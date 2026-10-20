@@ -266,17 +266,16 @@ docker compose --env-file .env.production -f compose.production.yaml \
 
 ---
 
-## GitLab CI
+## GitHub Actions
 
-The file `.gitlab-ci.yml` runs two stages. The second stage runs only when the first one passes.
+The workflow `.github/workflows/ci.yml` has two jobs. The second job runs only when the first one passes.
 
-| Stage   | Job      | What it does                                                               |
-| ------- | -------- | -------------------------------------------------------------------------- |
-| `check` | `check`  | Runs `pnpm build`, `pnpm typecheck`, and `pnpm -r test` in `devenv shell`. |
-| `build` | `images` | Runs `docker/ci-images.sh` to build, test, and publish the Docker images.  |
+| Job      | What it does                                                               |
+| -------- | -------------------------------------------------------------------------- |
+| `check`  | Runs `pnpm build`, `pnpm typecheck`, and `pnpm -r test` in `devenv shell`. |
+| `images` | Runs `docker/ci-images.sh` to build, check, and publish the Docker images. |
 
-Both jobs use the official devenv image on a privileged ARM64 runner with the `docker` tag. The `images` job uses Docker-in-Docker.
-CI keeps Nix and pnpm caches in `.cache/`.
+Both jobs run on `ubuntu-latest`. They install Nix and devenv 2.4.0 and use the `devenv` Cachix cache. The `check` job keeps the pnpm store in a cache.
 
 `docker/ci-images.sh` does these checks with `linux/amd64` images:
 
@@ -286,13 +285,21 @@ CI keeps Nix and pnpm caches in `.cache/`.
 4. It checks that `/v1/sessions` returns `401` with no key and with a bad key, and that `/openapi.json` works.
 5. It starts the protocol test service and checks its health, its Catalog, and MCP discovery.
 
-The job saves both images as `.devenv/images.tar.gz` for seven days.
+The job saves both images as the `images-<commit-sha>` artifact for seven days.
 
-Pipelines run for merge requests, branches, and tags like `v1.2.3`. Publishing happens only in two cases:
+The workflow runs for pull requests, pushes to `main`, and tags like `v1.2.3`. It publishes images only for pushes:
 
-| Pipeline                     | Published tags              |
-| ---------------------------- | --------------------------- |
-| A push to the default branch | `<commit-sha>` and `latest` |
-| A tag like `v1.2.3`          | `<commit-sha>` and `v1.2.3` |
+| Event               | Published tags              |
+| ------------------- | --------------------------- |
+| A push to `main`    | `<commit-sha>` and `latest` |
+| A tag like `v1.2.3` | `<commit-sha>` and `v1.2.3` |
 
-The images go to `$CI_REGISTRY_IMAGE/platform` and `$CI_REGISTRY_IMAGE/protocol-test`. CI does not deploy. To use a published image with Compose, pull it and tag it as `openbot-platform:<tag>`.
+The images go to the GitHub container registry, at `ghcr.io/openbot-build/openbot/platform` and `ghcr.io/openbot-build/openbot/protocol-test`. The workflow does not deploy. To use a published image with Compose, pull it and tag it as `openbot-platform:<tag>`.
+
+You can run the same image checks on your computer:
+
+```sh
+devenv shell -- bash docker/ci-images.sh
+```
+
+With no `RELEASE_TAG`, the script builds and checks the images but does not publish them.

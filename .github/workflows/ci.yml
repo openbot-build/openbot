@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Build, typecheck and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
+      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+        with:
+          name: devenv
+      - name: Install devenv
+        run: nix profile add github:cachix/devenv/v2.4.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/pnpm
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+      - name: Install dependencies
+        run: devenv shell -- pnpm install --frozen-lockfile --store-dir .cache/pnpm
+      - name: Build
+        run: devenv shell -- pnpm build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+      - name: Typecheck
+        run: devenv shell -- pnpm typecheck
+      - name: Test
+        run: devenv shell -- pnpm -r test
+
+  images:
+    name: Build and check images
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # Images are published only for pushes to main and for version tags.
+      PUBLISH: ${{ github.event_name == 'push' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702 # v31.11.2
+      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+        with:
+          name: devenv
+      - name: Install devenv
+        run: nix profile add github:cachix/devenv/v2.4.0
+      - name: Sign in to the GitHub container registry
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build, check and publish images
+        run: devenv shell -- bash docker/ci-images.sh < /dev/null
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          REGISTRY_IMAGE: ghcr.io/${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || (env.PUBLISH == 'true' && 'latest' || '') }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: images-${{ github.sha }}
+          path: .devenv/images.tar.gz
+          retention-days: 7

@@ -76,7 +76,7 @@ To sign in and make an API key, see [Quick start](/docs/quickstart).
 Run `pnpm build` before `pnpm typecheck`. Packages import each other from their built files.
 
 Tests use Node.js's own test runner. Platform tests start their own short-lived PostgreSQL server with the tools from devenv. They need no secrets and no outside services.
-CI runs the same `build`, `typecheck`, and `test` commands. See [Deploy](/docs/deploy#gitlab-ci).
+GitHub Actions runs the same `build`, `typecheck`, and `test` commands. See [Deploy](/docs/deploy#github-actions).
 
 ---
 

@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
+# Builds the Platform and Protocol Test images for linux/amd64, checks them in real containers,
+# saves them to .devenv/images.tar.gz, and publishes them when RELEASE_TAG is set.
+#
+# IMAGE_TAG       Tag for the built images. The default is "local".
+# RELEASE_TAG     Extra tag to publish, such as "latest" or "v1.2.3". When it is empty, nothing is published.
+# REGISTRY_IMAGE  Registry path, such as ghcr.io/owner/repository. It is needed only to publish.
 set -euo pipefail
 
-docker run --privileged --rm tonistiigi/binfmt --install amd64
+IMAGE_TAG="${IMAGE_TAG:-local}"
+RELEASE_TAG="${RELEASE_TAG:-}"
+if [ "$(uname -m)" != x86_64 ]; then
+  docker run --privileged --rm tonistiigi/binfmt --install amd64
+fi
 docker build --platform linux/amd64 --file docker/Dockerfile \
-  --target production --tag "openbot-platform:$CI_COMMIT_SHA" .
+  --target production --tag "openbot-platform:$IMAGE_TAG" .
 docker build --platform linux/amd64 --file docker/protocol-test.Dockerfile \
-  --tag "openbot-protocol-test:$CI_COMMIT_SHA" .
+  --tag "openbot-protocol-test:$IMAGE_TAG" .
 cleanup() {
   status=$?
   if [ "$status" -ne 0 ]; then
@@ -29,7 +39,7 @@ until docker exec platform-postgres pg_isready -U platform -d platform; do
 done
 docker run --rm --platform linux/amd64 --network platform-check \
   -e OPENBOT_DATABASE_URL=postgres://platform:platform@platform-postgres:5432/platform \
-  "openbot-platform:$CI_COMMIT_SHA" /app/dist/app/Migrate.mjs
+  "openbot-platform:$IMAGE_TAG" /app/dist/app/Migrate.mjs
 docker run --detach --platform linux/amd64 --name platform-server \
   --network platform-check --network-alias platform \
   -e OPENBOT_DATABASE_URL=postgres://platform:platform@platform-postgres:5432/platform \
@@ -38,7 +48,7 @@ docker run --detach --platform linux/amd64 --name platform-server \
   -e OPENBOT_OIDC_CLIENT_ID=ci-test -e OPENBOT_OIDC_CLIENT_SECRET=ci-test-secret \
   -e OPENBOT_APP_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 \
   -e BETTER_AUTH_SECRET=ci-test-independent-secret-at-least-32-characters \
-  "openbot-platform:$CI_COMMIT_SHA"
+  "openbot-platform:$IMAGE_TAG"
 attempts=0
 until docker exec platform-server node --input-type=module -e '
   const response = await fetch("http://127.0.0.1:3000/health", { signal: AbortSignal.timeout(5000) })
@@ -59,7 +69,7 @@ docker exec platform-server node --input-type=module -e '
 '
 docker run --detach --platform linux/amd64 --name platform-protocol-test \
   --network platform-check -e PROTOCOL_TEST_PUBLIC_ORIGIN=https://protocol-test.example.com \
-  "openbot-protocol-test:$CI_COMMIT_SHA"
+  "openbot-protocol-test:$IMAGE_TAG"
 attempts=0
 until docker exec platform-protocol-test node --input-type=module -e '
   const response = await fetch("http://127.0.0.1:3001/healthz", { signal: AbortSignal.timeout(5000) })
@@ -84,20 +94,16 @@ docker exec platform-protocol-test node --input-type=module -e '
   if (response.status !== 200 || message.error || message.result?._meta?.["io.modelcontextprotocol/serverInfo"]?.name !== "openbot.protocol-test/anonymous") throw new Error("Protocol Test MCP discovery failed")
 '
 mkdir -p .devenv
-docker save "openbot-platform:$CI_COMMIT_SHA" "openbot-protocol-test:$CI_COMMIT_SHA" | gzip > .devenv/images.tar.gz
-if [ "$CI_PIPELINE_SOURCE" = push ] && [ "${CI_COMMIT_BRANCH:-}" = "$CI_DEFAULT_BRANCH" ]; then
-  release_tag=latest
-elif [ -n "${CI_COMMIT_TAG:-}" ]; then
-  release_tag="$CI_COMMIT_TAG"
-else
+docker save "openbot-platform:$IMAGE_TAG" "openbot-protocol-test:$IMAGE_TAG" | gzip > .devenv/images.tar.gz
+if [ -z "$RELEASE_TAG" ]; then
   exit 0
 fi
-printf '%s' "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" \
-  --username "$CI_REGISTRY_USER" --password-stdin
+: "${REGISTRY_IMAGE:?Set REGISTRY_IMAGE to publish images}"
+registry_image="$(printf '%s' "$REGISTRY_IMAGE" | tr '[:upper:]' '[:lower:]')"
 for component in platform protocol-test; do
-  image_name="$CI_REGISTRY_IMAGE/$component"
-  docker tag "openbot-$component:$CI_COMMIT_SHA" "$image_name:$CI_COMMIT_SHA"
-  docker push --platform linux/amd64 "$image_name:$CI_COMMIT_SHA"
-  docker tag "openbot-$component:$CI_COMMIT_SHA" "$image_name:$release_tag"
-  docker push --platform linux/amd64 "$image_name:$release_tag"
+  image_name="$registry_image/$component"
+  docker tag "openbot-$component:$IMAGE_TAG" "$image_name:$IMAGE_TAG"
+  docker push "$image_name:$IMAGE_TAG"
+  docker tag "openbot-$component:$IMAGE_TAG" "$image_name:$RELEASE_TAG"
+  docker push "$image_name:$RELEASE_TAG"
 done

@@ -61,7 +61,6 @@
   packages = with pkgs; [
     git
     gh
-    glab
     corepack
     docker-client
     mkcert

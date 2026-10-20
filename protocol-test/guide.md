@@ -217,6 +217,6 @@ After you set up DNS and TLS, check `/healthz`, the Catalog, and `server/discove
 
 ### CI/CD
 
-GitLab CI builds the protocol test image in the `build` stage, next to Platform. On every branch it starts the AMD64 image and checks health, the public Catalog identity, and anonymous MCP discovery. Pushes to the default branch and release tags publish `$CI_REGISTRY_IMAGE/protocol-test:<commit-sha>`, plus `:latest` or the version tag.
+GitHub Actions builds the protocol test image in the `images` job, next to Platform. For every pull request and push, it starts the AMD64 image and checks health, the public Catalog identity, and anonymous MCP discovery. Pushes to `main` and release tags publish `ghcr.io/openbot-build/openbot/protocol-test:<commit-sha>`, plus `:latest` or the version tag.
 
 The production Compose file (`compose.production.yaml`) runs the test service without Platform credentials or a database. It listens only on `127.0.0.1:3001`. Put it behind a reverse proxy that supports streaming, at `PROTOCOL_TEST_PUBLIC_ORIGIN`. `PROTOCOL_TEST_ALLOWED_ORIGINS` can list allowed browser origins, separated by commas. It defaults to the public origin. Replacing the container clears its temporary data.
