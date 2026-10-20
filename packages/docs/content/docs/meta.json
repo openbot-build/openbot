@@ -1,0 +1,29 @@
+{
+	"title": "OpenBot",
+	"pages": [
+		"index",
+		"quickstart",
+		"---Usage---",
+		"authentication",
+		"sessions",
+		"memory",
+		"approvals",
+		"apps",
+		"app-index",
+		"developer-tools",
+		"---Configure---",
+		"configuration",
+		"models",
+		"alerts",
+		"deploy",
+		"---Develop---",
+		"client",
+		"server",
+		"packages",
+		"protocol",
+		"protocol-test",
+		"contributing",
+		"---Reference---",
+		"api"
+	]
+}

@@ -1,0 +1,7 @@
+interface:
+  # Invocation is opt-in for this catalog.
+  display_name: "Simplicity"
+  short_description: "Choose the smallest complete design."
+  default_prompt: "Use $simplicity when a design is more complex than its need."
+policy:
+  allow_implicit_invocation: false

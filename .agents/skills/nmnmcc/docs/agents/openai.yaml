@@ -1,0 +1,7 @@
+interface:
+  # Invocation is opt-in for this catalog.
+  display_name: "Docs"
+  short_description: "Keep docs and comments truthful."
+  default_prompt: "Use $docs when readers rely on changed behavior or commands."
+policy:
+  allow_implicit_invocation: false

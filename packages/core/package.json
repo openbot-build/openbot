@@ -1,0 +1,55 @@
+{
+	"name": "@openbot-build/core",
+	"version": "0.1.0",
+	"type": "module",
+	"description": "A composable Session core built with Effect",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src",
+		"README.md"
+	],
+	"exports": {
+		".": "./dist/index.js",
+		"./Agent": "./dist/agent/Agent.js",
+		"./ContextCompaction": "./dist/context/ContextCompaction.js",
+		"./ContextWindow": "./dist/context/ContextWindow.js",
+		"./ConversationContext": "./dist/context/ConversationContext.js",
+		"./ConversationContextOperations": "./dist/context/ConversationContextOperations.js",
+		"./SummaryCompaction": "./dist/context/SummaryCompaction.js",
+		"./Item": "./dist/memory/Item.js",
+		"./Memory": "./dist/memory/Memory.js",
+		"./MemoryState": "./dist/memory/MemoryState.js",
+		"./Config": "./dist/models/Config.js",
+		"./ConfigurationOperations": "./dist/models/ConfigurationOperations.js",
+		"./Model": "./dist/models/Model.js",
+		"./Provider": "./dist/models/Provider.js",
+		"./Plugin": "./dist/plugins/Plugin.js",
+		"./PluginComposition": "./dist/plugins/PluginComposition.js",
+		"./PluginState": "./dist/plugins/PluginState.js",
+		"./Session": "./dist/session/Session.js",
+		"./SessionRuntime": "./dist/session/SessionRuntime.js",
+		"./Turn": "./dist/session/Turn.js",
+		"./Skill": "./dist/skills/Skill.js",
+		"./SkillMap": "./dist/skills/SkillMap.js",
+		"./DeltaValidation": "./dist/store/DeltaValidation.js",
+		"./MemoryPersistence": "./dist/store/MemoryPersistence.js",
+		"./RecordSerialization": "./dist/store/RecordSerialization.js",
+		"./SessionStore": "./dist/store/SessionStore.js",
+		"./SessionStoreMemory": "./dist/store/SessionStoreMemory.js",
+		"./SessionStoreRepository": "./dist/store/SessionStoreRepository.js",
+		"./MemorySnapshots": "./dist/store/Snapshots.js",
+		"./Store": "./dist/store/Store.js",
+		"./VersionGraph": "./dist/store/VersionGraph.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && node --test test/*.test.ts"
+	},
+	"peerDependencies": {
+		"effect": "4.0.5"
+	},
+	"devDependencies": {
+		"effect": "4.0.5"
+	}
+}

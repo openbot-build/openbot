@@ -1,0 +1,15 @@
+[submodule "references/codex"]
+	path = references/codex
+	url = https://github.com/openai/codex.git
+[submodule "references/letta-code"]
+	path = references/letta-code
+	url = https://github.com/letta-ai/letta-code.git
+[submodule "references/mastra"]
+	path = references/mastra
+	url = https://github.com/mastra-ai/mastra.git
+[submodule "references/langmem"]
+	path = references/langmem
+	url = https://github.com/langchain-ai/langmem.git
+[submodule "references/lobehub"]
+	path = references/lobehub
+	url = https://github.com/lobehub/lobehub.git

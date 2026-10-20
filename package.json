@@ -1,0 +1,26 @@
+{
+	"name": "@openbot-build/workspace",
+	"private": true,
+	"packageManager": "pnpm@9.15.9",
+	"type": "module",
+	"pnpm": {
+		"patchedDependencies": {
+			"drizzle-orm@1.0.0-rc.5-5935859": "patches/drizzle-orm@1.0.0-rc.5-5935859.patch"
+		}
+	},
+	"devDependencies": {
+		"@effect/tsgo": "0.48.1",
+		"@types/node": "26.6.0",
+		"acorn": "8.19.0",
+		"drizzle-kit": "1.0.0-rc.5-5935859",
+		"tsdown": "0.23.1",
+		"typescript": "7"
+	},
+	"scripts": {
+		"dev": "devenv up",
+		"dev:setup": "dev-setup",
+		"typecheck": "pnpm -r exec tsc -p tsconfig.json --noEmit",
+		"prepare": "effect-tsgo patch --typescript --no-oxlint",
+		"build": "pnpm -r build"
+	}
+}

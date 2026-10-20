@@ -1,0 +1,204 @@
+---
+title: Models
+description: Connect Platform to a language model.
+---
+
+An Agent needs a language model to do work. Platform does not include a model. You connect one.
+This page shows the three ways to do it: environment variables, your own code, and test models for development.
+
+---
+
+## Use an OpenAI-compatible model
+
+The `openbot-platform` program can use one model from any service that offers the OpenAI Chat Completions API.
+Set these three variables:
+
+```sh
+OPENBOT_MODEL_ENDPOINT=https://api.openai.com/v1
+OPENBOT_MODEL_API_KEY=sk-...
+OPENBOT_MODEL_ID=gpt-4.1
+```
+
+| Variable                 | Rule                                                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------------------- |
+| `OPENBOT_MODEL_ENDPOINT` | An `http` or `https` base URL, often ending in `/v1`. No user name, password, query, or `#` part. |
+| `OPENBOT_MODEL_API_KEY`  | Not empty. Platform sends it to the endpoint only.                                                |
+| `OPENBOT_MODEL_ID`       | Not empty. The model name that the service expects.                                               |
+
+Set all three, or none of them. If you set only some, or the endpoint is not a valid URL, Platform does not start.
+
+This model is the default for every new Session. It also appears in the model list of each Session:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  https://api.example.com/v1/sessions/$SESSION_ID/models
+```
+
+The list has one provider with the ID `openai-compat` and one model with the ID from `OPENBOT_MODEL_ID`.
+This model does not support the `reasoningEffort` or `serviceTier` options.
+
+You can save the model choice on a Session. Send the current Session revision as `expected`:
+
+```sh
+curl -X PUT -H "Authorization: Bearer $OPENBOT_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"expected":3,"selection":{"_tag":"Config.Selection","provider":"openai-compat","model":"gpt-4.1"}}' \
+  https://api.example.com/v1/sessions/$SESSION_ID/model
+```
+
+See the [Sessions API reference](/docs/api/sessions) for all fields.
+
+## Run without a model
+
+If you set none of the model variables, Platform still starts. You can make, read, rename, fork, and delete Sessions.
+
+Work that needs a model fails with status `503` and the error `SessionExecutionUnavailable`. This includes:
+
+- starting a Turn with `POST /v1/sessions/:id/turns`,
+- choosing a model with `PUT /v1/sessions/:id/model`,
+- continuing a Turn after an approval.
+
+```json
+{ "_tag": "SessionExecutionUnavailable", "session": "..." }
+```
+
+---
+
+## Use your own model in code
+
+When you run Platform from your own program, you can use any model that works with Effect AI. Effect AI is the AI library of Effect. Its `LanguageModel` service is the common interface for all models.
+See [Run from code](/docs/server) to set up the program.
+
+### One model
+
+Give a `LanguageModel` Layer to `Server.layer`. A Layer is an Effect recipe that builds a service. Platform uses this model for every Turn.
+
+```ts
+import { NodeRuntime } from "@effect/platform-node"
+import { Config, Model, Provider } from "@openbot-build/core"
+import { EnvironmentConfiguration, Server } from "@openbot-build/platform"
+import { AnthropicProvider } from "@openbot-build/provider-anthropic"
+import { Effect, Layer, Redacted } from "effect"
+import { FetchHttpClient } from "effect/http"
+
+const selection = Config.Selection.make({
+	provider: Provider.Id.make("anthropic"),
+	model: Model.Id.make("claude-sonnet-4-5"),
+})
+
+const model = Layer.unwrap(
+	AnthropicProvider.make({ max_tokens: 4096 }).model(selection),
+).pipe(
+	Layer.provide(
+		AnthropicProvider.layerClient({
+			apiKey: Redacted.make(process.env.ANTHROPIC_API_KEY ?? ""),
+		}),
+	),
+	Layer.provide(FetchHttpClient.layer),
+)
+
+NodeRuntime.runMain(
+	Effect.gen(function* () {
+		const settings = yield* EnvironmentConfiguration.load
+		return yield* Layer.launch(
+			Server.layer(settings).pipe(Layer.provide(model)),
+		)
+	}),
+)
+```
+
+With this setup, the model list of a Session is empty. Every Turn uses the one model.
+
+### A model list
+
+To show models in the list and let clients choose, pass three `sessions` options to `Server.layer`:
+
+| Option         | What it does                                                                  |
+| -------------- | ----------------------------------------------------------------------------- |
+| `modelCatalog` | An Effect that returns the providers and models that clients can see.         |
+| `defaults`     | An Effect that returns default Turn settings, such as `{ model: selection }`. |
+| `resolveModel` | A function that gets the chosen selection and returns a `LanguageModel`.      |
+
+```ts
+import { Config } from "@openbot-build/core"
+import { Effect } from "effect"
+import { LanguageModel } from "effect/ai"
+
+// `selection` is from the example above.
+// `claude` is a LanguageModel that your program built from the model Layer.
+const sessions = (claude: LanguageModel.LanguageModel) => ({
+	modelCatalog: Effect.succeed({
+		providers: [{ id: selection.provider, name: "Anthropic" }],
+		models: [
+			Config.Model.make({
+				provider: selection.provider,
+				id: selection.model,
+				name: "Claude Sonnet 4.5",
+				reasoningEfforts: [],
+				serviceTiers: [],
+			}),
+		],
+	}),
+	defaults: Effect.succeed({ model: selection }),
+	resolveModel: (requested: Config.Selection | undefined) =>
+		requested === undefined || requested.model === selection.model
+			? Effect.succeed(claude)
+			: Effect.fail(
+					new Config.ModelConfigurationError({
+						reason: "model-not-found",
+						message: "This model is not available",
+					}),
+				),
+})
+```
+
+`resolveModel` gets `undefined` when the Session has no saved choice. When it fails, starting a Turn returns `503`.
+To build `claude`, use `Layer.build` on the model Layer in a scope, then read the service with `Context.get(context, LanguageModel.LanguageModel)`.
+The built-in production model in `packages/platform/src/app/ProductionModel.ts` follows this pattern. It is a good full example.
+
+---
+
+## Provider packages
+
+A provider package turns a model name into a `LanguageModel` for one kind of API. Each package has the same parts:
+
+| Part                        | What it does                                                            |
+| --------------------------- | ----------------------------------------------------------------------- |
+| `make(defaults?)`           | Makes a provider. `defaults` are request options for every call.        |
+| `provider.model(selection)` | Returns the model Layer for one selection. It sends no requests.        |
+| `layerClient(options)`      | Makes the HTTP client. Pass `apiKey`, and `apiUrl` for another address. |
+| `layer(tag, defaults?)`     | Puts the provider in a service that you name.                           |
+
+| Package                                 | Provider ID     | API                                                          |
+| --------------------------------------- | --------------- | ------------------------------------------------------------ |
+| `@openbot-build/provider-openai`        | `openai`        | OpenAI Responses API. Also offers native context compaction. |
+| `@openbot-build/provider-openai-compat` | `openai-compat` | OpenAI Chat Completions API, and services that copy it.      |
+| `@openbot-build/provider-anthropic`     | `anthropic`     | Anthropic Messages API.                                      |
+
+Context compaction makes a long history shorter so that it fits in the model's context window.
+See [Packages](/docs/packages) for a short example of each package.
+
+---
+
+## Development models
+
+The development server (`devenv shell -- pnpm dev`) does not call a real model. It uses test models instead. They give the same answer every time, so you can test clients without cost.
+
+The provider ID is `development`. The model IDs are:
+
+| Model          | What it does                                                                 |
+| -------------- | ---------------------------------------------------------------------------- |
+| `mock-text`    | The default. Returns fixed text at once.                                     |
+| `mock-slow`    | Returns text slowly over ten seconds. Use it to test streams and interrupts. |
+| `mock-tool`    | Calls a harmless test tool that waits for your approval.                     |
+| `mock-app`     | Calls a tool of the test App and returns its real content.                   |
+| `mock-failure` | Sends some text, then fails on purpose with a model error.                   |
+
+The token counts in their answers are not real. To pick one, save it on a Session:
+
+```sh
+curl -X PUT -H "Authorization: Bearer $OPENBOT_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"expected":1,"selection":{"_tag":"Config.Selection","provider":"development","model":"mock-slow"}}' \
+  https://localhost:8443/v1/sessions/$SESSION_ID/model
+```
+
+The production program never uses these models, even when `OPENBOT_DEV_MODE=1`.

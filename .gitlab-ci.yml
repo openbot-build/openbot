@@ -1,0 +1,73 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"'
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
+stages:
+  - check
+  - build
+
+.devenv:
+  image: ghcr.io/cachix/devenv/devenv:v2.4.0
+  tags:
+    - docker
+    - privileged
+    - arm64
+  variables:
+    GIT_CONFIG_COUNT: "1"
+    GIT_CONFIG_KEY_0: safe.directory
+    GIT_CONFIG_VALUE_0: $CI_PROJECT_DIR
+    NIX_CONFIG: |
+      extra-experimental-features = nix-command flakes
+      extra-substituters = file://$CI_PROJECT_DIR/.cache/nix?trusted=1&priority=10
+  cache:
+    - key:
+        prefix: nix-arm64-devenv-2.4.0
+        files:
+          - devenv.lock
+          - devenv.nix
+      paths:
+        - .cache/nix/
+    - key:
+        prefix: pnpm-arm64
+        files:
+          - pnpm-lock.yaml
+      paths:
+        - .cache/pnpm/
+  before_script:
+    - >-
+      devenv shell -- bash -euo pipefail -c '
+      nix copy --to "file://$CI_PROJECT_DIR/.cache/nix?compression=zstd" "$DEVENV_PROFILE";
+      pnpm install --frozen-lockfile --store-dir .cache/pnpm'
+  interruptible: true
+
+check:
+  extends: .devenv
+  stage: check
+  script:
+    - >-
+      devenv shell -- bash -euo pipefail -c '
+      pnpm build;
+      pnpm typecheck;
+      pnpm -r test'
+
+images:
+  extends: .devenv
+  stage: build
+  services:
+    - name: docker:29-dind
+      alias: docker
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - devenv shell -- bash docker/ci-images.sh </dev/null
+  artifacts:
+    name: images-$CI_COMMIT_SHORT_SHA
+    paths:
+      - .devenv/images.tar.gz
+    expire_in: 7 days

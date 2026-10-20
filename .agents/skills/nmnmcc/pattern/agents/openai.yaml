@@ -1,0 +1,7 @@
+interface:
+  # Invocation is opt-in for this catalog.
+  display_name: "Pattern"
+  short_description: "Use evidence-backed project patterns."
+  default_prompt: "Use $pattern when a reusable project pattern applies or needs teaching."
+policy:
+  allow_implicit_invocation: false

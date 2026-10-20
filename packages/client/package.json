@@ -1,0 +1,24 @@
+{
+	"name": "@openbot-build/client",
+	"version": "0.1.0",
+	"type": "module",
+	"description": "Typed client for the OpenBot Platform API",
+	"sideEffects": false,
+	"exports": {
+		".": "./dist/index.js"
+	},
+	"files": [
+		"dist",
+		"src",
+		"README.md"
+	],
+	"scripts": {
+		"build": "tsdown"
+	},
+	"dependencies": {
+		"@openbot-build/platform-api": "workspace:*",
+		"effect": "4.0.5",
+		"@openbot-build/protocol": "workspace:*",
+		"@modelcontextprotocol/client": "2.3.1"
+	}
+}

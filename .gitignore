@@ -1,0 +1,19 @@
+.devenv*
+devenv.local.nix
+devenv.local.yaml
+.direnv
+
+.pre-commit-config.yaml
+
+node_modules
+
+.cache/
+
+.DS_Store
+
+dist/
+
+.env.development
+
+# Local Claude Code state and session worktrees.
+.claude/

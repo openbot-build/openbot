@@ -1,0 +1,206 @@
+---
+title: Client
+description: Call Platform from TypeScript with typed requests and errors.
+---
+
+`@openbot-build/client` is the TypeScript client for Platform. It is built from the same API contract as the server.
+Every request, answer, and error has a type. Your editor shows mistakes before you run the code.
+
+The client uses [Effect](https://effect.website), a TypeScript library for typed programs. It runs in Node.js, Deno, Bun, workers, and browsers.
+
+---
+
+## Install
+
+The OpenBot packages are not on npm yet. Use them from the OpenBot workspace:
+
+```json
+{
+	"dependencies": {
+		"@openbot-build/client": "workspace:*",
+		"effect": "4.0.5"
+	}
+}
+```
+
+## Make a client
+
+`layer` makes a Layer that gives you the `Client` service. A Layer is an Effect recipe that builds a service.
+
+```ts
+import { Client, layer } from "@openbot-build/client"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+	const client = yield* Client
+	const view = yield* client.api.sessions.createSession({
+		payload: { title: "Release notes" },
+	})
+	return view.session.id
+})
+
+const id = await Effect.runPromise(
+	program.pipe(
+		Effect.provide(
+			layer({
+				baseUrl: "https://api.example.com",
+				apiKey: process.env.OPENBOT_API_KEY,
+			}),
+		),
+	),
+)
+```
+
+| Option           | Required | What it does                                                                                        |
+| ---------------- | -------- | --------------------------------------------------------------------------------------------------- |
+| `baseUrl`        | Yes      | The origin of Platform, such as `https://api.example.com`.                                          |
+| `apiKey`         | No       | An API key, as a string or an Effect `Redacted` value. It is sent as `Authorization: Bearer <key>`. |
+| `onUnauthorized` | No       | A function that runs when a protected request returns `401`.                                        |
+
+To make an API key, see [Authentication](/docs/authentication).
+
+The client never saves the key and never puts it in a URL. `onUnauthorized` does not sign in or try the request again. Use it to tell the user, for example after a key expires or someone revokes it.
+
+## Call an operation
+
+Every operation is at `client.api.<group>.<operation>`. The names are the same as in the [API reference](/docs/api).
+Each call takes one object with these optional fields:
+
+| Field     | What it holds                            |
+| --------- | ---------------------------------------- |
+| `params`  | Values in the path, such as `sessionId`. |
+| `query`   | Values in the query string.              |
+| `payload` | The JSON body.                           |
+
+```ts
+const sessions = yield * client.api.sessions.listSessions({ query: {} })
+
+const view =
+	yield *
+	client.api.sessions.getSession({
+		params: { sessionId: id },
+	})
+
+const archived =
+	yield *
+	client.api.sessions.listSessions({
+		query: { archived: "true" },
+	})
+```
+
+Some groups and their pages:
+
+| Group         | Use it to                                     | Reference                            |
+| ------------- | --------------------------------------------- | ------------------------------------ |
+| `sessions`    | Make Sessions, start Turns, and read results. | [Sessions](/docs/api/sessions)       |
+| `approvals`   | Answer approval requests.                     | [Approvals](/docs/api/approvals)     |
+| `apps`        | Find an App at an address.                    | [App discovery](/docs/api/apps)      |
+| `connections` | Add and manage App connections.               | [Connections](/docs/api/connections) |
+| `appIndex`    | Search the public App Index.                  | [App Index](/docs/api/appIndex)      |
+| `apiKeys`     | List, make, and revoke API keys.              | [API keys](/docs/api/apiKeys)        |
+| `health`      | Read the service document and health.         | [Health](/docs/api/health)           |
+
+The `apiKeys` operations only work with the sign-in cookie, so only a browser client on the same origin can use them.
+
+## Handle errors
+
+Each failed call gives a typed error. The type `ClientError` lists all of them:
+
+- **API errors** from the contract. Each one has a `_tag`, such as `SessionNotFound` or `SessionConflict`.
+- **Schema errors** (`SchemaError`) when an answer does not match the contract.
+- **HTTP client errors** when the network fails.
+
+Use `Effect.catchTag` to handle one kind of error:
+
+```ts
+const view =
+	yield *
+	client.api.sessions
+		.getSession({ params: { sessionId: id } })
+		.pipe(Effect.catchTag("SessionNotFound", () => Effect.succeed(undefined)))
+```
+
+Common sign-in errors:
+
+| Tag                         | Status | Meaning                                                    |
+| --------------------------- | ------ | ---------------------------------------------------------- |
+| `AuthenticationRequired`    | `401`  | No key or cookie, or the key is revoked or expired.        |
+| `ForbiddenOrigin`           | `403`  | A cookie request that changes data has the wrong `Origin`. |
+| `AuthenticationUnavailable` | `503`  | Platform cannot check credentials right now.               |
+
+All error schemas are exported from `@openbot-build/platform-api`.
+
+---
+
+## Use the client in a browser
+
+A web app on the same origin as Platform can use the sign-in cookie instead of a key. Leave out `apiKey`:
+
+```ts
+import { layer } from "@openbot-build/client"
+
+const ClientLive = layer({
+	baseUrl: window.location.origin,
+	onUnauthorized: () => {
+		window.location.assign("/auth/login?returnTo=/")
+	},
+})
+```
+
+The client sends requests with `credentials: "same-origin"`, so the browser adds the cookie.
+The browser also adds the `Origin` header. For requests that change data, Platform checks that it is exactly `OPENBOT_PUBLIC_ORIGIN`.
+
+To serve your web app on the same origin, see [Deploy](/docs/deploy#your-own-client-on-the-same-origin).
+
+<Callout type="warn">
+	Do not put an API key in browser code. Anyone who opens the page can read it.
+</Callout>
+
+## Custom setup
+
+`make({ baseUrl })` builds the `Client` service without the default parts. You then give it:
+
+- an `HttpClient` service,
+- client middleware for `AgentAuth`, used by API key routes,
+- client middleware for `SessionAuth`, used by cookie-only routes.
+
+Use this when you need your own HTTP client, logging, or headers. See `packages/client/src/Client.ts` for how `layer` does it.
+
+---
+
+## Show App views
+
+Some App tools come with a small user interface, called an MCP Apps view. MCP is the Model Context Protocol, a standard way for Agents to talk to tools.
+Platform keeps the view on the server. Your client only shows it.
+
+First open the view for an App operation. Then make a view client with `AppViews.make`:
+
+```ts
+import { AppViews, Client } from "@openbot-build/client"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+	const client = yield* Client
+	const opened = yield* client.api.appViews.open({
+		params: { operationId },
+		payload: { sessionId, itemId },
+	})
+	return yield* AppViews.make(opened, accountId, () => refresh())
+})
+```
+
+| Argument   | What it is                                                                                             |
+| ---------- | ------------------------------------------------------------------------------------------------------ |
+| `opened`   | The view that `appViews.open` returned.                                                                |
+| `owner`    | A stable ID of the signed-in account. It keeps views of different accounts apart.                      |
+| `onChange` | Optional. Runs when an action in the view changes status. Use it to refresh approvals and the Session. |
+
+The result works with `mount` from `@openbot-build/protocol/McpApps`, which shows the view in an iframe. See [Protocol](/docs/protocol).
+
+The view client holds no credentials. Every request goes through Platform, so the normal approval rules apply:
+
+- It checks that each answer is a valid MCP result.
+- It sends each action once, with a new request ID.
+- It then checks the saved action every 250 milliseconds until it has a final result. It never sends the action again.
+
+When you close the view, the client stops checking. An action that Platform already accepted still runs to the end.

@@ -1,0 +1,298 @@
+---
+title: Deploy
+description: Run OpenBot on your own server.
+---
+
+This page shows how to run Platform in production. You build a Docker image, prepare the database, and start the server behind a reverse proxy.
+For every setting, see [Configuration](/docs/configuration).
+
+---
+
+## What you need
+
+- A Linux server with Docker and Docker Compose.
+- A domain name for Platform, such as `api.example.com`, and a TLS certificate for it.
+- An OpenID Connect provider, such as `https://id.example.com`. Register a client with the redirect URI `https://api.example.com/auth/callback`.
+- A model service, if you want the Agent to do work. See [Models](/docs/models).
+
+## Build the image
+
+Run this from the root of the repository:
+
+```sh
+export OPENBOT_RELEASE=$(git rev-parse HEAD)
+docker build --platform linux/amd64 --file docker/Dockerfile \
+  --target production --tag openbot-platform:$OPENBOT_RELEASE .
+```
+
+The image has Node.js, the bundled server, the bundled migration program, and the database migrations. It has no build tools and no secrets.
+
+| Path in the image           | What it is                                       |
+| --------------------------- | ------------------------------------------------ |
+| `/app/dist/app/Main.mjs`    | The server. The image runs it by default.        |
+| `/app/dist/app/Migrate.mjs` | The migration program. It prepares the database. |
+| `/app/migrations`           | The database migrations.                         |
+
+The server in the image listens on `0.0.0.0:3000`.
+
+## Run with Docker
+
+Put your settings in a file, for example `platform.env`. Start from `docker/production.env.example`.
+
+<Steps>
+<Step>
+
+### Prepare the database
+
+The migration program only needs `OPENBOT_DATABASE_URL`. Run it before you start the server, and again before each new release:
+
+```sh
+docker run --rm --env-file platform.env \
+  openbot-platform:$OPENBOT_RELEASE /app/dist/app/Migrate.mjs
+```
+
+It is safe to run it more than once. It only applies the migrations that the database does not have yet.
+Migrations only go forward. There is no way to undo one, so make a backup first.
+
+</Step>
+<Step>
+
+### Start the server
+
+```sh
+docker run -d --name openbot --env-file platform.env \
+  -p 127.0.0.1:8080:3000 openbot-platform:$OPENBOT_RELEASE
+```
+
+When the server starts, it checks that the database has all tables. If not, it stops and you see an error in the log.
+
+</Step>
+<Step>
+
+### Check it
+
+```sh
+curl http://127.0.0.1:8080/health
+```
+
+```json
+{ "status": "ok" }
+```
+
+`/health` only shows that the HTTP server can answer. It does not check the database or the model.
+
+</Step>
+</Steps>
+
+### Without Docker
+
+You can also run the programs with Node.js on the server:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm --filter-prod @openbot-build/platform... build
+pnpm --filter @openbot-build/platform migrate
+pnpm --filter @openbot-build/platform start
+```
+
+The package `@openbot-build/platform` also has the commands `openbot-platform-migrate` and `openbot-platform`.
+
+---
+
+## Run with Compose
+
+The file `compose.production.yaml` runs three services:
+
+| Service         | Image                                               | Port on the host                              |
+| --------------- | --------------------------------------------------- | --------------------------------------------- |
+| `postgres`      | `postgres:18-alpine`, data in the volume `postgres` | none                                          |
+| `platform`      | `openbot-platform:$OPENBOT_RELEASE`                 | `127.0.0.1:8080`, or `OPENBOT_PUBLISHED_PORT` |
+| `protocol-test` | `openbot-protocol-test:$OPENBOT_RELEASE`            | `127.0.0.1:3001`                              |
+
+The `protocol-test` service is the public test service for the App Protocol. See [Protocol test](/docs/protocol-test).
+The file needs `PROTOCOL_TEST_PUBLIC_ORIGIN` even if you only use Platform.
+
+Compose builds `OPENBOT_DATABASE_URL` from `POSTGRES_PASSWORD`. It also sets `OPENBOT_ENVIRONMENT=production` and `OPENBOT_VERSION=$OPENBOT_RELEASE`.
+
+<Steps>
+<Step>
+
+### Prepare the settings
+
+```sh
+cp docker/production.env.example .env.production
+openssl rand -hex 32   # use the output for POSTGRES_PASSWORD
+openssl rand -hex 32   # use the output for BETTER_AUTH_SECRET
+openssl rand -hex 32   # use the output for OPENBOT_APP_ENCRYPTION_KEY
+```
+
+Fill in the values in `.env.production`.
+
+</Step>
+<Step>
+
+### Build both images
+
+```sh
+export OPENBOT_RELEASE=$(git rev-parse HEAD)
+docker build --platform linux/amd64 --file docker/Dockerfile \
+  --target production --tag openbot-platform:$OPENBOT_RELEASE .
+docker build --platform linux/amd64 --file docker/protocol-test.Dockerfile \
+  --tag openbot-protocol-test:$OPENBOT_RELEASE .
+```
+
+</Step>
+<Step>
+
+### Start the database and migrate
+
+```sh
+docker compose --env-file .env.production -f compose.production.yaml up -d postgres
+docker compose --env-file .env.production -f compose.production.yaml \
+  run --rm --no-deps platform /app/dist/app/Migrate.mjs
+```
+
+</Step>
+<Step>
+
+### Start everything
+
+```sh
+docker compose --env-file .env.production -f compose.production.yaml up -d
+```
+
+Compose checks `/health` every five seconds. When a service process stops, Compose starts it again.
+
+</Step>
+</Steps>
+
+To release a new version, build new images, set the new `OPENBOT_RELEASE`, back up the database, run the migration again, and run `up -d`.
+Never delete the `postgres` volume. It holds all your data.
+
+---
+
+## TLS and the reverse proxy
+
+In production, a reverse proxy handles HTTPS and sends the traffic to Platform on `127.0.0.1:8080`.
+Leave `OPENBOT_TLS_CERT` and `OPENBOT_TLS_KEY` empty.
+
+The proxy must:
+
+- send the `Origin`, `Cookie`, and `Authorization` headers to Platform without changes,
+- not buffer responses, because Turns can stream their output as server-sent events (SSE),
+- allow long responses. `GET /v1/sessions/:id/wait` can wait for up to 30 seconds, and a stream lasts as long as its Turn.
+
+<Tabs items={["nginx", "Caddy"]}>
+<Tab value="nginx">
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name api.example.com;
+    ssl_certificate /etc/ssl/api.example.com.pem;
+    ssl_certificate_key /etc/ssl/api.example.com.key;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 1h;
+    }
+}
+```
+
+</Tab>
+<Tab value="Caddy">
+
+```txt
+api.example.com {
+    reverse_proxy 127.0.0.1:8080 {
+        flush_interval -1
+    }
+}
+```
+
+</Tab>
+</Tabs>
+
+## Your own client on the same origin
+
+A browser client on the same origin as Platform can use the sign-in cookie. It needs no API key.
+To do this, your proxy sends some paths to Platform and all other paths to your client.
+
+| Path            | Send to     | What it is                                                       |
+| --------------- | ----------- | ---------------------------------------------------------------- |
+| `/auth/*`       | Platform    | Sign-in, sign-out, API keys, and the App authorization callback. |
+| `/v1/*`         | Platform    | The API.                                                         |
+| `/health`       | Platform    | The health check.                                                |
+| `/openapi.json` | Platform    | The OpenAPI document.                                            |
+| `/docs`         | Platform    | The interactive API reference. Optional.                         |
+| everything else | Your client | Your pages, including `/`.                                       |
+
+When you mount your client at `/`, the service document of `GET /` is no longer public. That is fine. Clients can use the paths above directly.
+
+After sign-in, Platform sends the browser back to a path on your client. The default is `/`. Your client must also handle these return addresses:
+
+- `/?authorization=<flowId>` after an App authorization. Call `completeAppAuthorization` next. See [Apps](/docs/apps).
+- `/?developerTest=<testId>` after a developer test authorization. See [Developer tools](/docs/developer-tools).
+
+A return path can be any path on the same origin, except paths under `/auth/`, `/v1/`, and `/development/`.
+
+---
+
+## Backups
+
+Back up two things, and keep them together:
+
+1. **The database.** It holds accounts, API keys, Sessions, Memory, and App connections.
+2. **The secrets file.** `OPENBOT_APP_ENCRYPTION_KEY` decrypts App secrets in the database. A database backup without this key cannot restore App connections. Also keep `BETTER_AUTH_SECRET`, or everyone must sign in again.
+
+With Compose, make a database backup like this:
+
+```sh
+docker compose --env-file .env.production -f compose.production.yaml \
+  exec -T postgres pg_dump -U openbot -Fc openbot > openbot-$(date +%F).dump
+```
+
+To restore it, first stop Platform with `docker compose stop platform`. Then run `pg_restore`:
+
+```sh
+docker compose --env-file .env.production -f compose.production.yaml \
+  exec -T postgres pg_restore -U openbot -d openbot --clean < openbot-2026-10-20.dump
+```
+
+---
+
+## GitLab CI
+
+The file `.gitlab-ci.yml` runs two stages. The second stage runs only when the first one passes.
+
+| Stage   | Job      | What it does                                                               |
+| ------- | -------- | -------------------------------------------------------------------------- |
+| `check` | `check`  | Runs `pnpm build`, `pnpm typecheck`, and `pnpm -r test` in `devenv shell`. |
+| `build` | `images` | Runs `docker/ci-images.sh` to build, test, and publish the Docker images.  |
+
+Both jobs use the official devenv image on a privileged ARM64 runner with the `docker` tag. The `images` job uses Docker-in-Docker.
+CI keeps Nix and pnpm caches in `.cache/`.
+
+`docker/ci-images.sh` does these checks with `linux/amd64` images:
+
+1. It builds `openbot-platform` and `openbot-protocol-test`.
+2. It starts an empty PostgreSQL and runs the migration program.
+3. It starts Platform and waits for `/health`.
+4. It checks that `/v1/sessions` returns `401` with no key and with a bad key, and that `/openapi.json` works.
+5. It starts the protocol test service and checks its health, its Catalog, and MCP discovery.
+
+The job saves both images as `.devenv/images.tar.gz` for seven days.
+
+Pipelines run for merge requests, branches, and tags like `v1.2.3`. Publishing happens only in two cases:
+
+| Pipeline                     | Published tags              |
+| ---------------------------- | --------------------------- |
+| A push to the default branch | `<commit-sha>` and `latest` |
+| A tag like `v1.2.3`          | `<commit-sha>` and `v1.2.3` |
+
+The images go to `$CI_REGISTRY_IMAGE/platform` and `$CI_REGISTRY_IMAGE/protocol-test`. CI does not deploy. To use a published image with Compose, pull it and tag it as `openbot-platform:<tag>`.

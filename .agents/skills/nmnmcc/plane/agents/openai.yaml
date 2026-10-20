@@ -1,0 +1,7 @@
+interface:
+  # Invocation is opt-in for this catalog.
+  display_name: "Plane"
+  short_description: "Integrate a result across domains."
+  default_prompt: "Use $plane when one result crosses technical boundaries."
+policy:
+  allow_implicit_invocation: false

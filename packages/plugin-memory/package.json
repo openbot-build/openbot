@@ -1,0 +1,23 @@
+{
+	"name": "@openbot-build/plugin-memory",
+	"version": "0.1.0",
+	"type": "module",
+	"description": "Versioned learned memory for OpenBot Sessions",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src",
+		"README.md"
+	],
+	"exports": {
+		".": "./dist/index.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && node --test test/*.test.ts"
+	},
+	"dependencies": {
+		"@openbot-build/core": "workspace:*",
+		"effect": "4.0.5"
+	}
+}

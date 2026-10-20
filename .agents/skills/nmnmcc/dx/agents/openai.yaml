@@ -1,0 +1,7 @@
+interface:
+  # Invocation is opt-in for this catalog.
+  display_name: "DX"
+  short_description: "Make software easier to understand and change."
+  default_prompt: "Use $dx when the developer path is hard to understand or verify."
+policy:
+  allow_implicit_invocation: false

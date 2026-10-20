@@ -1,0 +1,7 @@
+interface:
+  # Invocation is opt-in for this catalog.
+  display_name: "Nobody Cares How"
+  short_description: "Keep implementation detail backstage."
+  default_prompt: "Use $nobody-cares-how when user-facing behavior leaks technical detail."
+policy:
+  allow_implicit_invocation: false

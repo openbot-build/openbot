@@ -1,0 +1,29 @@
+{
+	"name": "@openbot-build/app-host",
+	"version": "0.1.0",
+	"type": "module",
+	"description": "App and Index host service contracts for OpenBot App Protocol",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src",
+		"README.md"
+	],
+	"exports": {
+		".": "./dist/main.js",
+		"./App": "./dist/App.js",
+		"./Index": "./dist/Index.js"
+	},
+	"scripts": {
+		"build": "tsdown"
+	},
+	"dependencies": {
+		"@openbot-build/protocol": "workspace:*"
+	},
+	"peerDependencies": {
+		"effect": "4.0.5"
+	},
+	"devDependencies": {
+		"effect": "4.0.5"
+	}
+}

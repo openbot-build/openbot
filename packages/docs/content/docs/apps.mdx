@@ -1,0 +1,263 @@
+---
+title: Apps
+description: Connect outside services so the Agent can use them in Turns.
+---
+
+An **App** is an outside service that the Agent can use. Each App is published on the web with the [OpenBot App Protocol](/docs/protocol). This page shows how to connect an App to your account, sign in to it, and use it in Turns.
+
+All examples use an API key. The same calls also work with the session cookie. See [Authentication](/docs/authentication).
+
+| Word             | Meaning                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------ |
+| Card URL         | The stable HTTPS address of the App's Server Card. It is the App's identity.               |
+| Connection       | An App saved to your account, with your settings and sign-in. You can have up to 30.       |
+| Connection draft | A saved discovery result. You review it before you create a connection. It lasts 24 hours. |
+| App operation    | One recorded call from a Turn to an App, with its status and result.                       |
+
+---
+
+## Connect an App
+
+<Steps>
+<Step>
+
+### Find the App
+
+Give Platform the App's address. This can be a domain, an App page, a Catalog link, or a Card link. A QR code holds the same HTTPS link.
+
+```sh
+curl -X POST https://api.example.com/v1/connection-drafts \
+  -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "input": "apps.example.com" }'
+```
+
+The answer is a draft with status 201. Keep its `id` and `revision`. The `discovery` field is one of two kinds:
+
+- `Single` has one `candidate`.
+- `Multiple` has a `candidates` list. Ask the user to choose one. Platform never adds a whole Catalog.
+
+Each candidate has a `cardUrl`, the `card`, a list of `endpoints`, and the `sources` that led to it. Each endpoint has an `index` and the `requirements` it needs, such as an API key header.
+
+To only look, without saving a draft, send the same body to `POST /v1/apps/discover`. Discovery never adds, signs in to, or calls an App.
+
+</Step>
+<Step>
+
+### Review and create the connection
+
+Show the user the App name, its source, and the endpoint. Then create the connection. You must send `"confirmed": true`.
+
+```sh
+curl -X POST https://api.example.com/v1/connections \
+  -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "draftId": "<draft id>",
+    "revision": 0,
+    "cardUrl": "https://apps.example.com/mcp/server-card",
+    "remoteIndex": 0,
+    "name": "Work calendar",
+    "values": { "header:X-API-Key": "<secret>" },
+    "confirmed": true
+  }'
+```
+
+The keys in `values` come from the endpoint's `requirements`. They look like `variable:<name>`, `header:<name>`, or `header:<name>:variable:<name>`. Platform encrypts these values. Later reads only show values that are not secret.
+
+Platform reads the Card again before it saves. The new connection uses the draft `id` as its own `id`. If you send the same request again, you get the same connection back.
+
+</Step>
+<Step>
+
+### Check that it works
+
+```sh
+curl -X POST https://api.example.com/v1/connections/<connection id>/verify \
+  -H "Authorization: Bearer $OPENBOT_API_KEY"
+```
+
+`Verified` returns the live `protocolVersion`, `tools`, `resources`, `resourceTemplates` and `prompts`. `Unavailable` returns the connection, and its `availability` says why.
+
+</Step>
+</Steps>
+
+### Errors when you connect
+
+| Status | Error                            | What to do                                                                                              |
+| ------ | -------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| 409    | `ConnectionConflict`             | Read `reason`: `CandidateChanged`, `RevisionChanged`, `DraftExpired`, `AlreadyAdded` or `LimitReached`. |
+| 422    | `ConnectionConfigurationInvalid` | Fill in the setting names listed in `keys`.                                                             |
+| 422    | `AppDiscoveryFailed`             | Check the address. `reason` and `issues` say what failed.                                               |
+| 403    | `AppRestricted`                  | The deployment blocks this App. See `restriction.reason` and `restriction.appealUrl`.                   |
+
+### Availability
+
+The `availability` field tells you if the Agent can use a connection.
+
+| `_tag`                 | Meaning                                                                  |
+| ---------------------- | ------------------------------------------------------------------------ |
+| `Unverified`           | Saved, but not checked yet.                                              |
+| `Available`            | Checked and ready.                                                       |
+| `PendingAuthorization` | The App needs an account sign-in. `scopes` lists the access it asks for. |
+| `AuthorizationExpired` | The sign-in no longer works. Refresh it or sign in again.                |
+| `ConnectionFailed`     | The last check failed. `message` says why.                               |
+| `NeedsRevalidation`    | The App changed its endpoint or sign-in needs. Review it again.          |
+| `CleanupPending`       | Removal did not finish. Try to remove it again.                          |
+| `Restricted`           | The deployment blocks this App.                                          |
+| `PendingConfiguration` | The connection needs more settings.                                      |
+
+---
+
+## Sign in to an App account
+
+Some Apps need the user's own account. Platform uses OAuth with PKCE for this. The user signs in at the App's provider, not at Platform.
+
+1. Start the flow. Send the connection `revision`. Leave `scopes` empty to use the scopes the App asks for. `returnTo` is a same-origin path. It defaults to `/`.
+
+   ```sh
+   curl -X POST https://api.example.com/v1/connections/<connection id>/authorization \
+     -H "Authorization: Bearer $OPENBOT_API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{ "revision": 0, "scopes": [], "returnTo": "/apps" }'
+   ```
+
+2. Read the answer:
+   - `AuthorizationStarted` has a `flowId` and an `authorizationUrl`. Open the URL in the user's browser.
+   - `IssuerSelectionRequired` lists `issuers`. Ask the user to pick one, then start again with `issuer`.
+   - `AuthorizationNotRequired` means the App needs no sign-in.
+3. The user signs in. The provider sends the browser to `https://api.example.com/auth/apps/callback`.
+4. Platform sends the browser to `returnTo?authorization=<flowId>`. If the browser has no Platform session, the user signs in to Platform first, and then goes to `/?authorization=<flowId>`.
+5. Your client finishes the flow:
+
+   ```sh
+   curl -X POST https://api.example.com/v1/app-authorizations/<flow id>/complete \
+     -H "Authorization: Bearer $OPENBOT_API_KEY"
+   ```
+
+To see the flow, call `GET /v1/app-authorizations/:flowId`. Its `status` is `Waiting`, `Received`, `Processing`, `Succeeded`, `Cancelled` or `Failed`.
+
+Platform's OAuth client ID is a public document at `https://api.example.com/v1/apps/client-metadata`. Providers read it, so you do not need to register Platform with each provider.
+
+To sign out of the App, send `DELETE /v1/connections/:connectionId/authorization`. The answer is `Revoked`, or `LocalOnly` when the provider cannot revoke tokens. In both cases Platform deletes its stored tokens.
+
+---
+
+## Manage connections
+
+| Task                         | Request                                                                                   |
+| ---------------------------- | ----------------------------------------------------------------------------------------- |
+| List or read                 | `GET /v1/connections`, `GET /v1/connections/:connectionId`                                |
+| Rename, turn off, or turn on | `PUT /v1/connections/:connectionId` with `{ "revision", "name", "enabled" }`              |
+| Refresh the sign-in          | `POST /v1/connections/:connectionId/refresh`                                              |
+| Review a changed App         | Make a new draft from the Card URL. Then `POST /v1/connections/:connectionId/revalidate`. |
+| Remove                       | `DELETE /v1/connections/:connectionId`                                                    |
+
+A refresh never asks for more access. If it fails, the connection becomes `AuthorizationExpired`.
+
+When an App changes its endpoint, private settings, provider, or scopes, the connection becomes `NeedsRevalidation`. The Agent cannot use it until you review it. Send `{ "revision", "draftId", "remoteIndex", "values", "confirmed": true }` to `revalidate`. Platform does not send old tokens to a new endpoint. An App that needs sign-in then needs a new sign-in.
+
+Remove returns 204. Platform first turns the connection off, then revokes and deletes its tokens. If cleanup does not finish, you get 409 `ConnectionCleanupPending`. Send the same `DELETE` again to finish it.
+
+### Manual connections
+
+You can also connect an MCP server that has no Server Card. Send `POST /v1/connections/manual` with a new UUID `id`, a `name`, the HTTPS `url`, `"transport": "streamable-http"`, and `headers`. Change it with `PUT /v1/connections/:connectionId/manual`. Set a header to `null` to remove it. Manual connections never go into the public [App Index](/docs/app-index).
+
+---
+
+## Apps in Turns
+
+When a Turn runs, Platform gives the model a tool for each capability of your usable connections. Each tool name looks like `openbot_<hash>`. Its description starts with the App name, the connection name, and the capability name.
+
+- **Tools** become callable tools. Tools whose `visibility` does not include `model` stay hidden from the model.
+- **Resources**, **resource templates** and **prompts** become read tools.
+
+Every App tool call waits for [approval](/docs/approvals) first. Reads of resources and prompts do not. When you approve a call, you can send `"grantReads": true`. Then later calls of the same tool in that Session run without a new approval. This only works for tools that the deployment owner marked as reads. App notes never decide this.
+
+The model also gets three helper tools. They never add an App, sign in, or approve an action.
+
+| Tool                  | What it does                                                               |
+| --------------------- | -------------------------------------------------------------------------- |
+| `openbot_search_apps` | Searches the public [App Index](/docs/app-index) for a missing capability. |
+| `openbot_app_details` | Reads the public details and sources of one App by its Card URL.           |
+| `openbot_app_access`  | Lists the user's connections and their setup or sign-in needs.             |
+
+### App operations
+
+Platform records each App call as an App operation. Read them with `GET /v1/sessions/:sessionId/app-operations` or `GET /v1/app-operations/:id`.
+
+| Status                                    | Meaning                                                |
+| ----------------------------------------- | ------------------------------------------------------ |
+| `PendingApproval`, `Approved`, `Rejected` | The approval step.                                     |
+| `Sending`                                 | The call is in progress.                               |
+| `InputRequired`                           | The App asks for more input. See below.                |
+| `Completed`, `Failed`                     | The call ended. `result` holds the details.            |
+| `OutcomeUnknown`                          | Platform sent the call but did not get a clear answer. |
+
+Some Apps ask a question in the middle of a call. The operation then has status `InputRequired`, a `round` number, and the App's request in `result.request`. Send the answer with the same round:
+
+```sh
+curl -X POST https://api.example.com/v1/app-operations/<operation id>/inputs \
+  -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "round": 1, "responses": { "<input key>": { "action": "accept", "content": { "label": "Team sync" } } } }'
+```
+
+The keys in `responses` must match the keys of the App's input requests. Each answer uses the standard MCP result for that kind of request. The example above answers a form request. Platform checks the answers before it sends them.
+
+<Callout type="warn">
+	Never repeat an operation that ends with `OutcomeUnknown`. The App may have
+	done the work already. Use a read to check the real state first. The Agent
+	follows the same rule.
+</Callout>
+
+---
+
+## App views
+
+Some App tools come with an interactive view. A view is an HTML page from the App, defined by MCP Apps. Platform has no user interface, so your client shows the view. You can skip this part. Every result also has text.
+
+1. Open the view for an operation: `POST /v1/app-operations/:operationId/view` with `{ "sessionId", "itemId" }`. The answer has a view `id`, the HTML `resource`, the view's `tools`, the call `arguments`, and the `result`.
+2. Show the HTML in an iframe. The `@openbot-build/protocol/McpApps` module has a browser host that does this. See [Protocol](/docs/protocol).
+3. Pass the view's requests to Platform:
+
+| View request                     | Platform call                                                   |
+| -------------------------------- | --------------------------------------------------------------- |
+| List tools, resources, templates | `POST /v1/app-views/:viewId/read`                               |
+| Call a tool or read a resource   | `POST /v1/app-views/:viewId/actions` (returns 202 and a ticket) |
+| Check an action                  | `GET /v1/app-views/:viewId/actions/:requestId`                  |
+| Update the model context         | `PUT /v1/app-views/:viewId/context`                             |
+| Send a text message              | `POST /v1/app-views/:viewId/messages`                           |
+| Close                            | `DELETE /v1/app-views/:viewId`                                  |
+
+View actions go through the same approval rules. A message starts a new Turn, and only when the Session is idle. If you open a view with an older Memory `version`, the view is read-only. If a view cannot open, you get 409 `AppViewUnavailable`. The text result is still there.
+
+---
+
+## Export, import and reset
+
+Export your App list. The file has no secrets and no sign-ins.
+
+```sh
+curl https://api.example.com/v1/app-experience/export \
+  -H "Authorization: Bearer $OPENBOT_API_KEY"
+```
+
+```json
+{
+	"format": "openbot-apps-v1",
+	"apps": [
+		{
+			"name": "Work calendar",
+			"cardUrl": "https://apps.example.com/mcp/server-card",
+			"remoteIndex": 0
+		}
+	]
+}
+```
+
+Send the same JSON to `POST /v1/app-experience/import`. A file can hold up to 30 Apps. Import does not create connections. For each App you get a fresh draft, or an `error`. The draft's `imported` field keeps the name and endpoint. Review each draft and create the connection as usual.
+
+`POST /v1/app-experience/reset` removes all your connections and drafts. The answer lists the `removed` IDs and any `pending` cleanups.
+
+See the full request and response shapes in the [API reference](/docs/api/connections).

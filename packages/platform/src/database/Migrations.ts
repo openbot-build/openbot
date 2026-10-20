@@ -1,0 +1,71 @@
+import { Effect } from "effect"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { migrate } from "drizzle-orm/effect-postgres/migrator"
+import { fileURLToPath } from "node:url"
+import * as Shared from "../sessions/RepositoryEncoding.ts"
+import {
+	appInvocations,
+	developerRecords,
+	appIndexEntries,
+	appIndexJobs,
+	appIndexResults,
+	appAuthorizations,
+	appRecords,
+	appConnections,
+	appDrafts,
+	appSecrets,
+	refs,
+	versions,
+	contents,
+} from "./Schema.ts"
+import {
+	openbot_auth_user,
+	openbot_auth_session,
+	openbot_auth_account,
+	openbot_auth_verification,
+} from "./AuthSchema.ts"
+
+const folder = fileURLToPath(new URL("../../migrations", import.meta.url))
+
+export const check = Effect.gen(function* () {
+	const db = yield* makeWithDefaults()
+	yield* db.select().from(developerRecords).limit(0)
+	yield* db.select().from(appInvocations).limit(0)
+	yield* db.select().from(appIndexEntries).limit(0)
+	yield* db.select().from(appIndexJobs).limit(0)
+	yield* db.select().from(appIndexResults).limit(0)
+	yield* db.select().from(appAuthorizations).limit(0)
+	yield* db.select().from(appRecords).limit(0)
+	yield* db.select().from(appConnections).limit(0)
+	yield* db.select().from(appDrafts).limit(0)
+	yield* db.select().from(appSecrets).limit(0)
+	yield* db
+		.select({ id: refs.id, revision: refs.revision, turn: refs.turn })
+		.from(refs)
+		.limit(0)
+	yield* db.select({ id: versions.id }).from(versions).limit(0)
+	yield* db.select({ id: contents.id }).from(contents).limit(0)
+	yield* db
+		.select({ id: openbot_auth_user.id })
+		.from(openbot_auth_user)
+		.limit(0)
+	yield* db
+		.select({ id: openbot_auth_session.id })
+		.from(openbot_auth_session)
+		.limit(0)
+	yield* db
+		.select({ id: openbot_auth_account.id })
+		.from(openbot_auth_account)
+		.limit(0)
+	yield* db
+		.select({ id: openbot_auth_verification.id })
+		.from(openbot_auth_verification)
+		.limit(0)
+}).pipe(Effect.mapError(Shared.databaseError))
+
+/** Apply the current schema with the standard Drizzle migrator, which keeps a journal. */
+export const initialize = Effect.gen(function* () {
+	const db = yield* makeWithDefaults()
+	yield* migrate(db, { migrationsFolder: folder })
+	yield* check
+}).pipe(Effect.mapError(Shared.databaseError))

@@ -1,0 +1,201 @@
+---
+title: Developer tools
+description: Check, test and manage the Apps you publish.
+---
+
+These tools are for people who publish Apps. You can check your App, prove that you control it, share access with your team, run private tests, ask for indexing, and get notices when something breaks.
+
+Only the inspection call is public. All other calls need an API key or the session cookie. See [Authentication](/docs/authentication).
+
+---
+
+## Inspect an App
+
+Anyone can inspect an App. You do not need to sign in. Inspection reads only public documents. It saves nothing and does not connect to the App.
+
+```sh
+curl -X POST https://api.example.com/v1/developer/inspect \
+  -H "Content-Type: application/json" \
+  -d '{ "input": "apps.example.com" }'
+```
+
+`input` can be a domain or an HTTPS link, up to 8192 characters. The report has:
+
+| Field    | Description                                                                                                                                                                            |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps`   | Each App found. `eligibility` is `Eligible`, `Excluded` or `Unconfirmed` for the public Index. `stored` shows the last saved index check, if any.                                      |
+| `issues` | Problems to fix. Each has a `code`, a `stage`, a `severity` (`blocking` or `suggestion`), a `message`, and a `repair` hint.                                                            |
+| `stages` | Each check step: `Input`, `Discovery`, `CardRead`, `CardSchema`, `Compatibility`, `PublisherAssociation` and `Eligibility`. Each is `Passed`, `Failed`, `Unconfirmed` or `NotChecked`. |
+
+An `Eligible` result does not mean the App is in the Index yet. See [App Index](/docs/app-index#how-apps-get-indexed).
+
+---
+
+## Prove that you control an App
+
+Most tools need proof that you control the App. You can prove control in two ways:
+
+| Scope               | What it covers                                                                           | Where you put the token |
+| ------------------- | ---------------------------------------------------------------------------------------- | ----------------------- |
+| `PublisherHostname` | Every App whose Card is on this host name and listed in a Catalog on the same host name. | A DNS TXT record        |
+| `AppCard`           | One App, by its exact Card URL.                                                          | The Server Card         |
+
+<Steps>
+<Step>
+
+### Start a claim
+
+```sh
+curl -X POST https://api.example.com/v1/developer/claims \
+  -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "_tag": "PublisherHostname", "hostname": "apps.example.com" }'
+```
+
+For one App, send `{ "_tag": "AppCard", "cardUrl": "https://apps.example.com/mcp/server-card" }`. The host name must be one exact public name, with no port, path or wildcard.
+
+The answer has an `id` and a `token` like `openbot-verification=...`. The claim lasts 24 hours.
+
+</Step>
+<Step>
+
+### Publish the token
+
+For a host name, add a DNS TXT record at `_openbot-verification.<hostname>`. Use the full token as the value:
+
+```txt
+_openbot-verification.apps.example.com.  TXT  "openbot-verification=abc123..."
+```
+
+For one Card, add the token to the Card:
+
+```json
+{
+	"_meta": {
+		"openbot/developer-verification": {
+			"version": 1,
+			"tokens": ["openbot-verification=abc123..."]
+		}
+	}
+}
+```
+
+Platform reads the Card at its exact URL, with no redirects. Your `robots.txt` must allow the `OpenBot` user agent.
+
+</Step>
+<Step>
+
+### Verify
+
+```sh
+curl -X POST https://api.example.com/v1/developer/claims/<claim id>/verify \
+  -H "Authorization: Bearer $OPENBOT_API_KEY"
+```
+
+On success you get a **proof**. You become the `administrator` for that scope. On failure you get 409 `DeveloperConflict`. Its `reason` can be `ProofMismatch`, `ClaimExpired`, `VerificationUnavailable`, `RobotsDenied`, `RobotsUnconfirmed` or `CardUnconfirmed`.
+
+</Step>
+</Steps>
+
+Keep the token in place. A proof is valid for 7 days, and Platform checks it again every day:
+
+- If the token is gone, the proof becomes `Suspended` at once.
+- If the check cannot run, the proof becomes `Unconfirmed`. It still works until it ends. Platform tries again after about one minute.
+- A `Suspended` proof gives no access.
+
+To check now, call `POST /v1/developer/proofs/:id/verify`. To give up a proof, call `POST /v1/developer/proofs/:id/relinquish`. To cancel a claim, call `POST /v1/developer/claims/:id/revoke`.
+
+`GET /v1/developer` returns your Apps, your proofs, and your access `grants`.
+
+---
+
+## Members and roles
+
+The administrator can invite other accounts.
+
+| Role            | What they can do                                                 |
+| --------------- | ---------------------------------------------------------------- |
+| `administrator` | The account that made the proof. Everything, and manage members. |
+| `maintainer`    | Save reports, run tests, and ask for indexing.                   |
+| `viewer`        | Read Apps, reports and indexing requests. No changes.            |
+
+1. Invite: `POST /v1/developer/proofs/:id/invitations` with `{ "role": "maintainer" }` or `"viewer"`. The invitation lasts 7 days.
+2. Send the invitation `id` to the person. They read it with `GET /v1/developer/invitations/:id` and accept it with `POST /v1/developer/invitations/:id/accept`.
+3. Manage: `GET /v1/developer/proofs/:id/members`, `PUT /v1/developer/members/:id` with a new `role`, and `DELETE /v1/developer/members/:id`. Members can also remove themselves.
+
+To cancel an invitation, call `POST /v1/developer/invitations/:id/revoke`. When a proof ends, its members lose access too.
+
+---
+
+## Reports
+
+A report is a saved inspection. Use reports to see how your App changes over time.
+
+| Task                      | Request                                                                                 |
+| ------------------------- | --------------------------------------------------------------------------------------- |
+| Save a new report         | `POST /v1/developer/reports` with `{ "cardUrl" }`                                       |
+| List reports for App      | `GET /v1/developer/reports?cardUrl=...` (newest first, 50 per page, page with `before`) |
+| Read one report           | `GET /v1/developer/reports/:id`                                                         |
+| Compare two reports       | `GET /v1/developer/reports/:id/compare?other=<id>`                                      |
+| Delete a report you saved | `DELETE /v1/developer/reports/:id`                                                      |
+| List reports you saved    | `GET /v1/developer/personal-reports`                                                    |
+
+A comparison lists the issues that are `introduced`, `resolved` and `persisting`.
+
+---
+
+## Private connection tests
+
+A test connects to your App from Platform, like a user would. It is private. It does not save a user connection, and it does not add the App to the Index. A test ends after one hour.
+
+1. Create a test with your own UUID: `POST /v1/developer/tests` with `{ "id", "cardUrl", "remoteIndex" }`.
+2. If the endpoint needs settings, send them: `PUT /v1/developer/tests/:id/configuration` with an object of keys and values. The keys are the same as for [connections](/docs/apps#review-and-create-the-connection).
+3. Run it: `POST /v1/developer/tests/:id/run`. Read the result with `GET /v1/developer/tests/:id`.
+
+Each run has `stages`: `configuration`, `negotiation`, `tools`, `resources`, `resourceTemplates` and `prompts`. Each stage is `Passed`, `Failed`, `NotAdvertised` or `NotChecked`. The test `status` ends as `Succeeded` or `Failed`.
+
+### Sign in during a test
+
+When the App needs an account, the test status becomes `AwaitingAuthorization`.
+
+1. Start the sign-in: `POST /v1/developer/tests/:id/authorization` with `{ "scopes": [] }`. Add `issuer` if the App has more than one provider.
+2. Open `authorization.authorizationUrl` in your browser and sign in.
+3. The provider sends you to `/auth/developer/apps/callback`. Platform then sends you to `/?developerTest=<testId>`.
+4. Finish: `POST /v1/developer/tests/:id/authorization/complete`. Then run the test again.
+
+When you are done, call `POST /v1/developer/tests/:id/cleanup`. Platform revokes the test sign-in where the provider allows it, and deletes the stored tokens. You can also `cancel` a running test, or `DELETE` it.
+
+---
+
+## Ask for indexing
+
+You do not have to wait for a user to connect your App. Ask Platform to check it:
+
+```sh
+curl -X POST https://api.example.com/v1/developer/indexing \
+  -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "cardUrl": "https://apps.example.com/mcp/server-card" }'
+```
+
+Platform inspects the App first. If it is not eligible, you get 409 with the `reason`. If the deployment blocks the App, you get 403 `DeveloperRestricted`.
+
+The request `status` goes from `Accepted` to `Waiting`, `Verifying` and `Completed`. When it is done, `check` has the result. List requests with `GET /v1/developer/indexing`, or read one with `GET /v1/developer/indexing/:id`.
+
+---
+
+## Notifications
+
+Platform checks the Apps you manage about every hour. It sends you a notice when something changes.
+
+| Kind            | When                                              |
+| --------------- | ------------------------------------------------- |
+| `IssueAppeared` | A new blocking issue appears.                     |
+| `IssueResolved` | A blocking issue goes away.                       |
+| `AccessChanged` | A proof changes state, or you lose member access. |
+
+Read notices with `GET /v1/developer/notifications`. Use `before` to read older pages. Mark one as read with `POST /v1/developer/notifications/:id/read`.
+
+Issue notices are on for every App. To turn them off for one App, send `PUT /v1/developer/subscriptions` with `{ "cardUrl": "...", "enabled": false }`. List your settings with `GET /v1/developer/subscriptions`.
+
+See the full shapes in the [API reference](/docs/api/developer).

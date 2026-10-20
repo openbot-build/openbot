@@ -1,0 +1,89 @@
+import { randomUUID } from "node:crypto"
+import { Repository, ownerKey } from "./Repository.ts"
+import {
+	AppExperienceApi as Api,
+	ExperienceStorageUnavailable,
+	Identity,
+} from "@openbot-build/platform-api"
+import { Array as Arr, Context, Effect, Layer, Match } from "effect"
+import { Connections } from "./Connections.ts"
+import { Lifecycle } from "./Lifecycle.ts"
+export const make = Effect.gen(function* () {
+	const connections = yield* Connections
+	const lifecycle = yield* Lifecycle
+	const repository = yield* Repository
+	return {
+		export: (identity: typeof Identity.Service) =>
+			connections.listConnections.pipe(
+				Effect.provideService(Identity, identity),
+				Effect.mapError(() => ExperienceStorageUnavailable.make({})),
+				Effect.map((rows): Api.Transfer => ({
+					format: "openbot-apps-v1",
+					apps: rows.map((row) => ({
+						name: row.name,
+						cardUrl: row.cardUrl,
+						remoteIndex: row.remoteIndex,
+					})),
+				})),
+			),
+		import: (identity: typeof Identity.Service, transfer: Api.Transfer) =>
+			Effect.forEach(transfer.apps, (entry) =>
+				connections.prepareConnection(entry.cardUrl).pipe(
+					Effect.provideService(Identity, identity),
+					Effect.flatMap((draft) =>
+						repository.saveDraft(ownerKey(identity), {
+							...draft,
+							id: randomUUID(),
+							imported: { name: entry.name, remoteIndex: entry.remoteIndex },
+						}),
+					),
+					Effect.match({
+						onSuccess: (draft) => ({ entry, draft, error: null }),
+						onFailure: () => ({
+							entry,
+							draft: null,
+							error:
+								"The App could not be discovered. Review its public address before trying again.",
+						}),
+					}),
+				),
+			).pipe(Effect.map((entries) => ({ entries }))),
+		reset: (identity: typeof Identity.Service) =>
+			Effect.gen(function* () {
+				const rows = yield* connections.listConnections.pipe(
+					Effect.provideService(Identity, identity),
+					Effect.mapError(() => ExperienceStorageUnavailable.make({})),
+				)
+				let removed: ReadonlyArray<string> = []
+				let pending: Api.Reset["pending"] = []
+				for (const row of rows) {
+					const result = yield* lifecycle
+						.remove(row.id)
+						.pipe(Effect.provideService(Identity, identity), Effect.result)
+					Match.value(result).pipe(
+						Match.tag("Success", () => {
+							removed = Arr.append(removed, row.id)
+						}),
+						Match.tag("Failure", ({ failure }) => {
+							pending = Arr.append(pending, {
+								id: row.id,
+								name: row.name,
+								stage:
+									failure._tag === "ConnectionCleanupPending"
+										? failure.stage
+										: "Connection cleanup",
+							})
+						}),
+						Match.exhaustive,
+					)
+				}
+				yield* repository.clearDrafts(ownerKey(identity))
+				return { removed, pending }
+			}),
+	}
+})
+export class Experience extends Context.Service<
+	Experience,
+	Effect.Success<typeof make>
+>()("@openbot-build/platform/apps/Experience") {}
+export const layer = Layer.effect(Experience, make)

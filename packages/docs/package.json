@@ -1,0 +1,35 @@
+{
+	"name": "@openbot-build/docs",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"prepare:api": "node scripts/api.ts",
+		"build": "pnpm prepare:api && next build",
+		"dev": "pnpm prepare:api && next dev",
+		"start": "next start"
+	},
+	"dependencies": {
+		"@openbot-build/platform-api": "workspace:*",
+		"cn": "0.4.0",
+		"effect": "4.0.5",
+		"fumadocs-core": "16.17.7",
+		"fumadocs-mdx": "15.4.8",
+		"fumadocs-openapi": "12.5.3",
+		"fumadocs-ui": "npm:@fumadocs/base-ui@16.17.7",
+		"lucide-react": "1.60.0",
+		"next": "16.3.8",
+		"react": "19.3.1",
+		"react-dom": "19.3.1",
+		"shiki": "4.5.0"
+	},
+	"devDependencies": {
+		"@tailwindcss/postcss": "4.3.3",
+		"@types/mdx": "2.0.14",
+		"@types/node": "26.6.0",
+		"@types/react": "19.3.0",
+		"@types/react-dom": "19.3.0",
+		"postcss": "8.5.31",
+		"tailwindcss": "4.3.3"
+	}
+}

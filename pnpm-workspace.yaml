@@ -1,0 +1,4 @@
+packages:
+  - ./protocol-test
+  - ./packages/*
+  - "!./packages/template"

@@ -1,0 +1,7 @@
+interface:
+  # Invocation is opt-in for this catalog.
+  display_name: "UX"
+  short_description: "Improve the complete user journey."
+  default_prompt: "Use $ux when product behavior or interface needs user-centered improvement."
+policy:
+  allow_implicit_invocation: false

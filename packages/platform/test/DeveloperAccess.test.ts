@@ -1,0 +1,390 @@
+// @effect-diagnostics strictEffectProvide:off
+import assert from "node:assert/strict"
+import { test } from "node:test"
+import { NodeServices } from "@effect/platform-node"
+import { DeveloperApi as Api } from "@openbot-build/platform-api"
+import {
+	Discovery,
+	Document,
+	Network,
+	RobotsPolicy,
+} from "@openbot-build/protocol"
+import { Effect, Layer, ManagedRuntime, Redacted, Schema } from "effect"
+import { TestClock } from "effect/testing"
+import * as Database from "../src/database/DatabasePostgres.ts"
+import * as Migration from "../src/database/Migrations.ts"
+import * as RepositoryLayer from "../src/apps/DeveloperRepositoryPostgres.ts"
+import { DeveloperRepository } from "../src/apps/DeveloperRepository.ts"
+import * as AccessLayer from "../src/apps/DeveloperAccess.ts"
+import { DeveloperAccess } from "../src/apps/DeveloperAccess.ts"
+import * as MembersLayer from "../src/apps/DeveloperMembers.ts"
+import { DeveloperMembers } from "../src/apps/DeveloperMembers.ts"
+import * as ReportsLayer from "../src/apps/DeveloperReports.ts"
+import { DeveloperReports } from "../src/apps/DeveloperReports.ts"
+import { AppInspections } from "../src/apps/AppInspections.ts"
+import {
+	DomainControl,
+	DomainControlUnavailable,
+} from "../src/apps/DomainControl.ts"
+import { ownerKey } from "../src/apps/Repository.ts"
+import * as Postgres from "./PostgresTest.ts"
+
+const alice = ownerKey({ tenantId: "alice-tenant", userId: "alice" })
+const bobIdentity = { tenantId: "bob-tenant", userId: "bob" }
+const bob = ownerKey(bobIdentity)
+const cardUrl = "https://publisher.example/card?app=notes"
+const candidate = Schema.decodeSync(Discovery.Candidate)({
+	cardUrl,
+	card: {
+		$schema: Document.cardSchemaUrl,
+		name: "publisher.example/notes",
+		version: "1.0.0",
+		description: "Notes",
+		remotes: [
+			{
+				type: "streamable-http",
+				url: "https://publisher.example/mcp",
+				supportedProtocolVersions: [Document.protocolVersion],
+			},
+		],
+	},
+	endpoints: [],
+	sources: [
+		{
+			role: "catalog",
+			url: "https://publisher.example/.well-known/ai-catalog.json",
+		},
+	],
+})
+
+test("developer proofs, members and report history stay saved without sharing account capabilities", async () => {
+	const database = await Postgres.start()
+	let tokens: ReadonlyArray<string> = []
+	let unavailable = false
+	let hasIssue = true
+	const inspections = Layer.succeed(AppInspections, {
+		inspect: (input) =>
+			Effect.succeed<Api.InspectionReport>({
+				input,
+				checkedAt: 100,
+				stages: [],
+				apps: [
+					{
+						candidate,
+						eligibility: {
+							_tag: "Excluded",
+							cardUrl,
+							reason: "NoIndex",
+							withdraw: true,
+							stages: [],
+						},
+						stored: { _tag: "Known", check: null },
+					},
+				],
+				issues: hasIssue
+					? [
+							{
+								code: "NoIndex",
+								stage: "indexing",
+								severity: "blocking",
+								source: cardUrl,
+								message: "Noindex is declared.",
+								repair: "Remove noindex to allow indexing.",
+							},
+						]
+					: [],
+			}),
+	})
+	const dependencies = Layer.mergeAll(
+		inspections,
+		RobotsPolicy.layer,
+		Layer.succeed(DomainControl, {
+			tokens: () =>
+				unavailable
+					? Effect.fail(DomainControlUnavailable.make({}))
+					: Effect.succeed(tokens),
+		}),
+		Layer.succeed(Network.PublicNetwork, {
+			readDocument: (options) =>
+				unavailable
+					? Effect.fail(
+							new Network.NetworkError({
+								reason: "Transport",
+								message: "Temporary outage",
+							}),
+						)
+					: Effect.succeed({
+							url: options.url,
+							status: options.url.endsWith("robots.txt") ? 404 : 200,
+							headers: {},
+							text: JSON.stringify({
+								_meta: {
+									"openbot/developer-verification": { version: 1, tokens },
+								},
+							}),
+						}),
+		}),
+	)
+	const runtimeFor = () =>
+		ManagedRuntime.make(
+			Layer.mergeAll(MembersLayer.layer, ReportsLayer.layer).pipe(
+				Layer.provideMerge(AccessLayer.layer),
+				Layer.provideMerge(dependencies),
+				Layer.provideMerge(RepositoryLayer.layer),
+				Layer.provideMerge(
+					Database.layer({ databaseUrl: Redacted.make(database.url) }),
+				),
+				Layer.provideMerge(TestClock.layer()),
+				Layer.provide(NodeServices.layer),
+			),
+		)
+	let runtime = runtimeFor()
+	let proofId = ""
+	let reportId = ""
+	try {
+		await runtime.runPromise(
+			Effect.gen(function* () {
+				yield* Migration.initialize
+				const access = yield* DeveloperAccess
+				const members = yield* DeveloperMembers
+				const reports = yield* DeveloperReports
+				const records = yield* DeveloperRepository
+				const challenge = yield* access.start(alice, {
+					_tag: "AppCard",
+					cardUrl,
+				})
+				assert.equal(
+					(yield* Effect.flip(access.claim(bob, challenge.id)))._tag,
+					"DeveloperNotFound",
+				)
+				assert.equal(
+					(yield* Effect.flip(access.verify(alice, challenge.id)))._tag,
+					"DeveloperConflict",
+				)
+				tokens = [challenge.token]
+				const proof = yield* access.verify(alice, challenge.id)
+				proofId = proof.id
+				assert.equal(proof.status, "Confirmed")
+				assert.equal((yield* access.overview(alice)).apps.length, 1)
+				assert.equal(
+					(yield* Effect.flip(access.authorize(bob, cardUrl)))._tag,
+					"DeveloperNotFound",
+				)
+				const copied = yield* access.start(alice, {
+					_tag: "AppCard",
+					cardUrl: "https://publisher.example/other?app=notes",
+				})
+				assert.equal(
+					(yield* Effect.flip(access.verify(alice, copied.id)))._tag,
+					"DeveloperConflict",
+				)
+				const revokedClaim = yield* access.start(alice, {
+					_tag: "AppCard",
+					cardUrl: "https://other.example/card",
+				})
+				yield* access.revoke(alice, revokedClaim.id)
+				assert.equal(
+					(yield* Effect.flip(access.verify(alice, revokedClaim.id)))._tag,
+					"DeveloperConflict",
+				)
+				assert.notEqual(
+					(yield* access.start(alice, revokedClaim.scope)).id,
+					revokedClaim.id,
+				)
+				const expiringClaim = yield* access.start(alice, {
+					_tag: "PublisherHostname",
+					hostname: "unpublished.example",
+				})
+				const revoked = yield* members.invite(alice, proof.id, "viewer")
+				yield* members.revoke(alice, revoked.id)
+				assert.equal(
+					(yield* Effect.flip(members.accept(bobIdentity, revoked.id)))._tag,
+					"DeveloperConflict",
+				)
+				const invitation = yield* members.invite(alice, proof.id, "viewer")
+				assert.equal((yield* access.overview(bob)).apps.length, 0)
+				const accepts = yield* Effect.all(
+					[
+						members.accept(bobIdentity, invitation.id).pipe(Effect.result),
+						members
+							.accept({ tenantId: "third", userId: "third" }, invitation.id)
+							.pipe(Effect.result),
+					],
+					{ concurrency: 2 },
+				)
+				assert.equal(
+					accepts.filter((result) => result._tag === "Success").length,
+					1,
+				)
+				if (
+					!(yield* access.grants(bob)).some(
+						(grant) => grant.proofId === proof.id,
+					)
+				) {
+					const another = yield* members.invite(alice, proof.id, "viewer")
+					yield* members.accept(bobIdentity, another.id)
+				}
+				assert.equal(
+					(yield* Effect.flip(access.authorize(bob, cardUrl, true)))._tag,
+					"DeveloperForbidden",
+				)
+				assert.equal(
+					(yield* Effect.flip(members.invite(bob, proof.id, "viewer")))._tag,
+					"DeveloperForbidden",
+				)
+				const bobMember = (yield* members.list(alice, proof.id)).members.find(
+					(member) => member.identity.userId === bobIdentity.userId,
+				)
+				assert.ok(bobMember !== undefined)
+				yield* members.change(alice, bobMember.id, "maintainer")
+				yield* access.authorize(bob, cardUrl, true)
+				yield* members.remove(alice, bobMember.id)
+				assert.equal(
+					(yield* Effect.flip(access.authorize(bob, cardUrl)))._tag,
+					"DeveloperNotFound",
+				)
+				const restoredInvite = yield* members.invite(alice, proof.id, "viewer")
+				yield* members.accept(bobIdentity, restoredInvite.id)
+				const before = yield* reports.save(alice, cardUrl)
+				reportId = before.id
+				hasIssue = false
+				const after = yield* reports.save(alice, cardUrl)
+				assert.equal(
+					(yield* reports.compare(bob, before.id, after.id)).resolved[0]?.code,
+					"NoIndex",
+				)
+				assert.equal(
+					(yield* Effect.flip(reports.remove(bob, before.id)))._tag,
+					"DeveloperNotFound",
+				)
+				const independent = yield* access.start(bob, {
+					_tag: "AppCard",
+					cardUrl,
+				})
+				tokens = [...tokens, independent.token]
+				yield* access.verify(bob, independent.id)
+				assert.equal(
+					(yield* Effect.flip(access.relinquish(alice, independent.id)))._tag,
+					"DeveloperNotFound",
+				)
+				const staleInvitation = yield* members.invite(alice, proof.id, "viewer")
+				yield* access.relinquish(alice, proof.id)
+				const inactive = yield* Effect.flip(
+					members.accept(
+						{ tenantId: "fresh", userId: "fresh" },
+						staleInvitation.id,
+					),
+				)
+				assert.ok(inactive._tag === "DeveloperConflict")
+				assert.equal(inactive.reason, "InvitationSourceInactive")
+				assert.equal((yield* access.authorize(bob, cardUrl, true)).length, 1)
+				assert.equal(
+					(yield* Effect.flip(access.recheck(proof.id)))._tag,
+					"DeveloperConflict",
+				)
+				const domain = yield* access.start(alice, {
+					_tag: "PublisherHostname",
+					hostname: "publisher.example",
+				})
+				tokens = [...tokens, domain.token]
+				yield* access.verify(alice, domain.id)
+				const child = "https://sub.publisher.example/card"
+				yield* records.apps.put(child, "", "", {
+					candidate: yield* Discovery.Candidate.decode({
+						...candidate,
+						cardUrl: child,
+					}),
+					nextCheckAt: 0,
+				})
+				assert.equal(
+					(yield* Effect.flip(access.authorize(alice, child)))._tag,
+					"DeveloperNotFound",
+				)
+				const distinct = cardUrl.replace("notes", "other")
+				yield* records.apps.put(distinct, "", "", {
+					candidate: yield* Discovery.Candidate.decode({
+						...candidate,
+						cardUrl: distinct,
+					}),
+					nextCheckAt: 0,
+				})
+				assert.equal((yield* access.authorize(alice, distinct)).length, 1)
+				assert.equal(
+					(yield* Effect.flip(access.authorize(bob, distinct)))._tag,
+					"DeveloperNotFound",
+				)
+				const unlisted = "https://publisher.example/unlisted?app=private"
+				yield* records.apps.put(unlisted, "", "", {
+					candidate: yield* Discovery.Candidate.decode({
+						...candidate,
+						cardUrl: unlisted,
+						sources: [],
+					}),
+					nextCheckAt: 0,
+				})
+				assert.equal(
+					(yield* Effect.flip(access.authorize(alice, unlisted)))._tag,
+					"DeveloperNotFound",
+				)
+				const hosted = "https://hosting.example/customer/card"
+				yield* records.apps.put(hosted, "", "", {
+					candidate: yield* Discovery.Candidate.decode({
+						...candidate,
+						cardUrl: hosted,
+					}),
+					nextCheckAt: 0,
+				})
+				assert.equal(
+					(yield* Effect.flip(access.authorize(alice, hosted)))._tag,
+					"DeveloperNotFound",
+				)
+				const expiringInvite = yield* members.invite(alice, domain.id, "viewer")
+				unavailable = true
+				const unconfirmed = yield* access.recheck(domain.id)
+				assert.equal(unconfirmed.status, "Unconfirmed")
+				const until = unconfirmed.validUntil
+				yield* TestClock.adjust("8 days")
+				assert.equal((yield* access.recheck(domain.id)).validUntil, until)
+				assert.equal(
+					(yield* Effect.flip(access.authorize(alice, cardUrl)))._tag,
+					"DeveloperNotFound",
+				)
+				assert.equal(
+					(yield* Effect.flip(members.accept(bobIdentity, expiringInvite.id)))
+						._tag,
+					"DeveloperConflict",
+				)
+				const expiredClaim = yield* Effect.flip(
+					access.verify(alice, expiringClaim.id),
+				)
+				assert.ok(expiredClaim._tag === "DeveloperConflict")
+				assert.equal(expiredClaim.reason, "ClaimExpired")
+				assert.ok(
+					(yield* access.start(alice, expiringClaim.scope)).expiresAt >
+						expiringClaim.expiresAt,
+				)
+				unavailable = false
+				assert.equal((yield* access.recheck(domain.id)).status, "Confirmed")
+			}),
+		)
+		await runtime.dispose()
+		runtime = runtimeFor()
+		await runtime.runPromise(
+			Effect.gen(function* () {
+				const access = yield* DeveloperAccess
+				assert.equal(
+					(yield* access.ownProof(alice, proofId)).value.status,
+					"Relinquished",
+				)
+				assert.equal(
+					(yield* (yield* DeveloperReports).get(alice, reportId)).report
+						.issues[0]?.code,
+					"NoIndex",
+				)
+			}),
+		)
+	} finally {
+		await runtime.dispose()
+		await database.close()
+	}
+})

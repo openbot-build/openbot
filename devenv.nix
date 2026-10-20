@@ -1,0 +1,108 @@
+{
+  config,
+  pkgs,
+  multiverse,
+  ...
+}:
+
+{
+  devenv.warnOnNewVersion = false;
+
+  dotenv = {
+    enable = true;
+    filename = ".env.development";
+  };
+
+  scripts.dev-setup.exec = ''
+    set -eu
+    umask 077
+    mkdir -p .devenv/dev
+    if [ ! -f .env.development ]; then
+      sed -e "s/^BETTER_AUTH_SECRET=$/BETTER_AUTH_SECRET=$(openssl rand -hex 32)/" \
+        -e "s/^OPENBOT_APP_ENCRYPTION_KEY=$/OPENBOT_APP_ENCRYPTION_KEY=$(openssl rand -hex 32)/" \
+        docker/development.env.example > .env.development
+    fi
+    if [ ! -f .devenv/dev/cert.pem ] || [ ! -f .devenv/dev/key.pem ]; then
+      mkcert -cert-file .devenv/dev/cert.pem -key-file .devenv/dev/key.pem localhost 127.0.0.1 ::1
+    fi
+    echo "Run mkcert -install, then pnpm dev to sign in with the local development account."
+  '';
+
+  tasks."dev:install".exec = "pnpm install --frozen-lockfile";
+
+  processes = {
+    postgres = {
+      exec = "docker compose --env-file .env.development up --abort-on-container-exit postgres";
+      ready.exec = "pg_isready --dbname \"$OPENBOT_DATABASE_URL\"";
+    };
+    platform = {
+      after = [
+        "devenv:processes:postgres"
+        "dev:install"
+      ];
+      exec = ''
+        set -eu
+        : "''${BETTER_AUTH_SECRET:?Run pnpm dev:setup first}"
+        pnpm --filter-prod @openbot-build/platform... build
+        pnpm --filter @openbot-build/platform migrate
+        exec pnpm --filter @openbot-build/platform start:development
+      '';
+      restart.on = "never";
+      watch = {
+        paths = builtins.map (name: ./packages + "/${name}/src") (
+          builtins.filter (name: builtins.pathExists (./packages + "/${name}/src")) (
+            builtins.attrNames (builtins.readDir ./packages)
+          )
+        );
+      };
+    };
+  };
+
+  packages = with pkgs; [
+    git
+    gh
+    glab
+    corepack
+    docker-client
+    mkcert
+    openssl
+    ripgrep
+    postgresql
+  ];
+
+  env = {
+    OPENBOT_DATABASE_URL =
+      config.dotenv.resolved.OPENBOT_DATABASE_URL or "postgres://openbot_dev:openbot_dev@127.0.0.1:${
+        config.dotenv.resolved.OPENBOT_DEV_DATABASE_PORT or "5433"
+      }/${config.dotenv.resolved.OPENBOT_DEV_DATABASE_NAME or "openbot"}";
+    OPENBOT_HOST = "127.0.0.1";
+    OPENBOT_PORT = config.dotenv.resolved.OPENBOT_DEV_HTTPS_PORT or "8443";
+    OPENBOT_PUBLIC_ORIGIN = "https://localhost:${
+      config.dotenv.resolved.OPENBOT_DEV_HTTPS_PORT or "8443"
+    }";
+    OPENBOT_TLS_CERT = "${config.devenv.root}/.devenv/dev/cert.pem";
+    OPENBOT_TLS_KEY = "${config.devenv.root}/.devenv/dev/key.pem";
+  };
+
+  languages = {
+    javascript = {
+      enable = true;
+      lsp.enable = false;
+      package = multiverse.nodejs_26."26.6.0";
+    };
+  };
+
+  treefmt = {
+    enable = true;
+    config = {
+      projectRootFile = "devenv.nix";
+      settings.global.excludes = [
+        "references/**"
+      ];
+      programs = {
+        prettier.enable = true;
+        nixfmt.enable = true;
+      };
+    };
+  };
+}

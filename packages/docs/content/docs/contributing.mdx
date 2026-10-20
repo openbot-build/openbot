@@ -1,0 +1,152 @@
+---
+title: Contributing
+description: Set up the code, run the checks, and follow the project rules.
+---
+
+This page is for people who change OpenBot itself. It shows how to set up your computer, run the server and the checks, and find your way in the code.
+
+---
+
+## Set up
+
+You need [Docker](https://docs.docker.com/get-docker/) and [devenv](https://devenv.sh). devenv gives you the exact tools for the project: Node.js, pnpm, PostgreSQL tools, mkcert, and more.
+Run every command through `devenv shell -- <command>`, so you always use these tools.
+
+<Steps>
+<Step>
+
+### Get the code
+
+```sh
+git clone <repository-url> openbot
+cd openbot
+```
+
+</Step>
+<Step>
+
+### Make local settings
+
+```sh
+devenv shell -- pnpm dev:setup
+devenv shell -- mkcert -install
+```
+
+`dev:setup` makes `.env.development` with new random secrets. It also makes a local TLS certificate in `.devenv/dev/`.
+`mkcert -install` makes your computer trust that certificate.
+
+</Step>
+<Step>
+
+### Start the development server
+
+```sh
+devenv shell -- pnpm dev
+```
+
+`pnpm dev` runs `devenv up`. It does these steps:
+
+1. It starts PostgreSQL in Docker on `127.0.0.1:5433`.
+2. It installs the packages with `pnpm install --frozen-lockfile`.
+3. It builds Platform and the packages it needs.
+4. It runs the database migrations.
+5. It starts the development server at `https://localhost:8443`.
+
+When you change a file in `packages/*/src`, devenv starts Platform again.
+
+</Step>
+</Steps>
+
+The development server uses a local test account, test models, and a test App. No outside service is needed.
+To sign in and make an API key, see [Quick start](/docs/quickstart).
+
+---
+
+## Checks
+
+| Command                                                  | What it does                               |
+| -------------------------------------------------------- | ------------------------------------------ |
+| `devenv shell -- pnpm install`                           | Installs all packages.                     |
+| `devenv shell -- pnpm build`                             | Builds every package with tsdown.          |
+| `devenv shell -- pnpm typecheck`                         | Checks the types of every package.         |
+| `devenv shell -- pnpm -r test`                           | Runs the tests of every package.           |
+| `devenv shell -- pnpm --filter @openbot-build/core test` | Runs the tests of one package.             |
+| `devenv shell -- treefmt`                                | Formats the code with Prettier and nixfmt. |
+
+Run `pnpm build` before `pnpm typecheck`. Packages import each other from their built files.
+
+Tests use Node.js's own test runner. Platform tests start their own short-lived PostgreSQL server with the tools from devenv. They need no secrets and no outside services.
+CI runs the same `build`, `typecheck`, and `test` commands. See [Deploy](/docs/deploy#gitlab-ci).
+
+---
+
+## Repository layout
+
+| Path                      | What it holds                                                                           |
+| ------------------------- | --------------------------------------------------------------------------------------- |
+| `packages/`               | The workspace packages. See [Packages](/docs/packages).                                 |
+| `packages/docs/`          | This docs site.                                                                         |
+| `packages/template/`      | A starting point for a new package. It is not part of the workspace.                    |
+| `protocol-test/`          | The public test service for the App Protocol. See [Protocol test](/docs/protocol-test). |
+| `docker/`                 | Dockerfiles, environment templates, and the CI image script.                            |
+| `compose.yaml`            | The development PostgreSQL.                                                             |
+| `compose.production.yaml` | The production setup. See [Deploy](/docs/deploy).                                       |
+| `patches/`                | Fixes for exact versions of outside packages.                                           |
+| `references/`             | Source code of other open source projects, as Git submodules. Only for reading.         |
+| `devenv.nix`              | The development tools, settings, and processes.                                         |
+
+The `references/` folder is not part of the build. To read that code, fetch it with `git submodule update --init`.
+
+To start a new package, copy `packages/template/` to `packages/<name>/`. Then change its name, entry point, and dependencies.
+
+---
+
+## The docs site
+
+The docs site is a Next.js app built with Fumadocs. Start it with:
+
+```sh
+devenv shell -- pnpm --filter @openbot-build/docs dev
+```
+
+Then open `http://localhost:3000/docs`.
+
+| Path in `packages/docs/` | What it is                                                              |
+| ------------------------ | ----------------------------------------------------------------------- |
+| `content/docs/*.mdx`     | The pages. The file name is the URL: `deploy.mdx` is `/docs/deploy`.    |
+| `content/docs/meta.json` | The order of the pages in the sidebar.                                  |
+| `content/docs/api/`      | The API reference. It is made by a script. Do not change it by hand.    |
+| `scripts/api.ts`         | Makes `openapi.json` and the API reference pages from the API contract. |
+
+The script runs before every `dev` and `build`. When you change the API contract in `@openbot-build/platform-api`, the reference changes too.
+To check that every page builds, run `devenv shell -- pnpm --filter @openbot-build/docs build`.
+
+---
+
+## Project rules
+
+### Simple English
+
+Write all text in [Simple English](https://en.wikipedia.org/wiki/Simple_English). This covers docs, code comments, error messages, logs, prompts, and test text.
+Use short sentences and common words. Explain each technical term the first time you use it.
+
+### Headless
+
+OpenBot has no user interface. Do not add pages, front ends, or client apps to the repository. The docs site is the only exception.
+Every new feature starts as an operation in the `@openbot-build/platform-api` contract. Then the server handles it.
+Every operation must work with an API key and with the sign-in cookie.
+
+### One current model
+
+Do not keep old paths for old callers, old clients, or old data. When a contract or the storage must change, change it directly.
+The only exception is a small fix for a bug in an outside package or tool.
+
+### Effect data first
+
+Use the immutable data types of Effect, such as `HashMap`, `Chunk`, and `Option`. Use the mutable types of JavaScript only when you really need them.
+
+### Small, real changes
+
+Build what gives real value. Keep each change focused, and test the parts that can really break.
+
+The full rules for contributors are in `AGENTS.md` at the root of the repository.

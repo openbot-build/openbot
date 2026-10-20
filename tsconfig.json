@@ -1,0 +1,44 @@
+{
+	"files": [],
+	"references": [
+		{
+			"path": "./packages/platform-api"
+		},
+		{
+			"path": "./packages/platform"
+		},
+		{
+			"path": "./packages/core"
+		},
+		{
+			"path": "./packages/plugin-goal"
+		},
+		{
+			"path": "./packages/plugin-turn-limiter"
+		},
+		{
+			"path": "./packages/protocol"
+		},
+		{
+			"path": "./packages/app-host"
+		},
+		{
+			"path": "./packages/provider-openai"
+		},
+		{
+			"path": "./packages/plugin-memory"
+		},
+		{
+			"path": "./packages/provider-anthropic"
+		},
+		{
+			"path": "./packages/provider-openai-compat"
+		},
+		{
+			"path": "./packages/client"
+		},
+		{
+			"path": "./protocol-test"
+		}
+	]
+}

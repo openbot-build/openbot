@@ -1,0 +1,22 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": false,
+		"rootDir": "src",
+		"outDir": "dist",
+		"rewriteRelativeImportExtensions": true,
+		"tsBuildInfoFile": ".cache/build.tsbuildinfo"
+	},
+	"include": ["src"],
+	"references": [
+		{
+			"path": "../platform-api"
+		},
+		{
+			"path": "../core"
+		},
+		{
+			"path": "../plugin-memory"
+		}
+	]
+}

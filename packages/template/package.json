@@ -1,0 +1,20 @@
+{
+	"name": "@openbot-build/template",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./dist/index.js"
+	},
+	"scripts": {
+		"build": "tsdown"
+	},
+	"dependencies": {
+		"effect": "4.0.5"
+	},
+	"files": [
+		"dist",
+		"src",
+		"README.md"
+	]
+}

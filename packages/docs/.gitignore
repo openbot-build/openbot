@@ -1,0 +1,8 @@
+/.next/
+/.source/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+# Generated from the Platform API contract by scripts/api.ts.
+/openapi.json
+/content/docs/api/

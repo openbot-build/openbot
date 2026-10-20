@@ -1,0 +1,295 @@
+---
+title: Sessions
+description: Create Sessions, run Turns, and read the results.
+---
+
+A **Session** is one conversation and line of work. You give it work in **Turns**. A Turn is one request and all the Agent work that follows it.
+This page shows the Session and Turn routes. Every route is under `/v1/sessions` and accepts an API key or the session cookie. See [Authentication](/docs/authentication).
+
+| Term        | Meaning                                                                                         |
+| ----------- | ----------------------------------------------------------------------------------------------- |
+| Item        | One record inside a Turn, such as a user message, a model answer, a tool call or a tool result. |
+| Revision    | `session.revision`. A number that goes up with every change to the Session.                     |
+| Memory head | `session.head`. The ID of the current Version of the conversation history.                      |
+| Version     | A saved point in the history. A Version never changes after Platform saves it.                  |
+
+Most writes need `expected`. This is the revision you last saw. If the Session changed since then, Platform returns `409` with `SessionConflict`. Read the Session again and retry.
+
+---
+
+## Create a Session
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Trip plan"}' \
+  https://api.example.com/v1/sessions
+```
+
+Both fields are optional. `settings` can hold `mode`, `model`, `memoryEnabled` and `memoryGenerationEnabled`. Creating a Session does not call a model.
+Platform returns `201` with the Session view. Here is a short form of it:
+
+```json
+{
+	"session": {
+		"id": "a41c9e0f",
+		"revision": 0,
+		"head": "v-7d21",
+		"metadata": { "title": "Trip plan" },
+		"settings": { "mode": "default", "memoryEnabled": true },
+		"pending": [],
+		"turns": [],
+		"inheritedTurns": []
+	},
+	"state": {
+		"version": { "id": "v-7d21" },
+		"value": { "memory": { "history": [] } }
+	},
+	"response": null,
+	"activity": "inactive"
+}
+```
+
+`response` is the latest Turn's answer. `activity` is `active` while a Turn runs on this server, `inactive` when nothing runs, and `historical` when a saved Turn says it runs but no server runs it.
+
+## List and read Sessions
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  "https://api.example.com/v1/sessions?archived=false"
+```
+
+The list is an array of summaries. Each summary has `session`, `status` (`Idle`, `Running`, `WaitingApproval`, `Completed`, `Failed` or `Interrupted`), `turn`, a short `response` and `activity`. Leave out `archived` to get all Sessions.
+
+`GET /v1/sessions/:sessionId` returns the full view. Reading never starts work.
+
+To wait for a change, use a long poll. Platform answers when the revision is no longer `after`, or when the timeout ends. The longest wait is 30 seconds.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  "https://api.example.com/v1/sessions/$SESSION/wait?after=3&timeoutMs=30000"
+```
+
+## Rename, archive and delete
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"expected":3,"title":"Trip to Rome","archived":true}' \
+  https://api.example.com/v1/sessions/$SESSION
+```
+
+`DELETE /v1/sessions/:sessionId` removes the Session and returns `204`. If a Turn runs, Platform returns `409` with `SessionBusy`.
+
+---
+
+## Start a Turn
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"expected":0,"input":"Plan three days in Rome."}' \
+  https://api.example.com/v1/sessions/$SESSION/turns
+```
+
+| Field        | Meaning                                                                                             |
+| ------------ | --------------------------------------------------------------------------------------------------- |
+| `expected`   | Required. The current `session.revision`.                                                           |
+| `input`      | Required. Text, or a list of user messages (see below).                                             |
+| `stream`     | Optional. `true` sends live events. See [Stream the answer](#stream-the-answer).                    |
+| `background` | Optional. Only `true` is allowed. Every Turn runs in the background.                                |
+| `overrides`  | Optional. Settings for this Turn only: `mode`, `model`, `memoryEnabled`, `memoryGenerationEnabled`. |
+
+`input` takes text only. These three forms are the same:
+
+```json
+"Plan three days in Rome."
+```
+
+```json
+[{ "role": "user", "content": "Plan three days in Rome." }]
+```
+
+```json
+[
+	{
+		"type": "message",
+		"role": "user",
+		"content": [{ "type": "input_text", "text": "Plan three days in Rome." }]
+	}
+]
+```
+
+Unknown fields return `400`.
+
+### Background answer
+
+Without `stream`, Platform returns `202` at once. The response has `status: "in_progress"`:
+
+```json
+{
+	"id": "t-19aa",
+	"object": "response",
+	"created_at": 1792486800,
+	"session": "a41c9e0f",
+	"version": "v-7d21",
+	"background": true,
+	"status": "in_progress",
+	"output": [],
+	"error": null,
+	"incomplete_details": null
+}
+```
+
+The work goes on after the request ends. Read the result later with `GET /v1/sessions/:sessionId` (the `response` field), the wait route, or `GET /v1/sessions/:sessionId/turns/:turnId`.
+The final `status` is `completed`, `incomplete`, `failed` or `cancelled`. Each item in `output` is an assistant message with `output_text` parts. `usage` shows the tokens.
+
+### Stream the answer
+
+With `"stream": true`, Platform answers `200` with Server-Sent Events (SSE). SSE is a simple format for a stream of events over HTTP.
+
+```sh
+curl -N -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"expected":0,"input":"Plan three days in Rome.","stream":true}' \
+  https://api.example.com/v1/sessions/$SESSION/turns
+```
+
+```sh
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","session":"a41c9e0f","turn":"t-19aa","step":1,"sequence_number":4,"item_id":"i-02","output_index":0,"content_index":0,"delta":"Day 1: ","logprobs":[]}
+```
+
+The events come in this order: `response.created`, `response.in_progress`, `response.output_item.added`, `response.content_part.added`, many `response.output_text.delta`, `response.output_text.done`, `response.content_part.done`, `response.output_item.done`. The last event is one of `response.completed`, `response.incomplete`, `response.failed` or `response.cancelled`.
+The stream only watches the Turn. If you close it, the Turn goes on.
+
+### Common errors
+
+| Status | Error                         | When                                            |
+| ------ | ----------------------------- | ----------------------------------------------- |
+| `400`  | `SessionModelInvalid`         | The model in `overrides` does not exist.        |
+| `404`  | `SessionNotFound`             | No such Session in your tenant.                 |
+| `409`  | `SessionBusy`                 | The Session already has an unfinished Turn.     |
+| `409`  | `SessionConflict`             | `expected` is old, or the Turn could not start. |
+| `503`  | `SessionExecutionUnavailable` | Platform has no model to run the Turn.          |
+| `503`  | `SessionStorageUnavailable`   | Platform cannot reach its database.             |
+
+A Turn can also stop and wait for a person. See [Approvals](/docs/approvals).
+
+---
+
+## Read Turns and Items
+
+`GET /v1/sessions/:sessionId/turns` lists Turn records, oldest first. Use `limit` (1 to 100, default 50) and `after` (a Turn ID). The answer is `{ "items": [...], "next": "<turnId>" | null }`. The list also has Turns that a Fork copied from the source Session.
+
+`GET /v1/sessions/:sessionId/turns/:turnId` returns `{ "turn": {...}, "response": {...} }`. The Turn record has `status`, `settings`, `steps`, `usage`, `start` and `end`. `start` is the Version before the Turn. `end` is the Version after it.
+
+`GET /v1/sessions/:sessionId/turns/:turnId/items` lists the Items of one Turn, with the same `after` and `limit`. Each Item has `id`, `content` and `origin` (`session`, `turn`, `step`).
+
+## Steer, queue and interrupt
+
+**Steer** adds a message to a running Turn. The Agent reads it at its next step.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"input":"Keep it cheap."}' \
+  https://api.example.com/v1/sessions/$SESSION/turns/$TURN/steer
+```
+
+Platform returns `202` with `session`, `turn`, `item`, `revision` and `version`. If the Turn does not run, you get `409`.
+
+**Queue** saves a message for later: `POST /v1/sessions/:sessionId/queue` with `{ "input": ..., "expected"?: <revision> }`. When the current Turn ends, Platform starts the next queued message as a new Turn. The answer is `202` with `session`, `item` and `revision`.
+
+**Interrupt** stops a Turn: `POST /v1/sessions/:sessionId/turns/:turnId/interrupt` with the body `{}`. The Turn status becomes `Interrupted` and the response status becomes `cancelled`. A Turn that has already ended returns `409`.
+
+**Resume** cleans up after a restart: `POST /v1/sessions/:sessionId/resume`. If a saved Turn still says it runs but no server runs it (`activity: "historical"`), Platform marks it `Interrupted`. It does not run the Turn again.
+
+---
+
+## Models and execution mode
+
+`GET /v1/sessions/:sessionId/models` shows the models you can pick:
+
+```json
+{
+	"selected": {
+		"_tag": "Config.Selection",
+		"provider": "development",
+		"model": "mock-text"
+	},
+	"providers": [
+		{ "id": "development", "name": "Development scenarios (simulated)" }
+	],
+	"models": [
+		{
+			"_tag": "Config.Model",
+			"provider": "development",
+			"id": "mock-text",
+			"name": "mock-text (simulated)",
+			"reasoningEfforts": [],
+			"serviceTiers": []
+		}
+	]
+}
+```
+
+Pick a model for the Session with `PUT /v1/sessions/:sessionId/model`:
+
+```json
+{
+	"expected": 4,
+	"selection": {
+		"_tag": "Config.Selection",
+		"provider": "development",
+		"model": "mock-slow"
+	}
+}
+```
+
+A wrong choice returns `400` with `SessionModelInvalid`. The `reason` is `provider-not-found`, `model-not-found` or `unsupported-option`. To use a model for one Turn only, put the selection in `overrides.model` when you start the Turn. See [Models](/docs/models) for how Platform gets its models.
+
+The execution mode is `default` or `plan`. Set it with `PUT /v1/sessions/:sessionId/mode` and `{ "expected": 4, "mode": "plan" }`. Platform saves the mode on the Session and copies it into each new Turn's `settings`, where tools and plugins can read it.
+
+`PUT /v1/sessions/:sessionId/settings` replaces all settings at once: `{ "expected": 4, "settings": { "mode": "default", "memoryEnabled": true } }`.
+
+---
+
+## Fork from a Version
+
+A **Fork** makes a new Session that starts from a Version of another Session. The source Session does not change.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"version":"v-7d21","title":"Rome, plan B"}' \
+  https://api.example.com/v1/sessions/$SESSION/fork
+```
+
+All fields are optional: `version`, `title` and `settings`. Without `version`, the Fork starts from the latest complete point. Platform returns `201` with the new Session view. Its `session.forkedFrom` names the source Session and Version.
+
+To find Versions, use `GET /v1/sessions/:sessionId/versions`. To see the history at one Version, use `GET /v1/sessions/:sessionId/history?version=<versionId>`.
+
+### Regenerate an answer
+
+To get a new answer to the same question, fork from the Version before that Turn. Then start a new Turn with the same input.
+
+1. Read the Turn with `GET /v1/sessions/$SESSION/turns/$TURN`. Note `turn.start`. `turn.input` lists the IDs of the input Items. Read their text with the Items route.
+2. Fork with `{ "version": "<turn.start>" }`. Note the new `session.id` and `session.revision`.
+3. Start a Turn in the new Session with the same `input`.
+
+---
+
+## Export and import
+
+`GET /v1/sessions/:sessionId/record` exports the whole Session as one record. The record has `formatVersion`, `session`, `versions` and `messages`.
+
+`PUT /v1/sessions/:sessionId/record` imports a record. The body is `{ "record": {...}, "expected": ... }`:
+
+- Use `"expected": null` to make a new Session from the record.
+- To replace an existing Session, set `expected` to its current `session` object from `GET /v1/sessions/:sessionId`.
+
+The record's `session.id` must match the path. If it does not, Platform returns `400` with `SessionInvalidRecord`. If a Turn runs, Platform returns `409` with `SessionBusy`.
+An import restores data only. It does not restart a Turn.
+
+See all fields in the [Sessions reference](/docs/api/sessions).

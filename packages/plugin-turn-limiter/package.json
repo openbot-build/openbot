@@ -1,0 +1,28 @@
+{
+	"name": "@openbot-build/plugin-turn-limiter",
+	"version": "0.1.0",
+	"type": "module",
+	"description": "ReAct turn limit middleware for OpenBot Sessions",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src",
+		"README.md"
+	],
+	"exports": {
+		".": "./dist/index.js",
+		"./TurnLimiter": "./dist/TurnLimiter.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && node --test test/*.test.ts"
+	},
+	"peerDependencies": {
+		"@openbot-build/core": "0.1.0",
+		"effect": "4.0.5"
+	},
+	"devDependencies": {
+		"@openbot-build/core": "workspace:*",
+		"effect": "4.0.5"
+	}
+}

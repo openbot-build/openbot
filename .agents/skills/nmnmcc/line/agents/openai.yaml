@@ -1,0 +1,7 @@
+interface:
+  # Invocation is opt-in for this catalog.
+  display_name: "Line"
+  short_description: "Keep one domain rule coherent."
+  default_prompt: "Use $line when related modules must follow one shared rule."
+policy:
+  allow_implicit_invocation: false

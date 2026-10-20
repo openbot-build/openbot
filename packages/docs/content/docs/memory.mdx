@@ -1,0 +1,145 @@
+---
+title: Memory
+description: Keep useful facts from a Session and use them in later Turns.
+---
+
+**Learned memory** is a short list of facts that the Agent keeps for a Session. Each fact has a source in the conversation.
+Platform adds facts after each Turn and shows them to the model in later Turns. You can also add, remove and turn off facts yourself.
+This page shows how learned memory works and how to change it with the API.
+
+Learned memory belongs to one Session. It is part of the Session's history, so a [Fork](/docs/sessions#fork-from-a-version) takes a copy of it. Other Sessions do not see it.
+
+---
+
+## Read memory
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  https://api.example.com/v1/sessions/$SESSION/memory
+```
+
+```json
+{
+	"entries": {
+		"budget": {
+			"key": "budget",
+			"content": "The trip budget is 1500 EUR.",
+			"kind": "fact",
+			"sources": ["i-02"],
+			"updatedAt": 1792486800000,
+			"status": "active"
+		}
+	},
+	"processed": ["i-01", "i-02"]
+}
+```
+
+| Field       | Meaning                                                        |
+| ----------- | -------------------------------------------------------------- |
+| `key`       | A stable name for the fact. One key holds one fact.            |
+| `content`   | The fact in plain text.                                        |
+| `kind`      | `fact`, `decision`, `preference`, `procedure` or `hypothesis`. |
+| `sources`   | The IDs of the Items that support the fact.                    |
+| `status`    | `active`, or `retracted` when the fact was removed.            |
+| `processed` | The Items that Platform has already read for memory.           |
+
+---
+
+## How Platform uses memory
+
+### In a Turn
+
+When `memoryEnabled` is `true`, Platform adds the active facts to the model's instructions when the Turn runs. The text tells the model that memory is past evidence and that current instructions win.
+Retracted facts are not sent. `memoryEnabled` is `true` for a new Session.
+
+### After a Turn
+
+When a Turn completes, Platform consolidates memory. To consolidate means to read the new Items and update the list of facts. Platform asks the Turn's model to find facts worth keeping. The model must name the source Items for each change.
+
+Platform checks these rules for every change:
+
+- Platform reads only Items that it has not processed yet.
+- Each change must name at least one of those Items as its source.
+- One change per key. A retracted fact stays retracted. Only a direct Remember can bring it back.
+
+Platform also tells the model to reuse a key for the same fact, to count only clear user statements as preferences, and to never keep passwords, keys or links that give access.
+
+If the model fails, the Turn still completes. Platform records the error and tries again with the next Turn.
+Set `memoryGenerationEnabled` to `false` to stop this step.
+
+---
+
+## Change memory
+
+All changes use one route: `POST /v1/sessions/:sessionId/memory`.
+
+```json
+{
+	"expected": "v-7d21",
+	"revision": 5,
+	"command": {
+		"_tag": "Remember",
+		"key": "budget",
+		"content": "The trip budget is 1500 EUR.",
+		"kind": "fact"
+	}
+}
+```
+
+| Field      | Meaning                                                             |
+| ---------- | ------------------------------------------------------------------- |
+| `expected` | The Memory head you last saw: `session.head` from the Session view. |
+| `revision` | The Session revision you last saw: `session.revision`.              |
+| `command`  | What to do. See the commands below.                                 |
+
+If the Session or its history changed since you read it, Platform returns `409` with `SessionConflict`. Read the Session again and retry.
+On success, Platform returns the new Session view. The view has a new `session.head` and `session.revision`.
+
+### Commands
+
+| `_tag`      | Fields                       | What it does                                                               |
+| ----------- | ---------------------------- | -------------------------------------------------------------------------- |
+| `Remember`  | `key`, `content`, `kind`     | Adds a fact, or replaces the fact with this key. It makes the fact active. |
+| `Forget`    | `key`                        | Marks the fact as retracted. An unknown key returns `409`.                 |
+| `Configure` | `use`, `generate` (booleans) | Sets `memoryEnabled` to `use` and `memoryGenerationEnabled` to `generate`. |
+| `Refresh`   | none                         | Runs consolidation now with the Session's model.                           |
+
+Remember and Forget also add a small Item to the history that records your edit. This Item becomes the source of the change.
+
+### Examples
+
+Forget a fact:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"expected":"v-8e02","revision":6,"command":{"_tag":"Forget","key":"budget"}}' \
+  https://api.example.com/v1/sessions/$SESSION/memory
+```
+
+Keep using the facts, but stop learning new ones:
+
+```json
+{
+	"expected": "v-9f13",
+	"revision": 7,
+	"command": { "_tag": "Configure", "use": true, "generate": false }
+}
+```
+
+Learn from the history now:
+
+```json
+{ "expected": "v-9f13", "revision": 8, "command": { "_tag": "Refresh" } }
+```
+
+<Callout type="info">
+	Refresh needs a model. If Platform has no model, it returns `409` with
+	`SessionConflict`. Refresh does nothing when `memoryGenerationEnabled` is
+	`false`. It does not check `expected` and `revision`, but you must still send
+	them.
+</Callout>
+
+To turn memory on or off for one Turn only, set `overrides.memoryEnabled` or `overrides.memoryGenerationEnabled` when you [start the Turn](/docs/sessions#start-a-turn).
+
+See all fields in the [Sessions reference](/docs/api/sessions).

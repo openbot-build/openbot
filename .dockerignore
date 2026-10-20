@@ -1,0 +1,12 @@
+.git
+.agents
+.devenv*
+.direnv
+.env*
+devenv.local.*
+references
+**/node_modules
+**/dist
+**/build
+**/.cache
+*.log

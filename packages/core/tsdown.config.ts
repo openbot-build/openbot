@@ -1,0 +1,57 @@
+import config from "../../tsdown.config.ts"
+import { defineConfig } from "tsdown"
+
+export default defineConfig({
+	...config,
+	entry: {
+		"agent/Agent": "src/agent/Agent.ts",
+		"session/Turn": "src/session/Turn.ts",
+		"memory/Memory": "src/memory/Memory.ts",
+		"memory/Item": "src/memory/Item.ts",
+		"store/SessionStoreRepository": "src/store/SessionStoreRepository.ts",
+		"store/Snapshots": "src/store/Snapshots.ts",
+		"store/Store": "src/store/Store.ts",
+		"store/RecordSerialization": "src/store/RecordSerialization.ts",
+		"store/MemoryPersistence": "src/store/MemoryPersistence.ts",
+		"store/VersionGraph": "src/store/VersionGraph.ts",
+		"store/DeltaValidation": "src/store/DeltaValidation.ts",
+		"memory/MemoryState": "src/memory/MemoryState.ts",
+
+		index: "src/index.ts",
+		"session/Session": "src/session/Session.ts",
+		"models/Config": "src/models/Config.ts",
+		"context/ConversationContext": "src/context/ConversationContext.ts",
+		"models/Model": "src/models/Model.ts",
+		"plugins/Plugin": "src/plugins/Plugin.ts",
+		"models/Provider": "src/models/Provider.ts",
+		"skills/Skill": "src/skills/Skill.ts",
+		"skills/SkillMap": "src/skills/SkillMap.ts",
+		"store/SessionStore": "src/store/SessionStore.ts",
+		"session/SessionRuntime": "src/session/SessionRuntime.ts",
+		"store/SessionStoreMemory": "src/store/SessionStoreMemory.ts",
+		"models/ConfigurationOperations": "src/models/ConfigurationOperations.ts",
+		"context/ContextWindow": "src/context/ContextWindow.ts",
+		"context/SummaryCompaction": "src/context/SummaryCompaction.ts",
+		"context/ContextCompaction": "src/context/ContextCompaction.ts",
+		"context/ConversationContextOperations":
+			"src/context/ConversationContextOperations.ts",
+		"plugins/PluginComposition": "src/plugins/PluginComposition.ts",
+		"plugins/PluginState": "src/plugins/PluginState.ts",
+	},
+	exports: {
+		...config.exports,
+		customExports(exports) {
+			return Object.fromEntries(
+				Object.entries(exports).map(([key, value]) => {
+					const name = key.split("/").at(-1)
+					return [
+						key === "."
+							? key
+							: `./${name === "Snapshots" ? "MemorySnapshots" : name}`,
+						value,
+					]
+				}),
+			)
+		},
+	},
+})

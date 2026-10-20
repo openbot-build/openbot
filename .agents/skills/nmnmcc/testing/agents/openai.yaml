@@ -1,0 +1,7 @@
+interface:
+  # Invocation is opt-in for this catalog.
+  display_name: "Testing"
+  short_description: "Choose tests that expose credible faults."
+  default_prompt: "Use $testing when deciding what check can change the decision."
+policy:
+  allow_implicit_invocation: false

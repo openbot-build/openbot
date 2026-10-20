@@ -1,0 +1,7 @@
+interface:
+  # Invocation is opt-in for this catalog.
+  display_name: "Point"
+  short_description: "Solve one local cause-and-effect problem."
+  default_prompt: "Use $point for a focused change with a direct proof."
+policy:
+  allow_implicit_invocation: false

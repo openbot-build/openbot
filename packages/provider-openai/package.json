@@ -1,0 +1,32 @@
+{
+	"name": "@openbot-build/provider-openai",
+	"version": "0.1.0",
+	"type": "module",
+	"description": "OpenAI Responses and native context compaction for OpenBot",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src",
+		"README.md"
+	],
+	"exports": {
+		".": "./dist/index.js",
+		"./OpenAiProvider": "./dist/OpenAiProvider.js",
+		"./ResponsesCompaction": "./dist/ResponsesCompaction.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && node --test test/*.test.ts"
+	},
+	"dependencies": {
+		"@effect/ai-openai": "4.0.5"
+	},
+	"peerDependencies": {
+		"@openbot-build/core": "0.1.0",
+		"effect": "4.0.5"
+	},
+	"devDependencies": {
+		"@openbot-build/core": "workspace:*",
+		"effect": "4.0.5"
+	}
+}

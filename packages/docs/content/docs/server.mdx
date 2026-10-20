@@ -1,0 +1,241 @@
+---
+title: Run from code
+description: Start Platform from your own TypeScript program.
+---
+
+The `openbot-platform` program covers most needs. When you need more, you can start Platform from your own program.
+Then you can add your own models, tools, routes, and App Index sources.
+
+Platform is built with [Effect](https://effect.website). You build it from Layers. A Layer is an Effect recipe that builds services. Making a Layer does not open the network or the database. That happens when you launch it.
+
+---
+
+## The smallest program
+
+This program does the same as `openbot-platform` without a model:
+
+```ts
+import { NodeRuntime } from "@effect/platform-node"
+import { EnvironmentConfiguration, Server } from "@openbot-build/platform"
+import { Effect, Layer } from "effect"
+
+NodeRuntime.runMain(
+	Effect.gen(function* () {
+		const settings = yield* EnvironmentConfiguration.load
+		return yield* Layer.launch(Server.layer(settings))
+	}),
+)
+```
+
+`EnvironmentConfiguration.load` reads the variables in [Configuration](/docs/configuration). It returns `host`, `port`, `databaseUrl`, `appEncryptionKey`, `auth`, and `tls`.
+You can also write these values in code.
+
+## What the package exports
+
+| Export                                                      | What it is                                                                      |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `Server.layer(options)`                                     | Platform with its own Node.js HTTP or HTTPS server.                             |
+| `Server.layerApi(options)`                                  | Only the HTTP routes, for an HTTP server that you already have.                 |
+| `Platform.layer(options)`                                   | The services behind the routes: sign-in, API keys, storage, Sessions, and Apps. |
+| `DatabasePostgres`                                          | The database Layer and the `migrate` program.                                   |
+| `EnvironmentConfiguration`                                  | Reads Platform settings from environment variables.                             |
+| `Lark`, `LarkConfiguration`                                 | Error alerts to Lark. See [Alerts](/docs/alerts).                               |
+| `Auth`, `Sessions`, `AppHost`, `AppPlugin`, `Configuration` | Service types for advanced setups.                                              |
+
+---
+
+## Options
+
+`Server.layer` takes all `Platform.layer` options, plus a few for the HTTP server.
+
+### Required
+
+| Option             | Type               | What it is                                          |
+| ------------------ | ------------------ | --------------------------------------------------- |
+| `host`             | `string`           | The address to listen on, such as `127.0.0.1`.      |
+| `port`             | `number`           | The port to listen on, such as `3000`.              |
+| `databaseUrl`      | `Redacted<string>` | The PostgreSQL URL.                                 |
+| `appEncryptionKey` | `Redacted<string>` | 64 hexadecimal characters. It encrypts App secrets. |
+| `auth`             | object             | Sign-in settings. See below.                        |
+
+### Sign-in
+
+`auth` has one of two forms:
+
+```ts
+import { Redacted } from "effect"
+
+// OpenID Connect
+const auth = {
+	mode: "oidc" as const,
+	publicOrigin: "https://api.example.com",
+	secret: Redacted.make(process.env.BETTER_AUTH_SECRET ?? ""),
+	issuer: "https://id.example.com",
+	clientId: "openbot",
+	// Leave out clientSecret for a public PKCE client.
+	clientSecret: Redacted.make("your-client-secret"),
+}
+
+// Local test account, only for a loopback HTTPS origin
+const development = {
+	mode: "development" as const,
+	publicOrigin: "https://localhost:8443",
+	secret: Redacted.make(process.env.BETTER_AUTH_SECRET ?? ""),
+}
+```
+
+`secret` must have at least 32 characters. `clientSecret` must not be empty when you give it.
+`sessionTtlMs` sets how long a sign-in lasts. The default is 30 days.
+
+### Optional
+
+| Option            | What it does                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| `tls`             | `{ certFile, keyFile }` paths to PEM files. Platform then serves HTTPS itself.           |
+| `sessions`        | Models, tools, and memory for Sessions. See below.                                       |
+| `routes`          | A Layer with your own HTTP routes, served next to the Platform routes.                   |
+| `discovery`       | A Layer that finds Apps on the web. The default reads public Catalogs over the internet. |
+| `indexSources`    | More sources for the App Index search, next to the Platform Index.                       |
+| `appRestrictions` | Apps that this Platform blocks: `{ cardUrl, reason, appealUrl }`.                        |
+| `appReadRules`    | App tools that you trust to only read: `{ cardUrl, tool }`.                              |
+| `indexWork`       | Timing of the App Index worker: `{ intervalMs, retryMs }`.                               |
+
+---
+
+## Sessions
+
+The `sessions` option sets how Sessions do their work.
+
+| Field            | What it does                                                                    |
+| ---------------- | ------------------------------------------------------------------------------- |
+| `runtime`        | The Agent definition: `toolkit`, `plugin`, `providers`, `compaction`, and more. |
+| `layerExecution` | A function that builds extra services for each Turn, such as tool handlers.     |
+| `modelCatalog`   | The providers and models that clients can see.                                  |
+| `defaults`       | Default Turn settings, such as the model.                                       |
+| `resolveModel`   | Returns the `LanguageModel` for a model selection.                              |
+| `memory`         | Your own `model` and `policy` for learned memory. See [Memory](/docs/memory).   |
+
+For models, see [Models](/docs/models). You can also give a single `LanguageModel` Layer with `Layer.provide`.
+
+### Add a tool
+
+A tool is a function that the model can call. Make it with Effect AI, then give the toolkit and its handlers to Platform:
+
+```ts
+import { type Configuration, Server } from "@openbot-build/platform"
+import { Effect, Layer, Schema } from "effect"
+import { Tool, Toolkit } from "effect/ai"
+
+const CurrentTime = Tool.make("CurrentTime", {
+	description: "Returns the current time on the server.",
+	parameters: Schema.Struct({}),
+	success: Schema.String,
+})
+const toolkit = Toolkit.make(CurrentTime)
+const handlers = toolkit.toLayer({
+	CurrentTime: () => Effect.sync(() => new Date().toISOString()),
+})
+
+const server = (settings: Configuration.Settings) =>
+	Server.layer({
+		...settings,
+		sessions: {
+			runtime: { toolkit },
+			layerExecution: () => handlers,
+		},
+	}).pipe(Layer.provide(handlers), Layer.provide(model))
+```
+
+`model` is a `LanguageModel` Layer, as in [Models](/docs/models).
+Add `needsApproval: true` to `Tool.make` when a person must approve each call. See [Approvals](/docs/approvals).
+
+---
+
+## Your own routes
+
+`routes` adds HTTP routes to the same server. The Layer can use the `Auth` service to check the sign-in cookie.
+
+```ts
+import { HttpRouter, HttpServerResponse } from "effect/http"
+
+const routes = HttpRouter.add(
+	"GET",
+	"/status",
+	HttpServerResponse.text("ready"),
+)
+
+Server.layer({ ...settings, routes })
+```
+
+Do not use paths under `/auth/` or `/v1/`. Platform owns them.
+
+## Use your own HTTP server
+
+`Server.layerApi({ publicOrigin })` gives only the Platform routes. It also adds error logging for failed requests.
+Serve it with `HttpRouter.serve`, then give it `Platform.layer`, a `Discovery` service, and an HTTP server:
+
+```ts
+import { NodeHttpServer } from "@effect/platform-node"
+import { Platform, Server } from "@openbot-build/platform"
+import { CatalogDiscovery } from "@openbot-build/protocol"
+import * as PublicNetwork from "@openbot-build/protocol/NodeHttpServer"
+import { Layer } from "effect"
+import { HttpRouter } from "effect/http"
+import { createServer } from "node:http"
+
+const discovery = CatalogDiscovery.layer().pipe(
+	Layer.provide(CatalogDiscovery.layerRules),
+	Layer.provide(PublicNetwork.layerPublicNetwork()),
+)
+
+const app = HttpRouter.serve(
+	Layer.merge(Server.layerApi(options.auth), routes),
+).pipe(
+	Layer.provideMerge(Platform.layer(options)),
+	Layer.provide(discovery),
+	Layer.provideMerge(
+		NodeHttpServer.layer(() => createServer(), { host: "0.0.0.0", port: 3000 }),
+	),
+)
+```
+
+This is what `Server.layer` does inside. `options` has the same fields as above, and `routes` is your own routes Layer.
+
+---
+
+## Migrate the database
+
+`DatabasePostgres.migrate` applies the migrations. `Platform.layer` only checks that the tables exist, and fails if they do not.
+Run migrations in their own program before you start the server:
+
+```ts
+import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { DatabasePostgres } from "@openbot-build/platform"
+import { Config, Effect, Layer } from "effect"
+
+NodeRuntime.runMain(
+	DatabasePostgres.migrate.pipe(
+		Effect.provide(
+			Layer.unwrap(
+				Effect.map(Config.Redacted("OPENBOT_DATABASE_URL"), (databaseUrl) =>
+					DatabasePostgres.layer({ databaseUrl }),
+				),
+			).pipe(Layer.provide(NodeServices.layer)),
+		),
+	),
+)
+```
+
+## Add alerts
+
+`Lark.layer(settings)` sends error logs to a Lark bot. Provide it outside the server so that it stays open until the server closes:
+
+```ts
+const program = Layer.launch(Server.layer(settings)).pipe(
+	Effect.provide(
+		Lark.layer(larkSettings).pipe(Layer.provide(FetchHttpClient.layer)),
+	),
+)
+```
+
+See [Alerts](/docs/alerts) for the full example and the settings.

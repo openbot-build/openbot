@@ -1,0 +1,209 @@
+---
+title: Authentication
+description: Sign in, create API keys, and call the API.
+---
+
+This page shows how people sign in to OpenBot and how programs call the API.
+A person signs in once in a browser. Then the person creates API keys for scripts and services.
+
+There are two ways to call the business routes under `/v1`:
+
+| Way            | Who uses it                             | What you send                       |
+| -------------- | --------------------------------------- | ----------------------------------- |
+| API key        | Scripts, backend services, bots         | `Authorization: Bearer <key>`       |
+| Session cookie | A browser client on the Platform origin | The `__Host-openbot-session` cookie |
+
+---
+
+## Sign in
+
+Platform does not keep passwords. It uses an OpenID Connect provider. OpenID Connect (OIDC) is a standard way to let another service check who a person is.
+
+Open this address in a browser:
+
+```sh
+https://api.example.com/auth/login
+```
+
+Platform sends the browser to the provider. After the person signs in, the provider sends the browser back to `https://api.example.com/auth/callback`. Platform then sets the session cookie and sends the browser to the return path. The default return path is `/`.
+
+### Set up the provider
+
+Register Platform as a client at your provider. Then set these environment variables:
+
+| Variable                     | Value                                                                           |
+| ---------------------------- | ------------------------------------------------------------------------------- |
+| `OPENBOT_OIDC_ISSUER`        | The issuer URL, for example `https://id.example.com`. HTTPS, no trailing slash. |
+| `OPENBOT_OIDC_CLIENT_ID`     | The client ID from the provider.                                                |
+| `OPENBOT_OIDC_CLIENT_SECRET` | The client secret. Leave it empty for a public client.                          |
+| `OPENBOT_PUBLIC_ORIGIN`      | The public HTTPS origin of Platform, for example `https://api.example.com`.     |
+
+Use `<origin>/auth/callback` as the redirect URI at the provider. Platform asks for the scopes `openid profile email`.
+With an empty client secret, Platform signs in as a public client with PKCE. PKCE is a check that protects the sign-in code.
+
+### Development account
+
+For local work, set `OPENBOT_DEV_MODE=1`. Platform then uses one local account named "Local Developer" and no provider.
+This mode works only when the public origin is HTTPS on a loopback host: `localhost`, `127.0.0.1` or `[::1]`.
+
+This command signs in and saves the cookie in a file:
+
+```sh
+curl -c cookies.txt https://localhost:8443/auth/login
+```
+
+### Read and end the sign-in
+
+`GET /auth/session` returns the signed-in account. It needs the session cookie.
+
+```json
+{
+	"identity": { "userId": "u_123", "tenantId": "u_123" },
+	"profile": {
+		"name": "Ada",
+		"email": "ada@example.com",
+		"emailVerified": true
+	},
+	"expiresAt": "2026-11-19T10:00:00.000Z"
+}
+```
+
+`POST /auth/logout` ends the sign-in. It returns `204` and needs the `Origin` header (see below).
+
+---
+
+## The session cookie
+
+After sign-in, the browser holds the cookie `__Host-openbot-session`. It is `Secure`, `HttpOnly` and `SameSite=Lax`.
+
+- A sign-in lasts 30 days.
+- Platform renews it after one day of use.
+
+### The Origin rule
+
+A cookie goes with every browser request, even from other sites. So Platform checks where a write comes from.
+When you use the cookie, every `POST`, `PUT`, `PATCH` and `DELETE` request must send an `Origin` header.
+The header must be exactly equal to `OPENBOT_PUBLIC_ORIGIN`. If it is not, Platform returns `403` with `ForbiddenOrigin`.
+
+```sh
+curl -b cookies.txt \
+  -H "Origin: https://localhost:8443" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Notes"}' \
+  https://localhost:8443/v1/sessions
+```
+
+Requests with an API key do not need the `Origin` header.
+
+---
+
+## API keys
+
+An API key lets a program act for your account. You manage keys only with the session cookie. An API key cannot list, create or revoke keys. If you try, Platform returns `401`.
+
+See the full shapes in the [API keys reference](/docs/api/apiKeys).
+
+### Create a key
+
+```sh
+curl -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"CI bot","expiresInDays":90}' \
+  https://api.example.com/auth/api-keys
+```
+
+| Field           | Rules                                                                                          |
+| --------------- | ---------------------------------------------------------------------------------------------- |
+| `name`          | Required. 1 to 80 characters after trimming spaces.                                            |
+| `expiresInDays` | Optional. A whole number from 1 to 365. Leave it out for a key that works until you revoke it. |
+
+Platform returns `201`:
+
+```json
+{
+	"key": {
+		"id": "5f0c2a8e-7d1b-4c3e-9a55-2b6f1e8d4c10",
+		"name": "CI bot",
+		"prefix": "obk_Xr4pQ2aL",
+		"createdAt": "2026-10-20T09:00:00.000Z",
+		"expiresAt": "2027-01-18T09:00:00.000Z",
+		"lastUsedAt": null
+	},
+	"secret": "obk_Xr4pQ2aL..."
+}
+```
+
+<Callout type="warn">
+	Platform shows the `secret` only once. Save it now in a safe place. Platform
+	keeps only a SHA-256 hash of it.
+</Callout>
+
+Every secret starts with `obk_`, so a leaked key is easy to spot. The `prefix` is the first 12 characters. Use it to tell your keys apart.
+
+### List keys
+
+```sh
+curl -b cookies.txt https://api.example.com/auth/api-keys
+```
+
+The answer is `{ "keys": [ ... ] }`, oldest first. The list never contains secrets.
+`lastUsedAt` changes at most once a minute. Expired keys stay in the list until you revoke them.
+
+### Revoke a key
+
+```sh
+curl -X DELETE -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  https://api.example.com/auth/api-keys/5f0c2a8e-7d1b-4c3e-9a55-2b6f1e8d4c10
+```
+
+Platform returns `204` and deletes the key. The key stops working at once.
+
+### Limits and errors
+
+| Status | Error                      | When                                                  |
+| ------ | -------------------------- | ----------------------------------------------------- |
+| `401`  | `AuthenticationRequired`   | No valid session cookie.                              |
+| `403`  | `ForbiddenOrigin`          | A write without the exact `Origin` header.            |
+| `404`  | `ApiKeyNotFound`           | No key with this ID in your account.                  |
+| `409`  | `ApiKeyLimitReached`       | You already have 25 keys. The body has `"limit": 25`. |
+| `503`  | `ApiKeyStorageUnavailable` | Platform cannot reach its database.                   |
+
+An account can hold 25 keys at a time. Expired keys count too, so revoke old keys to make room.
+
+---
+
+## Use a key
+
+Send the key in the `Authorization` header on any `/v1` route:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  https://api.example.com/v1/sessions
+```
+
+A revoked, expired or unknown key gets `401` with `AuthenticationRequired`. If Platform cannot check the key, it returns `503` with `AuthenticationUnavailable`.
+
+### Each account is its own tenant
+
+A tenant is a private space for data. Each account is one tenant. Your keys and your cookie see only your own Sessions, Apps and connections.
+If you ask for a Session from another tenant, Platform answers `404`, as if it does not exist.
+
+---
+
+## Return paths
+
+Some flows send the browser back to your client after a round trip. You choose the place with `returnTo`, for example on `/auth/login`:
+
+```sh
+https://api.example.com/auth/login?returnTo=/settings/keys
+```
+
+A return path must be a path on the same origin. It must start with one `/`. It cannot point to `/auth/*`, `/v1/*` or `/development/*`, because Platform owns those paths. The default is `/`.
+
+Platform has no pages, so your client must serve these paths. Two flows add a query value:
+
+- **App authorization.** When an App sign-in comes back and the person is signed in, Platform finishes the flow. The browser goes to the return path with `?authorization=<flowId>`. Your client can read the result with `GET /v1/app-authorizations/<flowId>`.
+  If the person is not signed in, Platform signs the person in first, then goes to `/?authorization=<flowId>`. Your client then calls `POST /v1/app-authorizations/<flowId>/complete` to finish the flow.
+- **Developer tests.** A developer test authorization returns to `/?developerTest=<testId>`.

@@ -1,0 +1,67 @@
+{
+	"name": "@openbot-build/protocol",
+	"version": "0.1.0",
+	"type": "module",
+	"description": "OpenBot App Protocol publication, host and public indexing with Effect",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src",
+		"README.md"
+	],
+	"exports": {
+		".": "./dist/main.js",
+		"./Apps": "./dist/apps/Apps.js",
+		"./AppUi": "./dist/apps/AppUi.js",
+		"./McpApps": "./dist/apps/McpApps.js",
+		"./Ui": "./dist/apps/Ui.js",
+		"./App": "./dist/connections/App.js",
+		"./AppConnections": "./dist/connections/AppConnections.js",
+		"./Authorization": "./dist/connections/Authorization.js",
+		"./Client": "./dist/connections/Client.js",
+		"./McpClient": "./dist/connections/McpClient.js",
+		"./MemoryStore": "./dist/connections/MemoryStore.js",
+		"./OAuthAuthorization": "./dist/connections/OAuthAuthorization.js",
+		"./Store": "./dist/connections/Store.js",
+		"./CatalogDiscovery": "./dist/discovery/CatalogDiscovery.js",
+		"./Discovery": "./dist/discovery/Discovery.js",
+		"./Robots": "./dist/discovery/Robots.js",
+		"./RobotsPolicy": "./dist/discovery/RobotsPolicy.js",
+		"./Document": "./dist/Document.js",
+		"./Index": "./dist/indexing/Index.js",
+		"./Indexing": "./dist/indexing/Indexing.js",
+		"./MemoryIndex": "./dist/indexing/MemoryIndex.js",
+		"./PublicIndexing": "./dist/indexing/PublicIndexing.js",
+		"./HttpNetwork": "./dist/network/HttpNetwork.js",
+		"./Network": "./dist/network/Network.js",
+		"./Node": "./dist/node/Node.js",
+		"./NodeHttpServer": "./dist/node/NodeHttpServer.js",
+		"./McpPublisher": "./dist/publication/McpPublisher.js",
+		"./Protection": "./dist/publication/Protection.js",
+		"./Publisher": "./dist/publication/Publisher.js",
+		"./PublisherProtection": "./dist/publication/PublisherProtection.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && node --test test/*.test.ts"
+	},
+	"peerDependencies": {
+		"@effect/platform-node": "4.0.5",
+		"effect": "4.0.5"
+	},
+	"peerDependenciesMeta": {
+		"@effect/platform-node": {
+			"optional": true
+		}
+	},
+	"dependencies": {
+		"@modelcontextprotocol/client": "2.3.1",
+		"@modelcontextprotocol/core": "2.3.1",
+		"@modelcontextprotocol/ext-apps": "2.0.3",
+		"parse5": "8.0.1"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "4.0.5",
+		"effect": "4.0.5"
+	}
+}

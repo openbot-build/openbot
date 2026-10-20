@@ -1,0 +1,29 @@
+{
+	"name": "@openbot-build/platform-api",
+	"version": "0.1.0",
+	"type": "module",
+	"description": "Typed REST API contract for the OpenBot Platform",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"src",
+		"README.md"
+	],
+	"exports": {
+		".": "./dist/index.js"
+	},
+	"scripts": {
+		"build": "tsdown"
+	},
+	"peerDependencies": {
+		"effect": "4.0.5"
+	},
+	"devDependencies": {
+		"effect": "4.0.5"
+	},
+	"dependencies": {
+		"@openbot-build/core": "workspace:*",
+		"@openbot-build/plugin-memory": "workspace:*",
+		"@openbot-build/protocol": "workspace:*"
+	}
+}

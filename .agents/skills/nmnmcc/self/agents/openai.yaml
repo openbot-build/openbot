@@ -1,0 +1,7 @@
+interface:
+  # Invocation is opt-in for this catalog.
+  display_name: "Self"
+  short_description: "Clarify responsibility, authority, and handoffs."
+  default_prompt: "Use $self when ownership or authority is unclear."
+policy:
+  allow_implicit_invocation: false

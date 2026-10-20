@@ -1,0 +1,174 @@
+---
+title: Configuration
+description: Every environment variable that Platform reads.
+---
+
+Platform reads its settings from environment variables when it starts.
+This page lists every variable, what it does, and its default value.
+
+If a required value is missing or wrong, Platform does not start. It writes a configuration error to the log.
+
+---
+
+## Server
+
+| Variable                | Required | Default     | Meaning                                                                      |
+| ----------------------- | -------- | ----------- | ---------------------------------------------------------------------------- |
+| `OPENBOT_PUBLIC_ORIGIN` | Yes      |             | The public HTTPS address of Platform, for example `https://api.example.com`. |
+| `OPENBOT_HOST`          | No       | `127.0.0.1` | The network address that the server listens on.                              |
+| `OPENBOT_PORT`          | No       | `3000`      | The port that the server listens on.                                         |
+
+`OPENBOT_PUBLIC_ORIGIN` must be an origin only. An origin is the scheme, the host name, and the port, if there is one.
+It must use `https`. It must not have a path, a trailing slash, a user name, or a password.
+
+Platform uses this value in three places:
+
+- It builds the sign-in redirect URI `<origin>/auth/callback`.
+- It checks the `Origin` header of browser requests that change data. The header must be exactly equal to this value.
+- It builds links in App authorization and in the App Index.
+
+The Docker image sets `OPENBOT_HOST=0.0.0.0` and `OPENBOT_PORT=3000`, so the server can take traffic from outside the container.
+
+## Database
+
+| Variable               | Required | Default | Meaning                      |
+| ---------------------- | -------- | ------- | ---------------------------- |
+| `OPENBOT_DATABASE_URL` | Yes      |         | A PostgreSQL connection URL. |
+
+The server and the migration program both read this variable. For example: `postgres://openbot:secret@db.example.com:5432/openbot`.
+
+When the server starts, it checks that all tables exist. If they do not exist, it stops. Run the migration program first. See [Deploy](/docs/deploy).
+
+## Sign-in
+
+| Variable                     | Required             | Default | Meaning                                                                    |
+| ---------------------------- | -------------------- | ------- | -------------------------------------------------------------------------- |
+| `OPENBOT_OIDC_ISSUER`        | Yes, unless dev mode |         | The HTTPS address of your OpenID Connect provider, with no trailing slash. |
+| `OPENBOT_OIDC_CLIENT_ID`     | Yes, unless dev mode |         | The client ID that your provider gave you.                                 |
+| `OPENBOT_OIDC_CLIENT_SECRET` | No                   | empty   | The client secret. Leave it empty for a public client.                     |
+| `OPENBOT_DEV_MODE`           | No                   | `0`     | Set to `1` to use a local test account instead of a provider.              |
+
+OpenID Connect (OIDC) is a standard way to sign people in with an outside account provider.
+Platform finds the provider settings at `<issuer>/.well-known/openid-configuration`. It asks for the scopes `openid profile email`.
+
+When the client secret is empty, Platform acts as a public client. It then uses PKCE, a check that keeps the sign-in code safe without a secret.
+When you set a secret, Platform uses PKCE and also sends the secret.
+
+`OPENBOT_DEV_MODE=1` turns off OpenID Connect. Platform then signs everyone in to one local account.
+It works only when `OPENBOT_PUBLIC_ORIGIN` points to your own computer: `localhost`, `127.0.0.1`, or `[::1]`.
+Never use it on a public server. See [Authentication](/docs/authentication).
+
+## Secrets
+
+| Variable                     | Required | Default | Meaning                                                                         |
+| ---------------------------- | -------- | ------- | ------------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`         | Yes      |         | A secret of at least 32 characters. It protects sign-in data.                   |
+| `OPENBOT_APP_ENCRYPTION_KEY` | Yes      |         | A key of exactly 64 hexadecimal characters (32 bytes). It encrypts App secrets. |
+
+Make each value once, with a different random value for each:
+
+```sh
+openssl rand -hex 32
+```
+
+`BETTER_AUTH_SECRET` signs and encrypts sign-in sessions. If it changes, every person must sign in again.
+
+`OPENBOT_APP_ENCRYPTION_KEY` encrypts the private data of App connections. This includes App credentials, private settings, and sign-in state.
+Keep it together with your database backups. If you lose it or change it, Platform cannot read the App secrets that are already stored.
+
+<Callout type="warn">
+	Keep both values out of source control. Do not reuse one value for both
+	variables.
+</Callout>
+
+## TLS
+
+| Variable           | Required | Default | Meaning                                      |
+| ------------------ | -------- | ------- | -------------------------------------------- |
+| `OPENBOT_TLS_CERT` | No       |         | The path to a PEM certificate file.          |
+| `OPENBOT_TLS_KEY`  | No       |         | The path to the PEM private key file for it. |
+
+Set both values to make Platform serve HTTPS itself. Set neither to serve plain HTTP.
+If you set only one, Platform does not start.
+
+In production, a reverse proxy usually handles HTTPS. Then you leave both values empty. See [Deploy](/docs/deploy).
+
+## Model
+
+| Variable                 | Required | Default | Meaning                                                                            |
+| ------------------------ | -------- | ------- | ---------------------------------------------------------------------------------- |
+| `OPENBOT_MODEL_ENDPOINT` | No       |         | The base URL of an OpenAI-compatible API, for example `https://api.openai.com/v1`. |
+| `OPENBOT_MODEL_API_KEY`  | No       |         | The API key for that service.                                                      |
+| `OPENBOT_MODEL_ID`       | No       |         | The model name to use, for example `gpt-4.1`.                                      |
+
+Set all three values, or none of them. If you set only some, Platform does not start.
+Without a model, you can still make and read Sessions, but starting a Turn returns `503`. See [Models](/docs/models).
+
+## Alerts
+
+| Variable                      | Required | Default       | Meaning                                               |
+| ----------------------------- | -------- | ------------- | ----------------------------------------------------- |
+| `OPENBOT_LARK_WEBHOOK_URL`    | No       | empty         | The URL of a Lark custom bot. Empty turns alerts off. |
+| `OPENBOT_LARK_SIGNING_SECRET` | No       | empty         | The signing secret of the bot, if it uses one.        |
+| `OPENBOT_ENVIRONMENT`         | No       | `development` | A label for the environment, such as `production`.    |
+| `OPENBOT_VERSION`             | No       | `unknown`     | A label for the release, such as a commit SHA.        |
+| `OPENBOT_INSTANCE`            | No       | host name     | A label for this server. Empty means the host name.   |
+
+See [Alerts](/docs/alerts) for what Platform sends.
+
+## Production Compose
+
+The Compose file `compose.production.yaml` reads these extra variables. Platform itself does not read them.
+
+| Variable                        | Required | Default                       | Meaning                                                                 |
+| ------------------------------- | -------- | ----------------------------- | ----------------------------------------------------------------------- |
+| `POSTGRES_PASSWORD`             | Yes      |                               | The password of the PostgreSQL user `openbot`. Use URL-safe characters. |
+| `OPENBOT_RELEASE`               | Yes      |                               | The image tag to run. It is also sent as `OPENBOT_VERSION`.             |
+| `OPENBOT_PUBLISHED_PORT`        | No       | `8080`                        | The port on `127.0.0.1` where your reverse proxy finds Platform.        |
+| `PROTOCOL_TEST_PUBLIC_ORIGIN`   | Yes      |                               | The public HTTPS origin of the protocol test service.                   |
+| `PROTOCOL_TEST_ALLOWED_ORIGINS` | No       | `PROTOCOL_TEST_PUBLIC_ORIGIN` | Browser origins that the protocol test service accepts.                 |
+
+The Compose file builds `OPENBOT_DATABASE_URL` for you and sets `OPENBOT_ENVIRONMENT=production`.
+A full template is in `docker/production.env.example`.
+
+## Development
+
+`devenv shell -- pnpm dev:setup` makes the file `.env.development` from `docker/development.env.example`. It fills in `BETTER_AUTH_SECRET` and `OPENBOT_APP_ENCRYPTION_KEY` with new random values.
+
+| Variable                    | Default   | Meaning                                                 |
+| --------------------------- | --------- | ------------------------------------------------------- |
+| `OPENBOT_DEV_HTTPS_PORT`    | `8443`    | The HTTPS port of the local Platform.                   |
+| `OPENBOT_DEV_DATABASE_PORT` | `5433`    | The local port of the development PostgreSQL container. |
+| `OPENBOT_DEV_DATABASE_NAME` | `openbot` | The name of the development database.                   |
+
+devenv then sets these values for you:
+
+| Variable                | Value                                                       |
+| ----------------------- | ----------------------------------------------------------- |
+| `OPENBOT_PUBLIC_ORIGIN` | `https://localhost:8443`                                    |
+| `OPENBOT_HOST`          | `127.0.0.1`                                                 |
+| `OPENBOT_PORT`          | the value of `OPENBOT_DEV_HTTPS_PORT`                       |
+| `OPENBOT_DATABASE_URL`  | `postgres://openbot_dev:openbot_dev@127.0.0.1:5433/openbot` |
+| `OPENBOT_TLS_CERT`      | `.devenv/dev/cert.pem`, made by mkcert                      |
+| `OPENBOT_TLS_KEY`       | `.devenv/dev/key.pem`, made by mkcert                       |
+
+To use another database, set `OPENBOT_DATABASE_URL` in `.env.development`. See [Contributing](/docs/contributing).
+
+---
+
+## Example
+
+This is a small production environment file:
+
+```sh
+OPENBOT_DATABASE_URL=postgres://openbot:secret@db.example.com:5432/openbot
+OPENBOT_PUBLIC_ORIGIN=https://api.example.com
+OPENBOT_OIDC_ISSUER=https://id.example.com
+OPENBOT_OIDC_CLIENT_ID=openbot
+OPENBOT_OIDC_CLIENT_SECRET=
+BETTER_AUTH_SECRET=<output of openssl rand -hex 32>
+OPENBOT_APP_ENCRYPTION_KEY=<another output of openssl rand -hex 32>
+OPENBOT_MODEL_ENDPOINT=https://api.openai.com/v1
+OPENBOT_MODEL_API_KEY=sk-...
+OPENBOT_MODEL_ID=gpt-4.1
+```

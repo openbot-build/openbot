@@ -1,0 +1,129 @@
+---
+title: Quick start
+description: Run OpenBot on your computer and make your first call.
+---
+
+This page starts OpenBot on your computer with a test account and test models.
+You do not need an identity provider or a model key.
+
+---
+
+## Prerequisites
+
+You need:
+
+1. [Docker](https://docs.docker.com/get-docker/), running. OpenBot keeps its data in PostgreSQL in a container.
+2. [devenv](https://devenv.sh) 2.0 or newer. It gives you the right Node.js, pnpm, PostgreSQL tools, and mkcert.
+3. A copy of the code:
+
+```sh
+git clone https://github.com/openbot-build/openbot.git
+cd openbot
+```
+
+Run every command from the top folder of the code, inside `devenv shell --`.
+
+---
+
+## Start OpenBot
+
+<Steps>
+
+<Step>
+
+### Make the local settings
+
+```sh
+devenv shell -- pnpm dev:setup
+devenv shell -- mkcert -install
+```
+
+The first command makes `.env.development` with new secrets, and a certificate for `localhost`.
+The second command makes your computer trust that certificate. It can ask for your password.
+
+</Step>
+
+<Step>
+
+### Start the server
+
+```sh
+devenv shell -- pnpm dev
+```
+
+This starts PostgreSQL, builds Platform, updates the database, and starts Platform at `https://localhost:8443`.
+The first start can take a few minutes. Press **Ctrl+C** to stop. Your data stays in the database.
+
+</Step>
+
+<Step>
+
+### Sign in
+
+```sh
+curl -c cookies.txt https://localhost:8443/auth/login
+```
+
+In development, this signs you in to a local test account at once. The sign-in cookie goes to `cookies.txt`.
+
+</Step>
+
+<Step>
+
+### Make an API key
+
+```sh
+curl -b cookies.txt \
+  -H 'Origin: https://localhost:8443' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"local"}' \
+  https://localhost:8443/auth/api-keys
+```
+
+The answer has a `secret` that starts with `obk_`. You see it only once, so keep it:
+
+```sh
+export OPENBOT_API_KEY=obk_...
+```
+
+</Step>
+
+<Step>
+
+### Start a Session and a Turn
+
+Make a Session:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"My first Session"}' \
+  https://localhost:8443/v1/sessions
+```
+
+Take `session.id` and `session.revision` from the answer. Then give the Session some work:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"expected":0,"input":"Hello"}' \
+  https://localhost:8443/v1/sessions/<sessionId>/turns
+```
+
+The Turn runs in the background and you get `202` at once. Add `"stream": true` to get the answer as a live stream.
+
+</Step>
+
+</Steps>
+
+The test model `mock-text` answers with `Development response:` and your input.
+See [Models](/docs/models) for the other test models.
+
+---
+
+## Next steps
+
+- Read how [Sessions](/docs/sessions) and Turns work.
+- Use a real identity provider: [Authentication](/docs/authentication).
+- Add a real model: [Models](/docs/models).
+- Run OpenBot on a server: [Deploy](/docs/deploy).
