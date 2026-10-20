@@ -1,6 +1,7 @@
 {
 	"name": "@openbot-build/protocol",
 	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
 	"type": "module",
 	"description": "OpenBot App Protocol publication, host and public indexing with Effect",
 	"sideEffects": false,

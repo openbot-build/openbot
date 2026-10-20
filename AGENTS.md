@@ -14,6 +14,12 @@
 - Write all text in [Simple English](https://en.wikipedia.org/wiki/Simple_English). This covers docs, comments, error messages, logs, prompts, test names, test data, and commit messages.
 - Use short sentences, common words, one idea in each sentence, and active voice. Explain a technical word the first time you use it.
 - Do not use any other language in the repository.
+- The `LICENSE` file is the official legal text of the AGPL. Do not change it.
+
+## License
+
+- OpenBot uses `AGPL-3.0-only`. Every `package.json` sets `"license": "AGPL-3.0-only"`, and new packages must do the same.
+- Add a new dependency only when its license lets us share it under the AGPL.
 
 ## Docs
 

@@ -1,5 +1,6 @@
 {
 	"name": "@openbot-build/workspace",
+	"license": "AGPL-3.0-only",
 	"private": true,
 	"packageManager": "pnpm@9.15.9",
 	"type": "module",

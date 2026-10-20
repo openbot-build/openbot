@@ -1,6 +1,7 @@
 {
 	"name": "@openbot-build/plugin-goal",
 	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
 	"type": "module",
 	"description": "Goal management host contracts and tools for OpenBot Sessions",
 	"sideEffects": false,

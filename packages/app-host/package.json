@@ -1,6 +1,7 @@
 {
 	"name": "@openbot-build/app-host",
 	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
 	"type": "module",
 	"description": "App and Index host service contracts for OpenBot App Protocol",
 	"sideEffects": false,

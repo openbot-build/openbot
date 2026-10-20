@@ -1,6 +1,7 @@
 {
 	"name": "@openbot-build/plugin-turn-limiter",
 	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
 	"type": "module",
 	"description": "ReAct turn limit middleware for OpenBot Sessions",
 	"sideEffects": false,
