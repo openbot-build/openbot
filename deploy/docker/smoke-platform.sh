@@ -26,7 +26,6 @@ database="postgres://openbot:fixture-only@$postgres:5432/openbot"
 docker run --rm --platform linux/amd64 --network "$network"   -e OPENBOT_DATABASE_URL="$database" "$image" /app/dist/app/Migrate.mjs
 keys=fixture:0000000000000000000000000000000000000000000000000000000000000000
 common=(--detach --platform linux/amd64 --name "$platform" --network "$network"
-  -e "OPENBOT_DATABASE_URL=$database"
   -e "OPENBOT_SECRET_KEYS=$keys")
 docker run --rm --platform linux/amd64 --network "$network" \
   -e "OPENBOT_DATABASE_URL=$database" -e "OPENBOT_SECRET_KEYS=$keys" \
@@ -46,7 +45,7 @@ healthy() {
   done
 }
 # Start the production OIDC configuration without contacting an external provider.
-docker run "${common[@]}" "$image" >/dev/null
+docker run "${common[@]}" -e "OPENBOT_DATABASE_URL=$database" "$image" >/dev/null
 healthy
 docker exec "$platform" /usr/local/bin/node --input-type=module -e '
   for(const headers of [{},{"x-user-id":"forged","x-organization-id":"forged"},{cookie:"__Host-openbot-session=forged"}]){
@@ -55,14 +54,21 @@ docker exec "$platform" /usr/local/bin/node --input-type=module -e '
   }
 '
 docker rm --force "$platform" >/dev/null
-# A separate explicit development fixture checks real SDK cookie issue/read/revoke
-# in the packaged image. The production OIDC flow is covered by the SDK tests.
-docker run "${common[@]}" -e OPENBOT_DEV_PUBLIC_ORIGIN=https://localhost:8443 "$image" /app/dist/app/DevelopmentMain.mjs >/dev/null
+# Development owns its sign-in secret. Give it a separate database so this
+# fixture never asks setup to replace the production sign-in configuration.
+docker exec "$postgres" createdb -U openbot openbot_development
+development_database="postgres://openbot:fixture-only@$postgres:5432/openbot_development"
+docker run --rm --platform linux/amd64 --network "$network" \
+  -e "OPENBOT_DATABASE_URL=$development_database" "$image" /app/dist/app/Migrate.mjs
+docker run "${common[@]}" -e "OPENBOT_DATABASE_URL=$development_database" \
+  -e OPENBOT_DEV_PUBLIC_ORIGIN=https://localhost:8443 "$image" /app/dist/app/DevelopmentMain.mjs >/dev/null
 healthy
 docker exec "$platform" /usr/local/bin/node --input-type=module -e '
   const base="http://127.0.0.1:3000",origin="https://localhost:8443"
-  const login=await fetch(base+"/auth/login",{redirect:"manual"})
-  if(login.status!==303)throw new Error("Development fixture login failed")
+  const login=await fetch(base+"/auth/development/sign-in",{
+    method:"POST",headers:{origin,"content-type":"application/json"},body:"{}",redirect:"manual"
+  })
+  if(login.status!==200)throw new Error("Development fixture login failed")
   const cookie=login.headers.getSetCookie().find(value=>value.startsWith("__Host-openbot-session="))?.split(";")[0]
   if(!cookie)throw new Error("SDK session cookie missing")
   const session=await fetch(base+"/auth/session?refresh=false",{headers:{cookie}})
