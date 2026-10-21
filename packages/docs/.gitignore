@@ -1,8 +1,5 @@
-/.next/
-/.source/
-/out/
-next-env.d.ts
-*.tsbuildinfo
+/dist/
+/.astro/
 # Generated from the Platform API contract by scripts/api.ts.
 /openapi.json
-/content/docs/api/
+*.tsbuildinfo

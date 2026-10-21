@@ -127,13 +127,18 @@ PROTOCOL_TEST_PUBLIC_ORIGIN=https://protocol-test.example.com \
 
 The service speaks HTTP by default. It expects a TLS proxy in front of it. To serve HTTPS directly on your computer, set the origin to `https://localhost:7445`, the port to `7445`, and both TLS paths. Then make your host trust the certificate.
 
-## Run it with Compose
+## Run it with Docker
+
+The `protocol-test` target of `deploy/docker/Dockerfile` makes the image. Build it and start it:
 
 ```sh
-devenv shell -- docker compose -f compose.protocol-test.yaml up -d --build
+devenv shell -- docker buildx bake -f deploy/docker/docker-bake.hcl --load protocol-test
+devenv shell -- docker run -d --name protocol-test -p 127.0.0.1:3001:3001 \
+  -e PROTOCOL_TEST_PUBLIC_ORIGIN=https://protocol-test.example.com \
+  openbot-protocol-test:local
 ```
 
-The service listens on `127.0.0.1:3001` only. Put a TLS proxy that supports streaming in front of it. `docker/protocol-test.nginx.conf` is an example. `compose.production.yaml` runs the `openbot-protocol-test` image in the same way, with no database. Run only one copy, because all data lives in one process.
+The service listens on `127.0.0.1:3001` only. Put a TLS proxy that supports streaming in front of it. `deploy/docker/protocol-test.nginx.conf` is an example. `deploy/docker/compose.production.yaml` runs the `openbot-protocol-test` image in the same way, with no database. Run only one copy, because all data lives in one process.
 
 ## Configuration
 

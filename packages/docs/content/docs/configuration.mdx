@@ -5,6 +5,7 @@ description: Every environment variable that Platform reads.
 
 Platform reads its settings from environment variables when it starts.
 This page lists every variable, what it does, and its default value.
+Platform can also read each setting from a file. See [Secrets as files](#secrets-as-files).
 
 If a required value is missing or wrong, Platform does not start. It writes a configuration error to the log.
 
@@ -118,28 +119,39 @@ See [Alerts](/docs/alerts) for what Platform sends.
 
 ## Production Compose
 
-The Compose file `compose.production.yaml` reads these extra variables. Platform itself does not read them.
+The Compose file `deploy/docker/compose.production.yaml` reads these extra variables. Platform itself does not read them.
 
 | Variable                        | Required | Default                       | Meaning                                                                 |
 | ------------------------------- | -------- | ----------------------------- | ----------------------------------------------------------------------- |
 | `POSTGRES_PASSWORD`             | Yes      |                               | The password of the PostgreSQL user `openbot`. Use URL-safe characters. |
+| `OPENBOT_DATABASE_URL`          | Yes      |                               | The template fills it in from `POSTGRES_PASSWORD`.                      |
 | `OPENBOT_RELEASE`               | Yes      |                               | The image tag to run. It is also sent as `OPENBOT_VERSION`.             |
 | `OPENBOT_PUBLISHED_PORT`        | No       | `8080`                        | The port on `127.0.0.1` where your reverse proxy finds Platform.        |
 | `PROTOCOL_TEST_PUBLIC_ORIGIN`   | Yes      |                               | The public HTTPS origin of the protocol test service.                   |
 | `PROTOCOL_TEST_ALLOWED_ORIGINS` | No       | `PROTOCOL_TEST_PUBLIC_ORIGIN` | Browser origins that the protocol test service accepts.                 |
 
-The Compose file builds `OPENBOT_DATABASE_URL` for you and sets `OPENBOT_ENVIRONMENT=production`.
-A full template is in `docker/production.env.example`.
+The Compose file sets `OPENBOT_ENVIRONMENT=production`. It gives the secrets to Platform as files in `/run/secrets`. See [Deploy](/docs/deploy#run-with-compose).
+A full template is in `deploy/docker/production.env.example`.
+
+## Secrets as files
+
+When an environment variable is not set, Platform reads the file `/run/secrets/<NAME>` instead. For example, it reads `BETTER_AUTH_SECRET` from `/run/secrets/BETTER_AUTH_SECRET`. Docker and Compose put secrets in this folder.
+
+- An environment variable always comes first, even when the file exists.
+- Platform removes spaces and line breaks at the start and end of the file.
+- An empty file counts as not set. A missing file or folder also counts as not set.
+
+This works for every setting on this page. It is most useful for secrets, because environment variables show in `docker inspect`, and files do not.
 
 ## Development
 
-`devenv shell -- pnpm dev:setup` makes the file `.env.development` from `docker/development.env.example`. It fills in `BETTER_AUTH_SECRET` and `OPENBOT_APP_ENCRYPTION_KEY` with new random values.
+`devenv shell -- pnpm dev:setup` makes the file `.env.development` from `.env.development.example`. It fills in `BETTER_AUTH_SECRET` and `OPENBOT_APP_ENCRYPTION_KEY` with new random values.
 
-| Variable                    | Default   | Meaning                                                 |
-| --------------------------- | --------- | ------------------------------------------------------- |
-| `OPENBOT_DEV_HTTPS_PORT`    | `8443`    | The HTTPS port of the local Platform.                   |
-| `OPENBOT_DEV_DATABASE_PORT` | `5433`    | The local port of the development PostgreSQL container. |
-| `OPENBOT_DEV_DATABASE_NAME` | `openbot` | The name of the development database.                   |
+| Variable                    | Default   | Meaning                                       |
+| --------------------------- | --------- | --------------------------------------------- |
+| `OPENBOT_DEV_HTTPS_PORT`    | `8443`    | The HTTPS port of the local Platform.         |
+| `OPENBOT_DEV_DATABASE_PORT` | `5433`    | The local port of the development PostgreSQL. |
+| `OPENBOT_DEV_DATABASE_NAME` | `openbot` | The name of the development database.         |
 
 devenv then sets these values for you:
 

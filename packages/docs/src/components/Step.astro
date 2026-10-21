@@ -1,0 +1,33 @@
+---
+// One step in `Steps`. The step number comes from a CSS counter.
+---
+
+<div class="step"><slot /></div>
+
+<style>
+	.step {
+		position: relative;
+		counter-increment: step;
+	}
+	.step::before {
+		content: counter(step);
+		position: absolute;
+		inset-inline-start: -2.75rem;
+		inset-block-start: 0;
+		display: grid;
+		place-items: center;
+		inline-size: 2rem;
+		block-size: 2rem;
+		border-radius: 50%;
+		background: var(--sl-color-gray-6);
+		color: var(--sl-color-white);
+		font-size: var(--sl-text-sm);
+		font-weight: 600;
+	}
+	.step + .step {
+		margin-block-start: 2rem;
+	}
+	.step > :global(:first-child) {
+		margin-block-start: 0;
+	}
+</style>

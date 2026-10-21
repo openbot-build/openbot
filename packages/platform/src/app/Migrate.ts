@@ -1,6 +1,7 @@
 import { Config, Effect, Layer } from "effect"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 
+import * as SecretFiles from "../configuration/SecretFiles.ts"
 import * as DatabasePostgres from "../database/DatabasePostgres.ts"
 
 NodeRuntime.runMain(
@@ -12,7 +13,10 @@ NodeRuntime.runMain(
 				Effect.map(Config.Redacted("OPENBOT_DATABASE_URL"), (databaseUrl) =>
 					DatabasePostgres.layer({ databaseUrl }),
 				),
-			).pipe(Layer.provide(NodeServices.layer)),
+			).pipe(
+				// The database URL may come from a secret file.
+				Layer.provide(Layer.merge(NodeServices.layer, SecretFiles.layer())),
+			),
 		),
 	),
 )

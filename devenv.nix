@@ -20,7 +20,7 @@
     if [ ! -f .env.development ]; then
       sed -e "s/^BETTER_AUTH_SECRET=$/BETTER_AUTH_SECRET=$(openssl rand -hex 32)/" \
         -e "s/^OPENBOT_APP_ENCRYPTION_KEY=$/OPENBOT_APP_ENCRYPTION_KEY=$(openssl rand -hex 32)/" \
-        docker/development.env.example > .env.development
+        .env.development.example > .env.development
     fi
     if [ ! -f .devenv/dev/cert.pem ] || [ ! -f .devenv/dev/key.pem ]; then
       mkcert -cert-file .devenv/dev/cert.pem -key-file .devenv/dev/key.pem localhost 127.0.0.1 ::1
@@ -30,11 +30,22 @@
 
   tasks."dev:install".exec = "pnpm install --frozen-lockfile";
 
+  # The development database. Its data lives in .devenv/state/postgres.
+  services.postgres = {
+    enable = true;
+    package = pkgs.postgresql_18;
+    listen_addresses = "127.0.0.1";
+    port = pkgs.lib.toInt (config.dotenv.resolved.OPENBOT_DEV_DATABASE_PORT or "5433");
+    initialDatabases = [
+      {
+        name = config.dotenv.resolved.OPENBOT_DEV_DATABASE_NAME or "openbot";
+        user = "openbot_dev";
+        pass = "openbot_dev";
+      }
+    ];
+  };
+
   processes = {
-    postgres = {
-      exec = "docker compose --env-file .env.development up --abort-on-container-exit postgres";
-      ready.exec = "pg_isready --dbname \"$OPENBOT_DATABASE_URL\"";
-    };
     platform = {
       after = [
         "devenv:processes:postgres"
@@ -63,10 +74,13 @@
     gh
     corepack
     docker-client
+    # Checks for the Docker images. See the Deploy page in the docs.
+    hadolint
+    dive
+    trivy
     mkcert
     openssl
     ripgrep
-    postgresql
   ];
 
   env = {

@@ -199,24 +199,21 @@ Server clients do not send a browser `Origin` header, so they always work. Brows
 
 ### Docker and Compose
 
-Build the image:
+Build the image from the `protocol-test` target of `deploy/docker/Dockerfile`, and start it:
 
 ```sh
-devenv shell -- docker build -f docker/protocol-test.Dockerfile -t openbot/protocol-test .
+devenv shell -- docker buildx bake -f deploy/docker/docker-bake.hcl --load protocol-test
+devenv shell -- docker run -d --name protocol-test -p 127.0.0.1:3001:3001 \
+  -e PROTOCOL_TEST_PUBLIC_ORIGIN=https://protocol-test.example.com \
+  openbot-protocol-test:local
 ```
 
-Run it with Compose:
-
-```sh
-devenv shell -- docker compose -f compose.protocol-test.yaml up -d --build
-```
-
-The Compose service listens for HTTP on the loopback address only. `docker/protocol-test.nginx.conf` is an example HTTP origin behind a proxy that ends TLS. It keeps the `Host` header and passes on the outside scheme and client addresses. It turns off response buffering and caching for MCP streams.
+The service listens for HTTP on the loopback address only. `deploy/docker/protocol-test.nginx.conf` is an example HTTP origin behind a proxy that ends TLS. It keeps the `Host` header and passes on the outside scheme and client addresses. It turns off response buffering and caching for MCP streams.
 
 After you set up DNS and TLS, check `/healthz`, the Catalog, and `server/discover` through the real HTTPS host name. Run only one copy. The made-up data lives in one process on purpose. Replacing the process removes test grants and follow-up requests.
 
 ### CI/CD
 
-GitHub Actions builds the protocol test image in the `images` job, next to Platform. For every pull request and push, it starts the AMD64 image and checks health, the public Catalog identity, and anonymous MCP discovery. Pushes to `main` and release tags publish `ghcr.io/openbot-build/openbot/protocol-test:<commit-sha>`, plus `:latest` or the version tag.
+GitHub Actions builds the protocol test image in the `images` job, next to Platform. For every pull request and push, it starts the AMD64 image in the production Compose setup and checks health, the public Catalog identity, and anonymous MCP discovery. Pushes to `main` and release tags publish `ghcr.io/openbot-build/openbot/protocol-test:<commit-sha>`, plus `:latest` or the version tag.
 
-The production Compose file (`compose.production.yaml`) runs the test service without Platform credentials or a database. It listens only on `127.0.0.1:3001`. Put it behind a reverse proxy that supports streaming, at `PROTOCOL_TEST_PUBLIC_ORIGIN`. `PROTOCOL_TEST_ALLOWED_ORIGINS` can list allowed browser origins, separated by commas. It defaults to the public origin. Replacing the container clears its temporary data.
+The production Compose file (`deploy/docker/compose.production.yaml`) runs the test service without Platform credentials or a database. It listens only on `127.0.0.1:3001`. Put it behind a reverse proxy that supports streaming, at `PROTOCOL_TEST_PUBLIC_ORIGIN`. `PROTOCOL_TEST_ALLOWED_ORIGINS` can list allowed browser origins, separated by commas. It defaults to the public origin. Replacing the container clears its temporary data.

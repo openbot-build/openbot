@@ -15,17 +15,29 @@ For every setting, see [Configuration](/docs/configuration).
 - An OpenID Connect provider, such as `https://id.example.com`. Register a client with the redirect URI `https://api.example.com/auth/callback`.
 - A model service, if you want the Agent to do work. See [Models](/docs/models).
 
-## Build the image
+## Build the images
 
-Run this from the root of the repository:
+All Docker files are in `deploy/docker/`. One `Dockerfile` makes both images. Each image is a build target (a named last stage in the file):
+
+| Target          | Image                   | What it runs                                                                     |
+| --------------- | ----------------------- | -------------------------------------------------------------------------------- |
+| `platform`      | `openbot-platform`      | Platform and its migration program.                                              |
+| `protocol-test` | `openbot-protocol-test` | The test service for the App Protocol. See [Protocol test](/docs/protocol-test). |
+
+The file `docker-bake.hcl` tells [Docker Bake](https://docs.docker.com/build/bake/) how to build them. Run this from the root of the repository:
 
 ```sh
 export OPENBOT_RELEASE=$(git rev-parse HEAD)
-docker build --platform linux/amd64 --file docker/Dockerfile \
-  --target production --tag openbot-platform:$OPENBOT_RELEASE .
+TAG=$OPENBOT_RELEASE docker buildx bake -f deploy/docker/docker-bake.hcl --load
 ```
 
-The image has Node.js, the bundled server, the bundled migration program, and the database migrations. It has no build tools and no secrets.
+This builds `openbot-platform:$OPENBOT_RELEASE` and `openbot-protocol-test:$OPENBOT_RELEASE` for `linux/amd64`. `--load` puts them in your local Docker. Without `TAG`, the tag is `local`. To build only one image, add its target name, for example `platform`.
+
+On a computer that is not `x86_64`, Docker needs QEMU (a program that runs code for another processor) to build the images. Install it once with `docker run --privileged --rm tonistiigi/binfmt --install amd64`.
+
+Both images start from [distroless](https://github.com/GoogleContainerTools/distroless), with the same Node.js version as development. Distroless images have no shell and no package manager, so you cannot `docker exec` a shell in them. They run as the user `nonroot` (65532).
+
+The Platform image has Node.js, the bundled server, the bundled migration program, and the database migrations. It has no build tools and no secrets.
 
 | Path in the image           | What it is                                       |
 | --------------------------- | ------------------------------------------------ |
@@ -33,11 +45,17 @@ The image has Node.js, the bundled server, the bundled migration program, and th
 | `/app/dist/app/Migrate.mjs` | The migration program. It prepares the database. |
 | `/app/migrations`           | The database migrations.                         |
 
-The server in the image listens on `0.0.0.0:3000`.
+The server in the image listens on `0.0.0.0:3000`. The image has a health check that calls `/health` every five seconds.
+
+### Secrets as files
+
+Platform reads each setting from an environment variable first. When the variable is not set, Platform reads the file `/run/secrets/<NAME>` instead, for example `/run/secrets/BETTER_AUTH_SECRET`. This is where Docker and Compose put secrets. An empty file counts as not set. See [Configuration](/docs/configuration#secrets-as-files).
+
+Environment variables show in `docker inspect`. Files in `/run/secrets` do not. Compose uses files for all secrets.
 
 ## Run with Docker
 
-Put your settings in a file, for example `platform.env`. Start from `docker/production.env.example`.
+Put your settings in a file, for example `platform.env`. Start from `deploy/docker/production.env.example`. `docker run` does not fill in `${POSTGRES_PASSWORD}`, so write the full `OPENBOT_DATABASE_URL` yourself.
 
 <Steps>
 <Step>
@@ -101,18 +119,23 @@ The package `@openbot-build/platform` also has the commands `openbot-platform-mi
 
 ## Run with Compose
 
-The file `compose.production.yaml` runs three services:
+The file `deploy/docker/compose.production.yaml` runs these services:
 
 | Service         | Image                                               | Port on the host                              |
 | --------------- | --------------------------------------------------- | --------------------------------------------- |
 | `postgres`      | `postgres:18-alpine`, data in the volume `postgres` | none                                          |
+| `migrate`       | `openbot-platform:$OPENBOT_RELEASE`                 | none                                          |
 | `platform`      | `openbot-platform:$OPENBOT_RELEASE`                 | `127.0.0.1:8080`, or `OPENBOT_PUBLISHED_PORT` |
 | `protocol-test` | `openbot-protocol-test:$OPENBOT_RELEASE`            | `127.0.0.1:3001`                              |
+
+`migrate` runs the migration program once, after PostgreSQL is healthy. `platform` starts only when `migrate` succeeds. So `up` always migrates the database first.
 
 The `protocol-test` service is the public test service for the App Protocol. See [Protocol test](/docs/protocol-test).
 The file needs `PROTOCOL_TEST_PUBLIC_ORIGIN` even if you only use Platform.
 
-Compose builds `OPENBOT_DATABASE_URL` from `POSTGRES_PASSWORD`. It also sets `OPENBOT_ENVIRONMENT=production` and `OPENBOT_VERSION=$OPENBOT_RELEASE`.
+Compose gives the secrets to the containers as files in `/run/secrets`, not as environment variables. These are `POSTGRES_PASSWORD`, `OPENBOT_DATABASE_URL`, `BETTER_AUTH_SECRET`, `OPENBOT_APP_ENCRYPTION_KEY`, `OPENBOT_OIDC_CLIENT_SECRET`, `OPENBOT_MODEL_API_KEY`, `OPENBOT_LARK_WEBHOOK_URL`, and `OPENBOT_LARK_SIGNING_SECRET`. Compose takes their values from `.env.production`. The `migrate` service gets only `OPENBOT_DATABASE_URL`.
+
+In the template, `OPENBOT_DATABASE_URL` uses `${POSTGRES_PASSWORD}`, so you set the password only once. Compose also sets `OPENBOT_ENVIRONMENT=production` and `OPENBOT_VERSION=$OPENBOT_RELEASE`.
 
 <Steps>
 <Step>
@@ -120,7 +143,7 @@ Compose builds `OPENBOT_DATABASE_URL` from `POSTGRES_PASSWORD`. It also sets `OP
 ### Prepare the settings
 
 ```sh
-cp docker/production.env.example .env.production
+cp deploy/docker/production.env.example .env.production
 openssl rand -hex 32   # use the output for POSTGRES_PASSWORD
 openssl rand -hex 32   # use the output for BETTER_AUTH_SECRET
 openssl rand -hex 32   # use the output for OPENBOT_APP_ENCRYPTION_KEY
@@ -135,22 +158,19 @@ Fill in the values in `.env.production`.
 
 ```sh
 export OPENBOT_RELEASE=$(git rev-parse HEAD)
-docker build --platform linux/amd64 --file docker/Dockerfile \
-  --target production --tag openbot-platform:$OPENBOT_RELEASE .
-docker build --platform linux/amd64 --file docker/protocol-test.Dockerfile \
-  --tag openbot-protocol-test:$OPENBOT_RELEASE .
+TAG=$OPENBOT_RELEASE docker buildx bake -f deploy/docker/docker-bake.hcl --load
 ```
 
 </Step>
 <Step>
 
-### Start the database and migrate
+### Check the settings
 
 ```sh
-docker compose --env-file .env.production -f compose.production.yaml up -d postgres
-docker compose --env-file .env.production -f compose.production.yaml \
-  run --rm --no-deps platform /app/dist/app/Migrate.mjs
+docker compose --env-file .env.production -f deploy/docker/compose.production.yaml config --quiet
 ```
+
+This shows an error when a required setting is missing. Without `--quiet`, it prints the full setup with all values filled in.
 
 </Step>
 <Step>
@@ -158,15 +178,15 @@ docker compose --env-file .env.production -f compose.production.yaml \
 ### Start everything
 
 ```sh
-docker compose --env-file .env.production -f compose.production.yaml up -d
+docker compose --env-file .env.production -f deploy/docker/compose.production.yaml up -d --wait
 ```
 
-Compose checks `/health` every five seconds. When a service process stops, Compose starts it again.
+`--wait` returns when all services are healthy. The images check their health every five seconds. When a service process stops, Compose starts it again.
 
 </Step>
 </Steps>
 
-To release a new version, build new images, set the new `OPENBOT_RELEASE`, back up the database, run the migration again, and run `up -d`.
+To release a new version, build new images, set the new `OPENBOT_RELEASE`, back up the database, and run `up -d --wait` again. `migrate` runs again before the new Platform starts.
 Never delete the `postgres` volume. It holds all your data.
 
 ---
@@ -253,14 +273,14 @@ Back up two things, and keep them together:
 With Compose, make a database backup like this:
 
 ```sh
-docker compose --env-file .env.production -f compose.production.yaml \
+docker compose --env-file .env.production -f deploy/docker/compose.production.yaml \
   exec -T postgres pg_dump -U openbot -Fc openbot > openbot-$(date +%F).dump
 ```
 
-To restore it, first stop Platform with `docker compose stop platform`. Then run `pg_restore`:
+To restore it, first stop Platform with `docker compose --env-file .env.production -f deploy/docker/compose.production.yaml stop platform`. Then run `pg_restore`:
 
 ```sh
-docker compose --env-file .env.production -f compose.production.yaml \
+docker compose --env-file .env.production -f deploy/docker/compose.production.yaml \
   exec -T postgres pg_restore -U openbot -d openbot --clean < openbot-2026-10-20.dump
 ```
 
@@ -273,19 +293,19 @@ The workflow `.github/workflows/ci.yml` has two jobs. The second job runs only w
 | Job      | What it does                                                               |
 | -------- | -------------------------------------------------------------------------- |
 | `check`  | Runs `pnpm build`, `pnpm typecheck`, and `pnpm -r test` in `devenv shell`. |
-| `images` | Runs `docker/ci-images.sh` to build, check, and publish the Docker images. |
+| `images` | Builds, checks, scans, and publishes the Docker images.                    |
 
 Both jobs run on `ubuntu-latest`. They install Nix with the Determinate Nix installer, and then devenv 2.4.0. [Magic Nix Cache](https://github.com/DeterminateSystems/magic-nix-cache-action) keeps Nix build results in the GitHub Actions cache, so later runs do not build them again. The jobs also download prebuilt devenv packages from `devenv.cachix.org`. The `check` job keeps the pnpm store in a cache.
 
-`docker/ci-images.sh` does these checks with `linux/amd64` images:
+The `images` job does these steps:
 
-1. It builds `openbot-platform` and `openbot-protocol-test`.
-2. It starts an empty PostgreSQL and runs the migration program.
-3. It starts Platform and waits for `/health`.
-4. It checks that `/v1/sessions` returns `401` with no key and with a bad key, and that `/openapi.json` works.
-5. It starts the protocol test service and checks its health, its Catalog, and MCP discovery.
-
-The job saves both images as the `images-<commit-sha>` artifact for seven days.
+1. [hadolint](https://github.com/hadolint/hadolint) and `docker buildx bake lint` check the `Dockerfile`. The second one runs the [Docker build checks](https://docs.docker.com/build/checks/).
+2. Docker Bake builds both images. Build layers stay in the GitHub Actions cache, with one cache for each image, so later runs build only what changed.
+3. `deploy/docker/check.sh` checks the images. See [Check the images](#check-the-images).
+4. [dive](https://github.com/wagoodman/dive) checks that the image layers do not waste space.
+5. [Trivy](https://trivy.dev) scans both images. The job fails when an image has a known `HIGH` or `CRITICAL` vulnerability that has a fix. Trivy does not see the Node.js version, because Node.js is copied into the image and not installed as a package.
+6. The job saves both images as the `images-<commit-sha>` artifact for seven days.
+7. For pushes, the job publishes the images. It uses the build cache, so it does not build again.
 
 The workflow runs for pull requests, pushes to `main`, and tags like `v1.2.3`. It publishes images only for pushes:
 
@@ -296,10 +316,25 @@ The workflow runs for pull requests, pushes to `main`, and tags like `v1.2.3`. I
 
 The images go to the GitHub container registry, at `ghcr.io/openbot-build/openbot/platform` and `ghcr.io/openbot-build/openbot/protocol-test`. The workflow does not deploy. To use a published image with Compose, pull it and tag it as `openbot-platform:<tag>`.
 
-You can run the same image checks on your computer:
+### Check the images
+
+`deploy/docker/check.sh` starts `compose.production.yaml` with test settings. The extra file `compose.check.yaml` removes the host ports and adds a `check` service. `check.env` has the test settings. None of them are real secrets.
+
+The `check` service runs `check.mjs` inside the Compose network, after Platform and the protocol test service are healthy. It checks that:
+
+- `/v1/sessions` returns `401` with no key and with a bad key,
+- `/openapi.json` works,
+- the protocol test Catalog has the right public origin,
+- MCP discovery on the protocol test service works.
+
+So the check also proves that migrations, secret files, and health checks work in the real production setup. At the end, the script removes the containers and the test database.
+
+Run the same checks on your computer:
 
 ```sh
-devenv shell -- bash docker/ci-images.sh
+devenv shell -- pnpm images
+devenv shell -- pnpm images:check
+devenv shell -- hadolint deploy/docker/Dockerfile
+devenv shell -- dive --ci --source docker openbot-platform:local
+devenv shell -- trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed openbot-platform:local
 ```
-
-With no `RELEASE_TAG`, the script builds and checks the images but does not publish them.

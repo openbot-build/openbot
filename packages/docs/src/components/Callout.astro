@@ -1,0 +1,12 @@
+---
+import { Aside } from "@astrojs/starlight/components"
+
+interface Props {
+	type?: "info" | "warn"
+	title?: string
+}
+
+const { type = "info", title } = Astro.props
+---
+
+<Aside type={type === "warn" ? "caution" : "note"} title={title}><slot /></Aside>

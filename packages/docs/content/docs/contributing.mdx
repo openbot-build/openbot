@@ -9,7 +9,7 @@ This page is for people who change OpenBot itself. It shows how to set up your c
 
 ## Set up
 
-You need [Docker](https://docs.docker.com/get-docker/) and [devenv](https://devenv.sh). devenv gives you the exact tools for the project: Node.js, pnpm, PostgreSQL tools, mkcert, and more.
+You need [devenv](https://devenv.sh). devenv gives you the exact tools for the project: Node.js, pnpm, PostgreSQL, mkcert, and more. You need [Docker](https://docs.docker.com/get-docker/) only to build and check the images. See [Deploy](/docs/deploy#build-the-images).
 Run every command through `devenv shell -- <command>`, so you always use these tools.
 
 <Steps>
@@ -46,7 +46,7 @@ devenv shell -- pnpm dev
 
 `pnpm dev` runs `devenv up`. It does these steps:
 
-1. It starts PostgreSQL in Docker on `127.0.0.1:5433`.
+1. It starts PostgreSQL 18 on `127.0.0.1:5433`, with the user `openbot_dev`. devenv runs it as a normal process. Its data lives in `.devenv/state/postgres`.
 2. It installs the packages with `pnpm install --frozen-lockfile`.
 3. It builds Platform and the packages it needs.
 4. It runs the database migrations.
@@ -82,18 +82,18 @@ GitHub Actions runs the same `build`, `typecheck`, and `test` commands. See [Dep
 
 ## Repository layout
 
-| Path                      | What it holds                                                                           |
-| ------------------------- | --------------------------------------------------------------------------------------- |
-| `packages/`               | The workspace packages. See [Packages](/docs/packages).                                 |
-| `packages/docs/`          | This docs site.                                                                         |
-| `packages/template/`      | A starting point for a new package. It is not part of the workspace.                    |
-| `protocol-test/`          | The public test service for the App Protocol. See [Protocol test](/docs/protocol-test). |
-| `docker/`                 | Dockerfiles, environment templates, and the CI image script.                            |
-| `compose.yaml`            | The development PostgreSQL.                                                             |
-| `compose.production.yaml` | The production setup. See [Deploy](/docs/deploy).                                       |
-| `patches/`                | Fixes for exact versions of outside packages.                                           |
-| `references/`             | Source code of other open source projects, as Git submodules. Only for reading.         |
-| `devenv.nix`              | The development tools, settings, and processes.                                         |
+| Path                       | What it holds                                                                                            |
+| -------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `packages/`                | The workspace packages. See [Packages](/docs/packages).                                                  |
+| `packages/docs/`           | This docs site.                                                                                          |
+| `packages/template/`       | A starting point for a new package. It is not part of the workspace.                                     |
+| `protocol-test/`           | The public test service for the App Protocol. See [Protocol test](/docs/protocol-test).                  |
+| `deploy/`                  | Files to deploy OpenBot. Each target has its own folder. See [Deploy](/docs/deploy).                     |
+| `deploy/docker/`           | The Dockerfile, the Bake file, Compose files, the production environment template, and the image checks. |
+| `.env.development.example` | The template for `.env.development`.                                                                     |
+| `patches/`                 | Fixes for exact versions of outside packages.                                                            |
+| `references/`              | Source code of other open source projects, as Git submodules. Only for reading.                          |
+| `devenv.nix`               | The development tools, settings, and processes.                                                          |
 
 The `references/` folder is not part of the build. To read that code, fetch it with `git submodule update --init`.
 
@@ -103,22 +103,27 @@ To start a new package, copy `packages/template/` to `packages/<name>/`. Then ch
 
 ## The docs site
 
-The docs site is a Next.js app built with Fumadocs. Start it with:
+The docs site is an [Astro](https://astro.build) site built with [Starlight](https://starlight.astro.build). The build makes static files only. Start it with:
 
 ```sh
 devenv shell -- pnpm --filter @openbot-build/docs dev
 ```
 
-Then open `http://localhost:3000/docs`.
+Then open `http://localhost:4321`.
 
-| Path in `packages/docs/` | What it is                                                              |
-| ------------------------ | ----------------------------------------------------------------------- |
-| `content/docs/*.mdx`     | The pages. The file name is the URL: `deploy.mdx` is `/docs/deploy`.    |
-| `content/docs/meta.json` | The order of the pages in the sidebar.                                  |
-| `content/docs/api/`      | The API reference. It is made by a script. Do not change it by hand.    |
-| `scripts/api.ts`         | Makes `openapi.json` and the API reference pages from the API contract. |
+| Path in `packages/docs/`    | What it is                                                                         |
+| --------------------------- | ---------------------------------------------------------------------------------- |
+| `content/docs/*.mdx`        | The pages. The file name is the URL: `deploy.mdx` is `/docs/deploy`.               |
+| `astro.config.ts`           | The site settings and the order of the pages in the sidebar.                       |
+| `src/components/`           | The components that pages can use without an import: `Callout`, `Steps`, and more. |
+| `src/pages/index.astro`     | The home page.                                                                     |
+| `src/pages/openapi.json.ts` | Serves `openapi.json` at `/openapi.json`, so people can download it.               |
+| `scripts/api.ts`            | Makes `openapi.json` from the API contract.                                        |
 
+The API reference at `/docs/api` is made from `openapi.json` by the [starlight-openapi](https://github.com/HiDeoo/starlight-openapi) plugin. Do not write it by hand.
 The script runs before every `dev` and `build`. When you change the API contract in `@openbot-build/platform-api`, the reference changes too.
+When you add a group to the contract, give it a title and a description in `scripts/api.ts`. The script stops with an error until you do.
+The build also makes `/llms.txt` and `/llms-full.txt`, which give the docs as plain text for AI tools.
 To check that every page builds, run `devenv shell -- pnpm --filter @openbot-build/docs build`.
 
 ---

@@ -22,6 +22,8 @@
 		"dev:setup": "dev-setup",
 		"typecheck": "pnpm -r exec tsc -p tsconfig.json --noEmit",
 		"prepare": "effect-tsgo patch --typescript --no-oxlint",
-		"build": "pnpm -r build"
+		"build": "pnpm -r build",
+		"images": "docker buildx bake -f deploy/docker/docker-bake.hcl --load",
+		"images:check": "bash deploy/docker/check.sh"
 	}
 }

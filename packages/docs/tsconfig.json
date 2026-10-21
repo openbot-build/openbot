@@ -1,34 +1,9 @@
 {
-	"compilerOptions": {
-		"target": "ESNext",
-		"lib": ["dom", "dom.iterable", "esnext"],
-		"allowJs": true,
-		"skipLibCheck": true,
-		"strict": true,
-		"forceConsistentCasingInFileNames": true,
-		"noEmit": true,
-		"esModuleInterop": true,
-		"module": "esnext",
-		"moduleResolution": "bundler",
-		"resolveJsonModule": true,
-		"isolatedModules": true,
-		"jsx": "react-jsx",
-		"incremental": true,
-		"paths": {
-			"@/*": ["./*"]
-		},
-		"plugins": [
-			{
-				"name": "next"
-			}
-		]
-	},
-	"include": [
-		"next-env.d.ts",
-		"**/*.ts",
-		"**/*.tsx",
-		".next/types/**/*.ts",
-		".next/dev/types/**/*.ts"
-	],
-	"exclude": ["node_modules"]
+	"extends": "astro/tsconfigs/strict",
+	// Leave out astro.config.ts. It imports starlight-openapi, which ships
+	// TypeScript source files that do not pass strict checks. `skipLibCheck`
+	// does not skip `.ts` files, only `.d.ts` files. Astro checks the config
+	// when it loads it.
+	"include": [".astro/types.d.ts", "scripts", "src"],
+	"exclude": ["dist", "node_modules"]
 }

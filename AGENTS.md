@@ -6,7 +6,8 @@
 
 ## Product
 
-- OpenBot is headless and API first. Do not add a user interface, pages, or client apps. The only web site in the repository is the docs site in `packages/docs`.
+- OpenBot is headless and API first. Do not add a user interface, pages, or client apps. The only web site in the repository is the docs site in `packages/docs`. It also holds the home page.
+- Build the docs site and the home page with Astro and Starlight only. Do not use Next.js or another web framework.
 - Add a new feature to the HTTP contract in `@openbot-build/platform-api` first. Then write the handler in `@openbot-build/platform`. Make sure it works with an API key and with the same-origin session cookie.
 
 ## Language

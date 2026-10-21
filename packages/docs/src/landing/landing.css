@@ -1,0 +1,585 @@
+/*
+ * Styles for the home page only. Every rule starts with `.landing`.
+ * Dark mode follows the system. The theme picker in the docs saves a choice
+ * as `data-theme` on `<html>`, and that choice wins.
+ */
+
+.landing {
+	--background: #f7f6f3;
+	--foreground: #1c2025;
+	--foreground-secondary: #454b52;
+	--muted-foreground: #62666c;
+	--accent: #365d77;
+	--card: rgb(255 255 255 / 72%);
+	--card-border: rgb(28 32 37 / 8%);
+	--atmosphere-1: rgb(241 185 165 / 65%);
+	--atmosphere-2: rgb(187 174 230 / 62%);
+	--atmosphere-3: rgb(173 211 230 / 58%);
+	--landing-font-sans: "Geist Variable";
+	--landing-font-brand: "DM Sans Variable";
+	--layout-gap: 16px;
+	min-block-size: 100dvh;
+	overflow-x: clip;
+	background: var(--background);
+	color: var(--foreground);
+	font-family: var(--landing-font-sans), system-ui, sans-serif;
+}
+
+:root[data-theme="dark"] .landing {
+	--background: #0b0c0e;
+	--foreground: #f2f0ed;
+	--foreground-secondary: #c4c6c9;
+	--muted-foreground: #969a9f;
+	--accent: #b6d6e9;
+	--card: rgb(20 22 25 / 72%);
+	--card-border: rgb(255 255 255 / 10%);
+	--atmosphere-1: rgb(117 68 49 / 50%);
+	--atmosphere-2: rgb(91 70 137 / 50%);
+	--atmosphere-3: rgb(52 99 118 / 45%);
+}
+
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) .landing {
+		--background: #0b0c0e;
+		--foreground: #f2f0ed;
+		--foreground-secondary: #c4c6c9;
+		--muted-foreground: #969a9f;
+		--accent: #b6d6e9;
+		--card: rgb(20 22 25 / 72%);
+		--card-border: rgb(255 255 255 / 10%);
+		--atmosphere-1: rgb(117 68 49 / 50%);
+		--atmosphere-2: rgb(91 70 137 / 50%);
+		--atmosphere-3: rgb(52 99 118 / 45%);
+	}
+}
+
+.landing .home-page {
+	display: grid;
+	gap: var(--layout-gap);
+	min-inline-size: 0;
+	max-inline-size: 1024px;
+	margin-inline: auto;
+	padding: var(--layout-gap);
+}
+
+/* Header */
+
+.landing .site-header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--layout-gap);
+	min-block-size: 48px;
+}
+
+.landing .project-brand {
+	font-family: var(--landing-font-brand), var(--landing-font-sans), sans-serif;
+	font-size: calc(48px * 100 / 98.266667);
+	font-weight: 500;
+	line-height: 48px;
+	color: inherit;
+	text-decoration: none;
+}
+
+.landing .project-brand:hover {
+	opacity: 0.65;
+}
+
+.landing .site-tools {
+	display: flex;
+	gap: 24px;
+	font-size: 0.9375rem;
+}
+
+.landing .site-tools a {
+	display: block;
+	padding-block: 12px;
+	color: var(--foreground-secondary);
+	text-decoration: none;
+}
+
+.landing .site-tools a:hover {
+	color: var(--foreground);
+	text-decoration: underline;
+	text-underline-offset: 5px;
+}
+
+.landing :is(.project-brand, .site-tools a):focus-visible {
+	outline: 2px solid currentColor;
+	outline-offset: 4px;
+}
+
+/* Shared type */
+
+.landing .page-content {
+	container-type: inline-size;
+	inline-size: 100%;
+	min-inline-size: 0;
+}
+
+.landing .product-landing {
+	display: grid;
+	inline-size: 100%;
+	min-inline-size: 0;
+	font-size: 1.25rem;
+	line-height: 1.7;
+}
+
+.landing .product-landing :where(h1, h2, h3, p, figure, blockquote) {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+.landing .product-landing :where(h1, h2, h3) {
+	font-weight: 450;
+	text-wrap: balance;
+}
+
+.landing .product-landing p {
+	color: var(--foreground-secondary);
+	text-wrap: pretty;
+}
+
+.landing .product-landing h2 {
+	font-size: clamp(2rem, 1.25rem + 3cqi, 3.5rem);
+	line-height: 1.3;
+	letter-spacing: -0.035em;
+}
+
+.landing .product-landing h3 {
+	font-size: clamp(1.5rem, 1.25rem + 0.6cqi, 1.75rem);
+	line-height: 1.45;
+	letter-spacing: -0.025em;
+}
+
+.landing .product-landing :is(a, button) {
+	color: var(--foreground-secondary);
+	text-underline-offset: 0.4em;
+	text-decoration-thickness: 1px;
+	transition: color 160ms ease;
+}
+
+.landing .product-landing a:hover {
+	color: var(--accent);
+	text-decoration-line: underline;
+}
+
+.landing .product-landing :is(a, button):focus-visible {
+	outline: 2px solid currentColor;
+	outline-offset: 6px;
+}
+
+.landing .marketing-story {
+	row-gap: clamp(32px, 6cqi, 80px);
+}
+
+.landing .landing-scene {
+	position: relative;
+	min-inline-size: 0;
+	inline-size: 100%;
+}
+
+.landing .scene-content {
+	inline-size: 100%;
+	padding-block: clamp(24px, 4cqi, 48px);
+}
+
+/* Visual: a soft color field with a code card, in place of a photo */
+
+.landing .story-visual {
+	position: relative;
+	display: grid;
+	place-items: center;
+	min-inline-size: 0;
+	padding: clamp(24px, 5cqi, 56px) clamp(16px, 4cqi, 48px);
+	background:
+		radial-gradient(ellipse at 10% 90%, var(--atmosphere-1), transparent 60%),
+		radial-gradient(ellipse at 70% 100%, var(--atmosphere-2), transparent 60%),
+		radial-gradient(ellipse at 100% 20%, var(--atmosphere-3), transparent 55%);
+}
+
+.landing .story-visual-proof {
+	background:
+		radial-gradient(ellipse at 90% 10%, var(--atmosphere-1), transparent 55%),
+		radial-gradient(ellipse at 20% 30%, var(--atmosphere-3), transparent 60%),
+		radial-gradient(ellipse at 60% 100%, var(--atmosphere-2), transparent 60%);
+}
+
+.landing .story-visual pre {
+	inline-size: 100%;
+	max-inline-size: 100%;
+	margin: 0;
+	padding: 20px 24px;
+	overflow-x: auto;
+	border: 1px solid var(--card-border);
+	border-radius: 14px;
+	background: var(--card);
+	-webkit-backdrop-filter: blur(16px);
+	backdrop-filter: blur(16px);
+	color: var(--foreground);
+	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+	font-size: 0.8125rem;
+	line-height: 1.7;
+}
+
+.landing .photo-credit {
+	position: absolute;
+	inset-block-start: 8px;
+	inset-inline-end: 12px;
+	color: var(--foreground);
+	font-size: 0.75rem;
+	line-height: 1.4;
+	opacity: 0.65;
+}
+
+/* Hero */
+
+.landing .campaign-hero h1 {
+	font-size: clamp(3rem, 1.25rem + 7cqi, 6rem);
+	line-height: 1.05;
+	letter-spacing: -0.05em;
+}
+
+.landing .campaign-hero h1 > span {
+	display: block;
+}
+
+.landing .hero-aside {
+	display: grid;
+	gap: 16px;
+	align-content: end;
+}
+
+.landing .hero-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 24px;
+}
+
+.landing .kay-opening {
+	display: grid;
+	grid-template-columns: repeat(12, minmax(0, 1fr));
+	gap: 24px;
+	align-items: end;
+}
+
+.landing .kay-opening .hero-title {
+	grid-column: 1 / -1;
+}
+
+.landing .kay-opening h1 {
+	font-family: var(--landing-font-brand), var(--landing-font-sans), sans-serif;
+	font-size: clamp(3.25rem, 1rem + 9cqi, 7rem);
+	font-weight: 500;
+}
+
+.landing .kay-opening h1 > span:last-child {
+	margin-inline-start: 25%;
+	color: var(--accent);
+}
+
+.landing .kay-opening .hero-aside {
+	grid-column: 1 / 5;
+	padding-block-end: 8px;
+}
+
+.landing .kay-opening > .story-visual {
+	grid-column: 5 / -1;
+	aspect-ratio: 16 / 9;
+}
+
+/* Scenarios */
+
+.landing .kay-scenarios {
+	display: grid;
+	gap: 32px;
+}
+
+.landing .kay-scenarios h2 {
+	font-size: clamp(2.5rem, 1rem + 5.5cqi, 4.5rem);
+}
+
+.landing .connection-story {
+	display: grid;
+	gap: 32px;
+}
+
+.landing .perspective-switch {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 32px;
+}
+
+.landing .perspective-switch button {
+	min-block-size: 48px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--muted-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.landing .perspective-switch button[aria-pressed="true"] {
+	color: var(--accent);
+	font-weight: 550;
+	text-decoration: underline 2px;
+}
+
+.landing .perspective-switch button:hover {
+	color: var(--accent);
+}
+
+.landing .connection-perspective {
+	grid-area: 2 / 1;
+	display: grid;
+	gap: 24px;
+}
+
+.landing .connection-perspective[aria-hidden="true"] {
+	visibility: hidden;
+}
+
+.landing .connection-perspective blockquote {
+	max-inline-size: 17em;
+	color: var(--accent);
+	font-size: clamp(2rem, 1rem + 4cqi, 3.5rem);
+	line-height: 1.35;
+	text-wrap: balance;
+}
+
+.landing .scenario-meaning {
+	justify-self: end;
+	max-inline-size: 27em;
+}
+
+.landing .scenario-meaning h3 {
+	font-weight: 400;
+}
+
+/* Contract */
+
+.landing .campaign-proof {
+	display: grid;
+	grid-template-columns: repeat(12, minmax(0, 1fr));
+	gap: 32px 24px;
+	align-items: end;
+}
+
+.landing .campaign-proof > div {
+	display: contents;
+}
+
+.landing .campaign-proof h2 {
+	grid-column: 1 / -1;
+	grid-row: 1;
+	font-size: clamp(2.5rem, 1rem + 6cqi, 5rem);
+	line-height: 1.18;
+}
+
+.landing .campaign-proof > .story-visual {
+	grid-column: 6 / -1;
+	grid-row: 2;
+	aspect-ratio: 5 / 4;
+}
+
+.landing .campaign-proof > div > p {
+	grid-column: 1 / 5;
+	grid-row: 2;
+	align-self: end;
+}
+
+/* Features */
+
+.landing .resource-horizons {
+	display: grid;
+	gap: 40px;
+}
+
+.landing .resource-horizons h2 {
+	font-size: clamp(3rem, 1rem + 7cqi, 5.75rem);
+	line-height: 1.12;
+}
+
+.landing .resource-horizons h2 span {
+	display: block;
+	margin-inline-start: 25%;
+	color: var(--accent);
+}
+
+.landing .horizon-notes {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 48px;
+	margin-inline-start: 25%;
+}
+
+.landing .horizon-notes article {
+	display: grid;
+	gap: 16px;
+	align-content: start;
+}
+
+/* Closing */
+
+.landing .closing-scene {
+	position: relative;
+	display: grid;
+	justify-items: start;
+	gap: 32px;
+	isolation: isolate;
+}
+
+.landing .closing-scene h2 {
+	font-size: clamp(2.75rem, 1rem + 7cqi, 5.5rem);
+	line-height: 1.2;
+}
+
+.landing .closing-scene h2 > span {
+	display: block;
+}
+
+.landing .closing-atmosphere {
+	position: absolute;
+	z-index: -1;
+	inset-block: -32px;
+	inset-inline: calc(50% - 50vw);
+	pointer-events: none;
+	background:
+		radial-gradient(ellipse at 12% 78%, var(--atmosphere-1), transparent 65%),
+		radial-gradient(ellipse at 66% 82%, var(--atmosphere-2), transparent 60%),
+		radial-gradient(ellipse at 94% 62%, var(--atmosphere-3), transparent 56%);
+	mask-image: linear-gradient(
+		180deg,
+		transparent,
+		#000 24%,
+		#000 76%,
+		transparent
+	);
+}
+
+.landing .inline-usage {
+	display: grid;
+	gap: 24px;
+	inline-size: min(100%, 48rem);
+	margin: 0;
+	padding-inline-start: 32px;
+	list-style: decimal-leading-zero;
+}
+
+.landing .inline-usage li {
+	padding-inline-start: 16px;
+}
+
+.landing .inline-usage li::marker {
+	color: var(--accent);
+	font-family: var(--landing-font-brand), var(--landing-font-sans), sans-serif;
+}
+
+.landing .inline-usage h3 {
+	font-size: 1.5rem;
+}
+
+.landing .inline-usage p {
+	margin-block-start: 8px;
+}
+
+.landing .kay-builder {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 8px 32px;
+}
+
+.landing .kay-builder p {
+	max-inline-size: 28em;
+}
+
+.landing .landing-footer {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding-block: 16px;
+	color: var(--muted-foreground);
+	font-size: 1.25rem;
+}
+
+/* Narrow screens */
+
+@container (max-width: 48rem) {
+	.landing .marketing-story {
+		row-gap: 32px;
+	}
+	.landing .kay-opening {
+		gap: 24px 16px;
+	}
+	.landing .kay-opening h1 {
+		font-size: clamp(2.5rem, 1rem + 7.5cqi, 4.75rem);
+	}
+	.landing .kay-opening h1 > span:last-child {
+		margin-inline-start: 12%;
+	}
+	.landing .kay-opening > .story-visual {
+		grid-column: 1 / -1;
+		grid-row: 2;
+		aspect-ratio: auto;
+	}
+	.landing .kay-opening .hero-aside {
+		grid-column: 1 / -1;
+		grid-row: 3;
+		padding: 0;
+	}
+	.landing .hero-aside {
+		gap: 8px;
+	}
+	.landing :is(.kay-scenarios, .connection-story) {
+		gap: 24px;
+	}
+	.landing .perspective-switch {
+		gap: 8px 24px;
+	}
+	.landing .connection-perspective {
+		gap: 16px;
+	}
+	.landing .scenario-meaning {
+		max-inline-size: 90%;
+	}
+	.landing .campaign-proof {
+		gap: 24px 16px;
+	}
+	.landing .campaign-proof > .story-visual {
+		grid-column: 1 / -1;
+		grid-row: 2;
+		aspect-ratio: auto;
+	}
+	.landing .campaign-proof > div > p {
+		grid-column: 1 / -1;
+		grid-row: 3;
+	}
+	.landing .resource-horizons {
+		gap: 24px;
+	}
+	.landing .resource-horizons h2 span {
+		margin-inline-start: 10%;
+	}
+	.landing .horizon-notes {
+		grid-template-columns: 1fr;
+		gap: 24px;
+		margin: 0;
+	}
+	.landing .horizon-notes article {
+		gap: 8px;
+	}
+	.landing .closing-scene {
+		gap: 24px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.landing .product-landing :is(a, button) {
+		transition: none;
+	}
+}

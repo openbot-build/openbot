@@ -1,0 +1,14 @@
+---
+// A numbered list of steps. Put a `Step` around each step.
+---
+
+<div class="steps"><slot /></div>
+
+<style>
+	.steps {
+		counter-reset: step;
+		border-inline-start: 1px solid var(--sl-color-gray-5);
+		margin-inline-start: 1rem;
+		padding-inline-start: 1.75rem;
+	}
+</style>

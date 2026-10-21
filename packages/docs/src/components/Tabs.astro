@@ -1,0 +1,10 @@
+---
+import { Tabs as StarlightTabs } from "@astrojs/starlight/components"
+
+interface Props {
+	// The tab names. Each `Tab` gives its own name in `value`.
+	items?: Array<string>
+}
+---
+
+<StarlightTabs><slot /></StarlightTabs>

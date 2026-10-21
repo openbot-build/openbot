@@ -1,0 +1,11 @@
+---
+import { TabItem } from "@astrojs/starlight/components"
+
+interface Props {
+	value: string
+}
+
+const { value } = Astro.props
+---
+
+<TabItem label={value}><slot /></TabItem>

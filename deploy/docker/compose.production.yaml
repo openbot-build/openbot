@@ -1,0 +1,97 @@
+name: openbot-production
+
+# Settings that the OpenBot services share.
+x-openbot: &openbot
+  platform: linux/amd64
+  restart: unless-stopped
+
+x-platform: &platform
+  <<: *openbot
+  image: openbot-platform:${OPENBOT_RELEASE:?Set OPENBOT_RELEASE to the deployed commit SHA}
+  # Platform reads each secret from the file /run/secrets/<NAME>.
+  secrets:
+    - OPENBOT_DATABASE_URL
+    - BETTER_AUTH_SECRET
+    - OPENBOT_APP_ENCRYPTION_KEY
+    - OPENBOT_OIDC_CLIENT_SECRET
+    - OPENBOT_MODEL_API_KEY
+    - OPENBOT_LARK_WEBHOOK_URL
+    - OPENBOT_LARK_SIGNING_SECRET
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: openbot
+      POSTGRES_PASSWORD_FILE: /run/secrets/POSTGRES_PASSWORD
+      POSTGRES_DB: openbot
+    secrets:
+      - POSTGRES_PASSWORD
+    volumes:
+      - postgres:/var/lib/postgresql
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U openbot -d openbot]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Runs the database migrations once. Platform starts only after it succeeds.
+  migrate:
+    <<: *platform
+    restart: "no"
+    command: [/app/dist/app/Migrate.mjs]
+    secrets:
+      - OPENBOT_DATABASE_URL
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  platform:
+    <<: *platform
+    environment:
+      OPENBOT_PUBLIC_ORIGIN: ${OPENBOT_PUBLIC_ORIGIN:?Set OPENBOT_PUBLIC_ORIGIN}
+      OPENBOT_OIDC_ISSUER: ${OPENBOT_OIDC_ISSUER:?Set OPENBOT_OIDC_ISSUER}
+      OPENBOT_OIDC_CLIENT_ID: ${OPENBOT_OIDC_CLIENT_ID:?Set OPENBOT_OIDC_CLIENT_ID}
+      OPENBOT_MODEL_ENDPOINT: ${OPENBOT_MODEL_ENDPOINT:-}
+      OPENBOT_MODEL_ID: ${OPENBOT_MODEL_ID:-}
+      OPENBOT_ENVIRONMENT: production
+      OPENBOT_VERSION: ${OPENBOT_RELEASE}
+      OPENBOT_INSTANCE: ${OPENBOT_INSTANCE:-}
+    ports:
+      - "127.0.0.1:${OPENBOT_PUBLISHED_PORT:-8080}:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  protocol-test:
+    <<: *openbot
+    image: openbot-protocol-test:${OPENBOT_RELEASE}
+    environment:
+      PROTOCOL_TEST_PUBLIC_ORIGIN: ${PROTOCOL_TEST_PUBLIC_ORIGIN:?Set PROTOCOL_TEST_PUBLIC_ORIGIN}
+      PROTOCOL_TEST_ALLOWED_ORIGINS: ${PROTOCOL_TEST_ALLOWED_ORIGINS:-${PROTOCOL_TEST_PUBLIC_ORIGIN}}
+    ports:
+      - "127.0.0.1:3001:3001"
+
+# Compose copies each value from the environment file into a file in the container.
+# Unlike environment variables, these values do not show in docker inspect.
+secrets:
+  POSTGRES_PASSWORD:
+    environment: POSTGRES_PASSWORD
+  OPENBOT_DATABASE_URL:
+    environment: OPENBOT_DATABASE_URL
+  BETTER_AUTH_SECRET:
+    environment: BETTER_AUTH_SECRET
+  OPENBOT_APP_ENCRYPTION_KEY:
+    environment: OPENBOT_APP_ENCRYPTION_KEY
+  OPENBOT_OIDC_CLIENT_SECRET:
+    environment: OPENBOT_OIDC_CLIENT_SECRET
+  OPENBOT_MODEL_API_KEY:
+    environment: OPENBOT_MODEL_API_KEY
+  OPENBOT_LARK_WEBHOOK_URL:
+    environment: OPENBOT_LARK_WEBHOOK_URL
+  OPENBOT_LARK_SIGNING_SECRET:
+    environment: OPENBOT_LARK_SIGNING_SECRET
+
+volumes:
+  postgres:

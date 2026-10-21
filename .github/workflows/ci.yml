@@ -58,6 +58,9 @@ jobs:
     env:
       # Images are published only for pushes to main and for version tags.
       PUBLISH: ${{ github.event_name == 'push' }}
+      TAG: ${{ github.sha }}
+      REVISION: ${{ github.sha }}
+      OPENBOT_RELEASE: ${{ github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
@@ -73,6 +76,46 @@ jobs:
           diagnostic-endpoint: ""
       - name: Install devenv
         run: nix profile add github:cachix/devenv/v2.4.0
+      # The docker-container builder can keep build layers in the GitHub Actions cache.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Check the Dockerfile
+        run: |
+          devenv shell -- hadolint deploy/docker/Dockerfile
+          devenv shell -- docker buildx bake -f deploy/docker/docker-bake.hcl lint
+      # A run step cannot reach the GitHub Actions cache service, so the build uses this action.
+      - name: Build images
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
+        with:
+          source: .
+          files: deploy/docker/docker-bake.hcl
+          load: true
+          # Each image needs its own cache scope, or one cache replaces the other.
+          set: |
+            platform.cache-from=type=gha,scope=platform
+            platform.cache-to=type=gha,scope=platform,mode=max
+            protocol-test.cache-from=type=gha,scope=protocol-test
+            protocol-test.cache-to=type=gha,scope=protocol-test,mode=max
+      - name: Check images in Compose
+        run: devenv shell -- bash deploy/docker/check.sh < /dev/null
+      - name: Check image layers
+        run: |
+          devenv shell -- dive --ci --source docker "openbot-platform:$TAG"
+          devenv shell -- dive --ci --source docker "openbot-protocol-test:$TAG"
+      - name: Scan images for known vulnerabilities
+        run: |
+          for image in "openbot-platform:$TAG" "openbot-protocol-test:$TAG"; do
+            devenv shell -- trivy image --exit-code 1 --scanners vuln \
+              --severity HIGH,CRITICAL --ignore-unfixed "$image"
+          done
+      - name: Save images
+        run: |
+          mkdir -p .devenv
+          docker save "openbot-platform:$TAG" "openbot-protocol-test:$TAG" | gzip > .devenv/images.tar.gz
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: images-${{ github.sha }}
+          path: .devenv/images.tar.gz
+          retention-days: 7
       - name: Sign in to the GitHub container registry
         if: env.PUBLISH == 'true'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -80,14 +123,17 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build, check and publish images
-        run: devenv shell -- bash docker/ci-images.sh < /dev/null
+      # The build cache has every layer, so this step only pushes.
+      - name: Publish images
+        if: env.PUBLISH == 'true'
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
         env:
-          IMAGE_TAG: ${{ github.sha }}
-          REGISTRY_IMAGE: ghcr.io/${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || (env.PUBLISH == 'true' && 'latest' || '') }}
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+          REGISTRY: ghcr.io/${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}
         with:
-          name: images-${{ github.sha }}
-          path: .devenv/images.tar.gz
-          retention-days: 7
+          source: .
+          files: deploy/docker/docker-bake.hcl
+          push: true
+          set: |
+            platform.cache-from=type=gha,scope=platform
+            protocol-test.cache-from=type=gha,scope=protocol-test

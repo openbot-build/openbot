@@ -1,0 +1,53 @@
+# syntax=docker/dockerfile:1
+# check=error=true
+
+# Build stages make only JavaScript, so they run on the build machine's own platform.
+FROM --platform=$BUILDPLATFORM node:26.6.0-trixie-slim@sha256:80f12a4030a00d8f78ebc4602bc3ef0f984932f498649b8ed3c0a740a6dff4a8 AS workspace
+RUN npm install --global pnpm@9.15.9
+WORKDIR /workspace
+# This layer changes only when the lockfile changes, so the registry cache keeps the downloaded packages.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
+RUN pnpm fetch --frozen-lockfile
+COPY . .
+RUN pnpm install --offline --frozen-lockfile
+
+FROM workspace AS build-platform
+# Platform runs as one bundled file, so the image needs no node_modules.
+RUN pnpm --filter-prod @openbot-build/platform^... build \
+    && pnpm --filter @openbot-build/platform exec tsdown --config ../../deploy/docker/tsdown.config.ts
+
+FROM workspace AS build-protocol-test
+RUN pnpm --filter @openbot-build/protocol-test... build \
+    && pnpm --filter @openbot-build/protocol-test deploy --prod /deployment
+
+# The Node.js binary for the target platform, at the same version as development.
+FROM node:26.6.0-trixie-slim@sha256:80f12a4030a00d8f78ebc4602bc3ef0f984932f498649b8ed3c0a740a6dff4a8 AS node
+
+# Distroless has no shell and no package manager. Its user is "nonroot" (65532).
+# The cc image has the C and C++ libraries that Node.js needs, except libatomic.
+FROM gcr.io/distroless/cc-debian13:nonroot@sha256:b7e81cb1af38d9345680e68bcf564d388f96304e25222030fc8c051faf8565b3 AS runtime
+COPY --link --from=node /usr/lib/*-linux-gnu/libatomic.so.1* /usr/lib/
+COPY --link --from=node /usr/local/bin/node /usr/local/bin/node
+ENV NODE_ENV=production
+WORKDIR /app
+ENTRYPOINT ["/usr/local/bin/node"]
+
+FROM runtime AS platform
+ENV OPENBOT_HOST=0.0.0.0 \
+    OPENBOT_PORT=3000
+COPY --link --from=build-platform /workspace/.devenv/platform/dist/app ./dist/app
+COPY --link --from=build-platform /workspace/packages/platform/migrations ./migrations
+EXPOSE 3000
+HEALTHCHECK --interval=5s --timeout=5s --start-period=10s --retries=12 \
+    CMD ["/usr/local/bin/node", "--input-type=module", "-e", "const response = await fetch('http://127.0.0.1:3000/health'); if (response.status !== 200 || (await response.json()).status !== 'ok') process.exit(1)"]
+CMD ["/app/dist/app/Main.mjs"]
+
+FROM runtime AS protocol-test
+ENV PROTOCOL_TEST_HOST=0.0.0.0 \
+    PROTOCOL_TEST_PORT=3001
+COPY --link --from=build-protocol-test /deployment ./
+EXPOSE 3001
+HEALTHCHECK --interval=5s --timeout=5s --start-period=10s --retries=12 \
+    CMD ["/usr/local/bin/node", "--input-type=module", "-e", "const response = await fetch('http://127.0.0.1:3001/healthz'); if (response.status !== 200 || (await response.json()).status !== 'ok') process.exit(1)"]
+CMD ["/app/dist/Main.js"]

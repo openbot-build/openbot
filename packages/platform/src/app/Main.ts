@@ -1,5 +1,6 @@
 import { Effect, Layer, Option } from "effect"
 import * as EnvironmentConfiguration from "../configuration/EnvironmentConfiguration.ts"
+import * as SecretFiles from "../configuration/SecretFiles.ts"
 import { NodeRuntime } from "@effect/platform-node"
 
 import * as Server from "./Server.ts"
@@ -24,5 +25,9 @@ NodeRuntime.runMain(
 				).pipe(Layer.provide(FetchHttpClient.layer)),
 			)
 		}),
+	).pipe(
+		// This program owns the whole application Layer scope.
+		// @effect-diagnostics-next-line strictEffectProvide:off
+		Effect.provide(SecretFiles.layer()),
 	),
 )

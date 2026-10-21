@@ -1,0 +1,24 @@
+# Starts the production setup with test settings and checks it from the inside.
+# Use it on top of compose.production.yaml with check.env. See the Deploy page in the docs.
+name: openbot-check
+
+services:
+  platform:
+    ports: !reset []
+
+  protocol-test:
+    ports: !reset []
+
+  check:
+    image: openbot-platform:${OPENBOT_RELEASE}
+    platform: linux/amd64
+    command: [/check/check.mjs]
+    volumes:
+      - ./check.mjs:/check/check.mjs:ro
+    healthcheck:
+      disable: true
+    depends_on:
+      platform:
+        condition: service_healthy
+      protocol-test:
+        condition: service_healthy

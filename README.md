@@ -14,7 +14,7 @@ You give work to an Agent in plain language. OpenBot runs the work on a server, 
 
 ## Quick start
 
-You need [Docker](https://docs.docker.com/get-docker/) and [devenv](https://devenv.sh).
+You need [devenv](https://devenv.sh).
 
 ```sh
 devenv shell -- pnpm dev:setup
@@ -45,7 +45,7 @@ The docs site is in [`packages/docs`](./packages/docs). Run it on your computer:
 devenv shell -- pnpm --filter @openbot-build/docs dev
 ```
 
-Then open `http://localhost:3000/docs`. Start with the Intro and the Quick start.
+Then open `http://localhost:4321`. Start with the Intro and the Quick start.
 
 ## Packages
 

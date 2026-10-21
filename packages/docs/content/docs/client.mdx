@@ -63,7 +63,7 @@ The client never saves the key and never puts it in a URL. `onUnauthorized` does
 
 ## Call an operation
 
-Every operation is at `client.api.<group>.<operation>`. The names are the same as in the [API reference](/docs/api).
+Every operation is at `client.api.<group>.<operation>`. The names are the same as in the [API reference](/docs/api/).
 Each call takes one object with these optional fields:
 
 | Field     | What it holds                            |
@@ -90,15 +90,15 @@ const archived =
 
 Some groups and their pages:
 
-| Group         | Use it to                                     | Reference                            |
-| ------------- | --------------------------------------------- | ------------------------------------ |
-| `sessions`    | Make Sessions, start Turns, and read results. | [Sessions](/docs/api/sessions)       |
-| `approvals`   | Answer approval requests.                     | [Approvals](/docs/api/approvals)     |
-| `apps`        | Find an App at an address.                    | [App discovery](/docs/api/apps)      |
-| `connections` | Add and manage App connections.               | [Connections](/docs/api/connections) |
-| `appIndex`    | Search the public App Index.                  | [App Index](/docs/api/appIndex)      |
-| `apiKeys`     | List, make, and revoke API keys.              | [API keys](/docs/api/apiKeys)        |
-| `health`      | Read the service document and health.         | [Health](/docs/api/health)           |
+| Group         | Use it to                                     | Reference                                                 |
+| ------------- | --------------------------------------------- | --------------------------------------------------------- |
+| `sessions`    | Make Sessions, start Turns, and read results. | [Sessions](/docs/api/operations/tags/sessions/)           |
+| `approvals`   | Answer approval requests.                     | [Approvals](/docs/api/operations/tags/approvals/)         |
+| `apps`        | Find an App at an address.                    | [App discovery](/docs/api/operations/tags/app-discovery/) |
+| `connections` | Add and manage App connections.               | [Connections](/docs/api/operations/tags/connections/)     |
+| `appIndex`    | Search the public App Index.                  | [App Index](/docs/api/operations/tags/app-index/)         |
+| `apiKeys`     | List, make, and revoke API keys.              | [API keys](/docs/api/operations/tags/api-keys/)           |
+| `health`      | Read the service document and health.         | [Health](/docs/api/operations/tags/service-and-health/)   |
 
 The `apiKeys` operations only work with the sign-in cookie, so only a browser client on the same origin can use them.
 

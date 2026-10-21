@@ -1,73 +1,89 @@
-// Writes the OpenAPI document from the Platform API contract and the API reference pages built from it.
-import { mkdir, rm, writeFile } from "node:fs/promises"
+// Writes the OpenAPI document from the Platform API contract.
+// The starlight-openapi plugin makes the API reference pages from this file.
+import { writeFile } from "node:fs/promises"
 import { PlatformApi } from "@openbot-build/platform-api"
 import { OpenApi } from "effect/http-api"
-import { generateFiles } from "fumadocs-openapi"
-import { createOpenAPI } from "fumadocs-openapi/server"
 
-const output = "content/docs/api"
-// Page file names and titles for each API group, in reading order.
+// The title and a short description for each API group, in reading order.
+// The sidebar uses this order. A group with a description gets its own page.
 const groups = [
-	["account", "Account"],
-	["login", "Sign-in"],
-	["apiKeys", "API keys"],
-	["sessions", "Sessions"],
-	["approvals", "Approvals"],
-	["apps", "App discovery"],
-	["connections", "Connections"],
-	["appAuthorization", "App authorization"],
-	["appAuthorizationPublic", "App authorization callbacks"],
-	["appOperations", "App operations"],
-	["appViews", "App views"],
-	["appExperience", "App transfer and reset"],
-	["appIndex", "App Index"],
-	["developer", "Developer tools"],
-	["developerPublic", "Public developer tools"],
-	["health", "Service and health"],
+	["account", "Account", "Read the signed-in user."],
+	["login", "Sign-in", "Sign in and sign out in a browser."],
+	["apiKeys", "API keys", "Make, list, and revoke API keys."],
+	["sessions", "Sessions", "Give work to the Agent in Sessions and Turns."],
+	["approvals", "Approvals", "Say yes or no to risky tool calls."],
+	["apps", "App discovery", "Find Apps that the Agent can use."],
+	["connections", "Connections", "Connect an account to an App."],
+	["appAuthorization", "App authorization", "Let an App act for you."],
+	[
+		"appAuthorizationPublic",
+		"App authorization callbacks",
+		"Pages that an App sends you back to after authorization.",
+	],
+	[
+		"appOperations",
+		"App operations",
+		"Run App operations and read their results.",
+	],
+	["appViews", "App views", "Read the views that Apps show."],
+	[
+		"appExperience",
+		"App transfer and reset",
+		"Export, import, and reset what the Agent learned about Apps.",
+	],
+	["appIndex", "App Index", "Search the public index of Apps."],
+	["developer", "Developer tools", "Test and watch the Apps that you publish."],
+	[
+		"developerPublic",
+		"Public developer tools",
+		"Developer tools that work without sign-in.",
+	],
+	[
+		"health",
+		"Service and health",
+		"Read the service document and check health.",
+	],
 ] as const
 
-await writeFile(
-	"openapi.json",
-	JSON.stringify(OpenApi.fromApi(PlatformApi), null, 2) + "\n",
+const titles = new Map<string, string>(
+	groups.map(([tag, title]) => [tag, title] as const),
 )
-await rm(output, { recursive: true, force: true })
-await mkdir(output, { recursive: true })
-await generateFiles({
-	input: createOpenAPI({ input: ["./openapi.json"] }),
-	output: "./" + output,
-	per: "tag",
-	includeDescription: true,
-	beforeWrite(files) {
-		for (const file of files) {
-			const name = file.path
-				.split("/")
-				.at(-1)
-				?.replace(/\.mdx$/, "")
-			const group = groups.find(([tag]) => tag.toLowerCase() === name)
-			if (group === undefined) continue
-			file.path = file.path.replace(/[^/]+\.mdx$/, group[0] + ".mdx")
-			file.content = file.content.replace(/^title: .*$/m, "title: " + group[1])
+const document = OpenApi.fromApi(PlatformApi)
+
+const missing = (document.tags ?? [])
+	.map((tag) => tag.name)
+	.filter((name) => !titles.has(name))
+if (missing.length > 0) {
+	throw new Error(
+		`Add a title for these API groups in scripts/api.ts: ${missing.join(", ")}`,
+	)
+}
+
+const title = (name: string) => titles.get(name) ?? name
+
+for (const pathItem of Object.values(document.paths)) {
+	for (const operation of Object.values(pathItem ?? {})) {
+		if (
+			typeof operation === "object" &&
+			operation !== null &&
+			"tags" in operation &&
+			operation.tags !== undefined
+		) {
+			const [first, ...rest] = operation.tags
+			operation.tags = [title(first), ...rest.map(title)]
 		}
+	}
+}
+
+const output = {
+	...document,
+	info: {
+		...document.info,
+		description: `${document.info.description ?? ""}
+
+This reference is made from the same contract that the server and the TypeScript client use, so it always matches the running Platform. [Download the OpenAPI document](/openapi.json) to use it with your own tools, such as a code generator. Every Platform also serves it at \`/openapi.json\`. See [Authentication](/docs/authentication).`,
 	},
-})
-await writeFile(
-	output + "/index.mdx",
-	`---
-title: API reference
-description: Every Platform HTTP operation, made from the API contract.
----
+	tags: groups.map(([, name, description]) => ({ name, description })),
+}
 
-This reference is made from the same contract that the server and the TypeScript client use, so it always matches the running Platform.
-You can also read the raw document at \`/openapi.json\` on any Platform, or open \`/docs\` on a Platform for an interactive view.
-
-Most operations need an API key in the \`Authorization: Bearer <key>\` header. See [Authentication](/docs/authentication).
-`,
-)
-await writeFile(
-	output + "/meta.json",
-	JSON.stringify(
-		{ title: "API reference", pages: ["index", ...groups.map(([tag]) => tag)] },
-		null,
-		2,
-	) + "\n",
-)
+await writeFile("openapi.json", JSON.stringify(output, null, 2) + "\n")

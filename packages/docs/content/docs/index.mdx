@@ -23,13 +23,13 @@ You bring the client: a script, a backend service, a chat bot, or your own web o
 
 ## How it works
 
-| Part         | What it does                                                                                    |
-| ------------ | ----------------------------------------------------------------------------------------------- |
-| Platform     | The server. It runs Sessions, stores data in PostgreSQL, and serves the HTTP API.               |
-| Sign-in      | A person signs in once in a browser with an OpenID Connect provider.                            |
-| API keys     | Programs send a key in the `Authorization: Bearer <key>` header for every call.                 |
-| API contract | One typed contract makes the server, the TypeScript client, and the [API reference](/docs/api). |
-| App Protocol | An open way to publish Apps on the web so that Agents can find and use them.                    |
+| Part         | What it does                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------------ |
+| Platform     | The server. It runs Sessions, stores data in PostgreSQL, and serves the HTTP API.                |
+| Sign-in      | A person signs in once in a browser with an OpenID Connect provider.                             |
+| API keys     | Programs send a key in the `Authorization: Bearer <key>` header for every call.                  |
+| API contract | One typed contract makes the server, the TypeScript client, and the [API reference](/docs/api/). |
+| App Protocol | An open way to publish Apps on the web so that Agents can find and use them.                     |
 
 Every Platform tells you where to go next. Send `GET /` to read its service document:
 
