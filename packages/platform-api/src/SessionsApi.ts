@@ -34,8 +34,6 @@ const InputMessage = Schema.Struct({
 export const SettingsPatch = Schema.Struct({
 	mode: Schema.optionalKey(Config.Mode),
 	model: Schema.optionalKey(Config.Selection),
-	memoryEnabled: Schema.optionalKey(Schema.Boolean),
-	memoryGenerationEnabled: Schema.optionalKey(Schema.Boolean),
 })
 export const CreateSessionRequest = Schema.Struct({
 	title: Schema.optionalKey(Schema.String),
@@ -309,10 +307,37 @@ export const RestoreSessionRequest = Schema.Struct({
 	record: SessionStore.Record,
 	expected: Schema.NullOr(Session.Ref),
 })
+/** The memory switches that one Session sets. A missing switch follows the server default. */
+export const MemoryOverrides = Schema.Struct({
+	use: Schema.optionalKey(Schema.Boolean),
+	generate: Schema.optionalKey(Schema.Boolean),
+})
+export type MemoryOverrides = typeof MemoryOverrides.Type
+/** Learned memory, the switches in use, and the switches that this Session sets. */
+export const SessionMemory = Schema.Struct({
+	...Memory.State.fields,
+	settings: Memory.Settings,
+	overrides: MemoryOverrides,
+})
+export type SessionMemory = typeof SessionMemory.Type
+/**
+ * Remember and Forget edit one entry. Configure sets the switches of this Session:
+ * a boolean sets a switch, null makes it follow the server default, and a missing field keeps it.
+ * Refresh learns from the history now.
+ */
+export const MemoryCommand = Schema.Union([
+	Memory.Edit,
+	Schema.TaggedStruct("Configure", {
+		use: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
+		generate: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
+	}),
+	Schema.TaggedStruct("Refresh", {}),
+])
+export type MemoryCommand = typeof MemoryCommand.Type
 export const UpdateMemoryRequest = Schema.Struct({
 	expected: Timeline.VersionId,
 	revision: Session.Revision,
-	command: Memory.Command,
+	command: MemoryCommand,
 })
 export type UpdateMemoryRequest = typeof UpdateMemoryRequest.Type
 
@@ -402,7 +427,7 @@ export const SessionsApi = HttpApiGroup.make("sessions")
 			),
 		HttpApiEndpoint.get("sessionMemory", "/v1/sessions/:sessionId/memory", {
 			params: sessionParams,
-			success: Memory.State,
+			success: SessionMemory,
 			error: SessionOperationErrors,
 		}),
 		HttpApiEndpoint.post(

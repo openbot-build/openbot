@@ -18,7 +18,7 @@ export interface Operations {
 	>
 	readonly update: (
 		base: Session.Position,
-		command: Exclude<Memory.Command, { readonly _tag: "Refresh" }>,
+		command: Memory.Edit,
 	) => Effect.Effect<Session.View<Memory.Values>, Error>
 	readonly consolidate: (
 		session: Session.Id,

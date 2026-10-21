@@ -32,6 +32,7 @@ import {
 	Match,
 	Option,
 	Predicate,
+	Record as EffectRecord,
 	Scope,
 	Schema,
 	Stream,
@@ -57,14 +58,13 @@ import {
 } from "./Sessions.ts"
 import { publicError, inputPrompt, response } from "./ResponseMapping.ts"
 import * as SessionEvents from "./SessionEvents.ts"
+import * as SessionHost from "./SessionHost.ts"
+import { sessionHostId } from "./SessionHost.ts"
 import * as Approvals from "../approvals/Approvals.ts"
 import * as ErrorReporting from "../app/ErrorReporting.ts"
 import { Invocations } from "../apps/Invocations.ts"
 import { ownerKey } from "../apps/Repository.ts"
 import { AppPlugin, empty as emptyAppPlugin } from "../apps/AppPlugin.ts"
-
-/** The plugin that adds the host toolkit, the user plugin and the execution services. */
-const sessionHostId = Plugin.Id.make("@openbot-build/platform/session-host")
 
 /** The response of the current Turn, when the Session has one. */
 const currentResponse = (view: Session.View) =>
@@ -145,7 +145,12 @@ export const make = <
 							),
 						)
 		const memoryPolicy = options.memory?.policy ?? MemoryRules.policy,
-			memoryModel = options.memory?.model ?? LanguageModelMemory.model
+			memoryModel = options.memory?.model ?? LanguageModelMemory.model,
+			memoryDefaults: Memory.Settings = {
+				use: true,
+				generate: true,
+				...options.memory?.defaults,
+			}
 		const memoryPlugin = MemoryPlugin.make({
 			policy: memoryPolicy,
 			model: memoryModel,
@@ -157,12 +162,10 @@ export const make = <
 				const context = yield* Agent.Context,
 					at = yield* context.at,
 					view = yield* store.read(at.session)
-				const settings =
-					Session.currentTurn(view.session)?.settings ?? view.session.settings
-				return {
-					use: settings.memoryEnabled,
-					generate: settings.memoryGenerationEnabled ?? true,
-				}
+				return SessionHost.settings({
+					defaults: memoryDefaults,
+					session: view.session,
+				})
 			}),
 			languageModel: Effect.gen(function* (): Effect.fn.Return<
 				LanguageModel.LanguageModel,
@@ -177,7 +180,10 @@ export const make = <
 				return yield* modelFor(view, Session.currentTurn(view.session))
 			}),
 		})
-		const host = Plugin.make({ id: sessionHostId })<
+		const host = Plugin.make({
+			id: sessionHostId,
+			store: SessionHost.sessionHostStore,
+		})<
 			Tools,
 			E | Session.SessionNotFound | SessionStore.SessionStoreError,
 			R,
@@ -238,16 +244,16 @@ export const make = <
 		const composed = yield* PluginComposition.mergeState(
 			sessionHostId,
 			memoryPlugin,
-			{ ...host, stores: {} },
+			host,
 		).pipe(
-			// Only the memory plugin has a store here, so the stores cannot conflict.
+			// The two plugins have different IDs, so their stores cannot conflict.
 			Effect.orDie,
 		)
 		const definition = yield* Store.define({
 			stores: composed.stores,
 			schemaVersion: "timeline/1",
 		})
-		const store: SessionStore.Store<Memory.Values> =
+		const store: SessionStore.Store<SessionHost.Values> =
 			yield* SessionStoreRepository.make({
 				definition,
 				persistence: repository.store(namespace),
@@ -319,7 +325,7 @@ export const make = <
 		const read = (id: Session.Id) =>
 			store.read(id).pipe(Effect.mapError(publicError))
 		const project = (
-			view: Session.View<Memory.Values>,
+			view: Session.View<SessionHost.Values>,
 		): Effect.Effect<SessionView> =>
 			Effect.gen(function* () {
 				const active = yield* runtime.isActive(view.session.id)
@@ -543,6 +549,11 @@ export const make = <
 							title: input.title ?? source.session.metadata.title,
 						},
 						...(settings === undefined ? {} : { settings }),
+						// The Fork keeps the Platform data of its source, such as the memory switches.
+						business: EffectRecord.filter(
+							{ [sessionHostId]: source.session.business[sessionHostId] },
+							Predicate.isNotUndefined,
+						),
 					})
 					.pipe(Effect.mapError(publicError), Effect.flatMap(project))
 			})
@@ -1091,8 +1102,45 @@ export const make = <
 			Effect.gen(function* () {
 				const view = yield* read(id)
 				const changed = yield* Match.value(input.command).pipe(
+					Match.tag("Configure", (command) =>
+						store
+							.modifyEffect({
+								session: id,
+								expectedHead: input.expected,
+								expectedRevision: input.revision,
+								update: (current) =>
+									Effect.succeed([
+										undefined,
+										Option.some({
+											session: {
+												business: {
+													...current.session.business,
+													[sessionHostId]: {
+														...SessionHost.hostState(current.session),
+														memory: SessionHost.configure({
+															current: SessionHost.overrides(current.session),
+															command,
+														}),
+													},
+												},
+											},
+										}),
+									] as const),
+							})
+							.pipe(
+								Effect.map((changed) => changed.view),
+								Effect.mapError(publicError),
+							),
+					),
 					Match.tag("Refresh", () =>
 						Effect.gen(function* () {
+							if (
+								!SessionHost.settings({
+									defaults: memoryDefaults,
+									session: view.session,
+								}).generate
+							)
+								return view
 							const model = yield* modelFor(view).pipe(
 								Effect.mapError(() =>
 									SessionConflict.make({
@@ -1153,7 +1201,18 @@ export const make = <
 								.pipe(Effect.mapError(publicError)),
 						),
 					),
-				memory: (id) => memories.read(id).pipe(Effect.mapError(publicError)),
+				memory: (id) =>
+					read(id).pipe(
+						Effect.map((view) => ({
+							...(view.state.value["@openbot-build/plugin-memory"] ??
+								Memory.empty()),
+							settings: SessionHost.settings({
+								defaults: memoryDefaults,
+								session: view.session,
+							}),
+							overrides: SessionHost.overrides(view.session),
+						})),
+					),
 				exportRecord: (id) =>
 					store.export(id).pipe(Effect.mapError(publicError)),
 				remove: (id) =>

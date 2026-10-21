@@ -28,11 +28,14 @@ import {
 	type CreateSessionRequest,
 	type StartTurnRequest,
 	type ToolApproval,
+	type MemoryCommand,
+	type SessionMemory,
 } from "@openbot-build/platform-api"
 import { Context, Effect, Layer, Scope, Stream } from "effect"
 import { LanguageModel, type Tool, type Toolkit } from "effect/ai"
 import { type Memory } from "@openbot-build/plugin-memory"
 import type { Tools as AppTools } from "../apps/AppPlugin.ts"
+import type * as SessionHost from "./SessionHost.ts"
 
 export type ServiceError =
 	| SessionNotFound
@@ -71,7 +74,13 @@ export interface Options<
 		LanguageModel.LanguageModel,
 		Config.ModelConfigurationError
 	>
-	readonly memory?: Memory.Options
+	/**
+	 * Your own model and policy for learned memory, and the server default for the switches.
+	 * A Session can override each switch. Both switches are on when you do not set them.
+	 */
+	readonly memory?: Memory.Options & {
+		readonly defaults?: Partial<Memory.Settings>
+	}
 	readonly namespace?: string
 	readonly runtime?: Agent.Definition<Tools, E, R, BuildE, BuildR>
 	readonly layerExecution?: (
@@ -108,13 +117,13 @@ export class Sessions extends Context.Service<
 		>
 		readonly memory: (
 			id: Session.Id,
-		) => Effect.Effect<Memory.State, ServiceError>
+		) => Effect.Effect<SessionMemory, ServiceError>
 		readonly updateMemory: (
 			id: Session.Id,
 			input: {
 				readonly expected: Timeline.VersionId
 				readonly revision: Session.Revision
-				readonly command: Memory.Command
+				readonly command: MemoryCommand
 			},
 		) => Effect.Effect<SessionView, ServiceError>
 		readonly list: (input?: {
@@ -258,7 +267,7 @@ export type Instance<
 	R = never,
 > = typeof Sessions.Service & {
 	readonly runtime: Session.Runtime<
-		Memory.Values,
+		SessionHost.Values,
 		Tools,
 		| E
 		| Timeline.VersionError
@@ -268,11 +277,11 @@ export type Instance<
 		R,
 		AppTools
 	>
-	readonly store: SessionStore.Store<Memory.Values>
+	readonly store: SessionStore.Store<SessionHost.Values>
 	readonly consolidate: (
 		session: Session.Id,
 	) => Effect.Effect<
-		Session.View<Memory.Values>,
+		Session.View<SessionHost.Values>,
 		ServiceError,
 		LanguageModel.LanguageModel
 	>

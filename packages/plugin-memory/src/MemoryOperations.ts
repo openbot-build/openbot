@@ -20,7 +20,6 @@ export const make = (input: {
 	const consolidate: MemorySession.Operations["consolidate"] = (session) =>
 		Effect.gen(function* () {
 			const view = yield* store.read(session)
-			if (view.session.settings.memoryGenerationEnabled === false) return view
 			const changed = yield* MemoryConsolidation.run({
 				model,
 				policy,
@@ -57,98 +56,80 @@ export const make = (input: {
 				expectedHead: base.version,
 				expectedRevision: base.revision,
 				update: (view) =>
-					Match.value(command).pipe(
-						Match.tag("Configure", (command) =>
-							Effect.succeed([
-								undefined,
-								Option.some({
-									session: {
-										settings: {
-											...view.session.settings,
-											memoryEnabled: command.use,
-											memoryGenerationEnabled: command.generate,
-										},
-									},
-								}),
-							] as const),
-						),
-						Match.orElse((command) =>
-							Effect.gen(function* () {
-								const current = stateOf(view)
-								const id = Item.Id.make(crypto.randomUUID()),
-									now = yield* Clock.currentTimeMillis
-								const previous = Record.get(current.entries, command.key)
-								const entry = yield* Match.value(command).pipe(
-									Match.tag("Remember", (command) =>
-										Effect.succeed({
-											key: command.key,
-											content: command.content,
-											kind: command.kind,
-											sources: A.append(
-												Option.match(previous, {
-													onNone: () => [],
-													onSome: (previous) => previous.sources,
-												}),
-												id,
-											),
-											updatedAt: now,
-											status: "active" as const,
-										}),
-									),
-									Match.tag("Forget", () =>
+					Effect.gen(function* () {
+						const current = stateOf(view)
+						const id = Item.Id.make(crypto.randomUUID()),
+							now = yield* Clock.currentTimeMillis
+						const previous = Record.get(current.entries, command.key)
+						const entry = yield* Match.value(command).pipe(
+							Match.tag("Remember", (command) =>
+								Effect.succeed({
+									key: command.key,
+									content: command.content,
+									kind: command.kind,
+									sources: A.append(
 										Option.match(previous, {
-											onNone: () =>
-												Effect.fail(
-													new Memory.MemoryError({
-														reason: "invalid-change",
-														message: "The memory key does not exist",
-													}),
-												),
-											onSome: (previous) =>
-												Effect.succeed({
-													...previous,
-													sources: A.append(previous.sources, id),
-													updatedAt: now,
-													status: "retracted" as const,
-												}),
+											onNone: () => [],
+											onSome: (previous) => previous.sources,
 										}),
+										id,
 									),
-									Match.exhaustive,
-								)
-								const memory = {
-									...current,
-									entries: { ...current.entries, [entry.key]: entry },
-									processed: A.append(current.processed, id),
-								}
-								const evidence: Item.Record = {
-									id,
-									content: Prompt.make([
-										{
-											role: "user",
-											content: `Explicit memory edit: ${JSON.stringify(command)}`,
-										},
-									]),
-								}
-								// Explicit edits are lasting evidence. They stay apart from generated model input.
-								return [
-									undefined,
-									Option.some({
-										value: {
-											...view.state.value,
-											"@openbot-build/plugin-memory": memory,
-											conversation: {
-												...view.state.value.conversation,
-												history: A.append(
-													view.state.value.conversation.history,
-													evidence,
-												),
-											},
-										},
-									}),
-								] as const
+									updatedAt: now,
+									status: "active" as const,
+								}),
+							),
+							Match.tag("Forget", () =>
+								Option.match(previous, {
+									onNone: () =>
+										Effect.fail(
+											new Memory.MemoryError({
+												reason: "invalid-change",
+												message: "The memory key does not exist",
+											}),
+										),
+									onSome: (previous) =>
+										Effect.succeed({
+											...previous,
+											sources: A.append(previous.sources, id),
+											updatedAt: now,
+											status: "retracted" as const,
+										}),
+								}),
+							),
+							Match.exhaustive,
+						)
+						const memory = {
+							...current,
+							entries: { ...current.entries, [entry.key]: entry },
+							processed: A.append(current.processed, id),
+						}
+						const evidence: Item.Record = {
+							id,
+							content: Prompt.make([
+								{
+									role: "user",
+									content: `Explicit memory edit: ${JSON.stringify(command)}`,
+								},
+							]),
+						}
+						// Explicit edits are lasting evidence. They stay apart from generated model input.
+						return [
+							undefined,
+							Option.some({
+								value: {
+									...view.state.value,
+									"@openbot-build/plugin-memory": memory,
+									conversation: {
+										...view.state.value.conversation,
+										history: A.append(
+											view.state.value.conversation.history,
+											evidence,
+										),
+									},
+								},
 							}),
-						),
-					),
+						] as const
+					}),
 			})
 			.pipe(Effect.map((changed) => changed.view))
 	return { read, consolidate, update }

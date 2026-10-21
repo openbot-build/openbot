@@ -42,6 +42,9 @@ export {
 	ForkSessionRequest,
 	RestoreSessionRequest,
 	UpdateMemoryRequest,
+	MemoryCommand,
+	MemoryOverrides,
+	SessionMemory,
 } from "./SessionsApi.ts"
 
 export {

@@ -155,7 +155,7 @@ test(
 					Effect.gen(function* () {
 						yield* DatabasePostgres.migrate
 						const sessions = yield* ManagedSessions.make({
-							defaults: Effect.succeed({ memoryGenerationEnabled: false }),
+							memory: { defaults: { generate: false } },
 						})
 						const failing = yield* LanguageModel.make({
 							generateText: () => Effect.die(new Error("Model unavailable")),

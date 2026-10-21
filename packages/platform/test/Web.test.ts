@@ -2,6 +2,7 @@ import { Effect, Match, Redacted, Schema, Stream } from "effect"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import {
+	SessionMemory,
 	SessionView,
 	SessionResponseEvent,
 	ToolApproval,
@@ -44,12 +45,10 @@ test(
 				decode(await (await request(alice.session, path)).json())
 			const created = await request(alice.session, "/v1/sessions", "POST", {
 				title: "A workflow",
-				settings: { memoryEnabled: false },
 			})
 			assert.equal(created.status, 201)
 			const initial = decode(await created.json()),
 				path = "/v1/sessions/" + initial.session.id
-			assert.equal(initial.session.settings.memoryEnabled, false)
 			assert.equal(
 				(
 					await request(alice.session, "/v1/sessions", "POST", {
@@ -271,6 +270,35 @@ test(
 			)
 			assert.equal(historical.value.conversation.history.length, 0)
 			assert.equal((await get(path)).session.head, planned.session.head)
+			const memoryOf = async () =>
+				Schema.decodeUnknownSync(SessionMemory)(
+					await (await request(alice.session, path + "/memory")).json(),
+				)
+			const configure = async (
+				view: typeof planned,
+				command: { use?: boolean | null; generate?: boolean | null },
+			) =>
+				decode(
+					await (
+						await request(alice.session, path + "/memory", "POST", {
+							expected: view.session.head,
+							revision: view.session.revision,
+							command: { _tag: "Configure", ...command },
+						})
+					).json(),
+				)
+			assert.deepEqual((await memoryOf()).settings, {
+				use: true,
+				generate: true,
+			})
+			const generationOff = await configure(planned, { generate: false })
+			assert.equal(generationOff.session.head, planned.session.head)
+			assert.ok(generationOff.session.revision > planned.session.revision)
+			assert.deepEqual((await memoryOf()).overrides, { generate: false })
+			assert.deepEqual((await memoryOf()).settings, {
+				use: true,
+				generate: false,
+			})
 			const beforeConsolidations = host.consolidations()
 			const controller = new AbortController()
 			const streaming = await fetch(host.address + path + "/turns", {
@@ -284,9 +312,9 @@ test(
 					"content-type": "application/json",
 				},
 				body: JSON.stringify({
-					expected: planned.session.revision,
+					expected: generationOff.session.revision,
 					input: "slow output",
-					overrides: { mode: "default", memoryGenerationEnabled: false },
+					overrides: { mode: "default" },
 					stream: true,
 				}),
 			})
@@ -306,33 +334,32 @@ test(
 			assert.equal(final.session.settings.mode, "plan")
 			assert.equal(host.consolidations(), beforeConsolidations)
 			assert.match(final.response.output[0]!.content[0]!.text, /Progress stays/)
-			const generationOff = decode(
-				await (
-					await request(alice.session, path + "/settings", "PUT", {
-						expected: final.session.revision,
-						settings: {
-							...final.session.settings,
-							memoryGenerationEnabled: false,
-						},
-					})
-				).json(),
+			const configuredFork = decode(
+				await (await request(alice.session, path + "/fork", "POST", {})).json(),
 			)
+			assert.deepEqual(
+				Schema.decodeUnknownSync(SessionMemory)(
+					await (
+						await request(
+							alice.session,
+							"/v1/sessions/" + configuredFork.session.id + "/memory",
+						)
+					).json(),
+				).overrides,
+				{ generate: false },
+			)
+			const generationDefault = await configure(final, { generate: null })
+			assert.deepEqual((await memoryOf()).overrides, {})
 			assert.equal(
 				(
 					await request(alice.session, path + "/turns", "POST", {
-						expected: generationOff.session.revision,
+						expected: generationDefault.session.revision,
 						input: "one explicit extraction",
-						overrides: { memoryGenerationEnabled: true },
 					})
 				).status,
 				202,
 			)
-			const extracted = await wait()
-			assert.equal(extracted.session.settings.memoryGenerationEnabled, false)
-			assert.equal(
-				extracted.session.turns.at(-1)!.settings.memoryGenerationEnabled,
-				true,
-			)
+			await wait()
 			assert.equal(host.consolidations(), beforeConsolidations + 1)
 			const old = await (
 				await request(alice.session, path + "/turns/" + completed.response!.id)
@@ -453,11 +480,7 @@ test(
 				"defect",
 			]) {
 				const created = Schema.decodeUnknownSync(SessionView)(
-					await (
-						await request("/v1/sessions", {
-							settings: { memoryGenerationEnabled: false },
-						})
-					).json(),
+					await (await request("/v1/sessions", {})).json(),
 				)
 				const path = "/v1/sessions/" + created.session.id
 				const stream = await request(path + "/turns", {

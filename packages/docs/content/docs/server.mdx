@@ -113,9 +113,20 @@ The `sessions` option sets how Sessions do their work.
 | `modelCatalog`   | The providers and models that clients can see.                                  |
 | `defaults`       | Default Turn settings, such as the model.                                       |
 | `resolveModel`   | Returns the `LanguageModel` for a model selection.                              |
-| `memory`         | Your own `model` and `policy` for learned memory. See [Memory](/docs/memory).   |
+| `memory`         | Learned memory: your own `model` and `policy`, and `defaults` for the switches. |
 
 For models, see [Models](/docs/models). You can also give a single `LanguageModel` Layer with `Layer.provide`.
+
+### Memory defaults
+
+`memory.defaults` sets the server default for the two memory switches, `use` and `generate`. Both are on when you leave them out. Each Session can override them. See [Memory](/docs/memory#switches).
+This example keeps memory in the instructions, but stops learning by default:
+
+```ts
+sessions: {
+	memory: { defaults: { generate: false } },
+},
+```
 
 ### Add a tool
 
