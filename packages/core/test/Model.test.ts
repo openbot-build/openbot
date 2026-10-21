@@ -18,7 +18,7 @@ import {
 	Toolkit,
 } from "effect/ai"
 import {
-	MemoryState,
+	TimelineState,
 	SessionStoreMemory,
 	SessionRuntime,
 	ContextWindow,
@@ -275,7 +275,7 @@ test("provider model creation keeps host failures unchanged", async () => {
 	)
 })
 
-test("model and mode updates keep Memory and each change Session settings with one revision", async () => {
+test("model and mode updates keep the Timeline and each change Session settings with one revision", async () => {
 	let expectedPrompt = Prompt.empty
 	let requests = 0
 	await using host = ManagedRuntime.make(
@@ -291,15 +291,15 @@ test("model and mode updates keep Memory and each change Session settings with o
 		Effect.scoped(
 			Effect.gen(function* () {
 				const definition = yield* Store.define({
-					stores: { marker: { scope: "memory", schema: Schema.String } },
-					schemaVersion: "memory/1",
+					stores: { marker: { scope: "timeline", schema: Schema.String } },
+					schemaVersion: "timeline/1",
 				})
 				const store = yield* SessionStoreMemory.make(definition)
-				const initial = MemoryState.initial({ marker: "keep plugin data" })
+				const initial = TimelineState.initial({ marker: "keep plugin data" })
 				const value = {
 					...initial,
-					memory: {
-						...initial.memory,
+					conversation: {
+						...initial.conversation,
 						history: [
 							{
 								id: Item.Id.make("first"),
@@ -395,7 +395,7 @@ test("model and mode updates keep Memory and each change Session settings with o
 				)
 				const runtime = yield* SessionRuntime.make({ store, agent: {} })
 				expectedPrompt = Prompt.concat(
-					MemoryState.fullHistory(value),
+					TimelineState.fullHistory(value),
 					Prompt.make("model switch input"),
 				)
 				const modelTurn = yield* runtime.execute({
@@ -405,7 +405,7 @@ test("model and mode updates keep Memory and each change Session settings with o
 					},
 					input: "model switch input",
 				})
-				assert.equal(modelTurn.state.value.memory.context._tag, "Prompt")
+				assert.equal(modelTurn.state.value.conversation.context._tag, "Prompt")
 				assert.deepEqual(
 					Session.currentTurn(modelTurn.session)!.settings.model,
 					switched,
@@ -434,7 +434,7 @@ test("model and mode updates keep Memory and each change Session settings with o
 				})
 				assert.deepEqual(yield* configuration.get, providerSwitch)
 				expectedPrompt = Prompt.concat(
-					MemoryState.fullHistory(value),
+					TimelineState.fullHistory(value),
 					Prompt.make("provider switch input"),
 				)
 				const providerTurn = yield* runtime.execute({
@@ -444,7 +444,10 @@ test("model and mode updates keep Memory and each change Session settings with o
 					},
 					input: "provider switch input",
 				})
-				assert.equal(providerTurn.state.value.memory.context._tag, "Prompt")
+				assert.equal(
+					providerTurn.state.value.conversation.context._tag,
+					"Prompt",
+				)
 				assert.deepEqual(
 					Session.currentTurn(providerTurn.session)!.settings.model,
 					providerSwitch,

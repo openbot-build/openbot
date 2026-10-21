@@ -1,19 +1,19 @@
 import { HashMap, Match } from "effect"
 import { Prompt } from "effect/ai"
 import type * as Item from "./Item.ts"
-import type * as Memory from "./Memory.ts"
+import type * as Timeline from "./Timeline.ts"
 import * as ContextWindow from "../context/ContextWindow.ts"
 
-export const initial = <P>(plugins: P): Memory.Value<P> => ({
+export const initial = <P>(plugins: P): Timeline.Value<P> => ({
 	...plugins,
-	memory: {
+	conversation: {
 		history: [],
 		context: ContextWindow.fromPrompt(Prompt.empty),
 		closed: true,
 	},
 })
-export const fullHistory = <P>(value: Memory.Value<P>): Prompt.Prompt =>
-	value.memory.history.reduce(
+export const fullHistory = <P>(value: Timeline.Value<P>): Prompt.Prompt =>
+	value.conversation.history.reduce(
 		(prompt, entry) => Prompt.concat(prompt, entry.content),
 		Prompt.empty,
 	)
@@ -51,5 +51,6 @@ export const unansweredCalls = (
 		)
 
 /** In coherent history, no client tool call is still waiting for a result. */
-export const coherent = <P>(value: Memory.Value<P>): boolean =>
-	value.memory.closed && HashMap.isEmpty(unansweredCalls(value.memory.history))
+export const coherent = <P>(value: Timeline.Value<P>): boolean =>
+	value.conversation.closed &&
+	HashMap.isEmpty(unansweredCalls(value.conversation.history))

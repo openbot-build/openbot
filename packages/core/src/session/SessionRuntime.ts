@@ -34,9 +34,9 @@ import * as Session from "./Session.ts"
 import * as HostActionDriver from "./HostActionDriver.ts"
 import * as Turn from "./Turn.ts"
 import * as Agent from "../agent/Agent.ts"
-import * as Memory from "../memory/Memory.ts"
-import * as Item from "../memory/Item.ts"
-import { fullHistory, unansweredCalls } from "../memory/MemoryState.ts"
+import * as Timeline from "../timeline/Timeline.ts"
+import * as Item from "../timeline/Item.ts"
+import { fullHistory, unansweredCalls } from "../timeline/TimelineState.ts"
 import type * as Config from "../models/Config.ts"
 import * as ConfigurationOperations from "../models/ConfigurationOperations.ts"
 import * as ContextWindow from "../context/ContextWindow.ts"
@@ -179,20 +179,20 @@ export const make = <
 			),
 			{ startImmediately: true },
 		)
-		const check = (ref: Session.Ref, expected?: Memory.VersionId) =>
+		const check = (ref: Session.Ref, expected?: Timeline.VersionId) =>
 			expected !== undefined && ref.head !== expected
 				? Effect.fail(
-						new Memory.VersionError({
+						new Timeline.VersionError({
 							reason: "head-conflict",
 							version: expected,
-							message: "The Memory head is out of date",
+							message: "The Timeline head is out of date",
 						}),
 					)
 				: Effect.void
 		const commit = (input: {
 			readonly session: Session.Id
-			readonly expected?: Memory.VersionId
-			readonly update: (value: Memory.Value<P>) => Memory.Value<P>
+			readonly expected?: Timeline.VersionId
+			readonly update: (value: Timeline.Value<P>) => Timeline.Value<P>
 		}) =>
 			options.store
 				.modifyEffect({
@@ -255,7 +255,9 @@ export const make = <
 									message: "The Session already has an unfinished Turn",
 								})
 							const settings = { ...view.session.settings, ...input.overrides }
-							const window = Match.value(view.state.value.memory.context).pipe(
+							const window = Match.value(
+								view.state.value.conversation.context,
+							).pipe(
 								Match.tag("Native", (window) =>
 									settings.model?.provider === window.provider &&
 									settings.model.model === window.model
@@ -282,10 +284,10 @@ export const make = <
 								Option.some({
 									value: {
 										...view.state.value,
-										memory: {
-											...view.state.value.memory,
+										conversation: {
+											...view.state.value.conversation,
 											closed: false,
-											history: A.append(view.state.value.memory.history, {
+											history: A.append(view.state.value.conversation.history, {
 												id: item,
 												content: prompt,
 												origin: { session: view.session.id, turn, step: 0 },
@@ -318,7 +320,9 @@ export const make = <
 							if (Turn.isTerminal(current.status))
 								return [false, Option.none()] as const
 							// Record an unavailable result for each unanswered tool call before later input uses this history.
-							const calls = unansweredCalls(view.state.value.memory.history)
+							const calls = unansweredCalls(
+								view.state.value.conversation.history,
+							)
 							const completedAt = yield* Clock.currentTimeMillis
 							const item = Item.Id.make(yield* id())
 							const prompt = Prompt.make(
@@ -342,8 +346,8 @@ export const make = <
 							)
 							const history =
 								prompt.content.length === 0
-									? view.state.value.memory.history
-									: A.append(view.state.value.memory.history, {
+									? view.state.value.conversation.history
+									: A.append(view.state.value.conversation.history, {
 											id: item,
 											content: prompt,
 											origin: {
@@ -357,11 +361,11 @@ export const make = <
 								Option.some({
 									value: {
 										...view.state.value,
-										memory: {
-											...view.state.value.memory,
+										conversation: {
+											...view.state.value.conversation,
 											history,
 											context: ContextWindow.append(
-												view.state.value.memory.context,
+												view.state.value.conversation.context,
 												prompt,
 											),
 											closed: true,
@@ -406,7 +410,7 @@ export const make = <
 			session: Session.Id
 			targetTokens: number
 			request: Omit<ContextCompaction.Request, "window" | "selection">
-			expected?: Memory.VersionId
+			expected?: Timeline.VersionId
 			selection?: Config.Selection
 		}) =>
 			Effect.gen(function* () {
@@ -431,7 +435,7 @@ export const make = <
 				const model = yield* findModel(selection)
 				const request = {
 						...input.request,
-						window: Match.value(view.state.value.memory.context).pipe(
+						window: Match.value(view.state.value.conversation.context).pipe(
 							Match.tag("Native", (window) =>
 								selection.provider === window.provider &&
 								selection.model === window.model
@@ -516,8 +520,8 @@ export const make = <
 					expected: view.session.head,
 					update: (value) => ({
 						...value,
-						memory: {
-							...value.memory,
+						conversation: {
+							...value.conversation,
 							context: window,
 						},
 					}),
@@ -581,7 +585,7 @@ export const make = <
 					const step = yield* Ref.make(0),
 						chatRef = yield* Ref.make(
 							yield* Chat.fromPrompt(
-								accepted.view.state.value.memory.context.prompt,
+								accepted.view.state.value.conversation.context.prompt,
 							),
 						)
 					const context = Agent.Context.of({
@@ -646,7 +650,7 @@ export const make = <
 																	),
 															)
 															const history = [
-																...current.state.value.memory.history,
+																...current.state.value.conversation.history,
 																...entries.map((entry): Item.Record => ({
 																	id: entry.id,
 																	content: entry.content,
@@ -662,8 +666,8 @@ export const make = <
 																Option.some({
 																	value: {
 																		...current.state.value,
-																		memory: {
-																			...current.state.value.memory,
+																		conversation: {
+																			...current.state.value.conversation,
 																			history,
 																			context: entries.reduce(
 																				(window, entry) =>
@@ -671,7 +675,8 @@ export const make = <
 																						window,
 																						entry.content,
 																					),
-																				current.state.value.memory.context,
+																				current.state.value.conversation
+																					.context,
 																			),
 																		},
 																	},
@@ -728,7 +733,7 @@ export const make = <
 											) {
 												const request = {
 													selection,
-													window: view.state.value.memory.context,
+													window: view.state.value.conversation.context,
 													toolkit,
 													instructions,
 													...R.filter(
@@ -760,7 +765,7 @@ export const make = <
 														request,
 													})).view
 											}
-											const window = view.state.value.memory.context,
+											const window = view.state.value.conversation.context,
 												starting = Prompt.concat(instructions, window.prompt)
 											const chat = yield* Chat.fromPrompt(starting)
 											yield* Ref.set(chatRef, chat)
@@ -880,7 +885,7 @@ export const make = <
 																			turn,
 																		)
 																		if (
-																			current.state.value.memory.history.some(
+																			current.state.value.conversation.history.some(
 																				(entry) => entry.id === item,
 																			)
 																		)
@@ -890,10 +895,10 @@ export const make = <
 																			Option.some({
 																				value: {
 																					...current.state.value,
-																					memory: {
-																						...current.state.value.memory,
+																					conversation: {
+																						...current.state.value.conversation,
 																						history: A.append(
-																							current.state.value.memory
+																							current.state.value.conversation
 																								.history,
 																							{
 																								id: item,
@@ -909,7 +914,7 @@ export const make = <
 																							},
 																						),
 																						context: ContextWindow.append(
-																							current.state.value.memory
+																							current.state.value.conversation
 																								.context,
 																							added,
 																						),
@@ -1008,10 +1013,11 @@ export const make = <
 																	Option.some({
 																		value: {
 																			...current.state.value,
-																			memory: {
-																				...current.state.value.memory,
+																			conversation: {
+																				...current.state.value.conversation,
 																				history: A.append(
-																					current.state.value.memory.history,
+																					current.state.value.conversation
+																						.history,
 																					{
 																						id: item,
 																						content: added,
@@ -1024,7 +1030,8 @@ export const make = <
 																					},
 																				),
 																				context: ContextWindow.append(
-																					current.state.value.memory.context,
+																					current.state.value.conversation
+																						.context,
 																					added,
 																				),
 																				closed: terminal,
@@ -1233,19 +1240,22 @@ export const make = <
 											Option.some({
 												value: {
 													...view.state.value,
-													memory: {
-														...view.state.value.memory,
-														history: A.append(view.state.value.memory.history, {
-															id: pending.id,
-															content: pending.content,
-															origin: {
-																session: view.session.id,
-																turn: phase.turn,
-																step: turn.steps,
+													conversation: {
+														...view.state.value.conversation,
+														history: A.append(
+															view.state.value.conversation.history,
+															{
+																id: pending.id,
+																content: pending.content,
+																origin: {
+																	session: view.session.id,
+																	turn: phase.turn,
+																	step: turn.steps,
+																},
 															},
-														}),
+														),
 														context: ContextWindow.append(
-															view.state.value.memory.context,
+															view.state.value.conversation.context,
 															pending.content,
 														),
 														closed: false,
@@ -1529,20 +1539,23 @@ export const make = <
 										Option.some({
 											value: {
 												...view.state.value,
-												memory: {
-													...view.state.value.memory,
+												conversation: {
+													...view.state.value.conversation,
 													closed: false,
-													history: A.append(view.state.value.memory.history, {
-														id: item,
-														content,
-														origin: {
-															session: input.session,
-															turn: input.turn,
-															step: turn.steps,
+													history: A.append(
+														view.state.value.conversation.history,
+														{
+															id: item,
+															content,
+															origin: {
+																session: input.session,
+																turn: input.turn,
+																step: turn.steps,
+															},
 														},
-													}),
+													),
 													context: ContextWindow.append(
-														view.state.value.memory.context,
+														view.state.value.conversation.context,
 														content,
 													),
 												},

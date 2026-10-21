@@ -86,11 +86,11 @@ All changes use one route: `POST /v1/sessions/:sessionId/memory`.
 }
 ```
 
-| Field      | Meaning                                                             |
-| ---------- | ------------------------------------------------------------------- |
-| `expected` | The Memory head you last saw: `session.head` from the Session view. |
-| `revision` | The Session revision you last saw: `session.revision`.              |
-| `command`  | What to do. See the commands below.                                 |
+| Field      | Meaning                                                               |
+| ---------- | --------------------------------------------------------------------- |
+| `expected` | The Timeline head you last saw: `session.head` from the Session view. |
+| `revision` | The Session revision you last saw: `session.revision`.                |
+| `command`  | What to do. See the commands below.                                   |
 
 If the Session or its history changed since you read it, Platform returns `409` with `SessionConflict`. Read the Session again and retry.
 On success, Platform returns the new Session view. The view has a new `session.head` and `session.revision`.

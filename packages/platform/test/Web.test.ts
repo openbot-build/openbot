@@ -7,7 +7,7 @@ import {
 	ToolApproval,
 } from "@openbot-build/platform-api"
 import { AiError, LanguageModel, Response } from "effect/ai"
-import { Memory, Session } from "@openbot-build/core"
+import { Timeline, Session } from "@openbot-build/core"
 import * as BrowserHost from "./BrowserHost.ts"
 
 test(
@@ -58,7 +58,7 @@ test(
 				).status,
 				400,
 			)
-			const versions = Schema.decodeUnknownSync(Schema.Array(Memory.Version))(
+			const versions = Schema.decodeUnknownSync(Schema.Array(Timeline.Version))(
 				await (await request(alice.session, path + "/versions")).json(),
 			)
 			assert.deepEqual(versions, [initial.state.version])
@@ -261,7 +261,7 @@ test(
 				).status,
 				409,
 			)
-			const historical = Schema.decodeUnknownSync(Memory.State({}))(
+			const historical = Schema.decodeUnknownSync(Timeline.State({}))(
 				await (
 					await request(
 						alice.session,
@@ -269,7 +269,7 @@ test(
 					)
 				).json(),
 			)
-			assert.equal(historical.value.memory.history.length, 0)
+			assert.equal(historical.value.conversation.history.length, 0)
 			assert.equal((await get(path)).session.head, planned.session.head)
 			const beforeConsolidations = host.consolidations()
 			const controller = new AbortController()

@@ -10,8 +10,8 @@ import {
 import { type Prompt, type Tool, type Toolkit } from "effect/ai"
 import { Id, Revision } from "./SessionIdentity.ts"
 import * as Turn from "./Turn.ts"
-import * as Item from "../memory/Item.ts"
-import * as Memory from "../memory/Memory.ts"
+import * as Item from "../timeline/Item.ts"
+import * as Timeline from "../timeline/Timeline.ts"
 import { PromptJson } from "../store/PromptCodec.ts"
 import type * as SessionStore from "../store/SessionStore.ts"
 import type * as Agent from "../agent/Agent.ts"
@@ -40,7 +40,7 @@ const opaque = Schema.declare(
 export const Ref = Schema.Struct({
 	id: Id,
 	revision: Revision,
-	head: Memory.VersionId,
+	head: Timeline.VersionId,
 	metadata: Metadata,
 	settings: Turn.Settings,
 	pending: Schema.Array(Pending),
@@ -48,13 +48,13 @@ export const Ref = Schema.Struct({
 	inheritedTurns: Schema.Array(Turn.Record),
 	business: Schema.Record(Schema.String, opaque),
 	forkedFrom: Schema.optionalKey(
-		Schema.Struct({ session: Id, version: Memory.VersionId }),
+		Schema.Struct({ session: Id, version: Timeline.VersionId }),
 	),
 })
 export type Ref = typeof Ref.Type
 export const Position = Schema.Struct({
 	session: Id,
-	version: Memory.VersionId,
+	version: Timeline.VersionId,
 	revision: Revision,
 })
 export type Position = typeof Position.Type
@@ -62,14 +62,14 @@ export const Expected = Schema.Struct({ session: Id, revision: Revision })
 export type Expected = typeof Expected.Type
 export const HistorySelection = Schema.Struct({
 	session: Id,
-	version: Memory.VersionId,
+	version: Timeline.VersionId,
 })
 export type HistorySelection = typeof HistorySelection.Type
 export const View = <Fields extends Schema.Struct.Fields>(fields: Fields) =>
-	Schema.Struct({ session: Ref, state: Memory.State(fields) })
+	Schema.Struct({ session: Ref, state: Timeline.State(fields) })
 export interface View<P = {}> {
 	readonly session: Ref
-	readonly state: Memory.State<P>
+	readonly state: Timeline.State<P>
 }
 export const currentTurn = (session: Ref): Turn.Record | undefined =>
 	session.turns.at(-1)
@@ -95,7 +95,7 @@ export type RuntimeError =
 	| SessionNotFound
 	| SessionError
 	| Conflict
-	| Memory.VersionError
+	| Timeline.VersionError
 	| Turn.Conflict
 	| SessionStore.SessionStoreError
 	| ContextCompaction.ContextCompactionError
@@ -125,7 +125,7 @@ export interface Receipt {
 	readonly turn: Turn.Id
 	readonly item: Item.Id
 	readonly revision: Revision
-	readonly version: Memory.VersionId
+	readonly version: Timeline.VersionId
 }
 export interface RuntimeOptions<
 	P,
@@ -234,7 +234,7 @@ export interface Runtime<
 		readonly session: Id
 		readonly targetTokens: number
 		readonly request: Omit<ContextCompaction.Request, "window" | "selection">
-		readonly expected?: Memory.VersionId
+		readonly expected?: Timeline.VersionId
 	}) => Effect.Effect<
 		{
 			readonly view: View<P>

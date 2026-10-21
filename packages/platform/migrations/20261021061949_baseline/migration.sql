@@ -98,12 +98,12 @@ CREATE TABLE "openbot_audit_logs" (
 	"details" text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "openbot_memory_contents" (
+CREATE TABLE "openbot_timeline_contents" (
 	"namespace" text,
 	"id" text,
 	"message" text NOT NULL,
 	"content" text NOT NULL,
-	CONSTRAINT "openbot_memory_contents_pkey" PRIMARY KEY("namespace","id")
+	CONSTRAINT "openbot_timeline_contents_pkey" PRIMARY KEY("namespace","id")
 );
 --> statement-breakpoint
 CREATE TABLE "openbot_developer_records" (
@@ -162,7 +162,7 @@ CREATE TABLE "openbot_tokens" (
 	"last_used_at" bigint
 );
 --> statement-breakpoint
-CREATE TABLE "openbot_memory_versions" (
+CREATE TABLE "openbot_timeline_versions" (
 	"namespace" text,
 	"id" text,
 	"schema_version" text NOT NULL,
@@ -170,7 +170,7 @@ CREATE TABLE "openbot_memory_versions" (
 	"snapshot_format" integer NOT NULL,
 	"value" text NOT NULL,
 	"history" text NOT NULL,
-	CONSTRAINT "openbot_memory_versions_pkey" PRIMARY KEY("namespace","id")
+	CONSTRAINT "openbot_timeline_versions_pkey" PRIMARY KEY("namespace","id")
 );
 --> statement-breakpoint
 CREATE TABLE "openbot_auth_account" (

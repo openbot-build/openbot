@@ -3,7 +3,7 @@ import { test } from "node:test"
 import { Deferred, Effect, Exit, Fiber, Option, Schema, Stream } from "effect"
 import {
 	MemoryPersistence,
-	MemoryState,
+	TimelineState,
 	RecordSerialization,
 	SessionStore,
 	SessionStoreRepository,
@@ -13,7 +13,7 @@ const metadata = { title: "work" }
 const definition = Store.define({
 	stores: {
 		counter: {
-			scope: "memory",
+			scope: "timeline",
 			schema: Schema.Finite,
 		},
 		goal: {
@@ -21,7 +21,7 @@ const definition = Store.define({
 			schema: Schema.String,
 		},
 	},
-	schemaVersion: "memory/1",
+	schemaVersion: "timeline/1",
 })
 const setup = Effect.gen(function* () {
 	const declared = yield* definition,
@@ -81,7 +81,7 @@ test("empty Sessions, metadata, settings and Session business values have indepe
 				yield* store.remove((yield* store.read(a.session.id)).session)
 				assert.equal((yield* store.list()).length, 2)
 				assert.equal(
-					(yield* store.read(fork.session.id)).state.value.memory.history
+					(yield* store.read(fork.session.id)).state.value.conversation.history
 						.length,
 					0,
 				)
@@ -90,14 +90,14 @@ test("empty Sessions, metadata, settings and Session business values have indepe
 	)
 })
 
-test("concurrent atomic Memory updates, skipped writes and typed callback failures keep committed state", async () => {
+test("concurrent atomic Timeline updates, skipped writes and typed callback failures keep committed state", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
 				const { store } = yield* setup
 				const root = yield* store.create({
 					metadata,
-					value: MemoryState.initial({ counter: 0 }),
+					value: TimelineState.initial({ counter: 0 }),
 				})
 				const fork = yield* store.fork({ source: root.session.id })
 				yield* Effect.all(
@@ -228,7 +228,7 @@ test("records keep unknown data and reject malformed formats and unreachable ver
 				const { declared, store } = yield* setup
 				const view = yield* store.create({
 					metadata,
-					value: MemoryState.initial({ unknown: { nested: [1, "value"] } }),
+					value: TimelineState.initial({ unknown: { nested: [1, "value"] } }),
 					business: { unknown: { saved: true } },
 				})
 				const record = yield* store.export(view.session.id),

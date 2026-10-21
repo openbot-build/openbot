@@ -16,7 +16,7 @@ import {
 import type * as Session from "../session/Session.ts"
 import type * as SessionStore from "../store/SessionStore.ts"
 import type * as Turn from "../session/Turn.ts"
-import type * as Item from "../memory/Item.ts"
+import type * as Item from "../timeline/Item.ts"
 import type * as Plugin from "../plugins/Plugin.ts"
 import type * as Config from "../models/Config.ts"
 import type * as Provider from "../models/Provider.ts"

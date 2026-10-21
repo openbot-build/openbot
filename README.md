@@ -9,7 +9,7 @@ You give work to an Agent in plain language. OpenBot runs the work on a server, 
 - **API first.** Every feature is an HTTP call. One typed contract makes the server, the TypeScript client, and the API reference.
 - **User tokens.** Sign in once in a browser, make a token, and call the API from any program.
 - **Organization and permissions.** Many people can share one OpenBot. Roles and policies decide what each person and each token may do.
-- **Sessions and Memory.** Work happens in Sessions and Turns. Memory keeps versions, so you can go back and try again.
+- **Sessions and Timelines.** Work happens in Sessions and Turns. The Timeline keeps versions, so you can go back and try again.
 - **Approvals.** Risky tool calls wait until a person says yes.
 - **Open Apps.** Agents find and use Apps that publishers put on the open web with the OpenBot App Protocol.
 

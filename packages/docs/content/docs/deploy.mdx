@@ -267,7 +267,7 @@ A return path can be any path on the same origin, except paths under `/auth/`, `
 
 Back up two things, and keep them together:
 
-1. **The database.** It holds accounts, the organization and its members, user tokens, the audit log, Sessions, Memory, and App connections.
+1. **The database.** It holds accounts, the organization and its members, user tokens, the audit log, Sessions and their Timelines, and App connections.
 2. **The secrets file.** `OPENBOT_APP_ENCRYPTION_KEY` decrypts App secrets in the database. A database backup without this key cannot restore App connections. Also keep `BETTER_AUTH_SECRET`, or everyone must sign in again.
 
 With Compose, make a database backup like this:

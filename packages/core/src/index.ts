@@ -1,6 +1,6 @@
 export * as Agent from "./agent/Agent.ts"
-export * as Memory from "./memory/Memory.ts"
-export * as Item from "./memory/Item.ts"
+export * as Timeline from "./timeline/Timeline.ts"
+export * as Item from "./timeline/Item.ts"
 export * as Turn from "./session/Turn.ts"
 export * as Session from "./session/Session.ts"
 export * as SessionStore from "./store/SessionStore.ts"
@@ -22,12 +22,12 @@ export * as PluginState from "./plugins/PluginState.ts"
 
 export * as SummaryCompaction from "./context/SummaryCompaction.ts"
 
-export * as MemorySnapshots from "./store/Snapshots.ts"
+export * as TimelineSnapshots from "./store/Snapshots.ts"
 export * as Store from "./store/Store.ts"
 export * as RecordSerialization from "./store/RecordSerialization.ts"
 export * as MemoryPersistence from "./store/MemoryPersistence.ts"
 export * as VersionGraph from "./store/VersionGraph.ts"
 export * as DeltaValidation from "./store/DeltaValidation.ts"
-export * as MemoryState from "./memory/MemoryState.ts"
+export * as TimelineState from "./timeline/TimelineState.ts"
 
 export * as SessionStoreRepository from "./store/SessionStoreRepository.ts"

@@ -97,7 +97,7 @@ test(
 						assert.equal(memory.entries["retired"]?.status, "retracted")
 						assert.deepEqual(
 							memory.processed,
-							source.state.value.memory.history.map((item) => item.id),
+							source.state.value.conversation.history.map((item) => item.id),
 						)
 						assert.ok(memory.processed.length >= 2)
 						const fork = yield* sessions.fork(source.session.id, {
@@ -105,8 +105,8 @@ test(
 						})
 						assert.equal(Session.status(fork.session)._tag, "Idle")
 						assert.deepEqual(
-							fork.state.value.memory.history,
-							source.state.value.memory.history,
+							fork.state.value.conversation.history,
+							source.state.value.conversation.history,
 						)
 						assert.deepEqual(yield* sessions.memory(fork.session.id), memory)
 						const changed = yield* sessions.updateMemory(fork.session.id, {
@@ -150,8 +150,8 @@ test(
 						const resumed = yield* restored.get(source.session.id)
 						assert.deepEqual(resumed.session, source.session)
 						assert.deepEqual(
-							resumed.state.value.memory.history,
-							source.state.value.memory.history,
+							resumed.state.value.conversation.history,
+							source.state.value.conversation.history,
 						)
 						assert.equal(resumed.activity, "inactive")
 						const other = yield* ManagedSessions.make({

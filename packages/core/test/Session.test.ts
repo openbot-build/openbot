@@ -14,7 +14,7 @@ import {
 } from "effect"
 import { Prompt, Response, Tool, Toolkit } from "effect/ai"
 import {
-	MemoryState,
+	TimelineState,
 	Plugin,
 	Session,
 	SessionRuntime,
@@ -76,7 +76,7 @@ test("a multi-step tool loop has one Turn and stable Item identities", async () 
 				assert.equal(turn.steps, 2)
 				assert.equal(turn.end, view.session.head)
 				assert.deepEqual(
-					MemoryState.fullHistory(view.state.value).content.map(
+					TimelineState.fullHistory(view.state.value).content.map(
 						(message) => message.role,
 					),
 					["user", "assistant", "tool", "assistant"],
@@ -84,7 +84,7 @@ test("a multi-step tool loop has one Turn and stable Item identities", async () 
 				const results = events.filter((event) => event._tag === "ResponsePart")
 				assert.ok(
 					results.every((event) =>
-						view.state.value.memory.history.some(
+						view.state.value.conversation.history.some(
 							(item) => item.id === event.item,
 						),
 					),
@@ -109,7 +109,7 @@ test("a multi-step tool loop has one Turn and stable Item identities", async () 
 	)
 })
 
-test("Session settings change revision without changing Memory or a completed Turn", async () => {
+test("Session settings change revision without changing the Timeline or a completed Turn", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
@@ -148,7 +148,7 @@ test("Session settings change revision without changing Memory or a completed Tu
 	)
 })
 
-test("Fork inherits a selected completed Memory and starts with separate coordination state", async () => {
+test("Fork inherits a selected completed Timeline version and starts with separate coordination state", async () => {
 	let requests: ReadonlyArray<Prompt.Prompt> = []
 	await Effect.runPromise(
 		Effect.scoped(
@@ -297,20 +297,21 @@ test("approval resumes the loaded Turn once and restored history cannot recreate
 				assert.equal(turn.status._tag, "WaitingApproval")
 				assert.equal(calls, 0)
 				const request =
-					waiting.state.value.memory.context.prompt.content.flatMap((message) =>
-						Match.value(message).pipe(
-							Match.when({ role: "assistant" }, (message) =>
-								message.content.flatMap((part) =>
-									Match.value(part).pipe(
-										Match.when({ type: "tool-approval-request" }, (part) => [
-											part.approvalId,
-										]),
-										Match.orElse(() => []),
+					waiting.state.value.conversation.context.prompt.content.flatMap(
+						(message) =>
+							Match.value(message).pipe(
+								Match.when({ role: "assistant" }, (message) =>
+									message.content.flatMap((part) =>
+										Match.value(part).pipe(
+											Match.when({ type: "tool-approval-request" }, (part) => [
+												part.approvalId,
+											]),
+											Match.orElse(() => []),
+										),
 									),
 								),
+								Match.orElse(() => []),
 							),
-							Match.orElse(() => []),
-						),
 					)[0]!
 				assert.equal(
 					(yield* runtime.resume(base.session)).session.revision,
@@ -453,10 +454,10 @@ test(
 						"Interrupted",
 					)
 					assert.match(
-						JSON.stringify(MemoryState.fullHistory(view.state.value)),
+						JSON.stringify(TimelineState.fullHistory(view.state.value)),
 						/actual external receipt/,
 					)
-					assert.equal(MemoryState.coherent(view.state.value), true)
+					assert.equal(TimelineState.coherent(view.state.value), true)
 				}),
 			).pipe(
 				Effect.provide(
@@ -485,7 +486,7 @@ test(
 	},
 )
 
-test("an activity wait wakes after the final resources are released, without a new Memory version", async () => {
+test("an activity wait wakes after the final resources are released, without a new Timeline version", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {

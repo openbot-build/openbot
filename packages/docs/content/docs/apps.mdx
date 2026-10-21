@@ -230,7 +230,7 @@ Some App tools come with an interactive view. A view is an HTML page from the Ap
 | Send a text message              | `POST /v1/app-views/:viewId/messages`                           |
 | Close                            | `DELETE /v1/app-views/:viewId`                                  |
 
-View actions go through the same approval rules. A message starts a new Turn, and only when the Session is idle. If you open a view with an older Memory `version`, the view is read-only. If a view cannot open, you get 409 `AppViewUnavailable`. The text result is still there.
+View actions go through the same approval rules. A message starts a new Turn, and only when the Session is idle. If you open a view with an older Timeline `version`, the view is read-only. If a view cannot open, you get 409 `AppViewUnavailable`. The text result is still there.
 
 ---
 

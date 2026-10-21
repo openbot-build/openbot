@@ -10,7 +10,7 @@ import {
 } from "@openbot-build/core"
 import { Context, Effect, Match, Schema, Stream } from "effect"
 import { LanguageModel, Response, Tool, Toolkit } from "effect/ai"
-import * as MemoryState from "../src/memory/MemoryState.ts"
+import * as TimelineState from "../src/timeline/TimelineState.ts"
 
 class CallerDependency extends Context.Service<CallerDependency, string>()(
 	"@openbot-build/core/test/HostPlugin.test/CallerDependency",
@@ -121,7 +121,7 @@ test("a scoped host plugin owns its dynamic handlers, and caller tools keep the 
 				})
 				const view = yield* store.create({
 					metadata: {},
-					value: MemoryState.initial({}),
+					value: TimelineState.initial({}),
 				})
 				assert.equal(opened, 0)
 				for (const input of ["First Turn", "Second Turn"]) {

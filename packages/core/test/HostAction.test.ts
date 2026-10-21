@@ -10,7 +10,7 @@ import {
 } from "@openbot-build/core"
 import { Deferred, Effect, Match, Schema } from "effect"
 import { Tool, Toolkit } from "effect/ai"
-import * as MemoryState from "../src/memory/MemoryState.ts"
+import * as TimelineState from "../src/timeline/TimelineState.ts"
 
 test("host-selected actions check and approve the exact parameters without the model, and cannot reuse an approval from history", async () => {
 	let calls: ReadonlyArray<string> = []
@@ -42,7 +42,7 @@ test("host-selected actions check and approve the exact parameters without the m
 				})
 				const session = yield* store.create({
 					metadata: {},
-					value: MemoryState.initial({}),
+					value: TimelineState.initial({}),
 				})
 				const settled = () =>
 					Effect.gen(function* () {
@@ -84,7 +84,7 @@ test("host-selected actions check and approve the exact parameters without the m
 					Session.currentTurn(pending.session)?.action?.arguments,
 					{ text: "Exact host selection" },
 				)
-				const request = pending.state.value.memory.context.prompt.content
+				const request = pending.state.value.conversation.context.prompt.content
 					.flatMap((message) =>
 						Match.value(message).pipe(
 							Match.when({ role: "assistant" }, (message) =>
@@ -139,7 +139,7 @@ test("host-selected actions check and approve the exact parameters without the m
 				)
 				assert.deepEqual(calls, ["Exact host selection"])
 				assert.match(
-					JSON.stringify(completed.state.value.memory.history),
+					JSON.stringify(completed.state.value.conversation.history),
 					/Actual receipt: Exact host selection/,
 				)
 				assert.equal(
@@ -196,11 +196,11 @@ test("host actions share cancellation and admission, and independent Sessions ke
 				})
 				const first = yield* store.create({
 					metadata: {},
-					value: MemoryState.initial({}),
+					value: TimelineState.initial({}),
 				})
 				const second = yield* store.create({
 					metadata: {},
-					value: MemoryState.initial({}),
+					value: TimelineState.initial({}),
 				})
 				const handlers = yield* toolkit.toHandlers({
 					Gate: ({ hold }) =>
@@ -257,7 +257,7 @@ test("host actions share cancellation and admission, and independent Sessions ke
 					"Completed",
 				)
 				assert.match(
-					JSON.stringify(view.state.value.memory.history),
+					JSON.stringify(view.state.value.conversation.history),
 					/Independent receipt/,
 				)
 			}),
@@ -305,7 +305,7 @@ test("a related host action waits in the active Turn and keeps its own approval 
 				})
 				const view = yield* store.create({
 					metadata: {},
-					value: MemoryState.initial({}),
+					value: TimelineState.initial({}),
 				})
 				const original = yield* runtime
 					.startAction({
@@ -356,7 +356,7 @@ test("a related host action waits in the active Turn and keeps its own approval 
 					Session.currentTurn(pending.session)?.activeAction?.item,
 					related.item,
 				)
-				const request = pending.state.value.memory.context.prompt.content
+				const request = pending.state.value.conversation.context.prompt.content
 					.flatMap((message) =>
 						Match.value(message).pipe(
 							Match.when({ role: "assistant" }, (message) =>
@@ -401,7 +401,7 @@ test("a related host action waits in the active Turn and keeps its own approval 
 				)
 				assert.equal(writes, 1)
 				assert.match(
-					JSON.stringify(completed.state.value.memory.history),
+					JSON.stringify(completed.state.value.conversation.history),
 					/Related receipt: Specific selection/,
 				)
 			}),

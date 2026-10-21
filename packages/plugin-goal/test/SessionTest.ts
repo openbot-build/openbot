@@ -1,5 +1,5 @@
 import { SessionStoreRepository, MemoryPersistence } from "@openbot-build/core"
-import { MemoryState, Store } from "@openbot-build/core"
+import { TimelineState, Store } from "@openbot-build/core"
 import { SessionRuntime, type Plugin } from "@openbot-build/core"
 import { Effect, Stream } from "effect"
 import { type Prompt, type Tool } from "effect/ai"
@@ -10,7 +10,7 @@ export const SessionTest = <Tools extends Record<string, Tool.Any>, E, R>(
 	const create = Effect.gen(function* () {
 		const definition = yield* Store.define({
 			stores: {},
-			schemaVersion: "memory/1",
+			schemaVersion: "timeline/1",
 		})
 		const runtimeStore = yield* SessionStoreRepository.make({
 			definition: definition,
@@ -22,7 +22,7 @@ export const SessionTest = <Tools extends Record<string, Tool.Any>, E, R>(
 		})
 		const view = yield* runtimeStore.create({
 			metadata: {},
-			value: MemoryState.initial({}),
+			value: TimelineState.initial({}),
 		})
 		return {
 			runtime,

@@ -308,7 +308,7 @@ test("the Platform App plugin combines live paged capabilities with caller tools
 		}
 		const completed = await run("Read the document")
 		assert.equal(publisher.businessCalls(), 1)
-		const history = JSON.stringify(completed.state.value.memory.history)
+		const history = JSON.stringify(completed.state.value.conversation.history)
 		assert.match(history, /handler-executed/)
 		assert.match(history, /Document content release-plan/)
 		assert.match(history, /read_later/)
@@ -538,13 +538,14 @@ test("the Platform App plugin combines live paged capabilities with caller tools
 			409,
 		)
 		const resultParts =
-			completed.state.value.memory.context.prompt.content.flatMap((message) =>
-				Match.value(message).pipe(
-					Match.when({ role: "tool" }, (message) =>
-						message.content.filter((part) => part.type === "tool-result"),
+			completed.state.value.conversation.context.prompt.content.flatMap(
+				(message) =>
+					Match.value(message).pipe(
+						Match.when({ role: "tool" }, (message) =>
+							message.content.filter((part) => part.type === "tool-result"),
+						),
+						Match.orElse(() => []),
 					),
-					Match.orElse(() => []),
-				),
 			)
 		const execution = Schema.decodeUnknownSync(AppExecution.Result)(
 			resultParts[0]?.result,

@@ -157,7 +157,7 @@ test("App views bind to the real history and account, accept each exact host act
 			await (await request("/v1/sessions/" + id + "/app-operations")).json(),
 		)
 		const original = all[0]!
-		const item = completed.state.value.memory.history.find((item) =>
+		const item = completed.state.value.conversation.history.find((item) =>
 			item.content.content.some(
 				(m) =>
 					m.role === "tool" &&
@@ -377,7 +377,10 @@ test("App views bind to the real history and account, accept each exact host act
 			).length,
 			1,
 		)
-		assert.equal((await get()).state.value.memory.history.length > 0, true)
+		assert.equal(
+			(await get()).state.value.conversation.history.length > 0,
+			true,
+		)
 		assert.equal(
 			(await (await request("/v1/sessions/" + id + "/app-operations")).json())
 				.length > 0,

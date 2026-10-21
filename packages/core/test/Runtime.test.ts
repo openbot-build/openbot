@@ -11,7 +11,7 @@ import {
 	Stream,
 	Predicate,
 } from "effect"
-import * as MemoryState from "../src/memory/MemoryState.ts"
+import * as TimelineState from "../src/timeline/TimelineState.ts"
 import * as RecordSerialization from "../src/store/RecordSerialization.ts"
 import * as Store from "../src/store/Store.ts"
 // @effect-diagnostics strictEffectProvide:off
@@ -26,7 +26,7 @@ import * as SessionStoreMemory from "../src/store/SessionStoreMemory.ts"
 const setup = Effect.gen(function* () {
 	const definition = yield* Store.define({
 		stores: {},
-		schemaVersion: "memory/1",
+		schemaVersion: "timeline/1",
 	})
 	const runtimeStore = yield* SessionStoreRepository.make({
 		definition: definition,
@@ -35,7 +35,7 @@ const setup = Effect.gen(function* () {
 	const runtime = yield* SessionRuntime.make({ store: runtimeStore, agent: {} })
 	const view = yield* runtimeStore.create({
 		metadata: {},
-		value: MemoryState.initial({}),
+		value: TimelineState.initial({}),
 	})
 	return { definition, runtime, runtimeStore, view }
 })
@@ -82,7 +82,7 @@ test("store compare-and-set includes metadata and rejects conflicts with immutab
 				assert.equal(
 					Option.getOrThrow(yield* store.getVersion(before.session.head))
 						.schemaVersion,
-					"memory/1",
+					"timeline/1",
 				)
 				yield* store.remove(loaded.session)
 				assert.equal(Option.isNone(yield* store.get(view.session.id)), true)
@@ -126,8 +126,8 @@ test("media and unknown namespaces round-trip with the same runtime and encoded 
 										value: ((value: typeof current.state.value) => ({
 											...value,
 											future: { tokens: 4, encrypted: "secret" },
-											memory: {
-												...value.memory,
+											conversation: {
+												...value.conversation,
 												history: [
 													{
 														id: Item.Record.fields.id.make("media"),
@@ -151,7 +151,10 @@ test("media and unknown namespaces round-trip with the same runtime and encoded 
 						input: yield* codec.encode({ definition, record }),
 					}),
 				})
-				assert.deepEqual(restored.value.memory.history[0]!.content, prompt)
+				assert.deepEqual(
+					restored.value.conversation.history[0]!.content,
+					prompt,
+				)
 				assert.deepEqual(restored.value["future"], {
 					tokens: 4,
 					encrypted: "secret",
@@ -164,11 +167,11 @@ test("media and unknown namespaces round-trip with the same runtime and encoded 
 						Object.keys(json as Schema.JsonObject),
 						Order.String,
 					),
-					["future", "memory"],
+					["conversation", "future"],
 				)
 				assert.deepEqual(
 					EffectArray.sort(Object.keys(restored.value), Order.String),
-					["future", "memory"],
+					["conversation", "future"],
 				)
 				assert.equal(
 					Object.hasOwn(record.versions.at(-1)!.value, "history"),
@@ -176,7 +179,7 @@ test("media and unknown namespaces round-trip with the same runtime and encoded 
 				)
 				assert.equal(
 					Object.hasOwn(
-						record.versions.at(-1)!.value["memory"] as object,
+						record.versions.at(-1)!.value["conversation"] as object,
 						"history",
 					),
 					false,
@@ -185,7 +188,7 @@ test("media and unknown namespaces round-trip with the same runtime and encoded 
 					Exit.isFailure(
 						yield* Effect.exit(
 							Schema.decodeUnknownEffect(definition.schema)({
-								...MemoryState.initial({}).memory,
+								...TimelineState.initial({}).conversation,
 								plugins: {},
 								unrecognizedPlugins: {},
 							}),
@@ -239,7 +242,7 @@ test("execute commits the input and the completed turn, and a stale head fails b
 				const result = yield* runtime.execute(input)
 				assert.equal(Session.status(result.session)._tag, "Completed")
 				assert.equal(Session.currentTurn(result.session)!.steps, 1)
-				assert.equal(result.state.value.memory.history.length, 2)
+				assert.equal(result.state.value.conversation.history.length, 2)
 				assert.equal(
 					(yield* runtimeStore.export(view.session.id)).versions.length,
 					3,

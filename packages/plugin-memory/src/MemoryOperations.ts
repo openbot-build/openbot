@@ -23,7 +23,7 @@ export const make = (input: {
 		Effect.gen(function* () {
 			const view = yield* store.read(session),
 				state = stateOf(view)
-			const history = view.state.value.memory.history.filter(
+			const history = view.state.value.conversation.history.filter(
 				(entry) => !state.processed.includes(entry.id),
 			)
 			if (
@@ -143,10 +143,10 @@ export const make = (input: {
 										value: {
 											...view.state.value,
 											"@openbot-build/plugin-memory": memory,
-											memory: {
-												...view.state.value.memory,
+											conversation: {
+												...view.state.value.conversation,
 												history: A.append(
-													view.state.value.memory.history,
+													view.state.value.conversation.history,
 													evidence,
 												),
 											},

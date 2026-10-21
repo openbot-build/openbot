@@ -18,9 +18,6 @@
 		"./ConversationContext": "./dist/context/ConversationContext.js",
 		"./ConversationContextOperations": "./dist/context/ConversationContextOperations.js",
 		"./SummaryCompaction": "./dist/context/SummaryCompaction.js",
-		"./Item": "./dist/memory/Item.js",
-		"./Memory": "./dist/memory/Memory.js",
-		"./MemoryState": "./dist/memory/MemoryState.js",
 		"./Config": "./dist/models/Config.js",
 		"./ConfigurationOperations": "./dist/models/ConfigurationOperations.js",
 		"./Model": "./dist/models/Model.js",
@@ -39,9 +36,12 @@
 		"./SessionStore": "./dist/store/SessionStore.js",
 		"./SessionStoreMemory": "./dist/store/SessionStoreMemory.js",
 		"./SessionStoreRepository": "./dist/store/SessionStoreRepository.js",
-		"./MemorySnapshots": "./dist/store/Snapshots.js",
+		"./TimelineSnapshots": "./dist/store/Snapshots.js",
 		"./Store": "./dist/store/Store.js",
-		"./VersionGraph": "./dist/store/VersionGraph.js"
+		"./VersionGraph": "./dist/store/VersionGraph.js",
+		"./Item": "./dist/timeline/Item.js",
+		"./Timeline": "./dist/timeline/Timeline.js",
+		"./TimelineState": "./dist/timeline/TimelineState.js"
 	},
 	"scripts": {
 		"build": "tsdown",

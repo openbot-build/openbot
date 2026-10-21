@@ -4,8 +4,8 @@ import { Effect } from "effect"
 import { Prompt } from "effect/ai"
 import {
 	Item,
-	Memory,
-	MemoryState,
+	Timeline,
+	TimelineState,
 	MemoryPersistence,
 	RecordSerialization,
 	SessionStoreRepository,
@@ -22,7 +22,7 @@ test("complete records keep native bytes, opaque provider items and original Ite
 			Effect.gen(function* () {
 				const definition = yield* Store.define({
 					stores: {},
-					schemaVersion: "memory/1",
+					schemaVersion: "timeline/1",
 				})
 				const store = yield* SessionStoreRepository.make({
 					definition,
@@ -39,13 +39,15 @@ test("complete records keep native bytes, opaque provider items and original Ite
 						],
 					},
 				])
-				const value = MemoryState.initial({ unknown: { archived: [1, null] } })
+				const value = TimelineState.initial({
+					unknown: { archived: [1, null] },
+				})
 				const created = yield* store.create({
 					metadata,
 					value: {
 						...value,
-						memory: {
-							...value.memory,
+						conversation: {
+							...value.conversation,
 							history: [{ id: Item.Id.make("media"), content }],
 							context: {
 								_tag: "Native",
@@ -64,12 +66,12 @@ test("complete records keep native bytes, opaque provider items and original Ite
 					definition,
 					input: yield* codec.encode({ definition, record: exported }),
 				})
-				const memory = yield* codec.materialize({ definition, record })
-				assert.deepEqual(memory.value, created.state.value)
-				assert.equal(memory.value.memory.history[0]!.id, "media")
+				const restored = yield* codec.materialize({ definition, record })
+				assert.deepEqual(restored.value, created.state.value)
+				assert.equal(restored.value.conversation.history[0]!.id, "media")
 				assert.equal(
-					Memory.VersionId.make(created.session.head),
-					memory.version.id,
+					Timeline.VersionId.make(created.session.head),
+					restored.version.id,
 				)
 			}),
 		),

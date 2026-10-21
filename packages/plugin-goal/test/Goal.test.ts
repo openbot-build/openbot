@@ -38,7 +38,7 @@ const setup = Effect.gen(function* () {
 	const plugin = GoalPlugin.make(),
 		definition = yield* Store.define({
 			stores: plugin.stores,
-			schemaVersion: "memory/1",
+			schemaVersion: "timeline/1",
 		})
 	const store = yield* SessionStoreRepository.make({
 		definition,
@@ -64,7 +64,7 @@ const calls = (prompt: Prompt.Prompt) =>
 		),
 	)
 
-test("six native handlers bind Goal values to the current Session and keep them out of Memory", async () => {
+test("six native handlers bind Goal values to the current Session and keep them out of the Timeline", async () => {
 	const plans = [
 		{ name: "GetGoal", params: {} },
 		{ name: "SetGoal", params: { objective: "finish", tokenBudget: 100 } },

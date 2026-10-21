@@ -9,19 +9,19 @@ import {
 import { dual } from "effect/Function"
 import { batches } from "./GraphTraversal.ts"
 import type * as Session from "../session/Session.ts"
-import * as Memory from "../memory/Memory.ts"
+import * as Timeline from "../timeline/Timeline.ts"
 import type * as SessionStore from "./SessionStore.ts"
 import { readRaw } from "./Snapshots.ts"
 import { error } from "./StoreErrors.ts"
 
 interface Indexed {
-	readonly graph: Graph.DirectedGraph<Memory.Version, 0 | 1>
-	readonly indexes: HashMap.HashMap<Memory.VersionId, Graph.NodeIndex>
+	readonly graph: Graph.DirectedGraph<Timeline.Version, 0 | 1>
+	readonly indexes: HashMap.HashMap<Timeline.VersionId, Graph.NodeIndex>
 }
 
-const index = (versions: ReadonlyArray<Memory.Version>): Indexed => {
-	let indexes = HashMap.empty<Memory.VersionId, Graph.NodeIndex>()
-	const graph = Graph.directed<Memory.Version, 0 | 1>((mutable) => {
+const index = (versions: ReadonlyArray<Timeline.Version>): Indexed => {
+	let indexes = HashMap.empty<Timeline.VersionId, Graph.NodeIndex>()
+	const graph = Graph.directed<Timeline.Version, 0 | 1>((mutable) => {
 		versions.forEach((version) => {
 			indexes = HashMap.set(
 				indexes,
@@ -51,23 +51,23 @@ const index = (versions: ReadonlyArray<Memory.Version>): Indexed => {
 
 /** Submitted dependencies are resolved separately, before their local edges are validated. */
 export const acyclic = (
-	versions: HashMap.HashMap<Memory.VersionId, Memory.Version>,
+	versions: HashMap.HashMap<Timeline.VersionId, Timeline.Version>,
 ): boolean => Graph.isAcyclic(index(Array.from(HashMap.values(versions))).graph)
 
 const load = (
 	storage: SessionStore.Persistence,
-	roots: ReadonlyArray<Memory.VersionId>,
+	roots: ReadonlyArray<Timeline.VersionId>,
 ) =>
 	Effect.gen(function* () {
 		// Read the ancestry one generation at a time. Each generation is one batch of reads.
 		const visit = (
-			pending: ReadonlyArray<Memory.VersionId>,
-			found: HashMap.HashMap<Memory.VersionId, Memory.Version>,
-			ordered: ReadonlyArray<Memory.Version>,
+			pending: ReadonlyArray<Timeline.VersionId>,
+			found: HashMap.HashMap<Timeline.VersionId, Timeline.Version>,
+			ordered: ReadonlyArray<Timeline.Version>,
 		): Effect.Effect<
 			{
-				readonly found: HashMap.HashMap<Memory.VersionId, Memory.Version>
-				readonly ordered: ReadonlyArray<Memory.Version>
+				readonly found: HashMap.HashMap<Timeline.VersionId, Timeline.Version>
+				readonly ordered: ReadonlyArray<Timeline.Version>
 			},
 			SessionStore.SessionStoreError
 		> => {
@@ -113,41 +113,41 @@ const load = (
 /** Return only domain headers. Graph indexes stay inside this module. */
 export const graph: {
 	(
-		head: Memory.VersionId,
+		head: Timeline.VersionId,
 	): (
 		storage: SessionStore.Persistence,
 	) => Effect.Effect<
-		HashMap.HashMap<Memory.VersionId, Memory.Version>,
+		HashMap.HashMap<Timeline.VersionId, Timeline.Version>,
 		SessionStore.SessionStoreError
 	>
 	(
 		storage: SessionStore.Persistence,
-		head: Memory.VersionId,
+		head: Timeline.VersionId,
 	): Effect.Effect<
-		HashMap.HashMap<Memory.VersionId, Memory.Version>,
+		HashMap.HashMap<Timeline.VersionId, Timeline.Version>,
 		SessionStore.SessionStoreError
 	>
-} = dual(2, (storage: SessionStore.Persistence, head: Memory.VersionId) =>
+} = dual(2, (storage: SessionStore.Persistence, head: Timeline.VersionId) =>
 	load(storage, [head]).pipe(Effect.map((loaded) => loaded.versions)),
 )
 
 export const log: {
 	(
-		head: Memory.VersionId,
+		head: Timeline.VersionId,
 	): (
 		storage: SessionStore.Persistence,
 	) => Effect.Effect<
-		ReadonlyArray<Memory.Version>,
+		ReadonlyArray<Timeline.Version>,
 		SessionStore.SessionStoreError
 	>
 	(
 		storage: SessionStore.Persistence,
-		head: Memory.VersionId,
+		head: Timeline.VersionId,
 	): Effect.Effect<
-		ReadonlyArray<Memory.Version>,
+		ReadonlyArray<Timeline.Version>,
 		SessionStore.SessionStoreError
 	>
-} = dual(2, (storage: SessionStore.Persistence, head: Memory.VersionId) =>
+} = dual(2, (storage: SessionStore.Persistence, head: Timeline.VersionId) =>
 	load(storage, [head]).pipe(
 		Effect.map((loaded) => Array.from(Graph.values(Graph.topo(loaded.graph)))),
 	),
@@ -156,22 +156,24 @@ export const log: {
 /** Reachability can choose to follow only first-parent links. */
 export const reaches: {
 	(
-		from: Memory.VersionId,
-		to: Memory.VersionId,
+		from: Timeline.VersionId,
+		to: Timeline.VersionId,
 		firstParent?: boolean,
-	): (versions: HashMap.HashMap<Memory.VersionId, Memory.Version>) => boolean
+	): (
+		versions: HashMap.HashMap<Timeline.VersionId, Timeline.Version>,
+	) => boolean
 	(
-		versions: HashMap.HashMap<Memory.VersionId, Memory.Version>,
-		from: Memory.VersionId,
-		to: Memory.VersionId,
+		versions: HashMap.HashMap<Timeline.VersionId, Timeline.Version>,
+		from: Timeline.VersionId,
+		to: Timeline.VersionId,
 		firstParent?: boolean,
 	): boolean
 } = dual(
 	(args) => HashMap.isHashMap(args[0]),
 	(
-		versions: HashMap.HashMap<Memory.VersionId, Memory.Version>,
-		from: Memory.VersionId,
-		to: Memory.VersionId,
+		versions: HashMap.HashMap<Timeline.VersionId, Timeline.Version>,
+		from: Timeline.VersionId,
+		to: Timeline.VersionId,
 		firstParent: boolean = false,
 	): boolean => {
 		const loaded = index(Array.from(HashMap.values(versions)))
@@ -192,26 +194,26 @@ export const reaches: {
 
 interface MergeBases {
 	readonly alreadyMerged: boolean
-	readonly candidates: ReadonlyArray<Memory.VersionId>
+	readonly candidates: ReadonlyArray<Timeline.VersionId>
 }
 export const mergeBases: {
 	(
-		target: Memory.VersionId,
-		source: Memory.VersionId,
+		target: Timeline.VersionId,
+		source: Timeline.VersionId,
 	): (
 		storage: SessionStore.Persistence,
 	) => Effect.Effect<MergeBases, SessionStore.SessionStoreError>
 	(
 		storage: SessionStore.Persistence,
-		target: Memory.VersionId,
-		source: Memory.VersionId,
+		target: Timeline.VersionId,
+		source: Timeline.VersionId,
 	): Effect.Effect<MergeBases, SessionStore.SessionStoreError>
 } = dual(
 	3,
 	(
 		storage: SessionStore.Persistence,
-		target: Memory.VersionId,
-		source: Memory.VersionId,
+		target: Timeline.VersionId,
+		source: Timeline.VersionId,
 	) =>
 		Effect.gen(function* () {
 			const loaded = yield* load(storage, [target, source])
@@ -293,22 +295,22 @@ export const exportRecord: {
 /** Build a Diff from raw snapshots. A null base compares with an empty value. */
 export const diff: {
 	(
-		version: Memory.VersionId,
-		base: Memory.VersionId | null,
+		version: Timeline.VersionId,
+		base: Timeline.VersionId | null,
 	): (
 		storage: SessionStore.Persistence,
 	) => Effect.Effect<JsonPatch.JsonPatch, SessionStore.SessionStoreError>
 	(
 		storage: SessionStore.Persistence,
-		version: Memory.VersionId,
-		base: Memory.VersionId | null,
+		version: Timeline.VersionId,
+		base: Timeline.VersionId | null,
 	): Effect.Effect<JsonPatch.JsonPatch, SessionStore.SessionStoreError>
 } = dual(
 	3,
 	(
 		storage: SessionStore.Persistence,
-		version: Memory.VersionId,
-		base: Memory.VersionId | null,
+		version: Timeline.VersionId,
+		base: Timeline.VersionId | null,
 	) =>
 		Effect.gen(function* () {
 			const target = yield* readRaw(storage, version)

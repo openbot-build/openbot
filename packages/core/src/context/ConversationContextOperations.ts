@@ -4,7 +4,7 @@ import { LanguageModel, Prompt, type Tool } from "effect/ai"
 import * as ContextCompaction from "./ContextCompaction.ts"
 import * as ContextWindow from "./ContextWindow.ts"
 import * as ConversationContext from "./ConversationContext.ts"
-import { fullHistory } from "../memory/MemoryState.ts"
+import { fullHistory } from "../timeline/TimelineState.ts"
 
 export const make = <P, Tools extends Record<string, Tool.Any>, E, R>(
 	input: ConversationContext.Options<P, Tools, E, R>,
@@ -15,9 +15,9 @@ export const make = <P, Tools extends Record<string, Tool.Any>, E, R>(
 				compaction = yield* ContextCompaction.ContextCompaction
 			const window =
 				additional?.additional === undefined
-					? view.state.value.memory.context
+					? view.state.value.conversation.context
 					: ContextWindow.append(
-							view.state.value.memory.context,
+							view.state.value.conversation.context,
 							additional.additional,
 						)
 			if (view.session.settings.model === undefined)
@@ -47,7 +47,7 @@ export const make = <P, Tools extends Record<string, Tool.Any>, E, R>(
 		})
 		return new ConversationContext.Summary({
 			text: response.text,
-			sourceMessages: view.state.value.memory.history.length,
+			sourceMessages: view.state.value.conversation.history.length,
 		})
 	}),
 	compact: (request: { readonly targetTokens: number }) =>
@@ -66,8 +66,8 @@ export const make = <P, Tools extends Record<string, Tool.Any>, E, R>(
 							afterTokens: result.afterTokens,
 							context: new ConversationContext.State({
 								session: input.session,
-								prompt: result.view.state.value.memory.context.prompt,
-								window: result.view.state.value.memory.context,
+								prompt: result.view.state.value.conversation.context.prompt,
+								window: result.view.state.value.conversation.context,
 								estimatedTokens: result.afterTokens,
 							}),
 						}),

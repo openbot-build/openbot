@@ -13,8 +13,8 @@ import {
 import { dual } from "effect/Function"
 
 import { IdGenerator } from "effect/ai"
-import * as Item from "../memory/Item.ts"
-import * as Memory from "../memory/Memory.ts"
+import * as Item from "../timeline/Item.ts"
+import * as Timeline from "../timeline/Timeline.ts"
 import type * as SessionStore from "./SessionStore.ts"
 import { error, invalid } from "./StoreErrors.ts"
 import { batches } from "./GraphTraversal.ts"
@@ -86,10 +86,10 @@ export const unpack: {
 				}),
 			)
 			const core = yield* Schema.decodeUnknownEffect(Schema.JsonObject)(
-				snapshot.value["memory"],
+				snapshot.value["conversation"],
 			).pipe(Effect.mapError(invalid))
 			return Optic.id<Schema.JsonObject>()
-				.key("memory")
+				.key("conversation")
 				.replace({ ...core, history }, snapshot.value)
 		}),
 )
@@ -102,7 +102,7 @@ export const pack: {
 			readonly messages: ReadonlyArray<SessionStore.Content>
 		}>,
 		generate?: () => Effect.Effect<string>,
-	): (version: Memory.Version) => Effect.Effect<
+	): (version: Timeline.Version) => Effect.Effect<
 		{
 			readonly snapshot: SessionStore.Snapshot
 			readonly messages: ReadonlyArray<SessionStore.Content>
@@ -110,7 +110,7 @@ export const pack: {
 		SessionStore.SessionStoreError
 	>
 	(
-		version: Memory.Version,
+		version: Timeline.Version,
 		raw: Schema.Json,
 		reusable?: ReadonlyArray<{
 			readonly snapshot: SessionStore.Snapshot
@@ -127,7 +127,7 @@ export const pack: {
 } = dual(
 	(args) => Predicate.hasProperty(args[0], "schemaVersion"),
 	(
-		version: Memory.Version,
+		version: Timeline.Version,
 		raw: Schema.Json,
 		reusable: ReadonlyArray<{
 			readonly snapshot: SessionStore.Snapshot
@@ -147,13 +147,13 @@ export const pack: {
 				raw,
 			).pipe(Effect.mapError(invalid))
 			const core = yield* Schema.decodeUnknownEffect(Schema.JsonObject)(
-				object["memory"],
+				object["conversation"],
 			).pipe(Effect.mapError(invalid))
 			const entries = yield* Schema.decodeUnknownEffect(encodedHistory)(
 				core["history"],
 			).pipe(Effect.mapError(invalid))
 			const { history: _, ...rest } = core
-			const value = { ...object, memory: rest }
+			const value = { ...object, conversation: rest }
 			if (
 				HashSet.size(HashSet.fromIterable(entries.map((entry) => entry.id))) !==
 				entries.length
@@ -220,7 +220,9 @@ export const pack: {
 		}),
 )
 export const readRaw: {
-	(id: Memory.VersionId): (storage: SessionStore.Persistence) => Effect.Effect<
+	(id: Timeline.VersionId): (
+		storage: SessionStore.Persistence,
+	) => Effect.Effect<
 		{
 			snapshot: SessionStore.Snapshot
 			messages: Array<SessionStore.Content>
@@ -230,7 +232,7 @@ export const readRaw: {
 	>
 	(
 		storage: SessionStore.Persistence,
-		id: Memory.VersionId,
+		id: Timeline.VersionId,
 	): Effect.Effect<
 		{
 			snapshot: SessionStore.Snapshot
@@ -239,7 +241,7 @@ export const readRaw: {
 		},
 		SessionStore.SessionStoreError
 	>
-} = dual(2, (storage: SessionStore.Persistence, id: Memory.VersionId) =>
+} = dual(2, (storage: SessionStore.Persistence, id: Timeline.VersionId) =>
 	Effect.gen(function* () {
 		const snapshot = yield* storage.snapshot(id).pipe(
 			Effect.flatMap((snapshot) =>

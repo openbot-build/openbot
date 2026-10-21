@@ -1,9 +1,9 @@
 import { Data, Schema } from "effect"
 import * as Item from "./Item.ts"
-import { VersionId } from "./MemoryIdentity.ts"
+import { VersionId } from "./TimelineIdentity.ts"
 import * as ContextWindow from "../context/ContextWindow.ts"
 import { PromptJson } from "../store/PromptCodec.ts"
-export { VersionId } from "./MemoryIdentity.ts"
+export { VersionId } from "./TimelineIdentity.ts"
 
 export const Parents = Schema.Union([
 	Schema.Tuple([]),
@@ -31,12 +31,13 @@ const opaque = Schema.declare(
 export const Value = <Fields extends Schema.Struct.Fields>(
 	namespaces: Fields,
 ) =>
-	Schema.StructWithRest(Schema.Struct({ ...namespaces, memory: CoreValue }), [
-		Schema.Record(Schema.String, opaque),
-	])
+	Schema.StructWithRest(
+		Schema.Struct({ ...namespaces, conversation: CoreValue }),
+		[Schema.Record(Schema.String, opaque)],
+	)
 export type Value<P = {}> = typeof CoreValue extends never
 	? never
-	: { readonly memory: CoreValue; readonly [key: string]: unknown } & P
+	: { readonly conversation: CoreValue; readonly [key: string]: unknown } & P
 export const State = <Fields extends Schema.Struct.Fields>(
 	namespaces: Fields,
 ) => Schema.Struct({ version: Version, value: Value(namespaces) })
@@ -44,7 +45,7 @@ export interface State<P = {}> {
 	readonly version: Version
 	readonly value: Value<P>
 }
-export class VersionError extends Data.TaggedError("MemoryVersionError")<{
+export class VersionError extends Data.TaggedError("TimelineVersionError")<{
 	readonly reason:
 		| "version-missing"
 		| "version-unreachable"
