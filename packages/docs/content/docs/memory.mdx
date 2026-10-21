@@ -69,6 +69,9 @@ A Session can override each switch with `Configure`. A switch that the Session d
 When `use` is on, Platform adds the active facts to the model's instructions when the Turn runs. The text tells the model that memory is past evidence and that current instructions win.
 Retracted facts are not sent.
 
+The memory text has a size limit of 8000 characters. The newest facts come first. Platform stops before the first fact that does not fit, so older facts are left out. A fact is never cut in the middle.
+To change the limit, give your own policy on the server: `sessions.memory.policy: MemoryRules.make({ maxLength: 4000 })`.
+
 ### After a Turn
 
 When a Turn completes, Platform consolidates memory. To consolidate means to read the new Items and update the list of facts. This also happens when a Turn completes after an approval. Platform asks the Turn's model to find facts worth keeping. The model must name the source Items for each change.
