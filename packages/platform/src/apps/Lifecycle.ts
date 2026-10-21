@@ -53,12 +53,7 @@ export class Lifecycle extends Context.Service<
 
 const metadataPolicy = Client.InvocationPolicy.of({
 	check: (invocation) =>
-		[
-			"tools/list",
-			"resources/list",
-			"resources/templates/list",
-			"prompts/list",
-		].includes(invocation.action)
+		Schema.is(Client.ListAction)(invocation.action)
 			? Effect.void
 			: Effect.fail(
 					new Client.PermissionDenied({

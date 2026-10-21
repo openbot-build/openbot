@@ -44,6 +44,9 @@ export interface Receipt {
 	readonly requiresLogin: boolean
 }
 /** Private operations read the current request identity. @effect-expect-leaking Identity */
+/** A flow in these states can still go on. */
+const openStatus: ReadonlyArray<Api.State["status"]> = ["Waiting", "Received"]
+
 export class Authorizations extends Context.Service<
 	Authorizations,
 	{
@@ -173,7 +176,7 @@ export const make = (
 		) {
 			const record = yield* owned(owner, id)
 			if (
-				["Waiting", "Received"].includes(record.state.status) &&
+				openStatus.includes(record.state.status) &&
 				record.state.expiresAt <= (yield* Clock.currentTimeMillis)
 			)
 				return yield* authorizationFailure("FlowExpired")

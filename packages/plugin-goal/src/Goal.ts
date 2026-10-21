@@ -28,9 +28,10 @@ export class State extends Schema.TaggedClass<State>()("Goal.State", {
 }) {}
 
 /** A host uses this when it builds its schema. It does not install storage or change middleware. */
-export const pluginId = Schema.Literal("@openbot-build/plugin-goal")
+export const storeKey = "@openbot-build/plugin-goal"
+export const pluginId = Schema.Literal(storeKey)
 	.pipe(Schema.brand("@openbot-build/core/PluginId"))
-	.make("@openbot-build/plugin-goal")
+	.make(storeKey)
 
 export const store = {
 	scope: "session",

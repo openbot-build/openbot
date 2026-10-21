@@ -1,4 +1,4 @@
-import { AppIndexApi } from "@openbot-build/platform-api"
+import { AppIndexApi, DeveloperApi } from "@openbot-build/platform-api"
 import { Discovery, Index } from "@openbot-build/protocol"
 import { Context, Effect, Option, Schema } from "effect"
 
@@ -12,7 +12,7 @@ export type Claim = typeof Claim.Type
 export const Job = Schema.Struct({
 	cardUrl: Schema.String,
 	generation: Schema.String,
-	status: Schema.Literals(["Waiting", "Verifying", "Completed"]),
+	status: DeveloperApi.IndexJobStatus,
 	check: Schema.NullOr(AppIndexApi.Check),
 	requestedAt: Schema.Finite,
 })

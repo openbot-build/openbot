@@ -1,4 +1,4 @@
-import { Permissions } from "@openbot-build/platform-api"
+import { type AgentsApi, Permissions } from "@openbot-build/platform-api"
 import { Option } from "effect"
 
 type PermissionGroupId = Permissions.PermissionGroupId
@@ -26,10 +26,11 @@ export const resourceKey = (target: {
 	readonly id: Option.Option<string>
 }): string => {
 	const { subject, kind, id } = target
-	const child = (parent: string, name: string) =>
+	// The kind is the name of its key part, such as `session`.
+	const child = (parent: string) =>
 		Option.match(id, {
-			onNone: () => parent + "." + name,
-			onSome: (id) => parent + "." + name + "." + segment(id),
+			onNone: () => parent + "." + kind,
+			onSome: (id) => parent + "." + kind + "." + segment(id),
 		})
 	switch (kind) {
 		case "organization":
@@ -37,18 +38,15 @@ export const resourceKey = (target: {
 		case "user":
 			return userKey(subject)
 		case "apps":
-			return userKey(subject) + ".apps"
+			return userKey(subject) + "." + kind
 		case "session":
-			return child(userKey(subject), "session")
 		case "connection":
-			return child(userKey(subject), "connection")
-		case "model":
-			return child(organizationKey(subject.organizationId), "model")
+		case "request":
+			return child(userKey(subject))
 		// The key of one Agent depends on its owner. Use agentKey when the Agent is known.
 		case "agent":
-			return child(organizationKey(subject.organizationId), "agent")
-		case "request":
-			return child(userKey(subject), "request")
+		case "model":
+			return child(organizationKey(subject.organizationId))
 	}
 }
 
@@ -59,9 +57,7 @@ export const resourceKey = (target: {
 export const agentKey = (agent: {
 	readonly organizationId: string
 	readonly id: string
-	readonly owner:
-		| { readonly _tag: "Organization" }
-		| { readonly _tag: "Member" | "Session"; readonly userId: string }
+	readonly owner: AgentsApi.AgentOwner
 }) =>
 	agent.owner._tag === "Organization"
 		? organizationKey(agent.organizationId) + ".agent." + segment(agent.id)
@@ -89,7 +85,8 @@ export interface Check {
 	readonly key: string
 }
 
-export type Decision = "allow" | "deny" | "none"
+/** A policy decision, or `none` when no policy matches. */
+export type Decision = Permissions.Decision | "none"
 
 /** An explicit deny wins over an allow. With no matching policy, the answer is "none". */
 export const decide = (
@@ -137,7 +134,7 @@ export const inOrganization = (input: {
 	input.policies.every((policy) =>
 		policy.resources.every(
 			(resource) =>
-				covers("openbot.org.{org}", resource) ||
+				covers(Permissions.organizationResource, resource) ||
 				covers(organizationKey(input.organizationId), resource),
 		),
 	)
@@ -147,8 +144,8 @@ export const defaultTokenPolicies: ReadonlyArray<Policy> = [
 	{
 		effect: "allow",
 		permissionGroups: Permissions.PermissionGroupId.literals.filter(
-			(id) => id !== "tokens.read" && id !== "tokens.write",
+			(id) => !Permissions.permissionGroupsOf("tokens").includes(id),
 		),
-		resources: ["openbot.org.{org}"],
+		resources: [Permissions.organizationResource],
 	},
 ]

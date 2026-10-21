@@ -5,12 +5,12 @@ import {
 	type Caller,
 	Permissions,
 } from "@openbot-build/platform-api"
-import { Clock, Context, Effect, Layer, Option } from "effect"
+import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import type { Tokens } from "../auth/Tokens.ts"
 import { can } from "../authorization/Check.ts"
 import { agentKey } from "../authorization/Policy.ts"
 import type { Organization } from "../organization/Organization.ts"
-import { AgentRecords } from "./AgentRecords.ts"
+import { AgentRecords, type Keys } from "./AgentRecords.ts"
 
 type Agent = AgentsApi.Agent
 type AgentId = AgentsApi.AgentId
@@ -101,8 +101,15 @@ export class Agents extends Context.Service<
 	}
 >()("@openbot-build/platform/agents/Agents") {}
 
+/** The status key of an Agent record: its kind, or `archived`. */
+const RecordStatus = Schema.Literals([
+	"archived",
+	...AgentsApi.AgentKind.literals,
+])
+type RecordStatus = typeof RecordStatus.Type
+
 /** The owner and scope keys of an Agent record. */
-const keys = (organizationId: string, agent: Agent) => ({
+const keys = (organizationId: string, agent: Agent): Keys<RecordStatus> => ({
 	organizationId,
 	id: agent.id,
 	owner: agent.owner._tag === "Organization" ? "" : agent.owner.userId,
@@ -113,7 +120,7 @@ const keys = (organizationId: string, agent: Agent) => ({
 export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 	Effect.gen(function* () {
 		const records = yield* AgentRecords
-		const agents = records.collection("agent", AgentsApi.Agent)
+		const agents = records.collection("agent", AgentsApi.Agent, RecordStatus)
 		const put = (organizationId: string, agent: Agent) =>
 			agents.put(keys(organizationId, agent), agent).pipe(Effect.as(agent))
 		const find: typeof Agents.Service.find = (organizationId, id) =>

@@ -1572,26 +1572,12 @@ export const make = <
 					return view
 				return yield* close(session, current.id, { _tag: "Interrupted" })
 			})
+		/** An event with a view takes its position from it. Other events carry `at`. */
+		const positionOf = (event: Event) =>
+			"view" in event ? Session.position(event.view.session) : event.at
 		const belongs = (event: Event, session: Session.Id) =>
-			Match.value(event).pipe(
-				Match.tag(
-					"VersionCreated",
-					"TurnWaiting",
-					"TurnCompleted",
-					({ view }) => view.session.id === session,
-				),
-				Match.orElse((event) => event.at.session === session),
-			)
-		const revision = (event: Event) =>
-			Match.value(event).pipe(
-				Match.tag(
-					"VersionCreated",
-					"TurnWaiting",
-					"TurnCompleted",
-					({ view }) => view.session.revision,
-				),
-				Match.orElse((event) => event.at.revision),
-			)
+			positionOf(event).session === session
+		const revision = (event: Event) => positionOf(event).revision
 		const events: Session.Runtime<P, Tools, E, R, HostTools>["events"] = (
 			input,
 		) =>

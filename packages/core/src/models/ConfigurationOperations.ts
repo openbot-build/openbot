@@ -29,6 +29,65 @@ export const contextLimits = (model: Config.Model): Config.ContextLimits => {
 	}
 }
 
+/** The providers and models that a selection can use. */
+export interface Catalog {
+	readonly providers: ReadonlyArray<Config.Provider>
+	readonly models: ReadonlyArray<Config.Model>
+}
+/** Why a selection does not fit the catalog, in words for people. */
+export interface SelectionProblem {
+	readonly reason: Config.SelectionReason
+	readonly message: string
+}
+
+/**
+ * Checks a selection against a catalog. It gives the first problem, or none
+ * when the catalog offers the provider, the model and the selected options.
+ */
+export const selectionProblem: {
+	(
+		selection: Config.Selection,
+	): (catalog: Catalog) => Option.Option<SelectionProblem>
+	(
+		catalog: Catalog,
+		selection: Config.Selection,
+	): Option.Option<SelectionProblem>
+} = dual(
+	2,
+	(
+		catalog: Catalog,
+		selection: Config.Selection,
+	): Option.Option<SelectionProblem> => {
+		if (
+			!catalog.providers.some((provider) => provider.id === selection.provider)
+		)
+			return Option.some({
+				reason: "provider-not-found",
+				message: "The provider does not exist",
+			})
+		const model = catalog.models.find(
+			(model) =>
+				model.provider === selection.provider && model.id === selection.model,
+		)
+		if (model === undefined)
+			return Option.some({
+				reason: "model-not-found",
+				message: "The model does not exist",
+			})
+		if (
+			(selection.reasoningEffort !== undefined &&
+				!model.reasoningEfforts.includes(selection.reasoningEffort)) ||
+			(selection.serviceTier !== undefined &&
+				!model.serviceTiers.includes(selection.serviceTier))
+		)
+			return Option.some({
+				reason: "unsupported-option",
+				message: "The model does not support the selected options",
+			})
+		return Option.none()
+	},
+)
+
 export const modelConfiguration = <P>(
 	input: Config.ModelConfigurationOptions<P>,
 ): Config.RuntimeModelConfiguration => ({
@@ -46,32 +105,9 @@ export const modelConfiguration = <P>(
 	),
 	select: (selection) =>
 		Effect.gen(function* () {
-			if (
-				!input.providers.some((provider) => provider.id === selection.provider)
-			)
-				return yield* new Config.ModelConfigurationError({
-					reason: "provider-not-found",
-					message: "The provider does not exist",
-				})
-			const model = input.models.find(
-				(model) =>
-					model.provider === selection.provider && model.id === selection.model,
-			)
-			if (model === undefined)
-				return yield* new Config.ModelConfigurationError({
-					reason: "model-not-found",
-					message: "The model does not exist",
-				})
-			if (
-				(selection.reasoningEffort !== undefined &&
-					!model.reasoningEfforts.includes(selection.reasoningEffort)) ||
-				(selection.serviceTier !== undefined &&
-					!model.serviceTiers.includes(selection.serviceTier))
-			)
-				return yield* new Config.ModelConfigurationError({
-					reason: "unsupported-option",
-					message: "The model does not support the selected options",
-				})
+			const problem = selectionProblem(input, selection)
+			if (Option.isSome(problem))
+				return yield* new Config.ModelConfigurationError(problem.value)
 			const before = yield* input.store.read(input.session)
 			yield* input.store.updateSettings({
 				expected: before.session,

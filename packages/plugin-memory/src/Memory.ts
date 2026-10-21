@@ -10,13 +10,16 @@ export const Kind = Schema.Literals([
 	"procedure",
 	"hypothesis",
 ])
+/** A `retracted` entry is kept, so later runs do not learn it again. */
+export const EntryStatus = Schema.Literals(["active", "retracted"])
+export type EntryStatus = typeof EntryStatus.Type
 export const Entry = Schema.Struct({
 	key: Schema.NonEmptyString,
 	content: Schema.NonEmptyString,
 	kind: Kind,
 	sources: Schema.Array(Item.Id),
 	updatedAt: Schema.Finite,
-	status: Schema.Literals(["active", "retracted"]),
+	status: EntryStatus,
 })
 export type Entry = typeof Entry.Type
 export const State = Schema.Struct({
@@ -24,16 +27,18 @@ export const State = Schema.Struct({
 	processed: Schema.Array(Item.Id),
 })
 export type State = typeof State.Type
-export const pluginId = Schema.Literal("@openbot-build/plugin-memory")
+/** The plugin id. It is also the key of the memory store in the Timeline. */
+export const storeKey = "@openbot-build/plugin-memory"
+export const pluginId = Schema.Literal(storeKey)
 	.pipe(Schema.brand("@openbot-build/core/PluginId"))
-	.make("@openbot-build/plugin-memory")
+	.make(storeKey)
 export const store = {
 	scope: "timeline",
 	schema: Schema.toCodecJson(State),
 } satisfies Plugin.StoreDefinition<
 	ReturnType<typeof Schema.toCodecJson<typeof State>>
 >
-export const stores = { "@openbot-build/plugin-memory": store }
+export const stores = { [storeKey]: store }
 export type States = typeof stores
 export type Values = { readonly [K in keyof States]?: State }
 export const empty = (): State => ({
@@ -46,7 +51,7 @@ export const Change = Schema.Struct({
 	content: Schema.NonEmptyString,
 	kind: Kind,
 	sources: Schema.Array(Item.Id).check(Schema.isMinLength(1)),
-	status: Schema.Literals(["active", "retracted"]),
+	status: EntryStatus,
 })
 export type Change = typeof Change.Type
 export const Extraction = Schema.Struct({ changes: Schema.Array(Change) })

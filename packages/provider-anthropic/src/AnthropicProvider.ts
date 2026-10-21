@@ -23,6 +23,19 @@ const invalid = (description: string) =>
 		reason: AiError.InvalidRequestError.make({ description }),
 	})
 
+// The SDK types own these sets. Each object must name every SDK value and
+// no other value, so the schemas below stay equal to the SDK types.
+const efforts: {
+	readonly [
+		Key in NonNullable<NonNullable<Defaults["output_config"]>["effort"]>
+	]: true
+} = { low: true, medium: true, high: true }
+const serviceTiers: {
+	readonly [Key in NonNullable<Defaults["service_tier"]>]: true
+} = { auto: true, standard_only: true }
+const Effort = Schema.Literals(Record.keys(efforts))
+const ServiceTier = Schema.Literals(Record.keys(serviceTiers))
+
 export const make = (defaults: Defaults = {}): Provider =>
 	new CoreProvider.Provider({
 		id: CoreProvider.Id.make("anthropic"),
@@ -31,15 +44,15 @@ export const make = (defaults: Defaults = {}): Provider =>
 				const effort =
 					selection.reasoningEffort === undefined
 						? defaults.output_config?.effort
-						: yield* Schema.decodeUnknownEffect(
-								Schema.Literals(["low", "medium", "high"]),
-							)(selection.reasoningEffort)
+						: yield* Schema.decodeUnknownEffect(Effort)(
+								selection.reasoningEffort,
+							)
 				const tier =
 					selection.serviceTier === undefined
 						? defaults.service_tier
-						: yield* Schema.decodeUnknownEffect(
-								Schema.Literals(["auto", "standard_only"]),
-							)(selection.serviceTier)
+						: yield* Schema.decodeUnknownEffect(ServiceTier)(
+								selection.serviceTier,
+							)
 				const config: Defaults = {
 					...defaults,
 					...(effort === undefined

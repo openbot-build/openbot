@@ -1,8 +1,8 @@
 import { Item, Timeline, Session, Turn } from "@openbot-build/core"
-import { Ui } from "@openbot-build/protocol"
+import { Client, Ui } from "@openbot-build/protocol"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
-import { Source, Invocation } from "./AppExecution.ts"
+import { Source, Invocation, InvocationStatus } from "./AppExecution.ts"
 import { ExperienceErrors } from "./ExperienceErrors.ts"
 import { AppRestricted } from "./ConnectionsApi.ts"
 import { SessionConflict } from "./SessionsApi.ts"
@@ -31,24 +31,6 @@ export const Opened = Schema.Struct({
 	result: Schema.optionalKey(Schema.JsonObject),
 })
 export type Opened = typeof Opened.Type
-export const ActionSource = Schema.TaggedStruct("AppUiAction", {
-	viewId: Schema.String,
-	requestId: Schema.String,
-	connectionId: Schema.String,
-	revision: Schema.Natural,
-	kind: Schema.Literals(["tool", "resource"]),
-	target: Schema.String,
-})
-export type ActionSource = typeof ActionSource.Type
-export const ActionTicket = Schema.Struct({
-	session: Session.Id,
-	turn: Turn.Id,
-	item: Item.Id,
-	callId: Schema.String,
-	revision: Session.Revision,
-	version: Timeline.VersionId,
-})
-export type ActionTicket = typeof ActionTicket.Type
 export const ActionRequest = Schema.Union([
 	Schema.Struct({
 		kind: Schema.Literal("tool"),
@@ -63,19 +45,39 @@ export const ActionRequest = Schema.Union([
 	}),
 ])
 export type ActionRequest = typeof ActionRequest.Type
+/** The kind of an action that an App view asks for. It comes from `ActionRequest`. */
+export const ActionKind = Schema.Literals(
+	ActionRequest.members.map((member) => member.fields.kind.literal),
+)
+export type ActionKind = typeof ActionKind.Type
+export const ActionSource = Schema.TaggedStruct("AppUiAction", {
+	viewId: Schema.String,
+	requestId: Schema.String,
+	connectionId: Schema.String,
+	revision: Schema.Natural,
+	kind: ActionKind,
+	target: Schema.String,
+})
+export type ActionSource = typeof ActionSource.Type
+/** The list methods that an App view may call. A view cannot list prompts. */
+export const ViewReadAction = Client.ListAction.pick([
+	"tools/list",
+	"resources/list",
+	"resources/templates/list",
+])
+export type ViewReadAction = typeof ViewReadAction.Type
+export const ActionTicket = Schema.Struct({
+	session: Session.Id,
+	turn: Turn.Id,
+	item: Item.Id,
+	callId: Schema.String,
+	revision: Session.Revision,
+	version: Timeline.VersionId,
+})
+export type ActionTicket = typeof ActionTicket.Type
 export const Observation = Schema.Struct({
 	ticket: ActionTicket,
-	status: Schema.Literals([
-		"Queued",
-		"PendingApproval",
-		"Approved",
-		"Rejected",
-		"Sending",
-		"InputRequired",
-		"Completed",
-		"Failed",
-		"OutcomeUnknown",
-	]),
+	status: Schema.Literals(["Queued", ...InvocationStatus.literals]),
 	operation: Schema.NullOr(Invocation),
 })
 export class AppViewUnavailable extends Schema.TaggedError<AppViewUnavailable>()(
@@ -122,11 +124,7 @@ export const AppViewsApi = HttpApiGroup.make("appViews").add(
 	HttpApiEndpoint.post("read", "/v1/app-views/:viewId/read", {
 		params: { viewId: Schema.String },
 		payload: Schema.Struct({
-			method: Schema.Literals([
-				"tools/list",
-				"resources/list",
-				"resources/templates/list",
-			]),
+			method: ViewReadAction,
 			params: Schema.JsonObject,
 		}),
 		success: Schema.JsonObject,

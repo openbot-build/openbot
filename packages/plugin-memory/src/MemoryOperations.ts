@@ -7,7 +7,7 @@ import type * as MemorySession from "./MemorySession.ts"
 
 /** The store field is optional. A Session without memory starts empty. */
 const stateOf = (view: Session.View<Memory.Values>): Memory.State =>
-	view.state.value["@openbot-build/plugin-memory"] ?? Memory.empty()
+	view.state.value[Memory.storeKey] ?? Memory.empty()
 
 export const make = (input: {
 	readonly store: MemorySession.Store
@@ -38,7 +38,7 @@ export const make = (input: {
 												Option.some({
 													value: {
 														...current.state.value,
-														"@openbot-build/plugin-memory": memory,
+														[Memory.storeKey]: memory,
 													},
 												}),
 											] as const,
@@ -118,7 +118,7 @@ export const make = (input: {
 							Option.some({
 								value: {
 									...view.state.value,
-									"@openbot-build/plugin-memory": memory,
+									[Memory.storeKey]: memory,
 									conversation: {
 										...view.state.value.conversation,
 										history: A.append(

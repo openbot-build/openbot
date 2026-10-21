@@ -22,13 +22,24 @@ import {
 	Store,
 } from "@openbot-build/core"
 import { LanguageModel, Prompt, Response } from "effect/ai"
+import { getTableName, is, Table } from "drizzle-orm"
 import * as Migration from "../src/database/Migrations.ts"
+import * as AuthSchema from "../src/database/AuthSchema.ts"
+import * as DatabaseSchema from "../src/database/Schema.ts"
 import * as RepositoryPostgres from "../src/sessions/RepositoryPostgres.ts"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 import * as ManagedSessions from "../src/sessions/ManagedSessions.ts"
 import * as BackendLayers from "../src/app/BackendLayers.ts"
 import { Backend } from "../src/app/Backend.ts"
+
+/** The tables that the Drizzle schema defines. The migrations must make the same tables. */
+const definedTables = [
+	...Object.values(DatabaseSchema),
+	...Object.values(AuthSchema),
+]
+	.flatMap((value) => (is(value, Table) ? [getTableName(value)] : []))
+	.sort()
 
 test(
 	"PostgreSQL saves independent Session revisions and immutable Timeline versions in one step within each namespace",
@@ -191,30 +202,7 @@ test(
 					}>`SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'`)
 						.map((row) => row.tablename)
 						.sort()
-					assert.deepEqual(tables, [
-						"openbot_agent_records",
-						"openbot_app_authorizations",
-						"openbot_app_connections",
-						"openbot_app_drafts",
-						"openbot_app_index_entries",
-						"openbot_app_index_jobs",
-						"openbot_app_index_results",
-						"openbot_app_invocations",
-						"openbot_app_records",
-						"openbot_app_secrets",
-						"openbot_audit_logs",
-						"openbot_auth_account",
-						"openbot_auth_session",
-						"openbot_auth_user",
-						"openbot_auth_verification",
-						"openbot_developer_records",
-						"openbot_members",
-						"openbot_organizations",
-						"openbot_session_references",
-						"openbot_timeline_contents",
-						"openbot_timeline_versions",
-						"openbot_tokens",
-					])
+					assert.deepEqual(tables, definedTables)
 				}),
 			)
 		} finally {

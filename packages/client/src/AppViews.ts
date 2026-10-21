@@ -47,10 +47,7 @@ export const make = Effect.fn("AppViews.make")(function* (
 ) {
 	const { api } = yield* Client
 	const params = { viewId: opened.id }
-	const read = (
-		method: "tools/list" | "resources/list" | "resources/templates/list",
-		cursor?: string,
-	) =>
+	const read = (method: Api.ViewReadAction, cursor?: string) =>
 		api.appViews
 			.read({
 				params,

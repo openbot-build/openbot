@@ -1,4 +1,4 @@
-import type { AgentsApi } from "@openbot-build/platform-api"
+import { type AgentsApi, Permissions } from "@openbot-build/platform-api"
 import { Context, Data, Duration, Effect, Layer, Option, Schema } from "effect"
 import { LanguageModel, Prompt } from "effect/ai"
 import { AgentRecords } from "../agents/AgentRecords.ts"
@@ -6,7 +6,7 @@ import { type Capability, describe, hash } from "./Capability.ts"
 
 /** What the judge model returns. */
 export const Verdict = Schema.Struct({
-	decision: Schema.Literals(["allow", "deny", "no_match"]),
+	decision: Schema.Literals([...Permissions.Decision.literals, "no_match"]),
 	citations: Schema.Array(
 		Schema.Struct({ rule: Schema.String, quote: Schema.String }),
 	),
@@ -89,7 +89,7 @@ export const make: Effect.Effect<
 > = Effect.gen(function* () {
 	const records = yield* AgentRecords
 	const helper = yield* HelperModel
-	const cache = records.collection("decision", Verdict)
+	const cache = records.collection("decision", Verdict, Verdict.fields.decision)
 	return Judge.of({
 		decide: (input) =>
 			Effect.gen(function* () {

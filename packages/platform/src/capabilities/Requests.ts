@@ -166,7 +166,11 @@ export const make = (
 		const records = yield* AgentRecords
 		const grants = yield* Grants
 		const rules = yield* Rules
-		const requests = records.collection("request", Stored)
+		const requests = records.collection(
+			"request",
+			Stored,
+			RequestsApi.RequestStatus,
+		)
 		const timeout = options.timeout ?? defaultTimeout
 		const put = (organizationId: string, stored: Stored) =>
 			requests

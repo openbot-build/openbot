@@ -77,7 +77,11 @@ export const make: Effect.Effect<
 	AgentRecords
 > = Effect.gen(function* () {
 	const records = yield* AgentRecords
-	const delegations = records.collection("delegation", Stored)
+	const delegations = records.collection(
+		"delegation",
+		Stored,
+		AgentsApi.DelegationStatus,
+	)
 	const put = (organizationId: string, stored: Stored) =>
 		delegations
 			.put(
@@ -136,7 +140,7 @@ export const make: Effect.Effect<
 				),
 		open: Effect.gen(function* () {
 			const all = yield* Effect.forEach(
-				["authorizing", "queued", "running"],
+				AgentsApi.OpenDelegationStatus.literals,
 				(status) => delegations.withStatus(status),
 			)
 			return all.flat()

@@ -3,39 +3,39 @@ import { AgentsApi } from "@openbot-build/platform-api"
 import { Array as Arr, Context, Effect, Layer, Option, Schema } from "effect"
 
 /** Where one record is. `owner` and `scope` are the keys that lists filter by. */
-export interface Keys {
+export interface Keys<Status extends string = string> {
 	readonly organizationId: string
 	readonly id: string
 	readonly owner: string
 	readonly scope: string
-	readonly status: string
+	readonly status: Status
 }
 
-export interface Filter {
+export interface Filter<Status extends string = string> {
 	readonly owner?: string
 	readonly scope?: string
-	readonly status?: string
+	readonly status?: Status
 }
 
 /** Typed JSON records of one kind. */
-export interface Collection<A> {
+export interface Collection<A, Status extends string = string> {
 	readonly find: (
 		organizationId: string,
 		id: string,
 	) => Effect.Effect<Option.Option<A>, AgentsApi.AgentStorageUnavailable>
 	readonly list: (
 		organizationId: string,
-		filter?: Filter,
+		filter?: Filter<Status>,
 	) => Effect.Effect<ReadonlyArray<A>, AgentsApi.AgentStorageUnavailable>
 	/** Records with this status in every organization. Recovery uses it after a restart. */
 	readonly withStatus: (
-		status: string,
+		status: Status,
 	) => Effect.Effect<
 		ReadonlyArray<{ readonly organizationId: string; readonly value: A }>,
 		AgentsApi.AgentStorageUnavailable
 	>
 	readonly put: (
-		keys: Keys,
+		keys: Keys<Status>,
 		value: A,
 	) => Effect.Effect<void, AgentsApi.AgentStorageUnavailable>
 	readonly remove: (
@@ -47,10 +47,15 @@ export interface Collection<A> {
 export class AgentRecords extends Context.Service<
 	AgentRecords,
 	{
-		readonly collection: <S extends Schema.Codec<any, any>>(
+		/** `status` is the set of values that the status key can have. */
+		readonly collection: <
+			S extends Schema.Codec<any, any>,
+			Status extends string = string,
+		>(
 			kind: string,
 			schema: S,
-		) => Collection<S["Type"]>
+			status?: Schema.Schema<Status>,
+		) => Collection<S["Type"], Status>
 		/**
 		 * Runs the operation in one transaction that holds a lock on `key`.
 		 * Read-change-write steps on the same key never run at the same time.
@@ -69,10 +74,15 @@ export const make: Effect.Effect<
 > = Effect.gen(function* () {
 	const sql = yield* PgClient.PgClient
 	const unavailable = () => AgentsApi.AgentStorageUnavailable.make({})
-	const collection = <S extends Schema.Codec<any, any>>(
+	const collection = <
+		S extends Schema.Codec<any, any>,
+		Status extends string = string,
+	>(
 		kind: string,
 		schema: S,
-	): Collection<S["Type"]> => {
+		// Only the type of the status keys comes from this schema.
+		_status?: Schema.Schema<Status>,
+	): Collection<S["Type"], Status> => {
 		type A = S["Type"]
 		const codec = Schema.fromJsonString(
 			Schema.toCodecJson(schema),

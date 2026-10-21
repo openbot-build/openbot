@@ -47,7 +47,11 @@ export class Rules extends Context.Service<
 export const make: Effect.Effect<typeof Rules.Service, never, AgentRecords> =
 	Effect.gen(function* () {
 		const records = yield* AgentRecords
-		const rules = records.collection("rule", AgentsApi.Rule)
+		const rules = records.collection(
+			"rule",
+			AgentsApi.Rule,
+			AgentsApi.RuleStatus,
+		)
 		const put = (organizationId: string, rule: Rule) =>
 			rules
 				.put(

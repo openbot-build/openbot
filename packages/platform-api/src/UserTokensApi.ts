@@ -76,13 +76,15 @@ const errors = [
 	TokenStorageUnavailable.pipe(HttpApiSchema.status(503)),
 ] as const
 
+export const UserTokensPath = "/v1/user/tokens"
+
 export const UserTokensApi = HttpApiGroup.make("userTokens")
 	.add(
-		HttpApiEndpoint.get("listTokens", "/v1/user/tokens", {
+		HttpApiEndpoint.get("listTokens", UserTokensPath, {
 			success: Schema.Struct({ items: Schema.Array(Token) }),
 			error: errors,
 		}),
-		HttpApiEndpoint.post("createToken", "/v1/user/tokens", {
+		HttpApiEndpoint.post("createToken", UserTokensPath, {
 			payload: CreateTokenRequest,
 			success: CreatedToken.pipe(HttpApiSchema.status(201)),
 			error: [
@@ -91,11 +93,15 @@ export const UserTokensApi = HttpApiGroup.make("userTokens")
 				TokenPolicyInvalid.pipe(HttpApiSchema.status(400)),
 			],
 		}),
-		HttpApiEndpoint.delete("revokeToken", "/v1/user/tokens/:tokenId", {
-			params: { tokenId: Schema.String },
-			success: HttpApiSchema.NoContent,
-			error: [...errors, TokenNotFound.pipe(HttpApiSchema.status(404))],
-		}),
+		HttpApiEndpoint.delete(
+			"revokeToken",
+			`${UserTokensPath}/:tokenId` as const,
+			{
+				params: { tokenId: Schema.String },
+				success: HttpApiSchema.NoContent,
+				error: [...errors, TokenNotFound.pipe(HttpApiSchema.status(404))],
+			},
+		),
 		HttpApiEndpoint.get("verifyToken", "/v1/tokens/verify", {
 			success: TokenVerification,
 			error: errors,

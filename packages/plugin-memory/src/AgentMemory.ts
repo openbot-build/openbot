@@ -9,14 +9,14 @@ import {
 	Schema,
 } from "effect"
 import { LanguageModel, Prompt } from "effect/ai"
-import { MemoryError } from "./Memory.ts"
+import { EntryStatus, Kind as SessionKind, MemoryError } from "./Memory.ts"
 
 /**
  * Agent memory is what one Agent learns over many Sessions.
  * It keeps only lasting experience: how to do things, what people like, and what was decided.
  * It does not follow a Timeline, so a Fork never changes it.
  */
-export const Kind = Schema.Literals(["procedure", "preference", "decision"])
+export const Kind = SessionKind.pick(["procedure", "preference", "decision"])
 export type Kind = typeof Kind.Type
 /** One Item in one Session that supports an entry. */
 export const Source = Schema.Struct({ session: Session.Id, item: Item.Id })
@@ -27,7 +27,7 @@ export const Entry = Schema.Struct({
 	kind: Kind,
 	sources: Schema.Array(Source),
 	updatedAt: Schema.Finite,
-	status: Schema.Literals(["active", "retracted"]),
+	status: EntryStatus,
 })
 export type Entry = typeof Entry.Type
 /** The entries of one Agent. `version` grows by one with each change. */
@@ -43,7 +43,7 @@ export const Change = Schema.Struct({
 	content: Schema.NonEmptyString,
 	kind: Kind,
 	sources: Schema.Array(Source).check(Schema.isMinLength(1)),
-	status: Schema.Literals(["active", "retracted"]),
+	status: EntryStatus,
 })
 export type Change = typeof Change.Type
 export const Extraction = Schema.Struct({ changes: Schema.Array(Change) })

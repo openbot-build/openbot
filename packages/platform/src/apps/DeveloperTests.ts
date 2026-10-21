@@ -88,6 +88,17 @@ export class DeveloperTests extends Context.Service<
 	}
 >()("@openbot-build/platform/apps/DeveloperTests") {}
 const conflict = (reason: string) => Api.DeveloperConflict.make({ reason })
+/** Remote cleanup has nothing more to do in these states. */
+const remoteCleanupDone: ReadonlyArray<Api.ConnectionTest["cleanupRemote"]> = [
+	"NotRequired",
+	"Complete",
+	"LocalOnly",
+]
+/** A test authorization in these states can still go on. */
+const openAuthorization: ReadonlyArray<Api.TestAuthorization["status"]> = [
+	"Waiting",
+	"Received",
+]
 const working = (value: Api.ConnectionTest) =>
 	value.status === "Running" || value.authorization?.status === "Exchanging"
 
@@ -150,7 +161,7 @@ export const make = (
 			const now = yield* Clock.currentTimeMillis
 			const value: Api.ConnectionTest =
 				record.value.authorization !== null &&
-				["Waiting", "Received"].includes(record.value.authorization.status) &&
+				openAuthorization.includes(record.value.authorization.status) &&
 				record.value.authorization.expiresAt <= now
 					? {
 							...record.value,
@@ -309,11 +320,7 @@ export const make = (
 			const token = claimed.record.cleanupToken
 			const result = yield* Effect.gen(function* () {
 				const current = yield* owned(owner, id)
-				if (
-					!["NotRequired", "Complete", "LocalOnly"].includes(
-						current.value.cleanupRemote,
-					)
-				) {
+				if (!remoteCleanupDone.includes(current.value.cleanupRemote)) {
 					const remote = yield* runtime.revoke(owner, id)
 					yield* records.transaction(
 						"test:" + id,
@@ -648,9 +655,7 @@ export const make = (
 						if (working(record.value)) return yield* conflict("TestBusy")
 						if (
 							record.value.authorization !== null &&
-							["Waiting", "Received"].includes(
-								record.value.authorization.status,
-							) &&
+							openAuthorization.includes(record.value.authorization.status) &&
 							record.value.authorization.expiresAt >
 								(yield* Clock.currentTimeMillis)
 						)

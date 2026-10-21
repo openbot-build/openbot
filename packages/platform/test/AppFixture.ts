@@ -14,6 +14,7 @@ import {
 import { createHash, randomUUID } from "node:crypto"
 import { startHttps } from "../../protocol/test/Fixture.ts"
 import * as Probe from "../src/apps/Probe.ts"
+import type { PublicationMode } from "../src/app/DevelopmentApps.ts"
 
 const Request = Schema.Struct({
 	id: Schema.Union([Schema.String, Schema.Finite]),
@@ -30,7 +31,7 @@ export const start = async (
 ) => {
 	let origin = ""
 	let revision = 0
-	let publication = "published"
+	let publication: PublicationMode = "published"
 	let description = "Project documents"
 	let websiteUrl: string | undefined
 	let declarations: ReadonlyArray<string> | undefined
@@ -603,10 +604,7 @@ export const start = async (
 			rejectGrant = value
 		},
 		ca: fixture.ca,
-		setPublication: (
-			value:
-				"published" | "withdrawn" | "noindex" | "unavailable" | "robots-denied",
-		) => {
+		setPublication: (value: PublicationMode) => {
 			publication = value
 		},
 		setDescription: (value: string) => {

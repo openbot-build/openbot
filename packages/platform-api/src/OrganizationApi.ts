@@ -19,7 +19,8 @@ import {
 const EmailDomain = Schema.String.check(
 	Schema.isPattern(/^(?=.{1,253}$)[a-z0-9-]+(?:\.[a-z0-9-]+)+$/),
 )
-const Roles = Schema.Array(RoleId).check(Schema.isMinLength(1))
+/** A member always has at least one role. */
+export const Roles = Schema.Array(RoleId).check(Schema.isMinLength(1))
 
 export const Organization = Schema.Struct({
 	id: Schema.String,
@@ -61,26 +62,35 @@ export const UpdateMemberRequest = Schema.Struct({
 })
 export type UpdateMemberRequest = typeof UpdateMemberRequest.Type
 
-export const AuditAction = Schema.Literals([
-	"member.joined",
-	"member.updated",
-	"member.removed",
-	"organization.updated",
-	"token.created",
-	"token.revoked",
-	"agent.created",
-	"agent.updated",
-	"agent.promoted",
-	"agent.memory.updated",
-	"delegation.started",
-	"delegation.completed",
-	"capability.decided",
-	"request.resolved",
-	"grant.created",
-	"grant.revoked",
-	"rule.created",
-	"rule.updated",
-])
+/**
+ * The audit actions of each resource. Each action id joins the resource and
+ * the action with a dot, such as `token.created`.
+ */
+const auditActionTree = {
+	member: ["joined", "updated", "removed"],
+	organization: ["updated"],
+	token: ["created", "revoked"],
+	agent: ["created", "updated", "promoted", "memory.updated"],
+	delegation: ["started", "completed"],
+	capability: ["decided"],
+	request: ["resolved"],
+	grant: ["created", "revoked"],
+	rule: ["created", "updated"],
+} as const satisfies Record<string, ReadonlyArray<string>>
+type AuditActionTree = typeof auditActionTree
+/** The audit actions of one resource, such as `token.created`. */
+export type AuditActionOf<Resource extends keyof AuditActionTree> =
+	`${Resource}.${AuditActionTree[Resource][number]}`
+
+export const AuditAction = Schema.Literals(
+	Object.entries(auditActionTree).flatMap(([resource, actions]) =>
+		actions.map(
+			// `Object.entries` gives plain strings. The type above gives the same ids.
+			(action) =>
+				`${resource}.${action}` as AuditActionOf<keyof AuditActionTree>,
+		),
+	),
+)
 export type AuditAction = typeof AuditAction.Type
 export const AuditLogEntry = Schema.Struct({
 	id: Schema.String,

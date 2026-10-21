@@ -14,8 +14,13 @@ export const scopeKey = (scope: Api.ManagementScope): string =>
 			AppCard: (value) => "card:" + value.cardUrl,
 		}),
 	)
+/** A proof in these states still gives access. */
+const usableStatus: ReadonlyArray<Api.Proof["status"]> = [
+	"Confirmed",
+	"Unconfirmed",
+]
 const usable = (proof: Api.Proof, now: number) =>
-	proof.validUntil > now && ["Confirmed", "Unconfirmed"].includes(proof.status)
+	proof.validUntil > now && usableStatus.includes(proof.status)
 export const normalizeScope = (
 	scope: Api.ManagementScope,
 ): Effect.Effect<Api.ManagementScope, Api.DeveloperInputInvalid> =>

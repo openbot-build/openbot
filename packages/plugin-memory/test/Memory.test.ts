@@ -261,7 +261,7 @@ test("extraction of new history checks source IDs, and failures keep progress un
 					)
 					assert.deepEqual(
 						(yield* memory.read(view.session.id)).processed,
-						edited.state.value["@openbot-build/plugin-memory"]!.processed,
+						edited.state.value[Memory.storeKey]!.processed,
 					)
 				}
 			}),

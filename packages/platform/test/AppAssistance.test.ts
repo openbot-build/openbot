@@ -30,10 +30,10 @@ test("App assistance shows public candidates and the account's access needs with
 					identity: alice.identity,
 					index: tracked,
 					connections,
-					occupied: ["openbot_search_apps", "openbot_search_apps_1"],
+					occupied: [Assistance.names.search, Assistance.names.search + "_1"],
 				})
 				assert.equal(queries.length, 0)
-				assert.equal(entries[0]?.tool.name, "openbot_search_apps_2")
+				assert.equal(entries[0]?.tool.name, Assistance.names.search + "_2")
 				const context = { preliminary: () => Effect.void }
 				const search = entries[0]!
 				const result = yield* search.handle(

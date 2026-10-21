@@ -61,7 +61,7 @@ const reason = {
 } as const
 const scope = {
 	type: "string",
-	enum: ["once", "session", "lifetime"],
+	enum: AgentsApi.GrantScope.literals,
 	description:
 		"How long the decision lasts: this call only, this Session, or until it is revoked.",
 } as const
@@ -89,21 +89,14 @@ const SpawnInput = Schema.Struct({
 })
 const AgentInput = Schema.Struct({ agent: Schema.String })
 export const ReportInput = Schema.Struct({
-	status: Schema.Literals(["completed", "failed"]),
+	/** A child Agent can not report `cancelled`. Only the parent cancels. */
+	status: AgentsApi.DelegationResultStatus.pick(["completed", "failed"]),
 	summary: Schema.String,
-	artifacts: Schema.optionalKey(
-		Schema.Array(
-			Schema.Struct({
-				kind: Schema.String,
-				ref: Schema.String,
-				description: Schema.optionalKey(Schema.String),
-			}),
-		),
-	),
+	artifacts: Schema.optionalKey(Schema.Array(AgentsApi.Artifact)),
 	openQuestions: Schema.optionalKey(Schema.Array(Schema.String)),
 })
 const ApproveInput = Schema.Struct({
-	scope: Schema.Literals(["once", "session", "lifetime"]),
+	scope: AgentsApi.GrantScope,
 	reason: Schema.optionalKey(Schema.String),
 })
 const DenyInput = Schema.Struct({
@@ -216,7 +209,7 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 		const workEntries = (delegated: boolean): ReadonlyArray<Entry> => [
 			entry(
 				names.delegate,
-				"Give a task to another Agent and wait for its result. Use an Agent id from openbot_list_agents. Pass the person's own words unchanged in userRequest. Give `session` to continue earlier work of that Agent.",
+				`Give a task to another Agent and wait for its result. Use an Agent id from ${names.list}. Pass the person's own words unchanged in userRequest. Give \`session\` to continue earlier work of that Agent.`,
 				{
 					type: "object",
 					properties: {
@@ -291,8 +284,7 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 							if (Option.isNone(target)) {
 								yield* record("failed", {
 									status: "failed",
-									summary:
-										"There is no Agent with this id. Use openbot_list_agents.",
+									summary: `There is no Agent with this id. Use ${names.list}.`,
 									artifacts: [],
 									openQuestions: [],
 									child: { session: current.session, turn: null },
@@ -410,7 +402,10 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 							{
 								type: "object",
 								properties: {
-									status: { type: "string", enum: ["completed", "failed"] },
+									status: {
+										type: "string",
+										enum: ReportInput.fields.status.literals,
+									},
 									summary: text,
 									artifacts: {
 										type: "array",

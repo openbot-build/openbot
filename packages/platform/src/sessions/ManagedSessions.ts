@@ -1,6 +1,7 @@
 import {
 	Agent,
 	Config,
+	ConfigurationOperations,
 	Item,
 	Plugin,
 	PluginComposition,
@@ -388,36 +389,12 @@ export const make = <
 			options.modelCatalog ?? Effect.succeed({ providers: [], models: [] })
 		const validateSelection = (selection: Config.Selection) =>
 			Effect.gen(function* () {
-				const available = yield* catalog
-				if (
-					!available.providers.some(
-						(provider) => provider.id === selection.provider,
-					)
+				const problem = ConfigurationOperations.selectionProblem(
+					yield* catalog,
+					selection,
 				)
-					return yield* SessionModelInvalid.make({
-						reason: "provider-not-found",
-						message: "The provider does not exist",
-					})
-				const model = available.models.find(
-					(model) =>
-						model.provider === selection.provider &&
-						model.id === selection.model,
-				)
-				if (model === undefined)
-					return yield* SessionModelInvalid.make({
-						reason: "model-not-found",
-						message: "The model does not exist",
-					})
-				if (
-					(selection.reasoningEffort !== undefined &&
-						!model.reasoningEfforts.includes(selection.reasoningEffort)) ||
-					(selection.serviceTier !== undefined &&
-						!model.serviceTiers.includes(selection.serviceTier))
-				)
-					return yield* SessionModelInvalid.make({
-						reason: "unsupported-option",
-						message: "The selected model options are not supported",
-					})
+				if (Option.isSome(problem))
+					return yield* SessionModelInvalid.make(problem.value)
 				return options.modelDefaults === undefined
 					? selection
 					: yield* options.modelDefaults(selection)
@@ -728,21 +705,12 @@ export const make = <
 										session: id,
 										turn: result.id,
 										...(step === undefined ? {} : { step }),
-										type: Match.value(result).pipe(
-											Match.when(
-												{ status: "completed" },
-												() => "response.completed" as const,
-											),
-											Match.when(
-												{ status: "failed" },
-												() => "response.failed" as const,
-											),
-											Match.when(
-												{ status: "cancelled" },
-												() => "response.cancelled" as const,
-											),
-											Match.orElse(() => "response.incomplete" as const),
-										),
+										// The final event names the final status. A response that
+										// still runs here did not finish, so it is incomplete.
+										type:
+											result.status === "in_progress"
+												? "response.incomplete"
+												: (`response.${result.status}` as const),
 										response: result,
 									},
 								])
@@ -1198,8 +1166,7 @@ export const make = <
 				memory: (id) =>
 					read(id).pipe(
 						Effect.map((view) => ({
-							...(view.state.value["@openbot-build/plugin-memory"] ??
-								Memory.empty()),
+							...(view.state.value[Memory.storeKey] ?? Memory.empty()),
 							settings: SessionHost.settings({
 								defaults: memoryDefaults,
 								session: view.session,

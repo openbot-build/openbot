@@ -5,6 +5,9 @@ import { Clock, Context, Effect, Layer, Option, Record, Schema } from "effect"
 import type { LanguageModel } from "effect/ai"
 import { AgentRecords } from "./AgentRecords.ts"
 
+/** Agent memory keeps only the lasting kinds of Session memory. */
+const isLastingKind = Schema.is(AgentMemory.Kind)
+
 const Stored = Schema.Struct({
 	agent: AgentsApi.AgentId,
 	state: AgentMemory.State,
@@ -196,10 +199,7 @@ export const make: Effect.Effect<
 					const now = yield* Clock.currentTimeMillis
 					const lasting = Object.values(memory.entries).filter(
 						(entry): entry is typeof entry & { kind: AgentMemory.Kind } =>
-							entry.status === "active" &&
-							(entry.kind === "procedure" ||
-								entry.kind === "preference" ||
-								entry.kind === "decision"),
+							entry.status === "active" && isLastingKind(entry.kind),
 					)
 					if (lasting.length === 0) return state
 					const next: AgentMemory.State = {

@@ -9,6 +9,7 @@ import {
 import { AgentMemory } from "@openbot-build/plugin-memory"
 import { Effect, Redacted, Schema, Stream } from "effect"
 import { LanguageModel, type Prompt, Response } from "effect/ai"
+import { names } from "../src/agents/AgentPlugin.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 
 const publicOrigin = "https://agents.example.com"
@@ -110,27 +111,27 @@ const model = Effect.runSync(
 				const has = (name: string) =>
 					results.some((result) => result.name === name)
 				if (system.includes("you decide one request")) {
-					return has("openbot_approve")
+					return has(names.approve)
 						? answer("Decided.")
-						: call("openbot_approve", {
+						: call(names.approve, {
 								scope: "lifetime",
 								reason: "It fits the task I gave.",
 							})
 				}
 				const name = /You are (\w+)\./.exec(system)?.[1]
 				if (name === "Programmer")
-					return has("openbot_report")
+					return has(names.report)
 						? answer("Reported.")
-						: call("openbot_report", {
+						: call(names.report, {
 								status: "completed",
 								summary: "Programmer did it",
 							})
 				if (name === "Helper") {
 					if (!has("ConfirmChange"))
 						return call("ConfirmChange", { description: "helper change" })
-					return has("openbot_report")
+					return has(names.report)
 						? answer("Reported.")
-						: call("openbot_report", {
+						: call(names.report, {
 								status: "completed",
 								summary: "Helper confirmed it",
 							})
@@ -139,7 +140,7 @@ const model = Effect.runSync(
 				if (done !== undefined)
 					return answer("Main got: " + JSON.stringify(done.result))
 				if (input.includes("delegate to programmer"))
-					return call("openbot_delegate", {
+					return call(names.delegate, {
 						agent: known.programmer,
 						reason: "Code work needs the Programmer.",
 						task: "Write the change.",
@@ -147,14 +148,14 @@ const model = Effect.runSync(
 						expectedOutput: "A short summary.",
 					})
 				if (input.includes("spawn a helper"))
-					return call("openbot_spawn_subagent", {
+					return call(names.spawn, {
 						name: "Helper",
 						role: "Confirms changes",
 						instructions: "Confirm the change, then report.",
 						reason: "This Session needs a helper.",
 					})
 				if (input.includes("confirm via helper"))
-					return call("openbot_delegate", {
+					return call(names.delegate, {
 						agent: known.helper,
 						reason: "The Helper confirms changes.",
 						task: "Confirm the change.",

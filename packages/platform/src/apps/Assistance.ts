@@ -5,6 +5,13 @@ import { Connections } from "./Connections.ts"
 import type { Entry } from "./AppPlugin.ts"
 import type { PublicIndex } from "./Index.ts"
 
+/** The names of the assistance tools. A name gets a suffix when another tool already uses it. */
+export const names = {
+	search: "openbot_search_apps",
+	details: "openbot_app_details",
+	access: "openbot_app_access",
+} as const
+
 /** These tools read public descriptions or the owner's safe access state. They never add or authorize Apps. */
 export const entries = (input: {
 	readonly identity: typeof Identity.Service
@@ -41,7 +48,7 @@ export const entries = (input: {
 	})
 	return [
 		entry(
-			"openbot_search_apps",
+			names.search,
 			"Search public App descriptions for a missing capability. Send only a short public description of the capability. Never send private documents, credentials or conversation history. Search does not add an App or approve an action.",
 			{
 				type: "object",
@@ -72,7 +79,7 @@ export const entries = (input: {
 				),
 		),
 		entry(
-			"openbot_app_details",
+			names.details,
 			"Read the public details of a candidate App, and where it comes from, before the user chooses it. This gives no access.",
 			{
 				type: "object",
@@ -98,7 +105,7 @@ export const entries = (input: {
 				),
 		),
 		entry(
-			"openbot_app_access",
+			names.access,
 			"Check this user's App account labels and what setup or authorization they need. Ask the user to choose an account when more than one could do the task. After adding or authorizing, the user must explicitly continue in the original Session.",
 			{ type: "object", properties: {}, additionalProperties: false },
 			() =>

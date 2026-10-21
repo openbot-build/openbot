@@ -112,7 +112,7 @@ export const Grant = Schema.Struct({
 	proofId: Schema.String,
 	memberId: Schema.optionalKey(Schema.String),
 	scope: ManagementScope,
-	role: Schema.Literals(["administrator", "maintainer", "viewer"]),
+	role: Schema.Literals(["administrator", ...MemberRole.literals]),
 })
 export type Grant = typeof Grant.Type
 export const ManagedApp = Schema.Struct({
@@ -191,6 +191,13 @@ export const TestAuthorization = Schema.Struct({
 	authorizationUrl: Schema.String,
 })
 export type TestAuthorization = typeof TestAuthorization.Type
+/** How far the cleanup of a connection test has come. */
+export const CleanupProgress = Schema.Literals([
+	"NotRequired",
+	"Pending",
+	"Complete",
+])
+export type CleanupProgress = typeof CleanupProgress.Type
 export const ConnectionTest = Schema.Struct({
 	id: Schema.String,
 	cardUrl: Schema.String,
@@ -214,24 +221,26 @@ export const ConnectionTest = Schema.Struct({
 	]),
 	checkedAt: Schema.NullOr(Schema.Finite),
 	stages: Schema.Array(TestStage),
-	cleanup: Schema.Literals(["NotRequired", "Pending", "Complete"]),
-	cleanupRemote: Schema.Literals([
-		"NotRequired",
-		"Pending",
-		"Complete",
-		"LocalOnly",
-	]),
-	cleanupLocal: Schema.Literals(["Pending", "Complete"]),
+	cleanup: CleanupProgress,
+	cleanupRemote: Schema.Literals([...CleanupProgress.literals, "LocalOnly"]),
+	cleanupLocal: CleanupProgress.pick(["Pending", "Complete"]),
 	authorization: Schema.NullOr(TestAuthorization),
 	reason: Schema.NullOr(Schema.String),
 })
 export type ConnectionTest = typeof ConnectionTest.Type
+/** The status of index work after Platform accepts an index request. */
+export const IndexJobStatus = Schema.Literals([
+	"Waiting",
+	"Verifying",
+	"Completed",
+])
+export type IndexJobStatus = typeof IndexJobStatus.Type
 export const IndexRequest = Schema.Struct({
 	id: Schema.String,
 	cardUrl: Schema.String,
 	generation: Schema.String,
 	acceptedAt: Schema.Finite,
-	status: Schema.Literals(["Accepted", "Waiting", "Verifying", "Completed"]),
+	status: Schema.Literals(["Accepted", ...IndexJobStatus.literals]),
 	check: Schema.NullOr(Check),
 	restriction: Schema.NullOr(Restriction),
 })

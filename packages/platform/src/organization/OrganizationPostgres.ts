@@ -14,7 +14,7 @@ import {
 	type Options,
 } from "./Organization.ts"
 
-const Roles = Schema.fromJsonString(Schema.Array(Permissions.RoleId))
+const Roles = Schema.fromJsonString(OrganizationApi.Roles)
 const Domains = Schema.fromJsonString(Schema.Array(Schema.String))
 const PolicyList = Schema.fromJsonString(Permissions.Policies)
 const decodeRoles = Schema.decodeUnknownSync(Roles)
@@ -29,9 +29,7 @@ const organizationView = (
 	id: row.id,
 	name: row.name,
 	allowedEmailDomains: decodeDomains(row.allowedEmailDomains),
-	defaultRoles: decodeRoles(
-		row.defaultRoles,
-	) as OrganizationApi.Organization["defaultRoles"],
+	defaultRoles: decodeRoles(row.defaultRoles),
 	createdAt: iso(row.createdAt),
 })
 const memberView = (
@@ -41,7 +39,7 @@ const memberView = (
 	email: row.email,
 	name: row.name,
 	status: decodeStatus(row.status),
-	roles: decodeRoles(row.roles) as OrganizationApi.Member["roles"],
+	roles: decodeRoles(row.roles),
 	policies: decodePolicies(row.policies),
 	joinedAt: iso(row.joinedAt),
 })

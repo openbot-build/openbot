@@ -227,7 +227,7 @@ export const make = Effect.gen(function* () {
 		read: (
 			identity: typeof Identity.Service,
 			id: string,
-			method: "tools/list" | "resources/list" | "resources/templates/list",
+			method: Api.ViewReadAction,
 			params: Schema.JsonObject,
 		) =>
 			Effect.scoped(

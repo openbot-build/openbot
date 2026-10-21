@@ -1,4 +1,4 @@
-import { Discovery, Document } from "@openbot-build/protocol"
+import { App, Discovery, Document } from "@openbot-build/protocol"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 import { AppDiscoveryFailed, AppDiscoveryResult } from "./AppsApi.ts"
@@ -31,7 +31,7 @@ export const Availability = Schema.TaggedUnion({
 	AuthorizationExpired: {},
 	ConnectionFailed: { message: Schema.String },
 	NeedsRevalidation: {},
-	CleanupPending: { stage: Schema.String },
+	CleanupPending: { stage: App.CleanupStage },
 	Restricted: { restriction: Restriction },
 })
 const HeaderName = Schema.String.check(
@@ -140,7 +140,7 @@ export class ConnectionCleanupPending extends Schema.TaggedError<ConnectionClean
 	"ConnectionCleanupPending",
 	{
 		connectionId: Schema.String,
-		stage: Schema.Literals(["Credentials", "Connection"]),
+		stage: App.CleanupStage,
 		message: Schema.String,
 	},
 ) {}

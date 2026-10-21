@@ -39,6 +39,17 @@ export const Result = Schema.TaggedUnion({
 })
 export type Result = typeof Result.Type
 
+export const InvocationStatus = Schema.Literals([
+	"PendingApproval",
+	"Approved",
+	"Rejected",
+	"Sending",
+	"InputRequired",
+	"Completed",
+	"Failed",
+	"OutcomeUnknown",
+])
+export type InvocationStatus = typeof InvocationStatus.Type
 export const Invocation = Schema.Struct({
 	id: Schema.String,
 	session: Session.Id,
@@ -49,16 +60,7 @@ export const Invocation = Schema.Struct({
 	arguments: Schema.JsonObject,
 	readOnly: Schema.Boolean,
 	round: Schema.Natural,
-	status: Schema.Literals([
-		"PendingApproval",
-		"Approved",
-		"Rejected",
-		"Sending",
-		"InputRequired",
-		"Completed",
-		"Failed",
-		"OutcomeUnknown",
-	]),
+	status: InvocationStatus,
 	result: Schema.NullOr(Result),
 })
 export type Invocation = typeof Invocation.Type

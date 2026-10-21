@@ -193,6 +193,16 @@ export const PermissionGroupId = Schema.Literals(
 )
 export type PermissionGroupId = typeof PermissionGroupId.Type
 
+/** The first part of a permission group id, such as `sessions`. */
+export type PermissionResource = keyof PermissionTree
+/** The permission groups of one resource, such as `tokens.read` and `tokens.write`. */
+export const permissionGroupsOf = (
+	resource: PermissionResource,
+): ReadonlyArray<PermissionGroupId> =>
+	permissionGroupList
+		.filter((group) => group.id.startsWith(resource + "."))
+		.map((group) => group.id)
+
 export const PermissionGroup = Schema.Struct({
 	id: PermissionGroupId,
 	name: Schema.String,
@@ -215,8 +225,12 @@ export const ResourceKey = Schema.String.check(
 )
 export type ResourceKey = typeof ResourceKey.Type
 
+/** Whether a decision allows or denies something. */
+export const Decision = Schema.Literals(["allow", "deny"])
+export type Decision = typeof Decision.Type
+
 export const Policy = Schema.Struct({
-	effect: Schema.Literals(["allow", "deny"]),
+	effect: Decision,
 	permissionGroups: Schema.Array(PermissionGroupId).check(
 		Schema.isMinLength(1),
 	),
@@ -225,8 +239,12 @@ export const Policy = Schema.Struct({
 export type Policy = typeof Policy.Type
 export const Policies = Schema.Array(Policy).check(Schema.isMaxLength(50))
 
-const organization = "openbot.org.{org}"
-const self = "openbot.org.{org}.user.{self}"
+/** The resource pattern of the current organization. */
+export const organizationResource = "openbot.org.{org}"
+/** The resource pattern of the user of the caller. */
+export const selfResource = "openbot.org.{org}.user.{self}"
+const organization = organizationResource
+const self = selfResource
 /** The shared Agents of the organization. */
 const sharedAgents = "openbot.org.{org}.agent"
 const own: ReadonlyArray<PermissionGroupId> = [

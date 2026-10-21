@@ -52,7 +52,11 @@ export class Grants extends Context.Service<
 export const make: Effect.Effect<typeof Grants.Service, never, AgentRecords> =
 	Effect.gen(function* () {
 		const records = yield* AgentRecords
-		const grants = records.collection("grant", AgentsApi.Grant)
+		const grants = records.collection(
+			"grant",
+			AgentsApi.Grant,
+			AgentsApi.GrantStatus,
+		)
 		const put = (organizationId: string, grant: Grant) =>
 			grants
 				.put(

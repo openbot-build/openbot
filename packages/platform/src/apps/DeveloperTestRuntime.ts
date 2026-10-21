@@ -1,4 +1,7 @@
-import { DeveloperApi as Api } from "@openbot-build/platform-api"
+import {
+	AppAuthorizationApi,
+	DeveloperApi as Api,
+} from "@openbot-build/platform-api"
 import {
 	App,
 	Authorization,
@@ -69,7 +72,7 @@ export class DeveloperTestRuntime extends Context.Service<
 		readonly revoke: (
 			owner: string,
 			id: string,
-		) => Effect.Effect<"Revoked" | "LocalOnly", Api.Failure>
+		) => Effect.Effect<AppAuthorizationApi.Revocation["_tag"], Api.Failure>
 		readonly clear: (
 			owner: string,
 			id: string,
@@ -78,12 +81,7 @@ export class DeveloperTestRuntime extends Context.Service<
 >()("@openbot-build/platform/apps/DeveloperTestRuntime") {}
 const policy = Client.InvocationPolicy.of({
 	check: (invocation) =>
-		[
-			"tools/list",
-			"resources/list",
-			"resources/templates/list",
-			"prompts/list",
-		].includes(invocation.action)
+		Schema.is(Client.ListAction)(invocation.action)
 			? Effect.void
 			: Effect.fail(
 					new Client.PermissionDenied({

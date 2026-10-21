@@ -9,11 +9,10 @@ import type { Memory } from "@openbot-build/plugin-memory"
 import { Schema } from "effect"
 
 /** The Platform plugin that adds the host toolkit, the user plugin and the execution services. */
-export const sessionHostId = Schema.Literal(
-	"@openbot-build/platform/session-host",
-)
+const sessionHostKey = "@openbot-build/platform/session-host"
+export const sessionHostId = Schema.Literal(sessionHostKey)
 	.pipe(Schema.brand("@openbot-build/core/PluginId"))
-	.make("@openbot-build/platform/session-host")
+	.make(sessionHostKey)
 
 /**
  * Who the work in a Session is for, and through which Agents it came.
@@ -43,7 +42,7 @@ export const SessionHostState = Schema.Struct({
 export type SessionHostState = typeof SessionHostState.Type
 /** The plugin data in a Session: learned memory and the Platform data. */
 export type Values = Memory.Values & {
-	readonly "@openbot-build/platform/session-host"?: SessionHostState
+	readonly [sessionHostKey]?: SessionHostState
 }
 export const sessionHostStore = {
 	scope: "session",

@@ -23,7 +23,7 @@ export const View = Schema.Struct({
 export type View = typeof View.Type
 export const Action = Schema.Struct({
 	requestId: Schema.String,
-	kind: Schema.Literals(["tool", "resource"]),
+	kind: Api.ActionKind,
 	target: Schema.String,
 	arguments: Schema.JsonObject,
 	ticket: Schema.NullOr(Api.ActionTicket),

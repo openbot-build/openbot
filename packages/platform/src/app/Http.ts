@@ -21,7 +21,7 @@ const cloudHealth = HttpApiBuilder.group(PlatformApi, "health", (handlers) =>
 )
 export const layerPlatform = (publicOrigin: string) =>
 	Layer.mergeAll(
-		HttpApiBuilder.layer(PlatformApi, { openapiPath: "/openapi.json" }).pipe(
+		HttpApiBuilder.layer(PlatformApi, { openapiPath: service.openapi }).pipe(
 			Layer.provide(
 				Layer.mergeAll(
 					cloudHealth,
@@ -41,5 +41,5 @@ export const layerPlatform = (publicOrigin: string) =>
 				),
 			),
 		),
-		HttpApiScalar.layer(PlatformApi, { path: "/docs" }),
+		HttpApiScalar.layer(PlatformApi, { path: service.documentation }),
 	)

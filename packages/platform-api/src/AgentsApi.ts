@@ -1,5 +1,10 @@
 import { AgentAuth } from "./AuthApi.ts"
-import { Authorize, GroupRequired, PermissionErrors } from "./Permissions.ts"
+import {
+	Authorize,
+	Decision,
+	GroupRequired,
+	PermissionErrors,
+} from "./Permissions.ts"
 import { Config, Item, Session, Turn } from "@openbot-build/core"
 import { AgentMemory } from "@openbot-build/plugin-memory"
 import { Schema } from "effect"
@@ -105,30 +110,38 @@ export type Decider = typeof Decider.Type
 export const GrantScope = Schema.Literals(["once", "session", "lifetime"])
 export type GrantScope = typeof GrantScope.Type
 
+/** `used` means a `once` Grant was used up. */
+export const GrantStatus = Schema.Literals(["active", "used", "revoked"])
+export type GrantStatus = typeof GrantStatus.Type
+
 /** A stored decision about one capability of one Agent. The Agent never sees it. */
 export const Grant = Schema.Struct({
 	id: Schema.String,
 	agent: AgentId,
 	capability: Capability,
-	effect: Schema.Literals(["allow", "deny"]),
+	effect: Decision,
 	scope: GrantScope,
 	session: Schema.optionalKey(Session.Id),
 	grantedBy: Decider,
 	reason: Schema.optionalKey(Schema.String),
 	/** The Grant of the decider that this Grant came from. Revoking it revokes this one too. */
 	parent: Schema.optionalKey(Schema.String),
-	status: Schema.Literals(["active", "used", "revoked"]),
+	status: GrantStatus,
 	createdAt: Schema.Finite,
 })
 export type Grant = typeof Grant.Type
 
 export const CreateGrantRequest = Schema.Struct({
 	capability: Capability,
-	effect: Schema.Literals(["allow", "deny"]),
+	effect: Decision,
 	scope: GrantScope,
 	reason: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(2000))),
 })
 export type CreateGrantRequest = typeof CreateGrantRequest.Type
+
+/** A `proposed` Rule waits for a person to confirm it. */
+export const RuleStatus = Schema.Literals(["active", "proposed", "retired"])
+export type RuleStatus = typeof RuleStatus.Type
 
 /**
  * A rule in plain language that a decider uses to answer requests of one Agent.
@@ -139,7 +152,7 @@ export const Rule = Schema.Struct({
 	agent: AgentId,
 	author: Decider,
 	text: Schema.String,
-	status: Schema.Literals(["active", "proposed", "retired"]),
+	status: RuleStatus,
 	version: Schema.Natural,
 	createdAt: Schema.Finite,
 	updatedAt: Schema.Finite,
@@ -154,7 +167,7 @@ export const CreateRuleRequest = Schema.Struct({ text: RuleText })
 export const UpdateRuleRequest = Schema.Struct({
 	expected: Schema.Natural,
 	text: Schema.optionalKey(RuleText),
-	status: Schema.optionalKey(Schema.Literals(["active", "retired"])),
+	status: Schema.optionalKey(RuleStatus.pick(["active", "retired"])),
 })
 export type UpdateRuleRequest = typeof UpdateRuleRequest.Type
 
@@ -189,9 +202,29 @@ export const Artifact = Schema.Struct({
 	ref: Schema.String,
 	description: Schema.optionalKey(Schema.String),
 })
+/** The status of a Delegation that has ended. */
+export const DelegationResultStatus = Schema.Literals([
+	"completed",
+	"failed",
+	"cancelled",
+])
+export type DelegationResultStatus = typeof DelegationResultStatus.Type
+/** The status of a Delegation that has not ended yet. */
+export const OpenDelegationStatus = Schema.Literals([
+	"authorizing",
+	"queued",
+	"running",
+])
+export type OpenDelegationStatus = typeof OpenDelegationStatus.Type
+export const DelegationStatus = Schema.Literals([
+	...OpenDelegationStatus.literals,
+	...DelegationResultStatus.literals,
+])
+export type DelegationStatus = typeof DelegationStatus.Type
+
 /** What the other Agent sends back. It never holds the full history. */
 export const DelegationResult = Schema.Struct({
-	status: Schema.Literals(["completed", "failed", "cancelled"]),
+	status: DelegationResultStatus,
 	summary: Schema.String,
 	artifacts: Schema.Array(Artifact),
 	openQuestions: Schema.Array(Schema.String),
@@ -211,14 +244,7 @@ export const Delegation = Schema.Struct({
 	child: Schema.NullOr(
 		Schema.Struct({ session: Session.Id, turn: Schema.NullOr(Turn.Id) }),
 	),
-	status: Schema.Literals([
-		"authorizing",
-		"queued",
-		"running",
-		"completed",
-		"failed",
-		"cancelled",
-	]),
+	status: DelegationStatus,
 	brief: Brief,
 	result: Schema.NullOr(DelegationResult),
 	createdAt: Schema.Finite,
@@ -334,9 +360,7 @@ export class AgentsApi extends HttpApiGroup.make("agents")
 		HttpApiEndpoint.get("listGrants", "/v1/agents/:agentId/grants", {
 			params: agentParams,
 			query: {
-				status: Schema.optionalKey(
-					Schema.Literals(["active", "used", "revoked"]),
-				),
+				status: Schema.optionalKey(GrantStatus),
 			},
 			success: Schema.Array(Grant),
 			error: AgentErrors,

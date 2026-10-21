@@ -21,6 +21,7 @@ import {
 	type UpdateSessionRequest,
 	type ForkSessionRequest,
 	type RestoreSessionRequest,
+	type SessionActivity,
 	type SessionResponse,
 	type SessionResponseSseEvent,
 	type SessionView,
@@ -169,7 +170,7 @@ export class Sessions extends Context.Service<
 			id: Session.Id,
 			after: Session.Revision,
 			timeoutMs?: number,
-			afterActivity?: "active" | "inactive" | "historical",
+			afterActivity?: SessionActivity,
 		) => Effect.Effect<SessionView, ServiceError>
 		readonly interrupt: (
 			id: Session.Id,

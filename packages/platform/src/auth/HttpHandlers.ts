@@ -2,6 +2,7 @@ import {
 	AuthApi,
 	type Caller,
 	Identity,
+	type OrganizationApi,
 	PlatformApi,
 	UserTokensApi,
 } from "@openbot-build/platform-api"
@@ -31,7 +32,7 @@ export const layer = (config: { readonly publicOrigin: string }) => {
 				const audit = yield* AuditLog
 				const record = (
 					caller: Caller,
-					action: "token.created" | "token.revoked",
+					action: OrganizationApi.AuditActionOf<"token">,
 					token: UserTokensApi.Token,
 				) =>
 					audit

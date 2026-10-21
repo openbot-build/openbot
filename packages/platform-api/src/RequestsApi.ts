@@ -1,5 +1,5 @@
 import { AgentAuth } from "./AuthApi.ts"
-import { Authorize, GroupRequired, requires } from "./Permissions.ts"
+import { Authorize, Decision, GroupRequired, requires } from "./Permissions.ts"
 import { Session, Turn } from "@openbot-build/core"
 import { Schema } from "effect"
 import {
@@ -17,6 +17,16 @@ import {
 	GrantScope,
 } from "./AgentsApi.ts"
 import * as AppExecution from "./AppExecution.ts"
+
+/** Only a `pending` request waits for a decision. */
+export const RequestStatus = Schema.Literals([
+	"pending",
+	"allowed",
+	"denied",
+	"expired",
+	"cancelled",
+])
+export type RequestStatus = typeof RequestStatus.Type
 
 /**
  * An Agent tried to use a capability that no Grant or Rule covers.
@@ -50,13 +60,7 @@ export const CapabilityRequest = Schema.Struct({
 			reason: Schema.optionalKey(Schema.String),
 		}),
 	),
-	status: Schema.Literals([
-		"pending",
-		"allowed",
-		"denied",
-		"expired",
-		"cancelled",
-	]),
+	status: RequestStatus,
 	decision: Schema.NullOr(
 		Schema.Struct({
 			by: Decider,
@@ -75,7 +79,7 @@ export type CapabilityRequest = typeof CapabilityRequest.Type
 
 export const ResolveRequest = Schema.Struct({
 	expected: Schema.Natural,
-	decision: Schema.Literals(["allow", "deny"]),
+	decision: Decision,
 	/** How long an allow lasts. A deny with a scope is kept as a deny Grant. */
 	scope: Schema.optionalKey(GrantScope),
 	reason: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(2000))),
@@ -104,15 +108,7 @@ export class RequestsApi extends HttpApiGroup.make("requests")
 	.add(
 		HttpApiEndpoint.get("listRequests", "/v1/requests", {
 			query: {
-				status: Schema.optionalKey(
-					Schema.Literals([
-						"pending",
-						"allowed",
-						"denied",
-						"expired",
-						"cancelled",
-					]),
-				),
+				status: Schema.optionalKey(RequestStatus),
 			},
 			success: Schema.Array(CapabilityRequest),
 			error: RequestErrors,

@@ -529,14 +529,9 @@ const prepare = (
 						)
 							return yield* denied(invocation.action, invocation.target)
 						if (
-							[
-								"tools/list",
-								"resources/list",
-								"resources/templates/list",
-								"prompts/list",
-								"resources/read",
-								"prompts/get",
-							].includes(invocation.action)
+							Schema.is(Client.ListAction)(invocation.action) ||
+							invocation.action === "resources/read" ||
+							invocation.action === "prompts/get"
 						)
 							return
 						if (

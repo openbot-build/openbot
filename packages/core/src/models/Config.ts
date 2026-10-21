@@ -99,14 +99,26 @@ export class Model extends Schema.TaggedClass<Model>()("Config.Model", {
 export const Mode = Schema.Literals(["default", "plan"])
 export type Mode = typeof Mode.Type
 
+/** Why a model selection or model setting is not valid. */
+export const ModelConfigurationReason = Schema.Literals([
+	"provider-not-found",
+	"model-not-found",
+	"unsupported-option",
+	"unavailable",
+])
+export type ModelConfigurationReason = typeof ModelConfigurationReason.Type
+/** Why a selection does not fit the catalog. */
+export const SelectionReason = ModelConfigurationReason.pick([
+	"provider-not-found",
+	"model-not-found",
+	"unsupported-option",
+])
+export type SelectionReason = typeof SelectionReason.Type
+
 export class ModelConfigurationError extends Data.TaggedError(
 	"ModelConfigurationError",
 )<{
-	readonly reason:
-		| "provider-not-found"
-		| "model-not-found"
-		| "unsupported-option"
-		| "unavailable"
+	readonly reason: ModelConfigurationReason
 	readonly message: string
 }> {}
 

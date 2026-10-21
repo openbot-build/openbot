@@ -234,16 +234,11 @@ export const layer = (options: { readonly memory?: boolean } = {}) =>
 			) =>
 				Effect.gen(function* () {
 					const delegation = stored.delegation
-					const status =
-						result.status === "completed"
-							? ("completed" as const)
-							: result.status === "cancelled"
-								? ("cancelled" as const)
-								: ("failed" as const)
+					const status = result.status
 					yield* delegations.change(
 						member.organizationId,
 						delegation.id,
-						["authorizing", "queued", "running"],
+						AgentsApi.OpenDelegationStatus.literals,
 						(current) => ({
 							...current,
 							delegation: { ...current.delegation, status, result },
@@ -722,7 +717,7 @@ export const layer = (options: { readonly memory?: boolean } = {}) =>
 							yield* delegations.change(
 								member.organizationId,
 								stored.delegation.id,
-								["authorizing", "queued", "running"],
+								AgentsApi.OpenDelegationStatus.literals,
 								(current) => ({
 									...current,
 									delegation: { ...current.delegation, status: "cancelled" },

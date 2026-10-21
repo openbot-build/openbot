@@ -106,9 +106,17 @@ export type Result =
 			readonly issues: ReadonlyArray<Issue>
 	  }
 
+export const DiscoveryErrorReason = Schema.Literals([
+	"NoDeclaration",
+	"NoUsableServices",
+	"Document",
+	"Http",
+	"Configuration",
+])
+export type DiscoveryErrorReason = typeof DiscoveryErrorReason.Type
+
 export class DiscoveryError extends Data.TaggedError("DiscoveryError")<{
-	readonly reason:
-		"NoDeclaration" | "NoUsableServices" | "Document" | "Http" | "Configuration"
+	readonly reason: DiscoveryErrorReason
 	readonly issues: ReadonlyArray<Issue>
 }> {}
 

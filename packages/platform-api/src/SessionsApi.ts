@@ -63,11 +63,20 @@ const OutputText = Schema.Struct({
 	text: Schema.String,
 	annotations: Schema.Tuple([]),
 })
+/** The status of a response. response.cancelled is a platform extension. */
+export const ResponseStatus = Schema.Literals([
+	"in_progress",
+	"completed",
+	"incomplete",
+	"failed",
+	"cancelled",
+])
+export type ResponseStatus = typeof ResponseStatus.Type
 const OutputMessage = Schema.Struct({
 	id: Item.Id,
 	type: Schema.Literal("message"),
 	role: Schema.Literal("assistant"),
-	status: Schema.Literals(["in_progress", "completed", "incomplete"]),
+	status: ResponseStatus.pick(["in_progress", "completed", "incomplete"]),
 	content: Schema.Array(OutputText),
 })
 
@@ -92,17 +101,11 @@ export const SessionResponse = Schema.Struct({
 	session: Session.Id,
 	version: Timeline.VersionId,
 	background: Schema.Literal(true),
-	status: Schema.Literals([
-		"in_progress",
-		"completed",
-		"incomplete",
-		"failed",
-		"cancelled",
-	]),
+	status: ResponseStatus,
 	output: Schema.Array(OutputMessage),
 	error: Schema.NullOr(
 		Schema.Struct({
-			code: Schema.Literals(["model_error", "internal_error"]),
+			code: Turn.FailureCode,
 			message: Schema.String,
 		}),
 	),
@@ -174,24 +177,16 @@ export const SessionResponseEvent = Schema.Union([
 	responseEvent("response.cancelled"),
 ])
 export type SessionResponseEvent = typeof SessionResponseEvent.Type
+/** The `type` of each Responses event, such as `response.created`. */
+export const SessionResponseEventType = Schema.Literals(
+	SessionResponseEvent.members.map((member) => member.fields.type.literal),
+)
+export type SessionResponseEventType = typeof SessionResponseEventType.Type
 
 /** Codec for the native SSE envelope. data is a JSON event, not an already encoded string. */
 const SseEventSchema = Schema.Struct({
 	...Sse.EventEncoded.fields,
-	event: Schema.Literals([
-		"response.created",
-		"response.in_progress",
-		"response.output_item.added",
-		"response.content_part.added",
-		"response.output_text.delta",
-		"response.output_text.done",
-		"response.content_part.done",
-		"response.output_item.done",
-		"response.completed",
-		"response.incomplete",
-		"response.failed",
-		"response.cancelled",
-	]),
+	event: SessionResponseEventType,
 	data: Schema.fromJsonString(SessionResponseEvent),
 }).check(
 	Schema.makeFilter(
@@ -223,6 +218,17 @@ export const SessionParent = Schema.Struct({
 })
 export type SessionParent = typeof SessionParent.Type
 
+/**
+ * Whether a Session runs work now. `historical` means that the Session says it
+ * runs, but no process runs it.
+ */
+export const SessionActivity = Schema.Literals([
+	"active",
+	"inactive",
+	"historical",
+])
+export type SessionActivity = typeof SessionActivity.Type
+
 /** The current core view, plus the latest message in the Responses format. */
 export const SessionView = Schema.Struct({
 	...Session.View({}).fields,
@@ -230,9 +236,7 @@ export const SessionView = Schema.Struct({
 	kind: SessionKind,
 	parent: Schema.NullOr(SessionParent),
 	response: Schema.NullOr(SessionResponse),
-	activity: Schema.optionalKey(
-		Schema.Literals(["active", "inactive", "historical"]),
-	),
+	activity: Schema.optionalKey(SessionActivity),
 })
 export type SessionView = typeof SessionView.Type
 
@@ -242,14 +246,7 @@ export const SessionSummary = Schema.Struct({
 	agent: AgentId,
 	kind: SessionKind,
 	parent: Schema.NullOr(SessionParent),
-	status: Schema.Literals([
-		"Idle",
-		"Running",
-		"Waiting",
-		"Completed",
-		"Failed",
-		"Interrupted",
-	]),
+	status: Schema.Literals(["Idle", ...Turn.StatusTag.literals]),
 	turn: Schema.NullOr(Turn.Id),
 	response: Schema.NullOr(
 		Schema.Struct({
@@ -259,7 +256,7 @@ export const SessionSummary = Schema.Struct({
 			version: Timeline.VersionId,
 		}),
 	),
-	activity: Schema.Literals(["active", "inactive", "historical"]),
+	activity: SessionActivity,
 })
 export type SessionSummary = typeof SessionSummary.Type
 
@@ -293,11 +290,7 @@ export class SessionStorageUnavailable extends Schema.TaggedError<SessionStorage
 export class SessionModelInvalid extends Schema.TaggedError<SessionModelInvalid>()(
 	"SessionModelInvalid",
 	{
-		reason: Schema.Literals([
-			"provider-not-found",
-			"model-not-found",
-			"unsupported-option",
-		]),
+		reason: Config.SelectionReason,
 		message: Schema.String,
 	},
 ) {}
@@ -518,9 +511,7 @@ export class SessionsApi extends HttpApiGroup.make("sessions")
 			params: sessionParams,
 			query: {
 				after: Schema.FiniteFromString.pipe(Schema.decodeTo(Session.Revision)),
-				afterActivity: Schema.optionalKey(
-					Schema.Literals(["active", "inactive", "historical"]),
-				),
+				afterActivity: Schema.optionalKey(SessionActivity),
 				timeoutMs: Schema.optionalKey(
 					Schema.FiniteFromString.check(Schema.isGreaterThanOrEqualTo(0)),
 				),

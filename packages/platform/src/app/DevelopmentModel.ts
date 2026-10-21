@@ -18,23 +18,10 @@ import {
 	Tool,
 	Toolkit,
 } from "effect/ai"
+import * as Assistance from "../apps/Assistance.ts"
 
-export const Scenario = Schema.Literals([
-	"mock-text",
-	"mock-slow",
-	"mock-tool",
-	"mock-app",
-	"mock-failure",
-])
-export type Scenario = typeof Scenario.Type
-
-export const provider = Provider.Id.make("development")
-export const selection = Config.Selection.make({
-	provider,
-	model: Model.Id.make("mock-text"),
-})
-
-const descriptions: Readonly<Record<Scenario, string>> = {
+/** Each development scenario and what it does. The scenario ids come from these keys. */
+const descriptions = {
 	"mock-text": "Fixed text with simulated usage and no added delay.",
 	"mock-slow":
 		"Text sent over ten seconds that you can interrupt, with simulated usage.",
@@ -43,7 +30,16 @@ const descriptions: Readonly<Record<Scenario, string>> = {
 		"Uses the simulated App's real MCP handler and its returned content.",
 	"mock-failure":
 		"A typed model failure on purpose, after some streamed output.",
-}
+} as const satisfies Readonly<Record<string, string>>
+
+export const Scenario = Schema.Literals(EffectRecord.keys(descriptions))
+export type Scenario = typeof Scenario.Type
+
+export const provider = Provider.Id.make("development")
+export const selection = Config.Selection.make({
+	provider,
+	model: Model.Id.make("mock-text" satisfies Scenario),
+})
 
 export const catalog = Effect.succeed({
 	providers: [{ id: provider, name: "Development scenarios (simulated)" }],
@@ -300,7 +296,9 @@ const appParts = Effect.fn("DevelopmentModel.appParts")(function* (
 		const assistance = options.tools.find(
 			(candidate) =>
 				candidate.name ===
-				(choices.length === 0 ? "openbot_search_apps" : "openbot_app_access"),
+				(choices.length === 0
+					? Assistance.names.search
+					: Assistance.names.access),
 		)
 		if (assistance === undefined)
 			return textParts(

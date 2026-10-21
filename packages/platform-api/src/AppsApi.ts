@@ -1,4 +1,4 @@
-import { Discovery } from "@openbot-build/protocol"
+import { Discovery, Network } from "@openbot-build/protocol"
 import { Schema } from "effect"
 import {
 	HttpApiEndpoint,
@@ -25,23 +25,25 @@ export const AppDiscoveryResult = Schema.Union([
 ])
 export type AppDiscoveryResult = typeof AppDiscoveryResult.Type
 
+/**
+ * Why discovery failed. It joins the reasons of the protocol errors. A
+ * `Configuration` problem of the publisher shows as `Document`.
+ */
+export const AppDiscoveryFailureReason = Schema.Literals([
+	"InvalidInput",
+	"IncompatibleCard",
+	...Discovery.DiscoveryErrorReason.literals.filter(
+		(reason): reason is Exclude<typeof reason, "Configuration"> =>
+			reason !== "Configuration",
+	),
+	...Network.NetworkErrorReason.literals,
+])
+export type AppDiscoveryFailureReason = typeof AppDiscoveryFailureReason.Type
+
 export class AppDiscoveryFailed extends Schema.TaggedError<AppDiscoveryFailed>()(
 	"AppDiscoveryFailed",
 	{
-		reason: Schema.Literals([
-			"InvalidInput",
-			"NoDeclaration",
-			"NoUsableServices",
-			"Document",
-			"IncompatibleCard",
-			"Http",
-			"BlockedTarget",
-			"Transport",
-			"TooLarge",
-			"Timeout",
-			"Redirect",
-			"Encoding",
-		]),
+		reason: AppDiscoveryFailureReason,
 		issues: Schema.Array(Discovery.Issue),
 	},
 ) {}
