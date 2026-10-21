@@ -20,15 +20,15 @@ curl https://api.example.com/v1/app-index/sources
 ```json
 [
 	{
-		"id": "platform",
-		"name": "Platform Index",
+		"id": "openbot",
+		"name": "OpenBot Index",
 		"url": "https://api.example.com/v1/app-index/apps",
 		"simulated": false
 	}
 ]
 ```
 
-The `platform` source is the Index of this Platform. A deployment owner can add the Index of other Platforms in code. Platform reads them without user credentials. In development mode the source name is `Platform Development Index`, and `simulated` is `true`.
+The `openbot` source is the Index of this OpenBot server. A deployment owner can add the Index of other OpenBot servers in code. OpenBot reads them without user credentials. In development mode the source name is `OpenBot Development Index`, and `simulated` is `true`.
 
 ---
 
@@ -72,8 +72,8 @@ The answer is a page:
 			},
 			"sources": [
 				{
-					"id": "platform",
-					"name": "Platform Index",
+					"id": "openbot",
+					"name": "OpenBot Index",
 					"url": "https://api.example.com/v1/app-index/apps",
 					"simulated": false
 				}
@@ -133,17 +133,17 @@ The answer has the same shape as one item in `apps`. You can add `source` to rea
 Nobody needs to register an App. An App joins the Index after a user connects it:
 
 1. A user saves a connection to the App. Manual connections are not indexed.
-2. Platform puts the Card URL in a queue. The connection does not wait for this. It works even when the Index is down.
+2. OpenBot puts the Card URL in a queue. The connection does not wait for this. It works even when the Index is down.
 3. A background worker reads the Card again with no user data and no credentials. It checks that:
    - the Card is public and valid, and has an endpoint that supports the protocol;
    - `robots.txt` allows the `OpenBot` user agent;
    - the Card has no `noindex` rule;
    - a publisher Catalog lists the same Card URL.
-4. If all checks pass, Platform saves the public entry.
+4. If all checks pass, OpenBot saves the public entry.
 
 The publisher Catalog can be at the Card's own origin under `/.well-known/ai-catalog.json`, in an `ai-catalog` link on the Card response, or on the page named in the Card's `websiteUrl`. A copy of the Card in someone else's Catalog is not enough.
 
-Platform checks each App again about every hour. After a failed or unsure check, it tries again after about one minute.
+OpenBot checks each App again about every hour. After a failed or unsure check, it tries again after about one minute.
 
 | `check._tag`  | Meaning                                                                             |
 | ------------- | ----------------------------------------------------------------------------------- |
@@ -162,9 +162,9 @@ Publishers can also ask for a check from the [developer tools](/docs/developer-t
 
 A publisher controls whether their App is in the Index:
 
-- **`noindex`.** Send `X-Robots-Tag: noindex` on the Card response. You can also send `X-Robots-Tag: OpenBot: noindex` to target only this crawler. At the next check, Platform removes the entry, or never adds it.
-- **Remove the Card from your Catalog.** At the next check, Platform withdraws the entry.
-- **`robots.txt`.** Block the `OpenBot` user agent. At the next check, Platform excludes the App, and it no longer shows in search.
+- **`noindex`.** Send `X-Robots-Tag: noindex` on the Card response. You can also send `X-Robots-Tag: OpenBot: noindex` to target only this crawler. At the next check, OpenBot removes the entry, or never adds it.
+- **Remove the Card from your Catalog.** At the next check, OpenBot withdraws the entry.
+- **`robots.txt`.** Block the `OpenBot` user agent. At the next check, OpenBot excludes the App, and it no longer shows in search.
 
 If your Catalog cannot be reached, that is not a withdrawal. The check is `Unconfirmed`, and the entry stays.
 
@@ -179,7 +179,7 @@ Removing an Index entry never removes anyone's connection. Users can still use a
 
 ## Host restrictions
 
-A deployment owner can block some Apps. Each restriction has a `cardUrl`, a public `reason`, and an HTTPS `appealUrl`. They are set in code with the Platform `appRestrictions` option.
+A deployment owner can block some Apps. Each restriction has a `cardUrl`, a public `reason`, and an HTTPS `appealUrl`. They are set in code with the OpenBot `appRestrictions` option.
 
 A blocked App:
 

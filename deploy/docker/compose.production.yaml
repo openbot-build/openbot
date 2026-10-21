@@ -5,10 +5,10 @@ x-openbot: &openbot
   platform: linux/amd64
   restart: unless-stopped
 
-x-platform: &platform
+x-server: &server
   <<: *openbot
-  image: openbot-platform:${OPENBOT_RELEASE:?Set OPENBOT_RELEASE to the deployed commit SHA}
-  # Platform reads each secret from the file /run/secrets/<NAME>.
+  image: openbot:${OPENBOT_RELEASE:?Set OPENBOT_RELEASE to the deployed commit SHA}
+  # OpenBot reads each secret from the file /run/secrets/<NAME>.
   secrets:
     - OPENBOT_DATABASE_URL
     - BETTER_AUTH_SECRET
@@ -34,9 +34,9 @@ services:
       timeout: 3s
       retries: 30
 
-  # Runs the database migrations once. Platform starts only after it succeeds.
+  # Runs the database migrations once. OpenBot starts only after it succeeds.
   migrate:
-    <<: *platform
+    <<: *server
     restart: "no"
     command: [/app/dist/app/Migrate.mjs]
     secrets:
@@ -45,8 +45,8 @@ services:
       postgres:
         condition: service_healthy
 
-  platform:
-    <<: *platform
+  openbot:
+    <<: *server
     environment:
       OPENBOT_PUBLIC_ORIGIN: ${OPENBOT_PUBLIC_ORIGIN:?Set OPENBOT_PUBLIC_ORIGIN}
       OPENBOT_OIDC_ISSUER: ${OPENBOT_OIDC_ISSUER:?Set OPENBOT_OIDC_ISSUER}

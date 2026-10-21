@@ -7,7 +7,8 @@ variable "TAG" {
 }
 
 # Registry path, such as ghcr.io/owner/repository. When it is empty, the images get local names,
-# such as openbot-platform:local. When it is set, they get only registry names.
+# such as openbot:local. When it is set, they get only registry names.
+# The server image is the registry path itself. Other images get a sub path, such as /protocol-test.
 variable "REGISTRY" {
   default = ""
 }
@@ -22,16 +23,24 @@ variable "REVISION" {
   default = ""
 }
 
+# The component "openbot" is the server. Its local name is openbot, and the others start with openbot-.
+function "image" {
+  params = [component]
+  result = REGISTRY == "" ? (component == "openbot" ? "openbot" : "openbot-${component}") : (
+    component == "openbot" ? lower(REGISTRY) : "${lower(REGISTRY)}/${component}"
+  )
+}
+
 function "tags" {
   params = [component]
-  result = REGISTRY == "" ? ["openbot-${component}:${TAG}"] : concat(
-    ["${lower(REGISTRY)}/${component}:${TAG}"],
-    RELEASE_TAG == "" ? [] : ["${lower(REGISTRY)}/${component}:${RELEASE_TAG}"],
+  result = concat(
+    ["${image(component)}:${TAG}"],
+    REGISTRY == "" || RELEASE_TAG == "" ? [] : ["${image(component)}:${RELEASE_TAG}"],
   )
 }
 
 group "default" {
-  targets = ["platform", "protocol-test"]
+  targets = ["openbot", "protocol-test"]
 }
 
 target "_base" {
@@ -44,12 +53,12 @@ target "_base" {
   }
 }
 
-target "platform" {
+target "openbot" {
   inherits = ["_base"]
-  target   = "platform"
-  tags     = tags("platform")
+  target   = "openbot"
+  tags     = tags("openbot")
   labels = {
-    "org.opencontainers.image.title" = "OpenBot Platform"
+    "org.opencontainers.image.title" = "OpenBot"
   }
 }
 
@@ -65,6 +74,6 @@ target "protocol-test" {
 # Runs the Dockerfile build checks without building.
 target "lint" {
   inherits = ["_base"]
-  target   = "platform"
+  target   = "openbot"
   call     = "check"
 }

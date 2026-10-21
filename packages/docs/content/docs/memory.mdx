@@ -4,7 +4,7 @@ description: Keep useful facts from a Session and use them in later Turns.
 ---
 
 **Learned memory** is a short list of facts that the Agent keeps for a Session. Each fact has a source in the conversation.
-Platform adds facts after each Turn and shows them to the model in later Turns. You can also add, remove and turn off facts yourself.
+OpenBot adds facts after each Turn and shows them to the model in later Turns. You can also add, remove and turn off facts yourself.
 This page shows how learned memory works and how to change it with the API.
 
 Learned memory belongs to one Session. It is part of the Session's history, so a [Fork](/docs/sessions#fork-from-a-version) takes a copy of it. Other Sessions do not see it.
@@ -45,7 +45,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `kind`      | `fact`, `decision`, `preference`, `procedure` or `hypothesis`. |
 | `sources`   | The IDs of the Items that support the fact.                    |
 | `status`    | `active`, or `retracted` when the fact was removed.            |
-| `processed` | The Items that Platform has already read for memory.           |
+| `processed` | The Items that OpenBot has already read for memory.            |
 | `settings`  | The switches in use for this Session. See below.               |
 | `overrides` | The switches that this Session sets itself.                    |
 
@@ -55,8 +55,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 Two switches control memory:
 
-- `use`: Platform adds the active facts to the model's instructions.
-- `generate`: Platform learns new facts after each Turn.
+- `use`: OpenBot adds the active facts to the model's instructions.
+- `generate`: OpenBot learns new facts after each Turn.
 
 The server sets a default for each switch. Both are on unless the server changes them. See [Server](/docs/server#sessions).
 A Session can override each switch with `Configure`. A switch that the Session does not set follows the server default.
@@ -64,31 +64,31 @@ A Session can override each switch with `Configure`. A switch that the Session d
 
 ---
 
-## How Platform uses memory
+## How OpenBot uses memory
 
 ### In a Turn
 
-When `use` is on, Platform adds the active facts to the model's instructions when the Turn runs. The text tells the model that memory is past evidence and that current instructions win.
+When `use` is on, OpenBot adds the active facts to the model's instructions when the Turn runs. The text tells the model that memory is past evidence and that current instructions win.
 Retracted facts are not sent.
 
-The memory text has a size limit of 8000 characters. The newest facts come first. Platform stops before the first fact that does not fit, so older facts are left out. A fact is never cut in the middle.
+The memory text has a size limit of 8000 characters. The newest facts come first. OpenBot stops before the first fact that does not fit, so older facts are left out. A fact is never cut in the middle.
 To change the limit, give your own policy on the server: `sessions.memory.policy: MemoryRules.make({ maxLength: 4000 })`.
 
 ### After a Turn
 
-When a Turn completes, Platform consolidates memory. To consolidate means to read the new Items and update the list of facts. This also happens when a Turn completes after an approval. Platform asks the Turn's model to find facts worth keeping. The model must name the source Items for each change.
-Platform applies the changes to the newest memory. So an edit that you make while the model works is kept.
+When a Turn completes, OpenBot consolidates memory. To consolidate means to read the new Items and update the list of facts. This also happens when a Turn completes after an approval. OpenBot asks the Turn's model to find facts worth keeping. The model must name the source Items for each change.
+OpenBot applies the changes to the newest memory. So an edit that you make while the model works is kept.
 A Turn that only runs an App action does not change memory, because no model runs in it.
 
-Platform checks these rules for every change:
+OpenBot checks these rules for every change:
 
-- Platform reads only Items that it has not processed yet.
+- OpenBot reads only Items that it has not processed yet.
 - Each change must name at least one of those Items as its source.
 - One change per key. A retracted fact stays retracted. Only a direct Remember can bring it back.
 
-Platform also tells the model to reuse a key for the same fact, to count only clear user statements as preferences, and to never keep passwords, keys or links that give access.
+OpenBot also tells the model to reuse a key for the same fact, to count only clear user statements as preferences, and to never keep passwords, keys or links that give access.
 
-If the model fails, the Turn still completes. Platform records the error and tries again with the next Turn.
+If the model fails, the Turn still completes. OpenBot records the error and tries again with the next Turn.
 Turn `generate` off to stop this step.
 
 ---
@@ -116,8 +116,8 @@ All changes use one route: `POST /v1/sessions/:sessionId/memory`.
 | `revision` | The Session revision you last saw: `session.revision`.                |
 | `command`  | What to do. See the commands below.                                   |
 
-If the Session or its history changed since you read it, Platform returns `409` with `SessionConflict`. Read the Session again and retry.
-On success, Platform returns the new Session view. It has a new `session.revision`. Remember and Forget also make a new `session.head`.
+If the Session or its history changed since you read it, OpenBot returns `409` with `SessionConflict`. Read the Session again and retry.
+On success, OpenBot returns the new Session view. It has a new `session.revision`. Remember and Forget also make a new `session.head`.
 
 ### Commands
 
@@ -177,7 +177,7 @@ Learn from the history now:
 
 <Callout type="info">
 	Refresh does nothing when `generate` is off. Otherwise it needs a model. If
-	Platform has no model, it returns `409` with `SessionConflict`. Refresh does
+	OpenBot has no model, it returns `409` with `SessionConflict`. Refresh does
 	not check `expected` and `revision`, but you must still send them.
 </Callout>
 
@@ -199,7 +199,7 @@ Facts that matter for one task only stay in Session memory.
 
 ### How it learns
 
-When a Turn of the Agent completes and its queue is empty, Platform asks the [helper model](/docs/server#agents) which lasting experience to keep. Review Sessions do not teach anything. A Session whose `generate` switch is off does not teach its Agent either.
+When a Turn of the Agent completes and its queue is empty, OpenBot asks the [helper model](/docs/server#agents) which lasting experience to keep. Review Sessions do not teach anything. A Session whose `generate` switch is off does not teach its Agent either.
 
 - Each entry names its sources: Session and Item IDs.
 - Tool results from Apps are outside data. An entry that only App results support is never kept.
@@ -208,7 +208,7 @@ When a Turn of the Agent completes and its queue is empty, Platform asks the [he
 
 Agent memory does not follow a Timeline. A Fork never changes it, and going back to an old Version does not undo it. To remove an entry, forget it.
 
-Platform adds the active entries to the instructions of every Turn of the Agent, newest first, up to 8000 characters. The text says that current instructions win over memory.
+OpenBot adds the active entries to the instructions of every Turn of the Agent, newest first, up to 8000 characters. The text says that current instructions win over memory.
 
 ### Shared Agents
 

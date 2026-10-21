@@ -91,26 +91,26 @@ jobs:
           load: true
           # Each image needs its own cache scope, or one cache replaces the other.
           set: |
-            platform.cache-from=type=gha,scope=platform
-            platform.cache-to=type=gha,scope=platform,mode=max
+            openbot.cache-from=type=gha,scope=openbot
+            openbot.cache-to=type=gha,scope=openbot,mode=max
             protocol-test.cache-from=type=gha,scope=protocol-test
             protocol-test.cache-to=type=gha,scope=protocol-test,mode=max
       - name: Check images in Compose
         run: devenv shell -- bash deploy/docker/check.sh < /dev/null
       - name: Check image layers
         run: |
-          devenv shell -- dive --ci --source docker "openbot-platform:$TAG"
+          devenv shell -- dive --ci --source docker "openbot:$TAG"
           devenv shell -- dive --ci --source docker "openbot-protocol-test:$TAG"
       - name: Scan images for known vulnerabilities
         run: |
-          for image in "openbot-platform:$TAG" "openbot-protocol-test:$TAG"; do
+          for image in "openbot:$TAG" "openbot-protocol-test:$TAG"; do
             devenv shell -- trivy image --exit-code 1 --scanners vuln \
               --severity HIGH,CRITICAL --ignore-unfixed "$image"
           done
       - name: Save images
         run: |
           mkdir -p .devenv
-          docker save "openbot-platform:$TAG" "openbot-protocol-test:$TAG" | gzip > .devenv/images.tar.gz
+          docker save "openbot:$TAG" "openbot-protocol-test:$TAG" | gzip > .devenv/images.tar.gz
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: images-${{ github.sha }}
@@ -135,5 +135,5 @@ jobs:
           files: deploy/docker/docker-bake.hcl
           push: true
           set: |
-            platform.cache-from=type=gha,scope=platform
+            openbot.cache-from=type=gha,scope=openbot
             protocol-test.cache-from=type=gha,scope=protocol-test

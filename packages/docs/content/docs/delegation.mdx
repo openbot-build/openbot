@@ -10,7 +10,7 @@ This page shows the Agent tools, the brief and the result, and how to watch dele
 
 ## The Agent tools
 
-Platform gives every Agent these tools:
+OpenBot gives every Agent these tools:
 
 | Tool                     | What it does                                                                       |
 | ------------------------ | ---------------------------------------------------------------------------------- |
@@ -52,7 +52,7 @@ If the other Session is busy, the brief waits in its queue and runs next.
 
 ## The result
 
-The other Agent calls `openbot_report` once when it is done. If it ends without a report, Platform uses its last answer.
+The other Agent calls `openbot_report` once when it is done. If it ends without a report, OpenBot uses its last answer.
 
 ```json
 {
@@ -70,7 +70,7 @@ The other Agent calls `openbot_report` once when it is done. If it ends without 
 
 ## How the parent waits
 
-While the other Agent works, the Turn that gave the work has the status `Waiting`. It does not hold a running process, so the wait can last long and survives a server restart. When the work ends, Platform gives the result to the waiting tool call, and the Turn goes on. When a Turn gives work to several Agents at once, it goes on after the last result.
+While the other Agent works, the Turn that gave the work has the status `Waiting`. It does not hold a running process, so the wait can last long and survives a server restart. When the work ends, OpenBot gives the result to the waiting tool call, and the Turn goes on. When a Turn gives work to several Agents at once, it goes on after the last result.
 
 Delegated Sessions have `kind: "delegated"` and a `parent` with the Session, Turn and tool call that started them. They have the same routes as every Session. You can read them, steer them and interrupt them.
 
@@ -98,7 +98,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | Status        | Meaning                                                        |
 | ------------- | -------------------------------------------------------------- |
 | `authorizing` | The work waits for a [request](/docs/requests) to be answered. |
-| `queued`      | The work may start. Platform starts it now.                    |
+| `queued`      | The work may start. OpenBot starts it now.                     |
 | `running`     | The other Agent works on it.                                   |
 | `completed`   | The work is done. `result` holds the result.                   |
 | `failed`      | The work failed or was not allowed.                            |
@@ -106,7 +106,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ## Stop delegated work
 
-When you [interrupt](/docs/sessions#steer-queue-and-interrupt) a Turn, Platform also stops the work that it gave away, and closes its open requests. Each record becomes `cancelled`.
+When you [interrupt](/docs/sessions#steer-queue-and-interrupt) a Turn, OpenBot also stops the work that it gave away, and closes its open requests. Each record becomes `cancelled`.
 
 ## Forks
 

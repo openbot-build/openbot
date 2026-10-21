@@ -1,29 +1,29 @@
 ---
 title: Error logs
-description: How Platform logs failures, and how to send them to your own service.
+description: How OpenBot logs failures, and how to send them to your own service.
 ---
 
-Platform writes a log line at level `Error` when something fails on the server.
-Platform does not send these logs to other services. You can add this yourself with an Effect logger.
+OpenBot writes a log line at level `Error` when something fails on the server.
+OpenBot does not send these logs to other services. You can add this yourself with an Effect logger.
 
 ---
 
-## What Platform logs
+## What OpenBot logs
 
-| Source    | When                                                               |
-| --------- | ------------------------------------------------------------------ |
-| `http`    | A request ends with a status of `500` or higher.                   |
-| `turn`    | A Turn ends with the status `Failed`.                              |
-| `startup` | Platform fails to start, for example because of bad configuration. |
+| Source    | When                                                              |
+| --------- | ----------------------------------------------------------------- |
+| `http`    | A request ends with a status of `500` or higher.                  |
+| `turn`    | A Turn ends with the status `Failed`.                             |
+| `startup` | OpenBot fails to start, for example because of bad configuration. |
 
 Normal request errors, such as `400`, `401`, `404`, or `409`, are not logged as errors. Work that a person interrupts on purpose is not logged either.
 
-Each error log has the message `Platform operation failed` and these annotations. An annotation is a named value that is attached to a log line.
+Each error log has the message `OpenBot operation failed` and these annotations. An annotation is a named value that is attached to a log line.
 
 | Annotation                               | Meaning                                                             |
 | ---------------------------------------- | ------------------------------------------------------------------- |
-| `source`, `operation`                    | Which part of Platform failed.                                      |
-| `errorType`                              | A short name for the error, when Platform knows one.                |
+| `source`, `operation`                    | Which part of OpenBot failed.                                       |
+| `errorType`                              | A short name for the error, when OpenBot knows one.                 |
 | `requestId`, `method`, `route`, `status` | For HTTP failures. `route` is the route pattern, not the real path. |
 | `sessionId`, `turnId`                    | For Turn failures.                                                  |
 
@@ -33,12 +33,12 @@ The log also has the cause of the failure. The cause can hold error messages and
 
 ## Send errors to your own service
 
-When you run Platform from your own code, add a logger with `Logger.layer`. Use `mergeWithExisting: true` to keep the other loggers.
+When you run OpenBot from your own code, add a logger with `Logger.layer`. Use `mergeWithExisting: true` to keep the other loggers.
 Provide it outside the server, so that it stays open until the server has closed.
 
 ```ts
 import { NodeRuntime } from "@effect/platform-node"
-import { EnvironmentConfiguration, Server } from "@openbot-build/platform"
+import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
 import { Effect, Layer, Logger, References } from "effect"
 
 const alerts = Logger.layer(

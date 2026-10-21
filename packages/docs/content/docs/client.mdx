@@ -1,9 +1,9 @@
 ---
 title: Client
-description: Call Platform from TypeScript with typed requests and errors.
+description: Call OpenBot from TypeScript with typed requests and errors.
 ---
 
-`@openbot-build/client` is the TypeScript client for Platform. It is built from the same API contract as the server.
+`@openbot-build/client` is the TypeScript client for OpenBot. It is built from the same API contract as the server.
 Every request, answer, and error has a type. Your editor shows mistakes before you run the code.
 
 The client uses [Effect](https://effect.website), a TypeScript library for typed programs. It runs in Node.js, Deno, Bun, workers, and browsers.
@@ -53,7 +53,7 @@ const id = await Effect.runPromise(
 
 | Option           | Required | What it does                                                                                            |
 | ---------------- | -------- | ------------------------------------------------------------------------------------------------------- |
-| `baseUrl`        | Yes      | The origin of Platform, such as `https://api.example.com`.                                              |
+| `baseUrl`        | Yes      | The origin of OpenBot, such as `https://api.example.com`.                                               |
 | `token`          | No       | A user token, as a string or an Effect `Redacted` value. It is sent as `Authorization: Bearer <token>`. |
 | `onUnauthorized` | No       | A function that runs when a protected request returns `401`.                                            |
 
@@ -128,15 +128,15 @@ Common sign-in errors:
 | --------------------------- | ------ | ---------------------------------------------------------- |
 | `AuthenticationRequired`    | `401`  | No key or cookie, or the key is revoked or expired.        |
 | `ForbiddenOrigin`           | `403`  | A cookie request that changes data has the wrong `Origin`. |
-| `AuthenticationUnavailable` | `503`  | Platform cannot check credentials right now.               |
+| `AuthenticationUnavailable` | `503`  | OpenBot cannot check credentials right now.                |
 
-All error schemas are exported from `@openbot-build/platform-api`.
+All error schemas are exported from `@openbot-build/api`.
 
 ---
 
 ## Use the client in a browser
 
-A web app on the same origin as Platform can use the sign-in cookie instead of a token. Leave out `token`:
+A web app on the same origin as OpenBot can use the sign-in cookie instead of a token. Leave out `token`:
 
 ```ts
 import { layer } from "@openbot-build/client"
@@ -157,7 +157,7 @@ const ClientLive = layer({
 ```
 
 The client sends requests with `credentials: "same-origin"`, so the browser adds the cookie.
-The browser also adds the `Origin` header. For requests that change data, Platform checks that it is exactly `OPENBOT_PUBLIC_ORIGIN`.
+The browser also adds the `Origin` header. For requests that change data, OpenBot checks that it is exactly `OPENBOT_PUBLIC_ORIGIN`.
 
 To serve your web app on the same origin, see [Deploy](/docs/deploy#your-own-client-on-the-same-origin).
 
@@ -181,7 +181,7 @@ Use this when you need your own HTTP client, logging, or headers. See `packages/
 ## Show App views
 
 Some App tools come with a small user interface, called an MCP Apps view. MCP is the Model Context Protocol, a standard way for Agents to talk to tools.
-Platform keeps the view on the server. Your client only shows it.
+OpenBot keeps the view on the server. Your client only shows it.
 
 First open the view for an App operation. Then make a view client with `AppViews.make`:
 
@@ -207,10 +207,10 @@ const program = Effect.gen(function* () {
 
 The result works with `mount` from `@openbot-build/protocol/McpApps`, which shows the view in an iframe. See [Protocol](/docs/protocol).
 
-The view client holds no credentials. Every request goes through Platform, so the normal capability checks apply:
+The view client holds no credentials. Every request goes through OpenBot, so the normal capability checks apply:
 
 - It checks that each answer is a valid MCP result.
 - It sends each action once, with a new request ID.
 - It then checks the saved action every 250 milliseconds until it has a final result. It never sends the action again.
 
-When you close the view, the client stops checking. An action that Platform already accepted still runs to the end.
+When you close the view, the client stops checking. An action that OpenBot already accepted still runs to the end.

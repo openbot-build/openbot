@@ -5,11 +5,7 @@ import {
 	type HttpApiGroup,
 	HttpApiMiddleware,
 } from "effect/http-api"
-import {
-	PlatformApi,
-	AgentAuth,
-	SessionAuth,
-} from "@openbot-build/platform-api"
+import { OpenBotApi, AgentAuth, SessionAuth } from "@openbot-build/api"
 import {
 	type HttpClientError,
 	FetchHttpClient,
@@ -20,14 +16,14 @@ import {
 export class Client extends Context.Service<
 	Client,
 	{
-		readonly api: HttpApiClient.ForApi<typeof PlatformApi>
+		readonly api: HttpApiClient.ForApi<typeof OpenBotApi>
 	}
 >()("@openbot-build/client/Client") {}
 
 export type ClientError =
 	| HttpApiEndpoint.Errors<
 			HttpApiGroup.Endpoints<
-				(typeof PlatformApi.groups)[keyof typeof PlatformApi.groups]
+				(typeof OpenBotApi.groups)[keyof typeof OpenBotApi.groups]
 			>
 	  >
 	| Schema.SchemaError
@@ -42,7 +38,7 @@ export const make = (options: {
 	| HttpApiMiddleware.ForClient<AgentAuth>
 	| HttpApiMiddleware.ForClient<SessionAuth>
 > =>
-	HttpApiClient.make(PlatformApi, options).pipe(
+	HttpApiClient.make(OpenBotApi, options).pipe(
 		Effect.map((api) => Client.of({ api })),
 	)
 

@@ -3,7 +3,7 @@ title: Deploy
 description: Run OpenBot on your own server.
 ---
 
-This page shows how to run Platform in production. You build a Docker image, prepare the database, and start the server behind a reverse proxy.
+This page shows how to run OpenBot in production. You build a Docker image, prepare the database, and start the server behind a reverse proxy.
 For every setting, see [Configuration](/docs/configuration).
 
 ---
@@ -11,7 +11,7 @@ For every setting, see [Configuration](/docs/configuration).
 ## What you need
 
 - A Linux server with Docker and Docker Compose.
-- A domain name for Platform, such as `api.example.com`, and a TLS certificate for it.
+- A domain name for OpenBot, such as `api.example.com`, and a TLS certificate for it.
 - An OpenID Connect provider, such as `https://id.example.com`. Register a client with the redirect URI `https://api.example.com/auth/callback/oidc`.
 - A model service, if you want the Agent to do work. See [Models](/docs/models).
 
@@ -21,7 +21,7 @@ All Docker files are in `deploy/docker/`. One `Dockerfile` makes both images. Ea
 
 | Target          | Image                   | What it runs                                                                     |
 | --------------- | ----------------------- | -------------------------------------------------------------------------------- |
-| `platform`      | `openbot-platform`      | Platform and its migration program.                                              |
+| `openbot`       | `openbot`               | OpenBot and its migration program.                                               |
 | `protocol-test` | `openbot-protocol-test` | The test service for the App Protocol. See [Protocol test](/docs/protocol-test). |
 
 The file `docker-bake.hcl` tells [Docker Bake](https://docs.docker.com/build/bake/) how to build them. Run this from the root of the repository:
@@ -31,13 +31,13 @@ export OPENBOT_RELEASE=$(git rev-parse HEAD)
 TAG=$OPENBOT_RELEASE docker buildx bake -f deploy/docker/docker-bake.hcl --load
 ```
 
-This builds `openbot-platform:$OPENBOT_RELEASE` and `openbot-protocol-test:$OPENBOT_RELEASE` for `linux/amd64`. `--load` puts them in your local Docker. Without `TAG`, the tag is `local`. To build only one image, add its target name, for example `platform`.
+This builds `openbot:$OPENBOT_RELEASE` and `openbot-protocol-test:$OPENBOT_RELEASE` for `linux/amd64`. `--load` puts them in your local Docker. Without `TAG`, the tag is `local`. To build only one image, add its target name, for example `openbot`.
 
 On a computer that is not `x86_64`, Docker needs QEMU (a program that runs code for another processor) to build the images. Install it once with `docker run --privileged --rm tonistiigi/binfmt --install amd64`.
 
 Both images start from [distroless](https://github.com/GoogleContainerTools/distroless), with the same Node.js version as development. Distroless images have no shell and no package manager, so you cannot `docker exec` a shell in them. They run as the user `nonroot` (65532).
 
-The Platform image has Node.js, the bundled server, the bundled migration program, and the database migrations. It has no build tools and no secrets.
+The OpenBot image has Node.js, the bundled server, the bundled migration program, and the database migrations. It has no build tools and no secrets.
 
 | Path in the image           | What it is                                       |
 | --------------------------- | ------------------------------------------------ |
@@ -49,13 +49,13 @@ The server in the image listens on `0.0.0.0:3000`. The image has a health check 
 
 ### Secrets as files
 
-Platform reads each setting from an environment variable first. When the variable is not set, Platform reads the file `/run/secrets/<NAME>` instead, for example `/run/secrets/BETTER_AUTH_SECRET`. This is where Docker and Compose put secrets. An empty file counts as not set. See [Configuration](/docs/configuration#secrets-as-files).
+OpenBot reads each setting from an environment variable first. When the variable is not set, OpenBot reads the file `/run/secrets/<NAME>` instead, for example `/run/secrets/BETTER_AUTH_SECRET`. This is where Docker and Compose put secrets. An empty file counts as not set. See [Configuration](/docs/configuration#secrets-as-files).
 
 Environment variables show in `docker inspect`. Files in `/run/secrets` do not. Compose uses files for all secrets.
 
 ## Run with Docker
 
-Put your settings in a file, for example `platform.env`. Start from `deploy/docker/production.env.example`. `docker run` does not fill in `${POSTGRES_PASSWORD}`, so write the full `OPENBOT_DATABASE_URL` yourself.
+Put your settings in a file, for example `openbot.env`. Start from `deploy/docker/production.env.example`. `docker run` does not fill in `${POSTGRES_PASSWORD}`, so write the full `OPENBOT_DATABASE_URL` yourself.
 
 <Steps>
 <Step>
@@ -65,8 +65,8 @@ Put your settings in a file, for example `platform.env`. Start from `deploy/dock
 The migration program only needs `OPENBOT_DATABASE_URL`. Run it before you start the server, and again before each new release:
 
 ```sh
-docker run --rm --env-file platform.env \
-  openbot-platform:$OPENBOT_RELEASE /app/dist/app/Migrate.mjs
+docker run --rm --env-file openbot.env \
+  openbot:$OPENBOT_RELEASE /app/dist/app/Migrate.mjs
 ```
 
 It is safe to run it more than once. It only applies the migrations that the database does not have yet.
@@ -78,8 +78,8 @@ Migrations only go forward. There is no way to undo one, so make a backup first.
 ### Start the server
 
 ```sh
-docker run -d --name openbot --env-file platform.env \
-  -p 127.0.0.1:8080:3000 openbot-platform:$OPENBOT_RELEASE
+docker run -d --name openbot --env-file openbot.env \
+  -p 127.0.0.1:8080:3000 openbot:$OPENBOT_RELEASE
 ```
 
 When the server starts, it checks that the database has all tables. If not, it stops and you see an error in the log.
@@ -108,12 +108,12 @@ You can also run the programs with Node.js on the server:
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm --filter-prod @openbot-build/platform... build
-pnpm --filter @openbot-build/platform migrate
-pnpm --filter @openbot-build/platform start
+pnpm --filter-prod @openbot-build/openbot... build
+pnpm --filter @openbot-build/openbot migrate
+pnpm --filter @openbot-build/openbot start
 ```
 
-The package `@openbot-build/platform` also has the commands `openbot-platform-migrate` and `openbot-platform`.
+The package `@openbot-build/openbot` also has the commands `openbot-migrate` and `openbot`.
 
 ---
 
@@ -124,14 +124,14 @@ The file `deploy/docker/compose.production.yaml` runs these services:
 | Service         | Image                                               | Port on the host                              |
 | --------------- | --------------------------------------------------- | --------------------------------------------- |
 | `postgres`      | `postgres:18-alpine`, data in the volume `postgres` | none                                          |
-| `migrate`       | `openbot-platform:$OPENBOT_RELEASE`                 | none                                          |
-| `platform`      | `openbot-platform:$OPENBOT_RELEASE`                 | `127.0.0.1:8080`, or `OPENBOT_PUBLISHED_PORT` |
+| `migrate`       | `openbot:$OPENBOT_RELEASE`                          | none                                          |
+| `openbot`       | `openbot:$OPENBOT_RELEASE`                          | `127.0.0.1:8080`, or `OPENBOT_PUBLISHED_PORT` |
 | `protocol-test` | `openbot-protocol-test:$OPENBOT_RELEASE`            | `127.0.0.1:3001`                              |
 
-`migrate` runs the migration program once, after PostgreSQL is healthy. `platform` starts only when `migrate` succeeds. So `up` always migrates the database first.
+`migrate` runs the migration program once, after PostgreSQL is healthy. `openbot` starts only when `migrate` succeeds. So `up` always migrates the database first.
 
 The `protocol-test` service is the public test service for the App Protocol. See [Protocol test](/docs/protocol-test).
-The file needs `PROTOCOL_TEST_PUBLIC_ORIGIN` even if you only use Platform.
+The file needs `PROTOCOL_TEST_PUBLIC_ORIGIN` even if you only use OpenBot.
 
 Compose gives the secrets to the containers as files in `/run/secrets`, not as environment variables. These are `POSTGRES_PASSWORD`, `OPENBOT_DATABASE_URL`, `BETTER_AUTH_SECRET`, `OPENBOT_APP_ENCRYPTION_KEY`, `OPENBOT_OIDC_CLIENT_SECRET`, and `OPENBOT_MODEL_API_KEY`. Compose takes their values from `.env.production`. The `migrate` service gets only `OPENBOT_DATABASE_URL`.
 
@@ -186,19 +186,19 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 </Step>
 </Steps>
 
-To release a new version, build new images, set the new `OPENBOT_RELEASE`, back up the database, and run `up -d --wait` again. `migrate` runs again before the new Platform starts.
+To release a new version, build new images, set the new `OPENBOT_RELEASE`, back up the database, and run `up -d --wait` again. `migrate` runs again before the new OpenBot starts.
 Never delete the `postgres` volume. It holds all your data.
 
 ---
 
 ## TLS and the reverse proxy
 
-In production, a reverse proxy handles HTTPS and sends the traffic to Platform on `127.0.0.1:8080`.
+In production, a reverse proxy handles HTTPS and sends the traffic to OpenBot on `127.0.0.1:8080`.
 Leave `OPENBOT_TLS_CERT` and `OPENBOT_TLS_KEY` empty.
 
 The proxy must:
 
-- send the `Origin`, `Cookie`, and `Authorization` headers to Platform without changes,
+- send the `Origin`, `Cookie`, and `Authorization` headers to OpenBot without changes,
 - not buffer responses, because Turns can stream their output as server-sent events (SSE),
 - allow long responses. `GET /v1/sessions/:id/wait` can wait for up to 30 seconds, and a stream lasts as long as its Turn.
 
@@ -240,21 +240,21 @@ api.example.com {
 
 ## Your own client on the same origin
 
-A browser client on the same origin as Platform can use the sign-in cookie. It needs no user token.
-To do this, your proxy sends some paths to Platform and all other paths to your client.
+A browser client on the same origin as OpenBot can use the sign-in cookie. It needs no user token.
+To do this, your proxy sends some paths to OpenBot and all other paths to your client.
 
 | Path            | Send to     | What it is                                             |
 | --------------- | ----------- | ------------------------------------------------------ |
-| `/auth/*`       | Platform    | Sign-in, sign-out, and the App authorization callback. |
-| `/v1/*`         | Platform    | The API.                                               |
-| `/health`       | Platform    | The health check.                                      |
-| `/openapi.json` | Platform    | The OpenAPI document.                                  |
-| `/docs`         | Platform    | The interactive API reference. Optional.               |
+| `/auth/*`       | OpenBot     | Sign-in, sign-out, and the App authorization callback. |
+| `/v1/*`         | OpenBot     | The API.                                               |
+| `/health`       | OpenBot     | The health check.                                      |
+| `/openapi.json` | OpenBot     | The OpenAPI document.                                  |
+| `/docs`         | OpenBot     | The interactive API reference. Optional.               |
 | everything else | Your client | Your pages, including `/`.                             |
 
 When you mount your client at `/`, the service document of `GET /` is no longer public. That is fine. Clients can use the paths above directly.
 
-After sign-in, Platform sends the browser back to a path on your client. The default is `/`. Your client must also handle these return addresses:
+After sign-in, OpenBot sends the browser back to a path on your client. The default is `/`. Your client must also handle these return addresses:
 
 - `/?authorization=<flowId>` after an App authorization. Call `completeAppAuthorization` next. See [Apps](/docs/apps).
 - `/?developerTest=<testId>` after a developer test authorization. See [Developer tools](/docs/developer-tools).
@@ -277,7 +277,7 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
   exec -T postgres pg_dump -U openbot -Fc openbot > openbot-$(date +%F).dump
 ```
 
-To restore it, first stop Platform with `docker compose --env-file .env.production -f deploy/docker/compose.production.yaml stop platform`. Then run `pg_restore`:
+To restore it, first stop OpenBot with `docker compose --env-file .env.production -f deploy/docker/compose.production.yaml stop openbot`. Then run `pg_restore`:
 
 ```sh
 docker compose --env-file .env.production -f deploy/docker/compose.production.yaml \
@@ -314,7 +314,7 @@ The workflow runs for pull requests, pushes to `main`, and tags like `v1.2.3`. I
 | A push to `main`    | `<commit-sha>` and `latest` |
 | A tag like `v1.2.3` | `<commit-sha>` and `v1.2.3` |
 
-The images go to the GitHub container registry, at `ghcr.io/openbot-build/openbot/platform` and `ghcr.io/openbot-build/openbot/protocol-test`. The workflow does not deploy Platform. To use a published image with Compose, pull it and tag it as `openbot-platform:<tag>`.
+The images go to the GitHub container registry, at `ghcr.io/openbot-build/openbot` and `ghcr.io/openbot-build/openbot/protocol-test`. The workflow does not deploy OpenBot. To use a published image with Compose, pull it and tag it as `openbot:<tag>`.
 
 ### Publish the docs site
 
@@ -333,7 +333,7 @@ The repository settings must use **GitHub Actions** as the Pages source, with `o
 
 `deploy/docker/check.sh` starts `compose.production.yaml` with test settings. The extra file `compose.check.yaml` removes the host ports and adds a `check` service. `check.env` has the test settings. None of them are real secrets.
 
-The `check` service runs `check.mjs` inside the Compose network, after Platform and the protocol test service are healthy. It checks that:
+The `check` service runs `check.mjs` inside the Compose network, after OpenBot and the protocol test service are healthy. It checks that:
 
 - `/v1/sessions` returns `401` with no key and with a bad key,
 - `/openapi.json` works,
@@ -348,6 +348,6 @@ Run the same checks on your computer:
 devenv shell -- pnpm images
 devenv shell -- pnpm images:check
 devenv shell -- hadolint deploy/docker/Dockerfile
-devenv shell -- dive --ci --source docker openbot-platform:local
-devenv shell -- trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed openbot-platform:local
+devenv shell -- dive --ci --source docker openbot:local
+devenv shell -- trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed openbot:local
 ```

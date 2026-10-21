@@ -1,0 +1,90 @@
+import { createHash } from "node:crypto"
+import {
+	type AgentsApi,
+	type Caller,
+	type Permissions,
+} from "@openbot-build/api"
+import { Option } from "effect"
+import { agentKey, resourceKey } from "../authorization/Policy.ts"
+
+export type Capability = AgentsApi.Capability
+
+/**
+ * True when a stored capability covers a request.
+ * The target `*` covers every target. Stored arguments must match exactly, and no arguments match any.
+ */
+export const covers = ({
+	stored,
+	request,
+}: {
+	readonly stored: Capability
+	readonly request: Capability
+}) =>
+	stored.action === request.action &&
+	(stored.target === "*" || stored.target === request.target) &&
+	(stored.arguments === undefined ||
+		JSON.stringify(stored.arguments) ===
+			JSON.stringify(request.arguments ?? {}))
+
+/** A short and stable text that names a capability, for logs, prompts and cache keys. */
+export const describe = (capability: Capability) =>
+	capability.action +
+	" " +
+	capability.target +
+	(capability.arguments === undefined
+		? ""
+		: " " + JSON.stringify(capability.arguments))
+
+export const hash = (value: unknown) =>
+	createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 40)
+
+/**
+ * The member permission that a capability needs, and its resource key.
+ * An Agent never does more than the member it works for, so this check comes first.
+ */
+export const permission = (input: {
+	readonly caller: Caller
+	readonly capability: Capability
+	readonly session: string
+	/** The target Agent, for actions on an Agent. */
+	readonly agent?: AgentsApi.Agent
+}): {
+	readonly permission: Permissions.PermissionGroupId
+	readonly key: string
+} => {
+	const subject = {
+		organizationId: input.caller.organizationId,
+		userId: input.caller.userId,
+	}
+	const onAgent = (permission: Permissions.PermissionGroupId) => ({
+		permission,
+		key:
+			input.agent === undefined
+				? resourceKey({ subject, kind: "agent", id: Option.none() })
+				: agentKey({ ...input.agent, organizationId: subject.organizationId }),
+	})
+	switch (input.capability.action) {
+		case "apps.call":
+			return {
+				permission: "apps.use",
+				key: resourceKey({ subject, kind: "apps", id: Option.none() }),
+			}
+		case "agents.spawn":
+			return {
+				permission: "agents.write",
+				key:
+					resourceKey({ subject, kind: "user", id: Option.none() }) + ".agent",
+			}
+		case "agents.delegate":
+			return onAgent("agents.delegate")
+		case "tools.call":
+			return {
+				permission: "responses.run",
+				key: resourceKey({
+					subject,
+					kind: "session",
+					id: Option.some(input.session),
+				}),
+			}
+	}
+}

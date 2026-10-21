@@ -1,16 +1,16 @@
 ---
 title: Models
-description: Connect Platform to a language model.
+description: Connect OpenBot to a language model.
 ---
 
-An Agent needs a language model to do work. Platform does not include a model. You connect one.
+An Agent needs a language model to do work. OpenBot does not include a model. You connect one.
 This page shows the three ways to do it: environment variables, your own code, and test models for development.
 
 ---
 
 ## Use an OpenAI-compatible model
 
-The `openbot-platform` program can use one model from any service that offers the OpenAI Chat Completions API.
+The `openbot` program can use one model from any service that offers the OpenAI Chat Completions API.
 Set these three variables:
 
 ```sh
@@ -22,10 +22,10 @@ OPENBOT_MODEL_ID=gpt-4.1
 | Variable                 | Rule                                                                                              |
 | ------------------------ | ------------------------------------------------------------------------------------------------- |
 | `OPENBOT_MODEL_ENDPOINT` | An `http` or `https` base URL, often ending in `/v1`. No user name, password, query, or `#` part. |
-| `OPENBOT_MODEL_API_KEY`  | Not empty. Platform sends it to the endpoint only.                                                |
+| `OPENBOT_MODEL_API_KEY`  | Not empty. OpenBot sends it to the endpoint only.                                                 |
 | `OPENBOT_MODEL_ID`       | Not empty. The model name that the service expects.                                               |
 
-Set all three, or none of them. If you set only some, or the endpoint is not a valid URL, Platform does not start.
+Set all three, or none of them. If you set only some, or the endpoint is not a valid URL, OpenBot does not start.
 
 This model is the default for every new Session. It also appears in the model list of each Session:
 
@@ -49,7 +49,7 @@ See the [Sessions API reference](/docs/api/operations/tags/sessions/) for all fi
 
 ## Run without a model
 
-If you set none of the model variables, Platform still starts. You can make, read, rename, fork, and delete Sessions.
+If you set none of the model variables, OpenBot still starts. You can make, read, rename, fork, and delete Sessions.
 
 Work that needs a model fails with status `503` and the error `SessionExecutionUnavailable`. This includes:
 
@@ -65,17 +65,17 @@ Work that needs a model fails with status `503` and the error `SessionExecutionU
 
 ## Use your own model in code
 
-When you run Platform from your own program, you can use any model that works with Effect AI. Effect AI is the AI library of Effect. Its `LanguageModel` service is the common interface for all models.
+When you run OpenBot from your own program, you can use any model that works with Effect AI. Effect AI is the AI library of Effect. Its `LanguageModel` service is the common interface for all models.
 See [Run from code](/docs/server) to set up the program.
 
 ### One model
 
-Give a `LanguageModel` Layer to `Server.layer`. A Layer is an Effect recipe that builds a service. Platform uses this model for every Turn.
+Give a `LanguageModel` Layer to `Server.layer`. A Layer is an Effect recipe that builds a service. OpenBot uses this model for every Turn.
 
 ```ts
 import { NodeRuntime } from "@effect/platform-node"
 import { Config, Model, Provider } from "@openbot-build/core"
-import { EnvironmentConfiguration, Server } from "@openbot-build/platform"
+import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
 import { AnthropicProvider } from "@openbot-build/provider-anthropic"
 import { Effect, Layer, Redacted } from "effect"
 import { FetchHttpClient } from "effect/http"
@@ -153,7 +153,7 @@ const sessions = (claude: LanguageModel.LanguageModel) => ({
 
 `resolveModel` gets `undefined` when the Session has no saved choice. When it fails, starting a Turn returns `503`.
 To build `claude`, use `Layer.build` on the model Layer in a scope, then read the service with `Context.get(context, LanguageModel.LanguageModel)`.
-The built-in production model in `packages/platform/src/app/ProductionModel.ts` follows this pattern. It is a good full example.
+The built-in production model in `packages/openbot/src/app/ProductionModel.ts` follows this pattern. It is a good full example.
 
 ---
 

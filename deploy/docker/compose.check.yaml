@@ -3,14 +3,14 @@
 name: openbot-check
 
 services:
-  platform:
+  openbot:
     ports: !reset []
 
   protocol-test:
     ports: !reset []
 
   check:
-    image: openbot-platform:${OPENBOT_RELEASE}
+    image: openbot:${OPENBOT_RELEASE}
     platform: linux/amd64
     command: [/check/check.mjs]
     volumes:
@@ -18,7 +18,7 @@ services:
     healthcheck:
       disable: true
     depends_on:
-      platform:
+      openbot:
         condition: service_healthy
       protocol-test:
         condition: service_healthy

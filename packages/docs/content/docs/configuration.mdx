@@ -1,28 +1,28 @@
 ---
 title: Configuration
-description: Every environment variable that Platform reads.
+description: Every environment variable that OpenBot reads.
 ---
 
-Platform reads its settings from environment variables when it starts.
+OpenBot reads its settings from environment variables when it starts.
 This page lists every variable, what it does, and its default value.
-Platform can also read each setting from a file. See [Secrets as files](#secrets-as-files).
+OpenBot can also read each setting from a file. See [Secrets as files](#secrets-as-files).
 
-If a required value is missing or wrong, Platform does not start. It writes a configuration error to the log.
+If a required value is missing or wrong, OpenBot does not start. It writes a configuration error to the log.
 
 ---
 
 ## Server
 
-| Variable                | Required | Default     | Meaning                                                                      |
-| ----------------------- | -------- | ----------- | ---------------------------------------------------------------------------- |
-| `OPENBOT_PUBLIC_ORIGIN` | Yes      |             | The public HTTPS address of Platform, for example `https://api.example.com`. |
-| `OPENBOT_HOST`          | No       | `127.0.0.1` | The network address that the server listens on.                              |
-| `OPENBOT_PORT`          | No       | `3000`      | The port that the server listens on.                                         |
+| Variable                | Required | Default     | Meaning                                                                     |
+| ----------------------- | -------- | ----------- | --------------------------------------------------------------------------- |
+| `OPENBOT_PUBLIC_ORIGIN` | Yes      |             | The public HTTPS address of OpenBot, for example `https://api.example.com`. |
+| `OPENBOT_HOST`          | No       | `127.0.0.1` | The network address that the server listens on.                             |
+| `OPENBOT_PORT`          | No       | `3000`      | The port that the server listens on.                                        |
 
 `OPENBOT_PUBLIC_ORIGIN` must be an origin only. An origin is the scheme, the host name, and the port, if there is one.
 It must use `https`. It must not have a path, a trailing slash, a user name, or a password.
 
-Platform uses this value in three places:
+OpenBot uses this value in three places:
 
 - It builds the sign-in redirect URI `<origin>/auth/callback/oidc`.
 - It checks the `Origin` header of browser requests that change data. The header must be exactly equal to this value.
@@ -50,12 +50,12 @@ When the server starts, it checks that all tables exist. If they do not exist, i
 | `OPENBOT_DEV_MODE`           | No                   | `0`     | Set to `1` to use a local test account instead of a provider.              |
 
 OpenID Connect (OIDC) is a standard way to sign people in with an outside account provider.
-Platform finds the provider settings at `<issuer>/.well-known/openid-configuration`. It asks for the scopes `openid profile email`.
+OpenBot finds the provider settings at `<issuer>/.well-known/openid-configuration`. It asks for the scopes `openid profile email`.
 
-When the client secret is empty, Platform acts as a public client. It then uses PKCE, a check that keeps the sign-in code safe without a secret.
-When you set a secret, Platform uses PKCE and also sends the secret.
+When the client secret is empty, OpenBot acts as a public client. It then uses PKCE, a check that keeps the sign-in code safe without a secret.
+When you set a secret, OpenBot uses PKCE and also sends the secret.
 
-`OPENBOT_DEV_MODE=1` turns off OpenID Connect. Platform then signs everyone in to one local account.
+`OPENBOT_DEV_MODE=1` turns off OpenID Connect. OpenBot then signs everyone in to one local account.
 It works only when `OPENBOT_PUBLIC_ORIGIN` points to your own computer: `localhost`, `127.0.0.1`, or `[::1]`.
 Never use it on a public server. See [Authentication](/docs/authentication).
 
@@ -64,11 +64,11 @@ Never use it on a public server. See [Authentication](/docs/authentication).
 | Variable                        | Required | Default | Meaning                                                                                                           |
 | ------------------------------- | -------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
 | `OPENBOT_OWNER_EMAILS`          | No       | empty   | Emails, with commas between them. These people join as Super Administrators when the provider verified the email. |
-| `OPENBOT_ALLOWED_EMAIL_DOMAINS` | No       | empty   | Email domains, with commas between them. Platform uses them only when it creates the organization.                |
+| `OPENBOT_ALLOWED_EMAIL_DOMAINS` | No       | empty   | Email domains, with commas between them. OpenBot uses them only when it creates the organization.                 |
 
-One deployment has one organization. Platform creates it when the first account signs in.
+One deployment has one organization. OpenBot creates it when the first account signs in.
 With `OPENBOT_OWNER_EMAILS` empty, that first account becomes the Super Administrator. One person alone needs no setting.
-After Platform creates the organization, change the allowed domains with `PATCH /v1/organization`. See [Organization](/docs/organization).
+After OpenBot creates the organization, change the allowed domains with `PATCH /v1/organization`. See [Organization](/docs/organization).
 
 ## Secrets
 
@@ -86,7 +86,7 @@ openssl rand -hex 32
 `BETTER_AUTH_SECRET` signs and encrypts sign-in sessions. If it changes, every person must sign in again.
 
 `OPENBOT_APP_ENCRYPTION_KEY` encrypts the private data of App connections. This includes App credentials, private settings, and sign-in state.
-Keep it together with your database backups. If you lose it or change it, Platform cannot read the App secrets that are already stored.
+Keep it together with your database backups. If you lose it or change it, OpenBot cannot read the App secrets that are already stored.
 
 <Callout type="warn">
 	Keep both values out of source control. Do not reuse one value for both
@@ -100,8 +100,8 @@ Keep it together with your database backups. If you lose it or change it, Platfo
 | `OPENBOT_TLS_CERT` | No       |         | The path to a PEM certificate file.          |
 | `OPENBOT_TLS_KEY`  | No       |         | The path to the PEM private key file for it. |
 
-Set both values to make Platform serve HTTPS itself. Set neither to serve plain HTTP.
-If you set only one, Platform does not start.
+Set both values to make OpenBot serve HTTPS itself. Set neither to serve plain HTTP.
+If you set only one, OpenBot does not start.
 
 In production, a reverse proxy usually handles HTTPS. Then you leave both values empty. See [Deploy](/docs/deploy).
 
@@ -113,31 +113,31 @@ In production, a reverse proxy usually handles HTTPS. Then you leave both values
 | `OPENBOT_MODEL_API_KEY`  | No       |         | The API key for that service.                                                      |
 | `OPENBOT_MODEL_ID`       | No       |         | The model name to use, for example `gpt-4.1`.                                      |
 
-Set all three values, or none of them. If you set only some, Platform does not start.
+Set all three values, or none of them. If you set only some, OpenBot does not start.
 Without a model, you can still make and read Sessions, but starting a Turn returns `503`. See [Models](/docs/models).
 
 ## Production Compose
 
-The Compose file `deploy/docker/compose.production.yaml` reads these extra variables. Platform itself does not read them.
+The Compose file `deploy/docker/compose.production.yaml` reads these extra variables. OpenBot itself does not read them.
 
 | Variable                        | Required | Default                       | Meaning                                                                 |
 | ------------------------------- | -------- | ----------------------------- | ----------------------------------------------------------------------- |
 | `POSTGRES_PASSWORD`             | Yes      |                               | The password of the PostgreSQL user `openbot`. Use URL-safe characters. |
 | `OPENBOT_DATABASE_URL`          | Yes      |                               | The template fills it in from `POSTGRES_PASSWORD`.                      |
 | `OPENBOT_RELEASE`               | Yes      |                               | The image tag to run.                                                   |
-| `OPENBOT_PUBLISHED_PORT`        | No       | `8080`                        | The port on `127.0.0.1` where your reverse proxy finds Platform.        |
+| `OPENBOT_PUBLISHED_PORT`        | No       | `8080`                        | The port on `127.0.0.1` where your reverse proxy finds OpenBot.         |
 | `PROTOCOL_TEST_PUBLIC_ORIGIN`   | Yes      |                               | The public HTTPS origin of the protocol test service.                   |
 | `PROTOCOL_TEST_ALLOWED_ORIGINS` | No       | `PROTOCOL_TEST_PUBLIC_ORIGIN` | Browser origins that the protocol test service accepts.                 |
 
-The Compose file gives the secrets to Platform as files in `/run/secrets`. See [Deploy](/docs/deploy#run-with-compose).
+The Compose file gives the secrets to OpenBot as files in `/run/secrets`. See [Deploy](/docs/deploy#run-with-compose).
 A full template is in `deploy/docker/production.env.example`.
 
 ## Secrets as files
 
-When an environment variable is not set, Platform reads the file `/run/secrets/<NAME>` instead. For example, it reads `BETTER_AUTH_SECRET` from `/run/secrets/BETTER_AUTH_SECRET`. Docker and Compose put secrets in this folder.
+When an environment variable is not set, OpenBot reads the file `/run/secrets/<NAME>` instead. For example, it reads `BETTER_AUTH_SECRET` from `/run/secrets/BETTER_AUTH_SECRET`. Docker and Compose put secrets in this folder.
 
 - An environment variable always comes first, even when the file exists.
-- Platform removes spaces and line breaks at the start and end of the file.
+- OpenBot removes spaces and line breaks at the start and end of the file.
 - An empty file counts as not set. A missing file or folder also counts as not set.
 
 This works for every setting on this page. It is most useful for secrets, because environment variables show in `docker inspect`, and files do not.
@@ -148,7 +148,7 @@ This works for every setting on this page. It is most useful for secrets, becaus
 
 | Variable                    | Default   | Meaning                                       |
 | --------------------------- | --------- | --------------------------------------------- |
-| `OPENBOT_DEV_HTTPS_PORT`    | `8443`    | The HTTPS port of the local Platform.         |
+| `OPENBOT_DEV_HTTPS_PORT`    | `8443`    | The HTTPS port of the local OpenBot.          |
 | `OPENBOT_DEV_DATABASE_PORT` | `5433`    | The local port of the development PostgreSQL. |
 | `OPENBOT_DEV_DATABASE_NAME` | `openbot` | The name of the development database.         |
 

@@ -1,7 +1,7 @@
-// Writes the OpenAPI document from the Platform API contract.
+// Writes the OpenAPI document from the OpenBot API contract.
 // The starlight-openapi plugin makes the API reference pages from this file.
 import { writeFile } from "node:fs/promises"
-import { PlatformApi } from "@openbot-build/platform-api"
+import { OpenBotApi } from "@openbot-build/api"
 import { OpenApi } from "effect/http-api"
 
 // The title and a short description for each API group, in reading order.
@@ -61,7 +61,7 @@ const groups = [
 const titles = new Map<string, string>(
 	groups.map(([tag, title]) => [tag, title] as const),
 )
-const document = OpenApi.fromApi(PlatformApi)
+const document = OpenApi.fromApi(OpenBotApi)
 
 const missing = (document.tags ?? [])
 	.map((tag) => tag.name)
@@ -94,7 +94,7 @@ const output = {
 		...document.info,
 		description: `${document.info.description ?? ""}
 
-This reference is made from the same contract that the server and the TypeScript client use, so it always matches the running Platform. [Download the OpenAPI document](/openapi.json) to use it with your own tools, such as a code generator. Every Platform also serves it at \`/openapi.json\`. See [Authentication](/docs/authentication) and [Permissions](/docs/permissions).`,
+This reference is made from the same contract that the server and the TypeScript client use, so it always matches the running OpenBot. [Download the OpenAPI document](/openapi.json) to use it with your own tools, such as a code generator. Every OpenBot also serves it at \`/openapi.json\`. See [Authentication](/docs/authentication) and [Permissions](/docs/permissions).`,
 	},
 	tags: groups.map(([, name, description]) => ({ name, description })),
 }

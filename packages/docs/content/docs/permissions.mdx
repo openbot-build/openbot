@@ -3,17 +3,17 @@ title: Permissions
 description: Permission groups, policies, roles and resource keys.
 ---
 
-This page shows how Platform decides if a caller may do something.
-Every call to `/v1` needs one or more permissions. Platform checks them before the call runs.
+This page shows how OpenBot decides if a caller may do something.
+Every call to `/v1` needs one or more permissions. OpenBot checks them before the call runs.
 
 The model has four parts:
 
-| Part             | What it is                                                                        |
-| ---------------- | --------------------------------------------------------------------------------- |
-| Permission group | A named set of actions on one kind of resource, such as `sessions.read`.          |
-| Resource key     | The name of one resource, such as one Session.                                    |
-| Policy           | Says `allow` or `deny` for some permission groups on some resources.              |
-| Role             | A fixed set of policies that Platform gives you, such as Member or Administrator. |
+| Part             | What it is                                                                       |
+| ---------------- | -------------------------------------------------------------------------------- |
+| Permission group | A named set of actions on one kind of resource, such as `sessions.read`.         |
+| Resource key     | The name of one resource, such as one Session.                                   |
+| Policy           | Says `allow` or `deny` for some permission groups on some resources.             |
+| Role             | A fixed set of policies that OpenBot gives you, such as Member or Administrator. |
 
 A member gets the policies of their roles, plus their own extra policies. A user token gets the policies of its member, and also its own policies.
 
@@ -45,7 +45,7 @@ List them with `GET /v1/organization/permission_groups`.
 | `members.write`      | Organization | Change the roles, policies and status of members, and remove members.   |
 | `audit_logs.read`    | Organization | Read the audit log.                                                     |
 
-The [API reference](/docs/api) lists the routes. The contract in `@openbot-build/platform-api` says which permission each route needs.
+The [API reference](/docs/api) lists the routes. The contract in `@openbot-build/api` says which permission each route needs.
 
 ---
 
@@ -88,7 +88,7 @@ A policy looks like this:
 }
 ```
 
-Platform decides in this order:
+OpenBot decides in this order:
 
 1. If a matching policy says `deny`, the answer is no.
 2. If a matching policy says `allow`, the answer is yes.
@@ -96,7 +96,7 @@ Platform decides in this order:
 
 A policy matches when it names the permission group, and one of its resources covers the key of the request.
 
-A policy can only name resources in its own organization. Otherwise Platform returns `400`.
+A policy can only name resources in its own organization. Otherwise OpenBot returns `400`.
 
 ### Tokens never do more than their member
 
@@ -158,7 +158,7 @@ curl -X PATCH -b cookies.txt \
 | Status | Error                      | When                                                                  |
 | ------ | -------------------------- | --------------------------------------------------------------------- |
 | `403`  | `PermissionDenied`         | No policy allows the call, or a policy denies it. See the body below. |
-| `503`  | `AuthorizationUnavailable` | Platform cannot read the roles and policies of the caller right now.  |
+| `503`  | `AuthorizationUnavailable` | OpenBot cannot read the roles and policies of the caller right now.   |
 
 The body of `PermissionDenied` names the permission and the resource key:
 
