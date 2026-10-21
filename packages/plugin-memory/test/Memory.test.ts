@@ -268,3 +268,45 @@ test("extraction of new history checks source IDs, and failures keep progress un
 		).pipe(Effect.provide(unusedModel)),
 	)
 })
+
+test("the memory text keeps the newest active entries that fit and never cuts one", () => {
+	const entry = (key: string, content: string, updatedAt: number) => ({
+		key,
+		content,
+		kind: "fact" as const,
+		sources: [],
+		updatedAt,
+		status: "active" as const,
+	})
+	const state: Memory.State = {
+		entries: {
+			old: entry("old", "An old fact", 1),
+			middle: entry("middle", "A middle fact", 2),
+			newest: entry("newest", "The newest fact", 3),
+			removed: {
+				...entry("removed", "A removed fact", 4),
+				status: "retracted",
+			},
+		},
+		processed: [],
+	}
+	const line = (key: string, content: string) =>
+		`[fact; ${key}; sources=] ${content}`
+	const newest = line("newest", "The newest fact"),
+		middle = line("middle", "A middle fact"),
+		old = line("old", "An old fact")
+	assert.equal(
+		MemoryRules.policy.project(state),
+		[newest, middle, old].join("\n"),
+	)
+	assert.equal(
+		MemoryRules.make({
+			maxLength: newest.length + 1 + middle.length,
+		}).project(state),
+		[newest, middle].join("\n"),
+	)
+	assert.equal(
+		MemoryRules.make({ maxLength: newest.length - 1 }).project(state),
+		"",
+	)
+})

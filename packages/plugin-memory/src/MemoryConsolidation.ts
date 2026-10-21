@@ -1,4 +1,4 @@
-import { Clock, Effect, Option } from "effect"
+import { Clock, Effect, HashSet, Option } from "effect"
 import type { Item } from "@openbot-build/core"
 import type { LanguageModel } from "effect/ai"
 import * as Memory from "./Memory.ts"
@@ -25,8 +25,9 @@ export const run = <A, E, R>(input: {
 	R | LanguageModel.LanguageModel
 > =>
 	Effect.gen(function* () {
+		const processed = HashSet.fromIterable(input.state.processed)
 		const history = input.history.filter(
-			(entry) => !input.state.processed.includes(entry.id),
+			(entry) => !HashSet.has(processed, entry.id),
 		)
 		if (history.length === 0) return Option.none()
 		const extracted = yield* input.model.extract({

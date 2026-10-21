@@ -198,6 +198,7 @@ const program = Effect.scoped(
 
 `read` returns the learned entries. `update` runs a `Remember` or `Forget` edit. `consolidate` asks the model to learn new entries from new history.
 `MemoryRules` and `LanguageModelMemory` are the default rules and model. You can replace them.
+`MemoryRules.policy` limits the memory text to 8000 characters. Use `MemoryRules.make({ maxLength })` for another limit.
 
 `MemoryPlugin.make` gives the plugin that uses memory in each Turn. It adds the active entries to the instructions. After a completed Turn, it learns new entries. You give it two Effects that run in each Turn:
 
