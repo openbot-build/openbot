@@ -12,15 +12,15 @@ This page shows the Agent tools, the brief and the result, and how to watch dele
 
 OpenBot gives every Agent these tools:
 
-| Tool                     | What it does                                                                       |
-| ------------------------ | ---------------------------------------------------------------------------------- |
-| `openbot_list_agents`    | Lists the Agents it can give work to, with their roles. It includes its subagents. |
-| `openbot_agent_details`  | Reads the role and instructions of one Agent.                                      |
-| `openbot_delegate`       | Gives a task to another Agent and waits for the result.                            |
-| `openbot_spawn_subagent` | Starts a new [subagent](/docs/agents#three-kinds-of-agents) for its Session.       |
-| `openbot_report`         | Only in delegated work. Sends the result back.                                     |
+| Tool                          | What it does                                                                            |
+| ----------------------------- | --------------------------------------------------------------------------------------- |
+| `openbot_list_agents`         | Lists the Agents it can give work to, with their roles. It includes its Session Agents. |
+| `openbot_agent_details`       | Reads the role and instructions of one Agent.                                           |
+| `openbot_delegate`            | Gives a task to another Agent and waits for the result.                                 |
+| `openbot_start_session_agent` | Starts a new [Session Agent](/docs/agents#three-kinds-of-agents) for its Session.       |
+| `openbot_report`              | Only in delegated work. Sends the result back.                                          |
 
-The first time an Agent gives work to another lasting Agent, or starts a subagent, the decider above it must agree. See [Requests](/docs/requests). An Agent can always give work to the subagents that it started.
+The first time an Agent gives work to another lasting Agent, or starts a Session Agent, the decider above it must agree. See [Requests](/docs/requests). An Agent can always give work to the Session Agents that it started.
 
 ---
 
@@ -45,7 +45,7 @@ The other Agent gets the brief as the first message of a Turn. It never sees the
 ### Which Session the work uses
 
 - With `session`, the work goes on in that Session, if it belongs to the other Agent and was started from the same Session.
-- For a subagent, the work goes on in its latest Session from the same parent Session. So a subagent keeps its context.
+- For a Session Agent, the work goes on in its latest Session from the same parent Session. So a Session Agent keeps its context.
 - Otherwise the work starts in a new Session.
 
 If the other Session is busy, the brief waits in its queue and runs next.
@@ -110,4 +110,4 @@ When you [interrupt](/docs/sessions#steer-queue-and-interrupt) a Turn, OpenBot a
 
 ## Forks
 
-A Fork of a Session is new direct work. It keeps the Agent of its source, but it has no `parent`. Work that a Fork gives away starts in new Sessions, so two branches never share the work of one subagent.
+A Fork of a Session is new direct work. It keeps the Agent of its source, but it has no `parent`. Work that a Fork gives away starts in new Sessions, so two branches never share the work of one Session Agent.

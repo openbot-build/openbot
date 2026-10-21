@@ -25,11 +25,11 @@ export interface Subject {
 }
 
 export const mainInstructions =
-	"You are the Main Agent of one person. You act for them. Do simple work yourself. When work needs a special skill or a long effort, give it to one of the person's other Agents with the delegate tool, or start a subagent for it. Write a clear brief, and always pass the person's own words unchanged. Read the results, check them, and tell the person what was done."
+	"You are the Main Agent of one person. You act for them. Do simple work yourself. When work needs a special skill or a long effort, give it to one of the person's other Agents with the delegate tool, or start a Session Agent for it. Write a clear brief, and always pass the person's own words unchanged. Read the results, check them, and tell the person what was done."
 
 export const newId = () => "agt_" + randomUUID().replaceAll("-", "")
 
-/** The Agents of an organization: the Main Agents, other lasting Agents and subagents. */
+/** The Agents of an organization: the Main Agents, other lasting Agents and Session Agents. */
 export class Agents extends Context.Service<
 	Agents,
 	{
@@ -55,8 +55,8 @@ export class Agents extends Context.Service<
 			caller: Caller,
 			input: AgentsApi.CreateAgentRequest,
 		) => Effect.Effect<Agent, Failure, AuthorizationServices>
-		/** Makes a subagent. The Session owns it, and it lives as long as the Session. */
-		readonly createSubagent: (
+		/** Makes a Session Agent. The Session owns it, and it lives as long as the Session. */
+		readonly createSessionAgent: (
 			subject: Subject,
 			input: {
 				readonly session: Session.Id
@@ -71,23 +71,23 @@ export class Agents extends Context.Service<
 			id: string,
 			input: AgentsApi.UpdateAgentRequest,
 		) => Effect.Effect<Agent, Failure, AuthorizationServices>
-		/** Changes the owner of a subagent to the member of its Session. */
+		/** Changes the owner of a Session Agent to the member of its Session. */
 		readonly promote: (
 			caller: Caller,
 			id: string,
 			expected: number,
 		) => Effect.Effect<Agent, Failure, AuthorizationServices>
-		/** The subagents that a Session owns. */
+		/** The Session Agents that a Session owns. */
 		readonly ownedBy: (
 			subject: Subject,
 			session: Session.Id,
 		) => Effect.Effect<ReadonlyArray<Agent>, AgentsApi.AgentStorageUnavailable>
-		/** Archives the subagents of a Session, for example when the Session goes away. */
+		/** Archives the Session Agents of a Session, for example when the Session goes away. */
 		readonly archiveOwnedBy: (
 			subject: Subject,
 			session: Session.Id,
 		) => Effect.Effect<ReadonlyArray<Agent>, AgentsApi.AgentStorageUnavailable>
-		/** Copies a subagent for another Session, so that a Fork has its own subagent. */
+		/** Copies a Session Agent for another Session, so that a Fork has its own Session Agent. */
 		readonly copyFor: (
 			subject: Subject,
 			agent: Agent,
@@ -215,7 +215,7 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 						...own.filter(
 							(agent) =>
 								agent.id !== main.id &&
-								(input.session !== undefined || agent.kind !== "subagent"),
+								(input.session !== undefined || agent.kind !== "session"),
 						),
 						...shared,
 					]
@@ -267,12 +267,12 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 						})
 					return yield* put(caller.organizationId, agent)
 				}),
-			createSubagent: (subject, input) =>
+			createSessionAgent: (subject, input) =>
 				Effect.gen(function* () {
 					const now = yield* Clock.currentTimeMillis
 					return yield* put(subject.organizationId, {
 						id: AgentsApi.AgentId.make(newId()),
-						kind: "subagent",
+						kind: "session",
 						owner: {
 							_tag: "Session",
 							userId: subject.userId,
@@ -314,10 +314,10 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 				}),
 			promote: (caller, id, expected) =>
 				change(caller, id, "agents.write", expected, (agent) =>
-					agent.kind !== "subagent" || agent.owner._tag !== "Session"
+					agent.kind !== "session" || agent.owner._tag !== "Session"
 						? Effect.fail(
 								AgentsApi.AgentInvalid.make({
-									message: "Only a subagent can be promoted.",
+									message: "Only a Session Agent can be promoted.",
 								}),
 							)
 						: Effect.succeed({
@@ -334,7 +334,7 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 					})
 					.pipe(
 						Effect.map((list) =>
-							list.filter((agent) => agent.kind === "subagent"),
+							list.filter((agent) => agent.kind === "session"),
 						),
 					),
 			archiveOwnedBy: (subject, session) =>
@@ -346,7 +346,7 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 					const now = yield* Clock.currentTimeMillis
 					return yield* Effect.forEach(
 						owned.filter(
-							(agent) => agent.kind === "subagent" && !agent.archived,
+							(agent) => agent.kind === "session" && !agent.archived,
 						),
 						(agent) =>
 							put(subject.organizationId, {

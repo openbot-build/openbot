@@ -85,7 +85,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions/$SESSION
 ```
 
-`DELETE /v1/sessions/:sessionId` removes the Session and returns `204`. Its [subagents](/docs/agents#three-kinds-of-agents) are archived. If a Turn runs, OpenBot returns `409` with `SessionBusy`.
+`DELETE /v1/sessions/:sessionId` removes the Session and returns `204`. Its [Session Agents](/docs/agents#three-kinds-of-agents) are archived. If a Turn runs, OpenBot returns `409` with `SessionBusy`.
 
 ---
 

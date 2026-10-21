@@ -111,7 +111,7 @@ const implementations = Effect.gen(function* () {
 				const caller = yield* Identity
 				const sessions = yield* current
 				yield* sessions.remove(params.sessionId)
-				// The subagents of a Session live only as long as the Session.
+				// The Session Agents of a Session live only as long as the Session.
 				yield* agents
 					.archiveOwnedBy(caller, params.sessionId)
 					.pipe(Effect.mapError(() => SessionStorageUnavailable.make({})))

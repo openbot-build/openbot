@@ -307,7 +307,7 @@ export const layer = Layer.effectDiscard(
 					Option.fromNullishOr(delegation.brief.session),
 					{
 						onNone: () =>
-							target.value.kind === "subagent"
+							target.value.kind === "session"
 								? sessions
 										.list({ agent: target.value.id, kind: "delegated" })
 										.pipe(

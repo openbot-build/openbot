@@ -15,7 +15,7 @@ This page shows how the check works, how a person answers requests, and what eac
 | `apps.call`       | `<connection>/<tool name>` | It calls an App tool.                               |
 | `tools.call`      | The tool name              | It calls a tool of the host that asks for approval. |
 | `agents.delegate` | The ID of the other Agent  | It gives work to another lasting Agent.             |
-| `agents.spawn`    | `*`                        | It starts a subagent.                               |
+| `agents.spawn`    | `*`                        | It starts a Session Agent.                          |
 
 Each capability tool takes a `reason`. App tools get an extra `openbot_reason` parameter for it. OpenBot never sends it to the App.
 
@@ -30,13 +30,13 @@ OpenBot checks each attempt in this order. The first step that decides wins.
 3. **Rules.** A judge model reads the [Rules](/docs/rules) for this Agent in plain language. Only a Rule that the judge quotes can allow or deny.
 4. **The decider above.** OpenBot makes a request. The decider is the Agent that gave this Agent its work. For the first Agent of the work, the decider is the person.
 
-Some calls need no decision: tool calls that the organization marks as reads, and work for subagents that the Agent started itself.
+Some calls need no decision: tool calls that the organization marks as reads, and work for Session Agents that the Agent started itself.
 
 When any check fails, the call waits. It never runs without a decision.
 
 ### The chain of deciders
 
-Work goes down a chain, such as **person → Main → Programmer → subagent**. A request from the subagent goes to the Programmer first.
+Work goes down a chain, such as **person → Main → Programmer → Session Agent**. A request from the Session Agent goes to the Programmer first.
 
 A decider can only allow what it may do itself. If the Programmer agrees but does not hold the capability, the request goes up to Main with the support of the Programmer, and then to the person. When someone above allows it, each Agent on the way gets a Grant, with the scope that it chose.
 

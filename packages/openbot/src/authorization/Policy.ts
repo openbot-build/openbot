@@ -53,7 +53,7 @@ export const resourceKey = (target: {
 
 /**
  * The key of one Agent. Shared Agents are below the organization.
- * The Agents of a member, and the subagents in their Sessions, are below that member.
+ * The Agents of a member, and the Session Agents in their Sessions, are below that member.
  */
 export const agentKey = (agent: {
 	readonly organizationId: string

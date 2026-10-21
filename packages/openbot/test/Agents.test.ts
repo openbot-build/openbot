@@ -400,7 +400,7 @@ test(
 )
 
 test(
-	"a subagent asks, its owning Agent reviews and passes it up, and the person decides at the top",
+	"a Session Agent asks, its owning Agent reviews and passes it up, and the person decides at the top",
 	{ timeout: 120000 },
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
@@ -446,7 +446,7 @@ test(
 					).find(check),
 				)
 
-			// Starting a subagent is a capability, so the person decides it first.
+			// Starting a Session Agent is a capability, so the person decides it first.
 			await turn("spawn a helper")
 			const spawn = await pendingFor(
 				(request) => request.capability.action === "agents.spawn",
@@ -459,13 +459,13 @@ test(
 				}),
 			)
 			await completed()
-			const subagents = await json(
+			const sessionAgents = await json(
 				Schema.Array(AgentsApi.Agent),
 				send(alice.session, "/v1/agents?session=" + created.session.id),
 			)
-			assert.equal(subagents.length, 1)
-			const helper = subagents[0]!
-			assert.equal(helper.kind, "subagent")
+			assert.equal(sessionAgents.length, 1)
+			const helper = sessionAgents[0]!
+			assert.equal(helper.kind, "session")
 			assert.deepEqual(helper.owner, {
 				_tag: "Session",
 				userId: alice.identity.userId,
@@ -546,7 +546,7 @@ test(
 				[],
 			)
 
-			// Deleting the Session archives its subagents.
+			// Deleting the Session archives its Session Agents.
 			assert.equal((await send(alice.session, path, "DELETE")).status, 204)
 			const after = await json(
 				AgentsApi.Agent,

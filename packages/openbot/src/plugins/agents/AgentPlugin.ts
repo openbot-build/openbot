@@ -112,7 +112,7 @@ const RuleInput = Schema.Struct({
 /** The tool names of this plugin. Delegation and review code finds calls by these names. */
 export const names = {
 	delegate: "openbot_delegate",
-	spawn: "openbot_spawn_subagent",
+	spawn: "openbot_start_session_agent",
 	list: "openbot_list_agents",
 	details: "openbot_agent_details",
 	report: "openbot_report",
@@ -301,7 +301,7 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 								reason: brief.reason,
 								toolCallId: context.toolCallId,
 								target: target.value,
-								// An Agent may always give work to the subagents it started.
+								// An Agent may always give work to the Session Agents it started.
 								implicit: own,
 							})
 							yield* record(answer === "allow" ? "queued" : "authorizing")
@@ -312,7 +312,7 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 			),
 			entry(
 				names.spawn,
-				"Start a new subagent for this Session. It keeps its own context while this Session lasts. Give it a clear role and instructions.",
+				"Start a new Session Agent for this Session. It keeps its own context while this Session lasts. Give it a clear role and instructions.",
 				{
 					type: "object",
 					properties: { name: text, role: text, instructions: text, reason },
@@ -322,7 +322,7 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 					Effect.gen(function* () {
 						const current = yield* work
 						const spawn = yield* decode(SpawnInput)(input)
-						const agent = yield* agents.createSubagent(current.caller, {
+						const agent = yield* agents.createSessionAgent(current.caller, {
 							session: current.session,
 							name: spawn.name,
 							role: spawn.role,
@@ -345,7 +345,7 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 			),
 			entry(
 				names.list,
-				"List the Agents you can give work to, with their ids and roles. It includes the subagents of this Session.",
+				"List the Agents you can give work to, with their ids and roles. It includes the Session Agents of this Session.",
 				{ type: "object", properties: {} },
 				() =>
 					Effect.gen(function* () {

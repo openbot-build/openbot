@@ -52,7 +52,7 @@ export class AgentMemories extends Context.Service<
 			AgentsApi.AgentStorageUnavailable,
 			LanguageModel.LanguageModel
 		>
-		/** Adds the lasting entries of a Session memory, when a subagent is promoted. */
+		/** Adds the lasting entries of a Session memory, when a Session Agent is promoted. */
 		readonly adopt: (
 			organizationId: string,
 			agent: AgentsApi.AgentId,

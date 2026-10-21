@@ -25,7 +25,7 @@ export type AgentId = typeof AgentId.Type
 /**
  * Who owns an Agent.
  * A member owns their Main Agent and their own Agents. The organization owns shared Agents.
- * A Session owns a subagent: the subagent lives as long as that Session.
+ * A Session owns a Session Agent: the Session Agent lives as long as that Session.
  */
 export const AgentOwner = Schema.TaggedUnion({
 	Member: { userId: Schema.String },
@@ -34,7 +34,7 @@ export const AgentOwner = Schema.TaggedUnion({
 })
 export type AgentOwner = typeof AgentOwner.Type
 
-export const AgentKind = Schema.Literals(["main", "persistent", "subagent"])
+export const AgentKind = Schema.Literals(["main", "persistent", "session"])
 export type AgentKind = typeof AgentKind.Type
 
 export const Agent = Schema.Struct({
@@ -289,7 +289,7 @@ export class AgentsApi extends HttpApiGroup.make("agents")
 			error: AgentErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Lists the Agents that the caller can use: their Main Agent, their own Agents and the shared Agents. With `session`, it lists the subagents of that Session.",
+			"Lists the Agents that the caller can use: their Main Agent, their own Agents and the shared Agents. With `session`, it lists the Session Agents of that Session.",
 		),
 		HttpApiEndpoint.post("createAgent", "/v1/agents", {
 			payload: CreateAgentRequest,
@@ -314,7 +314,7 @@ export class AgentsApi extends HttpApiGroup.make("agents")
 			error: AgentErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Makes a subagent a lasting Agent of the caller. Its Session memory becomes its Agent memory.",
+			"Makes a Session Agent a lasting Agent of the caller. Its Session memory becomes its Agent memory.",
 		),
 		HttpApiEndpoint.get("agentMemory", "/v1/agents/:agentId/memory", {
 			params: agentParams,

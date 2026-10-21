@@ -14,17 +14,17 @@ This page shows the kinds of Agents and the routes under `/v1/agents`. Every rou
 | ------------ | ----------------------------- | ----------------------------------- | -------------------------------------------------------------------- |
 | `main`       | One member                    | As long as the member               | Acts for the person. Does simple work itself and gives work away.    |
 | `persistent` | A member, or the organization | Until you archive it                | A lasting worker with a role. It learns from its work over time.     |
-| `subagent`   | One Session                   | As long as the Session that owns it | A helper for one line of work. It keeps its context in that Session. |
+| `session`    | One Session                   | As long as the Session that owns it | A helper for one line of work. It keeps its context in that Session. |
 
 Every member has exactly one **Main Agent**. OpenBot makes it the first time it is needed. A Session that you create without an Agent belongs to your Main Agent.
 
-A **subagent** is "almost lasting". An Agent starts it with a tool while it works. The subagent keeps its context while its Session lasts, so the Agent can give it work many times. When you delete the Session, its subagents are archived too. You can [promote](#promote-a-subagent) a useful subagent to a lasting Agent.
+A **Session Agent** is "almost lasting". An Agent starts it with a tool while it works. The Session Agent keeps its context while its Session lasts, so the Agent can give it work many times. When you delete the Session, its Session Agents are archived too. You can [promote](#promote-a-session-agent) a useful Session Agent to a lasting Agent.
 
 Every Session belongs to one Agent. See [Sessions](/docs/sessions). How Agents give work to each other is on [Delegation](/docs/delegation).
 
 ### No limits that an Agent knows
 
-Agents have no list of things they may do. An Agent just tries. When it tries something new for the first time, such as starting a subagent or calling an App tool, the decider above it decides. See [Requests](/docs/requests). The decisions are kept, so the limits of each Agent grow from real work.
+Agents have no list of things they may do. An Agent just tries. When it tries something new for the first time, such as starting a Session Agent or calling an App tool, the decider above it decides. See [Requests](/docs/requests). The decisions are kept, so the limits of each Agent grow from real work.
 
 ---
 
@@ -66,7 +66,7 @@ OpenBot returns `201` with the Agent:
 
 ## List, read and change Agents
 
-`GET /v1/agents` lists your Main Agent, your own Agents and the shared Agents that you may use. Add `?archived=false` to hide archived Agents. Add `?session=<id>` to list the subagents of one Session.
+`GET /v1/agents` lists your Main Agent, your own Agents and the shared Agents that you may use. Add `?archived=false` to hide archived Agents. Add `?session=<id>` to list the Session Agents of one Session.
 
 `GET /v1/agents/:agentId` returns one Agent.
 
@@ -79,7 +79,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 `expected` is the current `revision`. You can change `name`, `role`, `instructions`, `model` (send `null` to remove it) and `archived`. The Main Agent cannot be archived.
 
-## Promote a subagent
+## Promote a Session Agent
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -88,7 +88,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/agents/$AGENT/promote
 ```
 
-The subagent becomes a lasting Agent of the member. OpenBot also adds the lasting entries of its Session memory to its [Agent memory](/docs/memory#agent-memory).
+The Session Agent becomes a lasting Agent of the member. OpenBot also adds the lasting entries of its Session memory to its [Agent memory](/docs/memory#agent-memory).
 
 ---
 
