@@ -39,7 +39,6 @@ You can also write these values in code.
 | `Platform.layer(options)`                                   | The services behind the routes: sign-in, tokens, permissions, storage, Sessions, and Apps. |
 | `DatabasePostgres`                                          | The database Layer and the `migrate` program.                                              |
 | `EnvironmentConfiguration`                                  | Reads Platform settings from environment variables.                                        |
-| `Lark`, `LarkConfiguration`                                 | Error alerts to Lark. See [Alerts](/docs/alerts).                                          |
 | `Auth`, `Sessions`, `AppHost`, `AppPlugin`, `Configuration` | Service types for advanced setups.                                                         |
 
 ---
@@ -237,16 +236,7 @@ NodeRuntime.runMain(
 )
 ```
 
-## Add alerts
+## Send error logs to your own service
 
-`Lark.layer(settings)` sends error logs to a Lark bot. Provide it outside the server so that it stays open until the server closes:
-
-```ts
-const program = Layer.launch(Server.layer(settings)).pipe(
-	Effect.provide(
-		Lark.layer(larkSettings).pipe(Layer.provide(FetchHttpClient.layer)),
-	),
-)
-```
-
-See [Alerts](/docs/alerts) for the full example and the settings.
+Platform writes failures as error logs. Add your own Effect logger to send them to another service.
+See [Error logs](/docs/error-logs) for what each log contains and a full example.

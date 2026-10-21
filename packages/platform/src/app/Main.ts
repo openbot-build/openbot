@@ -4,12 +4,12 @@ import * as SecretFiles from "../configuration/SecretFiles.ts"
 import { NodeRuntime } from "@effect/platform-node"
 
 import * as Server from "./Server.ts"
-import * as Entry from "./Entry.ts"
+import * as ErrorReporting from "./ErrorReporting.ts"
 import * as ProductionModel from "./ProductionModel.ts"
 import { FetchHttpClient } from "effect/http"
 
 NodeRuntime.runMain(
-	Entry.withErrorReporting(
+	ErrorReporting.withStartup(
 		Effect.gen(function* () {
 			const settings = yield* EnvironmentConfiguration.load
 			const model = yield* ProductionModel.load

@@ -2,10 +2,10 @@ import { NodeRuntime } from "@effect/platform-node"
 import { Effect, Layer } from "effect"
 import * as EnvironmentConfiguration from "../configuration/EnvironmentConfiguration.ts"
 import * as Development from "./Development.ts"
-import * as Entry from "./Entry.ts"
+import * as ErrorReporting from "./ErrorReporting.ts"
 
 NodeRuntime.runMain(
-	Entry.withErrorReporting(
+	ErrorReporting.withStartup(
 		Effect.gen(function* () {
 			const settings = yield* EnvironmentConfiguration.load
 			return yield* Layer.launch(

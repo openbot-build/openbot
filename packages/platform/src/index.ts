@@ -8,5 +8,3 @@ export * as AppHost from "./apps/AppHost.ts"
 export * as AppPlugin from "./apps/AppPlugin.ts"
 
 export * as Configuration from "./configuration/Configuration.ts"
-export * as Lark from "./app/Lark.ts"
-export * as LarkConfiguration from "./configuration/LarkConfiguration.ts"

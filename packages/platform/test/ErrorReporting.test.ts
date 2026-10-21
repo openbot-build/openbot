@@ -15,9 +15,8 @@ import {
 	Stream,
 } from "effect"
 import { LanguageModel } from "effect/ai"
-import { FetchHttpClient, HttpRouter, HttpServerResponse } from "effect/http"
+import { HttpRouter, HttpServerResponse } from "effect/http"
 import * as ErrorReporting from "../src/app/ErrorReporting.ts"
-import * as Entry from "../src/app/Entry.ts"
 import * as EnvironmentConfiguration from "../src/configuration/EnvironmentConfiguration.ts"
 import * as ManagedSessions from "../src/sessions/ManagedSessions.ts"
 import * as Approvals from "../src/approvals/Approvals.ts"
@@ -86,22 +85,21 @@ test("HTTP failures are reported once with route templates, and rejections keep 
 	}
 })
 
-test("the entry reports configuration failure before a database is available and keeps its failure", async () => {
+test("startup reports configuration failure before a database is available and keeps its failure", async () => {
 	let sent = 0
 	const exit = await Effect.runPromiseExit(
-		Entry.withErrorReporting(EnvironmentConfiguration.load).pipe(
+		ErrorReporting.withStartup(EnvironmentConfiguration.load).pipe(
 			Effect.provideService(
 				ConfigProvider.ConfigProvider,
-				ConfigProvider.fromUnknown({
-					OPENBOT_LARK_WEBHOOK_URL:
-						"https://open.larksuite.com/open-apis/bot/v2/hook/test-hook",
-				}),
+				ConfigProvider.fromUnknown({}),
 			),
-			Effect.provideService(FetchHttpClient.Fetch, async () => {
-				sent++
-				return Response.json({ code: 0 })
-			}),
-			Effect.provide(Logger.layer([])),
+			Effect.provide(
+				Logger.layer([
+					Logger.make((log) => {
+						if (log.logLevel === "Error") sent++
+					}),
+				]),
+			),
 		),
 	)
 	assert.ok(Exit.isFailure(exit))
@@ -230,19 +228,14 @@ test("database startup failure is reported without a working database", async ()
 		),
 	)
 	const exit = await Effect.runPromiseExit(
-		Entry.withErrorReporting(program).pipe(
-			Effect.provideService(
-				ConfigProvider.ConfigProvider,
-				ConfigProvider.fromUnknown({
-					OPENBOT_LARK_WEBHOOK_URL:
-						"https://open.larksuite.com/open-apis/bot/v2/hook/test-hook",
-				}),
+		ErrorReporting.withStartup(program).pipe(
+			Effect.provide(
+				Logger.layer([
+					Logger.make((log) => {
+						if (log.logLevel === "Error") sent++
+					}),
+				]),
 			),
-			Effect.provideService(FetchHttpClient.Fetch, async () => {
-				sent++
-				return Response.json({ code: 0 })
-			}),
-			Effect.provide(Logger.layer([])),
 		),
 	)
 	assert.ok(Exit.isFailure(exit))

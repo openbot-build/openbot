@@ -133,9 +133,9 @@ The file `deploy/docker/compose.production.yaml` runs these services:
 The `protocol-test` service is the public test service for the App Protocol. See [Protocol test](/docs/protocol-test).
 The file needs `PROTOCOL_TEST_PUBLIC_ORIGIN` even if you only use Platform.
 
-Compose gives the secrets to the containers as files in `/run/secrets`, not as environment variables. These are `POSTGRES_PASSWORD`, `OPENBOT_DATABASE_URL`, `BETTER_AUTH_SECRET`, `OPENBOT_APP_ENCRYPTION_KEY`, `OPENBOT_OIDC_CLIENT_SECRET`, `OPENBOT_MODEL_API_KEY`, `OPENBOT_LARK_WEBHOOK_URL`, and `OPENBOT_LARK_SIGNING_SECRET`. Compose takes their values from `.env.production`. The `migrate` service gets only `OPENBOT_DATABASE_URL`.
+Compose gives the secrets to the containers as files in `/run/secrets`, not as environment variables. These are `POSTGRES_PASSWORD`, `OPENBOT_DATABASE_URL`, `BETTER_AUTH_SECRET`, `OPENBOT_APP_ENCRYPTION_KEY`, `OPENBOT_OIDC_CLIENT_SECRET`, and `OPENBOT_MODEL_API_KEY`. Compose takes their values from `.env.production`. The `migrate` service gets only `OPENBOT_DATABASE_URL`.
 
-In the template, `OPENBOT_DATABASE_URL` uses `${POSTGRES_PASSWORD}`, so you set the password only once. Compose also sets `OPENBOT_ENVIRONMENT=production` and `OPENBOT_VERSION=$OPENBOT_RELEASE`.
+In the template, `OPENBOT_DATABASE_URL` uses `${POSTGRES_PASSWORD}`, so you set the password only once.
 
 <Steps>
 <Step>

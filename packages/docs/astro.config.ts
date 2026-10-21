@@ -61,7 +61,7 @@ export default defineConfig({
 					items: [
 						"docs/configuration",
 						"docs/models",
-						"docs/alerts",
+						"docs/error-logs",
 						"docs/deploy",
 					],
 				},

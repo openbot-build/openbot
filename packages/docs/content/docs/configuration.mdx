@@ -116,18 +116,6 @@ In production, a reverse proxy usually handles HTTPS. Then you leave both values
 Set all three values, or none of them. If you set only some, Platform does not start.
 Without a model, you can still make and read Sessions, but starting a Turn returns `503`. See [Models](/docs/models).
 
-## Alerts
-
-| Variable                      | Required | Default       | Meaning                                               |
-| ----------------------------- | -------- | ------------- | ----------------------------------------------------- |
-| `OPENBOT_LARK_WEBHOOK_URL`    | No       | empty         | The URL of a Lark custom bot. Empty turns alerts off. |
-| `OPENBOT_LARK_SIGNING_SECRET` | No       | empty         | The signing secret of the bot, if it uses one.        |
-| `OPENBOT_ENVIRONMENT`         | No       | `development` | A label for the environment, such as `production`.    |
-| `OPENBOT_VERSION`             | No       | `unknown`     | A label for the release, such as a commit SHA.        |
-| `OPENBOT_INSTANCE`            | No       | host name     | A label for this server. Empty means the host name.   |
-
-See [Alerts](/docs/alerts) for what Platform sends.
-
 ## Production Compose
 
 The Compose file `deploy/docker/compose.production.yaml` reads these extra variables. Platform itself does not read them.
@@ -136,12 +124,12 @@ The Compose file `deploy/docker/compose.production.yaml` reads these extra varia
 | ------------------------------- | -------- | ----------------------------- | ----------------------------------------------------------------------- |
 | `POSTGRES_PASSWORD`             | Yes      |                               | The password of the PostgreSQL user `openbot`. Use URL-safe characters. |
 | `OPENBOT_DATABASE_URL`          | Yes      |                               | The template fills it in from `POSTGRES_PASSWORD`.                      |
-| `OPENBOT_RELEASE`               | Yes      |                               | The image tag to run. It is also sent as `OPENBOT_VERSION`.             |
+| `OPENBOT_RELEASE`               | Yes      |                               | The image tag to run.                                                   |
 | `OPENBOT_PUBLISHED_PORT`        | No       | `8080`                        | The port on `127.0.0.1` where your reverse proxy finds Platform.        |
 | `PROTOCOL_TEST_PUBLIC_ORIGIN`   | Yes      |                               | The public HTTPS origin of the protocol test service.                   |
 | `PROTOCOL_TEST_ALLOWED_ORIGINS` | No       | `PROTOCOL_TEST_PUBLIC_ORIGIN` | Browser origins that the protocol test service accepts.                 |
 
-The Compose file sets `OPENBOT_ENVIRONMENT=production`. It gives the secrets to Platform as files in `/run/secrets`. See [Deploy](/docs/deploy#run-with-compose).
+The Compose file gives the secrets to Platform as files in `/run/secrets`. See [Deploy](/docs/deploy#run-with-compose).
 A full template is in `deploy/docker/production.env.example`.
 
 ## Secrets as files
