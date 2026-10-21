@@ -80,7 +80,7 @@ For one Card, add the token to the Card:
 }
 ```
 
-Platform reads the Card at its exact URL, with no redirects. Your `robots.txt` must allow the `OpenBot` user agent.
+OpenBot reads the Card at its exact URL, with no redirects. Your `robots.txt` must allow the `OpenBot` user agent.
 
 </Step>
 <Step>
@@ -97,10 +97,10 @@ On success you get a **proof**. You become the `administrator` for that scope. O
 </Step>
 </Steps>
 
-Keep the token in place. A proof is valid for 7 days, and Platform checks it again every day:
+Keep the token in place. A proof is valid for 7 days, and OpenBot checks it again every day:
 
 - If the token is gone, the proof becomes `Suspended` at once.
-- If the check cannot run, the proof becomes `Unconfirmed`. It still works until it ends. Platform tries again after about one minute.
+- If the check cannot run, the proof becomes `Unconfirmed`. It still works until it ends. OpenBot tries again after about one minute.
 - A `Suspended` proof gives no access.
 
 To check now, call `POST /v1/developer/proofs/:id/verify`. To give up a proof, call `POST /v1/developer/proofs/:id/relinquish`. To cancel a claim, call `POST /v1/developer/claims/:id/revoke`.
@@ -146,7 +146,7 @@ A comparison lists the issues that are `introduced`, `resolved` and `persisting`
 
 ## Private connection tests
 
-A test connects to your App from Platform, like a user would. It is private. It does not save a user connection, and it does not add the App to the Index. A test ends after one hour.
+A test connects to your App from OpenBot, like a user would. It is private. It does not save a user connection, and it does not add the App to the Index. A test ends after one hour.
 
 1. Create a test with your own UUID: `POST /v1/developer/tests` with `{ "id", "cardUrl", "remoteIndex" }`.
 2. If the endpoint needs settings, send them: `PUT /v1/developer/tests/:id/configuration` with an object of keys and values. The keys are the same as for [connections](/docs/apps#review-and-create-the-connection).
@@ -160,16 +160,16 @@ When the App needs an account, the test status becomes `AwaitingAuthorization`.
 
 1. Start the sign-in: `POST /v1/developer/tests/:id/authorization` with `{ "scopes": [] }`. Add `issuer` if the App has more than one provider.
 2. Open `authorization.authorizationUrl` in your browser and sign in.
-3. The provider sends you to `/auth/developer/apps/callback`. Platform then sends you to `/?developerTest=<testId>`.
+3. The provider sends you to `/auth/developer/apps/callback`. OpenBot then sends you to `/?developerTest=<testId>`.
 4. Finish: `POST /v1/developer/tests/:id/authorization/complete`. Then run the test again.
 
-When you are done, call `POST /v1/developer/tests/:id/cleanup`. Platform revokes the test sign-in where the provider allows it, and deletes the stored tokens. You can also `cancel` a running test, or `DELETE` it.
+When you are done, call `POST /v1/developer/tests/:id/cleanup`. OpenBot revokes the test sign-in where the provider allows it, and deletes the stored tokens. You can also `cancel` a running test, or `DELETE` it.
 
 ---
 
 ## Ask for indexing
 
-You do not have to wait for a user to connect your App. Ask Platform to check it:
+You do not have to wait for a user to connect your App. Ask OpenBot to check it:
 
 ```sh
 curl -X POST https://api.example.com/v1/developer/indexing \
@@ -178,7 +178,7 @@ curl -X POST https://api.example.com/v1/developer/indexing \
   -d '{ "cardUrl": "https://apps.example.com/mcp/server-card" }'
 ```
 
-Platform inspects the App first. If it is not eligible, you get 409 with the `reason`. If the deployment blocks the App, you get 403 `DeveloperRestricted`.
+OpenBot inspects the App first. If it is not eligible, you get 409 with the `reason`. If the deployment blocks the App, you get 403 `DeveloperRestricted`.
 
 The request `status` goes from `Accepted` to `Waiting`, `Verifying` and `Completed`. When it is done, `check` has the result. List requests with `GET /v1/developer/indexing`, or read one with `GET /v1/developer/indexing/:id`.
 
@@ -186,7 +186,7 @@ The request `status` goes from `Accepted` to `Waiting`, `Verifying` and `Complet
 
 ## Notifications
 
-Platform checks the Apps you manage about every hour. It sends you a notice when something changes.
+OpenBot checks the Apps you manage about every hour. It sends you a notice when something changes.
 
 | Kind            | When                                              |
 | --------------- | ------------------------------------------------- |

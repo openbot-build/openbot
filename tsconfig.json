@@ -2,19 +2,13 @@
 	"files": [],
 	"references": [
 		{
-			"path": "./packages/platform-api"
+			"path": "./packages/api"
 		},
 		{
-			"path": "./packages/platform"
+			"path": "./packages/openbot"
 		},
 		{
 			"path": "./packages/core"
-		},
-		{
-			"path": "./packages/plugin-goal"
-		},
-		{
-			"path": "./packages/plugin-turn-limiter"
 		},
 		{
 			"path": "./packages/protocol"
@@ -24,9 +18,6 @@
 		},
 		{
 			"path": "./packages/provider-openai"
-		},
-		{
-			"path": "./packages/plugin-memory"
 		},
 		{
 			"path": "./packages/provider-anthropic"

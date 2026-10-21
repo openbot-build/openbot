@@ -23,7 +23,7 @@ After that, an account joins in one of these ways:
 Every other account gets `403` with `MembershipRequired` when it signs in.
 
 When `OPENBOT_OWNER_EMAILS` is set, the first account does not become a Super Administrator on its own. Only the listed emails do.
-`OPENBOT_ALLOWED_EMAIL_DOMAINS` sets the allowed domains when Platform creates the organization. After that, change them with the API. See [Configuration](/docs/configuration).
+`OPENBOT_ALLOWED_EMAIL_DOMAINS` sets the allowed domains when OpenBot creates the organization. After that, change them with the API. See [Configuration](/docs/configuration).
 
 ---
 
@@ -177,4 +177,4 @@ The audit log records important changes. Nothing can change or remove an entry.
 | `403`  | `PermissionDenied`               | The caller does not have the permission. See [Permissions](/docs/permissions). |
 | `404`  | `MemberNotFound`                 | No member has this user ID.                                                    |
 | `409`  | `LastSuperAdministrator`         | The change would leave no active Super Administrator.                          |
-| `503`  | `OrganizationStorageUnavailable` | Platform cannot reach its database.                                            |
+| `503`  | `OrganizationStorageUnavailable` | OpenBot cannot reach its database.                                             |

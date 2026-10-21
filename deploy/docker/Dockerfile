@@ -12,10 +12,10 @@ RUN pnpm fetch --frozen-lockfile
 COPY . .
 RUN pnpm install --offline --frozen-lockfile
 
-FROM workspace AS build-platform
-# Platform runs as one bundled file, so the image needs no node_modules.
-RUN pnpm --filter-prod @openbot-build/platform^... build \
-    && pnpm --filter @openbot-build/platform exec tsdown --config ../../deploy/docker/tsdown.config.ts
+FROM workspace AS build-openbot
+# OpenBot runs as one bundled file, so the image needs no node_modules.
+RUN pnpm --filter-prod @openbot-build/openbot^... build \
+    && pnpm --filter @openbot-build/openbot exec tsdown --config ../../deploy/docker/tsdown.config.ts
 
 FROM workspace AS build-protocol-test
 RUN pnpm --filter @openbot-build/protocol-test... build \
@@ -33,11 +33,11 @@ ENV NODE_ENV=production
 WORKDIR /app
 ENTRYPOINT ["/usr/local/bin/node"]
 
-FROM runtime AS platform
+FROM runtime AS openbot
 ENV OPENBOT_HOST=0.0.0.0 \
     OPENBOT_PORT=3000
-COPY --link --from=build-platform /workspace/.devenv/platform/dist/app ./dist/app
-COPY --link --from=build-platform /workspace/packages/platform/migrations ./migrations
+COPY --link --from=build-openbot /workspace/.devenv/openbot/dist/app ./dist/app
+COPY --link --from=build-openbot /workspace/packages/openbot/migrations ./migrations
 EXPOSE 3000
 HEALTHCHECK --interval=5s --timeout=5s --start-period=10s --retries=12 \
     CMD ["/usr/local/bin/node", "--input-type=module", "-e", "const response = await fetch('http://127.0.0.1:3000/health'); if (response.status !== 200 || (await response.json()).status !== 'ok') process.exit(1)"]

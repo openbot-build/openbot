@@ -1,9 +1,0 @@
-{
-	"extends": "../../tsconfig.base.json",
-	"compilerOptions": {
-		"composite": false,
-		"tsBuildInfoFile": ".cache/tests.tsbuildinfo",
-		"allowImportingTsExtensions": true
-	},
-	"include": ["test"]
-}

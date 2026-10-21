@@ -16,7 +16,7 @@ This page shows the kinds of Agents and the routes under `/v1/agents`. Every rou
 | `persistent` | A member, or the organization | Until you archive it                | A lasting worker with a role. It learns from its work over time.     |
 | `subagent`   | One Session                   | As long as the Session that owns it | A helper for one line of work. It keeps its context in that Session. |
 
-Every member has exactly one **Main Agent**. Platform makes it the first time it is needed. A Session that you create without an Agent belongs to your Main Agent.
+Every member has exactly one **Main Agent**. OpenBot makes it the first time it is needed. A Session that you create without an Agent belongs to your Main Agent.
 
 A **subagent** is "almost lasting". An Agent starts it with a tool while it works. The subagent keeps its context while its Session lasts, so the Agent can give it work many times. When you delete the Session, its subagents are archived too. You can [promote](#promote-a-subagent) a useful subagent to a lasting Agent.
 
@@ -45,7 +45,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `model`        | Optional. The default model for new Sessions of this Agent.                         |
 | `shared`       | Optional. `true` makes an organization Agent that every member can use.             |
 
-Platform returns `201` with the Agent:
+OpenBot returns `201` with the Agent:
 
 ```json
 {
@@ -88,13 +88,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/agents/$AGENT/promote
 ```
 
-The subagent becomes a lasting Agent of the member. Platform also adds the lasting entries of its Session memory to its [Agent memory](/docs/memory#agent-memory).
+The subagent becomes a lasting Agent of the member. OpenBot also adds the lasting entries of its Session memory to its [Agent memory](/docs/memory#agent-memory).
 
 ---
 
 ## What an Agent knows in each Turn
 
-Platform adds these to the instructions of every Turn:
+OpenBot adds these to the instructions of every Turn:
 
 - the name, role and instructions of the Agent,
 - the person it works with now, with their name and member ID,
@@ -122,4 +122,4 @@ Your own Agents are below your member key. Shared Agents are below `openbot.org.
 | `403`  | `PermissionDenied`        | You may read the Agent, but not change or use it.          |
 | `404`  | `AgentNotFound`           | There is no Agent with this ID that you may read.          |
 | `409`  | `AgentConflict`           | `expected` is old. Read the Agent again and retry.         |
-| `503`  | `AgentStorageUnavailable` | Platform cannot reach its database.                        |
+| `503`  | `AgentStorageUnavailable` | OpenBot cannot reach its database.                         |

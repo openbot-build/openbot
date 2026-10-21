@@ -3,12 +3,12 @@ title: Rules and Grants
 description: Keep decisions about capabilities, as exact Grants or as Rules in plain language.
 ---
 
-Decisions about [requests](/docs/requests) do not have to be made again and again. Platform keeps them in two forms:
+Decisions about [requests](/docs/requests) do not have to be made again and again. OpenBot keeps them in two forms:
 
-| Form  | Looks like                                                                                    | Who checks it            |
-| ----- | --------------------------------------------------------------------------------------------- | ------------------------ |
-| Grant | `apps.call` on `conn-7/search_orders`, allow, for this Session                                | Platform, by exact match |
-| Rule  | "The Programmer may read any repository of the openbot organization, but asks before a push." | A judge model            |
+| Form  | Looks like                                                                                    | Who checks it           |
+| ----- | --------------------------------------------------------------------------------------------- | ----------------------- |
+| Grant | `apps.call` on `conn-7/search_orders`, allow, for this Session                                | OpenBot, by exact match |
+| Rule  | "The Programmer may read any repository of the openbot organization, but asks before a push." | A judge model           |
 
 A Grant is fast and exact. A Rule covers a whole kind of request.
 
@@ -27,7 +27,7 @@ A **Grant** is a kept decision about one capability of one Agent. The Agent neve
 | `parent`     | The Grant of the decider that this Grant came from.                       |
 | `status`     | `active`, `used` or `revoked`.                                            |
 
-Platform makes Grants when a decider answers a request. You can also make one yourself:
+OpenBot makes Grants when a decider answers a request. You can also make one yourself:
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -38,7 +38,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 `GET /v1/agents/:agentId/grants` lists Grants. Add `?status=active` to see only active ones.
 
-`DELETE /v1/agents/:agentId/grants/:grantId` revokes a Grant. Platform also revokes every Grant that came from it, so Agents below lose what they got through it.
+`DELETE /v1/agents/:agentId/grants/:grantId` revokes a Grant. OpenBot also revokes every Grant that came from it, so Agents below lose what they got through it.
 
 ---
 
@@ -47,7 +47,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 A **Rule** is a sentence in plain language for one Agent. When no Grant decides a request, a judge model reads the active Rules of the Agent.
 
 - The judge allows only when a Rule clearly allows this request, and denies only when a Rule clearly forbids it. In every other case, the request goes to the decider.
-- Each allow or deny must quote the text of a Rule. Platform checks the quote. Without a real quote, there is no decision.
+- Each allow or deny must quote the text of a Rule. OpenBot checks the quote. Without a real quote, there is no decision.
 - A deny wins over an allow.
 - When the judge fails or is slow, there is no decision.
 
@@ -79,4 +79,4 @@ You can also keep a Rule when you answer a request: send `rule` with the answer.
 
 ### The judge model
 
-The judge uses the **helper model**, a model that Platform uses for its own work. By default it is the default model of Sessions. See [Server](/docs/server#agents). Platform keeps each judge answer for the same Rules and the same capability, so the judge does not run again for the same question.
+The judge uses the **helper model**, a model that OpenBot uses for its own work. By default it is the default model of Sessions. See [Server](/docs/server#agents). OpenBot keeps each judge answer for the same Rules and the same capability, so the judge does not run again for the same question.

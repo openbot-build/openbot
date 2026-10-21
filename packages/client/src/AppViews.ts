@@ -1,5 +1,5 @@
 import { specTypeSchemas } from "@modelcontextprotocol/client"
-import { AppViewsApi as Api } from "@openbot-build/platform-api"
+import { AppViewsApi as Api } from "@openbot-build/api"
 import { Client as ProtocolClient } from "@openbot-build/protocol"
 import type { UiClient } from "@openbot-build/protocol/McpApps"
 import { Effect, Schema } from "effect"

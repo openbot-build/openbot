@@ -3,7 +3,7 @@
 	"version": "0.1.0",
 	"license": "AGPL-3.0-only",
 	"type": "module",
-	"description": "Typed client for the OpenBot Platform API",
+	"description": "Typed client for the OpenBot API",
 	"sideEffects": false,
 	"exports": {
 		".": "./dist/index.js"
@@ -17,7 +17,7 @@
 		"build": "tsdown"
 	},
 	"dependencies": {
-		"@openbot-build/platform-api": "workspace:*",
+		"@openbot-build/api": "workspace:*",
 		"effect": "4.0.5",
 		"@openbot-build/protocol": "workspace:*",
 		"@modelcontextprotocol/client": "2.3.1"

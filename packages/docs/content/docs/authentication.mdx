@@ -8,10 +8,10 @@ A person signs in once in a browser. Then the person creates user tokens for scr
 
 There are two ways to call the business routes under `/v1`:
 
-| Way            | Who uses it                             | What you send                       |
-| -------------- | --------------------------------------- | ----------------------------------- |
-| User token     | Scripts, backend services, bots         | `Authorization: Bearer <token>`     |
-| Session cookie | A browser client on the Platform origin | The `__Host-openbot-session` cookie |
+| Way            | Who uses it                            | What you send                       |
+| -------------- | -------------------------------------- | ----------------------------------- |
+| User token     | Scripts, backend services, bots        | `Authorization: Bearer <token>`     |
+| Session cookie | A browser client on the OpenBot origin | The `__Host-openbot-session` cookie |
 
 Both ways need a permission for each call. See [Permissions](/docs/permissions).
 
@@ -19,11 +19,11 @@ Both ways need a permission for each call. See [Permissions](/docs/permissions).
 
 ## Sign in
 
-Platform does not keep passwords. It uses an OpenID Connect provider. OpenID Connect (OIDC) is a standard way to let another service check who a person is.
+OpenBot does not keep passwords. It uses an OpenID Connect provider. OpenID Connect (OIDC) is a standard way to let another service check who a person is.
 
-Platform uses [Better Auth](https://better-auth.com) for sign-in. Better Auth serves all of its routes under `/auth/*`, as its [Effect guide](https://better-auth.com/docs/integrations/effect) shows. These routes are not in the API reference. The [Better Auth docs](https://better-auth.com/docs/concepts/api) describe them.
+OpenBot uses [Better Auth](https://better-auth.com) for sign-in. Better Auth serves all of its routes under `/auth/*`, as its [Effect guide](https://better-auth.com/docs/integrations/effect) shows. These routes are not in the API reference. The [Better Auth docs](https://better-auth.com/docs/concepts/api) describe them.
 
-To start a sign-in, your client sends this request from the Platform origin:
+To start a sign-in, your client sends this request from the OpenBot origin:
 
 ```sh
 curl -X POST https://api.example.com/auth/sign-in/social \
@@ -32,26 +32,26 @@ curl -X POST https://api.example.com/auth/sign-in/social \
   -d '{ "provider": "oidc", "callbackURL": "https://api.example.com/settings/keys" }'
 ```
 
-The answer is JSON with a `url`. Send the browser to that `url`. After the person signs in, the provider sends the browser back to `https://api.example.com/auth/callback/oidc`. Better Auth then sets the session cookie and sends the browser to `callbackURL`. The `callbackURL` must be on the Platform origin. If it is not, Better Auth returns `403`.
+The answer is JSON with a `url`. Send the browser to that `url`. After the person signs in, the provider sends the browser back to `https://api.example.com/auth/callback/oidc`. Better Auth then sets the session cookie and sends the browser to `callbackURL`. The `callbackURL` must be on the OpenBot origin. If it is not, Better Auth returns `403`.
 If the sign-in fails, Better Auth sends the browser to `/auth/error?error=<code>` and sets no cookie.
 
 ### Set up the provider
 
-Register Platform as a client at your provider. Then set these environment variables:
+Register OpenBot as a client at your provider. Then set these environment variables:
 
 | Variable                     | Value                                                                           |
 | ---------------------------- | ------------------------------------------------------------------------------- |
 | `OPENBOT_OIDC_ISSUER`        | The issuer URL, for example `https://id.example.com`. HTTPS, no trailing slash. |
 | `OPENBOT_OIDC_CLIENT_ID`     | The client ID from the provider.                                                |
 | `OPENBOT_OIDC_CLIENT_SECRET` | The client secret. Leave it empty for a public client.                          |
-| `OPENBOT_PUBLIC_ORIGIN`      | The public HTTPS origin of Platform, for example `https://api.example.com`.     |
+| `OPENBOT_PUBLIC_ORIGIN`      | The public HTTPS origin of OpenBot, for example `https://api.example.com`.      |
 
-Use `<origin>/auth/callback/oidc` as the redirect URI at the provider. Platform asks for the scopes `openid profile email`.
-With an empty client secret, Platform signs in as a public client with PKCE. PKCE is a check that protects the sign-in code.
+Use `<origin>/auth/callback/oidc` as the redirect URI at the provider. OpenBot asks for the scopes `openid profile email`.
+With an empty client secret, OpenBot signs in as a public client with PKCE. PKCE is a check that protects the sign-in code.
 
 ### Development account
 
-For local work, set `OPENBOT_DEV_MODE=1`. Platform then uses one local account named "Local Developer" and no provider.
+For local work, set `OPENBOT_DEV_MODE=1`. OpenBot then uses one local account named "Local Developer" and no provider.
 This mode works only when the public origin is HTTPS on a loopback host: `localhost`, `127.0.0.1` or `[::1]`.
 
 This command signs in and saves the cookie in a file:
@@ -99,13 +99,13 @@ Every account that signs in must be a member of the organization. One deployment
 After sign-in, the browser holds the cookie `__Host-openbot-session`. It is `Secure`, `HttpOnly` and `SameSite=Lax`.
 
 - A sign-in lasts 30 days.
-- Platform renews it after one day of use.
+- OpenBot renews it after one day of use.
 
 ### The Origin rule
 
-A cookie goes with every browser request, even from other sites. So Platform checks where a write comes from.
+A cookie goes with every browser request, even from other sites. So OpenBot checks where a write comes from.
 When you use the cookie, every `POST`, `PUT`, `PATCH` and `DELETE` request must send an `Origin` header.
-The header must be exactly equal to `OPENBOT_PUBLIC_ORIGIN`. If it is not, Platform returns `403` with `ForbiddenOrigin`.
+The header must be exactly equal to `OPENBOT_PUBLIC_ORIGIN`. If it is not, OpenBot returns `403` with `ForbiddenOrigin`.
 
 ```sh
 curl -b cookies.txt \
@@ -143,7 +143,7 @@ curl -b cookies.txt \
 | `expiresInDays` | Optional. A whole number from 1 to 365. Leave it out for a token that works until you revoke it.                                    |
 | `policies`      | Optional. Policies that limit the token. Leave it out to allow everything that you can do, except `tokens.read` and `tokens.write`. |
 
-Platform returns `201`:
+OpenBot returns `201`:
 
 ```json
 {
@@ -171,7 +171,7 @@ Platform returns `201`:
 ```
 
 <Callout type="warn">
-	Platform shows the `secret` only once. Save it now in a safe place. Platform
+	OpenBot shows the `secret` only once. Save it now in a safe place. OpenBot
 	keeps only a SHA-256 hash of it.
 </Callout>
 
@@ -194,7 +194,7 @@ curl -X DELETE -b cookies.txt \
   https://api.example.com/v1/user/tokens/5f0c2a8e-7d1b-4c3e-9a55-2b6f1e8d4c10
 ```
 
-Platform returns `204` and deletes the token. The token stops working at once.
+OpenBot returns `204` and deletes the token. The token stops working at once.
 
 ### Check a token
 
@@ -224,7 +224,7 @@ With the session cookie, `caller.kind` is `member` and `token` is `null`.
 | `403`  | `ForbiddenOrigin`         | A cookie write without the exact `Origin` header.         |
 | `404`  | `TokenNotFound`           | You have no token with this ID.                           |
 | `409`  | `TokenLimitReached`       | You already have 25 tokens. The body has `"limit": 25`.   |
-| `503`  | `TokenStorageUnavailable` | Platform cannot reach its database.                       |
+| `503`  | `TokenStorageUnavailable` | OpenBot cannot reach its database.                        |
 
 A member can hold 25 tokens at a time. Expired tokens count too, so revoke old tokens to make room.
 
@@ -239,12 +239,12 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions
 ```
 
-A revoked, expired or unknown token gets `401` with `AuthenticationRequired`. If Platform cannot check the token, it returns `503` with `AuthenticationUnavailable`.
+A revoked, expired or unknown token gets `401` with `AuthenticationRequired`. If OpenBot cannot check the token, it returns `503` with `AuthenticationUnavailable`.
 
 ### Your own space
 
 Inside the organization, each member has their own Sessions, Apps and connections. Your tokens and your cookie see only your own.
-If you ask for a Session of another member, Platform answers `404`, as if it does not exist.
+If you ask for a Session of another member, OpenBot answers `404`, as if it does not exist.
 
 ---
 
@@ -252,10 +252,10 @@ If you ask for a Session of another member, Platform answers `404`, as if it doe
 
 Some flows send the browser back to your client after a round trip. You choose the place with `returnTo`.
 
-A return path must be a path on the same origin. It must start with one `/`. It cannot point to `/auth/*`, `/v1/*` or `/development/*`, because Platform owns those paths. The default is `/`.
+A return path must be a path on the same origin. It must start with one `/`. It cannot point to `/auth/*`, `/v1/*` or `/development/*`, because OpenBot owns those paths. The default is `/`.
 
-Platform has no pages, so your client must serve these paths. Two flows add a query value:
+OpenBot has no pages, so your client must serve these paths. Two flows add a query value:
 
-- **App authorization.** When an App sign-in comes back and the person is signed in, Platform finishes the flow. The browser goes to the return path with `?authorization=<flowId>`. Your client can read the result with `GET /v1/app-authorizations/<flowId>`.
+- **App authorization.** When an App sign-in comes back and the person is signed in, OpenBot finishes the flow. The browser goes to the return path with `?authorization=<flowId>`. Your client can read the result with `GET /v1/app-authorizations/<flowId>`.
   If the person is not signed in, the browser goes to `/?authorization=<flowId>`. Your client signs the person in with Better Auth (see [Sign in](#sign-in)), with this address as `callbackURL`. Then it calls `POST /v1/app-authorizations/<flowId>/complete` to finish the flow.
 - **Developer tests.** A developer test authorization returns to `/?developerTest=<testId>`.

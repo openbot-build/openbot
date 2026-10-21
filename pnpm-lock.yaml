@@ -46,9 +46,9 @@ importers:
       "@modelcontextprotocol/client":
         specifier: 2.3.1
         version: 2.3.1
-      "@openbot-build/platform-api":
+      "@openbot-build/api":
         specifier: workspace:*
-        version: link:../platform-api
+        version: link:../api
       "@openbot-build/protocol":
         specifier: workspace:*
         version: link:../protocol
@@ -76,9 +76,9 @@ importers:
       "@fontsource-variable/geist":
         specifier: 5.3.0
         version: 5.3.0
-      "@openbot-build/platform-api":
+      "@openbot-build/api":
         specifier: workspace:*
-        version: link:../platform-api
+        version: link:../api
       astro:
         specifier: 7.4.1
         version: 7.4.1(@types/node@26.6.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)
@@ -99,7 +99,7 @@ importers:
         specifier: 26.6.0
         version: 26.6.0
 
-  packages/platform:
+  packages/openbot:
     dependencies:
       "@better-auth/drizzle-adapter":
         specifier: 1.7.8
@@ -116,12 +116,9 @@ importers:
       "@openbot-build/core":
         specifier: workspace:*
         version: link:../core
-      "@openbot-build/platform-api":
+      "@openbot-build/api":
         specifier: workspace:*
-        version: link:../platform-api
-      "@openbot-build/plugin-memory":
-        specifier: workspace:*
-        version: link:../plugin-memory
+        version: link:../api
       "@openbot-build/protocol":
         specifier: workspace:*
         version: link:../protocol
@@ -151,45 +148,15 @@ importers:
         specifier: 8.23.1
         version: 8.23.1
 
-  packages/platform-api:
+  packages/api:
     dependencies:
       "@openbot-build/core":
         specifier: workspace:*
         version: link:../core
-      "@openbot-build/plugin-memory":
-        specifier: workspace:*
-        version: link:../plugin-memory
       "@openbot-build/protocol":
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
-      effect:
-        specifier: 4.0.5
-        version: 4.0.5
-
-  packages/plugin-goal:
-    devDependencies:
-      "@openbot-build/core":
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.5
-        version: 4.0.5
-
-  packages/plugin-memory:
-    dependencies:
-      "@openbot-build/core":
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.5
-        version: 4.0.5
-
-  packages/plugin-turn-limiter:
-    devDependencies:
-      "@openbot-build/core":
-        specifier: workspace:*
-        version: link:../core
       effect:
         specifier: 4.0.5
         version: 4.0.5

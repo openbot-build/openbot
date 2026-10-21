@@ -1,22 +1,22 @@
 ---
 title: Run from code
-description: Start Platform from your own TypeScript program.
+description: Start OpenBot from your own TypeScript program.
 ---
 
-The `openbot-platform` program covers most needs. When you need more, you can start Platform from your own program.
+The `openbot` program covers most needs. When you need more, you can start OpenBot from your own program.
 Then you can add your own models, tools, routes, and App Index sources.
 
-Platform is built with [Effect](https://effect.website). You build it from Layers. A Layer is an Effect recipe that builds services. Making a Layer does not open the network or the database. That happens when you launch it.
+OpenBot is built with [Effect](https://effect.website). You build it from Layers. A Layer is an Effect recipe that builds services. Making a Layer does not open the network or the database. That happens when you launch it.
 
 ---
 
 ## The smallest program
 
-This program does the same as `openbot-platform` without a model:
+This program does the same as `openbot` without a model:
 
 ```ts
 import { NodeRuntime } from "@effect/platform-node"
-import { EnvironmentConfiguration, Server } from "@openbot-build/platform"
+import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
 import { Effect, Layer } from "effect"
 
 NodeRuntime.runMain(
@@ -34,18 +34,18 @@ You can also write these values in code.
 
 | Export                                                      | What it is                                                                                 |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `Server.layer(options)`                                     | Platform with its own Node.js HTTP or HTTPS server.                                        |
+| `Server.layer(options)`                                     | OpenBot with its own Node.js HTTP or HTTPS server.                                         |
 | `Server.layerApi(options)`                                  | Only the HTTP routes, for an HTTP server that you already have.                            |
-| `Platform.layer(options)`                                   | The services behind the routes: sign-in, tokens, permissions, storage, Sessions, and Apps. |
+| `OpenBot.layer(options)`                                    | The services behind the routes: sign-in, tokens, permissions, storage, Sessions, and Apps. |
 | `DatabasePostgres`                                          | The database Layer and the `migrate` program.                                              |
-| `EnvironmentConfiguration`                                  | Reads Platform settings from environment variables.                                        |
+| `EnvironmentConfiguration`                                  | Reads OpenBot settings from environment variables.                                         |
 | `Auth`, `Sessions`, `AppHost`, `AppPlugin`, `Configuration` | Service types for advanced setups.                                                         |
 
 ---
 
 ## Options
 
-`Server.layer` takes all `Platform.layer` options, plus a few for the HTTP server.
+`Server.layer` takes all `OpenBot.layer` options, plus a few for the HTTP server.
 
 ### Required
 
@@ -90,13 +90,13 @@ const development = {
 
 | Option            | What it does                                                                             |
 | ----------------- | ---------------------------------------------------------------------------------------- |
-| `tls`             | `{ certFile, keyFile }` paths to PEM files. Platform then serves HTTPS itself.           |
+| `tls`             | `{ certFile, keyFile }` paths to PEM files. OpenBot then serves HTTPS itself.            |
 | `sessions`        | Models, tools, and memory for Sessions. See below.                                       |
 | `agents`          | The helper model, the request timeout, and Agent memory. See [Agents](#agents).          |
-| `routes`          | A Layer with your own HTTP routes, served next to the Platform routes.                   |
+| `routes`          | A Layer with your own HTTP routes, served next to the OpenBot routes.                    |
 | `discovery`       | A Layer that finds Apps on the web. The default reads public Catalogs over the internet. |
-| `indexSources`    | More sources for the App Index search, next to the Platform Index.                       |
-| `appRestrictions` | Apps that this Platform blocks: `{ cardUrl, reason, appealUrl }`.                        |
+| `indexSources`    | More sources for the App Index search, next to the OpenBot Index.                        |
+| `appRestrictions` | Apps that this OpenBot blocks: `{ cardUrl, reason, appealUrl }`.                         |
 | `appReadRules`    | App tools that you trust to only read: `{ cardUrl, tool }`.                              |
 | `indexWork`       | Timing of the App Index worker: `{ intervalMs, retryMs }`.                               |
 
@@ -130,10 +130,10 @@ sessions: {
 
 ### Add a tool
 
-A tool is a function that the model can call. Make it with Effect AI, then give the toolkit and its handlers to Platform:
+A tool is a function that the model can call. Make it with Effect AI, then give the toolkit and its handlers to OpenBot:
 
 ```ts
-import { type Configuration, Server } from "@openbot-build/platform"
+import { type Configuration, Server } from "@openbot-build/openbot"
 import { Effect, Layer, Schema } from "effect"
 import { Tool, Toolkit } from "effect/ai"
 
@@ -158,7 +158,7 @@ const server = (settings: Configuration.Settings) =>
 ```
 
 `model` is a `LanguageModel` Layer, as in [Models](/docs/models).
-Add `needsApproval: true` to `Tool.make` when each call needs a decision. Platform then makes a `tools.call` request for it. See [Requests](/docs/requests).
+Add `needsApproval: true` to `Tool.make` when each call needs a decision. OpenBot then makes a `tools.call` request for it. See [Requests](/docs/requests).
 
 ---
 
@@ -166,11 +166,11 @@ Add `needsApproval: true` to `Tool.make` when each call needs a decision. Platfo
 
 The `agents` option sets how [Agents](/docs/agents) work together.
 
-| Field            | What it does                                                                                                                                                           |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `helperModel`    | A model selection for the work that Platform does itself: the [judge of Rules](/docs/rules) and Agent memory. Without it, Platform uses the default model of Sessions. |
-| `requestTimeout` | How long a [request](/docs/requests) waits before it is denied, in milliseconds. The default is 24 hours.                                                              |
-| `memory`         | `false` stops learning [Agent memory](/docs/memory#agent-memory). It is on by default.                                                                                 |
+| Field            | What it does                                                                                                                                                         |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `helperModel`    | A model selection for the work that OpenBot does itself: the [judge of Rules](/docs/rules) and Agent memory. Without it, OpenBot uses the default model of Sessions. |
+| `requestTimeout` | How long a [request](/docs/requests) waits before it is denied, in milliseconds. The default is 24 hours.                                                            |
+| `memory`         | `false` stops learning [Agent memory](/docs/memory#agent-memory). It is on by default.                                                                               |
 
 ```ts
 agents: {
@@ -199,16 +199,16 @@ const routes = HttpRouter.add(
 Server.layer({ ...settings, routes })
 ```
 
-Do not use paths under `/auth/` or `/v1/`. Platform owns them.
+Do not use paths under `/auth/` or `/v1/`. OpenBot owns them.
 
 ## Use your own HTTP server
 
-`Server.layerApi({ publicOrigin })` gives only the Platform routes. It also adds error logging for failed requests.
-Serve it with `HttpRouter.serve`, then give it `Platform.layer`, a `Discovery` service, and an HTTP server:
+`Server.layerApi({ publicOrigin })` gives only the OpenBot routes. It also adds error logging for failed requests.
+Serve it with `HttpRouter.serve`, then give it `OpenBot.layer`, a `Discovery` service, and an HTTP server:
 
 ```ts
 import { NodeHttpServer } from "@effect/platform-node"
-import { Platform, Server } from "@openbot-build/platform"
+import { OpenBot, Server } from "@openbot-build/openbot"
 import { CatalogDiscovery } from "@openbot-build/protocol"
 import * as PublicNetwork from "@openbot-build/protocol/NodeHttpServer"
 import { Layer } from "effect"
@@ -223,7 +223,7 @@ const discovery = CatalogDiscovery.layer().pipe(
 const app = HttpRouter.serve(
 	Layer.merge(Server.layerApi(options.auth), routes),
 ).pipe(
-	Layer.provideMerge(Platform.layer(options)),
+	Layer.provideMerge(OpenBot.layer(options)),
 	Layer.provide(discovery),
 	Layer.provideMerge(
 		NodeHttpServer.layer(() => createServer(), { host: "0.0.0.0", port: 3000 }),
@@ -237,12 +237,12 @@ This is what `Server.layer` does inside. `options` has the same fields as above,
 
 ## Migrate the database
 
-`DatabasePostgres.migrate` applies the migrations. `Platform.layer` only checks that the tables exist, and fails if they do not.
+`DatabasePostgres.migrate` applies the migrations. `OpenBot.layer` only checks that the tables exist, and fails if they do not.
 Run migrations in their own program before you start the server:
 
 ```ts
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { DatabasePostgres } from "@openbot-build/platform"
+import { DatabasePostgres } from "@openbot-build/openbot"
 import { Config, Effect, Layer } from "effect"
 
 NodeRuntime.runMain(
@@ -260,5 +260,5 @@ NodeRuntime.runMain(
 
 ## Send error logs to your own service
 
-Platform writes failures as error logs. Add your own Effect logger to send them to another service.
+OpenBot writes failures as error logs. Add your own Effect logger to send them to another service.
 See [Error logs](/docs/error-logs) for what each log contains and a full example.

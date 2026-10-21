@@ -3,7 +3,7 @@ title: Requests
 description: Agents ask before they use a capability for the first time, and a decider above them answers.
 ---
 
-Agents have no limits that they know of. When an Agent tries to use a **capability**, such as an App tool, Platform checks whether it may. If nothing decides it yet, Platform makes a **request** and sends it to the **decider** above the Agent. The tool call waits until the request is answered.
+Agents have no limits that they know of. When an Agent tries to use a **capability**, such as an App tool, OpenBot checks whether it may. If nothing decides it yet, OpenBot makes a **request** and sends it to the **decider** above the Agent. The tool call waits until the request is answered.
 This page shows how the check works, how a person answers requests, and what each answer does.
 
 ---
@@ -17,18 +17,18 @@ This page shows how the check works, how a person answers requests, and what eac
 | `agents.delegate` | The ID of the other Agent  | It gives work to another lasting Agent.             |
 | `agents.spawn`    | `*`                        | It starts a subagent.                               |
 
-Each capability tool takes a `reason`. App tools get an extra `openbot_reason` parameter for it. Platform never sends it to the App.
+Each capability tool takes a `reason`. App tools get an extra `openbot_reason` parameter for it. OpenBot never sends it to the App.
 
 ---
 
-## How Platform checks an attempt
+## How OpenBot checks an attempt
 
-Platform checks each attempt in this order. The first step that decides wins.
+OpenBot checks each attempt in this order. The first step that decides wins.
 
 1. **The policy of the member.** An Agent never does more than the member it works for. If the [permissions](/docs/permissions) of the member, or of the token that started the work, do not allow it, the call is denied. This is never sent to a decider.
 2. **Grants.** A [Grant](/docs/rules#grants) is a kept decision. A deny Grant wins over an allow Grant.
 3. **Rules.** A judge model reads the [Rules](/docs/rules) for this Agent in plain language. Only a Rule that the judge quotes can allow or deny.
-4. **The decider above.** Platform makes a request. The decider is the Agent that gave this Agent its work. For the first Agent of the work, the decider is the person.
+4. **The decider above.** OpenBot makes a request. The decider is the Agent that gave this Agent its work. For the first Agent of the work, the decider is the person.
 
 Some calls need no decision: tool calls that the deployment owner marks as reads, and work for subagents that the Agent started itself.
 
@@ -121,6 +121,6 @@ You can still [interrupt](/docs/sessions#steer-queue-and-interrupt) a waiting Tu
 
 ## App tools
 
-An App is an outside service that a person connects. See [Apps](/docs/apps). Each App call is bound to one exact call: the owner, the Session, the Turn, the tool call, the exact arguments, and the App connection with its revision. Platform saves the call before the check. If the connection changes before the call runs, the call fails, and a new revision never uses an old decision.
+An App is an outside service that a person connects. See [Apps](/docs/apps). Each App call is bound to one exact call: the owner, the Session, the Turn, the tool call, the exact arguments, and the App connection with its revision. OpenBot saves the call before the check. If the connection changes before the call runs, the call fails, and a new revision never uses an old decision.
 
 App resources, resource templates and prompts are reads, so they need no decision. An App's own notes never decide which tools are safe. Only the deployment owner can mark tools as reads, with the `appReadRules` option. See [Server](/docs/server).
