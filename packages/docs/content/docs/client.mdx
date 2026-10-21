@@ -93,7 +93,8 @@ Some groups and their pages:
 | Group          | Use it to                                     | Reference                                                 |
 | -------------- | --------------------------------------------- | --------------------------------------------------------- |
 | `sessions`     | Make Sessions, start Turns, and read results. | [Sessions](/docs/api/operations/tags/sessions/)           |
-| `approvals`    | Answer approval requests.                     | [Approvals](/docs/api/operations/tags/approvals/)         |
+| `agents`       | Make and manage Agents.                       | [Agents](/docs/api/operations/tags/agents/)               |
+| `requests`     | Answer the requests of your Agents.           | [Requests](/docs/api/operations/tags/requests/)           |
 | `apps`         | Find an App at an address.                    | [App discovery](/docs/api/operations/tags/app-discovery/) |
 | `connections`  | Add and manage App connections.               | [Connections](/docs/api/operations/tags/connections/)     |
 | `appIndex`     | Search the public App Index.                  | [App Index](/docs/api/operations/tags/app-index/)         |
@@ -198,15 +199,15 @@ const program = Effect.gen(function* () {
 })
 ```
 
-| Argument   | What it is                                                                                             |
-| ---------- | ------------------------------------------------------------------------------------------------------ |
-| `opened`   | The view that `appViews.open` returned.                                                                |
-| `owner`    | A stable ID of the signed-in account. It keeps views of different accounts apart.                      |
-| `onChange` | Optional. Runs when an action in the view changes status. Use it to refresh approvals and the Session. |
+| Argument   | What it is                                                                                            |
+| ---------- | ----------------------------------------------------------------------------------------------------- |
+| `opened`   | The view that `appViews.open` returned.                                                               |
+| `owner`    | A stable ID of the signed-in account. It keeps views of different accounts apart.                     |
+| `onChange` | Optional. Runs when an action in the view changes status. Use it to refresh requests and the Session. |
 
 The result works with `mount` from `@openbot-build/protocol/McpApps`, which shows the view in an iframe. See [Protocol](/docs/protocol).
 
-The view client holds no credentials. Every request goes through Platform, so the normal approval rules apply:
+The view client holds no credentials. Every request goes through Platform, so the normal capability checks apply:
 
 - It checks that each answer is a valid MCP result.
 - It sends each action once, with a new request ID.

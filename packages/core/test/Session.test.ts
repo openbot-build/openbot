@@ -283,7 +283,21 @@ test("Fork during a running Turn picks the last coherent point and does not stop
 	)
 })
 
-test("approval resumes the loaded Turn once and restored history cannot recreate its continuation", async () => {
+const approvalIds = (view: Session.View<{}>) =>
+	Session.waits(view).map((wait) => wait.approvalId)
+const settled = (
+	read: Effect.Effect<Session.View<{}>, Session.RuntimeError>,
+): Effect.Effect<Session.View<{}>, Session.RuntimeError> =>
+	Effect.gen(function* () {
+		const view = yield* read
+		if (Session.status(view.session)._tag === "Running") {
+			yield* Effect.yieldNow
+			return yield* settled(read)
+		}
+		return view
+	})
+
+test("an approval survives a restart and resumes the Turn once", async () => {
 	let calls = 0
 	const approved = Toolkit.make(Echo.setNeedsApproval(true))
 	await Effect.runPromise(
@@ -294,25 +308,10 @@ test("approval resumes the loaded Turn once and restored history cannot recreate
 				})
 				const waiting = yield* runtime.execute({ base, input: "approve" }),
 					turn = Session.currentTurn(waiting.session)!
-				assert.equal(turn.status._tag, "WaitingApproval")
+				assert.equal(turn.status._tag, "Waiting")
 				assert.equal(calls, 0)
-				const request =
-					waiting.state.value.conversation.context.prompt.content.flatMap(
-						(message) =>
-							Match.value(message).pipe(
-								Match.when({ role: "assistant" }, (message) =>
-									message.content.flatMap((part) =>
-										Match.value(part).pipe(
-											Match.when({ type: "tool-approval-request" }, (part) => [
-												part.approvalId,
-											]),
-											Match.orElse(() => []),
-										),
-									),
-								),
-								Match.orElse(() => []),
-							),
-					)[0]!
+				const [request] = approvalIds(waiting)
+				assert.ok(request !== undefined)
 				assert.equal(
 					(yield* runtime.resume(base.session)).session.revision,
 					waiting.session.revision,
@@ -327,48 +326,18 @@ test("approval resumes the loaded Turn once and restored history cannot recreate
 					agent: { toolkit: approved },
 				})
 				assert.equal(
-					yield* restoredRuntime.canApprove({
-						session: base.session,
-						turn: turn.id,
-					}),
-					false,
-				)
-				assert.ok(
-					Exit.isFailure(
-						yield* Effect.exit(
-							restoredRuntime.approve({
-								session: base.session,
-								turn: turn.id,
-								approval: request,
-								approved: true,
-								expectedRevision: restored.session.revision,
-							}),
-						),
-					),
-				)
-				assert.equal(
 					Session.status((yield* restoredRuntime.resume(base.session)).session)
 						._tag,
-					"Interrupted",
+					"Waiting",
 				)
-				assert.equal(calls, 0)
-				yield* runtime.approve({
+				yield* restoredRuntime.resolve({
 					session: base.session,
 					turn: turn.id,
 					approval: request,
-					approved: true,
-					expectedRevision: waiting.session.revision,
+					outcome: Session.Outcome.Approved(),
+					expectedRevision: restored.session.revision,
 				})
-				const wait = (): Effect.Effect<void, Session.RuntimeError> =>
-					Effect.gen(function* () {
-						const view = yield* runtimeStore.read(base.session)
-						if (Session.currentTurn(view.session)!.status._tag === "Running") {
-							yield* Effect.yieldNow
-							return yield* wait()
-						}
-					})
-				yield* wait()
-				const completed = yield* runtimeStore.read(base.session)
+				const completed = yield* settled(restoredStore.read(base.session))
 				assert.equal(Session.currentTurn(completed.session)!.id, turn.id)
 				assert.equal(
 					Session.currentTurn(completed.session)!.status._tag,
@@ -378,11 +347,11 @@ test("approval resumes the loaded Turn once and restored history cannot recreate
 				assert.ok(
 					Exit.isFailure(
 						yield* Effect.exit(
-							runtime.approve({
+							restoredRuntime.resolve({
 								session: base.session,
 								turn: turn.id,
 								approval: request,
-								approved: true,
+								outcome: Session.Outcome.Approved(),
 								expectedRevision: completed.session.revision,
 							}),
 						),
@@ -405,6 +374,126 @@ test("approval resumes the loaded Turn once and restored history cannot recreate
 								return "done"
 							}),
 					}),
+				),
+			),
+		),
+	)
+})
+
+test("a result from the host answers a waiting call without its handler", async () => {
+	let calls = 0
+	let seen: unknown = undefined
+	const approved = Toolkit.make(Echo.setNeedsApproval(true))
+	await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const { runtime, runtimeStore, base } = yield* SessionTest({
+					toolkit: approved,
+				})
+				const waiting = yield* runtime.execute({ base, input: "delegate" }),
+					turn = Session.currentTurn(waiting.session)!
+				yield* runtime.resolve({
+					session: base.session,
+					turn: turn.id,
+					approval: approvalIds(waiting)[0]!,
+					outcome: Session.Outcome.Result({
+						result: "from the host",
+						isFailure: false,
+					}),
+					expectedRevision: waiting.session.revision,
+				})
+				const completed = yield* settled(runtimeStore.read(base.session))
+				assert.equal(Session.status(completed.session)._tag, "Completed")
+				assert.equal(calls, 0)
+				assert.equal(seen, "from the host")
+			}),
+		).pipe(
+			Effect.provide(
+				Layer.merge(
+					LanguageModelTest({
+						streamText: ({ prompt }) => {
+							const result = prompt.content
+								.flatMap((message) =>
+									message.role === "tool" ? message.content : [],
+								)
+								.find((part) => part.type === "tool-result")
+							if (result === undefined)
+								return Stream.make(call(), finish("tool-calls"))
+							seen = result.result
+							return Stream.fromArray(textParts("done"))
+						},
+					}),
+					approved.toLayer({
+						Echo: () =>
+							Effect.sync(() => {
+								calls++
+								return "handler"
+							}),
+					}),
+				),
+			),
+		),
+	)
+})
+
+test("a Turn with two waits runs again only after both have answers", async () => {
+	let steps = 0
+	const approved = Toolkit.make(Echo.setNeedsApproval(true))
+	const two = (id: string) =>
+		Response.makePart("tool-call", {
+			id,
+			name: "Echo",
+			params: { text: id },
+			providerExecuted: false,
+		})
+	await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const { runtime, runtimeStore, base } = yield* SessionTest({
+					toolkit: approved,
+				})
+				const waiting = yield* runtime.execute({ base, input: "two" }),
+					turn = Session.currentTurn(waiting.session)!
+				const [first, second] = approvalIds(waiting)
+				assert.ok(first !== undefined && second !== undefined)
+				yield* runtime.resolve({
+					session: base.session,
+					turn: turn.id,
+					approval: first,
+					outcome: Session.Outcome.Result({ result: "one", isFailure: false }),
+					expectedRevision: waiting.session.revision,
+				})
+				const half = yield* runtimeStore.read(base.session)
+				assert.equal(Session.status(half.session)._tag, "Waiting")
+				assert.deepEqual(approvalIds(half), [second])
+				assert.equal(steps, 1)
+				yield* runtime.resolve({
+					session: base.session,
+					turn: turn.id,
+					approval: second,
+					outcome: Session.Outcome.Denied({ reason: "not now" }),
+					expectedRevision: half.session.revision,
+				})
+				const completed = yield* settled(runtimeStore.read(base.session))
+				assert.equal(Session.status(completed.session)._tag, "Completed")
+				assert.ok(steps > 1)
+			}),
+		).pipe(
+			Effect.provide(
+				Layer.merge(
+					LanguageModelTest({
+						streamText: () => {
+							steps++
+							return steps === 1
+								? Stream.make(
+										two("echo-1"),
+										two("echo-2"),
+										finish("tool-calls"),
+									)
+								: Stream.fromArray(textParts("done"))
+						},
+					}),
+					approved.toLayer({ Echo: () => Effect.succeed("handler") }),
 				),
 			),
 		),

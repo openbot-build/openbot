@@ -1,3 +1,14 @@
+CREATE TABLE "openbot_agent_records" (
+	"kind" text,
+	"organization_id" text,
+	"id" text,
+	"owner" text NOT NULL,
+	"scope" text NOT NULL,
+	"status" text NOT NULL,
+	"body" text NOT NULL,
+	CONSTRAINT "openbot_agent_records_pkey" PRIMARY KEY("kind","organization_id","id")
+);
+--> statement-breakpoint
 CREATE TABLE "openbot_app_authorizations" (
 	"id" text PRIMARY KEY,
 	"owner" text NOT NULL,
@@ -219,6 +230,9 @@ CREATE TABLE "openbot_auth_verification" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE INDEX "openbot_agent_records_owner" ON "openbot_agent_records" ("kind","organization_id","owner");--> statement-breakpoint
+CREATE INDEX "openbot_agent_records_scope" ON "openbot_agent_records" ("kind","organization_id","scope");--> statement-breakpoint
+CREATE INDEX "openbot_agent_records_status" ON "openbot_agent_records" ("kind","status");--> statement-breakpoint
 CREATE INDEX "openbot_app_invocations_session" ON "openbot_app_invocations" ("owner","session");--> statement-breakpoint
 CREATE INDEX "openbot_audit_logs_list" ON "openbot_audit_logs" ("organization_id","sequence");--> statement-breakpoint
 CREATE INDEX "openbot_audit_logs_actor" ON "openbot_audit_logs" ("organization_id","actor_user_id","sequence");--> statement-breakpoint

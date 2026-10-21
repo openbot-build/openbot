@@ -1,11 +1,11 @@
 // @effect-diagnostics strictEffectProvide:off
+import * as AgentFixture from "./AgentFixture.ts"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { NodeServices } from "@effect/platform-node"
 import { Session } from "@openbot-build/core"
 import { Effect, Layer, ManagedRuntime, Redacted, Stream } from "effect"
 import * as ManagedSessions from "../src/sessions/ManagedSessions.ts"
-import * as Approvals from "../src/approvals/Approvals.ts"
 import * as DevelopmentModel from "../src/app/DevelopmentModel.ts"
 import * as RepositoryPostgres from "../src/sessions/RepositoryPostgres.ts"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
@@ -25,7 +25,6 @@ test(
 						}),
 					),
 				),
-				Approvals.layer,
 				DevelopmentModel.layerTools,
 			).pipe(Layer.provide(NodeServices.layer)),
 		)
@@ -39,7 +38,7 @@ test(
 							...options,
 							namespace: "memory-owner",
 						})
-						let source = yield* sessions.create({})
+						let source = yield* sessions.create(AgentFixture.direct())
 						source = yield* sessions.updateMemory(source.session.id, {
 							expected: source.session.head,
 							revision: source.session.revision,

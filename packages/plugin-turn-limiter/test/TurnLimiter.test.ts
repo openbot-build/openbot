@@ -247,7 +247,7 @@ test("approval waits and incomplete finishes keep their core state at the limit"
 		assert.equal(Session.currentTurn(view.session)!.steps, 1)
 		assert.equal(
 			Session.status(view.session)._tag,
-			reason === "approval" ? "WaitingApproval" : "Completed",
+			reason === "approval" ? "Waiting" : "Completed",
 		)
 	}
 })

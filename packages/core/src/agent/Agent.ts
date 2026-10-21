@@ -108,7 +108,7 @@ export type Event<
 		readonly part: Response.StreamPart<Tools, "opaque">
 	}
 	VersionCreated: { readonly view: Session.View<P> }
-	TurnWaitingApproval: {
+	TurnWaiting: {
 		readonly view: Session.View<P>
 		readonly turn: Turn.Record
 	}

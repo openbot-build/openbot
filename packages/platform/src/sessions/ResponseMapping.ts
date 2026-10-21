@@ -106,7 +106,7 @@ export const response: {
 	const state = turn.status
 	const phase: SessionResponse["status"] = Match.value(state).pipe(
 		Match.tag("Running", () => "in_progress" as const),
-		Match.tag("WaitingApproval", () => "incomplete" as const),
+		Match.tag("Waiting", () => "incomplete" as const),
 		Match.tag("Completed", ({ result }) =>
 			["stop", "tool-calls"].includes(result.finishReason)
 				? ("completed" as const)
@@ -117,11 +117,7 @@ export const response: {
 		Match.exhaustive,
 	)
 	const finish = Match.value(state).pipe(
-		Match.tag(
-			"Completed",
-			"WaitingApproval",
-			({ result }) => result.finishReason,
-		),
+		Match.tag("Completed", "Waiting", ({ result }) => result.finishReason),
 		Match.orElse(() => "unknown" as const),
 	)
 	const output = view.state.value.conversation.history

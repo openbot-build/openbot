@@ -160,27 +160,41 @@ test("development Apps show protocol, requirement, expiry and cleanup failures t
 			).status,
 			202,
 		)
-		const pending = await wait()
-		const approvals = await (
-			await fetch(address + sessionPath + "/approvals", { headers })
-		).json()
-		assert.equal(approvals.length, 1)
+		await wait()
+		let requests: ReadonlyArray<{
+			readonly id: string
+			readonly revision: number
+			readonly session: string
+		}> = []
+		for (let tries = 0; tries < 200 && requests.length === 0; tries++) {
+			requests = (
+				(await (
+					await fetch(address + "/v1/requests?status=pending", { headers })
+				).json()) as typeof requests
+			).filter((entry) => sessionPath.endsWith(entry.session))
+			if (requests.length === 0)
+				await new Promise((resolve) => setTimeout(resolve, 25))
+		}
+		assert.equal(requests.length, 1)
 		assert.equal(await executions(), 0)
-		const approval = approvals[0]
 		assert.equal(
 			(
-				await post(
-					sessionPath +
-						"/turns/" +
-						approval.turn +
-						"/approvals/" +
-						approval.approvalId,
-					{ expected: pending.session.revision, approved: true },
-				)
+				await post("/v1/requests/" + requests[0]!.id, {
+					expected: requests[0]!.revision,
+					decision: "allow",
+				})
 			).status,
-			202,
+			200,
 		)
-		const completed = await wait()
+		let completed = await wait()
+		for (
+			let tries = 0;
+			tries < 200 && completed.response?.status !== "completed";
+			tries++
+		) {
+			await new Promise((resolve) => setTimeout(resolve, 25))
+			completed = await wait()
+		}
 		assert.equal(completed.response?.status, "completed")
 		assert.match(JSON.stringify(completed.response), /handlerExecutions/)
 		assert.equal(await executions(), 1)

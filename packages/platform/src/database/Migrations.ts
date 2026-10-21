@@ -21,6 +21,7 @@ import {
 	members,
 	tokens,
 	auditLogs,
+	agentRecords,
 } from "./Schema.ts"
 import {
 	openbot_auth_user,
@@ -53,6 +54,7 @@ export const check = Effect.gen(function* () {
 	yield* db.select().from(members).limit(0)
 	yield* db.select().from(tokens).limit(0)
 	yield* db.select().from(auditLogs).limit(0)
+	yield* db.select().from(agentRecords).limit(0)
 	yield* db
 		.select({ id: openbot_auth_user.id })
 		.from(openbot_auth_user)

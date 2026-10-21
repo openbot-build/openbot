@@ -1,9 +1,15 @@
 {
 	"version": "8",
 	"dialect": "postgres",
-	"id": "1d11340e-e1ea-442b-87c3-754cd94efaca",
+	"id": "1dccb55e-fb89-473d-9927-f4fba42df3e9",
 	"prevIds": ["00000000-0000-0000-0000-000000000000"],
 	"ddl": [
+		{
+			"isRlsEnabled": false,
+			"name": "openbot_agent_records",
+			"entityType": "tables",
+			"schema": "public"
+		},
 		{
 			"isRlsEnabled": false,
 			"name": "openbot_app_authorizations",
@@ -129,6 +135,97 @@
 			"name": "openbot_auth_verification",
 			"entityType": "tables",
 			"schema": "public"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "kind",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_agent_records"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "organization_id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_agent_records"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_agent_records"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "owner",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_agent_records"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "scope",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_agent_records"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "status",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_agent_records"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "body",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_agent_records"
 		},
 		{
 			"type": "text",
@@ -2019,6 +2116,104 @@
 			"nameExplicit": true,
 			"columns": [
 				{
+					"value": "kind",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "organization_id",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "owner",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_agent_records_owner",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_agent_records"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "kind",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "organization_id",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "scope",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_agent_records_scope",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_agent_records"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "kind",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "status",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_agent_records_status",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_agent_records"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
 					"value": "owner",
 					"isExpression": false,
 					"asc": true,
@@ -2365,6 +2560,14 @@
 			"entityType": "fks",
 			"schema": "public",
 			"table": "openbot_auth_session"
+		},
+		{
+			"columns": ["kind", "organization_id", "id"],
+			"nameExplicit": false,
+			"name": "openbot_agent_records_pkey",
+			"entityType": "pks",
+			"schema": "public",
+			"table": "openbot_agent_records"
 		},
 		{
 			"columns": ["owner", "id"],

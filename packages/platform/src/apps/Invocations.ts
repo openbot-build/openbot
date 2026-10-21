@@ -26,11 +26,11 @@ export class Invocations extends Context.Service<
 			input: Position,
 			callId: string,
 		) => Effect.Effect<Option.Option<AppExecution.Invocation>, Error>
+		/** Records the decision about a proposed call. Capability checks make the decision. */
 		readonly approve: (
 			input: Position,
 			callId: string,
 			approved: boolean,
-			grantReads: boolean,
 		) => Effect.Effect<void, Error>
 		readonly resume: (
 			owner: string,
@@ -79,20 +79,8 @@ export const make: Effect.Effect<
 	const propose = (input: Proposal) =>
 		Effect.gen(function* () {
 			const readOnly = policy.isRead(input.source)
-			const prior = readOnly
-				? yield* records.list(input.owner, input.session)
-				: []
-			const covered =
-				input.source.kind !== "tool" ||
-				prior.some(
-					(value) =>
-						value.grantReads &&
-						value.readOnly &&
-						value.status === "Completed" &&
-						value.source.connectionId === input.source.connectionId &&
-						value.source.revision === input.source.revision &&
-						value.source.name === input.source.name,
-				)
+			// Only tool calls need a decision. Reading resources and prompts does not.
+			const covered = input.source.kind !== "tool"
 			return yield* records.put(input.owner, {
 				id: id(input, input.callId),
 				session: input.session,
@@ -102,7 +90,6 @@ export const make: Effect.Effect<
 				source: input.source,
 				arguments: input.arguments,
 				readOnly,
-				grantReads: false,
 				round: 0,
 				status: covered ? "Approved" : "PendingApproval",
 				result: null,
@@ -199,7 +186,7 @@ export const make: Effect.Effect<
 				Effect.asSome,
 				Effect.catchTag("ExperienceNotFound", () => Effect.succeedNone),
 			),
-		approve: (input, callId, approved, grantReads) =>
+		approve: (input, callId, approved) =>
 			Effect.gen(function* () {
 				const value = yield* records.get(input.owner, id(input, callId))
 				yield* valid(input.owner, value)
@@ -210,7 +197,6 @@ export const make: Effect.Effect<
 					(value) => ({
 						...value,
 						status: approved ? "Approved" : "Rejected",
-						grantReads: approved && grantReads && policy.isRead(value.source),
 					}),
 				)
 			}),

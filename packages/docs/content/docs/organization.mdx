@@ -146,15 +146,26 @@ The audit log records important changes. Nothing can change or remove an entry.
 }
 ```
 
-| Action                 | When                                           |
-| ---------------------- | ---------------------------------------------- |
-| `member.joined`        | An account joins the organization.             |
-| `member.updated`       | A member gets a new status, roles or policies. |
-| `member.removed`       | A member is removed.                           |
-| `organization.updated` | The organization settings change.              |
-| `token.created`        | A member creates a user token.                 |
-| `token.revoked`        | A member revokes a user token.                 |
-| `approval.resolved`    | A person answers an approval.                  |
+| Action                 | When                                                |
+| ---------------------- | --------------------------------------------------- |
+| `member.joined`        | An account joins the organization.                  |
+| `member.updated`       | A member gets a new status, roles or policies.      |
+| `member.removed`       | A member is removed.                                |
+| `organization.updated` | The organization settings change.                   |
+| `token.created`        | A member creates a user token.                      |
+| `token.revoked`        | A member revokes a user token.                      |
+| `agent.created`        | A member makes an Agent.                            |
+| `agent.updated`        | A member changes an Agent.                          |
+| `agent.promoted`       | A member promotes a subagent.                       |
+| `agent.memory.updated` | A member changes Agent memory.                      |
+| `delegation.started`   | An Agent gives work to another Agent.               |
+| `delegation.completed` | Delegated work ends.                                |
+| `capability.decided`   | A person answers a request.                         |
+| `request.resolved`     | A request closes. `details.chain` lists the Agents. |
+| `grant.created`        | A member makes a Grant.                             |
+| `grant.revoked`        | A member revokes a Grant.                           |
+| `rule.created`         | A member adds a Rule.                               |
+| `rule.updated`         | A member changes a Rule.                            |
 
 ---
 

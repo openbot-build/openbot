@@ -2,7 +2,13 @@
 import { PgClient } from "@effect/sql-pg"
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { AppExecution, AuthApi, SessionView } from "@openbot-build/platform-api"
+import {
+	AppExecution,
+	AuthApi,
+	RequestsApi,
+	SessionView,
+} from "@openbot-build/platform-api"
+import { Session } from "@openbot-build/core"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import {
 	Array as Arr,
@@ -257,6 +263,37 @@ test("the Platform App plugin combines live paged capabilities with caller tools
 			assert.notEqual(view.activity, "active")
 			return view
 		}
+		/** The pending requests of a Session. They appear when Platform sees that the Turn waits. */
+		const requestsFor = async (
+			id: string,
+			session: typeof alice.session,
+			view: SessionView,
+		): Promise<ReadonlyArray<RequestsApi.CapabilityRequest>> => {
+			if (Session.status(view.session)._tag !== "Waiting") return []
+			for (let tries = 0; tries < 200; tries++) {
+				const list = Schema.decodeUnknownSync(
+					Schema.Array(RequestsApi.CapabilityRequest),
+				)(
+					await (
+						await fetch(host.address + "/v1/requests?status=pending", {
+							headers: headers(session),
+						})
+					).json(),
+				).filter((entry) => entry.session === id)
+				if (list.length > 0) return list
+				await new Promise((resolve) => setTimeout(resolve, 25))
+			}
+			return []
+		}
+		/** Waits until the Turn no longer waits for a decision. */
+		const settled = async (id: string, session: typeof alice.session) => {
+			for (let tries = 0; tries < 200; tries++) {
+				const view = await wait(id, session)
+				if (Session.status(view.session)._tag !== "Waiting") return view
+				await new Promise((resolve) => setTimeout(resolve, 25))
+			}
+			return wait(id, session)
+		}
 		const run = async (
 			input: string,
 			session = alice.session,
@@ -272,31 +309,26 @@ test("the Platform App plugin combines live paged capabilities with caller tools
 			)
 			assert.equal(response.status, 202, await response.clone().text())
 			let view = await wait(id, session)
-			const approvals = await (
-				await fetch(host.address + "/v1/sessions/" + id + "/approvals", {
-					headers: headers(session),
-				})
-			).json()
-			if (input.includes("covered")) assert.equal(approvals.length, 0)
-			for (const approval of input.includes("hold") ? [] : approvals) {
+			const pending = await requestsFor(id, session, view)
+			if (input.includes("covered")) assert.equal(pending.length, 0)
+			for (const entry of input.includes("hold") ? [] : pending) {
 				assert.equal(publisher.businessCalls(), callsBefore)
 				assert.equal(
-					approval.app.source.connectionName,
+					entry.app?.source.connectionName,
 					input.includes("write") ? "Personal documents" : "Work documents",
 				)
 				if (input.includes("write"))
 					assert.equal(publisher.writes().length, writesBefore)
-				const approved = await post(
-					`/v1/sessions/${id}/turns/${approval.turn}/approvals/${approval.approvalId}`,
+				const decided = await post(
+					"/v1/requests/" + entry.id,
 					{
-						expected: view.session.revision,
-						approved: !input.includes("reject"),
-						grantReads: input.includes("ordinary"),
+						expected: entry.revision,
+						decision: input.includes("reject") ? "deny" : "allow",
 					},
 					session,
 				)
-				assert.equal(approved.status, 202, await approved.clone().text())
-				view = await wait(id, session)
+				assert.equal(decided.status, 200, await decided.clone().text())
+				view = await settled(id, session)
 			}
 			if (input.includes("hold")) return view
 			assert.equal(
@@ -481,18 +513,18 @@ test("the Platform App plugin combines live paged capabilities with caller tools
 			}),
 		)
 		const held = await run("hold a document operation")
-		const heldApprovals = await (
-			await fetch(host.address + `/v1/sessions/${work.session.id}/approvals`, {
-				headers: headers(),
-			})
-		).json()
-		assert.equal(heldApprovals.length, 1)
-		const heldApproval = heldApprovals[0]
+		const [heldRequest] = await requestsFor(
+			work.session.id,
+			alice.session,
+			held,
+		)
+		assert.ok(
+			heldRequest?.app !== undefined,
+			JSON.stringify({ status: Session.status(held.session), heldRequest }),
+		)
 		const connection = await (
 			await fetch(
-				host.address +
-					"/v1/connections/" +
-					heldApproval.app.source.connectionId,
+				host.address + "/v1/connections/" + heldRequest.app.source.connectionId,
 				{ headers: headers() },
 			)
 		).json()
@@ -509,31 +541,24 @@ test("the Platform App plugin combines live paged capabilities with caller tools
 			},
 		)
 		assert.equal(disabled.status, 200)
+		// The decision came after the connection changed, so the call never runs.
 		assert.equal(
 			(
-				await post(
-					`/v1/sessions/${work.session.id}/turns/${heldApproval.turn}/approvals/${heldApproval.approvalId}`,
-					{ expected: held.session.revision, approved: true },
-				)
-			).status,
-			409,
-		)
-		assert.equal(publisher.businessCalls(), 8)
-		assert.equal(
-			(
-				await post(
-					`/v1/sessions/${work.session.id}/turns/${heldApproval.turn}/interrupt`,
-					{},
-				)
+				await post("/v1/requests/" + heldRequest.id, {
+					expected: heldRequest.revision,
+					decision: "allow",
+				})
 			).status,
 			200,
 		)
+		await settled(work.session.id, alice.session)
+		assert.equal(publisher.businessCalls(), 8)
 		assert.equal(
 			(
-				await post(
-					`/v1/sessions/${work.session.id}/turns/${heldApproval.turn}/approvals/${heldApproval.approvalId}`,
-					{ expected: held.session.revision, approved: true },
-				)
+				await post("/v1/requests/" + heldRequest.id, {
+					expected: heldRequest.revision + 1,
+					decision: "allow",
+				})
 			).status,
 			409,
 		)

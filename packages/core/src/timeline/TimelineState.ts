@@ -1,4 +1,4 @@
-import { HashMap, Match } from "effect"
+import { HashMap, HashSet, Match, Option } from "effect"
 import { Prompt } from "effect/ai"
 import type * as Item from "./Item.ts"
 import type * as Timeline from "./Timeline.ts"
@@ -54,3 +54,47 @@ export const unansweredCalls = (
 export const coherent = <P>(value: Timeline.Value<P>): boolean =>
 	value.conversation.closed &&
 	HashMap.isEmpty(unansweredCalls(value.conversation.history))
+
+/** A tool approval request in the history that has no answer and no result yet. */
+export interface Wait {
+	readonly approvalId: string
+	readonly toolCallId: string
+	readonly toolCall: Prompt.ToolCallPart
+}
+
+/** The approval requests that still wait for an answer, in request order. */
+export const waits = <P>(value: Timeline.Value<P>): ReadonlyArray<Wait> => {
+	const messages = fullHistory(value).content
+	const assistant = messages.flatMap((message) =>
+		message.role === "assistant" ? message.content : [],
+	)
+	const tool = messages.flatMap((message) =>
+		message.role === "tool" ? message.content : [],
+	)
+	const calls = HashMap.fromIterable(
+		assistant.flatMap((part) =>
+			part.type === "tool-call" ? [[part.id, part] as const] : [],
+		),
+	)
+	const answered = HashSet.fromIterable(
+		tool.flatMap((part) =>
+			part.type === "tool-approval-response" ? [part.approvalId] : [],
+		),
+	)
+	const results = HashSet.fromIterable(
+		tool.flatMap((part) => (part.type === "tool-result" ? [part.id] : [])),
+	)
+	return assistant.flatMap((part) =>
+		part.type === "tool-approval-request" &&
+		!HashSet.has(answered, part.approvalId) &&
+		!HashSet.has(results, part.toolCallId)
+			? Option.toArray(
+					Option.map(HashMap.get(calls, part.toolCallId), (toolCall) => ({
+						approvalId: part.approvalId,
+						toolCallId: part.toolCallId,
+						toolCall,
+					})),
+				)
+			: [],
+	)
+}

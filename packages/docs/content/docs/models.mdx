@@ -55,7 +55,7 @@ Work that needs a model fails with status `503` and the error `SessionExecutionU
 
 - starting a Turn with `POST /v1/sessions/:id/turns`,
 - choosing a model with `PUT /v1/sessions/:id/model`,
-- continuing a Turn after an approval.
+- continuing a Turn after a decision or after delegated work.
 
 ```json
 { "_tag": "SessionExecutionUnavailable", "session": "..." }
@@ -189,7 +189,7 @@ The provider ID is `development`. The model IDs are:
 | -------------- | ---------------------------------------------------------------------------- |
 | `mock-text`    | The default. Returns fixed text at once.                                     |
 | `mock-slow`    | Returns text slowly over ten seconds. Use it to test streams and interrupts. |
-| `mock-tool`    | Calls a harmless test tool that waits for your approval.                     |
+| `mock-tool`    | Calls a harmless test tool that waits for a [request](/docs/requests).       |
 | `mock-app`     | Calls a tool of the test App and returns its real content.                   |
 | `mock-failure` | Sends some text, then fails on purpose with a model error.                   |
 

@@ -32,9 +32,7 @@ import {
 	Match,
 	Option,
 	Predicate,
-	Record as EffectRecord,
 	Scope,
-	Schema,
 	Stream,
 } from "effect"
 import { LanguageModel, Toolkit, type Response, type Tool } from "effect/ai"
@@ -60,11 +58,10 @@ import { publicError, inputPrompt, response } from "./ResponseMapping.ts"
 import * as SessionEvents from "./SessionEvents.ts"
 import * as SessionHost from "./SessionHost.ts"
 import { sessionHostId } from "./SessionHost.ts"
-import * as Approvals from "../approvals/Approvals.ts"
 import * as ErrorReporting from "../app/ErrorReporting.ts"
-import { Invocations } from "../apps/Invocations.ts"
-import { ownerKey } from "../apps/Repository.ts"
 import { AppPlugin, empty as emptyAppPlugin } from "../apps/AppPlugin.ts"
+import { AgentPlugin } from "../agents/AgentPlugin.ts"
+import { Signal, publish } from "../agents/Signals.ts"
 
 /** The response of the current Turn, when the Session has one. */
 const currentResponse = (view: Session.View) =>
@@ -109,21 +106,16 @@ export const make = <
 ): Effect.Effect<
 	Instance<Tools, E, R>,
 	Session.SessionError | SessionStore.SessionStoreError | BuildE,
-	| BuildR
-	| Approvals.Approvals
-	| Repository
-	| Scope.Scope
-	| ExecutionServices<Tools, R>
+	BuildR | Repository | Scope.Scope | ExecutionServices<Tools, R>
 > =>
 	Effect.gen(function* () {
 		const repository = yield* Repository,
-			approvals = yield* Approvals.Approvals,
 			scope = yield* Scope.Scope
 		const namespace = options.namespace ?? "local"
 		const environment = yield* Effect.context<ExecutionServices<Tools, R>>()
 		const fallback = yield* Effect.serviceOption(LanguageModel.LanguageModel)
 		const appPlugin = yield* Effect.serviceOption(AppPlugin)
-		const appInvocations = yield* Effect.serviceOption(Invocations)
+		const agentPlugin = yield* Effect.serviceOption(AgentPlugin)
 		const modelFor = (view: Session.View, turn?: Turn.Record) =>
 			options.resolveModel === undefined
 				? Effect.serviceOption(LanguageModel.LanguageModel).pipe(
@@ -279,6 +271,31 @@ export const make = <
 									? Effect.void
 									: ErrorReporting.failedTurn(turn)
 							}),
+							Effect.tap(() => {
+								if (view === undefined) return Effect.void
+								const turn = Session.currentTurn(view.session)
+								const previous = delta.expected?.turns.find(
+									(entry) => entry.id === turn?.id,
+								)
+								// Code that writes the store directly may make a Session without Platform data.
+								if (
+									turn === undefined ||
+									previous?.status._tag === turn.status._tag ||
+									view.session.business[sessionHostId] === undefined
+								)
+									return Effect.void
+								const state = SessionHost.hostState(view.session)
+								// Delegation, reviews and memory react to changes of the Turn status.
+								return publish(
+									Signal.TurnChanged({
+										organizationId: state.chain.organizationId,
+										userId: state.chain.userId,
+										session: view.session.id,
+										turn: turn.id,
+										status: turn.status._tag,
+									}),
+								)
+							}),
 						),
 				onRemove: (ref) => repository.remove(namespace, ref),
 			})
@@ -311,15 +328,30 @@ export const make = <
 					),
 			),
 		)
+		const apps =
+			options.owner === undefined || Option.isNone(appPlugin)
+				? emptyAppPlugin
+				: appPlugin.value.forOwner(options.owner)
+		// The Agent plugin runs inside the App plugin, so it sees every tool of the Turn.
+		const hostPlugin =
+			options.owner === undefined || Option.isNone(agentPlugin)
+				? apps
+				: // Both plugins add tools at run time with JSON Schema parameters. TypeScript
+					// cannot see that their merged tool types fit the App tool type.
+					(PluginComposition.merge(
+						apps,
+						agentPlugin.value.forOwner({
+							owner: options.owner,
+							namespace,
+							read: (id) => store.read(id),
+						}),
+					) as unknown as typeof apps)
 		const runtime = yield* SessionRuntime.make({
 			store,
 			agent: {
 				...options.runtime,
 				plugin,
-				hostPlugin:
-					options.owner === undefined || Option.isNone(appPlugin)
-						? emptyAppPlugin
-						: appPlugin.value.forOwner(options.owner),
+				hostPlugin,
 			},
 		})
 		const read = (id: Session.Id) =>
@@ -329,26 +361,14 @@ export const make = <
 		): Effect.Effect<SessionView> =>
 			Effect.gen(function* () {
 				const active = yield* runtime.isActive(view.session.id)
-				const current = Session.currentTurn(view.session)
-				const approvalLoaded =
-					current === undefined
-						? false
-						: yield* runtime.canApprove({
-								session: view.session.id,
-								turn: current.id,
-							})
 				return {
 					...view,
+					...SessionHost.agentFields(view.session),
 					response: Option.getOrNull(currentResponse(view)),
 					activity: active
 						? ("active" as const)
 						: Match.value(Session.status(view.session)).pipe(
 								Match.tag("Running", () => "historical" as const),
-								Match.tag("WaitingApproval", () =>
-									approvalLoaded
-										? ("inactive" as const)
-										: ("historical" as const),
-								),
 								Match.orElse(() => "inactive" as const),
 							),
 				}
@@ -405,11 +425,25 @@ export const make = <
 		const create: typeof Sessions.Service.create = (input) =>
 			Effect.gen(function* () {
 				const defaults = yield* options.defaults ?? Effect.succeed({})
-				const settings = { ...defaults, ...input.settings }
+				// The model of the Agent comes before the server default.
+				const settings = {
+					...defaults,
+					...(input.agent.model === undefined
+						? {}
+						: { model: input.agent.model }),
+					...input.settings,
+				}
 				const model =
 					settings.model === undefined
 						? undefined
 						: yield* validateSelection(settings.model)
+				const state: SessionHost.SessionHostState = {
+					agent: input.agent.id,
+					kind: input.kind,
+					chain: input.chain,
+					...(input.parent === undefined ? {} : { parent: input.parent }),
+					...(input.review === undefined ? {} : { review: input.review }),
+				}
 				return yield* store
 					.create({
 						metadata: {
@@ -419,6 +453,7 @@ export const make = <
 							...settings,
 							...(model === undefined ? {} : { model }),
 						},
+						business: { [sessionHostId]: state },
 					})
 					.pipe(Effect.mapError(publicError), Effect.flatMap(project))
 			})
@@ -516,6 +551,16 @@ export const make = <
 		const list: typeof Sessions.Service.list = (input) =>
 			repository.list(namespace, input).pipe(
 				Effect.mapError(publicError),
+				// Review Sessions are hidden unless the caller asks for them.
+				Effect.map((rows) =>
+					rows.filter(
+						(row) =>
+							(input?.agent === undefined || row.agent === input.agent) &&
+							(input?.kind === undefined
+								? row.kind !== "review"
+								: row.kind === input.kind),
+					),
+				),
 				Effect.flatMap((rows) =>
 					Effect.forEach(rows, (row) =>
 						runtime.isActive(row.session.id).pipe(
@@ -531,6 +576,14 @@ export const make = <
 			version === undefined
 				? read(id).pipe(Effect.map((view) => view.state))
 				: store.read(id, version).pipe(Effect.mapError(publicError))
+		const forked = ({
+			parent: _parent,
+			review: _review,
+			...kept
+		}: SessionHost.SessionHostState): SessionHost.SessionHostState => ({
+			...kept,
+			kind: "direct",
+		})
 		const fork: typeof Sessions.Service.fork = (id, input) =>
 			Effect.gen(function* () {
 				const source = yield* read(id)
@@ -549,11 +602,11 @@ export const make = <
 							title: input.title ?? source.session.metadata.title,
 						},
 						...(settings === undefined ? {} : { settings }),
-						// The Fork keeps the Platform data of its source, such as the memory switches.
-						business: EffectRecord.filter(
-							{ [sessionHostId]: source.session.business[sessionHostId] },
-							Predicate.isNotUndefined,
-						),
+						// The Fork keeps the Platform data of its source, such as the Agent and the
+						// memory switches. It is new direct work, so it has no parent tool call.
+						business: {
+							[sessionHostId]: forked(SessionHost.hostState(source.session)),
+						},
 					})
 					.pipe(Effect.mapError(publicError), Effect.flatMap(project))
 			})
@@ -572,57 +625,19 @@ export const make = <
 					.import(input)
 					.pipe(Effect.mapError(publicError), Effect.flatMap(project))
 			})
-		const pendingApprovals: typeof Sessions.Service.pendingApprovals = (id) =>
-			Effect.gen(function* () {
-				const view = yield* read(id),
-					current = Session.currentTurn(view.session)
-				if (
-					current === undefined ||
-					!(yield* runtime.canApprove({ session: id, turn: current.id })) ||
-					!Match.value(current.status).pipe(
-						Match.tag("WaitingApproval", () => true),
-						Match.orElse(() => false),
-					)
-				)
-					return []
-				return yield* Effect.forEach(approvals.pending(view), (entry) =>
-					Effect.gen(function* () {
-						const arguments_ = yield* Schema.decodeUnknownEffect(
-							Schema.JsonObject,
-						)(entry.toolCall.params).pipe(Effect.mapError(publicError))
-						const app =
-							options.owner === undefined || Option.isNone(appInvocations)
-								? Option.none()
-								: yield* appInvocations.value
-										.pending(
-											{
-												owner: ownerKey(options.owner),
-												session: id,
-												turn: current.id,
-											},
-											entry.toolCallId,
-										)
-										.pipe(
-											Effect.mapError(() =>
-												SessionConflict.make({
-													message: "The App approval could not be read.",
-												}),
-											),
-										)
-						return {
-							turn: current.id,
-							approvalId: entry.approvalId,
-							toolCallId: entry.toolCallId,
-							toolName: entry.toolCall.name,
-							arguments: arguments_,
-							...Option.match(app, {
-								onNone: () => ({}),
-								onSome: (app) => ({ app }),
-							}),
-						}
-					}),
-				)
-			})
+		const waits: typeof Sessions.Service.waits = (id) =>
+			read(id).pipe(
+				Effect.map((view) =>
+					Option.match(
+						Option.fromNullishOr(Session.currentTurn(view.session)),
+						{
+							onNone: () => [],
+							onSome: (turn) =>
+								turn.status._tag === "Waiting" ? Session.waits(view) : [],
+						},
+					),
+				),
+			)
 		const turns: typeof Sessions.Service.turns = (id, input) =>
 			Effect.flatMap(read(id), (view) =>
 				page(
@@ -868,7 +883,7 @@ export const make = <
 										)
 									}),
 								),
-								Match.tag("TurnCompleted", "TurnWaitingApproval", (event) =>
+								Match.tag("TurnCompleted", "TurnWaiting", (event) =>
 									Effect.gen(function* () {
 										terminal = true
 										reportedFailure = event.turn.status._tag === "Failed"
@@ -1026,64 +1041,42 @@ export const make = <
 						Effect.mapError(publicError),
 					)
 			})
-		const approve: typeof Sessions.Service.approve = (id, input) =>
+		const resolveCall: typeof Sessions.Service.resolveCall = (
+			id,
+			toolCallId,
+			outcome,
+		) =>
 			Effect.gen(function* () {
 				const view = yield* read(id)
 				const turn = Session.currentTurn(view.session)
+				const wait = Session.waits(view).find(
+					(entry) => entry.toolCallId === toolCallId,
+				)
+				if (
+					turn === undefined ||
+					turn.status._tag !== "Waiting" ||
+					wait === undefined
+				)
+					return
+				// A Turn of a host-selected action has no model. Its driver runs the action again.
 				const model =
-					turn?.action !== undefined || turn?.activeAction !== undefined
+					turn.action !== undefined || turn.activeAction !== undefined
 						? undefined
 						: yield* modelFor(view, turn)
-				if (
-					view.session.revision !== input.expected ||
-					Session.currentTurn(view.session)?.id !== input.turn
-				)
-					return yield* SessionConflict.make({
-						message:
-							"The approval belongs to an earlier Session revision or Turn.",
-					})
-				const pending = yield* pendingApprovals(id)
-				const selected = pending.find(
-					(entry) => entry.approvalId === input.approvalId,
-				)
-				if (selected === undefined)
-					return yield* SessionConflict.make({
-						message: "This approval is no longer active.",
-					})
-				if (
-					selected.app !== undefined &&
-					options.owner !== undefined &&
-					Option.isSome(appInvocations)
-				)
-					yield* appInvocations.value
-						.approve(
-							{ owner: ownerKey(options.owner), session: id, turn: input.turn },
-							selected.toolCallId,
-							input.approved,
-							input.grantReads ?? false,
-						)
-						.pipe(
-							Effect.mapError(() =>
-								SessionConflict.make({
-									message:
-										"The App or its approval changed. Review the current operation.",
-								}),
-							),
-						)
-				const approval = {
+				const input = {
 					session: id,
-					turn: input.turn,
-					approval: input.approvalId,
-					approved: input.approved,
-					expectedRevision: input.expected,
+					turn: turn.id,
+					approval: wait.approvalId,
+					outcome,
+					expectedRevision: view.session.revision,
 				}
 				yield* (
 					model === undefined
 						? runtime
-								.approveAction(approval)
+								.resolveAction(input)
 								.pipe(Effect.provideContext(environment))
 						: runtime
-								.approve(approval)
+								.resolve(input)
 								.pipe(
 									Effect.provideContext(
 										Context.add(
@@ -1093,10 +1086,11 @@ export const make = <
 										),
 									),
 								)
-				).pipe(Effect.mapError(publicError))
-
-				const latest = yield* read(id)
-				return response(latest, Session.currentTurn(latest.session)!)
+				).pipe(
+					// Another answer came first. The call does not wait any more.
+					Effect.catchTag("TurnConflict", () => Effect.void),
+					Effect.mapError(publicError),
+				)
 			})
 		const updateMemory: typeof Sessions.Service.updateMemory = (id, input) =>
 			Effect.gen(function* () {
@@ -1186,11 +1180,11 @@ export const make = <
 				turns,
 				turn,
 				items,
-				pendingApprovals,
+				waits,
 				send,
 				startAction,
 				sendStream,
-				approve,
+				resolveCall,
 				updateMemory,
 				history,
 				versions: (id) =>

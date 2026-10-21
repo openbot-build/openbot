@@ -1,6 +1,5 @@
 import {
 	SessionStorageUnavailable,
-	SessionConflict,
 	Identity,
 	SessionsApi,
 	PlatformApi,
@@ -9,8 +8,10 @@ import { Effect, Option } from "effect"
 import { LanguageModel } from "effect/ai"
 import { HttpApiBuilder, type HttpApiEndpoint } from "effect/http-api"
 import { Backend } from "../app/Backend.ts"
-import { AuditLog } from "../audit/AuditLog.ts"
-import { resourceKey } from "../authorization/Policy.ts"
+import { Agents } from "../agents/Agents.ts"
+import { Delegations } from "../agents/Delegations.ts"
+import { Tokens } from "../auth/Tokens.ts"
+import { Organization } from "../organization/Organization.ts"
 
 type Request<K extends keyof typeof SessionsApi.endpoints> = Omit<
 	HttpApiEndpoint.Request<(typeof SessionsApi.endpoints)[K]>,
@@ -26,6 +27,9 @@ const currentSessions = Effect.map(Backend, (backend) =>
 )
 const implementations = Effect.gen(function* () {
 	const current = yield* currentSessions
+	const agents = yield* Agents
+	const delegations = yield* Delegations
+	const services = yield* Effect.context<Organization | Tokens>()
 	const model = yield* Effect.serviceOption(LanguageModel.LanguageModel)
 	/** Give the host model to operations that may run one. */
 	const withModel = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -59,7 +63,34 @@ const implementations = Effect.gen(function* () {
 				withModel(sessions.updateMemory(params.sessionId, payload)),
 			),
 		createSession: ({ payload }: Request<"createSession">) =>
-			Effect.flatMap(current, (sessions) => sessions.create(payload)),
+			Effect.gen(function* () {
+				const caller = yield* Identity
+				const sessions = yield* current
+				// Work for an Agent needs the delegate permission on it. Main is the default.
+				const agent =
+					payload.agent === undefined
+						? yield* agents.ensureMain(caller)
+						: yield* agents
+								.access(caller, payload.agent, "agents.delegate")
+								.pipe(Effect.provideContext(services))
+				return yield* sessions.create({
+					agent,
+					kind: "direct",
+					chain: {
+						organizationId: caller.organizationId,
+						userId: caller.userId,
+						...(caller.tokenId === undefined
+							? {}
+							: { tokenId: caller.tokenId }),
+						agents: [agent.id],
+						sessions: [],
+					},
+					...(payload.title === undefined ? {} : { title: payload.title }),
+					...(payload.settings === undefined
+						? {}
+						: { settings: payload.settings }),
+				})
+			}),
 		getSession: ({ params }: Request<"getSession">) =>
 			Effect.flatMap(current, (sessions) => sessions.get(params.sessionId)),
 		listSessions: ({ query }: Request<"listSessions">) =>
@@ -68,6 +99,8 @@ const implementations = Effect.gen(function* () {
 					...(query.archived === undefined
 						? {}
 						: { archived: query.archived === "true" }),
+					...(query.agent === undefined ? {} : { agent: query.agent }),
+					...(query.kind === undefined ? {} : { kind: query.kind }),
 				}),
 			),
 		updateSession: ({ params, payload }: Request<"updateSession">) =>
@@ -75,7 +108,25 @@ const implementations = Effect.gen(function* () {
 				sessions.update(params.sessionId, payload),
 			),
 		deleteSession: ({ params }: Request<"deleteSession">) =>
-			Effect.flatMap(current, (sessions) => sessions.remove(params.sessionId)),
+			Effect.gen(function* () {
+				const caller = yield* Identity
+				const sessions = yield* current
+				yield* sessions.remove(params.sessionId)
+				// The subagents of a Session live only as long as the Session.
+				yield* agents
+					.archiveOwnedBy(caller, params.sessionId)
+					.pipe(Effect.mapError(() => SessionStorageUnavailable.make({})))
+			}),
+		sessionDelegations: ({ params }: Request<"sessionDelegations">) =>
+			Effect.gen(function* () {
+				const caller = yield* Identity
+				const sessions = yield* current
+				yield* sessions.get(params.sessionId)
+				const list = yield* delegations
+					.forSession(caller.organizationId, params.sessionId)
+					.pipe(Effect.mapError(() => SessionStorageUnavailable.make({})))
+				return list.map((stored) => stored.delegation)
+			}),
 		forkSession: ({ params, payload }: Request<"forkSession">) =>
 			Effect.flatMap(current, (sessions) =>
 				sessions.fork(params.sessionId, payload),
@@ -151,61 +202,4 @@ export const layerPlatform = HttpApiBuilder.group(
 	"sessions",
 	(handlers) =>
 		Effect.map(implementations, (routes) => handlers.handleAll(routes)),
-)
-
-export const layerPlatformApprovals = HttpApiBuilder.group(
-	PlatformApi,
-	"approvals",
-	(handlers) =>
-		Effect.gen(function* () {
-			const current = yield* currentSessions
-			const audit = yield* AuditLog
-			return handlers
-				.handle("list", ({ params }) =>
-					Effect.flatMap(current, (sessions) =>
-						sessions.pendingApprovals(params.sessionId),
-					),
-				)
-				.handle("resolve", ({ params, payload }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						const sessions = yield* current
-						const pending = yield* sessions.pendingApprovals(params.sessionId)
-						const approval = pending.find(
-							(item) => item.approvalId === params.approvalId,
-						)
-						if (approval === undefined)
-							return yield* SessionConflict.make({
-								message: "Approval is not pending on this Session",
-							})
-						const response = yield* sessions.approve(params.sessionId, {
-							...payload,
-							approvalId: params.approvalId,
-							turn: params.turnId,
-						})
-						yield* audit
-							.record({
-								organizationId: caller.organizationId,
-								action: "approval.resolved",
-								actor: caller,
-								resource: resourceKey({
-									subject: {
-										organizationId: caller.organizationId,
-										userId: caller.userId,
-									},
-									kind: "session",
-									id: Option.some(params.sessionId),
-								}),
-								details: {
-									turn: params.turnId,
-									approvalId: params.approvalId,
-									toolName: approval.toolName,
-									approved: payload.approved,
-								},
-							})
-							.pipe(Effect.mapError(() => SessionStorageUnavailable.make({})))
-						return response
-					}),
-				)
-		}),
 )

@@ -1,0 +1,44 @@
+import { Layer } from "effect"
+import * as Gate from "../capabilities/Gate.ts"
+import * as Grants from "../capabilities/Grants.ts"
+import * as Judge from "../capabilities/Judge.ts"
+import * as Requests from "../capabilities/Requests.ts"
+import * as Rules from "../capabilities/Rules.ts"
+import * as AgentMemories from "./AgentMemories.ts"
+import * as AgentPlugin from "./AgentPlugin.ts"
+import * as AgentRecords from "./AgentRecords.ts"
+import * as Agents from "./Agents.ts"
+import * as Delegations from "./Delegations.ts"
+import * as Signals from "./Signals.ts"
+
+/**
+ * The Agent services: records, Agents, memory, delegations, Grants, Rules, the judge,
+ * requests, the capability gate and the Agent plugin. The coordinator is separate,
+ * because it needs the Session runtimes.
+ */
+export const layer = (options: {
+	readonly helper: Layer.Layer<Judge.HelperModel>
+	readonly requestTimeout?: number
+}) =>
+	AgentPlugin.layer.pipe(
+		Layer.provideMerge(Gate.layer),
+		Layer.provideMerge(
+			Requests.layer(
+				options.requestTimeout === undefined
+					? {}
+					: { timeout: options.requestTimeout },
+			),
+		),
+		Layer.provideMerge(
+			Layer.mergeAll(
+				Judge.layer,
+				Grants.layer,
+				Rules.layer,
+				Delegations.layer,
+				AgentMemories.layer,
+				Agents.layer,
+			),
+		),
+		Layer.provideMerge(options.helper),
+		Layer.provideMerge(Layer.merge(AgentRecords.layer, Signals.layer)),
+	)

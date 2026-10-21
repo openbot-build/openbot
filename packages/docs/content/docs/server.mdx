@@ -92,6 +92,7 @@ const development = {
 | ----------------- | ---------------------------------------------------------------------------------------- |
 | `tls`             | `{ certFile, keyFile }` paths to PEM files. Platform then serves HTTPS itself.           |
 | `sessions`        | Models, tools, and memory for Sessions. See below.                                       |
+| `agents`          | The helper model, the request timeout, and Agent memory. See [Agents](#agents).          |
 | `routes`          | A Layer with your own HTTP routes, served next to the Platform routes.                   |
 | `discovery`       | A Layer that finds Apps on the web. The default reads public Catalogs over the internet. |
 | `indexSources`    | More sources for the App Index search, next to the Platform Index.                       |
@@ -157,7 +158,28 @@ const server = (settings: Configuration.Settings) =>
 ```
 
 `model` is a `LanguageModel` Layer, as in [Models](/docs/models).
-Add `needsApproval: true` to `Tool.make` when a person must approve each call. See [Approvals](/docs/approvals).
+Add `needsApproval: true` to `Tool.make` when each call needs a decision. Platform then makes a `tools.call` request for it. See [Requests](/docs/requests).
+
+---
+
+## Agents
+
+The `agents` option sets how [Agents](/docs/agents) work together.
+
+| Field            | What it does                                                                                                                                                           |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `helperModel`    | A model selection for the work that Platform does itself: the [judge of Rules](/docs/rules) and Agent memory. Without it, Platform uses the default model of Sessions. |
+| `requestTimeout` | How long a [request](/docs/requests) waits before it is denied, in milliseconds. The default is 24 hours.                                                              |
+| `memory`         | `false` stops learning [Agent memory](/docs/memory#agent-memory). It is on by default.                                                                                 |
+
+```ts
+agents: {
+	helperModel: { provider: "openai-compat", model: "small-model" },
+	requestTimeout: 60 * 60 * 1000,
+},
+```
+
+`helperModel` must be a model that `sessions.resolveModel` can return.
 
 ---
 

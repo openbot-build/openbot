@@ -68,7 +68,18 @@ export const AuditAction = Schema.Literals([
 	"organization.updated",
 	"token.created",
 	"token.revoked",
-	"approval.resolved",
+	"agent.created",
+	"agent.updated",
+	"agent.promoted",
+	"agent.memory.updated",
+	"delegation.started",
+	"delegation.completed",
+	"capability.decided",
+	"request.resolved",
+	"grant.created",
+	"grant.revoked",
+	"rule.created",
+	"rule.updated",
 ])
 export type AuditAction = typeof AuditAction.Type
 export const AuditLogEntry = Schema.Struct({

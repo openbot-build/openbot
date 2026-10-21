@@ -1,0 +1,113 @@
+---
+title: Delegation
+description: How Agents give work to other Agents and get the results back.
+---
+
+**Delegation** means that one Agent gives a task to another Agent. The other Agent works in its own Session, with its own context. Only a short brief goes down, and only a short result comes back. So each Agent keeps its attention on its own work.
+This page shows the Agent tools, the brief and the result, and how to watch delegated work.
+
+---
+
+## The Agent tools
+
+Platform gives every Agent these tools:
+
+| Tool                     | What it does                                                                       |
+| ------------------------ | ---------------------------------------------------------------------------------- |
+| `openbot_list_agents`    | Lists the Agents it can give work to, with their roles. It includes its subagents. |
+| `openbot_agent_details`  | Reads the role and instructions of one Agent.                                      |
+| `openbot_delegate`       | Gives a task to another Agent and waits for the result.                            |
+| `openbot_spawn_subagent` | Starts a new [subagent](/docs/agents#three-kinds-of-agents) for its Session.       |
+| `openbot_report`         | Only in delegated work. Sends the result back.                                     |
+
+The first time an Agent gives work to another lasting Agent, or starts a subagent, the decider above it must agree. See [Requests](/docs/requests). An Agent can always give work to the subagents that it started.
+
+---
+
+## The brief
+
+`openbot_delegate` takes a brief:
+
+| Field            | Meaning                                                           |
+| ---------------- | ----------------------------------------------------------------- |
+| `agent`          | The ID of the other Agent.                                        |
+| `reason`         | Why the Agent wants this. A decider reads it when one must agree. |
+| `task`           | What to do.                                                       |
+| `userRequest`    | The words of the person, unchanged. A brief never replaces them.  |
+| `context`        | Short facts that the other Agent needs.                           |
+| `references`     | Session and Item IDs that the other Agent can read.               |
+| `constraints`    | Rules for the work.                                               |
+| `expectedOutput` | What a good result looks like.                                    |
+| `session`        | Optional. Continue earlier work of that Agent in this Session.    |
+
+The other Agent gets the brief as the first message of a Turn. It never sees the history of the Agent that gave the work.
+
+### Which Session the work uses
+
+- With `session`, the work goes on in that Session, if it belongs to the other Agent and was started from the same Session.
+- For a subagent, the work goes on in its latest Session from the same parent Session. So a subagent keeps its context.
+- Otherwise the work starts in a new Session.
+
+If the other Session is busy, the brief waits in its queue and runs next.
+
+## The result
+
+The other Agent calls `openbot_report` once when it is done. If it ends without a report, Platform uses its last answer.
+
+```json
+{
+	"status": "completed",
+	"summary": "Added the endpoint and two tests.",
+	"artifacts": [{ "kind": "branch", "ref": "agents-contract" }],
+	"openQuestions": [],
+	"child": { "session": "c81d…", "turn": "t-77" }
+}
+```
+
+`status` is `completed`, `failed` or `cancelled`. The result never holds the full history. To read the details, open the Session in `child`.
+
+---
+
+## How the parent waits
+
+While the other Agent works, the Turn that gave the work has the status `Waiting`. It does not hold a running process, so the wait can last long and survives a server restart. When the work ends, Platform gives the result to the waiting tool call, and the Turn goes on. When a Turn gives work to several Agents at once, it goes on after the last result.
+
+Delegated Sessions have `kind: "delegated"` and a `parent` with the Session, Turn and tool call that started them. They have the same routes as every Session. You can read them, steer them and interrupt them.
+
+## Watch delegated work
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/sessions/$SESSION/delegations
+```
+
+```json
+[
+	{
+		"id": "dlg_9f1e…",
+		"parent": { "session": "a41c…", "turn": "t-12", "toolCallId": "call-3" },
+		"agent": "agt_5c0e…",
+		"child": { "session": "c81d…", "turn": "t-77" },
+		"status": "running",
+		"brief": { "task": "…", "userRequest": "…" },
+		"result": null
+	}
+]
+```
+
+| Status        | Meaning                                                        |
+| ------------- | -------------------------------------------------------------- |
+| `authorizing` | The work waits for a [request](/docs/requests) to be answered. |
+| `queued`      | The work may start. Platform starts it now.                    |
+| `running`     | The other Agent works on it.                                   |
+| `completed`   | The work is done. `result` holds the result.                   |
+| `failed`      | The work failed or was not allowed.                            |
+| `cancelled`   | The work was stopped.                                          |
+
+## Stop delegated work
+
+When you [interrupt](/docs/sessions#steer-queue-and-interrupt) a Turn, Platform also stops the work that it gave away, and closes its open requests. Each record becomes `cancelled`.
+
+## Forks
+
+A Fork of a Session is new direct work. It keeps the Agent of its source, but it has no `parent`. Work that a Fork gives away starts in new Sessions, so two branches never share the work of one subagent.

@@ -389,8 +389,7 @@ export const make = Effect.gen(function* () {
 					ticket,
 					status:
 						turn === undefined ||
-						(turn.status._tag !== "Running" &&
-							turn.status._tag !== "WaitingApproval")
+						(turn.status._tag !== "Running" && turn.status._tag !== "Waiting")
 							? ("Failed" as const)
 							: ("Queued" as const),
 					operation: null,
