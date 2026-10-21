@@ -23,6 +23,7 @@ export const make = (
 > =>
 	Effect.gen(function* () {
 		const client = yield* OpenAiClient.OpenAiClient
+		const encode = Request.encode({ upstream: client, defaults })
 		const post = (path: string, body: unknown) =>
 			HttpClient.filterStatusOk(client.client)
 				.execute(
@@ -32,9 +33,7 @@ export const make = (
 		return ContextCompaction.ContextCompaction.of({
 			count: (request) =>
 				Effect.gen(function* () {
-					const encoded = yield* Request.encode({ upstream: client, defaults })(
-						request,
-					)
+					const encoded = yield* encode(request)
 					const response = yield* post("/responses/input_tokens", {
 						model: encoded.model,
 						input: encoded.input,
@@ -48,9 +47,7 @@ export const make = (
 				}).pipe(Effect.mapError(failed)),
 			compact: (request) =>
 				Effect.gen(function* () {
-					const encoded = yield* Request.encode({ upstream: client, defaults })(
-						request,
-					)
+					const encoded = yield* encode(request)
 					const response = yield* post("/responses/compact", {
 						model: encoded.model,
 						input: encoded.input,

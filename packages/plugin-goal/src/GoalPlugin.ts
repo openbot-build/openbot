@@ -5,6 +5,7 @@ import {
 	Definition,
 	GoalError,
 	State,
+	type Value,
 	pluginId,
 	store,
 	toolkit,
@@ -64,16 +65,33 @@ export const layer = toolkit.toLayer(
 					Predicate.isNotUndefined,
 				),
 			})
-		const required = (value: Option.Option<import("./Goal.ts").Value>) =>
-			Effect.fromOption(value).pipe(
-				Effect.mapError(
-					() =>
-						new GoalError({
-							reason: "goal-not-found",
-							message: "The Session has no goal",
+		/** Change the existing goal. It fails when the Session has no goal. */
+		const change = (f: (current: Value) => Value) =>
+			Effect.gen(function* () {
+				const session = yield* currentSession
+				const value = yield* state
+					.modifyEffect((current) =>
+						Option.match(current, {
+							onNone: () =>
+								Effect.fail(
+									new GoalError({
+										reason: "goal-not-found",
+										message: "The Session has no goal",
+									}),
+								),
+							onSome: (current) => {
+								const next = f(current)
+								return Effect.succeed([next, Option.some(next)] as const)
+							},
 						}),
-				),
-			)
+					)
+					.pipe(
+						Effect.mapError((error) =>
+							error instanceof GoalError ? error : failure(error),
+						),
+					)
+				return State.make({ session, ...value })
+			})
 
 		return toolkit.of({
 			SetGoal: (input) =>
@@ -91,68 +109,18 @@ export const layer = toolkit.toLayer(
 				Effect.gen(function* () {
 					const session = yield* currentSession,
 						value = yield* state.get.pipe(Effect.mapError(failure))
+					// The tool result is JSON, so a missing goal is null.
 					return Option.match(value, {
 						onNone: () => null,
 						onSome: (value) => State.make({ session, ...value }),
 					})
 				}),
 			UpdateGoal: (input) =>
-				Effect.gen(function* () {
-					const session = yield* currentSession
-					const value = yield* state
-						.modifyEffect((current) =>
-							required(current).pipe(
-								Effect.map((current) => {
-									const next = { ...current, definition: definition(input) }
-									return [next, Option.some(next)] as const
-								}),
-							),
-						)
-						.pipe(
-							Effect.mapError((error) =>
-								error instanceof GoalError ? error : failure(error),
-							),
-						)
-					return State.make({ session, ...value })
-				}),
+				change((current) => ({ ...current, definition: definition(input) })),
 			PauseGoal: () =>
-				Effect.gen(function* () {
-					const session = yield* currentSession
-					const value = yield* state
-						.modifyEffect((current) =>
-							required(current).pipe(
-								Effect.map((current) => {
-									const next = { ...current, status: "paused" as const }
-									return [next, Option.some(next)] as const
-								}),
-							),
-						)
-						.pipe(
-							Effect.mapError((error) =>
-								error instanceof GoalError ? error : failure(error),
-							),
-						)
-					return State.make({ session, ...value })
-				}),
+				change((current) => ({ ...current, status: "paused" as const })),
 			ResumeGoal: () =>
-				Effect.gen(function* () {
-					const session = yield* currentSession
-					const value = yield* state
-						.modifyEffect((current) =>
-							required(current).pipe(
-								Effect.map((current) => {
-									const next = { ...current, status: "active" as const }
-									return [next, Option.some(next)] as const
-								}),
-							),
-						)
-						.pipe(
-							Effect.mapError((error) =>
-								error instanceof GoalError ? error : failure(error),
-							),
-						)
-					return State.make({ session, ...value })
-				}),
+				change((current) => ({ ...current, status: "active" as const })),
 			ClearGoal: () =>
 				state
 					.set(Option.none())

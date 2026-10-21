@@ -22,15 +22,14 @@ export class ModelStepLimitExceeded extends Data.TaggedError(
 export const make = ({
 	maxSteps,
 }: Options): Plugin.Plugin<{}, InvalidMaxSteps | ModelStepLimitExceeded> => {
+	const valid = Number.isSafeInteger(maxSteps) && maxSteps >= 1
 	const middleware: Plugin.Middleware<
 		{},
 		InvalidMaxSteps | ModelStepLimitExceeded
 	> = (next, options) =>
 		Stream.unwrap(
 			Effect.gen(function* () {
-				if (!Number.isSafeInteger(maxSteps) || maxSteps < 1) {
-					return yield* new InvalidMaxSteps({ maxSteps })
-				}
+				if (!valid) return yield* new InvalidMaxSteps({ maxSteps })
 
 				const context = yield* Agent.Context
 				return next(options).pipe(

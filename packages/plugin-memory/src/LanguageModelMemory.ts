@@ -22,6 +22,10 @@ export const model: typeof MemoryModel.Service = {
 			]),
 		}).pipe(
 			Effect.map((r) => r.value),
+			// The public error does not carry model details, so log them here.
+			Effect.tapError((error) =>
+				Effect.logWarning("The memory model failed", error),
+			),
 			Effect.mapError(failure),
 		),
 }

@@ -1,4 +1,4 @@
-import { Context, type Schema, Effect, Layer, Redacted } from "effect"
+import { Context, type Schema, Effect, Layer, Option, Redacted } from "effect"
 import {
 	HttpApiClient,
 	type HttpApiEndpoint,
@@ -42,10 +42,9 @@ export const make = (options: {
 	| HttpApiMiddleware.ForClient<AgentAuth>
 	| HttpApiMiddleware.ForClient<SessionAuth>
 > =>
-	Effect.gen(function* () {
-		const api = yield* HttpApiClient.make(PlatformApi, options)
-		return Client.of({ api })
-	})
+	HttpApiClient.make(PlatformApi, options).pipe(
+		Effect.map((api) => Client.of({ api })),
+	)
 
 export const layer = (options: {
 	readonly baseUrl: string
@@ -55,8 +54,15 @@ export const layer = (options: {
 	 */
 	readonly apiKey?: string | Redacted.Redacted<string>
 	readonly onUnauthorized?: () => void
-}): Layer.Layer<Client> =>
-	Layer.effect(Client, make(options)).pipe(
+}): Layer.Layer<Client> => {
+	const apiKey = Option.map(Option.fromNullishOr(options.apiKey), (key) =>
+		Redacted.isRedacted(key) ? Redacted.value(key) : key,
+	)
+	const reportUnauthorized = (response: { readonly status: number }) =>
+		Effect.sync(() => {
+			if (response.status === 401) options.onUnauthorized?.()
+		})
+	return Layer.effect(Client, make(options)).pipe(
 		Layer.provide(
 			Layer.mergeAll(
 				FetchHttpClient.layer.pipe(
@@ -68,31 +74,16 @@ export const layer = (options: {
 				),
 				HttpApiMiddleware.layerClient(AgentAuth, ({ request, next }) =>
 					next(
-						options.apiKey === undefined
-							? request
-							: HttpClientRequest.bearerToken(
-									request,
-									Redacted.isRedacted(options.apiKey)
-										? Redacted.value(options.apiKey)
-										: options.apiKey,
-								),
-					).pipe(
-						Effect.tap((response) =>
-							Effect.sync(() => {
-								if (response.status === 401) options.onUnauthorized?.()
-							}),
-						),
-					),
+						Option.match(apiKey, {
+							onNone: () => request,
+							onSome: (key) => HttpClientRequest.bearerToken(request, key),
+						}),
+					).pipe(Effect.tap(reportUnauthorized)),
 				),
 				HttpApiMiddleware.layerClient(SessionAuth, ({ request, next }) =>
-					next(request).pipe(
-						Effect.tap((response) =>
-							Effect.sync(() => {
-								if (response.status === 401) options.onUnauthorized?.()
-							}),
-						),
-					),
+					next(request).pipe(Effect.tap(reportUnauthorized)),
 				),
 			),
 		),
 	)
+}

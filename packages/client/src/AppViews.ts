@@ -28,13 +28,15 @@ const decode = <A>(
 	input: unknown,
 ) =>
 	Effect.tryPromise({
-		try: async () => {
-			const result = await schema["~standard"].validate(input)
-			if (result.issues !== undefined) throw new Error("Invalid MCP result")
-			return result.value
-		},
+		try: async () => schema["~standard"].validate(input),
 		catch: failure,
-	})
+	}).pipe(
+		Effect.flatMap((result) =>
+			result.issues === undefined
+				? Effect.succeed(result.value)
+				: Effect.fail(failure()),
+		),
+	)
 export const toolResult = (value: unknown) =>
 	decode(specTypeSchemas.CallToolResult, value)
 /** A bridge without credentials, tied to one view that the server owns. Polling never sends an action again. */
@@ -57,6 +59,8 @@ export const make = Effect.fn("AppViews.make")(function* (
 			.pipe(Effect.mapError(failure))
 	const invoke = (payload: Api.ActionRequest) =>
 		Effect.gen(function* () {
+			// The generated client takes a union of request objects, not one object with a union
+			// payload. TypeScript needs each branch narrowed, even though the calls look the same.
 			yield* (
 				payload.kind === "tool"
 					? api.appViews.act({ params, payload })
