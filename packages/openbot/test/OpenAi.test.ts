@@ -19,8 +19,8 @@ import { LanguageModel, Prompt, Tool, Toolkit } from "effect/ai"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { OpenAiClient, OpenAiConfig } from "@effect/ai-openai"
 import { Config, ContextWindow, Model, Provider } from "@openbot-build/core"
-import * as OpenAiProvider from "../src/OpenAiProvider.ts"
-import * as ResponsesCompaction from "../src/ResponsesCompaction.ts"
+import * as OpenAiProvider from "../src/providers/openai/OpenAiProvider.ts"
+import * as ResponsesCompaction from "../src/providers/openai/ResponsesCompaction.ts"
 
 const selection = Config.Selection.make({
 	provider: Provider.Id.make("openai"),
@@ -573,7 +573,7 @@ test("provider Layers keep service identity with direct and pipeable optional de
 	class ProviderTest extends Context.Service<
 		ProviderTest,
 		OpenAiProvider.Provider
-	>()("@openbot-build/provider-openai/test/OpenAi.test/ProviderTest") {}
+	>()("@openbot-build/openbot/test/OpenAi.test/ProviderTest") {}
 	const defaults: OpenAiProvider.Defaults = { temperature: 0.25 }
 	const layers: ReadonlyArray<Layer.Layer<ProviderTest>> = [
 		OpenAiProvider.layer(ProviderTest),

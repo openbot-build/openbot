@@ -16,7 +16,7 @@ import { type Defaults } from "./OpenAiProvider.ts"
 
 const invalid = (description: string) =>
 	AiError.AiError.make({
-		module: "provider-openai",
+		module: "OpenAiProvider",
 		method: "encodeRequest",
 		reason: AiError.InvalidRequestError.make({ description }),
 	})

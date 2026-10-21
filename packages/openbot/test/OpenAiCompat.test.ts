@@ -25,13 +25,13 @@ import {
 } from "effect/ai"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { Config, Model, Provider } from "@openbot-build/core"
-import { AnthropicProvider } from "../src/index.ts"
+import * as OpenAiCompatProvider from "../src/providers/openai-compat/OpenAiCompatProvider.ts"
 
 const selection = Config.Selection.make({
-	provider: Provider.Id.make("anthropic"),
-	model: Model.Id.make("claude-sonnet-4-5"),
+	provider: Provider.Id.make("openai-compat"),
+	model: Model.Id.make("chat-model"),
 	reasoningEffort: "high",
-	serviceTier: "standard_only",
+	serviceTier: "priority",
 })
 const tools = Toolkit.make(
 	Tool.make("echo", {
@@ -40,68 +40,91 @@ const tools = Toolkit.make(
 		success: Schema.String,
 	}),
 )
-const usage = {
-	input_tokens: 5,
-	output_tokens: 2,
-	cache_creation: null,
-	cache_creation_input_tokens: null,
-	cache_read_input_tokens: null,
-	service_tier: "standard",
-}
 const answer = {
-	id: "msg_1",
-	type: "message",
-	role: "assistant",
+	id: "chat_1",
 	model: selection.model,
-	content: [{ type: "text", text: "answer", citations: null }],
-	stop_reason: "end_turn",
-	stop_sequence: null,
-	usage,
+	created: 1,
+	choices: [
+		{
+			index: 0,
+			finish_reason: "stop",
+			message: { role: "assistant", content: "answer" },
+		},
+	],
+	usage: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
 }
 const toolAnswer = {
 	...answer,
-	content: [
-		{ type: "tool_use", id: "call_1", name: "echo", input: { text: "hello" } },
+	choices: [
+		{
+			index: 0,
+			finish_reason: "tool_calls",
+			message: {
+				role: "assistant",
+				content: null,
+				tool_calls: [
+					{
+						id: "call_1",
+						type: "function",
+						function: { name: "echo", arguments: '{"text":"hello"}' },
+					},
+				],
+			},
+		},
 	],
-	stop_reason: "tool_use",
 }
 const streamEvents = [
 	{
-		type: "message_start",
-		message: { ...answer, content: [], stop_reason: null },
+		...answer,
+		choices: [
+			{
+				index: 0,
+				delta: { role: "assistant", content: "hello" },
+				finish_reason: null,
+			},
+		],
 	},
 	{
-		type: "content_block_start",
-		index: 0,
-		content_block: { type: "text", text: "", citations: null },
+		...answer,
+		choices: [
+			{
+				index: 0,
+				delta: {
+					tool_calls: [
+						{
+							index: 0,
+							id: "call_1",
+							type: "function",
+							function: { name: "echo", arguments: "" },
+						},
+					],
+				},
+				finish_reason: null,
+			},
+		],
 	},
 	{
-		type: "content_block_delta",
-		index: 0,
-		delta: { type: "text_delta", text: "hello" },
+		...answer,
+		choices: [
+			{
+				index: 0,
+				delta: {
+					tool_calls: [
+						{ index: 0, function: { arguments: '{"text":"hello"}' } },
+					],
+				},
+				finish_reason: null,
+			},
+		],
 	},
-	{ type: "content_block_stop", index: 0 },
 	{
-		type: "content_block_start",
-		index: 1,
-		content_block: { type: "tool_use", id: "call_1", name: "echo", input: {} },
+		...answer,
+		choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
 	},
-	{
-		type: "content_block_delta",
-		index: 1,
-		delta: { type: "input_json_delta", partial_json: '{"text":"hello"}' },
-	},
-	{ type: "content_block_stop", index: 1 },
-	{
-		type: "message_delta",
-		delta: { stop_reason: "tool_use", stop_sequence: null },
-		usage: { ...usage, output_tokens: 2 },
-	},
-	{ type: "message_stop" },
 ]
-const sse = streamEvents
-	.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
-	.join("")
+const sse =
+	streamEvents.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") +
+	"data: [DONE]\n\n"
 
 test("the public Provider keeps identity, encodes options and continues after a tool runs", async () => {
 	let requests: ReadonlyArray<Schema.JsonObject> = []
@@ -110,9 +133,9 @@ test("the public Provider keeps identity, encodes options and continues after a 
 		HttpClient.HttpClient,
 		HttpClient.make((request, url) =>
 			Effect.gen(function* () {
-				assert.equal(url.origin, "https://anthropic.test")
-				assert.equal(url.pathname, "/v1/messages")
-				assert.equal(request.headers["x-api-key"], "test-key")
+				assert.equal(url.origin, "https://openai-compat.test")
+				assert.equal(url.pathname, "/v1/chat/completions")
+				assert.equal(request.headers["authorization"], "Bearer test-key")
 				assert.equal(request.body._tag, "Uint8Array")
 				return yield* Match.value(request.body).pipe(
 					Match.tag("Uint8Array", (body) =>
@@ -141,12 +164,13 @@ test("the public Provider keeps identity, encodes options and continues after a 
 			}),
 		),
 	)
-	const provider = AnthropicProvider.make({
-		max_tokens: 1024,
-		output_config: { effort: "low" },
+	const provider = OpenAiCompatProvider.make({
+		max_output_tokens: 1024,
+		reasoning_effort: "low",
 		service_tier: "auto",
+		custom_option: "retained",
 	})
-	assert.equal(provider.id, "anthropic")
+	assert.equal(provider.id, "openai-compat")
 	assert.equal(requests.length, 0)
 	await Effect.runPromise(
 		Effect.scoped(
@@ -187,20 +211,21 @@ test("the public Provider keeps identity, encodes options and continues after a 
 				assert.equal(toolCalls, 1)
 				assert.equal(requests[0]!["model"], selection.model)
 				assert.equal(requests[0]!["max_tokens"], 1024)
-				assert.deepEqual(requests[0]!["output_config"], { effort: "high" })
-				assert.equal(requests[0]!["service_tier"], "standard_only")
+				assert.equal(requests[0]!["reasoning_effort"], "high")
+				assert.equal(requests[0]!["custom_option"], "retained")
+				assert.equal(requests[0]!["service_tier"], "priority")
 				assert.match(JSON.stringify(requests[0]), /Follow instructions/)
 				assert.match(JSON.stringify(requests[0]!["tools"]), /echo/)
-				assert.match(JSON.stringify(requests[1]!["messages"]), /tool_result/)
+				assert.match(JSON.stringify(requests[1]!["messages"]), /tool_call_id/)
 				assert.match(JSON.stringify(requests[1]!["messages"]), /hello/)
-				assert.deepEqual(requests[2]!["output_config"], { effort: "low" })
+				assert.equal(requests[2]!["reasoning_effort"], "low")
 				assert.equal(requests[2]!["service_tier"], "auto")
 			}),
 		).pipe(
 			Effect.provide(
 				Layer.merge(
-					AnthropicProvider.layerClient({
-						apiUrl: "https://anthropic.test",
+					OpenAiCompatProvider.layerClient({
+						apiUrl: "https://openai-compat.test/v1",
 						apiKey: Redacted.make("test-key"),
 					}).pipe(Layer.provide(HttpClientTest)),
 					tools.toLayer({
@@ -246,7 +271,7 @@ test("streamed text and tool results are visible, and cancellation interrupts HT
 						)
 					}),
 				)
-				const model = yield* AnthropicProvider.make().model(selection)
+				const model = yield* OpenAiCompatProvider.make().model(selection)
 				yield* Effect.gen(function* () {
 					const parts = yield* LanguageModel.streamText({
 						prompt: "Echo hello.",
@@ -275,8 +300,8 @@ test("streamed text and tool results are visible, and cancellation interrupts HT
 							tools.toLayer({ echo: ({ text }) => Effect.succeed(text) }),
 						).pipe(
 							Layer.provide(
-								AnthropicProvider.layerClient({
-									apiUrl: "https://anthropic.test",
+								OpenAiCompatProvider.layerClient({
+									apiUrl: "https://openai-compat.test/v1",
 								}).pipe(Layer.provide(HttpClientTest)),
 							),
 						),
@@ -303,14 +328,16 @@ test("HTTP errors stay model errors", async () => {
 	)
 	const result = await Effect.runPromise(
 		Effect.gen(function* () {
-			const model = yield* AnthropicProvider.make().model(selection)
+			const model = yield* OpenAiCompatProvider.make().model(selection)
 			return yield* LanguageModel.generateText({ prompt: "Hello." }).pipe(
 				Effect.provide(model),
 				Effect.result,
 			)
 		}).pipe(
 			Effect.provide(
-				AnthropicProvider.layerClient({}).pipe(Layer.provide(HttpClientTest)),
+				OpenAiCompatProvider.layerClient({}).pipe(
+					Layer.provide(HttpClientTest),
+				),
 			),
 		),
 	)
@@ -326,47 +353,25 @@ test("HTTP errors stay model errors", async () => {
 	)
 })
 
-test("unsupported selection options fail locally", async () => {
-	for (const options of [
-		{ reasoningEffort: "xhigh" },
-		{ serviceTier: "priority" },
-	]) {
-		const result = await Effect.runPromise(
-			AnthropicProvider.make()
-				.model(Config.Selection.make({ ...selection, ...options }))
-				.pipe(Effect.result),
-		)
-		assert.equal(result._tag, "Failure")
-		Match.value(result).pipe(
-			Match.tag("Failure", (result) =>
-				assert.equal(result.failure.reason._tag, "InvalidRequestError"),
-			),
-			Match.orElse(() => {
-				throw new Error("Expected invalid selection")
-			}),
-		)
-	}
-})
-
 test("provider Layers keep service identity with direct and pipeable optional defaults", async () => {
 	class ProviderTest extends Context.Service<
 		ProviderTest,
-		AnthropicProvider.Provider
-	>()("@openbot-build/provider-anthropic/test/Anthropic.test/ProviderTest") {}
-	const defaults: AnthropicProvider.Defaults = { temperature: 0.25 }
+		OpenAiCompatProvider.Provider
+	>()("@openbot-build/openbot/test/OpenAiCompat.test/ProviderTest") {}
+	const defaults: OpenAiCompatProvider.Defaults = { temperature: 0.25 }
 	const layers: ReadonlyArray<Layer.Layer<ProviderTest>> = [
-		AnthropicProvider.layer(ProviderTest),
-		AnthropicProvider.layer(ProviderTest, undefined),
-		AnthropicProvider.layer(ProviderTest, defaults),
-		ProviderTest.pipe(AnthropicProvider.layer()),
-		ProviderTest.pipe(AnthropicProvider.layer(undefined)),
-		ProviderTest.pipe(AnthropicProvider.layer(defaults)),
+		OpenAiCompatProvider.layer(ProviderTest),
+		OpenAiCompatProvider.layer(ProviderTest, undefined),
+		OpenAiCompatProvider.layer(ProviderTest, defaults),
+		ProviderTest.pipe(OpenAiCompatProvider.layer()),
+		ProviderTest.pipe(OpenAiCompatProvider.layer(undefined)),
+		ProviderTest.pipe(OpenAiCompatProvider.layer(defaults)),
 	]
 	for (const layer of layers) {
 		const provider = await Effect.runPromise(
 			ProviderTest.pipe(Effect.provide(layer)),
 		)
-		assert.equal(provider.id, "anthropic")
+		assert.equal(provider.id, "openai-compat")
 		assert.equal(
 			(await Effect.runPromise(provider.model(selection))).provider,
 			selection.provider,
