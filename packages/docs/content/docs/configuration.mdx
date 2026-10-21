@@ -71,11 +71,13 @@ Never use it on a public server. See [Authentication](/docs/authentication).
 | `OPENBOT_OWNER_USER_IDS` | No | empty | Case-sensitive IDs that may first join as Super Administrators. |
 | `OPENBOT_MEMBER_USER_IDS` | No | empty | Case-sensitive IDs that may first join with the default member roles. |
 | `OPENBOT_ALLOW_FIRST_LOGIN_ADMIN` | No | `true` | Allow first-login admin bootstrap only when explicit owner and member lists are empty. Set `false` in a managed deployment. |
+| `OPENBOT_ALLOW_MEMBER_SIGNUP` | No | `false` | Let other signed-in accounts join an existing organization as `member`, only while it has an active Super Administrator. |
 | `OPENBOT_ALLOWED_EMAIL_DOMAINS` | No       | empty   | Email domains, with commas between them. Platform uses them only when it creates the organization.                |
 
 One deployment has one organization. Platform creates it when the first account signs in.
 The first account becomes the Super Administrator only when all owner/member lists are empty and `OPENBOT_ALLOW_FIRST_LOGIN_ADMIN` is `true`.
 An existing suspended or removed membership stays denied. Bootstrap lists and allowed email domains do not restore it.
+Member signup also keeps those denials. It does not create the first owner or use `defaultRoles`. Explicit owner, member ID and domain rules keep their configured roles. Use `OPENBOT_ALLOW_FIRST_LOGIN_ADMIN=false` when a managed deployment must name or import its first owner.
 After Platform creates the organization, change the allowed domains with `PATCH /v1/organization`. See [Organization](/docs/organization).
 
 ## Secrets

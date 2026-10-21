@@ -21,6 +21,8 @@ export interface Options {
 	readonly memberUserIds?: ReadonlyArray<string>
 	/** Disable for deployments that import accounts or require explicit admission. */
 	readonly allowFirstLoginAdmin?: boolean
+	/** Let new signed-in accounts join an established organization as members. */
+	readonly allowMemberSignup?: boolean
 	/** The allowed email domains of a new organization. After that, the API owns them. */
 	readonly allowedEmailDomains?: ReadonlyArray<string>
 }

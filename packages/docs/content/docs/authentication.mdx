@@ -278,8 +278,10 @@ Set these deployment options when moving an existing same-origin application:
 | OPENBOT_OWNER_USER_IDS | Empty | Case-sensitive existing account IDs admitted as Super Administrators. |
 | OPENBOT_MEMBER_USER_IDS | Empty | Case-sensitive existing account IDs admitted with the organization default roles. |
 | OPENBOT_ALLOW_FIRST_LOGIN_ADMIN | true | Set false before importing accounts or opening a managed deployment. |
+| OPENBOT_ALLOW_MEMBER_SIGNUP | false | Allow other authenticated accounts to join an existing organization as ordinary members while an active Super Administrator exists. |
 
 An explicit owner or member ID list also prevents first-login promotion. Existing member status and roles override bootstrap settings. Suspension and removal both block existing cookies and tokens. Removal keeps an admission tombstone, so an allowed domain or bootstrap ID cannot silently restore access.
+Member signup does not restore those accounts either. It uses the authenticated account ID and does not match or merge people by email. This signup path always grants only `member`, even if the organization default roles grant more access. It does not replace the separate rules for explicit owners, member IDs or allowed domains.
 
 GET /auth/session?refresh=false validates the session without extending its lifetime. A gateway must relay all Set-Cookie values returned by Platform. The generated static API contract names the default cookie; a deployment that changes its cookie name must configure its browser client accordingly.
 

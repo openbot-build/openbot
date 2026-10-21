@@ -83,6 +83,9 @@ export const load: Configuration.Load = Config.all({
 		allowFirstLoginAdmin: Config.Boolean(
 			"OPENBOT_ALLOW_FIRST_LOGIN_ADMIN",
 		).pipe(Config.withDefault(true)),
+		allowMemberSignup: Config.Boolean("OPENBOT_ALLOW_MEMBER_SIGNUP").pipe(
+			Config.withDefault(false),
+		),
 		ownerEmails: list("OPENBOT_OWNER_EMAILS"),
 		allowedEmailDomains: list("OPENBOT_ALLOWED_EMAIL_DOMAINS"),
 	}),
