@@ -8,7 +8,7 @@ import { Effect, Exit, Layer, Redacted, Scope } from "effect"
 import { SqlClient } from "effect/sql"
 import * as Probe from "../src/apps/Probe.ts"
 import { AppHost, AppNetwork } from "../src/apps/AppHost.ts"
-import { ownerKey } from "../src/apps/Repository.ts"
+import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Fixture from "./AppFixture.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 

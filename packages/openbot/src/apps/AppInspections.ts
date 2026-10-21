@@ -1,8 +1,16 @@
 import { DeveloperApi as Api } from "@openbot-build/api"
-import { CatalogDiscovery, Discovery, Indexing } from "@openbot-build/protocol"
+import {
+	CatalogDiscovery,
+	Discovery,
+	Index,
+	Indexing,
+} from "@openbot-build/protocol"
 import { Clock, Context, Effect, HashMap, Layer, Match, Option } from "effect"
-import { IndexRepository } from "./IndexRepository.ts"
+import type { PgClient } from "@effect/sql-pg"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { discover } from "./Discovery.ts"
+import { IndexNamespace } from "./IndexNamespace.ts"
+import * as IndexStore from "./IndexStore.ts"
 
 export class AppInspections extends Context.Service<
 	AppInspections,
@@ -16,10 +24,15 @@ export class AppInspections extends Context.Service<
 export const make: Effect.Effect<
 	typeof AppInspections.Service,
 	never,
-	Discovery.Discovery | Indexing.PublicationInspection | IndexRepository
+	| Discovery.Discovery
+	| Indexing.PublicationInspection
+	| Index.IndexStore
+	| PgClient.PgClient
 > = Effect.gen(function* () {
 	const inspection = yield* Indexing.PublicationInspection
-	const index = yield* IndexRepository
+	const index = yield* Index.IndexStore
+	const db = yield* makeWithDefaults()
+	const namespace = yield* IndexNamespace
 	const discovery = yield* Discovery.Discovery
 	return AppInspections.of({
 		inspect: (input) =>
@@ -82,7 +95,7 @@ export const make: Effect.Effect<
 										Effect.gen(function* () {
 											const stored = yield* Effect.all({
 												entry: index.get(candidate.cardUrl),
-												checks: index.checks,
+												checks: IndexStore.checks(db, namespace),
 											}).pipe(Effect.result)
 											const eligibility = yield* inspection
 												.inspect(

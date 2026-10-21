@@ -1,17 +1,21 @@
 import { randomUUID } from "node:crypto"
-import { Repository, ownerKey } from "./Repository.ts"
+import * as StoredConnections from "./StoredConnections.ts"
+import { ownerKey } from "./StoredConnections.ts"
 import {
 	AppExperienceApi as Api,
 	ExperienceStorageUnavailable,
 	Identity,
 } from "@openbot-build/api"
 import { Array as Arr, Context, Effect, Layer } from "effect"
+import { and, eq, inArray } from "drizzle-orm"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { appDrafts, appSecrets } from "../database/Schema.ts"
 import { Connections } from "./Connections.ts"
 import { Lifecycle } from "./Lifecycle.ts"
 export const make = Effect.gen(function* () {
 	const connections = yield* Connections
 	const lifecycle = yield* Lifecycle
-	const repository = yield* Repository
+	const db = yield* makeWithDefaults()
 	return {
 		export: (identity: typeof Identity.Service) =>
 			connections.listConnections.pipe(
@@ -31,7 +35,7 @@ export const make = Effect.gen(function* () {
 				connections.prepareConnection(entry.cardUrl).pipe(
 					Effect.provideService(Identity, identity),
 					Effect.flatMap((draft) =>
-						repository.saveDraft(ownerKey(identity), {
+						StoredConnections.saveDraft(db, ownerKey(identity), {
 							...draft,
 							id: randomUUID(),
 							imported: { name: entry.name, remoteIndex: entry.remoteIndex },
@@ -70,7 +74,27 @@ export const make = Effect.gen(function* () {
 					),
 				)
 				const [removed, pending] = Arr.separate(results)
-				yield* repository.clearDrafts(ownerKey(identity))
+				const owner = ownerKey(identity)
+				// Remove the preparation drafts and the saved App interface state.
+				yield* db
+					.transaction((tx) =>
+						Effect.gen(function* () {
+							yield* tx.delete(appDrafts).where(eq(appDrafts.owner, owner))
+							yield* tx
+								.delete(appSecrets)
+								.where(
+									and(
+										eq(appSecrets.owner, owner),
+										inArray(appSecrets.kind, [
+											"app-view",
+											"app-ui-state",
+											"app-view-action",
+										]),
+									),
+								)
+						}),
+					)
+					.pipe(Effect.mapError(StoredConnections.unavailable))
 				return { removed, pending }
 			}),
 	}

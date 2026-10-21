@@ -15,7 +15,10 @@ import {
 	type IndexRequestRecord,
 } from "./DeveloperRepository.ts"
 import { AppInspections } from "./AppInspections.ts"
-import { IndexWorkRepository } from "./IndexWorkRepository.ts"
+import type { PgClient } from "@effect/sql-pg"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { IndexNamespace } from "./IndexNamespace.ts"
+import * as IndexWork from "./IndexWork.ts"
 import { Governance } from "./Governance.ts"
 
 export class DeveloperIndexing extends Context.Service<
@@ -41,20 +44,24 @@ export const make: Effect.Effect<
 	| DeveloperAccess
 	| DeveloperRepository
 	| AppInspections
-	| IndexWorkRepository
+	| PgClient.PgClient
 	| Governance
 > = Effect.gen(function* () {
 	const records = yield* DeveloperRepository
 	const access = yield* DeveloperAccess
 	const inspections = yield* AppInspections
-	const jobs = yield* IndexWorkRepository
+	const db = yield* makeWithDefaults()
+	const namespace = yield* IndexNamespace
 	const governance = yield* Governance
 	const read = (record: IndexRequestRecord) =>
 		Effect.gen(function* () {
 			yield* access.authorize(record.owner, record.value.cardUrl)
-			const job = yield* jobs
-				.get(record.value.cardUrl, record.value.generation)
-				.pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
+			const job = yield* IndexWork.job(
+				db,
+				namespace,
+				record.value.cardUrl,
+				record.value.generation,
+			).pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
 			return {
 				...record.value,
 				status: Option.match(job, {
@@ -120,9 +127,12 @@ export const make: Effect.Effect<
 					"indexing:" + cardUrl,
 					Effect.gen(function* () {
 						yield* access.authorize(owner, cardUrl, true)
-						const job = yield* jobs
-							.enqueue(cardUrl, app.candidate.sources)
-							.pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
+						const job = yield* IndexWork.enqueue(
+							db,
+							namespace,
+							cardUrl,
+							app.candidate.sources,
+						).pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
 						const previous = (yield* records.indexing.list({
 							owner,
 							scope: cardUrl,

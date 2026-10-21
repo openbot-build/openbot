@@ -1,8 +1,6 @@
 import * as DeveloperLayers from "../apps/DeveloperLayers.ts"
 import * as AppExperience from "../apps/Experience.ts"
 import * as Views from "../apps/Views.ts"
-import * as ViewRepository from "../apps/ViewRepositoryPostgres.ts"
-import { ViewRepository as ViewRecords } from "../apps/ViewRepository.ts"
 import * as AppIndex from "../apps/Index.ts"
 import * as Connections from "../apps/Connections.ts"
 import * as Lifecycle from "../apps/Lifecycle.ts"
@@ -11,16 +9,12 @@ import * as Capabilities from "../apps/Capabilities.ts"
 import * as AppPlugin from "../plugins/apps/AppPlugin.ts"
 import * as Invocations from "../apps/Invocations.ts"
 import * as Operations from "../apps/Operations.ts"
-import * as InvocationRepository from "../apps/InvocationRepositoryPostgres.ts"
-import { InvocationRepository as InvocationRecords } from "../apps/InvocationRepository.ts"
 import * as ActionPolicy from "../apps/ActionPolicy.ts"
-import * as AppRepositoryPostgres from "../apps/RepositoryPostgres.ts"
 import * as Secrets from "../secrets/Secrets.ts"
 import * as SettingsPostgres from "../settings/SettingsPostgres.ts"
 import * as AppProbe from "../apps/Probe.ts"
 import * as AppHost from "../apps/AppHost.ts"
 import * as Authorizations from "../apps/Authorizations.ts"
-import * as AuthorizationRepository from "../apps/AuthorizationRepositoryPostgres.ts"
 import * as ProtocolStores from "../apps/ProtocolStores.ts"
 import {
 	CatalogDiscovery,
@@ -31,9 +25,9 @@ import {
 } from "@openbot-build/protocol"
 import * as ProtocolNodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import * as IndexWork from "../apps/IndexWork.ts"
-import * as IndexWorkRepositoryPostgres from "../apps/IndexWorkRepositoryPostgres.ts"
 import * as Governance from "../apps/Governance.ts"
-import * as IndexRepositoryPostgres from "../apps/IndexRepositoryPostgres.ts"
+import * as IndexStore from "../apps/IndexStore.ts"
+import { IndexNamespace } from "../apps/IndexNamespace.ts"
 import { ResolvedConfiguration } from "../auth/Configuration.js"
 import * as BackendLayers from "./BackendLayers.ts"
 import * as AgentLayers from "../agents/AgentLayers.ts"
@@ -42,7 +36,7 @@ import * as Judge from "../capabilities/Judge.ts"
 import * as Sessions from "../sessions/Sessions.ts"
 import { Config } from "@openbot-build/core"
 import * as Backend from "./Backend.ts"
-import { Repository } from "../sessions/Repository.ts"
+import type { PgClient } from "@effect/sql-pg"
 import { NodeServices, NodeCrypto } from "@effect/platform-node"
 import {
 	Effect,
@@ -54,7 +48,6 @@ import {
 } from "effect"
 import { type Tool } from "effect/ai"
 import { FetchHttpClient } from "effect/http"
-import * as RepositoryPostgres from "../sessions/RepositoryPostgres.ts"
 import * as DatabasePostgres from "../database/DatabasePostgres.ts"
 import * as BetterAuth from "../auth/BetterAuth.ts"
 import * as TokensPostgres from "../auth/TokensPostgres.ts"
@@ -132,7 +125,7 @@ export const layer = <
 	const sessions: Layer.Layer<
 		Backend.Backend,
 		never,
-		| Repository
+		| PgClient.PgClient
 		| Sessions.ExecutionServices<Tools, R>
 		| BuildR
 		| ModelRegistry.ModelRegistry
@@ -218,22 +211,7 @@ export const layer = <
 	const agents = AgentLayers.layer({ helper })
 
 	const indexNamespace = options.indexNamespace ?? "public"
-	const indexStorage = IndexRepositoryPostgres.layerFor(indexNamespace)
-	const appStorage = Layer.mergeAll(
-		ProtocolStores.layer,
-		AuthorizationRepository.layer,
-		InvocationRepository.layer,
-		ViewRepository.layer,
-	).pipe(Layer.provideMerge(AppRepositoryPostgres.layerFor(indexNamespace)))
-	const viewRecovery = Layer.effectDiscard(
-		Effect.flatMap(ViewRecords, (records) => records.recover),
-	)
-	const invocationRecovery = Layer.effectDiscard(
-		Effect.flatMap(InvocationRecords, (records) => records.recover),
-	)
 	const apps = Layer.mergeAll(
-		invocationRecovery,
-		viewRecovery,
 		Lifecycle.layer,
 		Authorizations.layer(options.auth.publicOrigin),
 		AppPlugin.layer,
@@ -249,7 +227,7 @@ export const layer = <
 		Layer.provideMerge(ConnectionLocks.layer),
 		Layer.provide(options.appNetwork ?? AppHost.layerNetwork),
 		Layer.provide(NodeCrypto.layer),
-		Layer.provideMerge(appStorage),
+		Layer.provideMerge(ProtocolStores.layer),
 		Layer.provideMerge(ActionPolicy.layer),
 	)
 
@@ -273,9 +251,7 @@ export const layer = <
 		Layer.provide(
 			options.indexPublicNetwork ?? ProtocolNodeHttpServer.layerPublicNetwork(),
 		),
-		Layer.provide(
-			IndexRepositoryPostgres.layerProtocol.pipe(Layer.provide(indexStorage)),
-		),
+		Layer.provide(IndexStore.layer),
 	)
 	const indexWork = IndexWork.layerWorker(options.indexWork).pipe(
 		Layer.provideMerge(
@@ -291,10 +267,7 @@ export const layer = <
 				: { providers: options.indexSources }),
 		}),
 		indexWork,
-	).pipe(
-		Layer.provideMerge(IndexWorkRepositoryPostgres.layerFor(indexNamespace)),
-		Layer.provideMerge(indexStorage),
-	)
+	).pipe(Layer.provideMerge(IndexStore.layer))
 
 	const base = Layer.merge(
 		sessions,
@@ -338,7 +311,7 @@ export const layer = <
 			),
 		),
 		Layer.provideMerge(AuditLogPostgres.layer),
-		Layer.provideMerge(RepositoryPostgres.layer),
+		Layer.provideMerge(Layer.succeed(IndexNamespace, indexNamespace)),
 		Layer.provideMerge(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
 	)
 	return Layer.mergeAll(

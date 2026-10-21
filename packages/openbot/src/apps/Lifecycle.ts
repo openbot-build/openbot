@@ -22,7 +22,11 @@ import { ConnectionLocks } from "./ConnectionLocks.ts"
 import { Capabilities } from "./Capabilities.ts"
 import { Governance } from "./Governance.ts"
 import { Probe } from "./Probe.ts"
-import { Repository, ownerKey } from "./Repository.ts"
+import type { PgClient } from "@effect/sql-pg"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { Secrets } from "../secrets/Secrets.ts"
+import * as StoredConnections from "./StoredConnections.ts"
+import { ownerKey } from "./StoredConnections.ts"
 
 export type Error = ConnectionError | Api.ConnectionCleanupPending
 /** Private lifecycle operations need the identity of the current request. @effect-expect-leaking Identity */
@@ -96,7 +100,8 @@ export const make: Effect.Effect<
 	typeof Lifecycle.Service,
 	never,
 	| Connections
-	| Repository
+	| PgClient.PgClient
+	| Secrets
 	| AppHost
 	| ConnectionLocks
 	| App.ConnectionScopes
@@ -108,7 +113,8 @@ export const make: Effect.Effect<
 > = Effect.gen(function* () {
 	const capabilities = yield* Capabilities
 	const connections = yield* Connections
-	const repository = yield* Repository
+	const db = yield* makeWithDefaults()
+	const secrets = yield* Secrets
 	const factory = yield* AppHost
 	const locks = yield* ConnectionLocks
 	const scopes = yield* App.ConnectionScopes
@@ -124,7 +130,7 @@ export const make: Effect.Effect<
 	return Lifecycle.of({
 		verify: Effect.fn("Apps.verifyConnection")(function* (id) {
 			const owned = yield* key(id)
-			const stored = yield* repository.get(owned.owner, id)
+			const stored = yield* StoredConnections.get(db, secrets, owned.owner, id)
 			yield* governance.check(stored.connection.cardUrl)
 			if (stored.connection.state !== "Enabled")
 				return {
@@ -181,7 +187,9 @@ export const make: Effect.Effect<
 				Match.tag("Success", ({ success }) =>
 					Effect.gen(function* () {
 						const checkedAt = yield* Clock.currentTimeMillis
-						yield* repository.update(
+						yield* StoredConnections.update(
+							db,
+							secrets,
 							owned.owner,
 							id,
 							(row) => ({
@@ -231,7 +239,9 @@ export const make: Effect.Effect<
 									}) as const,
 							),
 						)
-						yield* repository.update(
+						yield* StoredConnections.update(
+							db,
+							secrets,
 							owned.owner,
 							id,
 							(row) => ({ ...row, verification }),
@@ -248,7 +258,7 @@ export const make: Effect.Effect<
 		}),
 		refresh: Effect.fn("Apps.refreshConnectionAuthorization")(function* (id) {
 			const owned = yield* key(id)
-			const stored = yield* repository.get(owned.owner, id)
+			const stored = yield* StoredConnections.get(db, secrets, owned.owner, id)
 			yield* governance.check(stored.connection.cardUrl)
 			// A failed refresh is not an error for the caller. It is saved as an expired authorization.
 			yield* factory
@@ -257,17 +267,17 @@ export const make: Effect.Effect<
 				.pipe(
 					Effect.asVoid,
 					Effect.catch(() =>
-						repository
-							.update(
-								owned.owner,
-								id,
-								(row) => ({
-									...row,
-									verification: { _tag: "AuthorizationExpired" },
-								}),
-								stored.revision,
-							)
-							.pipe(Effect.asVoid),
+						StoredConnections.update(
+							db,
+							secrets,
+							owned.owner,
+							id,
+							(row) => ({
+								...row,
+								verification: { _tag: "AuthorizationExpired" },
+							}),
+							stored.revision,
+						).pipe(Effect.asVoid),
 					),
 				)
 			return yield* connections.getConnection(id)
@@ -278,8 +288,14 @@ export const make: Effect.Effect<
 				return yield* locks.withConnection(
 					owned,
 					Effect.gen(function* () {
-						const stored = yield* repository.get(owned.owner, id)
-						const app = yield* repository.getApp(
+						const stored = yield* StoredConnections.get(
+							db,
+							secrets,
+							owned.owner,
+							id,
+						)
+						const app = yield* StoredConnections.getApp(
+							db,
 							owned.owner,
 							stored.connection.cardUrl,
 						)
@@ -308,7 +324,9 @@ export const make: Effect.Effect<
 						})
 						const protection = yield* probe.check(configured)
 						yield* scopes.close(owned)
-						yield* repository.update(
+						yield* StoredConnections.update(
+							db,
+							secrets,
 							owned.owner,
 							id,
 							(row) => ({
@@ -329,7 +347,7 @@ export const make: Effect.Effect<
 							}),
 							valid.revision,
 						)
-						yield* repository.updateApp(owned.owner, configured.app)
+						yield* StoredConnections.updateApp(db, owned.owner, configured.app)
 						return yield* connections.getConnection(id)
 					}),
 				)
@@ -340,7 +358,12 @@ export const make: Effect.Effect<
 			return yield* locks.withConnection(
 				owned,
 				Effect.gen(function* () {
-					const stored = yield* repository.get(owned.owner, id)
+					const stored = yield* StoredConnections.get(
+						db,
+						secrets,
+						owned.owner,
+						id,
+					)
 					if (stored.connection.state === "CleanupPending")
 						return yield* Api.ConnectionCleanupPending.make({
 							connectionId: id,
@@ -350,7 +373,9 @@ export const make: Effect.Effect<
 					const needsReview =
 						stored.connection.state === "NeedsRevalidation" ||
 						stored.verification?._tag === "NeedsRevalidation"
-					yield* repository.update(
+					yield* StoredConnections.update(
+						db,
+						secrets,
 						owned.owner,
 						id,
 						(row) => ({
@@ -375,7 +400,7 @@ export const make: Effect.Effect<
 		}),
 		remove: Effect.fn("Apps.removeConnection")(function* (id) {
 			const owned = yield* key(id)
-			yield* repository.get(owned.owner, id)
+			yield* StoredConnections.get(db, secrets, owned.owner, id)
 			yield* factory
 				.bind(owned.owner, metadataPolicy)
 				.remove(owned)
@@ -386,7 +411,12 @@ export const make: Effect.Effect<
 			return yield* locks.withConnection(
 				owned,
 				Effect.gen(function* () {
-					const stored = yield* repository.get(owned.owner, id)
+					const stored = yield* StoredConnections.get(
+						db,
+						secrets,
+						owned.owner,
+						id,
+					)
 					if (stored.revision !== input.revision) return yield* conflict()
 					yield* governance.check(stored.connection.cardUrl)
 					const draft = yield* connections.getConnectionDraft(input.draftId)

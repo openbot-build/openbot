@@ -11,15 +11,14 @@ import { startHttps } from "../../protocol/test/Fixture.ts"
 import * as Database from "../src/database/DatabasePostgres.ts"
 import * as DeveloperLayers from "../src/apps/DeveloperLayers.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
-import * as IndexRepository from "../src/apps/IndexRepositoryPostgres.ts"
-import * as IndexWorkRepository from "../src/apps/IndexWorkRepositoryPostgres.ts"
+import * as IndexStore from "../src/apps/IndexStore.ts"
 import * as Governance from "../src/apps/Governance.ts"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
 import { AppNetwork } from "../src/apps/AppHost.ts"
 import { DeveloperAccess } from "../src/apps/DeveloperAccess.ts"
 import { DeveloperTests } from "../src/apps/DeveloperTests.ts"
 import { DeveloperRepository } from "../src/apps/DeveloperRepository.ts"
-import { ownerKey } from "../src/apps/Repository.ts"
+import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Postgres from "./PostgresTest.ts"
 
 const Wire = Schema.fromJsonString(
@@ -201,8 +200,7 @@ test(
 			}),
 		}).pipe(
 			Layer.provide(discovery),
-			Layer.provide(IndexRepository.layer),
-			Layer.provide(IndexWorkRepository.layer),
+			Layer.provide(IndexStore.layer),
 			Layer.provide(
 				Governance.layer.pipe(
 					Layer.provide(OrganizationFixture.layerDefaultSettings),

@@ -23,12 +23,14 @@ import {
 } from "effect"
 import { TestClock } from "effect/testing"
 import * as PublicIndex from "../src/apps/Index.ts"
-import { IndexRepository } from "../src/apps/IndexRepository.ts"
-import * as IndexStorage from "../src/apps/IndexRepositoryPostgres.ts"
+import { Index } from "@openbot-build/protocol"
+import { eq } from "drizzle-orm"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import * as IndexStorage from "../src/apps/IndexStore.ts"
+import { IndexNamespace } from "../src/apps/IndexNamespace.ts"
+import { appIndexJobs } from "../src/database/Schema.ts"
 import { IndexWork } from "../src/apps/IndexWork.ts"
 import * as Work from "../src/apps/IndexWork.ts"
-import { IndexWorkRepository } from "../src/apps/IndexWorkRepository.ts"
-import * as WorkStorage from "../src/apps/IndexWorkRepositoryPostgres.ts"
 import * as Governance from "../src/apps/Governance.ts"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
 import * as Database from "../src/database/DatabasePostgres.ts"
@@ -36,8 +38,8 @@ import * as Fixture from "./AppFixture.ts"
 import * as Postgres from "./PostgresTest.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 import { AppHost } from "../src/apps/AppHost.ts"
-import { Repository, ownerKey } from "../src/apps/Repository.ts"
-import * as AppStorage from "../src/apps/RepositoryPostgres.ts"
+import * as StoredConnections from "../src/apps/StoredConnections.ts"
+import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
 
 test("stored public verification updates and withdraws with a test clock and recovers interrupted claims", async () => {
@@ -51,14 +53,13 @@ test("stored public verification updates and withdraws with a test clock and rec
 		Layer.provide(
 			publisher.publicNetwork({ origins: [website.origin], cas: [website.ca] }),
 		),
-		Layer.provide(IndexStorage.layerProtocol.pipe(Layer.provide(indexStorage))),
+		Layer.provide(indexStorage),
 	)
 	const layers = Layer.merge(
 		PublicIndex.layer({ publicOrigin: "https://openbot.test" }),
 		Work.layer().pipe(Layer.provide(indexing)),
 	).pipe(
 		Layer.provideMerge(indexStorage),
-		Layer.provideMerge(WorkStorage.layer),
 		Layer.provide(
 			Governance.layer.pipe(
 				Layer.provide(OrganizationFixture.layerDefaultSettings),
@@ -76,11 +77,12 @@ test("stored public verification updates and withdraws with a test clock and rec
 		await runtime.runPromise(
 			Effect.gen(function* () {
 				yield* Database.migrate
-				const jobs = yield* IndexWorkRepository
+				const db = yield* makeWithDefaults()
+				const enqueue = Work.enqueue(db, "public", cardUrl, [])
 				const work = yield* IndexWork
 				const index = yield* PublicIndex.PublicIndex
-				const repository = yield* IndexRepository
-				yield* jobs.enqueue(cardUrl, [])
+				const repository = yield* Index.IndexStore
+				yield* enqueue
 				assert.ok(yield* work.runOne())
 				const first = (yield* index.search({})).apps[0]
 				assert.ok(first)
@@ -109,36 +111,41 @@ test("stored public verification updates and withdraws with a test clock and rec
 				assert.deepEqual((yield* index.search({})).apps, [])
 				assert.equal(Option.isNone(yield* repository.get(cardUrl)), true)
 				assert.equal(
-					Option.getOrThrow(HashMap.get(yield* repository.checks, cardUrl))
-						._tag,
+					Option.getOrThrow(
+						HashMap.get(yield* IndexStorage.checks(db, "public"), cardUrl),
+					)._tag,
 					"Withdrawn",
 				)
 				publisher.setPublication("published")
-				yield* jobs.enqueue(cardUrl, [])
+				yield* enqueue
 				yield* work.runOne()
 				publisher.setPublication("noindex")
-				yield* jobs.enqueue(cardUrl, [])
+				yield* enqueue
 				yield* work.runOne()
 				assert.deepEqual((yield* index.search({})).apps, [])
 				publisher.setPublication("published")
-				yield* jobs.enqueue(cardUrl, [])
+				yield* enqueue
 				yield* work.runOne()
 				publisher.setPublication("robots-denied")
-				yield* jobs.enqueue(cardUrl, [])
+				yield* enqueue
 				yield* work.runOne()
 				assert.deepEqual((yield* index.search({})).apps, [])
 				publisher.setPublication("published")
 				publisher.setWebsite(website.origin + "/website")
 				publisher.setDeclarations([])
 				website.setDeclarations([cardUrl])
-				yield* jobs.enqueue(cardUrl, [])
+				yield* enqueue
 				yield* work.runOne()
 				assert.equal(
 					(yield* index.get(cardUrl)).entry.evidence[0]?.association,
 					"Website",
 				)
-				yield* jobs.enqueue(cardUrl, [])
-				assert.ok(Option.isSome(yield* jobs.claim()))
+				yield* enqueue
+				// A worker takes the job and then stops before it finishes.
+				yield* db
+					.update(appIndexJobs)
+					.set({ claim: "interrupted", leaseUntil: Number.MAX_SAFE_INTEGER })
+					.where(eq(appIndexJobs.cardUrl, cardUrl))
 				assert.equal(yield* work.runOne(), false)
 			}),
 		)
@@ -146,8 +153,11 @@ test("stored public verification updates and withdraws with a test clock and rec
 		runtime = ManagedRuntime.make(layers)
 		await runtime.runPromise(
 			Effect.gen(function* () {
-				const jobs = yield* IndexWorkRepository
-				yield* jobs.restart
+				// The worker of the new process releases the claims of the old process.
+				yield* (yield* makeWithDefaults())
+					.update(appIndexJobs)
+					.set({ claim: null, leaseUntil: 0 })
+					.where(eq(appIndexJobs.namespace, "public"))
 				assert.equal(yield* (yield* IndexWork).runOne(), true)
 				assert.equal(
 					(yield* (yield* PublicIndex.PublicIndex).search({})).apps.length,
@@ -239,9 +249,14 @@ test("standard clients see independently indexed Apps, and withdrawal keeps priv
 		)
 		publisher.setPublication("noindex")
 		await host.runtime.runPromise(
-			Effect.flatMap(IndexWorkRepository, (jobs) =>
-				jobs.enqueue(connection.cardUrl, []),
-			),
+			Effect.gen(function* () {
+				yield* Work.enqueue(
+					yield* makeWithDefaults(),
+					yield* IndexNamespace,
+					connection.cardUrl,
+					[],
+				)
+			}),
 		)
 		await waitFor(0)
 		assert.equal(
@@ -275,13 +290,10 @@ test("public restrictions show appeals and block existing App clients and new co
 		appRestrictions: [restriction],
 	})
 	const storage = ManagedRuntime.make(
-		AppStorage.layer.pipe(
-			Layer.provide(Secrets.layer(Redacted.make("test:" + "11".repeat(32)))),
-			Layer.provide(
-				Database.layer({ databaseUrl: Redacted.make(host.databaseUrl) }),
-			),
-			Layer.provide(NodeServices.layer),
-		),
+		Layer.merge(
+			Secrets.layer(Redacted.make("test:" + "11".repeat(32))),
+			Database.layer({ databaseUrl: Redacted.make(host.databaseUrl) }),
+		).pipe(Layer.provide(NodeServices.layer)),
 	)
 	try {
 		const user = await host.login("restricted-user")
@@ -294,27 +306,33 @@ test("public restrictions show appeals and block existing App clients and new co
 		assert.equal(discovery._tag, "Single")
 		if (discovery._tag !== "Single") throw new Error("Expected one fixture App")
 		await storage.runPromise(
-			Effect.flatMap(Repository, (repository) =>
-				repository.save(owner, {
-					name: "Existing restricted App",
-					app: {
-						cardUrl,
-						card: discovery.candidate.card,
-						sources: discovery.candidate.sources,
+			Effect.gen(function* () {
+				return yield* StoredConnections.save(
+					yield* makeWithDefaults(),
+					yield* Secrets.Secrets,
+					"public",
+					owner,
+					{
+						name: "Existing restricted App",
+						app: {
+							cardUrl,
+							card: discovery.candidate.card,
+							sources: discovery.candidate.sources,
+						},
+						connection: {
+							owner,
+							connectionId: "restricted",
+							cardUrl,
+							endpoint: publisher.origin + "/mcp",
+							remoteIndex: 0,
+							configuration: Redacted.make({}),
+							headers: Redacted.make({}),
+							state: "Enabled",
+							authorization: { _tag: "Unprotected" },
+						},
 					},
-					connection: {
-						owner,
-						connectionId: "restricted",
-						cardUrl,
-						endpoint: publisher.origin + "/mcp",
-						remoteIndex: 0,
-						configuration: Redacted.make({}),
-						headers: Redacted.make({}),
-						state: "Enabled",
-						authorization: { _tag: "Unprotected" },
-					},
-				}),
-			),
+				)
+			}),
 		)
 		await host.runtime.runPromise(
 			Effect.flatMap(IndexWork, (work) => work.runOne()),

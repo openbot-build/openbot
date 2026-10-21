@@ -2,9 +2,11 @@ import { Identity, OpenBotApi, SessionConflict } from "@openbot-build/api"
 import { Session } from "@openbot-build/core"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import { InvocationRepository } from "./InvocationRepository.ts"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { Secrets } from "../secrets/Secrets.ts"
+import * as StoredInvocations from "./StoredInvocations.ts"
 import { Operations } from "./Operations.ts"
-import { ownerKey } from "./Repository.ts"
+import { ownerKey } from "./StoredConnections.ts"
 import { Backend } from "../app/Backend.ts"
 
 export const layer = HttpApiBuilder.group(
@@ -12,23 +14,31 @@ export const layer = HttpApiBuilder.group(
 	"appOperations",
 	(handlers) =>
 		Effect.gen(function* () {
-			const records = yield* InvocationRepository
+			const db = yield* makeWithDefaults()
+			const secrets = yield* Secrets
 			const operations = yield* Operations
 			const backend = yield* Backend
 			const owner = Effect.map(Identity, ownerKey)
 			return handlers
 				.handle("get", ({ params }) =>
-					Effect.flatMap(owner, (owner) => records.get(owner, params.id)),
+					Effect.flatMap(owner, (owner) =>
+						StoredInvocations.get(db, secrets, owner, params.id),
+					),
 				)
 				.handle("list", ({ params }) =>
 					Effect.flatMap(owner, (owner) =>
-						records.list(owner, params.sessionId),
+						StoredInvocations.list(db, secrets, owner, params.sessionId),
 					),
 				)
 				.handle("respond", ({ params, payload }) =>
 					Effect.gen(function* () {
 						const identity = yield* Identity
-						const operation = yield* records.get(ownerKey(identity), params.id)
+						const operation = yield* StoredInvocations.get(
+							db,
+							secrets,
+							ownerKey(identity),
+							params.id,
+						)
 						const conflict = () =>
 							SessionConflict.make({
 								message:

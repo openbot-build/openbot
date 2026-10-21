@@ -19,7 +19,7 @@ import {
 import { LanguageModel, type Prompt } from "effect/ai"
 import { Backend } from "../app/Backend.ts"
 import { Invocations } from "../apps/Invocations.ts"
-import { ownerKey } from "../apps/Repository.ts"
+import { ownerKey } from "../apps/StoredConnections.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { Gate } from "../capabilities/Gate.ts"
 import { HelperModel } from "../capabilities/Judge.ts"

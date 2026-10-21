@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { migrate } from "drizzle-orm/effect-postgres/migrator"
 import { fileURLToPath } from "node:url"
-import * as Shared from "../sessions/RepositoryEncoding.ts"
+import * as Shared from "../sessions/SessionEncoding.ts"
 import {
 	appInvocations,
 	developerRecords,

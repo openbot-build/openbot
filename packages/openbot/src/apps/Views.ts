@@ -20,9 +20,15 @@ import {
 import { Backend } from "../app/Backend.ts"
 import { Capabilities } from "./Capabilities.ts"
 import { ConnectionLocks } from "./ConnectionLocks.ts"
-import { InvocationRepository } from "./InvocationRepository.ts"
-import { Repository, ownerKey } from "./Repository.ts"
-import { ViewRepository, type View } from "./ViewRepository.ts"
+import { eq } from "drizzle-orm"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { appSecrets } from "../database/Schema.ts"
+import { Secrets } from "../secrets/Secrets.ts"
+import * as StoredConnections from "./StoredConnections.ts"
+import { ownerKey } from "./StoredConnections.ts"
+import * as StoredInvocations from "./StoredInvocations.ts"
+import * as StoredViews from "./StoredViews.ts"
+import { type Action, type View } from "./StoredViews.ts"
 import { json } from "./AppResults.ts"
 
 const unavailable = (reason: Api.AppViewUnavailable["reason"] = "Protocol") =>
@@ -39,20 +45,236 @@ const conflict = () =>
 export const make = Effect.gen(function* () {
 	const backend = yield* Backend
 	const capabilities = yield* Capabilities
-	const records = yield* InvocationRepository
-	const views = yield* ViewRepository
-	const connections = yield* Repository
 	const locks = yield* ConnectionLocks
+	const db = yield* makeWithDefaults()
+	const secrets = yield* Secrets
+	// A view that was open when the host stopped can not continue.
+	yield* db
+		.update(appSecrets)
+		.set({ consumed: true })
+		.where(eq(appSecrets.kind, "app-view"))
+		.pipe(Effect.mapError(StoredViews.unavailable))
+	const read = (owner: string, kind: string, id: string) =>
+		db
+			.select()
+			.from(appSecrets)
+			.where(StoredViews.where(owner, kind, id))
+			.pipe(Effect.map(Arr.head))
+	const required = <A>(found: Option.Option<A>) =>
+		Effect.fromOption(found).pipe(Effect.mapError(StoredViews.missing))
+	const getView = (owner: string, id: string) =>
+		read(owner, "app-view", id).pipe(
+			Effect.map(Option.filter((row) => !row.consumed)),
+			Effect.flatMap(required),
+			Effect.flatMap((row) => StoredViews.open(secrets, StoredViews.View, row)),
+			Effect.mapError(StoredViews.failure),
+		)
+	const openView = (owner: string, view: View) =>
+		Effect.gen(function* () {
+			const body = yield* StoredViews.seal(
+				secrets,
+				StoredViews.View,
+				owner,
+				"app-view",
+				view.id,
+				view,
+			)
+			yield* db.insert(appSecrets).values({
+				owner,
+				kind: "app-view",
+				id: view.id,
+				connectionId: view.connectionId,
+				body,
+			})
+		}).pipe(Effect.mapError(StoredViews.failure))
+	const closeView = (owner: string, id: string) =>
+		db
+			.update(appSecrets)
+			.set({ consumed: true })
+			.where(StoredViews.where(owner, "app-view", id))
+			.returning({ id: appSecrets.id })
+			.pipe(
+				Effect.flatMap((rows) =>
+					rows.length === 0 ? Effect.fail(StoredViews.missing()) : Effect.void,
+				),
+				Effect.mapError(StoredViews.failure),
+			)
+	const readInteraction = (
+		owner: string,
+		session: string,
+		operationId: string,
+	) =>
+		Effect.gen(function* () {
+			const found = yield* read(
+				owner,
+				"app-ui-state",
+				StoredViews.interactionKey(session, operationId),
+			)
+			return yield* Option.match(found, {
+				onNone: () => Effect.succeed(StoredViews.initial),
+				onSome: (row) => StoredViews.open(secrets, Api.Interaction, row),
+			})
+		}).pipe(Effect.mapError(StoredViews.failure))
+	const confirmInteraction = (
+		owner: string,
+		view: View,
+		revision: number,
+		context: Schema.JsonObject,
+	) =>
+		Effect.gen(function* () {
+			const id = StoredViews.interactionKey(view.session, view.operationId)
+			const initialBody = yield* StoredViews.seal(
+				secrets,
+				Api.Interaction,
+				owner,
+				"app-ui-state",
+				id,
+				StoredViews.initial,
+			)
+			return yield* db.transaction((tx) =>
+				Effect.gen(function* () {
+					yield* tx
+						.insert(appSecrets)
+						.values({
+							owner,
+							kind: "app-ui-state",
+							id,
+							connectionId: view.connectionId,
+							body: initialBody,
+						})
+						.onConflictDoNothing()
+					const row = (yield* tx
+						.select()
+						.from(appSecrets)
+						.where(StoredViews.where(owner, "app-ui-state", id))
+						.for("update"))[0]
+					if (row === undefined) return yield* StoredViews.missing()
+					const previous = yield* StoredViews.open(
+						secrets,
+						Api.Interaction,
+						row,
+					)
+					if (previous.revision !== revision)
+						return yield* StoredViews.conflict()
+					const next: Api.Interaction = { revision: revision + 1, context }
+					const body = yield* StoredViews.seal(
+						secrets,
+						Api.Interaction,
+						owner,
+						"app-ui-state",
+						id,
+						next,
+					)
+					yield* tx
+						.update(appSecrets)
+						.set({ body })
+						.where(StoredViews.where(owner, "app-ui-state", id))
+					return next
+				}),
+			)
+		}).pipe(Effect.mapError(StoredViews.failure))
+	const readAction = (owner: string, viewId: string, requestId: string) =>
+		read(
+			owner,
+			"app-view-action",
+			StoredViews.actionKey(viewId, requestId),
+		).pipe(
+			Effect.flatMap(required),
+			Effect.flatMap((row) =>
+				StoredViews.open(secrets, StoredViews.Action, row),
+			),
+			Effect.mapError(StoredViews.failure),
+		)
+	/** Save the action of a request once. Give `false` when the request was saved before. */
+	const claimAction = (owner: string, view: View, input: Action) =>
+		Effect.gen(function* () {
+			const id = StoredViews.actionKey(view.id, input.requestId)
+			const body = yield* StoredViews.seal(
+				secrets,
+				StoredViews.Action,
+				owner,
+				"app-view-action",
+				id,
+				input,
+			)
+			const inserted = yield* db
+				.insert(appSecrets)
+				.values({
+					owner,
+					kind: "app-view-action",
+					id,
+					connectionId: view.connectionId,
+					body,
+				})
+				.onConflictDoNothing()
+				.returning({ id: appSecrets.id })
+			if (inserted.length !== 0) return true
+			const saved = yield* readAction(owner, view.id, input.requestId)
+			if (
+				saved.kind !== input.kind ||
+				saved.target !== input.target ||
+				!Schema.toEquivalence(Schema.JsonObject)(
+					saved.arguments,
+					input.arguments,
+				)
+			)
+				return yield* StoredViews.conflict()
+			return false
+		}).pipe(Effect.mapError(StoredViews.failure))
+	const acceptAction = (
+		owner: string,
+		view: View,
+		requestId: string,
+		ticket: Api.ActionTicket,
+	) =>
+		db
+			.transaction((tx) =>
+				Effect.gen(function* () {
+					const id = StoredViews.actionKey(view.id, requestId)
+					const row = (yield* tx
+						.select()
+						.from(appSecrets)
+						.where(StoredViews.where(owner, "app-view-action", id))
+						.for("update"))[0]
+					if (row === undefined) return yield* StoredViews.missing()
+					const saved = yield* StoredViews.open(
+						secrets,
+						StoredViews.Action,
+						row,
+					)
+					if (
+						saved.ticket !== null &&
+						!Schema.toEquivalence(Api.ActionTicket)(saved.ticket, ticket)
+					)
+						return yield* StoredViews.conflict()
+					const body = yield* StoredViews.seal(
+						secrets,
+						StoredViews.Action,
+						owner,
+						"app-view-action",
+						id,
+						{ ...saved, ticket },
+					)
+					yield* tx
+						.update(appSecrets)
+						.set({ body })
+						.where(StoredViews.where(owner, "app-view-action", id))
+				}),
+			)
+			.pipe(Effect.mapError(StoredViews.failure))
 	const sessions = (identity: typeof Identity.Service) =>
 		backend.forCaller(identity).pipe(Effect.mapError(conflict))
 	const bound = (identity: typeof Identity.Service, id: string) =>
 		Effect.gen(function* () {
-			const view = yield* views.get(ownerKey(identity), id)
+			const view = yield* getView(ownerKey(identity), id)
 			if (view.expiresAt < (yield* Clock.currentTimeMillis))
 				return yield* unavailable("Closed")
-			const stored = yield* connections
-				.get(ownerKey(identity), view.connectionId)
-				.pipe(Effect.mapError(() => unavailable("ConnectionChanged")))
+			const stored = yield* StoredConnections.get(
+				db,
+				secrets,
+				ownerKey(identity),
+				view.connectionId,
+			).pipe(Effect.mapError(() => unavailable("ConnectionChanged")))
 			if (
 				stored.connection.state !== "Enabled" ||
 				stored.revision !== view.revision
@@ -101,7 +323,12 @@ export const make = Effect.gen(function* () {
 		version?: Timeline.VersionId,
 	) =>
 		Effect.gen(function* () {
-			const operation = yield* records.get(ownerKey(identity), operationId)
+			const operation = yield* StoredInvocations.get(
+				db,
+				secrets,
+				ownerKey(identity),
+				operationId,
+			)
 			const service = yield* sessions(identity)
 			const history = yield* service
 				.history(sessionId, version)
@@ -124,7 +351,12 @@ export const make = Effect.gen(function* () {
 		})
 	const binding = (identity: typeof Identity.Service, view: View) =>
 		Effect.gen(function* () {
-			const operation = yield* records.get(ownerKey(identity), view.operationId)
+			const operation = yield* StoredInvocations.get(
+				db,
+				secrets,
+				ownerKey(identity),
+				view.operationId,
+			)
 			return {
 				id: view.id,
 				operationId: view.operationId,
@@ -133,7 +365,7 @@ export const make = Effect.gen(function* () {
 				turn: view.turn,
 				item: view.item,
 				source: operation.source,
-				interaction: yield* views.interaction(
+				interaction: yield* readInteraction(
 					ownerKey(identity),
 					view.session,
 					view.operationId,
@@ -199,7 +431,7 @@ export const make = Effect.gen(function* () {
 						revision: operation.source.revision,
 						expiresAt: (yield* Clock.currentTimeMillis) + 7_200_000,
 					}
-					yield* views.open(ownerKey(identity), view)
+					yield* openView(ownerKey(identity), view)
 					const result =
 						operation.result !== null && operation.result._tag === "Completed"
 							? yield* Schema.decodeUnknownEffect(Schema.JsonObject)(
@@ -223,7 +455,7 @@ export const make = Effect.gen(function* () {
 		get: (identity: typeof Identity.Service, id: string) =>
 			Effect.flatMap(bound(identity, id), (view) => binding(identity, view)),
 		close: (identity: typeof Identity.Service, id: string) =>
-			locked(identity, id, views.close(ownerKey(identity), id)),
+			locked(identity, id, closeView(ownerKey(identity), id)),
 		read: (
 			identity: typeof Identity.Service,
 			id: string,
@@ -270,14 +502,16 @@ export const make = Effect.gen(function* () {
 					Effect.gen(function* () {
 						const view = yield* bound(identity, id)
 						if (view.readOnly) return yield* conflict()
-						const existing = yield* views
-							.action(ownerKey(identity), id, request.requestId)
-							.pipe(
-								Effect.asSome,
-								Effect.catchTag("ExperienceNotFound", () => Effect.succeedNone),
-							)
+						const existing = yield* readAction(
+							ownerKey(identity),
+							id,
+							request.requestId,
+						).pipe(
+							Effect.asSome,
+							Effect.catchTag("ExperienceNotFound", () => Effect.succeedNone),
+						)
 						if (Option.isSome(existing)) {
-							yield* views.claim(ownerKey(identity), view, {
+							yield* claimAction(ownerKey(identity), view, {
 								requestId: request.requestId,
 								kind: request.kind,
 								target: request.kind === "tool" ? request.name : request.uri,
@@ -309,7 +543,7 @@ export const make = Effect.gen(function* () {
 						)
 							return yield* unavailable("Declaration")
 						const args = request.kind === "tool" ? request.arguments : {}
-						const first = yield* views.claim(ownerKey(identity), view, {
+						const first = yield* claimAction(ownerKey(identity), view, {
 							requestId: request.requestId,
 							kind: request.kind,
 							target,
@@ -317,7 +551,7 @@ export const make = Effect.gen(function* () {
 							ticket: null,
 						})
 						if (!first) {
-							const saved = yield* views.action(
+							const saved = yield* readAction(
 								ownerKey(identity),
 								id,
 								request.requestId,
@@ -346,7 +580,7 @@ export const make = Effect.gen(function* () {
 								...(current.activity === "active" ? { turn: view.turn } : {}),
 							})
 							.pipe(Effect.mapError(conflict))
-						yield* views.accepted(
+						yield* acceptAction(
 							ownerKey(identity),
 							view,
 							request.requestId,
@@ -363,11 +597,16 @@ export const make = Effect.gen(function* () {
 		) =>
 			Effect.gen(function* () {
 				yield* bound(identity, id)
-				const saved = yield* views.action(ownerKey(identity), id, requestId)
+				const saved = yield* readAction(ownerKey(identity), id, requestId)
 				if (saved.ticket === null) return yield* conflict()
 				const ticket = saved.ticket
 				const recorded = Arr.findFirst(
-					yield* records.list(ownerKey(identity), ticket.session),
+					yield* StoredInvocations.list(
+						db,
+						secrets,
+						ownerKey(identity),
+						ticket.session,
+					),
 					(operation) =>
 						operation.turn === ticket.turn &&
 						operation.callId === ticket.callId,
@@ -407,7 +646,7 @@ export const make = Effect.gen(function* () {
 				Effect.flatMap(bound(identity, id), (view) =>
 					view.readOnly
 						? Effect.fail(conflict())
-						: views.confirm(ownerKey(identity), view, revision, context),
+						: confirmInteraction(ownerKey(identity), view, revision, context),
 				),
 			),
 		interaction: (
@@ -417,7 +656,7 @@ export const make = Effect.gen(function* () {
 		) =>
 			Effect.gen(function* () {
 				yield* historyBinding(identity, operationId, sessionId)
-				return yield* views.interaction(
+				return yield* readInteraction(
 					ownerKey(identity),
 					sessionId,
 					operationId,

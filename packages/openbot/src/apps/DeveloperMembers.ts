@@ -6,7 +6,7 @@ import {
 	type InvitationRecord,
 } from "./DeveloperRepository.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
-import { ownerKey } from "./Repository.ts"
+import { ownerKey } from "./StoredConnections.ts"
 
 export class DeveloperMembers extends Context.Service<
 	DeveloperMembers,

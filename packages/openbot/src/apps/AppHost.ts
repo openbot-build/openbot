@@ -22,7 +22,12 @@ import {
 	Scope,
 } from "effect"
 import { ProtocolStores } from "./ProtocolStores.ts"
-import { Repository } from "./Repository.ts"
+import type { PgClient } from "@effect/sql-pg"
+import { eq } from "drizzle-orm"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { appRecords } from "../database/Schema.ts"
+import { Secrets } from "../secrets/Secrets.ts"
+import * as StoredConnections from "./StoredConnections.ts"
 import { Governance } from "./Governance.ts"
 import type { AppAuthorizationApi, ConnectionsApi } from "@openbot-build/api"
 import { ConnectionLocks } from "./ConnectionLocks.ts"
@@ -95,7 +100,8 @@ export const make: Effect.Effect<
 	typeof AppHost.Service,
 	never,
 	| ProtocolStores
-	| Repository
+	| PgClient.PgClient
+	| Secrets
 	| Discovery.Discovery
 	| Discovery.Rules
 	| App.ConnectionScopes
@@ -107,7 +113,8 @@ export const make: Effect.Effect<
 > = Effect.gen(function* () {
 	const governance = yield* Governance
 	const persistent = yield* ProtocolStores
-	const repository = yield* Repository
+	const db = yield* makeWithDefaults()
+	const secrets = yield* Secrets
 	const discovery = yield* Discovery.Discovery
 	const rules = yield* Discovery.Rules
 	const active = yield* App.ConnectionScopes
@@ -229,22 +236,26 @@ export const make: Effect.Effect<
 				key: Store.ConnectionKey,
 				stage: App.CleanupPending["stage"],
 			) =>
-				repository
-					.update(owner, key.connectionId, (stored) => ({
+				StoredConnections.update(
+					db,
+					secrets,
+					owner,
+					key.connectionId,
+					(stored) => ({
 						...stored,
 						connection: { ...stored.connection, state: "CleanupPending" },
 						verification: { _tag: "CleanupPending", stage },
-					}))
-					.pipe(
-						Effect.mapError(
-							() =>
-								new Store.StoreError({
-									reason: "Unavailable",
-									operation: "Record App cleanup progress",
-								}),
-						),
-						Effect.andThen(Effect.fail(new App.CleanupPending({ key, stage }))),
-					)
+					}),
+				).pipe(
+					Effect.mapError(
+						() =>
+							new Store.StoreError({
+								reason: "Unavailable",
+								operation: "Record App cleanup progress",
+							}),
+					),
+					Effect.andThen(Effect.fail(new App.CleanupPending({ key, stage }))),
+				)
 			const revoke = (key: Store.ConnectionKey) =>
 				Effect.scoped(
 					Effect.gen(function* () {
@@ -268,9 +279,20 @@ export const make: Effect.Effect<
 				)
 			const host: BoundApp = {
 				discover: discovery.resolve,
-				list: repository.listApps(owner).pipe(Effect.mapError(appError)),
+				list: db
+					.select()
+					.from(appRecords)
+					.where(eq(appRecords.owner, owner))
+					.pipe(
+						Effect.flatMap((rows) =>
+							Effect.forEach(rows, (row) =>
+								Schema.decodeEffect(StoredConnections.appCodec)(row.body),
+							),
+						),
+						Effect.mapError(appError),
+					),
 				get: stores.apps.getApp,
-				listConnections: repository.list(owner).pipe(
+				listConnections: StoredConnections.list(db, secrets, owner).pipe(
 					Effect.map((rows) => rows.map((row) => row.connection)),
 					Effect.mapError(appError),
 				),
@@ -382,18 +404,24 @@ export const make: Effect.Effect<
 				setEnabled: ({ key, enabled }) =>
 					keyChecked(key).pipe(
 						Effect.andThen(
-							repository.update(owner, key.connectionId, (stored) => ({
-								...stored,
-								verification: null,
-								connection: {
-									...stored.connection,
-									state: enabled
-										? stored.connection.state === "Disabled"
-											? "Enabled"
-											: stored.connection.state
-										: "Disabled",
-								},
-							})),
+							StoredConnections.update(
+								db,
+								secrets,
+								owner,
+								key.connectionId,
+								(stored) => ({
+									...stored,
+									verification: null,
+									connection: {
+										...stored.connection,
+										state: enabled
+											? stored.connection.state === "Disabled"
+												? "Enabled"
+												: stored.connection.state
+											: "Disabled",
+									},
+								}),
+							),
 						),
 						Effect.tap(() => active.close(key)),
 						Effect.map((row) => row.connection),

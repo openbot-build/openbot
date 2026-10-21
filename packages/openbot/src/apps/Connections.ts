@@ -16,12 +16,19 @@ import {
 	Match,
 	Option,
 	Redacted,
+	Schema,
 } from "effect"
+import type { PgClient } from "@effect/sql-pg"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import * as DiscoveryService from "./Discovery.ts"
 import * as ManualConnection from "./ManualConnection.ts"
 import { Governance } from "./Governance.ts"
 import { Probe } from "./Probe.ts"
-import { Repository, ownerKey, type StoredConnection } from "./Repository.ts"
+import { Secrets } from "../secrets/Secrets.ts"
+import { appDrafts } from "../database/Schema.ts"
+import { IndexNamespace } from "./IndexNamespace.ts"
+import * as StoredConnections from "./StoredConnections.ts"
+import { ownerKey, type StoredConnection } from "./StoredConnections.ts"
 
 export type Error =
 	| ExperienceInputInvalid
@@ -61,10 +68,17 @@ export class Connections extends Context.Service<
 export const make: Effect.Effect<
 	typeof Connections.Service,
 	never,
-	Repository | Discovery.Discovery | Discovery.Rules | Probe | Governance
+	| PgClient.PgClient
+	| Secrets
+	| Discovery.Discovery
+	| Discovery.Rules
+	| Probe
+	| Governance
 > = Effect.gen(function* () {
 	const governance = yield* Governance
-	const repository = yield* Repository
+	const db = yield* makeWithDefaults()
+	const secrets = yield* Secrets
+	const namespace = yield* IndexNamespace
 	const discovery = yield* Discovery.Discovery
 	const rules = yield* Discovery.Rules
 	const probe = yield* Probe
@@ -73,7 +87,7 @@ export const make: Effect.Effect<
 		stored: StoredConnection,
 	) {
 		const connection = stored.connection
-		const app = yield* repository.getApp(owner, connection.cardUrl)
+		const app = yield* StoredConnections.getApp(db, owner, connection.cardUrl)
 		const remote = app.card.remotes?.[connection.remoteIndex]
 		const requirements = remote === undefined ? [] : rules.requirements(remote)
 		const values = Redacted.value(connection.configuration)
@@ -137,10 +151,21 @@ export const make: Effect.Effect<
 	const owner = Effect.map(Identity, ownerKey)
 	const getConnection = Effect.fn("Apps.getConnection")(function* (id: string) {
 		const key = yield* owner
-		return yield* project(key, yield* repository.get(key, id))
+		return yield* project(
+			key,
+			yield* StoredConnections.get(db, secrets, key, id),
+		)
 	})
 	const getDraft = Effect.fn("Apps.getConnectionDraft")(function* (id: string) {
-		const draft = yield* repository.getDraft(yield* owner, id)
+		const row = (yield* db
+			.select()
+			.from(appDrafts)
+			.where(StoredConnections.draftWhere(yield* owner, id))
+			.pipe(Effect.mapError(StoredConnections.unavailable)))[0]
+		if (row === undefined) return yield* ExperienceNotFound.make({ id })
+		const draft = yield* Schema.decodeEffect(StoredConnections.draftCodec)(
+			row.body,
+		).pipe(Effect.mapError(StoredConnections.unavailable))
 		if (draft.expiresAt <= (yield* Clock.currentTimeMillis))
 			return yield* Api.ConnectionConflict.make({
 				reason: "DraftExpired",
@@ -152,15 +177,16 @@ export const make: Effect.Effect<
 		getConnection,
 		listConnections: Effect.gen(function* () {
 			const key = yield* owner
-			return yield* Effect.forEach(yield* repository.list(key), (row) =>
-				project(key, row),
+			return yield* Effect.forEach(
+				yield* StoredConnections.list(db, secrets, key),
+				(row) => project(key, row),
 			)
 		}),
 		prepareConnection: Effect.fn("Apps.prepareConnection")(function* (input) {
 			const result = yield* DiscoveryService.discover(input).pipe(
 				Effect.provideService(Discovery.Discovery, discovery),
 			)
-			return yield* repository.saveDraft(yield* owner, {
+			return yield* StoredConnections.saveDraft(db, yield* owner, {
 				id: yield* Effect.sync(() => crypto.randomUUID()),
 				revision: 0,
 				input,
@@ -171,7 +197,12 @@ export const make: Effect.Effect<
 		createManualConnection: Effect.fn("Apps.createManualConnection")(
 			function* (input) {
 				const key = yield* owner
-				const existing = yield* repository.get(key, input.id).pipe(
+				const existing = yield* StoredConnections.get(
+					db,
+					secrets,
+					key,
+					input.id,
+				).pipe(
 					Effect.asSome,
 					Effect.catchTag("ExperienceNotFound", () => Effect.succeedNone),
 				)
@@ -191,7 +222,7 @@ export const make: Effect.Effect<
 				}
 				return yield* project(
 					key,
-					yield* repository.save(key, {
+					yield* StoredConnections.save(db, secrets, namespace, key, {
 						app: configured.app,
 						connection,
 						name: input.name,
@@ -203,7 +234,12 @@ export const make: Effect.Effect<
 		createConnection: Effect.fn("Apps.confirmConnection")(function* (input) {
 			const key = yield* owner
 			yield* governance.check(input.cardUrl)
-			const existing = yield* repository.get(key, input.draftId).pipe(
+			const existing = yield* StoredConnections.get(
+				db,
+				secrets,
+				key,
+				input.draftId,
+			).pipe(
 				Effect.asSome,
 				Effect.catchTag("ExperienceNotFound", () => Effect.succeedNone),
 			)
@@ -286,7 +322,7 @@ export const make: Effect.Effect<
 			}
 			return yield* project(
 				key,
-				yield* repository.save(key, {
+				yield* StoredConnections.save(db, secrets, namespace, key, {
 					app,
 					connection,
 					name: input.name,

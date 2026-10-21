@@ -30,12 +30,12 @@ import { DeveloperTestStores } from "../src/apps/DeveloperTestStores.ts"
 import * as DeveloperRepositoryLayer from "../src/apps/DeveloperRepositoryPostgres.ts"
 import * as SecretsLayer from "../src/secrets/Secrets.ts"
 import { DeveloperTests } from "../src/apps/DeveloperTests.ts"
+import { Index } from "@openbot-build/protocol"
 import { DeveloperRepository } from "../src/apps/DeveloperRepository.ts"
 import { DeveloperMonitor } from "../src/apps/DeveloperMonitor.ts"
-import { IndexRepository } from "../src/apps/IndexRepository.ts"
 import { DeveloperIndexing } from "../src/apps/DeveloperIndexing.ts"
 import { IndexWork } from "../src/apps/IndexWork.ts"
-import { ownerKey } from "../src/apps/Repository.ts"
+import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Postgres from "./PostgresTest.ts"
 import { OpenBot } from "@openbot-build/openbot"
 import { Settings } from "../src/settings/Settings.ts"
@@ -486,7 +486,7 @@ test(
 				"Complete",
 			)
 			await server.runPromise(
-				Effect.flatMap(IndexRepository, (index) => index.withdraw(cardUrl)),
+				Effect.flatMap(Index.IndexStore, (index) => index.withdraw(cardUrl)),
 			)
 			const request = await call((api) =>
 				api.developer.requestIndexing({ payload: { cardUrl } }),
@@ -514,7 +514,7 @@ test(
 			assert.ok(
 				Option.isSome(
 					await server.runPromise(
-						Effect.flatMap(IndexRepository, (index) => index.get(cardUrl)),
+						Effect.flatMap(Index.IndexStore, (index) => index.get(cardUrl)),
 					),
 				),
 			)

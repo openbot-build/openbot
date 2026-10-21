@@ -9,8 +9,11 @@ import { SqlClient } from "effect/sql"
 import * as Governance from "../src/apps/Governance.ts"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
 import * as Connections from "../src/apps/Connections.ts"
-import { Repository, ownerKey } from "../src/apps/Repository.ts"
-import * as RepositoryPostgres from "../src/apps/RepositoryPostgres.ts"
+import { eq } from "drizzle-orm"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { appRecords } from "../src/database/Schema.ts"
+import * as StoredConnections from "../src/apps/StoredConnections.ts"
+import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
 import * as Database from "../src/database/DatabasePostgres.ts"
 import * as Postgres from "./PostgresTest.ts"
@@ -26,13 +29,10 @@ const asOwner = <A, E, R>(operation: Effect.Effect<A, E, R>, owner = alice) =>
 test("confirmed App connections save encrypted configuration, reject changes, and keep accounts apart", async () => {
 	const database = await Postgres.start()
 	const publisher = await Fixture.start()
-	const repository = RepositoryPostgres.layer.pipe(
-		Layer.provide(Secrets.layer(encryptionKey)),
-		Layer.provideMerge(
-			Database.layer({ databaseUrl: Redacted.make(database.url) }),
-		),
-		Layer.provide(NodeServices.layer),
-	)
+	const storage = Layer.merge(
+		Secrets.layer(encryptionKey),
+		Database.layer({ databaseUrl: Redacted.make(database.url) }),
+	).pipe(Layer.provide(NodeServices.layer))
 	const makeRuntime = () =>
 		ManagedRuntime.make(
 			Connections.layer.pipe(
@@ -44,7 +44,7 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 						Layer.provide(OrganizationFixture.layerDefaultSettings),
 					),
 				),
-				Layer.provideMerge(repository),
+				Layer.provideMerge(storage),
 			),
 		)
 	let runtime = makeRuntime()
@@ -131,8 +131,8 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 				)
 				assert.equal(failure._tag, "ConnectionConflict")
 				const expired = { ...draft, id: "expired", expiresAt: 0 }
-				const repository = yield* Repository
-				yield* repository.saveDraft(ownerKey(alice), expired)
+				const db = yield* makeWithDefaults()
+				yield* StoredConnections.saveDraft(db, ownerKey(alice), expired)
 				const expiredResult = yield* Effect.flip(
 					asOwner(
 						connections.createConnection({ ...input, draftId: expired.id }),
@@ -164,7 +164,13 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 					"DROP TRIGGER reject_app_connection ON openbot_app_connections",
 				)
 				yield* sql.unsafe("DROP FUNCTION reject_app_connection()")
-				assert.deepEqual(yield* repository.listApps(ownerKey(bob)), [])
+				assert.deepEqual(
+					yield* db
+						.select()
+						.from(appRecords)
+						.where(eq(appRecords.owner, ownerKey(bob))),
+					[],
+				)
 				assert.deepEqual(yield* asOwner(connections.listConnections, bob), [])
 				yield* sql.unsafe(
 					"CREATE FUNCTION reject_index_job() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Index work storage unavailable'; END $$",
@@ -185,7 +191,13 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 					"DROP TRIGGER reject_index_job ON openbot_app_index_jobs",
 				)
 				yield* sql.unsafe("DROP FUNCTION reject_index_job()")
-				assert.deepEqual(yield* repository.listApps(ownerKey(bob)), [])
+				assert.deepEqual(
+					yield* db
+						.select()
+						.from(appRecords)
+						.where(eq(appRecords.owner, ownerKey(bob))),
+					[],
+				)
 				assert.deepEqual(yield* asOwner(connections.listConnections, bob), [])
 				return saved.id
 			}),
@@ -199,10 +211,12 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 					(yield* asOwner(connections.getConnection(id))).enabled,
 					true,
 				)
-				const store = yield* Repository
+				const db = yield* makeWithDefaults()
+				const secrets = yield* Secrets.Secrets
 				assert.equal(
 					Redacted.value(
-						(yield* store.get(ownerKey(alice), id)).connection.configuration,
+						(yield* StoredConnections.get(db, secrets, ownerKey(alice), id))
+							.connection.configuration,
 					)["header:X-Secret"],
 					"private-app-token",
 				)
@@ -218,13 +232,10 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 test("connection limits stay atomic across concurrent database pools and storage failures stay failures", async () => {
 	const database = await Postgres.start()
 	const layer = () =>
-		RepositoryPostgres.layer.pipe(
-			Layer.provide(Secrets.layer(encryptionKey)),
-			Layer.provideMerge(
-				Database.layer({ databaseUrl: Redacted.make(database.url) }),
-			),
-			Layer.provide(NodeServices.layer),
-		)
+		Layer.merge(
+			Secrets.layer(encryptionKey),
+			Database.layer({ databaseUrl: Redacted.make(database.url) }),
+		).pipe(Layer.provide(NodeServices.layer))
 	const first = ManagedRuntime.make(layer())
 	const second = ManagedRuntime.make(layer())
 	try {
@@ -232,7 +243,8 @@ test("connection limits stay atomic across concurrent database pools and storage
 		const save = (runtime: typeof first, id: string) =>
 			runtime.runPromise(
 				Effect.gen(function* () {
-					const repository = yield* Repository
+					const db = yield* makeWithDefaults()
+					const secrets = yield* Secrets.Secrets
 					const connection = yield* Store.UserConnection.decode({
 						owner: ownerKey(alice),
 						connectionId: id,
@@ -261,9 +273,13 @@ test("connection limits stay atomic across concurrent database pools and storage
 						},
 						sources: [],
 					})
-					return yield* repository
-						.save(ownerKey(alice), { app, connection, name: id })
-						.pipe(Effect.result)
+					return yield* StoredConnections.save(
+						db,
+						secrets,
+						"public",
+						ownerKey(alice),
+						{ app, connection, name: id },
+					).pipe(Effect.result)
 				}),
 			)
 		const results = await Promise.all(

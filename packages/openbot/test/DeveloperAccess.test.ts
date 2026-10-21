@@ -26,7 +26,7 @@ import {
 	DomainControl,
 	DomainControlUnavailable,
 } from "../src/apps/DomainControl.ts"
-import { ownerKey } from "../src/apps/Repository.ts"
+import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Postgres from "./PostgresTest.ts"
 
 const alice = ownerKey({

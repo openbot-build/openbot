@@ -12,18 +12,21 @@ import {
 } from "effect"
 import { AppHost } from "./AppHost.ts"
 import { Governance } from "./Governance.ts"
-import {
-	Repository,
-	type Error as RepositoryError,
-	type StoredConnection,
-} from "./Repository.ts"
+import type { PgClient } from "@effect/sql-pg"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { Secrets } from "../secrets/Secrets.ts"
+import * as StoredConnections from "./StoredConnections.ts"
+import type {
+	Error as StorageError,
+	StoredConnection,
+} from "./StoredConnections.ts"
 
 export class Unavailable extends Data.TaggedError(
 	"AppCapabilitiesUnavailable",
 )<{ readonly reason: "Disabled" | "NeedsRevalidation" }> {}
 export type Error =
 	| Client.Error
-	| RepositoryError
+	| StorageError
 	| Api.AppRestricted
 	| Discovery.Error
 	| Unavailable
@@ -91,17 +94,28 @@ export const pages = <A>(
 export const make: Effect.Effect<
 	typeof Capabilities.Service,
 	never,
-	AppHost | Repository | Governance | Discovery.Discovery | App.ConnectionScopes
+	| AppHost
+	| PgClient.PgClient
+	| Secrets
+	| Governance
+	| Discovery.Discovery
+	| App.ConnectionScopes
 > = Effect.gen(function* () {
 	const factory = yield* AppHost
-	const repository = yield* Repository
+	const db = yield* makeWithDefaults()
+	const secrets = yield* Secrets
 	const governance = yield* Governance
 	const discovery = yield* Discovery.Discovery
 	const scopes = yield* App.ConnectionScopes
 	const sameRemote = Schema.toEquivalence(Schema.UndefinedOr(Document.Remote))
 	return Capabilities.of({
 		open: Effect.fn("Apps.openCapabilities")(function* (input) {
-			const stored = yield* repository.get(input.owner, input.connectionId)
+			const stored = yield* StoredConnections.get(
+				db,
+				secrets,
+				input.owner,
+				input.connectionId,
+			)
 			yield* governance.check(stored.connection.cardUrl)
 			if (stored.connection.state !== "Enabled")
 				return yield* new Unavailable({
@@ -110,7 +124,8 @@ export const make: Effect.Effect<
 							? "NeedsRevalidation"
 							: "Disabled",
 				})
-			const previous = yield* repository.getApp(
+			const previous = yield* StoredConnections.getApp(
+				db,
 				input.owner,
 				stored.connection.cardUrl,
 			)
@@ -122,7 +137,9 @@ export const make: Effect.Effect<
 						declared.card.remotes?.[stored.connection.remoteIndex],
 					)
 				) {
-					yield* repository.update(
+					yield* StoredConnections.update(
+						db,
+						secrets,
 						input.owner,
 						input.connectionId,
 						(row) => ({
@@ -133,14 +150,14 @@ export const make: Effect.Effect<
 						stored.revision,
 					)
 					yield* scopes.close(input)
-					yield* repository.updateApp(input.owner, {
+					yield* StoredConnections.updateApp(db, input.owner, {
 						cardUrl: declared.cardUrl,
 						card: declared.card,
 						sources: declared.sources,
 					})
 					return yield* new Unavailable({ reason: "NeedsRevalidation" })
 				}
-				yield* repository.updateApp(input.owner, {
+				yield* StoredConnections.updateApp(db, input.owner, {
 					cardUrl: declared.cardUrl,
 					card: declared.card,
 					sources: declared.sources,
