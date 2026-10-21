@@ -78,17 +78,11 @@ export const layer = (publicOrigin: string) =>
 										publicOrigin,
 									)
 									target.searchParams.set("authorization", receipt.flowId)
-									const destination = receipt.requiresLogin
-										? publicOrigin +
-											"/auth/login?" +
-											new URLSearchParams({
-												returnTo: target.pathname + target.search,
-											})
-										: target.href
+									// Without a session, the client signs in with Better Auth and then reads the flow.
 									return HttpServerResponse.empty({
 										status: 303,
 										headers: {
-											location: destination,
+											location: target.href,
 											"cache-control": "no-store",
 											"referrer-policy": "no-referrer",
 										},

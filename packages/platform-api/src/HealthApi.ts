@@ -8,7 +8,7 @@ export const Service = Schema.Struct({
 	name: Schema.Literal("OpenBot Platform API"),
 	documentation: Schema.Literal("/docs"),
 	openapi: Schema.Literal("/openapi.json"),
-	login: Schema.Literal("/auth/login"),
+	auth: Schema.Literal("/auth"),
 	apiKeys: Schema.Literal("/auth/api-keys"),
 })
 export type Service = typeof Service.Type
@@ -16,14 +16,14 @@ export const service: Service = {
 	name: "OpenBot Platform API",
 	documentation: "/docs",
 	openapi: "/openapi.json",
-	login: "/auth/login",
+	auth: "/auth",
 	apiKeys: "/auth/api-keys",
 }
 
 export const HealthApi = HttpApiGroup.make("health").add(
 	HttpApiEndpoint.get("getService", "/", { success: Service }).annotate(
 		OpenApi.Description,
-		"Shows where to find the API reference, sign in and manage API keys.",
+		"Shows where to find the API reference, the Better Auth routes and API key routes.",
 	),
 	HttpApiEndpoint.get("getHealth", "/health", { success: Health }).annotate(
 		OpenApi.Description,

@@ -100,10 +100,6 @@ export class AuthUnavailable extends Schema.TaggedError<AuthUnavailable>()(
 	"AuthUnavailable",
 	{ dependency: Schema.Literals(["provider", "storage", "crypto"]) },
 ) {}
-export class AuthRequestInvalid extends Schema.TaggedError<AuthRequestInvalid>()(
-	"AuthRequestInvalid",
-	{},
-) {}
 export class CredentialRejected extends Schema.TaggedError<CredentialRejected>()(
 	"CredentialRejected",
 	{ kind: Schema.Literals(["session", "apiKey"]) },

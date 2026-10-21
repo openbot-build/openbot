@@ -67,16 +67,15 @@ test(
 					HttpServer.formatAddress(value.address),
 				),
 			)
-			const login = await fetch(
-				address +
-					"/auth/login?returnTo=" +
-					encodeURIComponent("/developer/tests/example"),
-				{ redirect: "manual" },
-			)
-			assert.equal(
-				login.headers.get("location"),
-				options.auth.publicOrigin + "/developer/tests/example",
-			)
+			const login = await fetch(address + "/auth/development/sign-in", {
+				method: "POST",
+				headers: {
+					origin: options.auth.publicOrigin,
+					"content-type": "application/json",
+				},
+				body: "{}",
+			})
+			assert.equal(login.status, 200)
 			const cookie =
 				login.headers
 					.getSetCookie()

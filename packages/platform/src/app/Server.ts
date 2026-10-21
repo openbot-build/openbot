@@ -14,9 +14,10 @@ import * as ErrorReporting from "./ErrorReporting.ts"
 import type { Auth } from "../auth/Auth.ts"
 
 export const layerApi = (options: { readonly publicOrigin: string }) =>
-	Layer.merge(
+	Layer.mergeAll(
 		Http.layerPlatform(options.publicOrigin),
 		ErrorReporting.layerHttp,
+		AuthHttpHandlers.layerBetterAuth,
 	).pipe(Layer.provide(AuthHttpHandlers.layer(options)))
 export const layer = <
 	Tools extends Record<string, Tool.Any> = {},

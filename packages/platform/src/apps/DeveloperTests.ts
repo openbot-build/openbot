@@ -81,7 +81,6 @@ export class DeveloperTests extends Context.Service<
 			{
 				readonly testId: string
 				readonly flowId: string
-				readonly requiresLogin: boolean
 			},
 			DeveloperFailure
 		>
@@ -839,7 +838,6 @@ export const make = (
 						return {
 							testId: flow.testId,
 							flowId: id,
-							requiresLogin: Option.isNone(owner),
 						}
 					}),
 				)

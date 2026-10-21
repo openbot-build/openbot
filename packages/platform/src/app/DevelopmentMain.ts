@@ -11,7 +11,7 @@ NodeRuntime.runMain(
 			return yield* Layer.launch(
 				Layer.effectDiscard(
 					Effect.logInfo(
-						`Development login: ${settings.auth.publicOrigin}/auth/login`,
+						`Development login: POST ${settings.auth.publicOrigin}/auth/development/sign-in`,
 					),
 				).pipe(Layer.provideMerge(Development.layer(settings))),
 			)

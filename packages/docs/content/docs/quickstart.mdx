@@ -60,7 +60,10 @@ The first start can take a few minutes. Press **Ctrl+C** to stop. Your data stay
 ### Sign in
 
 ```sh
-curl -c cookies.txt https://localhost:8443/auth/login
+curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
+  -H "Origin: https://localhost:8443" \
+  -H "Content-Type: application/json" \
+  -d '{}'
 ```
 
 In development, this signs you in to a local test account at once. The sign-in cookie goes to `cookies.txt`.
