@@ -135,7 +135,7 @@ export const make = (
 							.where(eq(members.organizationId, organization.id))
 						const email = account.email?.trim().toLowerCase()
 						const verified = account.emailVerified === true
-						const roles =
+						let roles =
 							ownerUserIds.includes(account.id) ||
 							(email !== undefined && verified && ownerEmails.includes(email))
 								? ["super_administrator"]
@@ -153,6 +153,28 @@ export const make = (
 												).includes(domainOf(email)))
 										? decodeRoles(organization.defaultRoles)
 										: undefined
+						if (
+							roles === undefined &&
+							options.allowMemberSignup === true &&
+							current !== undefined
+						) {
+							// Member changes use the same lock, so an owner cannot leave during admission.
+							const active = yield* tx
+								.select({ roles: members.roles })
+								.from(members)
+								.where(
+									and(
+										eq(members.organizationId, current.id),
+										eq(members.status, "active"),
+									),
+								)
+							if (
+								active.some((member) =>
+									decodeRoles(member.roles).includes("super_administrator"),
+								)
+							)
+								roles = ["member"]
+						}
 						if (roles === undefined) return yield* MembershipRejected.make({})
 						yield* tx.insert(members).values({
 							organizationId: organization.id,

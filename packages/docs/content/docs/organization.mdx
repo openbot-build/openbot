@@ -11,18 +11,22 @@ One deployment has one organization. One person who uses OpenBot alone is an org
 
 ## Who can join
 
-The first account that signs in creates the organization. It becomes a Super Administrator. One person alone needs nothing more.
+The first eligible account creates the organization. With the default settings, the first account becomes a Super Administrator. Managed deployments can turn off this behavior and name an owner. See [Configuration](/docs/configuration).
 
 After that, an account joins in one of these ways:
 
 | Way                  | Role it gets                          | Needs                                                                |
 | -------------------- | ------------------------------------- | -------------------------------------------------------------------- |
 | Owner email          | `super_administrator`                 | The email is in `OPENBOT_OWNER_EMAILS` and the provider verified it. |
+| Owner account ID | `super_administrator` | The account ID is in `OPENBOT_OWNER_USER_IDS`. |
+| Member account ID | The default roles of the organization | The account ID is in `OPENBOT_MEMBER_USER_IDS`. |
 | Allowed email domain | The default roles of the organization | The email domain is allowed and the provider verified the email.     |
+| Member signup | `member` | `OPENBOT_ALLOW_MEMBER_SIGNUP=true`, an existing organization, and an active Super Administrator. |
 
 Every other account gets `403` with `MembershipRequired` when it signs in.
+Member signup is off by default. It applies after the explicit owner, member ID and domain rules. It always grants `member`, even if the default roles grant more access. The owner check and new membership share the member-change lock. Signup does not create an owner, merge accounts by email, or restore a suspended or removed member.
 
-When `OPENBOT_OWNER_EMAILS` is set, the first account does not become a Super Administrator on its own. Only the listed emails do.
+An owner or member list disables automatic first-login ownership. Only an explicit owner rule grants that role. `OPENBOT_ALLOW_FIRST_LOGIN_ADMIN=false` also disables automatic first-login ownership.
 `OPENBOT_ALLOWED_EMAIL_DOMAINS` sets the allowed domains when Platform creates the organization. After that, change them with the API. See [Configuration](/docs/configuration).
 
 ---
@@ -97,7 +101,7 @@ curl -X PATCH -b cookies.txt \
 ### Remove a member
 
 `DELETE /v1/organization/members/:userId` removes the member and revokes their tokens. It needs `members.write`.
-If their email domain is still allowed, they join again the next time they sign in. To keep them out, suspend them.
+Removal keeps a record that blocks admission. Allowed domains, bootstrap settings and member signup cannot restore that account on its next sign-in.
 
 ### Rules for Super Administrators
 

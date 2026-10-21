@@ -13,6 +13,15 @@
     ],
     "decision": "Keep the reviewed c7e606d baseline. The newer Agent/delegation release replaces approvals and the database baseline and explicitly requires an empty database; it has not passed Kay compatibility or migration regression."
   },
+  "localExtensions": [
+    {
+      "name": "Optional member signup",
+      "configuration": "OPENBOT_ALLOW_MEMBER_SIGNUP",
+      "default": false,
+      "source": "packages/platform/src/organization/OrganizationPostgres.ts",
+      "behavior": "Authenticated accounts may join an existing organization as ordinary members only while an active Super Administrator exists. Suspended and removed accounts stay denied. Account IDs remain distinct."
+    }
+  ],
   "selectedFixes": [
     {
       "repository": "https://gitlab.kai.com/KAI/e",

@@ -50,6 +50,7 @@ export async function start(options: {
 		readonly ownerUserIds?: ReadonlyArray<string>
 		readonly memberUserIds?: ReadonlyArray<string>
 		readonly allowFirstLoginAdmin?: boolean
+		readonly allowMemberSignup?: boolean
 		readonly ownerEmails?: ReadonlyArray<string>
 		readonly allowedEmailDomains?: ReadonlyArray<string>
 	}
