@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto"
 import { DeveloperApi as Api } from "@openbot-build/platform-api"
-import { Clock, Context, Effect, Layer, Match, Option } from "effect"
+import {
+	Array as Arr,
+	Clock,
+	Context,
+	Effect,
+	Layer,
+	Match,
+	Option,
+} from "effect"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import {
 	DeveloperRepository,
@@ -68,11 +76,13 @@ export const make: Effect.Effect<
 					owner,
 					...(cardUrl === undefined ? {} : { scope: cardUrl }),
 				})
+				// Hide requests for Apps that the owner can no longer see.
 				return yield* Effect.forEach(requests, (record) =>
 					read(record).pipe(
-						Effect.catchTag("DeveloperNotFound", () => Effect.succeed(null)),
+						Effect.asSome,
+						Effect.catchTag("DeveloperNotFound", () => Effect.succeedNone),
 					),
-				).pipe(Effect.map((values) => values.filter((value) => value !== null)))
+				).pipe(Effect.map(Arr.getSomes))
 			}),
 		request: (owner, cardUrl) =>
 			Effect.gen(function* () {
@@ -83,11 +93,15 @@ export const make: Effect.Effect<
 						Effect.fail(Api.DeveloperRestricted.make({ restriction })),
 				})
 				const report = yield* inspections.inspect(cardUrl)
-				const app = report.apps.find((app) => app.candidate.cardUrl === cardUrl)
-				if (app === undefined)
-					return yield* Api.DeveloperConflict.make({
-						reason: "PublicationUnavailable",
-					})
+				const app = yield* Arr.findFirst(
+					report.apps,
+					(app) => app.candidate.cardUrl === cardUrl,
+				).pipe(
+					Effect.fromOption,
+					Effect.mapError(() =>
+						Api.DeveloperConflict.make({ reason: "PublicationUnavailable" }),
+					),
+				)
 				yield* Match.value(app.eligibility).pipe(
 					Match.tagsExhaustive({
 						Eligible: () => Effect.void,

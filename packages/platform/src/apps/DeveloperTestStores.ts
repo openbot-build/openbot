@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { Authorization, Store } from "@openbot-build/protocol"
-import { Clock, Context, Effect, Layer, Schema } from "effect"
+import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { DeveloperRepository } from "./DeveloperRepository.ts"
 import { Secrets } from "./Secrets.ts"
 
@@ -61,15 +61,14 @@ export const make: Effect.Effect<
 					: Effect.fail(missing())
 			const read = Effect.gen(function* () {
 				yield* owned
-				const record = yield* records.secrets.get(id).pipe(
-					Effect.catchTag("DeveloperNotFound", () => Effect.succeed(null)),
-					Effect.mapError(error),
-				)
-				if (record === null)
+				const found = yield* records.secrets
+					.find(id)
+					.pipe(Effect.mapError(error))
+				if (Option.isNone(found))
 					return { connection: null, credentials: [] } satisfies PrivateState
-				if (record.owner !== owner) return yield* missing()
+				if (found.value.owner !== owner) return yield* missing()
 				return yield* secrets
-					.open(record.body, binding)
+					.open(found.value.body, binding)
 					.pipe(
 						Effect.flatMap(Schema.decodeEffect(codec)),
 						Effect.mapError(error),

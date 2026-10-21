@@ -10,6 +10,7 @@ import {
 	Store,
 } from "@openbot-build/protocol"
 import {
+	Array as Arr,
 	Clock,
 	Context,
 	Crypto,
@@ -17,6 +18,7 @@ import {
 	Layer,
 	Match,
 	Option,
+	Ref,
 	Schema,
 	Scope,
 } from "effect"
@@ -227,7 +229,27 @@ export const make = (
 									reason: null,
 								},
 							]
-							let partial: ReadonlyArray<unknown> = []
+							const partial = yield* Ref.make<ReadonlyArray<unknown>>([])
+							/** Read every page, and keep the items read so far for a partial result. */
+							const collect = <A>(
+								page: (cursor?: string) => Effect.Effect<
+									{
+										readonly values: ReadonlyArray<A>
+										readonly nextCursor?: string | undefined
+									},
+									Client.Error
+								>,
+							) =>
+								pages<A>((cursor) =>
+									page(cursor).pipe(
+										Effect.tap((page) =>
+											Ref.update(partial, (values) => [
+												...values,
+												...page.values,
+											]),
+										),
+									),
+								)
 							const progress = (stages: ReadonlyArray<Api.TestStage>) =>
 								records.transaction(
 									"test:" + id,
@@ -258,7 +280,7 @@ export const make = (
 									name: "tools" as const,
 									advertised: client.discovery.capabilities.tools !== undefined,
 									read: () =>
-										pages((cursor) =>
+										collect((cursor) =>
 											client
 												.listTools({
 													...(cursor === undefined ? {} : { cursor }),
@@ -270,11 +292,6 @@ export const make = (
 														values: page.tools,
 														nextCursor: page.nextCursor,
 													})),
-													Effect.tap((page) =>
-														Effect.sync(() => {
-															partial = [...partial, ...page.values]
-														}),
-													),
 												),
 										),
 								},
@@ -283,7 +300,7 @@ export const make = (
 									advertised:
 										client.discovery.capabilities.resources !== undefined,
 									read: () =>
-										pages((cursor) =>
+										collect((cursor) =>
 											client
 												.listResources(cursor, "host", { singlePage: true })
 												.pipe(
@@ -291,11 +308,6 @@ export const make = (
 														values: page.resources,
 														nextCursor: page.nextCursor,
 													})),
-													Effect.tap((page) =>
-														Effect.sync(() => {
-															partial = [...partial, ...page.values]
-														}),
-													),
 												),
 										),
 								},
@@ -304,7 +316,7 @@ export const make = (
 									advertised:
 										client.discovery.capabilities.resources !== undefined,
 									read: () =>
-										pages((cursor) =>
+										collect((cursor) =>
 											client
 												.listResourceTemplates(cursor, "host", {
 													singlePage: true,
@@ -314,11 +326,6 @@ export const make = (
 														values: page.resourceTemplates,
 														nextCursor: page.nextCursor,
 													})),
-													Effect.tap((page) =>
-														Effect.sync(() => {
-															partial = [...partial, ...page.values]
-														}),
-													),
 												),
 										),
 								},
@@ -327,7 +334,7 @@ export const make = (
 									advertised:
 										client.discovery.capabilities.prompts !== undefined,
 									read: () =>
-										pages((cursor) =>
+										collect((cursor) =>
 											client
 												.listPrompts(cursor, "host", { singlePage: true })
 												.pipe(
@@ -335,11 +342,6 @@ export const make = (
 														values: page.prompts,
 														nextCursor: page.nextCursor,
 													})),
-													Effect.tap((page) =>
-														Effect.sync(() => {
-															partial = [...partial, ...page.values]
-														}),
-													),
 												),
 										),
 								},
@@ -372,7 +374,7 @@ export const make = (
 									yield* progress(stages)
 									continue
 								}
-								partial = []
+								yield* Ref.set(partial, [])
 								const result = yield* list
 									.read()
 									.pipe(
@@ -383,6 +385,7 @@ export const make = (
 										),
 										Effect.result,
 									)
+								const read = yield* Ref.get(partial)
 								const stage: Api.TestStage = Match.value(result).pipe(
 									Match.tagsExhaustive({
 										Success: ({ success }) => ({
@@ -396,7 +399,7 @@ export const make = (
 											status: "Failed" as const,
 											items: Schema.decodeUnknownOption(
 												Schema.Array(Schema.JsonObject),
-											)(partial).pipe(Option.getOrElse(() => [])),
+											)(read).pipe(Option.getOrElse(() => [])),
 											reason: "CapabilityListIncomplete",
 										}),
 									}),
@@ -477,13 +480,16 @@ export const make = (
 				Effect.gen(function* () {
 					const test = yield* records.tests.get(id)
 					if (test.owner !== owner) return yield* Api.DeveloperNotFound.make({})
-					const issuer =
-						input.issuer ??
-						(test.value.issuers.length === 1
-							? test.value.issuers[0]
-							: undefined)
-					if (issuer === undefined || !test.value.issuers.includes(issuer))
-						return yield* failure("SelectDeclaredIssuer")
+					const issuer = yield* Option.fromNullishOr(input.issuer).pipe(
+						Option.orElse(() =>
+							test.value.issuers.length === 1
+								? Arr.head(test.value.issuers)
+								: Option.none(),
+						),
+						Option.filter((issuer) => test.value.issuers.includes(issuer)),
+						Effect.fromOption,
+						Effect.mapError(() => failure("SelectDeclaredIssuer")),
+					)
 					const scopes =
 						input.scopes.length === 0
 							? test.value.requestedScopes
@@ -545,17 +551,17 @@ export const make = (
 			revoke: (owner, id) =>
 				Effect.gen(function* () {
 					const bound = stores.bind(owner, id)
-					const connection = yield* bound.apps
-						.get({ owner, connectionId: id })
-						.pipe(
-							Effect.catchTag("StoreError", (error) =>
-								error.reason === "Missing"
-									? Effect.succeed(null)
-									: Effect.fail(error),
-							),
-							Effect.mapError(() => failure("TestCleanupPending")),
-						)
-					if (connection === null) return "LocalOnly" as const
+					const found = yield* bound.apps.get({ owner, connectionId: id }).pipe(
+						Effect.asSome,
+						Effect.catchTag("StoreError", (error) =>
+							error.reason === "Missing"
+								? Effect.succeedNone
+								: Effect.fail(error),
+						),
+						Effect.mapError(() => failure("TestCleanupPending")),
+					)
+					if (Option.isNone(found)) return "LocalOnly" as const
+					const connection = found.value
 					yield* bound.apps
 						.update({
 							key: connection,

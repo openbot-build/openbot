@@ -76,68 +76,65 @@ export const make: Effect.Effect<
 	})
 	return DeveloperReports.of({
 		get,
-		personal: (owner, before) =>
-			Effect.gen(function* () {
-				const all = (yield* records.reports.list({ owner }))
-					.map((record) => record.value)
-					.toSorted(
-						(a, b) =>
-							b.report.checkedAt - a.report.checkedAt ||
-							b.id.localeCompare(a.id),
-					)
-				const start =
-					before === undefined
-						? 0
-						: all.findIndex((report) => report.id === before) + 1
-				if (before !== undefined && start === 0)
-					return yield* Api.DeveloperInputInvalid.make({
-						message:
-							"The report cursor is no longer available. Reload your records.",
-					})
-				return all.slice(start, start + 50).map((report) => ({
-					id: report.id,
-					cardUrl: report.cardUrl,
-					checkedAt: report.report.checkedAt,
-				}))
-			}),
-		save: (owner, cardUrl) =>
-			Effect.gen(function* () {
-				yield* access.authorize(owner, cardUrl, true)
-				const report = yield* inspections.inspect(cardUrl)
-				return yield* records.transaction(
-					"monitor:" + cardUrl,
-					Effect.gen(function* () {
-						yield* access.authorize(owner, cardUrl, true)
-						const value: Api.SavedReport = {
-							id: yield* Effect.sync(randomUUID),
-							cardUrl,
-							createdBy: owner,
-							report,
-						}
-						yield* records.reports.put(value.id, owner, cardUrl, {
-							owner,
-							value,
-						})
-						const observed = report.apps.find(
-							(app) => app.candidate.cardUrl === cardUrl,
-						)
-						if (observed !== undefined) {
-							const app = yield* records.apps.get(cardUrl)
-							yield* records.apps.put(cardUrl, "", cardUrl, {
-								...app,
-								candidate: {
-									...observed.candidate,
-									sources: app.candidate.sources,
-								},
-							})
-						}
-
-						return value
-					}),
+		personal: Effect.fn("DeveloperReports.personal")(function* (owner, before) {
+			const all = (yield* records.reports.list({ owner }))
+				.map((record) => record.value)
+				.toSorted(
+					(a, b) =>
+						b.report.checkedAt - a.report.checkedAt || b.id.localeCompare(a.id),
 				)
-			}),
-		list: (owner, cardUrl, before) =>
-			Effect.gen(function* () {
+			const start =
+				before === undefined
+					? 0
+					: all.findIndex((report) => report.id === before) + 1
+			if (before !== undefined && start === 0)
+				return yield* Api.DeveloperInputInvalid.make({
+					message:
+						"The report cursor is no longer available. Reload your records.",
+				})
+			return all.slice(start, start + 50).map((report) => ({
+				id: report.id,
+				cardUrl: report.cardUrl,
+				checkedAt: report.report.checkedAt,
+			}))
+		}),
+		save: Effect.fn("DeveloperReports.save")(function* (owner, cardUrl) {
+			yield* access.authorize(owner, cardUrl, true)
+			const report = yield* inspections.inspect(cardUrl)
+			return yield* records.transaction(
+				"monitor:" + cardUrl,
+				Effect.gen(function* () {
+					yield* access.authorize(owner, cardUrl, true)
+					const value: Api.SavedReport = {
+						id: yield* Effect.sync(randomUUID),
+						cardUrl,
+						createdBy: owner,
+						report,
+					}
+					yield* records.reports.put(value.id, owner, cardUrl, {
+						owner,
+						value,
+					})
+					const observed = report.apps.find(
+						(app) => app.candidate.cardUrl === cardUrl,
+					)
+					if (observed !== undefined) {
+						const app = yield* records.apps.get(cardUrl)
+						yield* records.apps.put(cardUrl, "", cardUrl, {
+							...app,
+							candidate: {
+								...observed.candidate,
+								sources: app.candidate.sources,
+							},
+						})
+					}
+
+					return value
+				}),
+			)
+		}),
+		list: Effect.fn("DeveloperReports.list")(
+			function* (owner, cardUrl, before) {
 				yield* access.authorize(owner, cardUrl)
 				const all = (yield* records.reports.list({ scope: cardUrl }))
 					.map((record) => record.value)
@@ -156,9 +153,10 @@ export const make: Effect.Effect<
 							"The report cursor is no longer available. Reload the history.",
 					})
 				return all.slice(start, start + 50)
-			}),
-		compare: (owner, id, other) =>
-			Effect.gen(function* () {
+			},
+		),
+		compare: Effect.fn("DeveloperReports.compare")(
+			function* (owner, id, other) {
 				const before = yield* get(owner, id)
 				const after = yield* get(owner, other)
 				if (before.cardUrl !== after.cardUrl)
@@ -166,13 +164,13 @@ export const make: Effect.Effect<
 						message: "Choose two reports for the same Card URL.",
 					})
 				return compare(before.report, after.report)
-			}),
-		remove: (owner, id) =>
-			Effect.gen(function* () {
-				const record = yield* records.reports.get(id)
-				if (record.owner !== owner) return yield* Api.DeveloperNotFound.make({})
-				yield* records.reports.remove(id)
-			}),
+			},
+		),
+		remove: Effect.fn("DeveloperReports.remove")(function* (owner, id) {
+			const record = yield* records.reports.get(id)
+			if (record.owner !== owner) return yield* Api.DeveloperNotFound.make({})
+			yield* records.reports.remove(id)
+		}),
 	})
 })
 export const layer = Layer.effect(DeveloperReports, make)

@@ -3,13 +3,7 @@ import {
 	ExperienceStorageUnavailable,
 	Identity,
 } from "@openbot-build/platform-api"
-import {
-	App,
-	Client,
-	Discovery,
-	Document,
-	Store,
-} from "@openbot-build/protocol"
+import { App, Client, Discovery, Document } from "@openbot-build/protocol"
 import {
 	Clock,
 	Context,
@@ -85,20 +79,14 @@ const configuration = () =>
 	})
 const hostFailure = (error: { readonly _tag: string }): Error =>
 	Match.value(error).pipe(
-		Match.when({ _tag: "CleanupPending" }, () => {
-			const pending = Schema.decodeUnknownSync(
-				Schema.Struct({
-					key: Store.ConnectionKey,
-					stage: Schema.Literals(["Credentials", "Connection"]),
-				}),
-			)(error)
-			return Api.ConnectionCleanupPending.make({
+		Match.when(Match.instanceOf(App.CleanupPending), (pending) =>
+			Api.ConnectionCleanupPending.make({
 				connectionId: pending.key.connectionId,
 				stage: pending.stage,
 				message:
 					"This connection is stopped. Retry cleanup to finish removing it.",
-			})
-		}),
+			}),
+		),
 		Match.when({ _tag: "AppError" }, configuration),
 		Match.when({ _tag: "DiscoveryError" }, configuration),
 		Match.orElse(() => ExperienceStorageUnavailable.make({})),
@@ -169,12 +157,10 @@ export const make: Effect.Effect<
 				Match.when(
 					{ _tag: "Failure", failure: { _tag: "AppCapabilitiesUnavailable" } },
 					() =>
-						Effect.gen(function* () {
-							return {
-								_tag: "Unavailable",
-								connection: yield* connections.getConnection(id),
-							} as const
-						}),
+						Effect.map(
+							connections.getConnection(id),
+							(connection) => ({ _tag: "Unavailable", connection }) as const,
+						),
 				),
 				Match.when(
 					{
@@ -268,34 +254,30 @@ export const make: Effect.Effect<
 			const owned = yield* key(id)
 			const stored = yield* repository.get(owned.owner, id)
 			yield* governance.check(stored.connection.cardUrl)
-			const result = yield* factory
+			// A failed refresh is not an error for the caller. It is saved as an expired authorization.
+			yield* factory
 				.bind(owned.owner, metadataPolicy)
 				.refreshAuthorization(owned)
-				.pipe(Effect.result)
-			yield* Match.value(result).pipe(
-				Match.tag("Success", () => Effect.void),
-				Match.tag("Failure", () =>
-					repository
-						.update(
-							owned.owner,
-							id,
-							(row) => ({
-								...row,
-								verification: { _tag: "AuthorizationExpired" },
-							}),
-							stored.revision,
-						)
-						.pipe(Effect.asVoid),
-				),
-				Match.exhaustive,
-			)
+				.pipe(
+					Effect.asVoid,
+					Effect.catch(() =>
+						repository
+							.update(
+								owned.owner,
+								id,
+								(row) => ({
+									...row,
+									verification: { _tag: "AuthorizationExpired" },
+								}),
+								stored.revision,
+							)
+							.pipe(Effect.asVoid),
+					),
+				)
 			return yield* connections.getConnection(id)
 		}),
 		updateManual: Effect.fn("Apps.updateManualConnection")(
-			function* (id, request) {
-				const valid = yield* Schema.decodeEffect(Api.ManualConnectionUpdate)(
-					request,
-				).pipe(Effect.mapError(configuration))
+			function* (id, valid) {
 				const owned = yield* key(id)
 				return yield* locks.withConnection(
 					owned,
@@ -357,10 +339,7 @@ export const make: Effect.Effect<
 				)
 			},
 		),
-		update: Effect.fn("Apps.manageConnection")(function* (id, request) {
-			const valid = yield* Schema.decodeEffect(Api.ConnectionUpdate)(
-				request,
-			).pipe(Effect.mapError(configuration))
+		update: Effect.fn("Apps.manageConnection")(function* (id, valid) {
 			const owned = yield* key(id)
 			return yield* locks.withConnection(
 				owned,
@@ -398,19 +377,15 @@ export const make: Effect.Effect<
 				}),
 			)
 		}),
-		remove: (id) =>
-			Effect.gen(function* () {
-				const owned = yield* key(id)
-				yield* repository.get(owned.owner, id)
-				yield* factory
-					.bind(owned.owner, metadataPolicy)
-					.remove(owned)
-					.pipe(Effect.mapError(hostFailure))
-			}),
-		revalidate: Effect.fn("Apps.revalidateConnection")(function* (id, raw) {
-			const input = yield* Schema.decodeEffect(Api.RevalidationRequest)(
-				raw,
-			).pipe(Effect.mapError(configuration))
+		remove: Effect.fn("Apps.removeConnection")(function* (id) {
+			const owned = yield* key(id)
+			yield* repository.get(owned.owner, id)
+			yield* factory
+				.bind(owned.owner, metadataPolicy)
+				.remove(owned)
+				.pipe(Effect.mapError(hostFailure))
+		}),
+		revalidate: Effect.fn("Apps.revalidateConnection")(function* (id, input) {
 			const owned = yield* key(id)
 			return yield* locks.withConnection(
 				owned,
@@ -473,18 +448,21 @@ export const make: Effect.Effect<
 						Match.tag("Authorized", (auth) => auth.binding.issuer),
 						Match.orElse(() => ""),
 					)
-					const attested =
+					const trustedIssuer =
 						protection.requiresAuthorization &&
 						endpoint.url === stored.connection.endpoint
-							? yield* app
-									.inspectAuthorization(owned)
-									.pipe(Effect.mapError(hostFailure))
-							: undefined
-					const trustedIssuer =
-						attested?.requiresAuthorization === true
-							? attested.resource.authorization_servers.includes(oldIssuer)
-								? oldIssuer
-								: attested.resource.authorization_servers[0]
+							? yield* app.inspectAuthorization(owned).pipe(
+									Effect.map((attested) =>
+										attested.requiresAuthorization
+											? attested.resource.authorization_servers.includes(
+													oldIssuer,
+												)
+												? oldIssuer
+												: attested.resource.authorization_servers[0]
+											: "",
+									),
+									Effect.mapError(hostFailure),
+								)
 							: ""
 					const authorization = protection.requiresAuthorization
 						? { issuer: trustedIssuer, scopes: protection.scopes }

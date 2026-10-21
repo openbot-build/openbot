@@ -31,6 +31,7 @@ export const layer = (
 		readonly appNetwork?: Layer.Layer<AppNetwork>
 	} = {},
 ) => {
+	const publicOrigin = options.publicOrigin ?? "https://localhost"
 	const publicNetwork =
 		options.publicNetwork ?? ProtocolNodeHttpServer.layerPublicNetwork()
 	const inspections = AppInspections.layer.pipe(
@@ -49,15 +50,13 @@ export const layer = (
 		Layer.provideMerge(inspections),
 		Layer.provideMerge(Repository.layerFor(options.namespace ?? "public")),
 	)
-	const testRuntime = TestRuntime.layer(
-		options.publicOrigin ?? "https://localhost",
-	).pipe(
+	const testRuntime = TestRuntime.layer(publicOrigin).pipe(
 		Layer.provideMerge(TestStores.layer),
 		Layer.provide(NodeCrypto.layer),
 		Layer.provide(AppConnections.layerConnectionScopes.pipe(Layer.fresh)),
 		Layer.provide(options.appNetwork ?? layerNetwork),
 	)
-	const tests = Tests.layer(options.publicOrigin ?? "https://localhost").pipe(
+	const tests = Tests.layer(publicOrigin).pipe(
 		Layer.provide(testRuntime),
 		Layer.provide(CatalogDiscovery.layerRules),
 	)

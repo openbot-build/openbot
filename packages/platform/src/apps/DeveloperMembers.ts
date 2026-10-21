@@ -87,18 +87,17 @@ export const make: Effect.Effect<
 		},
 	)
 	return DeveloperMembers.of({
-		list: (owner, proofId) =>
-			Effect.gen(function* () {
-				yield* admin(owner, proofId)
-				return {
-					members: (yield* records.members.list({ scope: proofId })).map(
-						(record) => record.value,
-					),
-					invitations: (yield* records.invitations.list({
-						scope: proofId,
-					})).map((record) => record.value),
-				}
-			}),
+		list: Effect.fn("DeveloperMembers.list")(function* (owner, proofId) {
+			yield* admin(owner, proofId)
+			return {
+				members: (yield* records.members.list({ scope: proofId })).map(
+					(record) => record.value,
+				),
+				invitations: (yield* records.invitations.list({
+					scope: proofId,
+				})).map((record) => record.value),
+			}
+		}),
 		invite: (owner, proofId, role) =>
 			records.transaction(
 				"proof:" + proofId,
