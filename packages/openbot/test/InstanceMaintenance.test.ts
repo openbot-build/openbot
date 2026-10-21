@@ -635,3 +635,78 @@ test("drain reads encrypted proposals against the current Turn and never discard
 		await database.close()
 	}
 })
+
+test("drain retains waiting authorizations until expiry without a saved callback", async (t) => {
+	const database = await Postgres.start()
+	const layer = Layer.merge(
+		Database.layer({ databaseUrl: Redacted.make(database.url) }),
+		Secrets.layer(Redacted.make("test:" + "11".repeat(32))),
+	).pipe(Layer.provide(NodeServices.layer))
+	let runtime = ManagedRuntime.make(layer)
+	const owner = JSON.stringify(["organization", "waiting-account"])
+	try {
+		await runtime.runPromise(Database.migrate)
+		for (const sample of [
+			{
+				name: "unexpired Waiting",
+				status: "Waiting",
+				offset: 60000,
+				callback: null,
+				count: 1,
+			},
+			{
+				name: "expired Waiting without callback",
+				status: "Waiting",
+				offset: -60000,
+				callback: null,
+				count: 0,
+			},
+			{
+				name: "expired Waiting with callback",
+				status: "Waiting",
+				offset: -60000,
+				callback: "saved-callback",
+				count: 1,
+			},
+			{
+				name: "unknown status",
+				status: "Expired",
+				offset: -60000,
+				callback: null,
+				count: 1,
+			},
+		]) {
+			await t.test(sample.name, async () => {
+				await runtime.runPromise(
+					Effect.gen(function* () {
+						const sql = yield* PgClient.PgClient
+						yield* sql`DELETE FROM openbot_app_authorizations`
+						yield* sql`INSERT INTO openbot_app_authorizations
+					 (id,owner,connection_id,revision,expires_at,return_to,status,callback,issuer,resource,scopes)
+					 VALUES ('waiting-flow',${owner},'connection',0,
+					 floor(extract(epoch FROM clock_timestamp())*1000)+${sample.offset},
+					 '{}',${sample.status},${sample.callback},'https://issuer.test','resource','[]')`
+						assert.equal(yield* Stored.forNamespace(owner), sample.count)
+						assert.equal(yield* Stored.pending(), sample.count)
+						assert.equal(
+							yield* Stored.forNamespace(
+								JSON.stringify(["organization", "other-account"]),
+							),
+							0,
+						)
+					}),
+				)
+				await runtime.dispose()
+				runtime = ManagedRuntime.make(layer)
+				assert.equal(
+					await runtime.runPromise(Stored.forNamespace(owner)),
+					sample.count,
+					"restart must preserve the same durable blocker",
+				)
+			})
+		}
+	} finally {
+		await runtime.dispose()
+		await database.close()
+	}
+})

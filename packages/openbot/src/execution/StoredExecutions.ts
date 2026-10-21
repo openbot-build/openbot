@@ -25,7 +25,7 @@ const stored = Effect.gen(function* () {
 	}>`SELECT owner,id,session,status,body FROM openbot_app_invocations WHERE status NOT IN ('Completed','Failed','Rejected')`
 	const authorizations = yield* sql<{
 		owner: string
-	}>`SELECT owner FROM openbot_app_authorizations WHERE status NOT IN ('Waiting','Succeeded','Cancelled','Failed')`
+	}>`SELECT owner FROM openbot_app_authorizations WHERE status NOT IN ('Succeeded','Cancelled','Failed') AND NOT(status='Waiting' AND callback IS NULL AND expires_at<=extract(epoch FROM clock_timestamp())*1000)`
 	const developer = yield* sql<{
 		owner: string
 	}>`SELECT owner FROM openbot_developer_tests WHERE status NOT IN ('Succeeded','Failed','Cancelled','Interrupted') OR cleanup='Pending' OR cleanup_lease_until<>0 UNION ALL SELECT owner FROM openbot_developer_test_flows WHERE status IN ('Received','Exchanging')`

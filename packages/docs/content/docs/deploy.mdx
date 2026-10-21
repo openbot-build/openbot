@@ -457,8 +457,10 @@ The response reports these counts:
 `drained` is true only while paused, with zero writers before and after the
 durable-state scan, no active executions and no durable blockers. The scan does
 not open Sessions or replay tools. It includes unopened approvals, nonterminal
-MCP operations, received authorization callbacks, unfinished developer tests or
-cleanup and outstanding public worker claims. `Sending` and `OutcomeUnknown`
+MCP operations, open authorization flows, unfinished developer tests or cleanup
+and outstanding public worker claims. A Waiting authorization is clear only
+when its deadline has passed and it has no saved callback. A saved callback or
+an unknown status still blocks drain. `Sending` and `OutcomeUnknown`
 remain blockers; stopping or resending them is not a recovery strategy.
 
 Stop an instance only after it acknowledges drain. On a timeout, resume admission
