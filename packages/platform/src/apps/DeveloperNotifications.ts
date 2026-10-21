@@ -40,13 +40,7 @@ export const make: Effect.Effect<
 	const visible = (owner: string, notice: Api.Notice) =>
 		notice.cardUrl === null
 			? Effect.succeed(true)
-			: access.authorize(owner, notice.cardUrl).pipe(
-					Effect.as(true),
-					Effect.catchTags({
-						DeveloperNotFound: () => Effect.succeed(false),
-						DeveloperForbidden: () => Effect.succeed(false),
-					}),
-				)
+			: access.allows(owner, notice.cardUrl)
 	return DeveloperNotifications.of({
 		list: (owner, before) =>
 			Effect.gen(function* () {

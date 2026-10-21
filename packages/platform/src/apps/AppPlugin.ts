@@ -93,7 +93,14 @@ const visible = (tool: Opened["tools"][number]) => {
 	const metadata = Schema.decodeUnknownOption(
 		Schema.Struct({ visibility: Schema.Array(Schema.String) }),
 	)(tool._meta?.["ui"])
-	return Option.isNone(metadata) || metadata.value.visibility.includes("model")
+	return Option.match(metadata, {
+		onNone: () => true,
+		onSome: (value) => value.visibility.includes("model"),
+	})
+}
+interface Selected {
+	readonly name: string
+	readonly source: AppViewsApi.ActionSource
 }
 const makePermits: Effect.Effect<Permits> = Effect.gen(function* () {
 	const state = yield* Ref.make(HashMap.empty<string, number>())
@@ -139,10 +146,7 @@ const entriesFor = (
 	opened: Opened,
 	permits: Permits,
 	occupied: ReadonlyArray<string>,
-	selected?: {
-		readonly name: string
-		readonly source: AppViewsApi.ActionSource
-	},
+	selected: Option.Option<Selected>,
 ) =>
 	Effect.gen(function* () {
 		const owner = position.owner
@@ -180,15 +184,18 @@ const entriesFor = (
 				Client.Error | Schema.SchemaError
 			>,
 		) => {
-			let salt = 0
-			let name: string
-			if (selected !== undefined) {
-				name = selected.name
-				if (used.includes(name)) return
-			} else
-				do {
-					name = "openbot_" + hash([owner, origin, schema, salt++])
-				} while (used.includes(name))
+			const name = Option.match(selected, {
+				onSome: (value) => value.name,
+				onNone: () => {
+					let salt = 0
+					let name: string
+					do {
+						name = "openbot_" + hash([owner, origin, schema, salt++])
+					} while (used.includes(name))
+					return name
+				},
+			})
+			if (used.includes(name)) return
 			used = Arr.append(used, name)
 			entries = Arr.append(entries, {
 				tool: Tool.dynamic(name, {
@@ -208,7 +215,13 @@ const entriesFor = (
 										}),
 									),
 									Effect.map((value) => value.status === "PendingApproval"),
-									Effect.orElseSucceed(() => true),
+									// When the proposal cannot be saved, ask the user to approve.
+									Effect.catch((error) =>
+										Effect.logWarning(
+											"Could not record an App action proposal.",
+											error,
+										).pipe(Effect.as(true)),
+									),
 								)
 						: false,
 				}),
@@ -291,10 +304,11 @@ const entriesFor = (
 			})
 		}
 		for (const tool of opened.tools.filter((tool) =>
-			selected === undefined
-				? visible(tool)
-				: selected.source.kind === "tool" &&
-					selected.source.target === tool.name,
+			Option.match(selected, {
+				onNone: () => visible(tool),
+				onSome: ({ source }) =>
+					source.kind === "tool" && source.target === tool.name,
+			}),
 		)) {
 			const origin = source("tool", tool.name, yield* json(tool))
 			add(
@@ -315,7 +329,7 @@ const entriesFor = (
 							opened.client.callTool(
 								{ name: tool.name, arguments: args },
 								{
-									source: selected === undefined ? "model" : "app",
+									source: Option.isNone(selected) ? "model" : "app",
 									readOnly: services.policy.isRead(origin),
 								},
 							),
@@ -323,11 +337,12 @@ const entriesFor = (
 					}),
 			)
 		}
-		for (const resource of opened.resources.filter(
-			(resource) =>
-				selected === undefined ||
-				(selected.source.kind === "resource" &&
-					selected.source.target === resource.uri),
+		for (const resource of opened.resources.filter((resource) =>
+			Option.match(selected, {
+				onNone: () => true,
+				onSome: ({ source }) =>
+					source.kind === "resource" && source.target === resource.uri,
+			}),
 		))
 			add(
 				source("resource", resource.uri, yield* json(resource)),
@@ -340,7 +355,7 @@ const entriesFor = (
 						{ source: "model", readOnly: true },
 					),
 			)
-		for (const template of selected === undefined
+		for (const template of Option.isNone(selected)
 			? opened.resourceTemplates
 			: [])
 			add(
@@ -359,7 +374,7 @@ const entriesFor = (
 							}),
 					),
 			)
-		for (const prompt of selected === undefined ? opened.prompts : []) {
+		for (const prompt of Option.isNone(selected) ? opened.prompts : []) {
 			const args = prompt.arguments ?? []
 			add(
 				source("prompt", prompt.name, yield* json(prompt)),
@@ -415,10 +430,7 @@ const prepare = (
 	services: Services,
 	position: Position,
 	occupied: ReadonlyArray<string>,
-	selected?: {
-		readonly name: string
-		readonly source: AppViewsApi.ActionSource
-	},
+	selected: Option.Option<Selected>,
 ) =>
 	Effect.gen(function* () {
 		const owner = position.owner
@@ -439,9 +451,12 @@ const prepare = (
 		for (const stored of rows) {
 			if (stored.connection.state !== "Enabled") continue
 			if (
-				selected !== undefined &&
-				(stored.connection.connectionId !== selected.source.connectionId ||
-					stored.revision !== selected.source.revision)
+				Option.exists(
+					selected,
+					({ source }) =>
+						stored.connection.connectionId !== source.connectionId ||
+						stored.revision !== source.revision,
+				)
 			)
 				continue
 			const policy = Client.InvocationPolicy.of({
@@ -550,17 +565,17 @@ export const make: Effect.Effect<
 								const at = yield* context.at
 								const turn = yield* context.turn
 								const incoming = yield* input.toolkit
-								const selectedSource = Schema.decodeUnknownOption(
-									AppViewsApi.ActionSource,
-								)(context.options.action?.source)
-								const selected =
-									Option.isSome(selectedSource) &&
-									context.options.action !== undefined
-										? {
-												name: context.options.action.name,
-												source: selectedSource.value,
-											}
-										: undefined
+								const selected = Option.fromNullishOr(
+									context.options.action,
+								).pipe(
+									Option.flatMap((action) =>
+										Schema.decodeUnknownOption(AppViewsApi.ActionSource)(
+											action.source,
+										).pipe(
+											Option.map((source) => ({ name: action.name, source })),
+										),
+									),
+								)
 								const assistance = Assistance.entries({
 									identity,
 									index,
@@ -577,9 +592,17 @@ export const make: Effect.Effect<
 									selected,
 								)
 								const entries = Arr.appendAll(assistance, connected)
+								// Saved selections only add context. The Turn goes on without them.
 								const savedSelections = yield* views
 									.contexts(ownerKey(identity), at.session)
-									.pipe(Effect.orElseSucceed(() => []))
+									.pipe(
+										Effect.catch((error) =>
+											Effect.logWarning(
+												"Could not read the saved App selections.",
+												error,
+											).pipe(Effect.as([])),
+										),
+									)
 								const confirmed = yield* Effect.forEach(
 									savedSelections,
 									(selection) =>

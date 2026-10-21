@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto"
 import { isIP } from "node:net"
 import { DeveloperApi as Api } from "@openbot-build/platform-api"
 import { Discovery, Document, Network, Robots } from "@openbot-build/protocol"
-import { Clock, Context, Effect, Layer, Match, Schema } from "effect"
+import { Clock, Context, Effect, Layer, Match, Option, Schema } from "effect"
 import { AppInspections } from "./AppInspections.ts"
 import { DeveloperRepository, type ProofRecord } from "./DeveloperRepository.ts"
 import { DomainControl } from "./DomainControl.ts"
@@ -61,6 +61,12 @@ export class DeveloperAccess extends Context.Service<
 			cardUrl: string,
 			write?: boolean,
 		) => Effect.Effect<ReadonlyArray<Api.Grant>, Api.Failure>
+		/** Tell if the owner can see (or, with `write`, change) the App, instead of failing. */
+		readonly allows: (
+			owner: string,
+			cardUrl: string,
+			write?: boolean,
+		) => Effect.Effect<boolean, Api.Failure>
 		readonly overview: (owner: string) => Effect.Effect<
 			{
 				readonly apps: ReadonlyArray<Api.ManagedApp>
@@ -255,6 +261,14 @@ export const make: Effect.Effect<
 			return yield* Api.DeveloperForbidden.make({})
 		return all
 	})
+	const allows = (owner: string, cardUrl: string, write: boolean = false) =>
+		authorize(owner, cardUrl, write).pipe(
+			Effect.as(true),
+			Effect.catchTags({
+				DeveloperNotFound: () => Effect.succeed(false),
+				DeveloperForbidden: () => Effect.succeed(false),
+			}),
+		)
 	const rememberApps = (scope: Api.ManagementScope) =>
 		Effect.gen(function* () {
 			const input = Match.value(scope).pipe(
@@ -279,17 +293,14 @@ export const make: Effect.Effect<
 				yield* records.transaction(
 					"monitor:" + app.candidate.cardUrl,
 					Effect.gen(function* () {
-						const previous = yield* records.apps
-							.get(app.candidate.cardUrl)
-							.pipe(
-								Effect.catchTag("DeveloperNotFound", () =>
-									Effect.succeed(null),
-								),
-							)
+						const previous = yield* records.apps.find(app.candidate.cardUrl)
 						const sources = [
 							...app.candidate.sources,
 							...evidence,
-							...(previous?.candidate.sources ?? []),
+							...Option.match(previous, {
+								onNone: () => [],
+								onSome: (value) => value.candidate.sources,
+							}),
 						].filter(
 							(source, index, values) =>
 								values.findIndex(
@@ -302,13 +313,16 @@ export const make: Effect.Effect<
 							sources,
 						}).pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
 						if (!covers(scope, candidate)) return
-						yield* records.apps.put(candidate.cardUrl, "", scopeKey(scope), {
-							...previous,
-							candidate,
-							nextCheckAt:
-								previous?.nextCheckAt ??
-								(yield* Clock.currentTimeMillis) + 3600000,
-						})
+						const now = yield* Clock.currentTimeMillis
+						yield* records.apps.put(
+							candidate.cardUrl,
+							"",
+							scopeKey(scope),
+							Option.match(previous, {
+								onNone: () => ({ candidate, nextCheckAt: now + 3600000 }),
+								onSome: (value) => ({ ...value, candidate }),
+							}),
+						)
 					}),
 				)
 			}
@@ -366,54 +380,53 @@ export const make: Effect.Effect<
 	return DeveloperAccess.of({
 		grants,
 		authorize,
+		allows,
 		ownProof,
 		claim,
 		recheck,
-		overview: (owner) =>
-			Effect.gen(function* () {
-				const access = yield* grants(owner)
-				const apps = (yield* records.apps.list()).flatMap((app) => {
-					const applicable = access.filter((grant) =>
-						covers(grant.scope, app.candidate),
-					)
-					return applicable.length === 0
-						? []
-						: [
-								{
-									cardUrl: app.candidate.cardUrl,
-									candidate: app.candidate,
-									grants: applicable,
-								},
-							]
-				})
-				return {
-					apps,
-					proofs: (yield* records.proofs.list({ owner })).map(
-						(record) => record.value,
-					),
-					grants: access,
-				}
-			}),
-		start: (owner, value) =>
-			Effect.gen(function* () {
-				const scope = yield* normalizeScope(value)
-				const now = yield* Clock.currentTimeMillis
-				const challenge: Api.Challenge = {
-					id: yield* Effect.sync(randomUUID),
-					scope,
-					token:
-						"openbot-verification=" +
-						(yield* Effect.sync(() => randomBytes(32).toString("base64url"))),
-					createdAt: now,
-					expiresAt: now + 86400000,
-					status: "Pending",
-				}
-				yield* records.claims.put(challenge.id, owner, scopeKey(scope), {
-					owner,
-					value: challenge,
-				})
-				return challenge
-			}),
+		overview: Effect.fn("DeveloperAccess.overview")(function* (owner) {
+			const access = yield* grants(owner)
+			const apps = (yield* records.apps.list()).flatMap((app) => {
+				const applicable = access.filter((grant) =>
+					covers(grant.scope, app.candidate),
+				)
+				return applicable.length === 0
+					? []
+					: [
+							{
+								cardUrl: app.candidate.cardUrl,
+								candidate: app.candidate,
+								grants: applicable,
+							},
+						]
+			})
+			return {
+				apps,
+				proofs: (yield* records.proofs.list({ owner })).map(
+					(record) => record.value,
+				),
+				grants: access,
+			}
+		}),
+		start: Effect.fn("DeveloperAccess.start")(function* (owner, value) {
+			const scope = yield* normalizeScope(value)
+			const now = yield* Clock.currentTimeMillis
+			const challenge: Api.Challenge = {
+				id: yield* Effect.sync(randomUUID),
+				scope,
+				token:
+					"openbot-verification=" +
+					(yield* Effect.sync(() => randomBytes(32).toString("base64url"))),
+				createdAt: now,
+				expiresAt: now + 86400000,
+				status: "Pending",
+			}
+			yield* records.claims.put(challenge.id, owner, scopeKey(scope), {
+				owner,
+				value: challenge,
+			})
+			return challenge
+		}),
 		revoke: (owner, id) =>
 			records.transaction(
 				"claim:" + id,
@@ -429,94 +442,90 @@ export const make: Effect.Effect<
 					return revoked
 				}),
 			),
-		verify: (owner, id) =>
-			Effect.gen(function* () {
-				const value = yield* claim(owner, id)
-				const checked = yield* evidence(value.scope, value.token)
-				const proof = yield* records.transaction(
-					"claim:" + id,
-					Effect.gen(function* () {
-						const current = yield* claim(owner, id)
-						if (current.status === "Confirmed")
-							return (yield* ownProof(owner, id)).value
-						if (current.status !== "Pending")
-							return yield* conflict("ClaimInactive")
-						const now = yield* Clock.currentTimeMillis
-						if (current.expiresAt <= now) return yield* conflict("ClaimExpired")
-						yield* Match.value(checked).pipe(
-							Match.tagsExhaustive({
-								Failure: () => Effect.fail(conflict("VerificationUnavailable")),
-								Success: ({ success }) =>
-									success
-										? Effect.void
-										: Effect.fail(conflict("ProofMismatch")),
-							}),
-						)
-						const proof: Api.Proof = {
-							transition: 0,
-							id,
-							scope: current.scope,
-							status: "Confirmed",
-							confirmedAt: now,
-							validUntil: now + 7 * 86400000,
-							nextVerificationAt: now + 86400000,
-							reason: null,
-						}
-						yield* records.proofs.put(id, owner, scopeKey(proof.scope), {
-							owner,
-							value: proof,
-							token: current.token,
+		verify: Effect.fn("DeveloperAccess.verify")(function* (owner, id) {
+			const value = yield* claim(owner, id)
+			const checked = yield* evidence(value.scope, value.token)
+			const proof = yield* records.transaction(
+				"claim:" + id,
+				Effect.gen(function* () {
+					const current = yield* claim(owner, id)
+					if (current.status === "Confirmed")
+						return (yield* ownProof(owner, id)).value
+					if (current.status !== "Pending")
+						return yield* conflict("ClaimInactive")
+					const now = yield* Clock.currentTimeMillis
+					if (current.expiresAt <= now) return yield* conflict("ClaimExpired")
+					yield* Match.value(checked).pipe(
+						Match.tagsExhaustive({
+							Failure: () => Effect.fail(conflict("VerificationUnavailable")),
+							Success: ({ success }) =>
+								success ? Effect.void : Effect.fail(conflict("ProofMismatch")),
+						}),
+					)
+					const proof: Api.Proof = {
+						transition: 0,
+						id,
+						scope: current.scope,
+						status: "Confirmed",
+						confirmedAt: now,
+						validUntil: now + 7 * 86400000,
+						nextVerificationAt: now + 86400000,
+						reason: null,
+					}
+					yield* records.proofs.put(id, owner, scopeKey(proof.scope), {
+						owner,
+						value: proof,
+						token: current.token,
+					})
+					yield* records.claims.put(id, owner, scopeKey(proof.scope), {
+						owner,
+						value: { ...current, status: "Confirmed" },
+					})
+					return proof
+				}),
+			)
+			yield* rememberApps(proof.scope)
+			return proof
+		}),
+		relinquish: Effect.fn("DeveloperAccess.relinquish")(function* (owner, id) {
+			const proof = yield* ownProof(owner, id)
+			return yield* records.transaction(
+				scopeKey(proof.value.scope),
+				Effect.gen(function* () {
+					const current = yield* ownProof(owner, id)
+					if (current.value.status === "Relinquished") return current.value
+					const value: Api.Proof = {
+						...current.value,
+						transition: current.value.transition + 1,
+						status: "Relinquished",
+						validUntil: yield* Clock.currentTimeMillis,
+						reason: "Relinquished",
+					}
+					yield* records.proofs.put(id, owner, scopeKey(value.scope), {
+						...current,
+						value,
+					})
+					for (const member of yield* records.members.list({ scope: id })) {
+						const noticeId = yield* Effect.sync(randomUUID)
+						yield* records.notices.put(noticeId, member.owner, "", {
+							owner: member.owner,
+							value: {
+								id: noticeId,
+								cardUrl: null,
+								kind: "AccessChanged",
+								issue: null,
+								reason: "SourceProofRelinquished",
+								reportId: null,
+								createdAt: value.validUntil,
+								readAt: null,
+							},
 						})
-						yield* records.claims.put(id, owner, scopeKey(proof.scope), {
-							owner,
-							value: { ...current, status: "Confirmed" },
-						})
-						return proof
-					}),
-				)
-				yield* rememberApps(proof.scope)
-				return proof
-			}),
-		relinquish: (owner, id) =>
-			Effect.gen(function* () {
-				const proof = yield* ownProof(owner, id)
-				return yield* records.transaction(
-					scopeKey(proof.value.scope),
-					Effect.gen(function* () {
-						const current = yield* ownProof(owner, id)
-						if (current.value.status === "Relinquished") return current.value
-						const value: Api.Proof = {
-							...current.value,
-							transition: current.value.transition + 1,
-							status: "Relinquished",
-							validUntil: yield* Clock.currentTimeMillis,
-							reason: "Relinquished",
-						}
-						yield* records.proofs.put(id, owner, scopeKey(value.scope), {
-							...current,
-							value,
-						})
-						for (const member of yield* records.members.list({ scope: id })) {
-							const noticeId = yield* Effect.sync(randomUUID)
-							yield* records.notices.put(noticeId, member.owner, "", {
-								owner: member.owner,
-								value: {
-									id: noticeId,
-									cardUrl: null,
-									kind: "AccessChanged",
-									issue: null,
-									reason: "SourceProofRelinquished",
-									reportId: null,
-									createdAt: value.validUntil,
-									readAt: null,
-								},
-							})
-						}
+					}
 
-						return value
-					}),
-				)
-			}),
+					return value
+				}),
+			)
+		}),
 	})
 })
 export const layer = Layer.effect(DeveloperAccess, make)

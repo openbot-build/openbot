@@ -1,6 +1,6 @@
 import { PgClient } from "@effect/sql-pg"
 import { DeveloperApi as Api } from "@openbot-build/platform-api"
-import { Effect, Layer, Schema } from "effect"
+import { Array as Arr, Effect, Layer, Option, Schema } from "effect"
 import {
 	AppRecord,
 	ClaimRecord,
@@ -35,20 +35,27 @@ export const makeFor = (
 		): Collection<A> => {
 			const recordKind = namespace + ":" + kind
 			const codec = Schema.fromJsonString(Schema.toCodecJson(schema))
+			const find = (id: string) =>
+				sql<{
+					body: string
+				}>`SELECT body FROM openbot_developer_records WHERE kind = ${recordKind} AND id = ${id}`.pipe(
+					Effect.map(Arr.head),
+					Effect.flatMap((row) =>
+						Effect.transposeOption(
+							Option.map(row, (row) => Schema.decodeEffect(codec)(row.body)),
+						),
+					),
+					Effect.mapError(unavailable),
+				)
 			return {
+				find,
 				get: (id) =>
-					Effect.gen(function* () {
-						const rows = yield* sql<{
-							body: string
-						}>`SELECT body FROM openbot_developer_records WHERE kind = ${recordKind} AND id = ${id}`.pipe(
-							Effect.mapError(unavailable),
-						)
-						if (rows[0] === undefined)
-							return yield* Api.DeveloperNotFound.make({})
-						return yield* Schema.decodeEffect(codec)(rows[0].body).pipe(
-							Effect.mapError(unavailable),
-						)
-					}),
+					find(id).pipe(
+						Effect.flatMap(Effect.fromOption),
+						Effect.catchTag("NoSuchElementError", () =>
+							Effect.fail(Api.DeveloperNotFound.make({})),
+						),
+					),
 				list: (filter = {}) =>
 					sql<{
 						body: string

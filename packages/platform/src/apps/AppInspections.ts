@@ -120,20 +120,18 @@ export const make: Effect.Effect<
 														Failure: () => ({ _tag: "Unknown" as const }),
 														Success: ({ success }) => ({
 															_tag: "Known" as const,
-															check:
-																Option.getOrNull(
-																	HashMap.get(
-																		success.checks,
-																		candidate.cardUrl,
-																	),
-																) ??
-																(Option.isSome(success.entry)
-																	? {
-																			_tag: "Indexed" as const,
-																			attemptedAt:
-																				success.entry.value.checkedAt,
-																		}
-																	: null),
+															check: HashMap.get(
+																success.checks,
+																candidate.cardUrl,
+															).pipe(
+																Option.orElse(() =>
+																	Option.map(success.entry, (entry) => ({
+																		_tag: "Indexed" as const,
+																		attemptedAt: entry.checkedAt,
+																	})),
+																),
+																Option.getOrNull,
+															),
 														}),
 													}),
 												),

@@ -1,6 +1,14 @@
 import { createHash, randomUUID } from "node:crypto"
 import { DeveloperApi as Api } from "@openbot-build/platform-api"
-import { Clock, Context, Effect, HashSet, Layer, Schedule } from "effect"
+import {
+	Clock,
+	Context,
+	Effect,
+	HashSet,
+	Layer,
+	Option,
+	Schedule,
+} from "effect"
 import { DeveloperRepository } from "./DeveloperRepository.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import { AppInspections } from "./AppInspections.ts"
@@ -57,10 +65,7 @@ export const make: Effect.Effect<
 			const id = createHash("sha256")
 				.update(JSON.stringify([owner, ...identity]))
 				.digest("hex")
-			const existing = yield* records.notices
-				.get(id)
-				.pipe(Effect.catchTag("DeveloperNotFound", () => Effect.succeed(null)))
-			if (existing === null)
+			if (Option.isNone(yield* records.notices.find(id)))
 				yield* records.notices.put(id, owner, value.cardUrl ?? "", {
 					owner,
 					value: { ...value, id, readAt: null },
@@ -108,13 +113,7 @@ export const make: Effect.Effect<
 					...(yield* records.members.list()).map((member) => member.owner),
 				])
 				const interested = yield* Effect.filter(possibleOwners, (owner) =>
-					access.authorize(owner, cardUrl).pipe(
-						Effect.as(true),
-						Effect.catchTags({
-							DeveloperNotFound: () => Effect.succeed(false),
-							DeveloperForbidden: () => Effect.succeed(false),
-						}),
-					),
+					access.allows(owner, cardUrl),
 				)
 				if (interested.length === 0) continue
 				const claimed = yield* records.transaction(
@@ -122,23 +121,23 @@ export const make: Effect.Effect<
 					Effect.gen(function* () {
 						const app = yield* records.apps.get(cardUrl)
 						if (app.nextCheckAt > now || (app.leaseUntil ?? 0) > now)
-							return null
+							return Option.none<string>()
 						const token = yield* Effect.sync(randomUUID)
 						yield* records.apps.put(cardUrl, "", cardUrl, {
 							...app,
 							leaseUntil: now + 300000,
 							monitorToken: token,
 						})
-						return token
+						return Option.some(token)
 					}),
 				)
-				if (claimed === null) continue
+				if (Option.isNone(claimed)) continue
 				const report = yield* inspections.inspect(cardUrl)
 				yield* records.transaction(
 					"monitor:" + cardUrl,
 					Effect.gen(function* () {
 						const app = yield* records.apps.get(cardUrl)
-						if (app.monitorToken !== claimed) return
+						if (app.monitorToken !== claimed.value) return
 						const previous = yield* records.monitors
 							.get(cardUrl)
 							.pipe(
@@ -178,22 +177,12 @@ export const make: Effect.Effect<
 							...(yield* records.members.list()).map((member) => member.owner),
 						])
 						for (const owner of owners) {
-							const allowed = yield* access.authorize(owner, cardUrl).pipe(
-								Effect.as(true),
-								Effect.catchTags({
-									DeveloperNotFound: () => Effect.succeed(false),
-									DeveloperForbidden: () => Effect.succeed(false),
-								}),
+							if (!(yield* access.allows(owner, cardUrl))) continue
+							const subscription = yield* records.subscriptions.find(
+								subscriptionId(owner, cardUrl),
 							)
-							if (!allowed) continue
-							const subscription = yield* records.subscriptions
-								.get(subscriptionId(owner, cardUrl))
-								.pipe(
-									Effect.catchTag("DeveloperNotFound", () =>
-										Effect.succeed(null),
-									),
-								)
-							if (subscription?.value.enabled === false) continue
+							if (Option.exists(subscription, (saved) => !saved.value.enabled))
+								continue
 							for (const change of changes)
 								yield* emit(
 									owner,
@@ -236,9 +225,10 @@ export const layerWorker = Layer.effectDiscard(
 	Effect.gen(function* () {
 		const monitor = yield* DeveloperMonitor
 		yield* monitor.run.pipe(
-			Effect.catch(() =>
+			Effect.catch((error) =>
 				Effect.logWarning(
 					"Developer publication monitoring could not complete.",
+					error,
 				),
 			),
 			Effect.repeat(Schedule.spaced("30 seconds")),

@@ -1,6 +1,6 @@
 import { DeveloperApi as Api } from "@openbot-build/platform-api"
 import { Discovery } from "@openbot-build/protocol"
-import { Context, Effect, Schema } from "effect"
+import { Context, Effect, type Option, Schema } from "effect"
 
 export const ClaimRecord = Schema.Struct({
 	owner: Schema.String,
@@ -80,9 +80,14 @@ export const MonitorRecord = Schema.Struct({
 })
 export type MonitorRecord = typeof MonitorRecord.Type
 export interface Collection<A> {
+	/** Read one record. Fail with `DeveloperNotFound` when it does not exist. */
 	readonly get: (
 		id: string,
 	) => Effect.Effect<A, Api.DeveloperNotFound | Api.DeveloperUnavailable>
+	/** Read one record. Give `None` when it does not exist. */
+	readonly find: (
+		id: string,
+	) => Effect.Effect<Option.Option<A>, Api.DeveloperUnavailable>
 	readonly list: (filter?: {
 		readonly owner?: string
 		readonly scope?: string
