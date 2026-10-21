@@ -6,7 +6,6 @@ import { LanguageModel, Prompt } from "effect/ai"
 import {
 	Item,
 	MemoryPersistence,
-	TimelineState,
 	RecordSerialization,
 	Session,
 	SessionStoreRepository,
@@ -40,7 +39,7 @@ const noOutput: typeof Memory.MemoryModel.Service = {
 	extract: () => Effect.succeed({ changes: [] }),
 }
 
-test("memory edits, retractions, Fork and records keep exact evidence and do not inherit settings", async () => {
+test("memory edits, retractions, Fork and records keep exact evidence", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
@@ -56,21 +55,13 @@ test("memory edits, retractions, Fork and records keep exact evidence and do not
 					content: "Use English",
 					kind: "preference",
 				})
-				const disabled = yield* memory.update(Session.position(first.session), {
-					_tag: "Configure",
-					use: false,
-					generate: false,
+				yield* memory.update(Session.position(first.session), {
+					_tag: "Forget",
+					key: "language",
 				})
-				assert.equal(disabled.session.head, first.session.head)
-				assert.ok(disabled.session.revision > first.session.revision)
-				const retracted = yield* memory.update(
-					Session.position(disabled.session),
-					{ _tag: "Forget", key: "language" },
-				)
 				const fork = yield* store.fork({
 					source: view.session.id,
 					version: first.session.head,
-					settings: { memoryEnabled: true, memoryGenerationEnabled: true },
 				})
 				assert.equal(
 					(yield* memory.read(fork.session.id)).entries["language"]!.status,
@@ -80,8 +71,6 @@ test("memory edits, retractions, Fork and records keep exact evidence and do not
 					(yield* memory.read(view.session.id)).entries["language"]!.status,
 					"retracted",
 				)
-				assert.equal(fork.session.settings.memoryEnabled, true)
-				assert.equal(retracted.session.settings.memoryEnabled, false)
 				assert.equal(
 					MemoryRules.policy
 						.project(yield* memory.read(fork.session.id))
@@ -275,35 +264,6 @@ test("extraction of new history checks source IDs, and failures keep progress un
 						edited.state.value["@openbot-build/plugin-memory"]!.processed,
 					)
 				}
-			}),
-		).pipe(Effect.provide(unusedModel)),
-	)
-})
-
-test("disabling generation only changes Session settings and never runs extraction on Fork", async () => {
-	await Effect.runPromise(
-		Effect.scoped(
-			Effect.gen(function* () {
-				const { store, view } = yield* setup
-				const memory = MemoryOperations.make({
-					store,
-					policy: MemoryRules.policy,
-					model: {
-						extract: () => Effect.die("Disabled extraction must not run"),
-					},
-				})
-				const configured = yield* memory.update(
-					Session.position(view.session),
-					{ _tag: "Configure", use: true, generate: false },
-				)
-				assert.deepEqual(configured.state, view.state)
-				assert.equal(
-					(yield* memory.consolidate(view.session.id)).session.head,
-					view.session.head,
-				)
-				const fork = yield* store.fork({ source: view.session.id })
-				assert.equal(fork.session.settings.memoryGenerationEnabled, false)
-				assert.deepEqual(fork.state.value, TimelineState.initial({}))
 			}),
 		).pipe(Effect.provide(unusedModel)),
 	)

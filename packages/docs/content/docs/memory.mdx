@@ -30,7 +30,9 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 			"status": "active"
 		}
 	},
-	"processed": ["i-01", "i-02"]
+	"processed": ["i-01", "i-02"],
+	"settings": { "use": true, "generate": false },
+	"overrides": { "generate": false }
 }
 ```
 
@@ -42,6 +44,21 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `sources`   | The IDs of the Items that support the fact.                    |
 | `status`    | `active`, or `retracted` when the fact was removed.            |
 | `processed` | The Items that Platform has already read for memory.           |
+| `settings`  | The switches in use for this Session. See below.               |
+| `overrides` | The switches that this Session sets itself.                    |
+
+---
+
+## Switches
+
+Two switches control memory:
+
+- `use`: Platform adds the active facts to the model's instructions.
+- `generate`: Platform learns new facts after each Turn.
+
+The server sets a default for each switch. Both are on unless the server changes them. See [Server](/docs/server#sessions).
+A Session can override each switch with `Configure`. A switch that the Session does not set follows the server default.
+`settings` shows the result, and `overrides` shows what the Session set. A Fork keeps the overrides of its source Session.
 
 ---
 
@@ -49,8 +66,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ### In a Turn
 
-When `memoryEnabled` is `true`, Platform adds the active facts to the model's instructions when the Turn runs. The text tells the model that memory is past evidence and that current instructions win.
-Retracted facts are not sent. `memoryEnabled` is `true` for a new Session.
+When `use` is on, Platform adds the active facts to the model's instructions when the Turn runs. The text tells the model that memory is past evidence and that current instructions win.
+Retracted facts are not sent.
 
 ### After a Turn
 
@@ -67,7 +84,7 @@ Platform checks these rules for every change:
 Platform also tells the model to reuse a key for the same fact, to count only clear user statements as preferences, and to never keep passwords, keys or links that give access.
 
 If the model fails, the Turn still completes. Platform records the error and tries again with the next Turn.
-Set `memoryGenerationEnabled` to `false` to stop this step.
+Turn `generate` off to stop this step.
 
 ---
 
@@ -95,16 +112,24 @@ All changes use one route: `POST /v1/sessions/:sessionId/memory`.
 | `command`  | What to do. See the commands below.                                   |
 
 If the Session or its history changed since you read it, Platform returns `409` with `SessionConflict`. Read the Session again and retry.
-On success, Platform returns the new Session view. The view has a new `session.head` and `session.revision`.
+On success, Platform returns the new Session view. It has a new `session.revision`. Remember and Forget also make a new `session.head`.
 
 ### Commands
 
-| `_tag`      | Fields                       | What it does                                                               |
-| ----------- | ---------------------------- | -------------------------------------------------------------------------- |
-| `Remember`  | `key`, `content`, `kind`     | Adds a fact, or replaces the fact with this key. It makes the fact active. |
-| `Forget`    | `key`                        | Marks the fact as retracted. An unknown key returns `409`.                 |
-| `Configure` | `use`, `generate` (booleans) | Sets `memoryEnabled` to `use` and `memoryGenerationEnabled` to `generate`. |
-| `Refresh`   | none                         | Runs consolidation now with the Session's model.                           |
+| `_tag`      | Fields                            | What it does                                                               |
+| ----------- | --------------------------------- | -------------------------------------------------------------------------- |
+| `Remember`  | `key`, `content`, `kind`          | Adds a fact, or replaces the fact with this key. It makes the fact active. |
+| `Forget`    | `key`                             | Marks the fact as retracted. An unknown key returns `409`.                 |
+| `Configure` | `use`, `generate` (both optional) | Sets the switches of this Session. See below.                              |
+| `Refresh`   | none                              | Runs consolidation now with the Session's model.                           |
+
+For each field of `Configure`:
+
+- `true` or `false` sets the switch for this Session.
+- `null` removes the setting. The switch then follows the server default.
+- A missing field keeps the switch as it is.
+
+Configure does not change the history, so `session.head` stays the same.
 
 Remember and Forget also add a small Item to the history that records your edit. This Item becomes the source of the change.
 
@@ -125,23 +150,30 @@ Keep using the facts, but stop learning new ones:
 {
 	"expected": "v-9f13",
 	"revision": 7,
-	"command": { "_tag": "Configure", "use": true, "generate": false }
+	"command": { "_tag": "Configure", "generate": false }
+}
+```
+
+Follow the server default for learning again:
+
+```json
+{
+	"expected": "v-9f13",
+	"revision": 8,
+	"command": { "_tag": "Configure", "generate": null }
 }
 ```
 
 Learn from the history now:
 
 ```json
-{ "expected": "v-9f13", "revision": 8, "command": { "_tag": "Refresh" } }
+{ "expected": "v-9f13", "revision": 9, "command": { "_tag": "Refresh" } }
 ```
 
 <Callout type="info">
-	Refresh needs a model. If Platform has no model, it returns `409` with
-	`SessionConflict`. Refresh does nothing when `memoryGenerationEnabled` is
-	`false`. It does not check `expected` and `revision`, but you must still send
-	them.
+	Refresh does nothing when `generate` is off. Otherwise it needs a model. If
+	Platform has no model, it returns `409` with `SessionConflict`. Refresh does
+	not check `expected` and `revision`, but you must still send them.
 </Callout>
-
-To turn memory on or off for one Turn only, set `overrides.memoryEnabled` or `overrides.memoryGenerationEnabled` when you [start the Turn](/docs/sessions#start-a-turn).
 
 See all fields in the [Sessions reference](/docs/api/operations/tags/sessions/).

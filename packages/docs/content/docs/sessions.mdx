@@ -27,7 +27,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions
 ```
 
-Both fields are optional. `settings` can hold `mode`, `model`, `memoryEnabled` and `memoryGenerationEnabled`. Creating a Session does not call a model.
+Both fields are optional. `settings` can hold `mode` and `model`. To set the memory switches, see [Memory](/docs/memory#switches). Creating a Session does not call a model.
 Platform returns `201` with the Session view. Here is a short form of it:
 
 ```json
@@ -37,7 +37,7 @@ Platform returns `201` with the Session view. Here is a short form of it:
 		"revision": 0,
 		"head": "v-7d21",
 		"metadata": { "title": "Trip plan" },
-		"settings": { "mode": "default", "memoryEnabled": true },
+		"settings": { "mode": "default" },
 		"pending": [],
 		"turns": [],
 		"inheritedTurns": []
@@ -93,13 +93,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions/$SESSION/turns
 ```
 
-| Field        | Meaning                                                                                             |
-| ------------ | --------------------------------------------------------------------------------------------------- |
-| `expected`   | Required. The current `session.revision`.                                                           |
-| `input`      | Required. Text, or a list of user messages (see below).                                             |
-| `stream`     | Optional. `true` sends live events. See [Stream the answer](#stream-the-answer).                    |
-| `background` | Optional. Only `true` is allowed. Every Turn runs in the background.                                |
-| `overrides`  | Optional. Settings for this Turn only: `mode`, `model`, `memoryEnabled`, `memoryGenerationEnabled`. |
+| Field        | Meaning                                                                          |
+| ------------ | -------------------------------------------------------------------------------- |
+| `expected`   | Required. The current `session.revision`.                                        |
+| `input`      | Required. Text, or a list of user messages (see below).                          |
+| `stream`     | Optional. `true` sends live events. See [Stream the answer](#stream-the-answer). |
+| `background` | Optional. Only `true` is allowed. Every Turn runs in the background.             |
+| `overrides`  | Optional. Settings for this Turn only: `mode` and `model`.                       |
 
 `input` takes text only. These three forms are the same:
 
@@ -252,7 +252,7 @@ A wrong choice returns `400` with `SessionModelInvalid`. The `reason` is `provid
 
 The execution mode is `default` or `plan`. Set it with `PUT /v1/sessions/:sessionId/mode` and `{ "expected": 4, "mode": "plan" }`. Platform saves the mode on the Session and copies it into each new Turn's `settings`, where tools and plugins can read it.
 
-`PUT /v1/sessions/:sessionId/settings` replaces all settings at once: `{ "expected": 4, "settings": { "mode": "default", "memoryEnabled": true } }`.
+`PUT /v1/sessions/:sessionId/settings` replaces all settings at once: `{ "expected": 4, "settings": { "mode": "default" } }`.
 
 ---
 

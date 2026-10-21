@@ -50,20 +50,16 @@ export const Change = Schema.Struct({
 })
 export type Change = typeof Change.Type
 export const Extraction = Schema.Struct({ changes: Schema.Array(Change) })
-export const Command = Schema.TaggedUnion({
+/** A direct edit of one entry. */
+export const Edit = Schema.TaggedUnion({
 	Remember: {
 		key: Schema.NonEmptyString,
 		content: Schema.NonEmptyString,
 		kind: Kind,
 	},
 	Forget: { key: Schema.NonEmptyString },
-	Configure: {
-		use: Schema.Boolean,
-		generate: Schema.Boolean,
-	},
-	Refresh: {},
 })
-export type Command = typeof Command.Type
+export type Edit = typeof Edit.Type
 export class MemoryError extends Data.TaggedError("MemoryError")<{
 	readonly reason: "model-failed" | "invalid-change" | "stale-input"
 	readonly message: string
@@ -101,12 +97,13 @@ export class MemoryPolicy extends Context.Service<
 >()("@openbot-build/plugin-memory/Memory/MemoryPolicy") {}
 
 /** The memory switches for one Turn. The host decides their values. */
-export interface Settings {
+export const Settings = Schema.Struct({
 	/** Add the active entries to the model instructions. */
-	readonly use: boolean
+	use: Schema.Boolean,
 	/** Learn new entries after the Turn completes. */
-	readonly generate: boolean
-}
+	generate: Schema.Boolean,
+})
+export type Settings = typeof Settings.Type
 
 export interface Options {
 	readonly model?: typeof MemoryModel.Service

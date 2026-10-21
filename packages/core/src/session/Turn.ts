@@ -10,8 +10,6 @@ export { Id } from "./TurnIdentity.ts"
 export const Settings = Schema.Struct({
 	mode: Config.Mode,
 	model: Schema.optionalKey(Config.Selection),
-	memoryEnabled: Schema.Boolean,
-	memoryGenerationEnabled: Schema.optionalKey(Schema.Boolean),
 })
 export type Settings = typeof Settings.Type
 /** An action the host selects explicitly. Its protocol-specific origin data is opaque. */

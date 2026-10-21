@@ -249,6 +249,8 @@ export interface Store<P = {}> {
 		readonly version?: Timeline.VersionId
 		readonly metadata?: Session.MetadataInput
 		readonly settings?: Partial<Turn.Settings>
+		/** Session data for the new Session. A Fork does not copy it from the source. */
+		readonly business?: Session.Ref["business"]
 	}) => Effect.Effect<
 		Session.View<P>,
 		Session.SessionNotFound | Timeline.VersionError | SessionStoreError

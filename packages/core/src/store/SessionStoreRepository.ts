@@ -256,7 +256,7 @@ export const make = <S extends Plugin.Stores>(
 				head,
 				revision: Session.Revision.make(0),
 				metadata: { ...metadata, title: metadata.title ?? "", archived: false },
-				settings: { mode: "default", memoryEnabled: true, ...settings },
+				settings: { mode: "default", ...settings },
 				pending: [],
 				turns: [],
 				inheritedTurns: [],
@@ -373,6 +373,7 @@ export const make = <S extends Plugin.Stores>(
 							version.id,
 							input.metadata ?? source.session.metadata,
 							settings,
+							input.business,
 						)),
 						forkedFrom: { session: source.session.id, version: selected },
 						inheritedTurns: [
