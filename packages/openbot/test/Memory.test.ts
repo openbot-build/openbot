@@ -11,9 +11,9 @@ import {
 	SessionStoreRepository,
 	Store,
 } from "@openbot-build/core"
-import * as Memory from "../src/memory/Memory.ts"
-import * as MemoryOperations from "../src/memory/MemoryOperations.ts"
-import * as MemoryRules from "../src/memory/MemoryRules.ts"
+import * as Memory from "../src/plugins/memory/Memory.ts"
+import * as MemoryOperations from "../src/plugins/memory/MemoryOperations.ts"
+import * as MemoryRules from "../src/plugins/memory/MemoryRules.ts"
 const unusedModel = Layer.effect(
 	LanguageModel.LanguageModel,
 	LanguageModel.make({

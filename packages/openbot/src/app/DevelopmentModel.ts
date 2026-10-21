@@ -1,6 +1,6 @@
 import { Item, Config, Model, Provider } from "@openbot-build/core"
 import { AppExecution } from "@openbot-build/api"
-import * as Memory from "../memory/Memory.ts"
+import * as Memory from "../plugins/memory/Memory.ts"
 import {
 	Context,
 	Effect,
@@ -18,7 +18,7 @@ import {
 	Tool,
 	Toolkit,
 } from "effect/ai"
-import * as Assistance from "../apps/Assistance.ts"
+import * as Assistance from "../plugins/apps/Assistance.ts"
 
 /** Each development scenario and what it does. The scenario ids come from these keys. */
 const descriptions = {

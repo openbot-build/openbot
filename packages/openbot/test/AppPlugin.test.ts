@@ -22,7 +22,7 @@ import {
 } from "effect"
 import { LanguageModel, Response, Tool } from "effect/ai"
 import { AppNetwork } from "../src/apps/AppHost.ts"
-import { AppPlugin } from "../src/apps/AppPlugin.ts"
+import { AppPlugin } from "../src/plugins/apps/AppPlugin.ts"
 import * as Fixture from "./AppFixture.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 

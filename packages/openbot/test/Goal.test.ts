@@ -3,8 +3,8 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { Effect, Exit, Layer, Match, Stream } from "effect"
 import { LanguageModel, Prompt, Response } from "effect/ai"
-import * as Goal from "../src/goals/Goal.ts"
-import * as GoalPlugin from "../src/goals/GoalPlugin.ts"
+import * as Goal from "../src/plugins/goals/Goal.ts"
+import * as GoalPlugin from "../src/plugins/goals/GoalPlugin.ts"
 import {
 	MemoryPersistence,
 	PluginState,

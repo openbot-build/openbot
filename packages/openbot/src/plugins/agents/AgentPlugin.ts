@@ -17,17 +17,17 @@ import {
 	Stream,
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
-import { Tokens } from "../auth/Tokens.ts"
-import { Gate } from "../capabilities/Gate.ts"
-import { Requests } from "../capabilities/Requests.ts"
-import { Rules } from "../capabilities/Rules.ts"
-import { Work, callerOf } from "../capabilities/Work.ts"
-import { Organization } from "../organization/Organization.ts"
-import * as SessionHost from "../sessions/SessionHost.ts"
-import { AgentMemories } from "./AgentMemories.ts"
-import { Agents } from "./Agents.ts"
-import { Delegations } from "./Delegations.ts"
-import { Signal, Signals } from "./Signals.ts"
+import { Tokens } from "../../auth/Tokens.ts"
+import { Gate } from "../../capabilities/Gate.ts"
+import { Requests } from "../../capabilities/Requests.ts"
+import { Rules } from "../../capabilities/Rules.ts"
+import { Work, callerOf } from "../../capabilities/Work.ts"
+import { Organization } from "../../organization/Organization.ts"
+import * as SessionHost from "../../sessions/SessionHost.ts"
+import { AgentMemories } from "../../agents/AgentMemories.ts"
+import { Agents } from "../../agents/Agents.ts"
+import { Delegations } from "../../agents/Delegations.ts"
+import { Signal, Signals } from "../../agents/Signals.ts"
 
 export const pluginId = Plugin.Id.make("@openbot-build/openbot/agents")
 
@@ -153,7 +153,7 @@ export class AgentPlugin extends Context.Service<
 			>
 		}) => Plugin.Plugin<Tools>
 	}
->()("@openbot-build/openbot/agents/AgentPlugin") {}
+>()("@openbot-build/openbot/plugins/agents/AgentPlugin") {}
 
 const json = (value: unknown): Schema.Json =>
 	JSON.parse(JSON.stringify(value)) as Schema.Json

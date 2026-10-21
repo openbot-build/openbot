@@ -12,8 +12,8 @@ import {
 	Store,
 	TimelineState,
 } from "@openbot-build/core"
-import * as Memory from "../src/memory/Memory.ts"
-import * as MemoryPlugin from "../src/memory/MemoryPlugin.ts"
+import * as Memory from "../src/plugins/memory/Memory.ts"
+import * as MemoryPlugin from "../src/plugins/memory/MemoryPlugin.ts"
 
 const usage = Response.Usage.make({
 	inputTokens: {

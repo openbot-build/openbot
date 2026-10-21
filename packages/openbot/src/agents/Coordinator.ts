@@ -1,6 +1,6 @@
 import { type Item, Session, type Turn } from "@openbot-build/core"
 import { AgentsApi, type Identity, type SessionView } from "@openbot-build/api"
-import type * as AgentMemory from "../memory/AgentMemory.ts"
+import type * as AgentMemory from "../plugins/memory/AgentMemory.ts"
 import {
 	Cause,
 	Duration,
@@ -30,7 +30,7 @@ import {
 import { Organization } from "../organization/Organization.ts"
 import * as SessionHost from "../sessions/SessionHost.ts"
 import { AgentMemories } from "./AgentMemories.ts"
-import { ReportInput, names } from "./AgentPlugin.ts"
+import { ReportInput, names } from "../plugins/agents/AgentPlugin.ts"
 import { Agents } from "./Agents.ts"
 import { Delegations, type Stored as StoredDelegation } from "./Delegations.ts"
 import { Signals, type Signal } from "./Signals.ts"
