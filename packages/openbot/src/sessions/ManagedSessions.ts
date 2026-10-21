@@ -508,23 +508,24 @@ export const make = <
 				.modifyEffect({
 					session: id,
 					expectedRevision: input.expected,
-					update: (view) =>
-						Effect.succeed([
+					update: (view) => {
+						// A `null` title removes the title.
+						const title =
+							input.title === undefined
+								? view.session.metadata.title
+								: (input.title ?? undefined)
+						return Effect.succeed([
 							undefined,
 							Option.some({
 								session: {
 									metadata: {
-										...view.session.metadata,
-										...(input.title === undefined
-											? {}
-											: { title: input.title }),
-										...(input.archived === undefined
-											? {}
-											: { archived: input.archived }),
+										...(title === undefined ? {} : { title }),
+										archived: input.archived ?? view.session.metadata.archived,
 									},
 								},
 							}),
-						] as const),
+						] as const)
+					},
 				})
 				.pipe(
 					Effect.mapError(publicError),
@@ -576,13 +577,12 @@ export const make = <
 								...input.settings,
 								model: yield* validateSelection(input.settings.model),
 							}
+				const title = input.title ?? source.session.metadata.title
 				return yield* store
 					.fork({
 						source: id,
 						...(input.version === undefined ? {} : { version: input.version }),
-						metadata: {
-							title: input.title ?? source.session.metadata.title,
-						},
+						metadata: title === undefined ? {} : { title },
 						...(settings === undefined ? {} : { settings }),
 						// The Fork keeps the OpenBot data of its source, such as the Agent and the
 						// memory switches. It is new direct work, so it has no parent tool call.

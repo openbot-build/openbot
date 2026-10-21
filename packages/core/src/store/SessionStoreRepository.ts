@@ -255,7 +255,7 @@ export const make = <S extends Plugin.Stores>(
 				id: Session.Id.make(id),
 				head,
 				revision: Session.Revision.make(0),
-				metadata: { ...metadata, title: metadata.title ?? "", archived: false },
+				metadata: { ...metadata, archived: false },
 				settings: { mode: "default", ...settings },
 				pending: [],
 				turns: [],

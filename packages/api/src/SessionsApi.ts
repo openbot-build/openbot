@@ -10,6 +10,7 @@ import {
 import * as Memory from "./Memory.ts"
 import { Authorize, GroupRequired, Required, requires } from "./Permissions.ts"
 import { AgentErrors, AgentId, Delegation } from "./AgentsApi.ts"
+import { Name } from "./Name.ts"
 import { Schema } from "effect"
 import { Sse } from "effect/encoding"
 import {
@@ -40,7 +41,7 @@ export const SettingsPatch = Schema.Struct({
 export const CreateSessionRequest = Schema.Struct({
 	/** The Agent that works in the Session. Without it, the Main Agent of the caller works. */
 	agent: Schema.optionalKey(AgentId),
-	title: Schema.optionalKey(Schema.String),
+	title: Schema.optionalKey(Name),
 	settings: Schema.optionalKey(SettingsPatch),
 })
 export type CreateSessionRequest = typeof CreateSessionRequest.Type
@@ -319,12 +320,14 @@ export type SelectSessionModelRequest = typeof SelectSessionModelRequest.Type
 
 export const UpdateSessionRequest = Schema.Struct({
 	expected: Session.Revision,
-	title: Schema.optionalKey(Schema.String),
+	/** A new title. `null` removes the title. */
+	title: Schema.optionalKey(Schema.NullOr(Name)),
 	archived: Schema.optionalKey(Schema.Boolean),
 })
 export const ForkSessionRequest = Schema.Struct({
 	version: Schema.optionalKey(Timeline.VersionId),
-	title: Schema.optionalKey(Schema.String),
+	/** The title of the Fork. Without it, the Fork keeps the title of its source. */
+	title: Schema.optionalKey(Name),
 	settings: Schema.optionalKey(SettingsPatch),
 })
 export const RestoreSessionRequest = Schema.Struct({

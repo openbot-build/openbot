@@ -27,7 +27,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions
 ```
 
-All fields are optional. `agent` is the ID of the Agent that works in the Session. Without it, your [Main Agent](/docs/agents) works in it. You need `agents.delegate` on the Agent. `settings` can hold `mode` and `model`. Without a model, the Session uses the model of the Agent, then the `defaultModel` of the organization. See [Models](/docs/models#choose-a-model). To set the memory switches, see [Memory](/docs/memory#switches). Creating a Session does not call a model.
+All fields are optional. `title` is a short name. OpenBot removes spaces at the start and end. The rest must have 1 to 100 characters. A Session without a title has no `title` field in its `metadata`. `agent` is the ID of the Agent that works in the Session. Without it, your [Main Agent](/docs/agents) works in it. You need `agents.delegate` on the Agent. `settings` can hold `mode` and `model`. Without a model, the Session uses the model of the Agent, then the `defaultModel` of the organization. See [Models](/docs/models#choose-a-model). To set the memory switches, see [Memory](/docs/memory#switches). Creating a Session does not call a model.
 OpenBot returns `201` with the Session view. Here is a short form of it:
 
 ```json
@@ -84,6 +84,8 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -d '{"expected":3,"title":"Trip to Rome","archived":true}' \
   https://api.example.com/v1/sessions/$SESSION
 ```
+
+`expected` is the current `revision` of the Session. `title` follows the same rules as when you create a Session. Send `"title": null` to remove the title. Leave out a field to keep its value.
 
 `DELETE /v1/sessions/:sessionId` removes the Session and returns `204`. Its [Session Agents](/docs/agents#three-kinds-of-agents) are archived. If a Turn runs, OpenBot returns `409` with `SessionBusy`.
 
@@ -272,7 +274,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions/$SESSION/fork
 ```
 
-All fields are optional: `version`, `title` and `settings`. Without `version`, the Fork starts from the latest complete point. OpenBot returns `201` with the new Session view. Its `session.forkedFrom` names the source Session and Version.
+All fields are optional: `version`, `title` and `settings`. Without `title`, the Fork keeps the title of its source. Without `version`, the Fork starts from the latest complete point. OpenBot returns `201` with the new Session view. Its `session.forkedFrom` names the source Session and Version.
 
 To find Versions, use `GET /v1/sessions/:sessionId/versions`. To see the history at one Version, use `GET /v1/sessions/:sessionId/history?version=<versionId>`.
 

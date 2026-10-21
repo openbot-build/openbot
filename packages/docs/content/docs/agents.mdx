@@ -37,13 +37,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/agents
 ```
 
-| Field          | Meaning                                                                             |
-| -------------- | ----------------------------------------------------------------------------------- |
-| `name`         | Required. A short name, up to 100 characters.                                       |
-| `role`         | Required. What the Agent does, in one line. Other Agents read it to choose workers. |
-| `instructions` | Required. The lasting instructions of the Agent, like a job description.            |
-| `model`        | Optional. The default model for new Sessions of this Agent.                         |
-| `shared`       | Optional. `true` makes an organization Agent that every member can use.             |
+| Field          | Meaning                                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------------------------------ |
+| `name`         | Required. A short name. OpenBot removes spaces at the start and end. The rest must have 1 to 100 characters. |
+| `role`         | Required. What the Agent does, in one line. Other Agents read it to choose workers.                          |
+| `instructions` | Required. The lasting instructions of the Agent, like a job description.                                     |
+| `model`        | Optional. The default model for new Sessions of this Agent.                                                  |
+| `shared`       | Optional. `true` makes an organization Agent that every member can use.                                      |
 
 OpenBot returns `201` with the Agent:
 
@@ -77,7 +77,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/agents/$AGENT
 ```
 
-`expected` is the current `revision`. You can change `name`, `role`, `instructions`, `model` (send `null` to remove it) and `archived`. The Main Agent cannot be archived.
+`expected` is the current `revision`. You can change `name` (with the same rules as above), `role`, `instructions`, `model` (send `null` to remove it) and `archived`. The Main Agent cannot be archived.
 
 ## Promote a Session Agent
 

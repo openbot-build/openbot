@@ -7,6 +7,7 @@ import {
 } from "./Permissions.ts"
 import { Config, Item, Session, Turn } from "@openbot-build/core"
 import * as AgentMemory from "./AgentMemory.ts"
+import { Name } from "./Name.ts"
 import { Schema } from "effect"
 import {
 	HttpApi,
@@ -54,7 +55,6 @@ export const Agent = Schema.Struct({
 })
 export type Agent = typeof Agent.Type
 
-const Name = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100))
 const Text = Schema.String.check(Schema.isMaxLength(20000))
 
 export const CreateAgentRequest = Schema.Struct({

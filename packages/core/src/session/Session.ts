@@ -20,7 +20,8 @@ import type * as ContextCompaction from "../context/ContextCompaction.ts"
 export { Id, Revision } from "./SessionIdentity.ts"
 
 export const Metadata = Schema.Struct({
-	title: Schema.String,
+	/** A Session without a title has no `title`. */
+	title: Schema.optionalKey(Schema.String),
 	archived: Schema.Boolean,
 })
 export type Metadata = typeof Metadata.Type
