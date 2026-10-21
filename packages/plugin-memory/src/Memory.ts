@@ -100,6 +100,14 @@ export class MemoryPolicy extends Context.Service<
 	}
 >()("@openbot-build/plugin-memory/Memory/MemoryPolicy") {}
 
+/** The memory switches for one Turn. The host decides their values. */
+export interface Settings {
+	/** Add the active entries to the model instructions. */
+	readonly use: boolean
+	/** Learn new entries after the Turn completes. */
+	readonly generate: boolean
+}
+
 export interface Options {
 	readonly model?: typeof MemoryModel.Service
 	readonly policy?: typeof MemoryPolicy.Service

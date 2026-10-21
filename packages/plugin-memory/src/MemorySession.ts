@@ -22,7 +22,6 @@ export interface Operations {
 	) => Effect.Effect<Session.View<Memory.Values>, Error>
 	readonly consolidate: (
 		session: Session.Id,
-		options?: { readonly enabled?: boolean },
 	) => Effect.Effect<
 		Session.View<Memory.Values>,
 		Session.RuntimeError | Memory.MemoryError,

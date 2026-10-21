@@ -2,6 +2,7 @@ import { Array as A, Clock, Effect, Match, Option, Record } from "effect"
 import { Item, type Session } from "@openbot-build/core"
 import { Prompt } from "effect/ai"
 import * as Memory from "./Memory.ts"
+import * as MemoryConsolidation from "./MemoryConsolidation.ts"
 import type * as MemorySession from "./MemorySession.ts"
 
 /** The store field is optional. A Session without memory starts empty. */
@@ -16,46 +17,38 @@ export const make = (input: {
 	const { store, model, policy } = input
 	const read: MemorySession.Operations["read"] = (session) =>
 		store.read(session).pipe(Effect.map(stateOf))
-	const consolidate: MemorySession.Operations["consolidate"] = (
-		session,
-		options,
-	) =>
+	const consolidate: MemorySession.Operations["consolidate"] = (session) =>
 		Effect.gen(function* () {
-			const view = yield* store.read(session),
-				state = stateOf(view)
-			const history = view.state.value.conversation.history.filter(
-				(entry) => !state.processed.includes(entry.id),
-			)
-			if (
-				(options?.enabled ?? view.session.settings.memoryGenerationEnabled) ===
-					false ||
-				history.length === 0
-			)
-				return view
-			const request = {
-				state,
-				history,
-			}
-			const extracted = yield* model.extract(request)
-			const memory = yield* policy.apply({
-				...request,
-				changes: extracted.changes,
-				now: yield* Clock.currentTimeMillis,
+			const view = yield* store.read(session)
+			if (view.session.settings.memoryGenerationEnabled === false) return view
+			const changed = yield* MemoryConsolidation.run({
+				model,
+				policy,
+				state: stateOf(view),
+				history: view.state.value.conversation.history,
+				update: (apply) =>
+					store
+						.modifyEffect({
+							session,
+							update: (current) =>
+								apply(stateOf(current)).pipe(
+									Effect.map(
+										(memory) =>
+											[
+												undefined,
+												Option.some({
+													value: {
+														...current.state.value,
+														"@openbot-build/plugin-memory": memory,
+													},
+												}),
+											] as const,
+									),
+								),
+						})
+						.pipe(Effect.map((changed) => changed.view)),
 			})
-			return (yield* store.modifyEffect({
-				session,
-				expectedHead: view.session.head,
-				update: (current) =>
-					Effect.succeed([
-						undefined,
-						Option.some({
-							value: {
-								...current.state.value,
-								"@openbot-build/plugin-memory": memory,
-							},
-						}),
-					] as const),
-			})).view
+			return Option.getOrElse(changed, () => view)
 		})
 	const update: MemorySession.Operations["update"] = (base, command) =>
 		store

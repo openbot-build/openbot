@@ -54,7 +54,9 @@ Retracted facts are not sent. `memoryEnabled` is `true` for a new Session.
 
 ### After a Turn
 
-When a Turn completes, Platform consolidates memory. To consolidate means to read the new Items and update the list of facts. Platform asks the Turn's model to find facts worth keeping. The model must name the source Items for each change.
+When a Turn completes, Platform consolidates memory. To consolidate means to read the new Items and update the list of facts. This also happens when a Turn completes after an approval. Platform asks the Turn's model to find facts worth keeping. The model must name the source Items for each change.
+Platform applies the changes to the newest memory. So an edit that you make while the model works is kept.
+A Turn that only runs an App action does not change memory, because no model runs in it.
 
 Platform checks these rules for every change:
 
