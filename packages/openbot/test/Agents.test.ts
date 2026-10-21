@@ -15,7 +15,12 @@ const usage = {
 }
 
 /** Agent IDs that the scripted model needs. The test fills them in. */
-const known: { programmer?: string; helper?: string } = {}
+const known: {
+	programmer?: string
+	helper?: string
+	worker?: string
+	scout?: string
+} = {}
 
 const textOf = (message: Prompt.Message) =>
 	typeof message.content === "string"
@@ -132,6 +137,30 @@ const model = Effect.runSync(
 								summary: "Helper confirmed it",
 							})
 				}
+				if (name === "Worker") {
+					if (input.includes("spawn a scout"))
+						return has(names.spawn)
+							? answer("Started.")
+							: call(names.spawn, {
+									name: "Scout",
+									role: "Looks around",
+									instructions: "Look around, then report.",
+									reason: "This Session needs a scout.",
+								})
+					if (input.includes("promote the scout"))
+						return has(names.promote)
+							? answer("Promoted.")
+							: call(names.promote, {
+									agent: known.scout,
+									reason: "The scout is useful later too.",
+								})
+					return has(names.report)
+						? answer("Reported.")
+						: call(names.report, {
+								status: "completed",
+								summary: "Worker did it",
+							})
+				}
 				const done = results.at(-1)
 				if (done !== undefined)
 					return answer("Main got: " + JSON.stringify(done.result))
@@ -140,6 +169,21 @@ const model = Effect.runSync(
 						agent: known.programmer,
 						reason: "Code work needs the Programmer.",
 						task: "Write the change.",
+						userRequest: input,
+						expectedOutput: "A short summary.",
+					})
+				if (input.includes("create a worker"))
+					return call(names.create, {
+						name: "Worker",
+						role: "Does work",
+						instructions: "Do the work, then report.",
+						reason: "I need a lasting worker.",
+					})
+				if (input.includes("delegate to worker"))
+					return call(names.delegate, {
+						agent: known.worker,
+						reason: "The Worker does this work.",
+						task: "Do the work.",
 						userRequest: input,
 						expectedOutput: "A short summary.",
 					})
@@ -470,6 +514,7 @@ test(
 				_tag: "Session",
 				userId: alice.identity.userId,
 				session: created.session.id,
+				agent: main.id,
 			})
 			known.helper = helper.id
 
@@ -640,6 +685,205 @@ test(
 			)
 			await run("confirm directly")
 			assert.equal(host.toolCalls(), before + 2)
+		} finally {
+			await host.close()
+		}
+	},
+)
+
+test(
+	"an Agent makes lasting Agents that it owns, and their requests go up the owner chain",
+	{ timeout: 120000 },
+	async () => {
+		const host = await BrowserHost.start({ publicOrigin, model })
+		try {
+			const { send, json, until } = client(host)
+			const dave = await host.login("agents-dave")
+			const main = (
+				await json(
+					Schema.Array(AgentsApi.Agent),
+					send(dave.session, "/v1/agents"),
+				)
+			)[0]!
+			const open = async (agent?: string) => {
+				const created = await json(
+					SessionView,
+					send(
+						dave.session,
+						"/v1/sessions",
+						"POST",
+						agent === undefined ? {} : { agent },
+					),
+				)
+				const path = "/v1/sessions/" + created.session.id
+				const view = () => json(SessionView, send(dave.session, path))
+				return {
+					id: created.session.id,
+					turn: async (input: string) => {
+						const current = await view()
+						const started = await send(dave.session, path + "/turns", "POST", {
+							expected: current.session.revision,
+							input,
+						})
+						assert.equal(started.status, 202, await started.clone().text())
+					},
+					completed: () =>
+						until("the Turn completes", async () => {
+							const current = await view()
+							return Session.status(current.session)._tag === "Completed"
+								? current
+								: undefined
+						}),
+				}
+			}
+			const pendingFor = (
+				check: (request: RequestsApi.CapabilityRequest) => boolean,
+			) =>
+				until("a pending request", async () =>
+					(
+						await json(
+							Schema.Array(RequestsApi.CapabilityRequest),
+							send(dave.session, "/v1/requests?status=pending"),
+						)
+					).find(check),
+				)
+			const allow = (request: RequestsApi.CapabilityRequest) =>
+				json(
+					RequestsApi.CapabilityRequest,
+					send(dave.session, "/v1/requests/" + request.id, "POST", {
+						expected: request.revision,
+						decision: "allow",
+					}),
+				)
+			const agent = (id: string) =>
+				json(AgentsApi.Agent, send(dave.session, "/v1/agents/" + id))
+			const ownedBy = (id: string) =>
+				json(
+					Schema.Array(AgentsApi.Agent),
+					send(dave.session, "/v1/agents?agent=" + id),
+				)
+
+			// Main makes a lasting Agent. Main is at the top, so the person decides.
+			const mainSession = await open()
+			await mainSession.turn("create a worker")
+			const create = await pendingFor(
+				(request) => request.capability.action === "agents.create",
+			)
+			assert.deepEqual(create.approver, {
+				_tag: "Person",
+				userId: dave.identity.userId,
+			})
+			assert.deepEqual(create.chain, [main.id])
+			await allow(create)
+			await mainSession.completed()
+			const owned = await ownedBy(main.id)
+			assert.equal(owned.length, 1)
+			const worker = owned[0]!
+			assert.equal(worker.kind, "persistent")
+			assert.deepEqual(worker.owner, {
+				_tag: "Agent",
+				agent: main.id,
+				userId: dave.identity.userId,
+			})
+			known.worker = worker.id
+
+			// Main gives work to the Agent it owns without a request.
+			await mainSession.turn("delegate to worker")
+			const delegated = await mainSession.completed()
+			assert.match(JSON.stringify(delegated.response?.output), /Worker did it/)
+
+			// The person works with the Worker directly. Its owner, Main, still decides first.
+			const workerSession = await open(worker.id)
+			await workerSession.turn("spawn a scout")
+			const passedUp = await pendingFor(
+				(request) =>
+					request.capability.action === "agents.spawn" &&
+					request.endorsements.length === 1,
+			)
+			assert.equal(passedUp.agent, worker.id)
+			assert.deepEqual(passedUp.chain, [main.id, worker.id])
+			assert.equal(passedUp.endorsements[0]?.agent, main.id)
+			assert.deepEqual(passedUp.approver, {
+				_tag: "Person",
+				userId: dave.identity.userId,
+			})
+			await allow(passedUp)
+			await workerSession.completed()
+			const scouts = await json(
+				Schema.Array(AgentsApi.Agent),
+				send(dave.session, "/v1/agents?session=" + workerSession.id),
+			)
+			assert.equal(scouts.length, 1)
+			const scout = scouts[0]!
+			assert.deepEqual(scout.owner, {
+				_tag: "Session",
+				userId: dave.identity.userId,
+				session: workerSession.id,
+				agent: worker.id,
+			})
+			known.scout = scout.id
+
+			// The Worker promotes its Session Agent to a lasting Agent that it owns.
+			await workerSession.turn("promote the scout")
+			const promote = await pendingFor(
+				(request) =>
+					request.capability.action === "agents.promote" &&
+					request.endorsements.length === 1,
+			)
+			assert.deepEqual(promote.capability, {
+				action: "agents.promote",
+				target: scout.id,
+			})
+			await allow(promote)
+			await workerSession.completed()
+			const promoted = await agent(scout.id)
+			assert.equal(promoted.kind, "persistent")
+			assert.deepEqual(promoted.owner, {
+				_tag: "Agent",
+				agent: worker.id,
+				userId: dave.identity.userId,
+			})
+			assert.deepEqual(
+				(await ownedBy(worker.id)).map((entry) => entry.id),
+				[scout.id],
+			)
+
+			// A person can make an owned Agent too, but not a shared one.
+			const mixed = await send(dave.session, "/v1/agents", "POST", {
+				name: "Mixed",
+				role: "Nothing",
+				instructions: "Nothing.",
+				shared: true,
+				agent: main.id,
+			})
+			assert.equal(mixed.status, 400)
+			const second = await json(
+				AgentsApi.Agent,
+				send(dave.session, "/v1/agents", "POST", {
+					name: "Second",
+					role: "Helps the Worker",
+					instructions: "Help.",
+					agent: worker.id,
+				}),
+			)
+			assert.deepEqual(second.owner, {
+				_tag: "Agent",
+				agent: worker.id,
+				userId: dave.identity.userId,
+			})
+
+			// Archiving the Worker archives every Agent below it.
+			const current = await agent(worker.id)
+			await json(
+				AgentsApi.Agent,
+				send(dave.session, "/v1/agents/" + worker.id, "PATCH", {
+					expected: current.revision,
+					archived: true,
+				}),
+			)
+			assert.equal((await agent(scout.id)).archived, true)
+			assert.equal((await agent(second.id)).archived, true)
+			assert.equal((await agent(main.id)).archived, false)
 		} finally {
 			await host.close()
 		}

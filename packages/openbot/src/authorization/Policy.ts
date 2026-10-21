@@ -52,22 +52,47 @@ export const resourceKey = (target: {
 }
 
 /**
- * The key of one Agent. Shared Agents are below the organization.
- * The Agents of a member, and the Session Agents in their Sessions, are below that member.
+ * The member at the top of the owner tree of an Agent.
+ * It is `null` when the organization owns the Agent at the top.
+ */
+export const rootOf = (owner: AgentsApi.AgentOwner): string | null => {
+	switch (owner._tag) {
+		case "Organization":
+			return null
+		case "Member":
+		case "Session":
+		case "Agent":
+			return owner.userId
+	}
+}
+
+/** The place for the Agents of a member, or for shared Agents when `root` is `null`. */
+export const agentPlace = ({
+	organizationId,
+	root,
+}: {
+	readonly organizationId: string
+	readonly root: string | null
+}) =>
+	(root === null
+		? organizationKey(organizationId)
+		: userKey({ organizationId, userId: root })) + ".agent"
+
+/**
+ * The key of one Agent. Shared Agents, and the Agents below them, are below the organization.
+ * The other Agents are below the member at the top of their owner tree.
  */
 export const agentKey = (agent: {
 	readonly organizationId: string
 	readonly id: string
 	readonly owner: AgentsApi.AgentOwner
 }) =>
-	agent.owner._tag === "Organization"
-		? organizationKey(agent.organizationId) + ".agent." + segment(agent.id)
-		: userKey({
-				organizationId: agent.organizationId,
-				userId: agent.owner.userId,
-			}) +
-			".agent." +
-			segment(agent.id)
+	agentPlace({
+		organizationId: agent.organizationId,
+		root: rootOf(agent.owner),
+	}) +
+	"." +
+	segment(agent.id)
 
 /** Put the organization and the user of the caller into a resource pattern. */
 export const expand = ({

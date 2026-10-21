@@ -11,29 +11,55 @@ import { Rules, deciderKey } from "./Rules.ts"
 type Request = RequestsApi.CapabilityRequest
 type Approver = Request["approver"]
 
-/** A request as it is stored: the public record and the chain it came through. */
+/**
+ * A request as it is stored: the public record and the delegation chain it came through.
+ * The deciders are the owner chain in `request.chain`.
+ */
 export const Stored = Schema.Struct({
 	request: RequestsApi.CapabilityRequest,
 	chain: Chain,
 })
 export type Stored = typeof Stored.Type
 
-/** The decider above an Agent in a chain: the Agent before it, or the person at the top. */
+/**
+ * The decider above an Agent in its owner chain: the Agent before it,
+ * or the person at the top.
+ */
 export const superior = ({
+	deciders,
+	userId,
+	agent,
+}: {
+	readonly deciders: ReadonlyArray<AgentsApi.AgentId>
+	readonly userId: string
+	readonly agent: string
+}): Approver => {
+	const index = deciders.indexOf(agent as AgentsApi.AgentId)
+	return index > 0
+		? { _tag: "Agent", agent: deciders[index - 1]! }
+		: { _tag: "Person", userId }
+}
+
+const above = (stored: Stored, agent: string) =>
+	superior({
+		deciders: stored.request.chain,
+		userId: stored.chain.userId,
+		agent,
+	})
+
+/**
+ * The Session where an Agent of the delegation chain works. The last Agent works in `current`.
+ * A decider outside the delegation chain gets `current` too.
+ */
+export const sessionOf = ({
 	chain,
 	agent,
+	current,
 }: {
 	readonly chain: Chain
 	readonly agent: string
-}): Approver => {
-	const index = chain.agents.indexOf(agent as AgentsApi.AgentId)
-	return index > 0
-		? { _tag: "Agent", agent: chain.agents[index - 1]! }
-		: { _tag: "Person", userId: chain.userId }
-}
-
-/** The Session where an Agent of the chain works. The last Agent works in `current`. */
-const sessionOf = (chain: Chain, agent: string, current: Session.Id) => {
+	readonly current: Session.Id
+}) => {
 	const index = chain.agents.indexOf(agent as AgentsApi.AgentId)
 	return index >= 0 && index < chain.sessions.length
 		? chain.sessions[index]!
@@ -75,6 +101,8 @@ export class Requests extends Context.Service<
 			input: {
 				readonly agent: AgentsApi.AgentId
 				readonly chain: Chain
+				/** The owner chain of the Agent, from the top, ending with the Agent. */
+				readonly deciders: ReadonlyArray<AgentsApi.AgentId>
 				readonly capability: AgentsApi.Capability
 				readonly reason: string
 				readonly session: Session.Id
@@ -227,7 +255,11 @@ export const make: Effect.Effect<
 						scope: giver.scope,
 						...(giver.scope === "session"
 							? {
-									session: sessionOf(stored.chain, agent, request.session),
+									session: sessionOf({
+										chain: stored.chain,
+										agent,
+										current: request.session,
+									}),
 								}
 							: {}),
 						grantedBy: giver.by,
@@ -299,7 +331,7 @@ export const make: Effect.Effect<
 											: { reason: decision.reason }),
 									},
 								],
-								approver: superior({ chain: stored.chain, agent }),
+								approver: above(stored, agent),
 								revision: request.revision + 1,
 							},
 						}),
@@ -386,8 +418,12 @@ export const make: Effect.Effect<
 						agent: input.agent,
 						capability: input.capability,
 						reason: input.reason,
-						approver: superior({ chain: input.chain, agent: input.agent }),
-						chain: input.chain.agents,
+						approver: superior({
+							deciders: input.deciders,
+							userId: input.chain.userId,
+							agent: input.agent,
+						}),
+						chain: input.deciders,
 						session: input.session,
 						turn: input.turn,
 						toolCallId: input.toolCallId,
@@ -439,7 +475,7 @@ export const make: Effect.Effect<
 							...stored,
 							request: {
 								...stored.request,
-								approver: superior({ chain: stored.chain, agent: from }),
+								approver: above(stored, from),
 								revision: stored.request.revision + 1,
 							},
 						}),

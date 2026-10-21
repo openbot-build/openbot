@@ -12,15 +12,17 @@ This page shows the Agent tools, the brief and the result, and how to watch dele
 
 OpenBot gives every Agent these tools:
 
-| Tool                          | What it does                                                                            |
-| ----------------------------- | --------------------------------------------------------------------------------------- |
-| `openbot_list_agents`         | Lists the Agents it can give work to, with their roles. It includes its Session Agents. |
-| `openbot_agent_details`       | Reads the role and instructions of one Agent.                                           |
-| `openbot_delegate`            | Gives a task to another Agent and waits for the result.                                 |
-| `openbot_start_session_agent` | Starts a new [Session Agent](/docs/agents#three-kinds-of-agents) for its Session.       |
-| `openbot_report`              | Only in delegated work. Sends the result back.                                          |
+| Tool                          | What it does                                                                                               |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `openbot_list_agents`         | Lists the Agents it can give work to, with their roles. It includes its Session Agents.                    |
+| `openbot_agent_details`       | Reads the role and instructions of one Agent.                                                              |
+| `openbot_delegate`            | Gives a task to another Agent and waits for the result.                                                    |
+| `openbot_start_session_agent` | Starts a new [Session Agent](/docs/agents#three-kinds-of-agents) for its Session.                          |
+| `openbot_create_agent`        | Makes a new lasting Agent that it owns. See [Agents that own Agents](/docs/agents#agents-that-own-agents). |
+| `openbot_promote_agent`       | Makes a Session Agent of its Session a lasting Agent that it owns.                                         |
+| `openbot_report`              | Only in delegated work. Sends the result back.                                                             |
 
-The first time an Agent gives work to another lasting Agent, or starts a Session Agent, the decider above it must agree. See [Requests](/docs/requests). An Agent can always give work to the Session Agents that it started.
+The first time an Agent gives work to another lasting Agent, starts a Session Agent, makes an Agent or promotes one, the decider above it must agree. See [Requests](/docs/requests). An Agent can always give work to the Session Agents of its Session and to the Agents that it owns.
 
 ---
 

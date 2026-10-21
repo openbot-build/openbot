@@ -10,12 +10,14 @@ This page shows how the check works, how a person answers requests, and what eac
 
 ## Capabilities
 
-| Action            | Target                     | When an Agent uses it                               |
-| ----------------- | -------------------------- | --------------------------------------------------- |
-| `apps.call`       | `<connection>/<tool name>` | It calls an App tool.                               |
-| `tools.call`      | The tool name              | It calls a tool of the host that asks for approval. |
-| `agents.delegate` | The ID of the other Agent  | It gives work to another lasting Agent.             |
-| `agents.spawn`    | `*`                        | It starts a Session Agent.                          |
+| Action            | Target                      | When an Agent uses it                                  |
+| ----------------- | --------------------------- | ------------------------------------------------------ |
+| `apps.call`       | `<connection>/<tool name>`  | It calls an App tool.                                  |
+| `tools.call`      | The tool name               | It calls a tool of the host that asks for approval.    |
+| `agents.delegate` | The ID of the other Agent   | It gives work to another lasting Agent.                |
+| `agents.spawn`    | `*`                         | It starts a Session Agent.                             |
+| `agents.create`   | `*`                         | It makes a lasting Agent that it owns.                 |
+| `agents.promote`  | The ID of the Session Agent | It makes a Session Agent a lasting Agent that it owns. |
 
 Each capability tool takes a `reason`. App tools get an extra `openbot_reason` parameter for it. OpenBot never sends it to the App.
 
@@ -28,15 +30,22 @@ OpenBot checks each attempt in this order. The first step that decides wins.
 1. **The policy of the member.** An Agent never does more than the member it works for. If the [permissions](/docs/permissions) of the member, or of the token that started the work, do not allow it, the call is denied. This is never sent to a decider.
 2. **Grants.** A [Grant](/docs/rules#grants) is a kept decision. A deny Grant wins over an allow Grant.
 3. **Rules.** A judge model reads the [Rules](/docs/rules) for this Agent in plain language. Only a Rule that the judge quotes can allow or deny.
-4. **The decider above.** OpenBot makes a request. The decider is the Agent that gave this Agent its work. For the first Agent of the work, the decider is the person.
+4. **The decider above.** OpenBot makes a request. The decider is the owner of the Agent in its owner chain. For a Main Agent, the decider is the person.
 
-Some calls need no decision: tool calls that the organization marks as reads, and work for Session Agents that the Agent started itself.
+Some calls need no decision: tool calls that the organization marks as reads, work for the Session Agents of the same Session, and work for the Agents that the Agent owns.
 
 When any check fails, the call waits. It never runs without a decision.
 
 ### The chain of deciders
 
-Work goes down a chain, such as **person → Main → Programmer → Session Agent**. A request from the Session Agent goes to the Programmer first.
+Every Agent has an **owner chain**. It goes from the person, through a Main Agent, down to the Agent, such as **person → Main → Programmer → Session Agent**. The steps are:
+
+- A Session Agent belongs to the Agent of its Session.
+- An Agent that an Agent owns belongs to that Agent.
+- Other lasting Agents and shared Agents belong to the Main Agent of the person who works with them.
+- A Main Agent belongs to its person.
+
+A request goes up the owner chain, not the way the work came. So a request from the Session Agent goes to the Programmer first, also when a person gives work to the Session Agent directly. `chain` in a request lists the owner chain from the top, and ends with the Agent that asks. Archived Agents are left out.
 
 A decider can only allow what it may do itself. If the Programmer agrees but does not hold the capability, the request goes up to Main with the support of the Programmer, and then to the person. When someone above allows it, each Agent on the way gets a Grant, with the scope that it chose.
 

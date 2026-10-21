@@ -4,7 +4,7 @@ import type { Config, Session } from "@openbot-build/core"
 import { AgentsApi, type Caller, Permissions } from "@openbot-build/api"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { can } from "../authorization/Check.ts"
-import { agentKey } from "../authorization/Policy.ts"
+import { agentKey, rootOf } from "../authorization/Policy.ts"
 import { AgentRecords, type Keys } from "./AgentRecords.ts"
 
 type Agent = AgentsApi.Agent
@@ -49,17 +49,37 @@ export class Agents extends Context.Service<
 		) => Effect.Effect<Agent, Failure, AuthorizationServices>
 		readonly list: (
 			caller: Caller,
-			input: { readonly archived?: boolean; readonly session?: Session.Id },
+			input: {
+				readonly archived?: boolean
+				readonly session?: Session.Id
+				readonly agent?: AgentId
+			},
 		) => Effect.Effect<ReadonlyArray<Agent>, Failure, AuthorizationServices>
 		readonly create: (
 			caller: Caller,
 			input: AgentsApi.CreateAgentRequest,
 		) => Effect.Effect<Agent, Failure, AuthorizationServices>
+		/**
+		 * Makes a lasting Agent that another Agent owns. An Agent uses it with a tool.
+		 * The capability gate checks it first, so it checks no permission itself.
+		 */
+		readonly createOwned: (
+			organizationId: string,
+			owner: Agent,
+			input: {
+				readonly name: string
+				readonly role: string
+				readonly instructions: string
+				readonly model?: Config.Selection
+			},
+		) => Effect.Effect<Agent, AgentsApi.AgentStorageUnavailable>
 		/** Makes a Session Agent. The Session owns it, and it lives as long as the Session. */
 		readonly createSessionAgent: (
 			subject: Subject,
 			input: {
 				readonly session: Session.Id
+				/** The Agent of the Session. */
+				readonly agent: AgentId
 				readonly name: string
 				readonly role: string
 				readonly instructions: string
@@ -71,28 +91,41 @@ export class Agents extends Context.Service<
 			id: string,
 			input: AgentsApi.UpdateAgentRequest,
 		) => Effect.Effect<Agent, Failure, AuthorizationServices>
-		/** Changes the owner of a Session Agent to the member of its Session. */
+		/**
+		 * Makes a Session Agent a lasting Agent.
+		 * The owner is the Agent `owner`, or the member of its Session without it.
+		 */
 		readonly promote: (
 			caller: Caller,
 			id: string,
 			expected: number,
+			owner?: AgentId,
 		) => Effect.Effect<Agent, Failure, AuthorizationServices>
+		/**
+		 * The deciders of an Agent: its owner chain from the top, ending with the Agent.
+		 * The top is the Main Agent of a member. Archived Agents are left out.
+		 * `subject` is the member who works with the Agent now.
+		 */
+		readonly ownerChain: (
+			subject: Subject,
+			agent: Agent,
+		) => Effect.Effect<
+			ReadonlyArray<AgentId>,
+			AgentsApi.AgentStorageUnavailable
+		>
 		/** The Session Agents that a Session owns. */
 		readonly ownedBy: (
 			subject: Subject,
 			session: Session.Id,
 		) => Effect.Effect<ReadonlyArray<Agent>, AgentsApi.AgentStorageUnavailable>
-		/** Archives the Session Agents of a Session, for example when the Session goes away. */
+		/**
+		 * Archives the Session Agents of a Session, for example when the Session goes away.
+		 * The Agents that they own are archived too.
+		 */
 		readonly archiveOwnedBy: (
 			subject: Subject,
 			session: Session.Id,
 		) => Effect.Effect<ReadonlyArray<Agent>, AgentsApi.AgentStorageUnavailable>
-		/** Copies a Session Agent for another Session, so that a Fork has its own Session Agent. */
-		readonly copyFor: (
-			subject: Subject,
-			agent: Agent,
-			session: Session.Id,
-		) => Effect.Effect<Agent, AgentsApi.AgentStorageUnavailable>
 	}
 >()("@openbot-build/openbot/agents/Agents") {}
 
@@ -107,8 +140,13 @@ type RecordStatus = typeof RecordStatus.Type
 const keys = (organizationId: string, agent: Agent): Keys<RecordStatus> => ({
 	organizationId,
 	id: agent.id,
-	owner: agent.owner._tag === "Organization" ? "" : agent.owner.userId,
-	scope: agent.owner._tag === "Session" ? agent.owner.session : "",
+	owner: rootOf(agent.owner) ?? "",
+	scope:
+		agent.owner._tag === "Session"
+			? agent.owner.session
+			: agent.owner._tag === "Agent"
+				? agent.owner.agent
+				: "",
 	status: agent.archived ? "archived" : agent.kind,
 })
 
@@ -177,7 +215,10 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 			id: string,
 			permission: Permissions.PermissionGroupId,
 			expected: number,
-			update: (agent: Agent, now: number) => Effect.Effect<Agent, Failure>,
+			update: (
+				agent: Agent,
+				now: number,
+			) => Effect.Effect<Agent, Failure, AuthorizationServices>,
 		) =>
 			records.transaction(
 				"agent:" + caller.organizationId + ":" + id,
@@ -196,12 +237,143 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 					})
 				}),
 			)
+		const visible = (caller: Caller, list: ReadonlyArray<Agent>) =>
+			Effect.filter(list, (agent) =>
+				can({
+					caller,
+					permission: "agents.read",
+					key: agentKey({ ...agent, organizationId: caller.organizationId }),
+				}),
+			)
+		/** Archives Agents and every Agent below them in the owner tree. */
+		const archiveTree = (
+			organizationId: string,
+			list: ReadonlyArray<Agent>,
+			now: number,
+		): Effect.Effect<ReadonlyArray<Agent>, AgentsApi.AgentStorageUnavailable> =>
+			Effect.gen(function* () {
+				if (list.length === 0) return []
+				const archived = yield* Effect.forEach(list, (agent) =>
+					agent.archived
+						? Effect.succeed(agent)
+						: put(organizationId, {
+								...agent,
+								archived: true,
+								revision: agent.revision + 1,
+								updatedAt: now,
+							}),
+				)
+				const below = yield* Effect.forEach(list, (agent) =>
+					agents.list(organizationId, { scope: agent.id }),
+				)
+				return [
+					...archived,
+					...(yield* archiveTree(
+						organizationId,
+						below.flat().filter((agent) => agent.owner._tag === "Agent"),
+						now,
+					)),
+				]
+			})
+		/** The Agent that decides above an Agent, or none for a Main Agent. */
+		const above = (subject: Subject, agent: Agent) => {
+			switch (agent.owner._tag) {
+				case "Agent":
+				case "Session":
+					return find(subject.organizationId, agent.owner.agent)
+				case "Member":
+					return agent.kind === "main"
+						? Effect.succeedNone
+						: ensureMain({
+								organizationId: subject.organizationId,
+								userId: agent.owner.userId,
+							}).pipe(Effect.asSome)
+				case "Organization":
+					return ensureMain(subject).pipe(Effect.asSome)
+			}
+		}
+		const climb = (
+			subject: Subject,
+			from: Agent,
+			chain: ReadonlyArray<AgentId>,
+			seen: ReadonlyArray<AgentId>,
+		): Effect.Effect<
+			ReadonlyArray<AgentId>,
+			AgentsApi.AgentStorageUnavailable
+		> =>
+			above(subject, from).pipe(
+				Effect.flatMap((next) => {
+					// A loop can only come from broken records. It must not hang the work.
+					if (Option.isNone(next) || seen.includes(next.value.id))
+						return Effect.succeed(chain)
+					const agent = next.value
+					return climb(
+						subject,
+						agent,
+						agent.archived ? chain : [agent.id, ...chain],
+						[...seen, agent.id],
+					)
+				}),
+			)
+		/** The owner of an Agent that the Agent `owner` owns. */
+		const ownerFor = (owner: Agent): Agent["owner"] => ({
+			_tag: "Agent",
+			agent: owner.id,
+			userId: rootOf(owner.owner),
+		})
+		const fresh = (input: {
+			readonly owner: Agent["owner"]
+			readonly name: string
+			readonly role: string
+			readonly instructions: string
+			readonly model?: Config.Selection
+			readonly kind: "persistent" | "session"
+			readonly now: number
+		}): Agent => ({
+			id: AgentsApi.AgentId.make(newId()),
+			kind: input.kind,
+			owner: input.owner,
+			name: input.name,
+			role: input.role,
+			instructions: input.instructions,
+			...(input.model === undefined ? {} : { model: input.model }),
+			archived: false,
+			revision: 0,
+			createdAt: input.now,
+			updatedAt: input.now,
+		})
+		const writable = (caller: Caller, agent: Agent) =>
+			Effect.gen(function* () {
+				const key = agentKey({
+					...agent,
+					organizationId: caller.organizationId,
+				})
+				if (!(yield* can({ caller, permission: "agents.write", key })))
+					return yield* Permissions.PermissionDenied.make({
+						permission: "agents.write",
+						resource: key,
+					})
+			})
 		return Agents.of({
 			ensureMain,
 			find,
 			access,
 			list: (caller, input) =>
 				Effect.gen(function* () {
+					if (input.agent !== undefined) {
+						yield* access(caller, input.agent, "agents.read")
+						const below = yield* agents.list(caller.organizationId, {
+							scope: input.agent,
+						})
+						return (yield* visible(
+							caller,
+							below.filter((agent) => agent.owner._tag === "Agent"),
+						)).filter(
+							(agent) =>
+								input.archived === undefined ||
+								agent.archived === input.archived,
+						)
+					}
 					const main = yield* ensureMain(caller)
 					const own = yield* agents.list(caller.organizationId, {
 						owner: caller.userId,
@@ -211,27 +383,17 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 						input.session === undefined
 							? yield* agents.list(caller.organizationId, { owner: "" })
 							: []
-					const all = [
+					const all = yield* visible(caller, [
 						...own.filter(
 							(agent) =>
 								agent.id !== main.id &&
 								(input.session !== undefined || agent.kind !== "session"),
 						),
 						...shared,
-					]
-					const visible = yield* Effect.filter(all, (agent) =>
-						can({
-							caller,
-							permission: "agents.read",
-							key: agentKey({
-								...agent,
-								organizationId: caller.organizationId,
-							}),
-						}),
-					)
+					])
 					return [
 						...(input.session === undefined ? [main] : []),
-						...visible,
+						...all,
 					].filter(
 						(agent) =>
 							input.archived === undefined || agent.archived === input.archived,
@@ -239,93 +401,133 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 				}),
 			create: (caller, input) =>
 				Effect.gen(function* () {
-					const now = yield* Clock.currentTimeMillis
-					const agent: Agent = {
-						id: AgentsApi.AgentId.make(newId()),
-						kind: "persistent",
-						owner:
-							input.shared === true
-								? { _tag: "Organization" }
-								: { _tag: "Member", userId: caller.userId },
-						name: input.name,
-						role: input.role,
-						instructions: input.instructions,
-						...(input.model === undefined ? {} : { model: input.model }),
-						archived: false,
-						revision: 0,
-						createdAt: now,
-						updatedAt: now,
-					}
-					const key = agentKey({
-						...agent,
-						organizationId: caller.organizationId,
-					})
-					if (!(yield* can({ caller, permission: "agents.write", key })))
-						return yield* Permissions.PermissionDenied.make({
-							permission: "agents.write",
-							resource: key,
+					if (input.shared === true && input.agent !== undefined)
+						return yield* AgentsApi.AgentInvalid.make({
+							message: "A shared Agent cannot have an owner Agent.",
 						})
+					const owner: Agent["owner"] =
+						input.agent !== undefined
+							? ownerFor(yield* access(caller, input.agent, "agents.read"))
+							: input.shared === true
+								? { _tag: "Organization" }
+								: { _tag: "Member", userId: caller.userId }
+					const agent = fresh({
+						...input,
+						owner,
+						kind: "persistent",
+						now: yield* Clock.currentTimeMillis,
+					})
+					yield* writable(caller, agent)
 					return yield* put(caller.organizationId, agent)
+				}),
+			createOwned: (organizationId, owner, input) =>
+				Effect.gen(function* () {
+					return yield* put(
+						organizationId,
+						fresh({
+							...input,
+							owner: ownerFor(owner),
+							kind: "persistent",
+							now: yield* Clock.currentTimeMillis,
+						}),
+					)
 				}),
 			createSessionAgent: (subject, input) =>
 				Effect.gen(function* () {
-					const now = yield* Clock.currentTimeMillis
-					return yield* put(subject.organizationId, {
-						id: AgentsApi.AgentId.make(newId()),
-						kind: "session",
-						owner: {
-							_tag: "Session",
-							userId: subject.userId,
-							session: input.session,
-						},
-						name: input.name,
-						role: input.role,
-						instructions: input.instructions,
-						...(input.model === undefined ? {} : { model: input.model }),
-						archived: false,
-						revision: 0,
-						createdAt: now,
-						updatedAt: now,
-					})
+					return yield* put(
+						subject.organizationId,
+						fresh({
+							...input,
+							owner: {
+								_tag: "Session",
+								userId: subject.userId,
+								session: input.session,
+								agent: input.agent,
+							},
+							kind: "session",
+							now: yield* Clock.currentTimeMillis,
+						}),
+					)
 				}),
 			update: (caller, id, input) =>
-				change(caller, id, "agents.write", input.expected, (agent) => {
-					if (agent.kind === "main" && input.archived === true)
-						return Effect.fail(
-							AgentsApi.AgentInvalid.make({
-								message: "The Main Agent cannot be archived.",
-							}),
-						)
-					const { model: _model, ...rest } = agent
-					const model =
-						input.model === undefined ? agent.model : (input.model ?? undefined)
-					return Effect.succeed({
-						...rest,
-						...(input.name === undefined ? {} : { name: input.name }),
-						...(input.role === undefined ? {} : { role: input.role }),
-						...(input.instructions === undefined
-							? {}
-							: { instructions: input.instructions }),
-						...(input.archived === undefined
-							? {}
-							: { archived: input.archived }),
-						...(model === undefined ? {} : { model }),
-					})
+				Effect.gen(function* () {
+					const agent = yield* change(
+						caller,
+						id,
+						"agents.write",
+						input.expected,
+						(agent) => {
+							if (agent.kind === "main" && input.archived === true)
+								return Effect.fail(
+									AgentsApi.AgentInvalid.make({
+										message: "The Main Agent cannot be archived.",
+									}),
+								)
+							const { model: _model, ...rest } = agent
+							const model =
+								input.model === undefined
+									? agent.model
+									: (input.model ?? undefined)
+							return Effect.succeed({
+								...rest,
+								...(input.name === undefined ? {} : { name: input.name }),
+								...(input.role === undefined ? {} : { role: input.role }),
+								...(input.instructions === undefined
+									? {}
+									: { instructions: input.instructions }),
+								...(input.archived === undefined
+									? {}
+									: { archived: input.archived }),
+								...(model === undefined ? {} : { model }),
+							})
+						},
+					)
+					// The Agents that an archived Agent owns are archived with it.
+					if (input.archived === true)
+						yield* archiveTree(caller.organizationId, [agent], agent.updatedAt)
+					return agent
 				}),
-			promote: (caller, id, expected) =>
-				change(caller, id, "agents.write", expected, (agent) =>
-					agent.kind !== "session" || agent.owner._tag !== "Session"
-						? Effect.fail(
-								AgentsApi.AgentInvalid.make({
-									message: "Only a Session Agent can be promoted.",
-								}),
-							)
-						: Effect.succeed({
-								...agent,
-								kind: "persistent" as const,
-								owner: { _tag: "Member" as const, userId: agent.owner.userId },
-							}),
-				),
+			promote: (caller, id, expected, owner) =>
+				Effect.gen(function* () {
+					const parent =
+						owner === undefined
+							? Option.none<Agent>()
+							: Option.some(yield* access(caller, owner, "agents.read"))
+					const agent = yield* change(
+						caller,
+						id,
+						"agents.write",
+						expected,
+						(agent) => {
+							const from = agent.owner
+							return agent.kind !== "session" || from._tag !== "Session"
+								? Effect.fail(
+										AgentsApi.AgentInvalid.make({
+											message: "Only a Session Agent can be promoted.",
+										}),
+									)
+								: Effect.gen(function* () {
+										const next: Agent = {
+											...agent,
+											kind: "persistent",
+											owner: Option.match(parent, {
+												onNone: () => ({
+													_tag: "Member" as const,
+													userId: from.userId,
+												}),
+												onSome: ownerFor,
+											}),
+										}
+										// The new owner can move the Agent to another place.
+										yield* writable(caller, next)
+										return next
+									})
+						},
+					)
+					return agent
+				}),
+			ownerChain: (subject, agent) =>
+				climb(subject, agent, [agent.id], [agent.id]),
 			ownedBy: (subject, session) =>
 				agents
 					.list(subject.organizationId, {
@@ -343,31 +545,13 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 						owner: subject.userId,
 						scope: session,
 					})
-					const now = yield* Clock.currentTimeMillis
-					return yield* Effect.forEach(
+					return yield* archiveTree(
+						subject.organizationId,
 						owned.filter(
 							(agent) => agent.kind === "session" && !agent.archived,
 						),
-						(agent) =>
-							put(subject.organizationId, {
-								...agent,
-								archived: true,
-								revision: agent.revision + 1,
-								updatedAt: now,
-							}),
+						yield* Clock.currentTimeMillis,
 					)
-				}),
-			copyFor: (subject, agent, session) =>
-				Effect.gen(function* () {
-					const now = yield* Clock.currentTimeMillis
-					return yield* put(subject.organizationId, {
-						...agent,
-						id: AgentsApi.AgentId.make(newId()),
-						owner: { _tag: "Session", userId: subject.userId, session },
-						revision: 0,
-						createdAt: now,
-						updatedAt: now,
-					})
 				}),
 		})
 	})

@@ -27,6 +27,7 @@ import { Work, callerOf } from "../capabilities/Work.ts"
 import {
 	Requests,
 	type Stored as StoredRequest,
+	sessionOf,
 } from "../capabilities/Requests.ts"
 import { Organization } from "../organization/Organization.ts"
 import * as SessionHost from "../sessions/SessionHost.ts"
@@ -451,15 +452,23 @@ export const layer = Layer.effectDiscard(
 						request: stored.request.id,
 					})
 				}
-				const index = stored.chain.agents.indexOf(approver.agent)
+				// The review runs in the owner chain, down to the deciding Agent.
+				const deciders = stored.request.chain
+				const index = deciders.indexOf(approver.agent)
 				const view = yield* sessions.create({
 					agent: agent.value,
 					kind: "review",
 					review: stored.request.id,
 					chain: {
 						...stored.chain,
-						agents: stored.chain.agents.slice(0, index + 1),
-						sessions: stored.chain.sessions.slice(0, index),
+						agents: deciders.slice(0, index + 1),
+						sessions: deciders.slice(0, index).map((decider) =>
+							sessionOf({
+								chain: stored.chain,
+								agent: decider,
+								current: stored.request.session,
+							}),
+						),
 					},
 					title: "Review " + stored.request.id,
 				})
@@ -497,6 +506,7 @@ export const layer = Layer.effectDiscard(
 							namespace: ownerKey(member),
 							agent: agent.value,
 							chain: state.chain,
+							deciders: yield* agents.ownerChain(member, agent.value),
 							session,
 							turn: turn.id,
 						}),
@@ -797,7 +807,7 @@ export const layer = Layer.effectDiscard(
 						resource: stored.request.id,
 						details: {
 							agent: stored.request.agent,
-							chain: [...stored.chain.agents],
+							chain: [...stored.request.chain],
 							capability: JSON.parse(JSON.stringify(stored.request.capability)),
 							status: stored.request.status,
 						},

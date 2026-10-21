@@ -27,11 +27,15 @@ export type AgentId = typeof AgentId.Type
  * Who owns an Agent.
  * A member owns their Main Agent and their own Agents. The organization owns shared Agents.
  * A Session owns a Session Agent: the Session Agent lives as long as that Session.
+ * `agent` is the Agent of that Session.
+ * An Agent can own lasting Agents too. `userId` is the member at the top of this tree.
+ * It is `null` when the organization owns the Agent at the top.
  */
 export const AgentOwner = Schema.TaggedUnion({
 	Member: { userId: Schema.String },
 	Organization: {},
-	Session: { userId: Schema.String, session: Session.Id },
+	Session: { userId: Schema.String, session: Session.Id, agent: AgentId },
+	Agent: { agent: AgentId, userId: Schema.NullOr(Schema.String) },
 })
 export type AgentOwner = typeof AgentOwner.Type
 
@@ -64,6 +68,8 @@ export const CreateAgentRequest = Schema.Struct({
 	model: Schema.optionalKey(Config.Selection),
 	/** Shared Agents belong to the organization. Other Agents belong to the caller. */
 	shared: Schema.optionalKey(Schema.Boolean),
+	/** The Agent that owns the new Agent. You cannot use it together with `shared`. */
+	agent: Schema.optionalKey(AgentId),
 })
 export type CreateAgentRequest = typeof CreateAgentRequest.Type
 
@@ -77,6 +83,13 @@ export const UpdateAgentRequest = Schema.Struct({
 })
 export type UpdateAgentRequest = typeof UpdateAgentRequest.Type
 
+export const PromoteAgentRequest = Schema.Struct({
+	expected: Schema.Natural,
+	/** The Agent that owns the promoted Agent. Without it, the caller owns it. */
+	agent: Schema.optionalKey(AgentId),
+})
+export type PromoteAgentRequest = typeof PromoteAgentRequest.Type
+
 /**
  * What a capability is: an action, the thing it acts on, and optional exact arguments.
  * `target` is `*` for every target.
@@ -85,6 +98,8 @@ export const CapabilityAction = Schema.Literals([
 	"tools.call",
 	"apps.call",
 	"agents.spawn",
+	"agents.create",
+	"agents.promote",
 	"agents.delegate",
 ])
 export type CapabilityAction = typeof CapabilityAction.Type
@@ -284,12 +299,13 @@ export class AgentsApi extends HttpApiGroup.make("agents")
 			query: {
 				archived: Schema.optionalKey(Schema.Literals(["true", "false"])),
 				session: Schema.optionalKey(Session.Id),
+				agent: Schema.optionalKey(AgentId),
 			},
 			success: Schema.Array(Agent),
 			error: AgentErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Lists the Agents that the caller can use: their Main Agent, their own Agents and the shared Agents. With `session`, it lists the Session Agents of that Session.",
+			"Lists the Agents that the caller can use: their Main Agent, their own Agents and the shared Agents. With `session`, it lists the Session Agents of that Session. With `agent`, it lists the Agents that this Agent owns.",
 		),
 		HttpApiEndpoint.post("createAgent", "/v1/agents", {
 			payload: CreateAgentRequest,
@@ -309,12 +325,12 @@ export class AgentsApi extends HttpApiGroup.make("agents")
 		}),
 		HttpApiEndpoint.post("promoteAgent", "/v1/agents/:agentId/promote", {
 			params: agentParams,
-			payload: Schema.Struct({ expected: Schema.Natural }),
+			payload: PromoteAgentRequest,
 			success: Agent,
 			error: AgentErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Makes a Session Agent a lasting Agent of the caller. Its Session memory becomes its Agent memory.",
+			"Makes a Session Agent a lasting Agent of the caller, or of the Agent in `agent`. Its Session memory becomes its Agent memory.",
 		),
 		HttpApiEndpoint.get("agentMemory", "/v1/agents/:agentId/memory", {
 			params: agentParams,

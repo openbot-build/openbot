@@ -14,7 +14,10 @@ export class Work extends Context.Service<
 		readonly caller: Caller
 		readonly namespace: string
 		readonly agent: AgentsApi.Agent
+		/** The delegation chain: who gave the work to whom. */
 		readonly chain: Chain
+		/** The owner chain of the Agent, from the top, ending with the Agent. They decide its requests. */
+		readonly deciders: ReadonlyArray<AgentsApi.AgentId>
 		readonly session: Session.Id
 		readonly turn: Turn.Id
 	}
