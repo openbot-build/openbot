@@ -1,5 +1,5 @@
 import { Config as ModelConfig, Model, Provider } from "@openbot-build/core"
-import { OpenAiCompatProvider } from "@openbot-build/provider-openai-compat"
+import * as OpenAiCompatProvider from "../providers/openai-compat/OpenAiCompatProvider.ts"
 import {
 	Config,
 	Context,

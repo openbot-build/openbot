@@ -9,6 +9,11 @@ export * as AppPlugin from "./plugins/apps/AppPlugin.ts"
 
 export * as Configuration from "./configuration/Configuration.ts"
 
+export * as OpenAiProvider from "./providers/openai/OpenAiProvider.ts"
+export * as ResponsesCompaction from "./providers/openai/ResponsesCompaction.ts"
+export * as OpenAiCompatProvider from "./providers/openai-compat/OpenAiCompatProvider.ts"
+export * as AnthropicProvider from "./providers/anthropic/AnthropicProvider.ts"
+
 export * as Memory from "./plugins/memory/Memory.ts"
 export * as MemoryRules from "./plugins/memory/MemoryRules.ts"
 export * as LanguageModelMemory from "./plugins/memory/LanguageModelMemory.ts"

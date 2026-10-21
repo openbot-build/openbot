@@ -18,7 +18,7 @@ export type Provider = CoreProvider.Provider<
 
 const invalid = (description: string) =>
 	AiError.AiError.make({
-		module: "provider-anthropic",
+		module: "AnthropicProvider",
 		method: "model",
 		reason: AiError.InvalidRequestError.make({ description }),
 	})

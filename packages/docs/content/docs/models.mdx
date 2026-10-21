@@ -75,8 +75,11 @@ Give a `LanguageModel` Layer to `Server.layer`. A Layer is an Effect recipe that
 ```ts
 import { NodeRuntime } from "@effect/platform-node"
 import { Config, Model, Provider } from "@openbot-build/core"
-import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
-import { AnthropicProvider } from "@openbot-build/provider-anthropic"
+import {
+	AnthropicProvider,
+	EnvironmentConfiguration,
+	Server,
+} from "@openbot-build/openbot"
 import { Effect, Layer, Redacted } from "effect"
 import { FetchHttpClient } from "effect/http"
 
@@ -157,9 +160,9 @@ The built-in production model in `packages/openbot/src/app/ProductionModel.ts` f
 
 ---
 
-## Provider packages
+## Model providers
 
-A provider package turns a model name into a `LanguageModel` for one kind of API. Each package has the same parts:
+A model provider turns a model name into a `LanguageModel` for one kind of API. `@openbot-build/openbot` exports three of them. Each one has the same parts:
 
 | Part                        | What it does                                                            |
 | --------------------------- | ----------------------------------------------------------------------- |
@@ -168,14 +171,14 @@ A provider package turns a model name into a `LanguageModel` for one kind of API
 | `layerClient(options)`      | Makes the HTTP client. Pass `apiKey`, and `apiUrl` for another address. |
 | `layer(tag, defaults?)`     | Puts the provider in a service that you name.                           |
 
-| Package                                 | Provider ID     | API                                                          |
-| --------------------------------------- | --------------- | ------------------------------------------------------------ |
-| `@openbot-build/provider-openai`        | `openai`        | OpenAI Responses API. Also offers native context compaction. |
-| `@openbot-build/provider-openai-compat` | `openai-compat` | OpenAI Chat Completions API, and services that copy it.      |
-| `@openbot-build/provider-anthropic`     | `anthropic`     | Anthropic Messages API.                                      |
+| Module                 | Provider ID     | API                                                                         |
+| ---------------------- | --------------- | --------------------------------------------------------------------------- |
+| `OpenAiProvider`       | `openai`        | OpenAI Responses API. `ResponsesCompaction` adds native context compaction. |
+| `OpenAiCompatProvider` | `openai-compat` | OpenAI Chat Completions API, and services that copy it.                     |
+| `AnthropicProvider`    | `anthropic`     | Anthropic Messages API.                                                     |
 
 Context compaction makes a long history shorter so that it fits in the model's context window.
-See [Packages](/docs/packages) for a short example of each package.
+See [Packages](/docs/packages) for a short example of each provider.
 
 ---
 

@@ -107,6 +107,15 @@ importers:
       "@better-auth/drizzle-adapter":
         specifier: 1.7.8
         version: 1.7.8(@better-auth/core@1.7.8(@better-auth/utils@0.5.0)(@better-fetch/fetch@1.3.2)(better-call@1.4.2(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.5))(@better-auth/utils@0.5.0)(drizzle-orm@1.0.0-rc.5-5935859(patch_hash=agguol5tijfnt7tqgffymcx67e)(@effect/sql-pg@4.0.5(effect@4.0.5))(@effect/sql-sqlite-node@4.0.5(effect@4.0.5))(@types/pg@8.23.1)(effect@4.0.5)(pg@8.23.1)(zod@4.6.5))
+      "@effect/ai-anthropic":
+        specifier: 4.0.5
+        version: 4.0.5(effect@4.0.5)
+      "@effect/ai-openai":
+        specifier: 4.0.5
+        version: 4.0.5(effect@4.0.5)
+      "@effect/ai-openai-compat":
+        specifier: 4.0.5
+        version: 4.0.5(effect@4.0.5)
       "@effect/platform-node":
         specifier: 4.0.5
         version: 4.0.5(effect@4.0.5)(redis@6.3.0)
@@ -122,9 +131,6 @@ importers:
       "@openbot-build/protocol":
         specifier: workspace:*
         version: link:../protocol
-      "@openbot-build/provider-openai-compat":
-        specifier: workspace:^
-        version: link:../provider-openai-compat
       better-auth:
         specifier: 1.7.8
         version: 1.7.8(@tanstack/react-start@1.169.1(esbuild@0.28.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(rolldown@1.2.13)(vite@8.3.4(@types/node@26.6.0)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)))(drizzle-kit@1.0.0-rc.5-5935859)(drizzle-orm@1.0.0-rc.5-5935859(patch_hash=agguol5tijfnt7tqgffymcx67e)(@effect/sql-pg@4.0.5(effect@4.0.5))(@effect/sql-sqlite-node@4.0.5(effect@4.0.5))(@types/pg@8.23.1)(effect@4.0.5)(pg@8.23.1)(zod@4.6.5))(next@16.3.8(@babel/core@7.29.7)(@types/node@26.6.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(pg@8.23.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -166,45 +172,6 @@ importers:
       "@effect/platform-node":
         specifier: 4.0.5
         version: 4.0.5(effect@4.0.5)(redis@6.3.0)
-      effect:
-        specifier: 4.0.5
-        version: 4.0.5
-
-  packages/provider-anthropic:
-    dependencies:
-      "@effect/ai-anthropic":
-        specifier: 4.0.5
-        version: 4.0.5(effect@4.0.5)
-    devDependencies:
-      "@openbot-build/core":
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.5
-        version: 4.0.5
-
-  packages/provider-openai:
-    dependencies:
-      "@effect/ai-openai":
-        specifier: 4.0.5
-        version: 4.0.5(effect@4.0.5)
-    devDependencies:
-      "@openbot-build/core":
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.0.5
-        version: 4.0.5
-
-  packages/provider-openai-compat:
-    dependencies:
-      "@effect/ai-openai-compat":
-        specifier: 4.0.5
-        version: 4.0.5(effect@4.0.5)
-    devDependencies:
-      "@openbot-build/core":
-        specifier: workspace:*
-        version: link:../core
       effect:
         specifier: 4.0.5
         version: 4.0.5
