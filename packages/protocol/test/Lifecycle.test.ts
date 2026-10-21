@@ -22,6 +22,7 @@ import {
 	Schema,
 	Scope,
 	Match,
+	Option,
 } from "effect"
 import * as Mcp from "@modelcontextprotocol/client"
 import { startHttps } from "./Fixture.ts"
@@ -348,10 +349,10 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 							key: fixture.key,
 							candidate,
 							confirmed: false,
-							authorization: {
+							authorization: Option.some({
 								issuer: fixture.ipOrigin,
 								scopes: ["notes"],
-							},
+							}),
 						}))._tag,
 						"DescriptionUpdated",
 					)
@@ -389,10 +390,10 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 							key: fixture.key,
 							candidate,
 							confirmed: false,
-							authorization: {
+							authorization: Option.some({
 								issuer: fixture.ipOrigin + "/new-issuer",
 								scopes: ["notes", "write"],
-							},
+							}),
 						}))._tag,
 						"NeedsRevalidation",
 					)
@@ -419,10 +420,10 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 						key: fixture.key,
 						candidate,
 						confirmed: true,
-						authorization: {
+						authorization: Option.some({
 							issuer: fixture.ipOrigin + "/new-issuer",
 							scopes: ["notes", "write"],
-						},
+						}),
 					})
 					assert.equal(confirmed._tag, "Revalidated")
 					assert.equal(
@@ -500,7 +501,7 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 								key,
 								candidate,
 								confirmed: false,
-								authorization: change,
+								authorization: Option.some(change),
 							}))._tag,
 							"NeedsRevalidation",
 						)
@@ -607,10 +608,10 @@ test("revalidation ignores the key order of configuration and variables, and the
 						candidate,
 						confirmed: false,
 						values: { mode: "read", account: "one" },
-						authorization: {
+						authorization: Option.some({
 							issuer: fixture.ipOrigin,
 							scopes: ["write", "notes", "write"],
-						},
+						}),
 					}
 					assert.equal(
 						(yield* AppConnections.revalidate(options))._tag,

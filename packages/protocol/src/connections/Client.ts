@@ -31,7 +31,7 @@ export class AuthorizationRequired extends Data.TaggedError(
 export class OutcomeUnknown extends Data.TaggedError("OutcomeUnknown")<{
 	readonly key: Store.ConnectionKey
 	readonly target: string
-	readonly cause?: "Network" | "Protocol" | "Schema" | "Closed"
+	readonly cause: "Network" | "Protocol" | "Schema" | "Closed"
 }> {}
 
 export class ToolFailure extends Data.TaggedError("ToolFailure")<{

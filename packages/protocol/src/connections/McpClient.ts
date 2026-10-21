@@ -1,7 +1,6 @@
 import {
 	HashSet,
 	Array as Arr,
-	Cause,
 	Clock,
 	Effect,
 	Equal,
@@ -9,6 +8,7 @@ import {
 	Layer,
 	Queue,
 	Redacted,
+	Ref,
 	Scope,
 	Stream,
 	Match,
@@ -41,6 +41,17 @@ import {
 	type Client,
 } from "./Client.ts"
 
+/**
+ * Close an SDK object as best-effort cleanup.
+ * A failed close only logs a warning, so the next cleanup steps still run.
+ */
+const closeQuietly = (name: string, close: () => Promise<void>) =>
+	Effect.tryPromise(close).pipe(
+		Effect.catch((error) =>
+			Effect.logWarning(`Could not close the MCP ${name}`, error),
+		),
+	)
+
 export const layerPolicy = (
 	check: (invocation: Invocation) => Effect.Effect<void, PermissionDenied>,
 ) => Layer.succeed(InvocationPolicy, { check })
@@ -61,96 +72,95 @@ const reservedMeta = HashSet.fromIterable([
 	Mcp.SERVER_INFO_META_KEY,
 ])
 
+/** The next request of an MRTR operation: the saved server state and the host answers. */
+interface Next {
+	readonly requestState?: string | undefined
+	readonly inputResponses: Mcp.InputResponses
+}
+
+/**
+ * Check a value with a Standard Schema from the SDK.
+ * The schema is built inside the Promise, because the SDK can throw while it builds a JSON Schema validator.
+ */
+const decodeStandard = <A>(
+	schema: () => Mcp.StandardSchemaV1<unknown, A>,
+	value: unknown,
+	error: () => ClientError,
+) =>
+	Effect.tryPromise({
+		try: async () => schema()["~standard"].validate(value),
+		catch: error,
+	}).pipe(
+		Effect.flatMap((result) =>
+			result.issues === undefined
+				? Effect.succeed(result.value)
+				: Effect.fail(error()),
+		),
+	)
+
+const invalidInput = () =>
+	new ClientError({
+		reason: "Schema",
+		issue: "The input response does not match this operation.",
+	})
+
 const decodeInputs = (
 	continuation: Continuation,
 	responses: Schema.JsonObject,
 ) =>
 	Effect.gen(function* () {
-		const invalid = () =>
-			new ClientError({
-				reason: "Schema",
-				issue: "The input response does not match this operation.",
-			})
-		const parsed = yield* Effect.tryPromise({
-			try: async () => {
-				const value = await Mcp.withInputRequired(
-					Mcp.specTypeSchemas.CallToolResult,
-				)["~standard"].validate(continuation.request)
-				if (
-					value.issues !== undefined ||
-					!Mcp.isInputRequiredResult(value.value)
-				)
-					throw new Error("Invalid input association")
-				return value.value
-			},
-			catch: invalid,
-		})
-		const decoded: Mcp.InputResponses = {}
-		for (const [id, request] of Object.entries(parsed.inputRequests ?? {})) {
-			const response = responses[id]
-			decoded[id] = yield* Match.value(request).pipe(
-				Match.when({ method: "elicitation/create" }, () =>
-					Effect.tryPromise({
-						try: async () => {
-							const result =
-								await Mcp.specTypeSchemas.ElicitResult["~standard"].validate(
-									response,
-								)
-							if (result.issues !== undefined)
-								throw new Error("Invalid elicitation response")
-							if (
-								result.value.action === "accept" &&
-								request.params !== undefined &&
-								"requestedSchema" in request.params
-							) {
-								const content = await Mcp.fromJsonSchema(
-									request.params.requestedSchema as Mcp.JsonSchemaType,
-								)["~standard"].validate(result.value.content)
-								if (content.issues !== undefined)
-									throw new Error("Invalid form content")
-							}
-							return result.value
-						},
-						catch: invalid,
-					}),
+		const parsed = yield* decodeStandard(
+			() => Mcp.withInputRequired(Mcp.specTypeSchemas.CallToolResult),
+			continuation.request,
+			invalidInput,
+		).pipe(Effect.filterOrFail(Mcp.isInputRequiredResult, invalidInput))
+		const requests = parsed.inputRequests ?? {}
+		if (Object.keys(responses).some((id) => requests[id] === undefined))
+			return yield* invalidInput()
+		const decoded: Mcp.InputResponses = yield* Effect.all(
+			Record.map(requests, (request, id) =>
+				Match.value(request).pipe(
+					Match.when({ method: "elicitation/create" }, (request) =>
+						decodeStandard(
+							() => Mcp.specTypeSchemas.ElicitResult,
+							responses[id],
+							invalidInput,
+						).pipe(
+							Effect.tap((result) => {
+								const params = request.params
+								return result.action === "accept" &&
+									params !== undefined &&
+									"requestedSchema" in params
+									? decodeStandard(
+											() =>
+												Mcp.fromJsonSchema(
+													params.requestedSchema as Mcp.JsonSchemaType,
+												),
+											result.content,
+											invalidInput,
+										)
+									: Effect.void
+							}),
+						),
+					),
+					Match.when({ method: "sampling/createMessage" }, () =>
+						decodeStandard(
+							() => Mcp.specTypeSchemas.CreateMessageResult,
+							responses[id],
+							invalidInput,
+						),
+					),
+					Match.when({ method: "roots/list" }, () =>
+						decodeStandard(
+							() => Mcp.specTypeSchemas.ListRootsResult,
+							responses[id],
+							invalidInput,
+						),
+					),
+					Match.exhaustive,
 				),
-				Match.when({ method: "sampling/createMessage" }, () =>
-					Effect.tryPromise({
-						try: async () => {
-							const result =
-								await Mcp.specTypeSchemas.CreateMessageResult[
-									"~standard"
-								].validate(response)
-							if (result.issues !== undefined)
-								throw new Error("Invalid sampling response")
-							return result.value
-						},
-						catch: invalid,
-					}),
-				),
-				Match.when({ method: "roots/list" }, () =>
-					Effect.tryPromise({
-						try: async () => {
-							const result =
-								await Mcp.specTypeSchemas.ListRootsResult["~standard"].validate(
-									response,
-								)
-							if (result.issues !== undefined)
-								throw new Error("Invalid roots response")
-							return result.value
-						},
-						catch: invalid,
-					}),
-				),
-				Match.exhaustive,
-			)
-		}
-		if (
-			Object.keys(responses).some(
-				(id) => parsed.inputRequests?.[id] === undefined,
-			)
+			),
 		)
-			return yield* invalid()
 		return { parsed, decoded }
 	})
 /** Check saved MRTR responses without sending a remote request. */
@@ -190,9 +200,9 @@ export const open = Effect.fn("Client.open")(function* (options: {
 	const scope = yield* Scope.fork(yield* Effect.scope)
 	return yield* Effect.gen(function* () {
 		yield* active.register({ key: options.key, scope })
-		let closed = false
+		const closed = yield* Ref.make(false)
 		const guard = Effect.fn("Client.currentConnection")(function* () {
-			if (closed)
+			if (yield* Ref.get(closed))
 				return yield* new ClientError({
 					reason: "Closed",
 					issue: "Connection Scope is closed",
@@ -270,19 +280,12 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			yield* policy.check({ ...invocation, connection })
 			return connection
 		})
-		const context = yield* Effect.context<never>()
-		const run = Effect.runPromiseExitWith(context)
-		const token = async () => {
-			const exit = await run(guard())
-			return Match.value(exit).pipe(
-				Match.tagsExhaustive({
-					Failure: (exit) => {
-						throw Cause.squash(exit.cause)
-					},
-					Success: (exit) => exit.value.token,
-				}),
-			)
-		}
+		// The SDK auth provider is a Promise callback. When the guard fails, the
+		// Promise rejects with the typed error, the SDK stops the request, and
+		// `mapError` below gets the same typed error back.
+		const run = Effect.runPromiseWith(yield* Effect.context<never>())
+		const token = () =>
+			run(guard().pipe(Effect.map((current) => current.token)))
 		const transportFetch = yield* Sdk.fetch().pipe(
 			Effect.provideService(Scope.Scope, scope),
 		)
@@ -365,9 +368,9 @@ export const open = Effect.fn("Client.open")(function* (options: {
 		yield* Scope.addFinalizer(
 			scope,
 			Effect.gen(function* () {
-				closed = true
-				yield* Effect.promise(() => sdk.close())
-				yield* Effect.promise(() => transport.close())
+				yield* Ref.set(closed, true)
+				yield* closeQuietly("client", () => sdk.close())
+				yield* closeQuietly("transport", () => transport.close())
 				yield* Queue.shutdown(queue)
 			}),
 		)
@@ -444,35 +447,19 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			schema: Mcp.Tool["inputSchema"] | NonNullable<Mcp.Tool["outputSchema"]>,
 			value: unknown,
 		) =>
-			Effect.tryPromise({
-				try: async () => {
-					const result = await Mcp.fromJsonSchema(schema as Mcp.JsonSchemaType)[
-						"~standard"
-					].validate(value)
-					if (result.issues !== undefined) throw new Error("Schema mismatch")
-				},
-				catch: () =>
+			decodeStandard(
+				() => Mcp.fromJsonSchema(schema as Mcp.JsonSchemaType),
+				value,
+				() =>
 					new ClientError({
 						reason: "Schema",
 						issue: "Value does not match the service JSON Schema",
 					}),
-			})
-		const decodeStandard = <A>(
-			schema: Mcp.StandardSchemaV1<unknown, A>,
-			value: unknown,
-		) =>
-			Effect.tryPromise({
-				try: async () => {
-					const parsed = await schema["~standard"].validate(value)
-					if (parsed.issues !== undefined)
-						throw new Error("Invalid standard result")
-					return parsed.value
-				},
-				catch: () =>
-					new ClientError({
-						reason: "Schema",
-						issue: "Invalid standard result",
-					}),
+			)
+		const invalidResult = () =>
+			new ClientError({
+				reason: "Schema",
+				issue: "Invalid standard result",
 			})
 		// The SDK 2.3.1 list helpers join all pages and drop the cursors.
 		// With `singlePage` we send the raw request, so callers keep each cursor and can find repeated ones.
@@ -518,13 +505,12 @@ export const open = Effect.fn("Client.open")(function* (options: {
 							),
 				)
 				dirty = HashSet.remove(dirty, "tools")
-				return input.source === undefined
+				const source = input.source
+				return source === undefined
 					? result
 					: {
 							...result,
-							tools: result.tools.filter((tool) =>
-								visibility(tool, input.source ?? "host"),
-							),
+							tools: result.tools.filter((tool) => visibility(tool, source)),
 						}
 			}),
 			resources: Effect.fn("Client.listResources")(function* (
@@ -628,26 +614,32 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				},
 				Error
 			>,
-		) =>
-			Effect.gen(function* () {
-				let items: ReadonlyArray<A> = []
-				let cursor: string | undefined
-				let seen = HashSet.empty<string>()
-				do {
-					const page = yield* read(cursor)
-					items = Arr.appendAll(items, page.items)
-					cursor = page.nextCursor
-					if (cursor !== undefined) {
-						if (HashSet.has(seen, cursor))
-							return yield* new ClientError({
-								reason: "Protocol",
-								issue: "The service repeated a capability cursor",
-							})
-						seen = HashSet.add(seen, cursor)
-					}
-				} while (cursor !== undefined)
-				return items
-			})
+		) => {
+			const next = (
+				cursor: string | undefined,
+				seen: HashSet.HashSet<string>,
+				items: ReadonlyArray<A>,
+			): Effect.Effect<ReadonlyArray<A>, Error> =>
+				read(cursor).pipe(
+					Effect.flatMap((page) => {
+						const all = Arr.appendAll(items, page.items)
+						if (page.nextCursor === undefined) return Effect.succeed(all)
+						if (HashSet.has(seen, page.nextCursor))
+							return Effect.fail(
+								new ClientError({
+									reason: "Protocol",
+									issue: "The service repeated a capability cursor",
+								}),
+							)
+						return next(
+							page.nextCursor,
+							HashSet.add(seen, page.nextCursor),
+							all,
+						)
+					}),
+				)
+			return next(undefined, HashSet.empty(), [])
+		}
 		const allTools = (source: CallOptions["source"] = "host") =>
 			allPages((cursor) =>
 				lists
@@ -663,54 +655,57 @@ export const open = Effect.fn("Client.open")(function* (options: {
 						})),
 					),
 			)
-		const finish = <A>(
-			result: A | Mcp.InputRequiredResult,
-			resume: (
+		const inputRequired = <A>(
+			result: Mcp.InputRequiredResult,
+			resume: (next: Next) => Effect.Effect<OperationResult<A>, Error>,
+		): Extract<OperationResult<A>, { readonly _tag: "InputRequired" }> => {
+			const requests = result.inputRequests ?? {}
+			const respond = Effect.fn("Client.respond")(function* (
 				responses: Mcp.InputResponses,
-			) => Effect.Effect<OperationResult<A>, Error>,
-		): OperationResult<A> => {
-			if (!Mcp.isInputRequiredResult(result))
-				return { _tag: "Completed", result }
-			const respond = (responses: Mcp.InputResponses) =>
-				Effect.gen(function* () {
-					if (
-						!Equal.equals(
-							HashSet.fromIterable(Object.keys(responses)),
-							HashSet.fromIterable(Object.keys(result.inputRequests ?? {})),
-						)
+			) {
+				if (
+					!Equal.equals(
+						HashSet.fromIterable(Object.keys(responses)),
+						HashSet.fromIterable(Object.keys(requests)),
 					)
-						return yield* new ClientError({
-							reason: "Schema",
-							issue:
-								"Input responses must match the request IDs of this operation",
-						})
-					for (const request of Object.values(result.inputRequests ?? {})) {
-						if (
+				)
+					return yield* new ClientError({
+						reason: "Schema",
+						issue:
+							"Input responses must match the request IDs of this operation",
+					})
+				if (
+					Object.values(requests).some(
+						(request) =>
 							(request.method === "sampling/createMessage" &&
 								capabilities.sampling === undefined) ||
 							(request.method === "elicitation/create" &&
 								capabilities.elicitation === undefined) ||
 							(request.method === "roots/list" &&
-								capabilities.roots === undefined)
-						)
-							return yield* new ClientError({
-								reason: "InputUnavailable",
-								issue: "Host did not declare this input capability",
-							})
-					}
-					return yield* resume(responses)
-				})
-			const handle = Effect.gen(function* () {
-				if (options.inputs === undefined)
+								capabilities.roots === undefined),
+					)
+				)
 					return yield* new ClientError({
 						reason: "InputUnavailable",
-						issue: "Host input handler is not installed",
+						issue: "Host did not declare this input capability",
 					})
-				const responses: Mcp.InputResponses = {}
-				for (const [id, request] of Object.entries(result.inputRequests ?? {}))
-					responses[id] = yield* options.inputs.handle(request)
-				return yield* respond(responses)
+				return yield* resume({
+					requestState: result.requestState,
+					inputResponses: responses,
+				})
 			})
+			const inputs = options.inputs
+			const handle =
+				inputs === undefined
+					? Effect.fail(
+							new ClientError({
+								reason: "InputUnavailable",
+								issue: "Host input handler is not installed",
+							}),
+						)
+					: Effect.all(
+							Record.map(requests, (request) => inputs.handle(request)),
+						).pipe(Effect.flatMap(respond))
 			return {
 				_tag: "InputRequired",
 				result,
@@ -718,22 +713,23 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				handle,
 			}
 		}
+		const finish = <A>(
+			result: A | Mcp.InputRequiredResult,
+			resume: (next: Next) => Effect.Effect<OperationResult<A>, Error>,
+		): OperationResult<A> =>
+			Mcp.isInputRequiredResult(result)
+				? inputRequired(result, resume)
+				: { _tag: "Completed", result }
 		const callTool: (
 			params: Mcp.CallToolRequest["params"],
 			call: CallOptions,
-			continuation?: {
-				readonly requestState?: string | undefined
-				readonly inputResponses: Mcp.InputResponses
-			},
+			next?: Next,
 		) => Effect.Effect<OperationResult<Mcp.CallToolResult>, Error> = Effect.fn(
 			"Client.callTool",
 		)(function* (
 			params: Mcp.CallToolRequest["params"],
 			call: CallOptions,
-			continuation?: {
-				readonly requestState?: string | undefined
-				readonly inputResponses: Mcp.InputResponses
-			},
+			next?: Next,
 		) {
 			yield* requireCapability("tools")
 			yield* validateMeta(params._meta)
@@ -755,7 +751,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			const { outputSchema, ...requestTool } = tool
 			const raw = yield* invoke((signal) =>
 				sdk.callTool(
-					{ ...params, ...continuation },
+					{ ...params, ...next },
 					{
 						signal,
 						...Record.filter(
@@ -791,78 +787,45 @@ export const open = Effect.fn("Client.open")(function* (options: {
 						),
 				),
 			)
-			const decoded = yield* Effect.tryPromise({
-				try: async () => {
-					const parsed = await Mcp.withInputRequired(
-						Mcp.specTypeSchemas.CallToolResult,
-					)["~standard"].validate(raw)
-					if (parsed.issues !== undefined)
-						throw new Error("Invalid standard tool result")
-					return parsed.value
-				},
-				catch: () =>
+			// A bad result of a call that may write leaves the remote outcome unknown.
+			const writeOutcome = (error: ClientError) =>
+				call.readOnly === true
+					? error
+					: new OutcomeUnknown({
+							key: options.key,
+							target: params.name,
+							cause: "Schema",
+						})
+			const decoded = yield* decodeStandard(
+				() => Mcp.withInputRequired(Mcp.specTypeSchemas.CallToolResult),
+				raw,
+				() =>
 					new ClientError({
 						reason: "Schema",
 						issue: "Invalid standard tool result",
 					}),
-			}).pipe(
-				Effect.mapError((error) =>
-					call.readOnly === true
-						? error
-						: new OutcomeUnknown({
-								key: options.key,
-								target: params.name,
-								cause: "Schema",
-							}),
-				),
-			)
+			).pipe(Effect.mapError(writeOutcome))
 			if (Mcp.isInputRequiredResult(decoded))
-				return finish(decoded, (inputResponses) =>
-					callTool(params, call, {
-						requestState: decoded.requestState,
-						inputResponses,
-					}),
-				)
+				return inputRequired(decoded, (next) => callTool(params, call, next))
 			if (decoded.isError === true)
 				return yield* new ToolFailure({
 					result: decoded,
 				})
 			if (outputSchema !== undefined)
 				yield* validateDynamic(outputSchema, decoded.structuredContent).pipe(
-					Effect.mapError((error) =>
-						call.readOnly === true
-							? error
-							: new OutcomeUnknown({
-									key: options.key,
-									target: params.name,
-									cause: "Schema",
-								}),
-					),
+					Effect.mapError(writeOutcome),
 				)
-			return finish(decoded, () =>
-				Effect.fail(
-					new ClientError({
-						reason: "Protocol",
-						issue: "Operation already completed",
-					}),
-				),
-			)
+			return { _tag: "Completed", result: decoded } as const
 		})
 		const readResource: (
 			params: Mcp.ReadResourceRequest["params"],
 			call: CallOptions,
-			continuation?: {
-				readonly requestState?: string | undefined
-				readonly inputResponses: Mcp.InputResponses
-			},
+			next?: Next,
 		) => Effect.Effect<OperationResult<Mcp.ReadResourceResult>, Error> =
 			Effect.fn("Client.readResource")(function* (
 				params: Mcp.ReadResourceRequest["params"],
 				call: CallOptions,
-				continuation?: {
-					readonly requestState?: string | undefined
-					readonly inputResponses: Mcp.InputResponses
-				},
+				next?: Next,
 			) {
 				yield* requireCapability("resources")
 				yield* validateMeta(params._meta)
@@ -874,7 +837,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				})
 				const raw = yield* invoke((signal) =>
 					sdk.readResource(
-						{ ...params, ...continuation },
+						{ ...params, ...next },
 						{
 							signal,
 							...Record.filter(
@@ -890,34 +853,22 @@ export const open = Effect.fn("Client.open")(function* (options: {
 					),
 				)
 				const result = yield* decodeStandard(
-					Mcp.withInputRequired(Mcp.specTypeSchemas.ReadResourceResult),
+					() => Mcp.withInputRequired(Mcp.specTypeSchemas.ReadResourceResult),
 					raw,
+					invalidResult,
 				)
-				return finish(result, (inputResponses) =>
-					readResource(params, call, {
-						requestState: Mcp.isInputRequiredResult(result)
-							? result.requestState
-							: undefined,
-						inputResponses,
-					}),
-				)
+				return finish(result, (next) => readResource(params, call, next))
 			})
 		const getPrompt: (
 			params: Mcp.GetPromptRequest["params"],
 			call: CallOptions,
-			continuation?: {
-				readonly requestState?: string | undefined
-				readonly inputResponses: Mcp.InputResponses
-			},
+			next?: Next,
 		) => Effect.Effect<OperationResult<Mcp.GetPromptResult>, Error> = Effect.fn(
 			"Client.getPrompt",
 		)(function* (
 			params: Mcp.GetPromptRequest["params"],
 			call: CallOptions,
-			continuation?: {
-				readonly requestState?: string | undefined
-				readonly inputResponses: Mcp.InputResponses
-			},
+			next?: Next,
 		) {
 			yield* requireCapability("prompts")
 			yield* validateMeta(params._meta)
@@ -933,7 +884,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 						method: "prompts/get",
 						params: {
 							...params,
-							...continuation,
+							...next,
 						},
 					},
 					Mcp.withInputRequired(Mcp.specTypeSchemas.GetPromptResult),
@@ -951,29 +902,17 @@ export const open = Effect.fn("Client.open")(function* (options: {
 					},
 				),
 			)
-			return finish(result, (inputResponses) =>
-				getPrompt(params, call, {
-					requestState: Mcp.isInputRequiredResult(result)
-						? result.requestState
-						: undefined,
-					inputResponses,
-				}),
-			)
+			return finish(result, (next) => getPrompt(params, call, next))
 		})
 		const client: Client = {
-			resume: (continuation, responses, call) =>
-				Effect.gen(function* () {
-					const invalid = () =>
-						new ClientError({
-							reason: "Schema",
-							issue: "The input response does not match this operation.",
-						})
+			resume: Effect.fn("Client.resume")(
+				function* (continuation, responses, call) {
 					const { parsed, decoded } = yield* decodeInputs(
 						continuation,
 						responses,
 					)
 					const resume = (
-						inputResponses: Mcp.InputResponses,
+						next: Next,
 					): Effect.Effect<OperationResult<unknown>, Error> =>
 						Match.value(continuation.method).pipe(
 							Match.when("tools/call", () =>
@@ -983,13 +922,8 @@ export const open = Effect.fn("Client.open")(function* (options: {
 										arguments: Schema.optionalKey(Schema.JsonObject),
 									}),
 								)(continuation.params).pipe(
-									Effect.mapError(invalid),
-									Effect.flatMap((params) =>
-										callTool(params, call, {
-											requestState: parsed.requestState,
-											inputResponses,
-										}),
-									),
+									Effect.mapError(invalidInput),
+									Effect.flatMap((params) => callTool(params, call, next)),
 								),
 							),
 							Match.when("resources/read", () =>
@@ -1002,25 +936,19 @@ export const open = Effect.fn("Client.open")(function* (options: {
 										}),
 									]),
 								)(continuation.params).pipe(
-									Effect.mapError(invalid),
+									Effect.mapError(invalidInput),
 									Effect.flatMap((params) =>
-										Effect.gen(function* () {
-											const uri =
-												"uri" in params
-													? params.uri
-													: yield* Effect.try({
-															try: () =>
-																new Mcp.UriTemplate(params.uriTemplate).expand(
-																	params.values,
-																),
-															catch: invalid,
-														})
-											return yield* readResource({ uri }, call, {
-												requestState: parsed.requestState,
-												inputResponses,
-											})
-										}),
+										"uri" in params
+											? Effect.succeed(params.uri)
+											: Effect.try({
+													try: () =>
+														new Mcp.UriTemplate(params.uriTemplate).expand(
+															params.values,
+														),
+													catch: invalidInput,
+												}),
 									),
+									Effect.flatMap((uri) => readResource({ uri }, call, next)),
 								),
 							),
 							Match.when("prompts/get", () =>
@@ -1032,23 +960,15 @@ export const open = Effect.fn("Client.open")(function* (options: {
 										),
 									}),
 								)(continuation.params).pipe(
-									Effect.mapError(invalid),
-									Effect.flatMap((params) =>
-										getPrompt(params, call, {
-											requestState: parsed.requestState,
-											inputResponses,
-										}),
-									),
+									Effect.mapError(invalidInput),
+									Effect.flatMap((params) => getPrompt(params, call, next)),
 								),
 							),
 							Match.exhaustive,
 						)
-					return yield* Match.value(finish<unknown>(parsed, resume)).pipe(
-						Match.tag("InputRequired", (pending) => pending.respond(decoded)),
-						Match.tag("Completed", () => Effect.fail(invalid())),
-						Match.exhaustive,
-					)
-				}),
+					return yield* inputRequired(parsed, resume).respond(decoded)
+				},
+			),
 			key: options.key,
 			discovery,
 			notifications: Stream.fromQueue(queue),
@@ -1098,7 +1018,8 @@ export const open = Effect.fn("Client.open")(function* (options: {
 							signal,
 						}),
 					),
-					(subscription) => Effect.promise(() => subscription.close()),
+					(subscription) =>
+						closeQuietly("subscription", () => subscription.close()),
 				)
 				return {
 					honoredFilter: subscription.honoredFilter,
