@@ -7,18 +7,14 @@ import { DrizzleQueryError } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { Pool } from "pg"
 import { decodeJwt } from "jose"
-import { Effect, Exit, Layer, Match, Redacted, Predicate, Schema } from "effect"
+import { Effect, Exit, Layer, Match, Redacted, Predicate } from "effect"
 import * as tables from "../database/AuthSchema.ts"
 import { Auth } from "./Auth.ts"
 import { developmentLogin } from "./DevelopmentLogin.ts"
 import { type ResolvedConfiguration } from "./Configuration.ts"
-import {
-	AuthUnavailable,
-	CredentialRejected,
-	AuthRequestInvalid,
-} from "./Model.ts"
+import { AuthUnavailable, CredentialRejected } from "./Model.ts"
 
-/** The Better Auth provider ID. The public callback stays at `/auth/callback`. */
+/** The Better Auth provider ID. The provider callback is `/auth/callback/oidc`. */
 const providerId = "oidc"
 
 /** SDK rejections go to the typed error channel. Programming errors stay defects. */
@@ -156,123 +152,7 @@ export const layer = (
 					origin: config.publicOrigin,
 				})
 			return Auth.of({
-				startLogin: (requestHeaders, returnTo = "/") =>
-					Effect.gen(function* () {
-						const target = yield* Schema.decodeEffect(AuthApi.ReturnTo)(
-							returnTo,
-						).pipe(Effect.mapError(() => AuthRequestInvalid.make({})))
-						return yield* Match.value(config).pipe(
-							Match.discriminatorsExhaustive("mode")({
-								oidc: () =>
-									attempt(
-										(signal) =>
-											sdk.api.signInSocial({
-												body: {
-													provider: providerId,
-													callbackURL: config.publicOrigin + target,
-												},
-												headers: requestHeaders,
-												request: new Request(
-													config.publicOrigin + "/auth/login",
-													{
-														signal,
-													},
-												),
-												asResponse: true,
-											}),
-										() => AuthUnavailable.make({ dependency: "provider" }),
-									).pipe(
-										Effect.flatMap((response) =>
-											response.ok && response.headers.has("location")
-												? Effect.succeed(
-														new Response(null, {
-															status: 303,
-															headers: response.headers,
-														}),
-													)
-												: Effect.fail(
-														AuthUnavailable.make({ dependency: "provider" }),
-													),
-										),
-									),
-								development: () =>
-									attempt(
-										() =>
-											sdk.api.signInDevelopment({
-												headers: requestHeaders,
-												asResponse: true,
-											}),
-										() => AuthUnavailable.make({ dependency: "storage" }),
-									).pipe(
-										Effect.flatMap((response) => {
-											if (!response.ok)
-												return Effect.fail(
-													AuthUnavailable.make({ dependency: "storage" }),
-												)
-											const headers = new Headers(response.headers)
-											headers.set("location", config.publicOrigin + target)
-											return Effect.succeed(
-												new Response(null, { status: 303, headers }),
-											)
-										}),
-									),
-							}),
-						)
-					}),
-				completeLogin: (url, requestHeaders) =>
-					Match.value(config).pipe(
-						Match.discriminatorsExhaustive("mode")({
-							development: () =>
-								Effect.succeed(new Response(null, { status: 400 })),
-							oidc: () =>
-								attempt(
-									(signal) => {
-										const callback = new URL(url, config.publicOrigin)
-										if (
-											[...callback.searchParams.keys()].some(
-												(key) => callback.searchParams.getAll(key).length !== 1,
-											)
-										)
-											return Promise.resolve(
-												new Response(null, { status: 400 }),
-											)
-										callback.pathname = "/auth/callback/" + providerId
-										return sdk.handler(
-											new Request(callback, {
-												headers: requestHeaders,
-												signal,
-											}),
-										)
-									},
-									() => AuthUnavailable.make({ dependency: "provider" }),
-								).pipe(
-									Effect.map((response) => {
-										if (response.status >= 400)
-											return new Response(null, {
-												status: response.status >= 500 ? 503 : 400,
-												headers: response.headers,
-											})
-										const location = response.headers.get("location")
-										const error =
-											location === null
-												? null
-												: new URL(
-														location,
-														config.publicOrigin,
-													).searchParams.get("error")
-										return new Response(null, {
-											status:
-												error === null
-													? 303
-													: error === "oauth_provider_not_found"
-														? 503
-														: 401,
-											headers: response.headers,
-										})
-									}),
-								),
-						}),
-					),
+				handler: sdk.handler,
 				resolveSession: (credential, options) =>
 					attempt(
 						() =>
@@ -299,20 +179,6 @@ export const layer = (
 										expiresAt: result.session.expiresAt.toISOString(),
 										setCookies: headers.getSetCookie(),
 									}),
-						),
-					),
-				logout: (credential) =>
-					attempt(
-						() =>
-							sdk.api.signOut({
-								headers: headers(credential),
-								asResponse: true,
-							}),
-						() => AuthUnavailable.make({ dependency: "storage" }),
-					).pipe(
-						Effect.map(
-							(response) =>
-								new Response(null, { status: 204, headers: response.headers }),
 						),
 					),
 			})

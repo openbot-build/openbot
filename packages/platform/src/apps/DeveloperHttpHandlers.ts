@@ -57,9 +57,8 @@ export const layerPublic = HttpApiBuilder.group(
 						return HttpServerResponse.empty({
 							status: 303,
 							headers: {
-								location: receipt.requiresLogin
-									? "/auth/login?returnTo=" + encodeURIComponent(target)
-									: target,
+								// Without a session, the client signs in with Better Auth and then reads the test.
+								location: target,
 								"cache-control": "no-store",
 								"referrer-policy": "no-referrer",
 							},

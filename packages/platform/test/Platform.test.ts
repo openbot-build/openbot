@@ -96,7 +96,10 @@ test(
 			)
 			assert.equal(form.get("client_secret"), null)
 			if (publicClient) assert.equal(form.get("client_id"), "client")
-			assert.equal(form.get("redirect_uri"), publicOrigin + "/auth/callback")
+			assert.equal(
+				form.get("redirect_uri"),
+				publicOrigin + "/auth/callback/oidc",
+			)
 			const [subject, state] = (form.get("code") ?? "").split(":")
 			const transaction = Option.getOrUndefined(
 				HashMap.get(pending, state ?? ""),
@@ -209,13 +212,22 @@ test(
 				return response
 			}
 			const login = async (subject: string) => {
-				const response = await request("/auth/login")
-				assert.equal(response.status, 303)
+				const response = await request("/auth/sign-in/social", {
+					method: "POST",
+					headers: { origin: publicOrigin, "content-type": "application/json" },
+					body: JSON.stringify({
+						provider: "oidc",
+						callbackURL: publicOrigin + "/",
+					}),
+				})
+				assert.equal(response.status, 200)
 				const cookie = response.headers.get("set-cookie") ?? ""
 				assert.match(cookie, /Secure/)
 				assert.match(cookie, /HttpOnly/)
 				assert.match(cookie, /SameSite=Lax/i)
-				const authorization = new URL(response.headers.get("location") ?? "")
+				const authorization = new URL(
+					((await response.json()) as { readonly url: string }).url,
+				)
 				assert.equal(authorization.origin, issuer)
 				assert.ok(
 					authorization.searchParams
@@ -228,7 +240,7 @@ test(
 					nonce: authorization.searchParams.get("nonce") ?? "",
 					challenge: authorization.searchParams.get("code_challenge") ?? "",
 				})
-				const callback = `/auth/callback?state=${state}&iss=${encodeURIComponent(issuer)}&code=${subject}:${state}`
+				const callback = `/auth/callback/oidc?state=${state}&iss=${encodeURIComponent(issuer)}&code=${subject}:${state}`
 				return { callback, cookie: cookie.split(";")[0]!, state }
 			}
 			const sessionCookie = (response: globalThis.Response) =>
@@ -236,52 +248,52 @@ test(
 					.getSetCookie()
 					.find((value) => value.startsWith(AuthApi.SessionCookie + "="))
 					?.split(";")[0] ?? ""
+			/** Better Auth sends a failed callback to its error page and sets no session. */
+			const rejected = (response: globalThis.Response) => {
+				assert.equal(response.status, 302)
+				assert.equal(sessionCookie(response), "")
+				assert.ok(
+					new URL(
+						response.headers.get("location") ?? "",
+						publicOrigin,
+					).searchParams.has("error"),
+				)
+			}
 			const complete = async (subject: string) => {
 				const transaction = await login(subject)
 				const response = await request(transaction.callback, {
 					headers: { cookie: transaction.cookie },
 				})
-				assert.equal(response.status, 303)
+				assert.equal(response.status, 302)
 				assert.equal(response.headers.get("location"), publicOrigin + "/")
 				return { ...transaction, session: sessionCookie(response) }
 			}
 			const alice = await complete("alice")
 			assert.ok(alice.session)
 			const count = tokenCalls
-			assert.equal(
-				(await request(alice.callback, { headers: { cookie: alice.cookie } }))
-					.status,
-				401,
+			rejected(
+				await request(alice.callback, { headers: { cookie: alice.cookie } }),
 			)
 			assert.equal(tokenCalls, count)
 			const wrongBrowser = await login("bob")
-			assert.equal(
-				(
-					await request(wrongBrowser.callback, {
-						headers: { cookie: AuthApi.LoginCookie + "=incorrect" },
-					})
-				).status,
-				401,
+			rejected(
+				await request(wrongBrowser.callback, {
+					headers: { cookie: AuthApi.LoginCookie + "=incorrect" },
+				}),
 			)
 			const bobResponse = await request(wrongBrowser.callback, {
 				headers: { cookie: wrongBrowser.cookie },
 			})
-			assert.equal(bobResponse.status, 303)
+			assert.equal(bobResponse.status, 302)
 			const bobSession = sessionCookie(bobResponse)
 			forged = true
 			const bad = await login("alice")
-			assert.equal(
-				(await request(bad.callback, { headers: { cookie: bad.cookie } }))
-					.status,
-				401,
-			)
+			rejected(await request(bad.callback, { headers: { cookie: bad.cookie } }))
 			forged = false
 			wrongIdentity = true
 			const wrong = await login("alice")
-			assert.equal(
-				(await request(wrong.callback, { headers: { cookie: wrong.cookie } }))
-					.status,
-				401,
+			rejected(
+				await request(wrong.callback, { headers: { cookie: wrong.cookie } }),
 			)
 			wrongIdentity = false
 			const expiredLogin = await login("alice")
@@ -293,23 +305,18 @@ test(
 				),
 			)
 			const beforeExpiredLogin = tokenCalls
-			assert.equal(
-				(
-					await request(expiredLogin.callback, {
-						headers: { cookie: expiredLogin.cookie },
-					})
-				).status,
-				401,
+			rejected(
+				await request(expiredLogin.callback, {
+					headers: { cookie: expiredLogin.cookie },
+				}),
 			)
 			assert.equal(tokenCalls, beforeExpiredLogin)
-			assert.equal(
-				(
-					await request("/auth/callback?state=one&state=two&iss=bad&code=bad", {
-						headers: { cookie: alice.cookie },
-					})
-				).status,
-				400,
+			const repeated = await request(
+				"/auth/callback/oidc?state=one&state=two&iss=bad&code=bad",
+				{ headers: { cookie: alice.cookie } },
 			)
+			assert.equal(repeated.status, 400)
+			assert.equal(sessionCookie(repeated), "")
 			providerUnavailable = true
 			await using unavailableRuntime = server()
 			const unavailableAddress = await unavailableRuntime.runPromise(
@@ -317,27 +324,30 @@ test(
 					HttpServer.formatAddress(server.address),
 				),
 			)
-			assert.equal(
+			assert.notEqual(
 				(
-					await fetch(unavailableAddress + "/auth/login", {
-						redirect: "manual",
+					await fetch(unavailableAddress + "/auth/sign-in/social", {
+						method: "POST",
+						headers: {
+							origin: publicOrigin,
+							"content-type": "application/json",
+						},
+						body: JSON.stringify({ provider: "oidc" }),
 					})
 				).status,
-				503,
+				200,
 			)
 			providerUnavailable = false
 			forged = false
-			assert.equal(
-				(await request(bad.callback, { headers: { cookie: bad.cookie } }))
-					.status,
-				401,
-			)
+			rejected(await request(bad.callback, { headers: { cookie: bad.cookie } }))
 			for (const origin of [undefined, "https://foreign.example"]) {
 				assert.equal(
 					(
-						await request("/auth/logout", {
+						await request("/auth/sign-out", {
 							method: "POST",
+							body: "{}",
 							headers: {
+								"content-type": "application/json",
 								cookie: alice.session,
 								...(origin === undefined ? {} : { origin }),
 							},
@@ -558,12 +568,17 @@ test(
 			)
 			assert.equal(
 				(
-					await request("/auth/logout", {
+					await request("/auth/sign-out", {
 						method: "POST",
-						headers: { cookie: alice.session, origin: publicOrigin },
+						body: "{}",
+						headers: {
+							"content-type": "application/json",
+							cookie: alice.session,
+							origin: publicOrigin,
+						},
 					})
 				).status,
-				204,
+				200,
 			)
 			assert.equal(
 				(await request("/auth/session", { headers: { cookie: alice.session } }))

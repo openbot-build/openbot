@@ -291,18 +291,22 @@ export async function start(options: {
 			),
 		)
 		const login = async (subject: string, returnTo?: string) => {
-			const redirect = await fetch(
-				address +
-					"/auth/login" +
-					(returnTo === undefined
-						? ""
-						: "?" + new URLSearchParams({ returnTo })),
-				{
-					redirect: "manual",
+			const start = await fetch(address + "/auth/sign-in/social", {
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+					origin: options.publicOrigin,
 				},
+				body: JSON.stringify({
+					provider: "oidc",
+					callbackURL: options.publicOrigin + (returnTo ?? "/"),
+					disableRedirect: true,
+				}),
+			})
+			const authorization = new URL(
+				((await start.json()) as { readonly url: string }).url,
 			)
-			const authorization = new URL(redirect.headers.get("location") ?? "")
-			const browser = redirect.headers
+			const browser = start.headers
 				.getSetCookie()
 				.map((cookie) => cookie.split(";")[0])
 				.join("; ")
@@ -312,7 +316,7 @@ export async function start(options: {
 			})
 			const callback = await fetch(
 				address +
-					"/auth/callback?" +
+					"/auth/callback/oidc?" +
 					new URLSearchParams({
 						state: authorization.searchParams.get("state") ?? "",
 						iss: issuer,

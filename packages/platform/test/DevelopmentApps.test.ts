@@ -37,7 +37,14 @@ test("development Apps show protocol, requirement, expiry and cleanup failures t
 				HttpServer.formatAddress(server.address),
 			),
 		)
-		const login = await fetch(address + "/auth/login", { redirect: "manual" })
+		const login = await fetch(address + "/auth/development/sign-in", {
+			method: "POST",
+			headers: {
+				origin: options.auth.publicOrigin,
+				"content-type": "application/json",
+			},
+			body: "{}",
+		})
 		const cookie =
 			login.headers
 				.getSetCookie()

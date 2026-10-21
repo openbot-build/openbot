@@ -104,16 +104,24 @@ test(
 			})
 			const development = await start(
 				"DevelopmentMain",
-				"Development login: " + publicOrigin + "/auth/login",
+				"Development login: POST " + publicOrigin + "/auth/development/sign-in",
 			)
 			try {
-				const login = await fetch(development.address + "/auth/login", {
-					redirect: "manual",
-				})
-				assert.equal(login.status, 303)
+				const login = await fetch(
+					development.address + "/auth/development/sign-in",
+					{
+						method: "POST",
+						headers: {
+							origin: publicOrigin,
+							"content-type": "application/json",
+						},
+						body: "{}",
+					},
+				)
+				assert.equal(login.status, 200)
 				assert.match(
 					development.output(),
-					/Development login: https:\/\/localhost:8443\/auth\/login/,
+					/Development login: POST https:\/\/localhost:8443\/auth\/development\/sign-in/,
 				)
 				const cookie = login.headers
 					.getSetCookie()

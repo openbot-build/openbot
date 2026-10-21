@@ -7,7 +7,7 @@ export const ResolvedConfiguration = Schema.Union([
 			{ redirectUri: Schema.String },
 			{
 				redirectUri: (config) =>
-					Option.some(config.publicOrigin + "/auth/callback"),
+					Option.some(config.publicOrigin + "/auth/callback/oidc"),
 			},
 		),
 	),

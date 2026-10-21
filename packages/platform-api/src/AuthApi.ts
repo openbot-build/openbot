@@ -9,7 +9,10 @@ import {
 import { Identity } from "./Identity.ts"
 
 export const SessionCookie = "__Host-openbot-session"
+/** Better Auth keeps the sign-in state in this cookie during an OpenID Connect round trip. */
 export const LoginCookie = "__Host-openbot-login"
+/** Better Auth serves every route under this path. */
+export const AuthBasePath = "/auth"
 /**
  * A same-origin path to return to after a browser sign-in or authorization round trip.
  * Platform serves no pages. A client on the same origin owns these paths.
@@ -37,10 +40,6 @@ export class AuthenticationRequired extends Schema.TaggedError<AuthenticationReq
 ) {}
 export class AuthenticationUnavailable extends Schema.TaggedError<AuthenticationUnavailable>()(
 	"AuthenticationUnavailable",
-	{},
-) {}
-export class InvalidAccountRequest extends Schema.TaggedError<InvalidAccountRequest>()(
-	"InvalidAccountRequest",
 	{},
 ) {}
 export class ForbiddenOrigin extends Schema.TaggedError<ForbiddenOrigin>()(
@@ -101,27 +100,6 @@ export class OriginCheck extends HttpApiMiddleware.Service<OriginCheck>()(
 export class NoStore extends HttpApiMiddleware.Service<NoStore>()(
 	"@openbot-build/platform-api/AuthApi/NoStore",
 ) {}
-const inputErrors = [
-	...AuthErrors,
-	InvalidAccountRequest.pipe(HttpApiSchema.status(400)),
-]
-export const LoginApi = HttpApiGroup.make("login")
-	.add(
-		HttpApiEndpoint.get("login", "/auth/login", {
-			query: { returnTo: Schema.optionalKey(ReturnTo) },
-			success: HttpApiSchema.Empty(303),
-			error: inputErrors,
-		}),
-		HttpApiEndpoint.get("callback", "/auth/callback", {
-			success: HttpApiSchema.Empty(303),
-			error: inputErrors,
-		}),
-		HttpApiEndpoint.post("logout", "/auth/logout", {
-			success: HttpApiSchema.NoContent,
-			error: AuthErrors,
-		}).middleware(OriginCheck),
-	)
-	.middleware(NoStore)
 export const AccountApi = HttpApiGroup.make("account")
 	.add(
 		HttpApiEndpoint.get("session", "/auth/session", { success: SessionInfo }),

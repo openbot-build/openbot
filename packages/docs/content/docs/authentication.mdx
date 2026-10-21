@@ -19,13 +19,19 @@ There are two ways to call the business routes under `/v1`:
 
 Platform does not keep passwords. It uses an OpenID Connect provider. OpenID Connect (OIDC) is a standard way to let another service check who a person is.
 
-Open this address in a browser:
+Platform uses [Better Auth](https://better-auth.com) for sign-in. Better Auth serves all of its routes under `/auth/*`, as its [Effect guide](https://better-auth.com/docs/integrations/effect) shows. These routes are not in the API reference. The [Better Auth docs](https://better-auth.com/docs/concepts/api) describe them.
+
+To start a sign-in, your client sends this request from the Platform origin:
 
 ```sh
-https://api.example.com/auth/login
+curl -X POST https://api.example.com/auth/sign-in/social \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{ "provider": "oidc", "callbackURL": "https://api.example.com/settings/keys" }'
 ```
 
-Platform sends the browser to the provider. After the person signs in, the provider sends the browser back to `https://api.example.com/auth/callback`. Platform then sets the session cookie and sends the browser to the return path. The default return path is `/`.
+The answer is JSON with a `url`. Send the browser to that `url`. After the person signs in, the provider sends the browser back to `https://api.example.com/auth/callback/oidc`. Better Auth then sets the session cookie and sends the browser to `callbackURL`. The `callbackURL` must be on the Platform origin. If it is not, Better Auth returns `403`.
+If the sign-in fails, Better Auth sends the browser to `/auth/error?error=<code>` and sets no cookie.
 
 ### Set up the provider
 
@@ -38,7 +44,7 @@ Register Platform as a client at your provider. Then set these environment varia
 | `OPENBOT_OIDC_CLIENT_SECRET` | The client secret. Leave it empty for a public client.                          |
 | `OPENBOT_PUBLIC_ORIGIN`      | The public HTTPS origin of Platform, for example `https://api.example.com`.     |
 
-Use `<origin>/auth/callback` as the redirect URI at the provider. Platform asks for the scopes `openid profile email`.
+Use `<origin>/auth/callback/oidc` as the redirect URI at the provider. Platform asks for the scopes `openid profile email`.
 With an empty client secret, Platform signs in as a public client with PKCE. PKCE is a check that protects the sign-in code.
 
 ### Development account
@@ -49,7 +55,10 @@ This mode works only when the public origin is HTTPS on a loopback host: `localh
 This command signs in and saves the cookie in a file:
 
 ```sh
-curl -c cookies.txt https://localhost:8443/auth/login
+curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
+  -H "Origin: https://localhost:8443" \
+  -H "Content-Type: application/json" \
+  -d '{}'
 ```
 
 ### Read and end the sign-in
@@ -68,7 +77,7 @@ curl -c cookies.txt https://localhost:8443/auth/login
 }
 ```
 
-`POST /auth/logout` ends the sign-in. It returns `204` and needs the `Origin` header (see below).
+`POST /auth/sign-out` ends the sign-in. It is a Better Auth route. Send a JSON body (`{}`) and the `Origin` header (see below). It returns `200`.
 
 ---
 
@@ -194,16 +203,12 @@ If you ask for a Session from another tenant, Platform answers `404`, as if it d
 
 ## Return paths
 
-Some flows send the browser back to your client after a round trip. You choose the place with `returnTo`, for example on `/auth/login`:
-
-```sh
-https://api.example.com/auth/login?returnTo=/settings/keys
-```
+Some flows send the browser back to your client after a round trip. You choose the place with `returnTo`.
 
 A return path must be a path on the same origin. It must start with one `/`. It cannot point to `/auth/*`, `/v1/*` or `/development/*`, because Platform owns those paths. The default is `/`.
 
 Platform has no pages, so your client must serve these paths. Two flows add a query value:
 
 - **App authorization.** When an App sign-in comes back and the person is signed in, Platform finishes the flow. The browser goes to the return path with `?authorization=<flowId>`. Your client can read the result with `GET /v1/app-authorizations/<flowId>`.
-  If the person is not signed in, Platform signs the person in first, then goes to `/?authorization=<flowId>`. Your client then calls `POST /v1/app-authorizations/<flowId>/complete` to finish the flow.
+  If the person is not signed in, the browser goes to `/?authorization=<flowId>`. Your client signs the person in with Better Auth (see [Sign in](#sign-in)), with this address as `callbackURL`. Then it calls `POST /v1/app-authorizations/<flowId>/complete` to finish the flow.
 - **Developer tests.** A developer test authorization returns to `/?developerTest=<testId>`.

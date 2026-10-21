@@ -23,7 +23,7 @@ It must use `https`. It must not have a path, a trailing slash, a user name, or 
 
 Platform uses this value in three places:
 
-- It builds the sign-in redirect URI `<origin>/auth/callback`.
+- It builds the sign-in redirect URI `<origin>/auth/callback/oidc`.
 - It checks the `Origin` header of browser requests that change data. The header must be exactly equal to this value.
 - It builds links in App authorization and in the App Index.
 

@@ -96,8 +96,15 @@ test(
 					HttpServer.formatAddress(server.address),
 				),
 			)
-			const login = await fetch(address + "/auth/login", { redirect: "manual" })
-			assert.equal(login.status, 303)
+			const login = await fetch(address + "/auth/development/sign-in", {
+				method: "POST",
+				headers: {
+					origin: options.auth.publicOrigin,
+					"content-type": "application/json",
+				},
+				body: "{}",
+			})
+			assert.equal(login.status, 200)
 			const cookie = login.headers
 				.getSetCookie()
 				.find((value) => value.startsWith(AuthApi.SessionCookie + "="))!
@@ -476,8 +483,15 @@ test(
 					HttpServer.formatAddress(server.address),
 				),
 			)
-			const login = await fetch(address + "/auth/login", { redirect: "manual" })
-			assert.equal(login.status, 303)
+			const login = await fetch(address + "/auth/development/sign-in", {
+				method: "POST",
+				headers: {
+					origin: options.auth.publicOrigin,
+					"content-type": "application/json",
+				},
+				body: "{}",
+			})
+			assert.equal(login.status, 200)
 			const cookie = login.headers
 				.getSetCookie()
 				.find((value) => value.startsWith(AuthApi.SessionCookie + "="))!

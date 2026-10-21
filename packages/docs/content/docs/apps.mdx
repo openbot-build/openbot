@@ -127,7 +127,7 @@ Some Apps need the user's own account. Platform uses OAuth with PKCE for this. T
    - `IssuerSelectionRequired` lists `issuers`. Ask the user to pick one, then start again with `issuer`.
    - `AuthorizationNotRequired` means the App needs no sign-in.
 3. The user signs in. The provider sends the browser to `https://api.example.com/auth/apps/callback`.
-4. Platform sends the browser to `returnTo?authorization=<flowId>`. If the browser has no Platform session, the user signs in to Platform first, and then goes to `/?authorization=<flowId>`.
+4. Platform sends the browser to `returnTo?authorization=<flowId>`. If the browser has no Platform session, it goes to `/?authorization=<flowId>`. Your client signs the user in first (see [Authentication](/docs/authentication#sign-in)).
 5. Your client finishes the flow:
 
    ```sh

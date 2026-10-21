@@ -141,8 +141,15 @@ import { layer } from "@openbot-build/client"
 
 const ClientLive = layer({
 	baseUrl: window.location.origin,
-	onUnauthorized: () => {
-		window.location.assign("/auth/login?returnTo=/")
+	onUnauthorized: async () => {
+		// Better Auth starts the sign-in and answers with the provider address.
+		const response = await fetch("/auth/sign-in/social", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ provider: "oidc", callbackURL: "/" }),
+		})
+		const { url } = await response.json()
+		window.location.assign(url)
 	},
 })
 ```

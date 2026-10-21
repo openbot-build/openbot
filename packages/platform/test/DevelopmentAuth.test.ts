@@ -167,9 +167,12 @@ test(
 				return response
 			}
 			const login = async () => {
-				const response = await request("/auth/login")
-				assert.equal(response.status, 303)
-				assert.equal(response.headers.get("location"), publicOrigin + "/")
+				const response = await request("/auth/development/sign-in", {
+					method: "POST",
+					headers: { origin: publicOrigin, "content-type": "application/json" },
+					body: "{}",
+				})
+				assert.equal(response.status, 200)
 				const cookie =
 					response.headers
 						.getSetCookie()
@@ -195,7 +198,12 @@ test(
 				(await request("/v1/sessions", { headers: accountHeaders })).status,
 				200,
 			)
-			assert.equal((await request("/auth/callback?code=anything")).status, 400)
+			assert.equal(
+				(await request("/auth/callback/oidc?code=anything")).headers.has(
+					"set-cookie",
+				),
+				false,
+			)
 			const secondSession = await login()
 			const same: typeof AuthApi.SessionInfo.Type = await (
 				await request("/auth/session", { headers: { cookie: secondSession } })
@@ -356,21 +364,27 @@ test(
 			assert.deepEqual(restarted.identity, info.identity)
 			assert.equal(
 				(
-					await request("/auth/logout", {
+					await request("/auth/sign-out", {
 						method: "POST",
-						headers: { ...accountHeaders, origin: "https://foreign.example" },
+						body: "{}",
+						headers: {
+							"content-type": "application/json",
+							...accountHeaders,
+							origin: "https://foreign.example",
+						},
 					})
 				).status,
 				403,
 			)
 			assert.equal(
 				(
-					await request("/auth/logout", {
+					await request("/auth/sign-out", {
 						method: "POST",
-						headers: accountHeaders,
+						body: "{}",
+						headers: { ...accountHeaders, "content-type": "application/json" },
 					})
 				).status,
-				204,
+				200,
 			)
 			assert.equal(
 				(await request("/auth/session", { headers: accountHeaders })).status,
@@ -409,9 +423,7 @@ test("business authentication keeps session Origin checks and typed failures", a
 		Auth.Model.AuthUnavailable.make({ dependency: "storage" }),
 	)
 	const auth = Layer.succeed(Auth.Auth, {
-		startLogin: () => failure,
-		completeLogin: () => failure,
-		logout: () => failure,
+		handler: () => Promise.resolve(new Response(null, { status: 503 })),
 		resolveSession: (credential) =>
 			Redacted.value(credential) !== "signed-session"
 				? Effect.fail(Auth.Model.CredentialRejected.make({ kind: "session" }))

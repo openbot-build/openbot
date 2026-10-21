@@ -389,9 +389,8 @@ const startApi = async (
 	const unused = () =>
 		Effect.die("Discovery must not call account or Agent operations")
 	const auth = Auth.Auth.of({
-		startLogin: unused,
-		completeLogin: unused,
-		logout: unused,
+		handler: () =>
+			Promise.reject(new Error("Discovery must not call Better Auth routes")),
 		resolveSession: (credential) =>
 			Effect.gen(function* () {
 				authCalls = EffectArray.append(authCalls, "session")

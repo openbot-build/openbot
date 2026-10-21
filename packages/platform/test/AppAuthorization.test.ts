@@ -145,10 +145,9 @@ test("Platform completes real CIMD and PKCE flows once, resumes callbacks after 
 			redirect: "manual",
 		})
 		assert.equal(received.status, 303)
-		assert.equal(
-			new URL(received.headers.get("location") ?? "").pathname,
-			"/auth/login",
-		)
+		const pending = new URL(received.headers.get("location") ?? "")
+		assert.equal(pending.pathname, "/")
+		assert.equal(pending.searchParams.get("authorization"), first.flowId)
 		assert.equal(publisher.exchanges(), 0)
 		await host.restart()
 		address = host.address
@@ -346,31 +345,26 @@ test("Platform completes real CIMD and PKCE flows once, resumes callbacks after 
 				(await host.login("return-user", returnTo)).returnLocation,
 				proxy.ipOrigin + returnTo,
 			)
-			const login = await fetch(
-				host.address + "/auth/login?" + new URLSearchParams({ returnTo }),
-				{ redirect: "manual" },
-			)
-			assert.equal(login.status, 303)
-			assert.equal(
-				new URL(login.headers.get("location") ?? "").origin,
-				"https://id.example.com",
-			)
 		}
-		for (const returnTo of [
+		const signIn = (callbackURL: string) =>
+			fetch(host.address + "/auth/sign-in/social", {
+				method: "POST",
+				headers: {
+					origin: proxy.ipOrigin,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					provider: "oidc",
+					callbackURL,
+					disableRedirect: true,
+				}),
+			})
+		for (const callbackURL of [
 			"https://foreign.test",
 			"//foreign.test",
-			"/auth/login",
 			"/\\foreign.test",
 		])
-			assert.equal(
-				(
-					await fetch(
-						host.address + "/auth/login?" + new URLSearchParams({ returnTo }),
-						{ redirect: "manual" },
-					)
-				).status,
-				400,
-			)
+			assert.equal((await signIn(callbackURL)).status, 403, callbackURL)
 		publisher.setRejectGrant(false)
 		publisher.setRevocationFails(true)
 		const revoke = () =>

@@ -1,7 +1,6 @@
 import { Context, Effect, type Redacted } from "effect"
 import type {
 	AuthUnavailable,
-	AuthRequestInvalid,
 	CredentialRejected,
 	SessionInfo,
 } from "./Model.js"
@@ -9,14 +8,8 @@ import type {
 export class Auth extends Context.Service<
 	Auth,
 	{
-		readonly startLogin: (
-			headers: Headers,
-			returnTo?: string,
-		) => Effect.Effect<Response, AuthUnavailable | AuthRequestInvalid>
-		readonly completeLogin: (
-			url: string,
-			headers: Headers,
-		) => Effect.Effect<Response, AuthUnavailable>
+		/** The Better Auth Web handler. Platform mounts it at `/auth/*`. */
+		readonly handler: (request: Request) => Promise<Response>
 		readonly resolveSession: (
 			credential: Redacted.Redacted<string>,
 			options?: { readonly refresh: boolean },
@@ -24,8 +17,5 @@ export class Auth extends Context.Service<
 			SessionInfo & { readonly setCookies: ReadonlyArray<string> },
 			CredentialRejected | AuthUnavailable
 		>
-		readonly logout: (
-			credential: Redacted.Redacted<string>,
-		) => Effect.Effect<Response, AuthUnavailable>
 	}
 >()("@openbot-build/platform/auth/Auth") {}
