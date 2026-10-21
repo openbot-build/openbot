@@ -314,7 +314,20 @@ The workflow runs for pull requests, pushes to `main`, and tags like `v1.2.3`. I
 | A push to `main`    | `<commit-sha>` and `latest` |
 | A tag like `v1.2.3` | `<commit-sha>` and `v1.2.3` |
 
-The images go to the GitHub container registry, at `ghcr.io/openbot-build/openbot/platform` and `ghcr.io/openbot-build/openbot/protocol-test`. The workflow does not deploy. To use a published image with Compose, pull it and tag it as `openbot-platform:<tag>`.
+The images go to the GitHub container registry, at `ghcr.io/openbot-build/openbot/platform` and `ghcr.io/openbot-build/openbot/protocol-test`. The workflow does not deploy Platform. To use a published image with Compose, pull it and tag it as `openbot-platform:<tag>`.
+
+### Publish the docs site
+
+The workflow `.github/workflows/docs.yml` publishes the docs site to [GitHub Pages](https://docs.github.com/pages) at [openbot.build](https://openbot.build). It runs for each push to `main`. You can also start it by hand from the Actions tab.
+
+| Job      | What it does                                                                                                            |
+| -------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `build`  | Runs `pnpm --filter "@openbot-build/docs..." build` in `devenv shell`. This builds the docs and the packages they need. |
+| `deploy` | Sends `packages/docs/dist` to GitHub Pages.                                                                             |
+
+The `build` job sets `DOCS_URL` to `https://openbot.build`. Astro uses it for full page links, such as the sitemap. Only one deploy runs at a time.
+
+The repository settings must use **GitHub Actions** as the Pages source, with `openbot.build` as the custom domain. The DNS for `openbot.build` must point to GitHub Pages. See [Manage a custom domain](https://docs.github.com/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site).
 
 ### Check the images
 
