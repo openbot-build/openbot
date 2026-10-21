@@ -48,7 +48,10 @@ import { FetchHttpClient } from "effect/http"
 import * as RepositoryPostgres from "../sessions/RepositoryPostgres.ts"
 import * as DatabasePostgres from "../database/DatabasePostgres.ts"
 import * as BetterAuth from "../auth/BetterAuth.ts"
-import * as ApiKeysPostgres from "../auth/ApiKeysPostgres.ts"
+import * as TokensPostgres from "../auth/TokensPostgres.ts"
+import * as AuditLogPostgres from "../audit/AuditLogPostgres.ts"
+import * as OrganizationPostgres from "../organization/OrganizationPostgres.ts"
+import type * as OrganizationSettings from "../organization/Organization.ts"
 import { AuthConfigurationError, type Configuration } from "../auth/Model.js"
 
 export interface Options<
@@ -69,6 +72,7 @@ export interface Options<
 	readonly appProbe?: Layer.Layer<AppProbe.Probe>
 	readonly appNetwork?: Layer.Layer<AppHost.AppNetwork>
 	readonly auth: Configuration
+	readonly organization?: OrganizationSettings.Options | undefined
 	readonly indexSources?: ReadonlyArray<AppIndex.SourceProvider>
 	readonly sessions?: Omit<
 		Sessions.Options<Tools, E, R, BuildE, BuildR>,
@@ -76,7 +80,7 @@ export interface Options<
 	>
 }
 
-/** Scoped database resources, with a separate stored runtime for each tenant. */
+/** Scoped database resources, with a separate stored runtime for each member. */
 export const layer = <
 	Tools extends Record<string, Tool.Any> = {},
 	E = never,
@@ -200,7 +204,9 @@ export const layer = <
 		Layer.provideMerge(apps),
 		Layer.provideMerge(index),
 		Layer.provideMerge(Governance.layer(options.appRestrictions)),
-		Layer.provideMerge(ApiKeysPostgres.layer),
+		Layer.provideMerge(TokensPostgres.layer),
+		Layer.provideMerge(OrganizationPostgres.layer(options.organization)),
+		Layer.provideMerge(AuditLogPostgres.layer),
 		Layer.provideMerge(RepositoryPostgres.layer),
 		Layer.provideMerge(checked),
 		Layer.provideMerge(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),

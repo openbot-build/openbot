@@ -9,16 +9,18 @@ import { Effect, Option } from "effect"
 import { LanguageModel } from "effect/ai"
 import { HttpApiBuilder, type HttpApiEndpoint } from "effect/http-api"
 import { Backend } from "../app/Backend.ts"
+import { AuditLog } from "../audit/AuditLog.ts"
+import { resourceKey } from "../authorization/Policy.ts"
 
 type Request<K extends keyof typeof SessionsApi.endpoints> = Omit<
 	HttpApiEndpoint.Request<(typeof SessionsApi.endpoints)[K]>,
 	"endpoint" | "group" | "request"
 >
-/** The Sessions of the calling tenant. */
+/** The Sessions of the calling member. */
 const currentSessions = Effect.map(Backend, (backend) =>
 	Effect.flatMap(Identity, (caller) =>
 		backend
-			.get(caller.tenantId, caller)
+			.forCaller(caller)
 			.pipe(Effect.mapError(() => SessionStorageUnavailable.make({}))),
 	),
 )
@@ -157,6 +159,7 @@ export const layerPlatformApprovals = HttpApiBuilder.group(
 	(handlers) =>
 		Effect.gen(function* () {
 			const current = yield* currentSessions
+			const audit = yield* AuditLog
 			return handlers
 				.handle("list", ({ params }) =>
 					Effect.flatMap(current, (sessions) =>
@@ -165,17 +168,43 @@ export const layerPlatformApprovals = HttpApiBuilder.group(
 				)
 				.handle("resolve", ({ params, payload }) =>
 					Effect.gen(function* () {
+						const caller = yield* Identity
 						const sessions = yield* current
 						const pending = yield* sessions.pendingApprovals(params.sessionId)
-						if (!pending.some((item) => item.approvalId === params.approvalId))
+						const approval = pending.find(
+							(item) => item.approvalId === params.approvalId,
+						)
+						if (approval === undefined)
 							return yield* SessionConflict.make({
 								message: "Approval is not pending on this Session",
 							})
-						return yield* sessions.approve(params.sessionId, {
+						const response = yield* sessions.approve(params.sessionId, {
 							...payload,
 							approvalId: params.approvalId,
 							turn: params.turnId,
 						})
+						yield* audit
+							.record({
+								organizationId: caller.organizationId,
+								action: "approval.resolved",
+								actor: caller,
+								resource: resourceKey({
+									subject: {
+										organizationId: caller.organizationId,
+										userId: caller.userId,
+									},
+									kind: "session",
+									id: Option.some(params.sessionId),
+								}),
+								details: {
+									turn: params.turnId,
+									approvalId: params.approvalId,
+									toolName: approval.toolName,
+									approved: payload.approved,
+								},
+							})
+							.pipe(Effect.mapError(() => SessionStorageUnavailable.make({})))
+						return response
 					}),
 				)
 		}),

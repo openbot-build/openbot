@@ -59,6 +59,17 @@ When you set a secret, Platform uses PKCE and also sends the secret.
 It works only when `OPENBOT_PUBLIC_ORIGIN` points to your own computer: `localhost`, `127.0.0.1`, or `[::1]`.
 Never use it on a public server. See [Authentication](/docs/authentication).
 
+## Organization
+
+| Variable                        | Required | Default | Meaning                                                                                                           |
+| ------------------------------- | -------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
+| `OPENBOT_OWNER_EMAILS`          | No       | empty   | Emails, with commas between them. These people join as Super Administrators when the provider verified the email. |
+| `OPENBOT_ALLOWED_EMAIL_DOMAINS` | No       | empty   | Email domains, with commas between them. Platform uses them only when it creates the organization.                |
+
+One deployment has one organization. Platform creates it when the first account signs in.
+With `OPENBOT_OWNER_EMAILS` empty, that first account becomes the Super Administrator. One person alone needs no setting.
+After Platform creates the organization, change the allowed domains with `PATCH /v1/organization`. See [Organization](/docs/organization).
+
 ## Secrets
 
 | Variable                     | Required | Default | Meaning                                                                         |

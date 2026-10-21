@@ -29,8 +29,11 @@ import {
 import { ownerKey } from "../src/apps/Repository.ts"
 import * as Postgres from "./PostgresTest.ts"
 
-const alice = ownerKey({ tenantId: "alice-tenant", userId: "alice" })
-const bobIdentity = { tenantId: "bob-tenant", userId: "bob" }
+const alice = ownerKey({
+	organizationId: "alice-organization",
+	userId: "alice",
+})
+const bobIdentity = { organizationId: "bob-organization", userId: "bob" }
 const bob = ownerKey(bobIdentity)
 const cardUrl = "https://publisher.example/card?app=notes"
 const candidate = Schema.decodeSync(Discovery.Candidate)({
@@ -207,7 +210,10 @@ test("developer proofs, members and report history stay saved without sharing ac
 					[
 						members.accept(bobIdentity, invitation.id).pipe(Effect.result),
 						members
-							.accept({ tenantId: "third", userId: "third" }, invitation.id)
+							.accept(
+								{ organizationId: "third", userId: "third" },
+								invitation.id,
+							)
 							.pipe(Effect.result),
 					],
 					{ concurrency: 2 },
@@ -271,7 +277,7 @@ test("developer proofs, members and report history stay saved without sharing ac
 				yield* access.relinquish(alice, proof.id)
 				const inactive = yield* Effect.flip(
 					members.accept(
-						{ tenantId: "fresh", userId: "fresh" },
+						{ organizationId: "fresh", userId: "fresh" },
 						staleInvitation.id,
 					),
 				)

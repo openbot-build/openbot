@@ -28,8 +28,8 @@ const Wire = Schema.fromJsonString(
 		params: Schema.optionalKey(Schema.JsonObject),
 	}),
 )
-const owner = ownerKey({ tenantId: "developer", userId: "alice" })
-const another = ownerKey({ tenantId: "other", userId: "bob" })
+const owner = ownerKey({ organizationId: "developer", userId: "alice" })
+const another = ownerKey({ organizationId: "other", userId: "bob" })
 test(
 	"independent HTTPS developer tests apply rules for complete pages, optional capabilities, cancellation and owner-only cleanup",
 	{ timeout: 30000 },

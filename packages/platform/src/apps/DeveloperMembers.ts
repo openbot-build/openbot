@@ -28,7 +28,7 @@ export class DeveloperMembers extends Context.Service<
 		) => Effect.Effect<Api.Invitation, Api.Failure>
 		readonly preview: (id: string) => Effect.Effect<Api.Invitation, Api.Failure>
 		readonly accept: (
-			identity: { readonly tenantId: string; readonly userId: string },
+			identity: { readonly organizationId: string; readonly userId: string },
 			id: string,
 		) => Effect.Effect<Api.Grant, Api.Failure>
 		readonly revoke: (

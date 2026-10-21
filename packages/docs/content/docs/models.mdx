@@ -30,7 +30,7 @@ Set all three, or none of them. If you set only some, or the endpoint is not a v
 This model is the default for every new Session. It also appears in the model list of each Session:
 
 ```sh
-curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions/$SESSION_ID/models
 ```
 
@@ -40,7 +40,7 @@ This model does not support the `reasoningEffort` or `serviceTier` options.
 You can save the model choice on a Session. Send the current Session revision as `expected`:
 
 ```sh
-curl -X PUT -H "Authorization: Bearer $OPENBOT_API_KEY" -H 'Content-Type: application/json' \
+curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
   -d '{"expected":3,"selection":{"_tag":"Config.Selection","provider":"openai-compat","model":"gpt-4.1"}}' \
   https://api.example.com/v1/sessions/$SESSION_ID/model
 ```
@@ -196,7 +196,7 @@ The provider ID is `development`. The model IDs are:
 The token counts in their answers are not real. To pick one, save it on a Session:
 
 ```sh
-curl -X PUT -H "Authorization: Bearer $OPENBOT_API_KEY" -H 'Content-Type: application/json' \
+curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
   -d '{"expected":1,"selection":{"_tag":"Config.Selection","provider":"development","model":"mock-slow"}}' \
   https://localhost:8443/v1/sessions/$SESSION_ID/model
 ```

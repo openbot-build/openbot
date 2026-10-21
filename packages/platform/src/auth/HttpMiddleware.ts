@@ -1,5 +1,5 @@
-import { AuthApi, Identity } from "@openbot-build/platform-api"
-import { Effect, Layer, Match } from "effect"
+import { AuthApi, type Caller, Identity } from "@openbot-build/platform-api"
+import { Effect, Layer, Match, Option } from "effect"
 import {
 	Cookies,
 	HttpEffect,
@@ -7,16 +7,20 @@ import {
 	HttpServerRequest,
 	HttpServerResponse,
 } from "effect/http"
-import { ApiKeys } from "./ApiKeys.ts"
+import { Tokens } from "./Tokens.ts"
 import { Auth } from "./Auth.js"
-import type { AuthUnavailable, CredentialRejected } from "./Model.ts"
+import { AuthUnavailable, CredentialRejected } from "./Model.ts"
+import { Organization } from "../organization/Organization.ts"
 
 /** The public error for a credential that failed to resolve. */
 const publicError = (error: AuthUnavailable | CredentialRejected) =>
 	Match.value(error).pipe(
 		Match.tagsExhaustive({
 			AuthUnavailable: () => AuthApi.AuthenticationUnavailable.make({}),
-			CredentialRejected: () => AuthApi.AuthenticationRequired.make({}),
+			CredentialRejected: ({ kind }) =>
+				kind === "membership"
+					? AuthApi.MembershipRequired.make({})
+					: AuthApi.AuthenticationRequired.make({}),
 		}),
 	)
 
@@ -73,21 +77,35 @@ export const layerSessionAuth = Layer.effect(
 )
 
 /**
- * Find the owner of one credential before the tenant's ordinary business handlers run.
- * Browsers do not send API keys on their own, so API keys need no Origin check.
+ * Find the caller of one credential before the organization's ordinary business handlers run.
+ * Browsers do not send tokens on their own, so tokens need no Origin check.
  */
 export const layerAgentAuth = (config: { readonly publicOrigin: string }) =>
 	Layer.effect(
 		AuthApi.AgentAuth,
 		Effect.gen(function* () {
 			const auth = yield* Auth
-			const apiKeys = yield* ApiKeys
+			const tokens = yield* Tokens
+			const organization = yield* Organization
+			/** A token stops working as soon as its member is suspended or removed. */
+			const activeMember = (caller: Caller) =>
+				organization.member(caller.organizationId, caller.userId).pipe(
+					Effect.mapError(() =>
+						AuthUnavailable.make({ dependency: "storage" }),
+					),
+					Effect.flatMap((member) =>
+						Option.exists(member, (member) => member.status === "active")
+							? Effect.succeed(caller)
+							: Effect.fail(CredentialRejected.make({ kind: "membership" })),
+					),
+				)
 			return {
-				apiKey: (httpEffect, { credential }) =>
-					apiKeys.authenticate(credential).pipe(
+				token: (httpEffect, { credential }) =>
+					tokens.authenticate(credential).pipe(
+						Effect.flatMap(activeMember),
 						Effect.mapError(publicError),
-						Effect.flatMap((identity) =>
-							Effect.provideService(httpEffect, Identity, identity),
+						Effect.flatMap((caller) =>
+							Effect.provideService(httpEffect, Identity, caller),
 						),
 					),
 				session: (httpEffect, { credential }) =>
@@ -103,11 +121,10 @@ export const layerAgentAuth = (config: { readonly publicOrigin: string }) =>
 							.pipe(Effect.mapError(publicError))
 						if (forbiddenOrigin) return yield* AuthApi.ForbiddenOrigin.make({})
 						yield* setSessionCookies(session.setCookies)
-						return yield* Effect.provideService(
-							httpEffect,
-							Identity,
-							session.identity,
-						)
+						return yield* Effect.provideService(httpEffect, Identity, {
+							kind: "member",
+							...session.identity,
+						})
 					}),
 			}
 		}),

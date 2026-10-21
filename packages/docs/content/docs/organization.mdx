@@ -1,0 +1,169 @@
+---
+title: Organization
+description: Members, roles, sign-in rules and the audit log.
+---
+
+This page shows how many people share one OpenBot. All routes are under `/v1/organization`. They accept a user token or the session cookie. See [Authentication](/docs/authentication).
+
+One deployment has one organization. One person who uses OpenBot alone is an organization with one member.
+
+---
+
+## Who can join
+
+The first account that signs in creates the organization. It becomes a Super Administrator. One person alone needs nothing more.
+
+After that, an account joins in one of these ways:
+
+| Way                  | Role it gets                          | Needs                                                                |
+| -------------------- | ------------------------------------- | -------------------------------------------------------------------- |
+| Owner email          | `super_administrator`                 | The email is in `OPENBOT_OWNER_EMAILS` and the provider verified it. |
+| Allowed email domain | The default roles of the organization | The email domain is allowed and the provider verified the email.     |
+
+Every other account gets `403` with `MembershipRequired` when it signs in.
+
+When `OPENBOT_OWNER_EMAILS` is set, the first account does not become a Super Administrator on its own. Only the listed emails do.
+`OPENBOT_ALLOWED_EMAIL_DOMAINS` sets the allowed domains when Platform creates the organization. After that, change them with the API. See [Configuration](/docs/configuration).
+
+---
+
+## Read and change the organization
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" https://api.example.com/v1/organization
+```
+
+```json
+{
+	"id": "org_8f3a",
+	"name": "OpenBot",
+	"allowedEmailDomains": ["example.com"],
+	"defaultRoles": ["member"],
+	"createdAt": "2026-10-21T09:00:00.000Z"
+}
+```
+
+`PATCH /v1/organization` changes `name`, `allowedEmailDomains` or `defaultRoles`. It needs `organization.write`.
+
+```sh
+curl -X PATCH -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"allowedEmailDomains":["example.com"]}' \
+  https://api.example.com/v1/organization
+```
+
+---
+
+## Members
+
+`GET /v1/organization/members` lists members in pages. It needs `members.read`. Use `limit` (1 to 100, default 50) and `after` with the `next` value of the last page.
+
+```json
+{
+	"items": [
+		{
+			"userId": "u_123",
+			"email": "ada@example.com",
+			"name": "Ada",
+			"status": "active",
+			"roles": ["super_administrator"],
+			"policies": [],
+			"joinedAt": "2026-10-21T09:00:00.000Z"
+		}
+	],
+	"next": null
+}
+```
+
+`GET /v1/organization/members/:userId` reads one member.
+
+### Change a member
+
+`PATCH /v1/organization/members/:userId` changes `status`, `roles` or `policies`. It needs `members.write`.
+
+- `status` is `active` or `suspended`. A suspended member cannot sign in, and their tokens stop working at once.
+- `roles` is a list of role IDs. See [Permissions](/docs/permissions).
+- `policies` are extra policies for the member, on top of their roles.
+
+```sh
+curl -X PATCH -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"roles":["administrator"]}' \
+  https://api.example.com/v1/organization/members/u_456
+```
+
+### Remove a member
+
+`DELETE /v1/organization/members/:userId` removes the member and revokes their tokens. It needs `members.write`.
+If their email domain is still allowed, they join again the next time they sign in. To keep them out, suspend them.
+
+### Rules for Super Administrators
+
+- Only a Super Administrator can change or remove a Super Administrator, or give someone the role.
+- Only a Super Administrator can give a member extra `allow` policies, or put `super_administrator` in the default roles. Other administrators can only add `deny` policies. So nobody can give more than they have.
+- The organization keeps at least one active Super Administrator. A change that breaks this returns `409` with `LastSuperAdministrator`.
+
+---
+
+## Audit log
+
+The audit log records important changes. Nothing can change or remove an entry.
+`GET /v1/organization/audit_logs` lists entries, newest first. It needs `audit_logs.read`.
+
+| Query    | What it does                                  |
+| -------- | --------------------------------------------- |
+| `limit`  | 1 to 100. The default is 50.                  |
+| `after`  | The `next` value of the last page.            |
+| `action` | Only entries with this action.                |
+| `actor`  | Only entries by the member with this user ID. |
+
+```json
+{
+	"items": [
+		{
+			"id": "42",
+			"createdAt": "2026-10-21T09:05:00.000Z",
+			"action": "member.updated",
+			"actor": {
+				"kind": "member",
+				"userId": "u_123",
+				"organizationId": "org_8f3a"
+			},
+			"resource": "openbot.org.org_8f3a.user.u_456",
+			"details": {
+				"before": { "status": "active", "roles": ["member"], "policies": 0 },
+				"after": {
+					"status": "active",
+					"roles": ["administrator"],
+					"policies": 0
+				}
+			}
+		}
+	],
+	"next": "42"
+}
+```
+
+| Action                 | When                                           |
+| ---------------------- | ---------------------------------------------- |
+| `member.joined`        | An account joins the organization.             |
+| `member.updated`       | A member gets a new status, roles or policies. |
+| `member.removed`       | A member is removed.                           |
+| `organization.updated` | The organization settings change.              |
+| `token.created`        | A member creates a user token.                 |
+| `token.revoked`        | A member revokes a user token.                 |
+| `approval.resolved`    | A person answers an approval.                  |
+
+---
+
+## Errors
+
+| Status | Error                            | When                                                                           |
+| ------ | -------------------------------- | ------------------------------------------------------------------------------ |
+| `400`  | `PolicyInvalid`                  | A policy names a resource outside the organization.                            |
+| `403`  | `PermissionDenied`               | The caller does not have the permission. See [Permissions](/docs/permissions). |
+| `404`  | `MemberNotFound`                 | No member has this user ID.                                                    |
+| `409`  | `LastSuperAdministrator`         | The change would leave no active Super Administrator.                          |
+| `503`  | `OrganizationStorageUnavailable` | Platform cannot reach its database.                                            |

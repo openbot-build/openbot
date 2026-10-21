@@ -44,7 +44,7 @@ export const make = Effect.gen(function* () {
 	const connections = yield* Repository
 	const locks = yield* ConnectionLocks
 	const sessions = (identity: typeof Identity.Service) =>
-		backend.get(identity.tenantId, identity).pipe(Effect.mapError(conflict))
+		backend.forCaller(identity).pipe(Effect.mapError(conflict))
 	const bound = (identity: typeof Identity.Service, id: string) =>
 		Effect.gen(function* () {
 			const view = yield* views.get(ownerKey(identity), id)

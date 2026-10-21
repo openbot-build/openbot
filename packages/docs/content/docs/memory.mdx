@@ -14,7 +14,7 @@ Learned memory belongs to one Session. It is part of the Session's history, so a
 ## Read memory
 
 ```sh
-curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions/$SESSION/memory
 ```
 
@@ -111,7 +111,7 @@ Remember and Forget also add a small Item to the history that records your edit.
 Forget a fact:
 
 ```sh
-curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"expected":"v-8e02","revision":6,"command":{"_tag":"Forget","key":"budget"}}' \
   https://api.example.com/v1/sessions/$SESSION/memory

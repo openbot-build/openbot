@@ -21,8 +21,8 @@ import * as Fixture from "./AppFixture.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 
 const encryptionKey = Redacted.make("11".repeat(32))
-const alice = { tenantId: "tenant", userId: "alice" }
-const bob = { tenantId: "tenant", userId: "bob" }
+const alice = { organizationId: "organization", userId: "alice" }
+const bob = { organizationId: "organization", userId: "bob" }
 const asOwner = <A, E, R>(operation: Effect.Effect<A, E, R>, owner = alice) =>
 	Effect.provideService(operation, Identity, owner)
 

@@ -46,6 +46,8 @@ export default defineConfig({
 					label: "Usage",
 					items: [
 						"docs/authentication",
+						"docs/organization",
+						"docs/permissions",
 						"docs/sessions",
 						"docs/memory",
 						"docs/approvals",

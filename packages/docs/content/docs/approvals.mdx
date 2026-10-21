@@ -29,7 +29,7 @@ The Turn waits as long as needed. You can still [interrupt](/docs/sessions#steer
 ## List approvals
 
 ```sh
-curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions/$SESSION/approvals
 ```
 
@@ -69,7 +69,7 @@ The list is empty when the current Turn does not wait.
 ## Answer an approval
 
 ```sh
-curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"expected":7,"approved":true}' \
   https://api.example.com/v1/sessions/$SESSION/turns/t-19aa/approvals/ap-01

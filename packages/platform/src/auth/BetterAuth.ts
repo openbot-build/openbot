@@ -10,6 +10,7 @@ import { decodeJwt } from "jose"
 import { Effect, Exit, Layer, Match, Redacted, Predicate } from "effect"
 import * as tables from "../database/AuthSchema.ts"
 import { Auth } from "./Auth.ts"
+import { Organization } from "../organization/Organization.ts"
 import { developmentLogin } from "./DevelopmentLogin.ts"
 import { type ResolvedConfiguration } from "./Configuration.ts"
 import { AuthUnavailable, CredentialRejected } from "./Model.ts"
@@ -42,10 +43,12 @@ export const layer = (
 	config: ResolvedConfiguration & {
 		readonly databaseUrl: Redacted.Redacted<string>
 	},
-): Layer.Layer<Auth, AuthUnavailable> =>
+): Layer.Layer<Auth, AuthUnavailable, Organization> =>
 	Layer.effect(
 		Auth,
 		Effect.gen(function* () {
+			/** Every signed-in account must be a member of the organization. */
+			const organization = yield* Organization
 			const pool = yield* Effect.acquireRelease(
 				Effect.sync(
 					() =>
@@ -166,19 +169,33 @@ export const layer = (
 						Effect.flatMap(({ response: result, headers }) =>
 							result === null
 								? Effect.fail(CredentialRejected.make({ kind: "session" }))
-								: Effect.succeed({
-										identity: {
-											userId: result.user.id,
-											tenantId: result.user.id,
-										},
-										profile: {
-											name: result.user.name,
+								: organization
+										.admit({
+											id: result.user.id,
 											email: result.user.email,
+											name: result.user.name,
 											emailVerified: result.user.emailVerified,
-										},
-										expiresAt: result.session.expiresAt.toISOString(),
-										setCookies: headers.getSetCookie(),
-									}),
+										})
+										.pipe(
+											Effect.mapError((error) =>
+												error._tag === "MembershipRejected"
+													? CredentialRejected.make({ kind: "membership" })
+													: AuthUnavailable.make({ dependency: "storage" }),
+											),
+											Effect.map(({ organizationId }) => ({
+												identity: {
+													userId: result.user.id,
+													organizationId: organizationId,
+												},
+												profile: {
+													name: result.user.name,
+													email: result.user.email,
+													emailVerified: result.user.emailVerified,
+												},
+												expiresAt: result.session.expiresAt.toISOString(),
+												setCookies: headers.getSetCookie(),
+											})),
+										),
 						),
 					),
 			})

@@ -52,7 +52,8 @@ import * as Capabilities from "../src/apps/Capabilities.ts"
 import * as AppRepository from "../src/apps/RepositoryPostgres.ts"
 import * as Secrets from "../src/apps/Secrets.ts"
 import * as Probe from "../src/apps/Probe.ts"
-import * as ApiKeysPostgres from "../src/auth/ApiKeysPostgres.ts"
+import * as TokensPostgres from "../src/auth/TokensPostgres.ts"
+import * as OrganizationFixture from "./OrganizationFixture.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 import { Backend } from "../dist/app/Backend.js"
 import {
@@ -385,7 +386,10 @@ const startApi = async (
 	)
 	await migration.runPromise(DatabasePostgres.migrate)
 	let authCalls: ReadonlyArray<string> = []
-	const identity = { userId: "local-user", tenantId: "local-tenant" }
+	const identity = {
+		userId: "local-user",
+		organizationId: "local-organization",
+	}
 	const unused = () =>
 		Effect.die("Discovery must not call account or Agent operations")
 	const auth = Auth.Auth.of({
@@ -427,7 +431,9 @@ const startApi = async (
 					Authorizations.layer(publicOrigin),
 					Operations.layer,
 					Views.layer.pipe(
-						Layer.provide(Layer.succeed(Backend, { get: unused })),
+						Layer.provide(
+							Layer.succeed(Backend, { get: unused, forCaller: unused }),
+						),
 					),
 				).pipe(
 					Layer.provideMerge(Invocations.layer),
@@ -459,9 +465,11 @@ const startApi = async (
 					Layer.provide(Governance.layer()),
 					Layer.provide(IndexRepository.layer),
 				),
-				ApiKeysPostgres.layer,
+				TokensPostgres.layer,
+				OrganizationFixture.layerEveryoneAdministrator,
+				OrganizationFixture.layerNoAudit,
 				Layer.succeed(Auth.Auth, auth),
-				Layer.succeed(Backend, { get: unused }),
+				Layer.succeed(Backend, { get: unused, forCaller: unused }),
 			]),
 			Layer.provideMerge(
 				DatabasePostgres.layer({
@@ -567,7 +575,7 @@ test("the registered public App API checks ordinary AgentAuth before it discover
 	)
 	const spec = await (await fetch(api.address + "/openapi.json")).json()
 	assert.deepEqual(spec.paths["/v1/apps/discover"].post.security, [
-		{ apiKey: [] },
+		{ token: [] },
 		{ session: [] },
 	])
 	for (const status of ["200", "400", "401", "403", "422", "503"])

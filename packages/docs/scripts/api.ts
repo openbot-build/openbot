@@ -8,8 +8,12 @@ import { OpenApi } from "effect/http-api"
 // The sidebar uses this order. A group with a description gets its own page.
 const groups = [
 	["account", "Account", "Read the signed-in user."],
-	["login", "Sign-in", "Sign in and sign out in a browser."],
-	["apiKeys", "API keys", "Make, list, and revoke API keys."],
+	["userTokens", "User tokens", "Make, list, check, and revoke user tokens."],
+	[
+		"organization",
+		"Organization",
+		"Manage members, roles, policies, and the audit log.",
+	],
 	["sessions", "Sessions", "Give work to the Agent in Sessions and Turns."],
 	["approvals", "Approvals", "Say yes or no to risky tool calls."],
 	["apps", "App discovery", "Find Apps that the Agent can use."],
@@ -81,7 +85,7 @@ const output = {
 		...document.info,
 		description: `${document.info.description ?? ""}
 
-This reference is made from the same contract that the server and the TypeScript client use, so it always matches the running Platform. [Download the OpenAPI document](/openapi.json) to use it with your own tools, such as a code generator. Every Platform also serves it at \`/openapi.json\`. See [Authentication](/docs/authentication).`,
+This reference is made from the same contract that the server and the TypeScript client use, so it always matches the running Platform. [Download the OpenAPI document](/openapi.json) to use it with your own tools, such as a code generator. Every Platform also serves it at \`/openapi.json\`. See [Authentication](/docs/authentication) and [Permissions](/docs/permissions).`,
 	},
 	tags: groups.map(([, name, description]) => ({ name, description })),
 }

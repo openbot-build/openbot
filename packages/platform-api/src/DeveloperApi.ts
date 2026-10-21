@@ -133,7 +133,10 @@ export type Invitation = typeof Invitation.Type
 export const Member = Schema.Struct({
 	id: Schema.String,
 	proofId: Schema.String,
-	identity: Schema.Struct({ tenantId: Schema.String, userId: Schema.String }),
+	identity: Schema.Struct({
+		organizationId: Schema.String,
+		userId: Schema.String,
+	}),
 	role: MemberRole,
 })
 export type Member = typeof Member.Type

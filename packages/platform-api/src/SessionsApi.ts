@@ -7,6 +7,7 @@ import {
 	Turn,
 } from "@openbot-build/core"
 import { Memory } from "@openbot-build/plugin-memory"
+import { Required, requires } from "./Permissions.ts"
 import { Schema } from "effect"
 import { Sse } from "effect/encoding"
 import {
@@ -321,6 +322,9 @@ export type ForkSessionRequest = typeof ForkSessionRequest.Type
 
 export type RestoreSessionRequest = typeof RestoreSessionRequest.Type
 
+/** Work that calls a model needs its own permission. */
+const run = [requires("responses.run").on("session", "sessionId")]
+
 export const SessionsApi = HttpApiGroup.make("sessions")
 	.add(
 		HttpApiEndpoint.get("sessionVersions", "/v1/sessions/:sessionId/versions", {
@@ -349,10 +353,12 @@ export const SessionsApi = HttpApiGroup.make("sessions")
 				...SessionOperationErrors,
 				SessionExecutionUnavailable.pipe(HttpApiSchema.status(503)),
 			],
-		}).annotate(
-			OpenApi.Description,
-			"Accepts text input and returns an in_progress response. The host scope owns the execution. Read the Session's response for results. Unsupported fields or input types return 400.",
-		),
+		})
+			.annotate(Required, run)
+			.annotate(
+				OpenApi.Description,
+				"Accepts text input and returns an in_progress response. The host scope owns the execution. Read the Session's response for results. Unsupported fields or input types return 400.",
+			),
 		HttpApiEndpoint.get("getSession", "/v1/sessions/:sessionId", {
 			params: { sessionId: Session.Id.check(Schema.isMinLength(1)) },
 			success: SessionView,
@@ -385,10 +391,15 @@ export const SessionsApi = HttpApiGroup.make("sessions")
 				...SessionOperationErrors,
 				SessionExecutionUnavailable.pipe(HttpApiSchema.status(503)),
 			],
-		}).annotate(
-			OpenApi.Description,
-			"Checks and saves the Session model selection. The Session revision guards against concurrent changes.",
-		),
+		})
+			.annotate(Required, [
+				requires("sessions.write").on("session", "sessionId"),
+				requires("models.use").on("model"),
+			])
+			.annotate(
+				OpenApi.Description,
+				"Checks and saves the Session model selection. The Session revision guards against concurrent changes.",
+			),
 		HttpApiEndpoint.get("sessionMemory", "/v1/sessions/:sessionId/memory", {
 			params: sessionParams,
 			success: Memory.State,
@@ -463,7 +474,7 @@ export const SessionsApi = HttpApiGroup.make("sessions")
 			params: sessionParams,
 			success: SessionView,
 			error: SessionOperationErrors,
-		}),
+		}).annotate(Required, run),
 		HttpApiEndpoint.put(
 			"updateSessionSettings",
 			"/v1/sessions/:sessionId/settings",
@@ -528,7 +539,7 @@ export const SessionsApi = HttpApiGroup.make("sessions")
 				}).pipe(HttpApiSchema.status(202)),
 				error: SessionOperationErrors,
 			},
-		),
+		).annotate(Required, run),
 		HttpApiEndpoint.post("enqueueMessage", "/v1/sessions/:sessionId/queue", {
 			params: sessionParams,
 			payload: Schema.Struct({
@@ -541,7 +552,7 @@ export const SessionsApi = HttpApiGroup.make("sessions")
 				revision: Session.Revision,
 			}).pipe(HttpApiSchema.status(202)),
 			error: SessionOperationErrors,
-		}),
+		}).annotate(Required, run),
 		HttpApiEndpoint.post(
 			"interruptTurn",
 			"/v1/sessions/:sessionId/turns/:turnId/interrupt",

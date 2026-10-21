@@ -28,7 +28,23 @@ const authentication = Config.Boolean("OPENBOT_DEV_MODE").pipe(
 	),
 )
 
+/** A comma-separated list. An empty value is an empty list. */
+const list = (name: string) =>
+	Config.String(name).pipe(
+		Config.withDefault(""),
+		Config.map((value) =>
+			value
+				.split(",")
+				.map((item) => item.trim().toLowerCase())
+				.filter((item) => item !== ""),
+		),
+	)
+
 export const load: Configuration.Load = Config.all({
+	organization: Config.all({
+		ownerEmails: list("OPENBOT_OWNER_EMAILS"),
+		allowedEmailDomains: list("OPENBOT_ALLOWED_EMAIL_DOMAINS"),
+	}),
 	host: Config.NonEmptyString("OPENBOT_HOST").pipe(
 		Config.withDefault("127.0.0.1"),
 	),

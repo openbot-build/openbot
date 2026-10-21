@@ -31,7 +31,7 @@ import { exportJWK, generateKeyPair, SignJWT } from "jose"
 import * as PostgresTest from "./PostgresTest.ts"
 
 test(
-	"signed OIDC login, session lifecycle, tenant isolation and PostgreSQL restart",
+	"signed OIDC login, session lifecycle, member isolation and PostgreSQL restart",
 	{ timeout: 60000 },
 	async (t) => {
 		const database = await PostgresTest.start()
@@ -153,6 +153,8 @@ test(
 		const options = {
 			host: "127.0.0.1",
 			port: 0,
+			// Every test account has a verified email at example.com.
+			organization: { allowedEmailDomains: ["example.com"] },
 			databaseUrl: Redacted.make(database.url),
 			appEncryptionKey: Redacted.make(
 				"1111111111111111111111111111111111111111111111111111111111111111",
@@ -207,7 +209,7 @@ test(
 					...init,
 					redirect: "manual",
 				})
-				if (path.startsWith("/auth/") && !path.startsWith("/auth/api-keys"))
+				if (path.startsWith("/auth/"))
 					assert.equal(response.headers.get("cache-control"), "no-store")
 				return response
 			}
@@ -364,7 +366,7 @@ test(
 				assert.equal(
 					(
 						await request(
-							"/auth/api-keys" + (method === "DELETE" ? "/unknown" : ""),
+							"/v1/user/tokens" + (method === "DELETE" ? "/unknown" : ""),
 							{
 								method,
 								headers: { cookie: alice.session, origin: publicOrigin },
@@ -511,7 +513,10 @@ test(
 						Redacted.make(decodeURIComponent(alice.session.split("=")[1]!)),
 					)
 					const backend = yield* Backend.Backend
-					const service = yield* backend.get(identity.identity.tenantId)
+					const service = yield* backend.forCaller({
+						kind: "member",
+						...identity.identity,
+					})
 					const wait = (
 						view: Effect.Success<ReturnType<typeof service.get>>,
 					): ReturnType<typeof service.get> =>

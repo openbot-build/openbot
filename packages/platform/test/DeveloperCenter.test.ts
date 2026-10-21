@@ -342,7 +342,9 @@ test(
 				Effect.flatMap(DeveloperTests, (tests) =>
 					tests.receive(
 						callback.toString(),
-						Option.some(ownerKey({ tenantId: "another", userId: "another" })),
+						Option.some(
+							ownerKey({ organizationId: "another", userId: "another" }),
+						),
 					),
 				).pipe(Effect.flip),
 			)

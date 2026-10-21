@@ -4,6 +4,7 @@ import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 import { Invocation } from "./AppExecution.ts"
 import { ExperienceErrors } from "./ExperienceErrors.ts"
 import { SessionConflict } from "./SessionsApi.ts"
+import { Required, requires } from "./Permissions.ts"
 
 const errors = [
 	...ExperienceErrors,
@@ -19,7 +20,7 @@ export const AppOperationsApi = HttpApiGroup.make("appOperations").add(
 		params: { sessionId: Session.Id },
 		success: Schema.Array(Invocation),
 		error: errors,
-	}),
+	}).annotate(Required, [requires("sessions.read").on("session", "sessionId")]),
 	HttpApiEndpoint.post("respond", "/v1/app-operations/:id/inputs", {
 		params: { id: Schema.String },
 		payload: Schema.Struct({

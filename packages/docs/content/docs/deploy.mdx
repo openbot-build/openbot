@@ -240,17 +240,17 @@ api.example.com {
 
 ## Your own client on the same origin
 
-A browser client on the same origin as Platform can use the sign-in cookie. It needs no API key.
+A browser client on the same origin as Platform can use the sign-in cookie. It needs no user token.
 To do this, your proxy sends some paths to Platform and all other paths to your client.
 
-| Path            | Send to     | What it is                                                       |
-| --------------- | ----------- | ---------------------------------------------------------------- |
-| `/auth/*`       | Platform    | Sign-in, sign-out, API keys, and the App authorization callback. |
-| `/v1/*`         | Platform    | The API.                                                         |
-| `/health`       | Platform    | The health check.                                                |
-| `/openapi.json` | Platform    | The OpenAPI document.                                            |
-| `/docs`         | Platform    | The interactive API reference. Optional.                         |
-| everything else | Your client | Your pages, including `/`.                                       |
+| Path            | Send to     | What it is                                             |
+| --------------- | ----------- | ------------------------------------------------------ |
+| `/auth/*`       | Platform    | Sign-in, sign-out, and the App authorization callback. |
+| `/v1/*`         | Platform    | The API.                                               |
+| `/health`       | Platform    | The health check.                                      |
+| `/openapi.json` | Platform    | The OpenAPI document.                                  |
+| `/docs`         | Platform    | The interactive API reference. Optional.               |
+| everything else | Your client | Your pages, including `/`.                             |
 
 When you mount your client at `/`, the service document of `GET /` is no longer public. That is fine. Clients can use the paths above directly.
 
@@ -267,7 +267,7 @@ A return path can be any path on the same origin, except paths under `/auth/`, `
 
 Back up two things, and keep them together:
 
-1. **The database.** It holds accounts, API keys, Sessions, Memory, and App connections.
+1. **The database.** It holds accounts, the organization and its members, user tokens, the audit log, Sessions, Memory, and App connections.
 2. **The secrets file.** `OPENBOT_APP_ENCRYPTION_KEY` decrypts App secrets in the database. A database backup without this key cannot restore App connections. Also keep `BETTER_AUTH_SECRET`, or everyone must sign in again.
 
 With Compose, make a database backup like this:
