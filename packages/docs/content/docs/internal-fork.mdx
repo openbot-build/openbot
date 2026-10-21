@@ -4,7 +4,7 @@ description: Source history and release rules for the internal OpenBot build.
 ---
 
 This repository is a derived build of [OpenBot](https://github.com/openbot-build/openbot).
-Its starting commit is [c7e606dd18d23328fc1d18a29bd483569ae4fc5c](https://github.com/openbot-build/openbot/tree/c7e606dd18d23328fc1d18a29bd483569ae4fc5c).
+Its current upstream base is [157034cb65ef698ec5fada04c372bd52899cef8c](https://github.com/openbot-build/openbot/tree/157034cb65ef698ec5fada04c372bd52899cef8c).
 The machine-readable record is `upstream.json`. Keep it when updating the source.
 
 The `upstream` Git remote points to the original project. The `origin` remote
@@ -136,12 +136,21 @@ and its built JavaScript are patched. `upstream.json` records the source range,
 full commit IDs, adaptations, and patch path. These selected fixes do not change
 the OpenBot base commit.
 
-## New upstream changes
+## Current upstream model
 
-The comparison from the pinned base to upstream
-[`4a5b95a`](https://github.com/openbot-build/openbot/compare/c7e606dd18d23328fc1d18a29bd483569ae4fc5c...4a5b95aec37ea39937711ef7613792a4cd173574)
-contains two additional commits. They introduce lasting Agents and delegation,
-replace approvals with requests, and recreate the database baseline with an
-explicit empty-database prerequisite. These changes are excluded from this Kay
-migration. Adopting them requires a separate data converter, contract comparison
-and regression run. `upstream.json` records the compared head and this decision.
+This build adopts the native Agent, delegation, capability Grant and Request model.
+The API package is `@openbot-build/api`; the server, plugins and providers live in
+`@openbot-build/openbot`. There is no second approval service or legacy Agent model.
+Kay's old HTTP contracts are translated by Kay API, outside this repository.
+
+Requests retain the Session, Turn and tool-call occurrence. A persisted decision
+is marked settled only after it has been applied to the Turn. Restart recovery
+checks the saved operation before sending: `Sending` and `OutcomeUnknown` never
+cause an automatic external write retry. Agent records, queued coordinator work,
+helper model calls and delegated work use the same account epoch and drain controls
+as direct Sessions.
+
+The new baseline requires an empty database. Do not replay it over a previously
+initialized OpenBot database. The separate account migration job converts e data
+into this schema and supplies native Main Agent and Session host bindings; it
+must verify IDs, references and content before activation.

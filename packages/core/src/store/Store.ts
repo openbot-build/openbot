@@ -28,7 +28,7 @@ const codec = <S extends Schema.Constraint>(schema: S) =>
 	)
 export const define: SessionStore.DefinitionFactory["define"] = (input) =>
 	Effect.sync(() => {
-		const fields = (scope: "timeline" | "session") =>
+		const fields = (scope: Plugin.StateDeclaration["scope"]) =>
 			Object.fromEntries(
 				Object.entries(input.stores)
 					.filter(([, state]) => state.scope === scope)

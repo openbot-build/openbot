@@ -18,7 +18,7 @@ import {
 	Stream,
 	Struct,
 	SynchronizedRef,
-	type Scope,
+	Scope,
 } from "effect"
 import { dual } from "effect/Function"
 import {
@@ -36,7 +36,7 @@ import * as Turn from "./Turn.ts"
 import * as Agent from "../agent/Agent.ts"
 import * as Timeline from "../timeline/Timeline.ts"
 import * as Item from "../timeline/Item.ts"
-import { finishToolCalls, fullHistory } from "../timeline/TimelineState.ts"
+import { fullHistory, finishToolCalls } from "../timeline/TimelineState.ts"
 import type * as Config from "../models/Config.ts"
 import * as ConfigurationOperations from "../models/ConfigurationOperations.ts"
 import * as ContextWindow from "../context/ContextWindow.ts"
@@ -68,6 +68,7 @@ export const make = <
 		>
 		const agent = options.agent
 		const scope = yield* Effect.scope
+		const execution = options.execution ?? Effect.succeed(Context.empty())
 		const basePlugin =
 			agent.plugin ??
 			Plugin.make({ id: Plugin.Id.make("@openbot-build/core/runtime-tools") })<
@@ -125,24 +126,6 @@ export const make = <
 			>(),
 		)
 		const bus = yield* PubSub.unbounded<Event>()
-		const continuations = yield* SynchronizedRef.make(
-			HashMap.empty<Session.Id, Turn.Id>(),
-		)
-		const canApprove = (input: {
-			readonly session: Session.Id
-			readonly turn: Turn.Id
-		}) =>
-			SynchronizedRef.get(continuations).pipe(
-				Effect.map((entries) =>
-					Option.contains(HashMap.get(entries, input.session), input.turn),
-				),
-			)
-		const clearContinuation = (session: Session.Id, turn: Turn.Id) =>
-			SynchronizedRef.update(continuations, (entries) =>
-				Option.contains(HashMap.get(entries, session), turn)
-					? HashMap.remove(entries, session)
-					: entries,
-			)
 		const activity = yield* PubSub.unbounded<Session.Id>()
 		yield* Effect.addFinalizer(() => PubSub.shutdown(bus))
 		yield* Effect.addFinalizer(() => PubSub.shutdown(activity))
@@ -357,9 +340,6 @@ export const make = <
 						}),
 				})
 				.pipe(
-					Effect.tap(({ result }) =>
-						result ? clearContinuation(session, turn) : Effect.void,
-					),
 					Effect.tap(({ result, view }) =>
 						result
 							? publish({
@@ -974,7 +954,7 @@ export const make = <
 																	stop && !approval && !moreActions
 																const now = yield* Clock.currentTimeMillis
 																const status: Turn.Status = approval
-																	? { _tag: "WaitingApproval", result: output }
+																	? { _tag: "Waiting", result: output }
 																	: terminal
 																		? { _tag: "Completed", result: output }
 																		: { _tag: "Running" }
@@ -1046,18 +1026,12 @@ export const make = <
 															}),
 													})).view
 													const ended = Session.currentTurn(committed.session)!
-													if (approval)
-														yield* SynchronizedRef.update(
-															continuations,
-															(entries) => HashMap.set(entries, session, turn),
-														)
-													else if (stop) yield* clearContinuation(session, turn)
 													return stop && ended.status._tag === "Running"
 														? Stream.succeed(versionEvent(committed))
 														: stop
 															? Stream.make(versionEvent(committed), {
 																	_tag: approval
-																		? "TurnWaitingApproval"
+																		? "TurnWaiting"
 																		: "TurnCompleted",
 																	view: committed,
 																	turn: ended,
@@ -1278,31 +1252,50 @@ export const make = <
 			readonly turn: Turn.Id
 			readonly item: Item.Id
 			readonly prompt: Prompt.Prompt
-		}): Effect.Effect<void, never, Agent.RuntimeServices<Tools, R>> =>
-			Effect.gen(function* () {
-				const started = yield* Deferred.make<void>()
-				yield* Effect.forkIn(
-					phases(accepted).pipe(
-						Stream.tap((event) =>
-							Match.value(event).pipe(
-								Match.tag("TurnStarted", () =>
-									Deferred.succeed(started, undefined),
-								),
-								Match.orElse(() => Effect.void),
-							),
-						),
-						Stream.runDrain,
-						Effect.ensuring(Deferred.succeed(started, undefined)),
+		}): Effect.Effect<
+			void,
+			Session.RuntimeError,
+			Agent.RuntimeServices<Tools, R>
+		> =>
+			Effect.uninterruptibleMask((restore) =>
+				Effect.gen(function* () {
+					const started = yield* Deferred.make<void>()
+					// Register the host resources before the child can outlive its caller.
+					const executionScope = yield* Scope.fork(scope)
+					const executionContext = yield* restore(execution).pipe(
+						Effect.provideService(Scope.Scope, executionScope),
 						Effect.onExit((exit) =>
-							Exit.isSuccess(exit)
-								? drain(accepted.view.session.id)
+							Exit.isFailure(exit)
+								? Scope.close(executionScope, exit)
 								: Effect.void,
 						),
-					),
-					scope,
-				)
-				yield* Deferred.await(started)
-			})
+					)
+					yield* Effect.forkIn(
+						phases(accepted).pipe(
+							Stream.tap((event) =>
+								Match.value(event).pipe(
+									Match.tag("TurnStarted", () =>
+										Deferred.succeed(started, undefined),
+									),
+									Match.orElse(() => Effect.void),
+								),
+							),
+							Stream.runDrain,
+							Effect.ensuring(Deferred.succeed(started, undefined)),
+							Effect.onExit((exit) =>
+								Exit.isSuccess(exit)
+									? drain(accepted.view.session.id)
+									: Effect.void,
+							),
+							Effect.provideContext(executionContext),
+							Effect.onExit((exit) => Scope.close(executionScope, exit)),
+						),
+						scope,
+						{ startImmediately: true },
+					)
+					yield* restore(Deferred.await(started))
+				}),
+			)
 		const runQueued: Session.Runtime<P, Tools, E, R, HostTools>["runQueued"] = (
 			session,
 		) =>
@@ -1338,7 +1331,20 @@ export const make = <
 
 		const stream: Session.Runtime<P, Tools, E, R, HostTools>["stream"] = (
 			input,
-		) => Stream.unwrap(accept(input).pipe(Effect.map(phases)))
+		) =>
+			Stream.scoped(
+				Stream.unwrap(
+					Effect.gen(function* () {
+						const executionContext = yield* execution
+						return yield* accept(input).pipe(
+							Effect.map((accepted) =>
+								phases(accepted).pipe(Stream.provideContext(executionContext)),
+							),
+							Effect.provideContext(executionContext),
+						)
+					}),
+				),
+			)
 		const start: Session.Runtime<P, Tools, E, R, HostTools>["start"] = (
 			input,
 		) =>
@@ -1431,13 +1437,13 @@ export const make = <
 				)
 				return yield* close(input.session, input.turn, { _tag: "Interrupted" })
 			})
-		const approve: Session.Runtime<P, Tools, E, R, HostTools>["approve"] = (
+		const resolve: Session.Runtime<P, Tools, E, R, HostTools>["resolve"] = (
 			input,
 		) =>
 			Effect.uninterruptibleMask((restore) =>
 				Effect.gen(function* () {
 					const item = Item.Id.make(yield* id())
-					const { view } = yield* restore(
+					const { view, result: ready } = yield* restore(
 						options.store.modifyEffect({
 							session: input.session,
 							expectedRevision: input.expectedRevision,
@@ -1456,73 +1462,86 @@ export const make = <
 												"The Turn is still releasing its execution scope",
 										})
 									const turn = yield* requireTurn(view, input.turn)
-									if (!(yield* canApprove(input)))
+									if (turn.status._tag !== "Waiting")
 										return yield* new Turn.Conflict({
 											session: input.session,
 											turn: input.turn,
-											message: "The approval continuation is no longer loaded",
+											message: "The Turn is not waiting",
 										})
-									if (turn.status._tag !== "WaitingApproval")
-										return yield* new Turn.Conflict({
-											session: input.session,
-											turn: input.turn,
-											message: "The Turn is not waiting for approval",
-										})
-									if (
-										!Session.pendingApprovals(view).some(
-											(request) => request.approvalId === input.approval,
-										)
+									const wait = Session.waits(view).find(
+										(entry) => entry.approvalId === input.approval,
 									)
+									if (wait === undefined)
 										return yield* new Turn.Conflict({
 											session: input.session,
 											turn: input.turn,
 											message:
 												"The approval does not belong to the current Turn or is no longer pending",
 										})
+									const answer = Prompt.toolApprovalResponsePart({
+										approvalId: input.approval,
+										approved: input.outcome._tag !== "Denied",
+										...(input.outcome._tag === "Denied" &&
+										input.outcome.reason !== undefined
+											? { reason: input.outcome.reason }
+											: {}),
+									})
+									// A tool result next to the approval tells Effect AI that the
+									// call is done, so it never runs the tool handler.
 									const content = Prompt.make([
 										{
 											role: "tool",
-											content: [
-												Prompt.toolApprovalResponsePart({
-													approvalId: input.approval,
-													approved: input.approved,
-												}),
-											],
+											content:
+												input.outcome._tag === "Result"
+													? [
+															answer,
+															Prompt.toolResultPart({
+																id: wait.toolCallId,
+																name: wait.toolCall.name,
+																isFailure: input.outcome.isFailure,
+																result: input.outcome.result,
+																providerExecuted: false,
+															}),
+														]
+													: [answer],
 										},
 									])
-									return [
-										undefined,
-										Option.some({
-											value: {
-												...view.state.value,
-												conversation: {
-													...view.state.value.conversation,
-													closed: false,
-													history: A.append(
-														view.state.value.conversation.history,
-														{
-															id: item,
-															content,
-															origin: {
-																session: input.session,
-																turn: input.turn,
-																step: turn.steps,
-															},
-														},
-													),
-													context: ContextWindow.append(
-														view.state.value.conversation.context,
-														content,
-													),
+									const value = {
+										...view.state.value,
+										conversation: {
+											...view.state.value.conversation,
+											closed: false,
+											history: A.append(view.state.value.conversation.history, {
+												id: item,
+												content,
+												origin: {
+													session: input.session,
+													turn: input.turn,
+													step: turn.steps,
 												},
-											},
+											}),
+											context: ContextWindow.append(
+												view.state.value.conversation.context,
+												content,
+											),
+										},
+									}
+									const ready =
+										Session.waits({ ...view, state: { ...view.state, value } })
+											.length === 0
+									return [
+										ready,
+										Option.some({
+											value,
 											session: {
 												turns: view.session.turns.map((entry) =>
 													entry.id === input.turn
 														? {
 																...entry,
 																items: A.append(entry.items, item),
-																status: { _tag: "Running" as const },
+																...(ready
+																	? { status: { _tag: "Running" as const } }
+																	: {}),
 															}
 														: entry,
 												),
@@ -1532,8 +1551,13 @@ export const make = <
 								}),
 						}),
 					)
-					yield* clearContinuation(input.session, input.turn)
-					yield* launch({ view, turn: input.turn, item, prompt: Prompt.empty })
+					if (ready)
+						yield* launch({
+							view,
+							turn: input.turn,
+							item,
+							prompt: Prompt.empty,
+						})
 					return receipt(view, input.turn, item)
 				}),
 			)
@@ -1544,9 +1568,9 @@ export const make = <
 				const view = yield* options.store.read(session)
 				const current = Session.currentTurn(view.session)
 				if (
-					HashMap.has(yield* SynchronizedRef.get(active), session) ||
-					(current !== undefined &&
-						(yield* canApprove({ session, turn: current.id })))
+					(current?.status._tag === "Waiting" &&
+						Session.waits(view).length > 0) ||
+					HashMap.has(yield* SynchronizedRef.get(active), session)
 				)
 					return view
 				if (current !== undefined && !Turn.isTerminal(current.status))
@@ -1574,26 +1598,12 @@ export const make = <
 				})
 				return repaired.view
 			})
+		/** An event with a view takes its position from it. Other events carry `at`. */
+		const positionOf = (event: Event) =>
+			"view" in event ? Session.position(event.view.session) : event.at
 		const belongs = (event: Event, session: Session.Id) =>
-			Match.value(event).pipe(
-				Match.tag(
-					"VersionCreated",
-					"TurnWaitingApproval",
-					"TurnCompleted",
-					({ view }) => view.session.id === session,
-				),
-				Match.orElse((event) => event.at.session === session),
-			)
-		const revision = (event: Event) =>
-			Match.value(event).pipe(
-				Match.tag(
-					"VersionCreated",
-					"TurnWaitingApproval",
-					"TurnCompleted",
-					({ view }) => view.session.revision,
-				),
-				Match.orElse((event) => event.at.revision),
-			)
+			positionOf(event).session === session
+		const revision = (event: Event) => positionOf(event).revision
 		const events: Session.Runtime<P, Tools, E, R, HostTools>["events"] = (
 			input,
 		) =>
@@ -1697,7 +1707,7 @@ export const make = <
 							)
 							const resident =
 								Option.exists(running, (entry) => entry.turn === turn) ||
-								(yield* canApprove({ session: view.session.id, turn }))
+								record.status._tag === "Waiting"
 							if (!resident || Turn.isTerminal(record.status))
 								return yield* new Turn.Conflict({
 									session: view.session.id,
@@ -1727,13 +1737,13 @@ export const make = <
 				}
 			})
 
-		const approveAction: Session.Runtime<
+		const resolveAction: Session.Runtime<
 			P,
 			Tools,
 			E,
 			R,
 			HostTools
-		>["approveAction"] = (input) =>
+		>["resolveAction"] = (input) =>
 			Effect.gen(function* () {
 				const view = yield* options.store.read(input.session)
 				const turn = yield* requireTurn(view, input.turn)
@@ -1744,12 +1754,11 @@ export const make = <
 						turn: input.turn,
 						message: "This Turn is not a host-selected action",
 					})
-				return yield* withActionDriver(action, approve(input))
+				return yield* withActionDriver(action, resolve(input))
 			})
 		return {
 			startAction,
-			approveAction,
-			canApprove,
+			resolveAction,
 			isActive: (session) =>
 				SynchronizedRef.get(active).pipe(
 					Effect.map((entries) => HashMap.has(entries, session)),
@@ -1765,7 +1774,7 @@ export const make = <
 			steer,
 			enqueue,
 			interrupt,
-			approve,
+			resolve,
 			resume,
 			status: options.store.read,
 			events,

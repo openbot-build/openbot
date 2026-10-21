@@ -3,7 +3,7 @@ title: Protocol test
 description: A public test service for hosts and clients of the App Protocol.
 ---
 
-The **protocol test service** is a public test partner for the [OpenBot App Protocol](/docs/protocol). It publishes made-up Apps that cover each way to connect and sign in. Use it to test a host, a client, or Platform itself.
+The **protocol test service** is a public test partner for the [OpenBot App Protocol](/docs/protocol). It publishes made-up Apps that cover each way to connect and sign in. Use it to test a host, a client, or OpenBot itself.
 
 The service lives in the `protocol-test` folder of the repository. Its package name is `@openbot-build/protocol-test`. It uses MCP `2026-07-28`, Streamable HTTP over HTTPS, and MCP Apps `2026-01-26`. The examples use `https://protocol-test.example.com` as its origin.
 
@@ -31,7 +31,7 @@ A running service also serves a full plain-text guide at `/guide`.
 
 Each App has a page at `/apps/<id>`, a Catalog at `/apps/<id>/catalog.json`, and a Card at `/apps/<id>/server-card.json`. The root Catalog at `/.well-known/ai-catalog.json` lists them all. `/scenarios.json` lists every scenario and fixture as JSON. `/healthz` and `/readyz` report status.
 
-To try it in Platform, connect `protocol-test.example.com` as described in [Apps](/docs/apps#connect-an-app).
+To try it in OpenBot, connect `protocol-test.example.com` as described in [Apps](/docs/apps#connect-an-app).
 
 ### Data lifetime
 

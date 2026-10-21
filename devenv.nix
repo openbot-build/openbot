@@ -46,7 +46,7 @@
   };
 
   processes = {
-    platform = {
+    openbot = {
       after = [
         "devenv:processes:postgres"
         "dev:install"
@@ -54,9 +54,9 @@
       exec = ''
         set -eu
         : "''${BETTER_AUTH_SECRET:?Run pnpm dev:setup first}"
-        pnpm --filter-prod @openbot-build/platform... build
-        pnpm --filter @openbot-build/platform migrate
-        exec pnpm --filter @openbot-build/platform start:development
+        pnpm --filter-prod @openbot-build/openbot... build
+        pnpm --filter @openbot-build/openbot migrate
+        exec pnpm --filter @openbot-build/openbot start:development
       '';
       restart.on = "never";
       watch = {

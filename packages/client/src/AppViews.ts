@@ -1,5 +1,5 @@
 import { specTypeSchemas } from "@modelcontextprotocol/client"
-import { AppViewsApi as Api } from "@openbot-build/platform-api"
+import { AppViewsApi as Api } from "@openbot-build/api"
 import { Client as ProtocolClient } from "@openbot-build/protocol"
 import type { UiClient } from "@openbot-build/protocol/McpApps"
 import { Effect, Schema } from "effect"
@@ -47,10 +47,7 @@ export const make = Effect.fn("AppViews.make")(function* (
 ) {
 	const { api } = yield* Client
 	const params = { viewId: opened.id }
-	const read = (
-		method: "tools/list" | "resources/list" | "resources/templates/list",
-		cursor?: string,
-	) =>
+	const read = (method: Api.ViewReadAction, cursor?: string) =>
 		api.appViews
 			.read({
 				params,

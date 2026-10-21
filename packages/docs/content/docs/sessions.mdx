@@ -3,7 +3,7 @@ title: Sessions
 description: Create Sessions, run Turns, and read the results.
 ---
 
-A **Session** is one conversation and line of work. You give it work in **Turns**. A Turn is one request and all the Agent work that follows it.
+A **Session** is one conversation and line of work. You give it work in **Turns**. A Turn is one request and all the Agent work that follows it. Every Session belongs to one [Agent](/docs/agents).
 This page shows the Session and Turn routes. Every route is under `/v1/sessions` and accepts a user token or the session cookie. See [Authentication](/docs/authentication).
 
 | Term          | Meaning                                                                                         |
@@ -12,9 +12,9 @@ This page shows the Session and Turn routes. Every route is under `/v1/sessions`
 | Revision      | `session.revision`. A number that goes up with every change to the Session.                     |
 | Timeline      | All saved Versions of a Session. Each change adds a new Version.                                |
 | Timeline head | `session.head`. The ID of the current Version on the Timeline.                                  |
-| Version       | A saved point in the history. A Version never changes after Platform saves it.                  |
+| Version       | A saved point in the history. A Version never changes after OpenBot saves it.                   |
 
-Most writes need `expected`. This is the revision you last saw. If the Session changed since then, Platform returns `409` with `SessionConflict`. Read the Session again and retry.
+Most writes need `expected`. This is the revision you last saw. If the Session changed since then, OpenBot returns `409` with `SessionConflict`. Read the Session again and retry.
 
 ---
 
@@ -27,8 +27,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions
 ```
 
-All fields are optional. `settings` can hold `mode` and `model`. Top-level `memory` can set the Session defaults for `use` and `generate`. See [Memory](/docs/memory#memory-for-one-turn). Creating a Session does not call a model.
-Platform returns `201` with the Session view. Here is a short form of it:
+All fields are optional. `agent` is the ID of the Agent that works in the Session. Without it, your [Main Agent](/docs/agents) works in it. You need `agents.delegate` on the Agent. `settings` can hold `mode` and `model`. Without a model, the Session uses the model of the Agent, then the server default. To set the memory switches, see [Memory](/docs/memory#switches). Creating a Session does not call a model.
+OpenBot returns `201` with the Session view. Here is a short form of it:
 
 ```json
 {
@@ -46,10 +46,15 @@ Platform returns `201` with the Session view. Here is a short form of it:
 		"version": { "id": "v-7d21" },
 		"value": { "conversation": { "history": [] } }
 	},
+	"agent": "agt_3f9a…",
+	"kind": "direct",
+	"parent": null,
 	"response": null,
 	"activity": "inactive"
 }
 ```
+
+`agent` is the Agent of the Session. `kind` is `direct` for work that a client started, `delegated` for work that another Agent gave, and `review` for a Session where an Agent decides one [request](/docs/requests). `parent` names the Session, Turn and tool call that started delegated work. See [Delegation](/docs/delegation).
 
 `response` is the latest Turn's answer. `activity` is `active` while a Turn runs on this server, `inactive` when nothing runs, and `historical` when a saved Turn says it runs but no server runs it.
 
@@ -60,11 +65,11 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   "https://api.example.com/v1/sessions?archived=false"
 ```
 
-The list is an array of summaries. Each summary has `session`, `status` (`Idle`, `Running`, `WaitingApproval`, `Completed`, `Failed` or `Interrupted`), `turn`, a short `response` and `activity`. Leave out `archived` to get all Sessions.
+The list is an array of summaries. Each summary has `session`, `agent`, `kind`, `parent`, `status` (`Idle`, `Running`, `Waiting`, `Completed`, `Failed` or `Interrupted`), `turn`, a short `response` and `activity`. Leave out `archived` to get all Sessions. Add `agent=<id>` to list the Sessions of one Agent. Review Sessions are left out unless you add `kind=review`.
 
 `GET /v1/sessions/:sessionId` returns the full view. Reading never starts work.
 
-To wait for a change, use a long poll. Platform answers when the revision is no longer `after`, or when the timeout ends. The longest wait is 30 seconds.
+To wait for a change, use a long poll. OpenBot answers when the revision is no longer `after`, or when the timeout ends. The longest wait is 30 seconds.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -80,7 +85,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions/$SESSION
 ```
 
-`DELETE /v1/sessions/:sessionId` removes the Session and returns `204`. If a Turn runs, Platform returns `409` with `SessionBusy`.
+`DELETE /v1/sessions/:sessionId` removes the Session and returns `204`. Its [subagents](/docs/agents#three-kinds-of-agents) are archived. If a Turn runs, OpenBot returns `409` with `SessionBusy`.
 
 ---
 
@@ -100,7 +105,6 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `stream`     | Optional. `true` sends live events. See [Stream the answer](#stream-the-answer). |
 | `background` | Optional. Only `true` is allowed. Every Turn runs in the background.             |
 | `overrides`  | Optional. Settings for this Turn only: `mode` and `model`.                       |
-| `memory` | Optional. This Turn only: `use` and `generate` booleans. See [Memory](/docs/memory#memory-for-one-turn). |
 
 `input` takes text only. These three forms are the same:
 
@@ -126,7 +130,7 @@ Unknown fields return `400`.
 
 ### Background answer
 
-Without `stream`, Platform returns `202` at once. The response has `status: "in_progress"`:
+Without `stream`, OpenBot returns `202` at once. The response has `status: "in_progress"`:
 
 ```json
 {
@@ -148,7 +152,7 @@ The final `status` is `completed`, `incomplete`, `failed` or `cancelled`. Each i
 
 ### Stream the answer
 
-With `"stream": true`, Platform answers `200` with Server-Sent Events (SSE). SSE is a simple format for a stream of events over HTTP.
+With `"stream": true`, OpenBot answers `200` with Server-Sent Events (SSE). SSE is a simple format for a stream of events over HTTP.
 
 ```sh
 curl -N -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -173,10 +177,10 @@ The stream only watches the Turn. If you close it, the Turn goes on.
 | `404`  | `SessionNotFound`             | You have no Session with this ID.               |
 | `409`  | `SessionBusy`                 | The Session already has an unfinished Turn.     |
 | `409`  | `SessionConflict`             | `expected` is old, or the Turn could not start. |
-| `503`  | `SessionExecutionUnavailable` | Platform has no model to run the Turn.          |
-| `503`  | `SessionStorageUnavailable`   | Platform cannot reach its database.             |
+| `503`  | `SessionExecutionUnavailable` | OpenBot has no model to run the Turn.           |
+| `503`  | `SessionStorageUnavailable`   | OpenBot cannot reach its database.              |
 
-A Turn can also stop and wait for a person. See [Approvals](/docs/approvals).
+A Turn can also stop and wait: for a decision about a capability, or for work that it gave to another Agent. Its status is then `Waiting`. The wait survives a server restart. See [Requests](/docs/requests) and [Delegation](/docs/delegation).
 
 ---
 
@@ -199,26 +203,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions/$SESSION/turns/$TURN/steer
 ```
 
-Platform returns `202` with `session`, `turn`, `item`, `revision` and `version`. If the Turn does not run, you get `409`.
+OpenBot returns `202` with `session`, `turn`, `item`, `revision` and `version`. If the Turn does not run, you get `409`.
 
-**Queue** saves a message for later: `POST /v1/sessions/:sessionId/queue` with `{ "input": ..., "expected"?: <revision> }`. When the current Turn ends, Platform starts the next queued message as a new Turn. The answer is `202` with `session`, `item` and `revision`.
+**Queue** saves a message for later: `POST /v1/sessions/:sessionId/queue` with `{ "input": ..., "expected"?: <revision> }`. When the current Turn ends, OpenBot starts the next queued message as a new Turn. The answer is `202` with `session`, `item` and `revision`.
 
 **Interrupt** stops a Turn: `POST /v1/sessions/:sessionId/turns/:turnId/interrupt` with the body `{}`. The Turn status becomes `Interrupted` and the response status becomes `cancelled`. A Turn that has already ended returns `409`.
 
-**Resume** cleans up after a restart: `POST /v1/sessions/:sessionId/resume`. If a saved Turn still says it runs but no server runs it (`activity: "historical"`), Platform marks it `Interrupted`. It does not run the Turn again.
-
-Resume also settles retained tool calls that lack results. Before a new Turn
-starts, Platform performs the same check. If history or model context holds
-the original result, Platform restores it only when the complete call matches
-exactly one occurrence on both sides. A repeated call ID with different
-arguments can still have a unique match; repeated identical calls cannot.
-
-When no unique result is available, Platform records that the result is
-unavailable and that the original operation must be observed before another
-action. It never runs a tool to fill in a missing result. This check also applies
-to imported history and ended Turns. Repeating Resume after the repair does
-not create another revision. A repaired conversation does not prove that an
-external operation completed; inspect its saved App operation.
+**Resume** cleans up after a restart: `POST /v1/sessions/:sessionId/resume`. If a saved Turn still says it runs but no server runs it (`activity: "historical"`), OpenBot marks it `Interrupted`. It does not run the Turn again. A `Waiting` Turn is not touched, because its wait is saved.
 
 ---
 
@@ -262,9 +253,9 @@ Pick a model for the Session with `PUT /v1/sessions/:sessionId/model`:
 }
 ```
 
-A wrong choice returns `400` with `SessionModelInvalid`. The `reason` is `provider-not-found`, `model-not-found` or `unsupported-option`. To use a model for one Turn only, put the selection in `overrides.model` when you start the Turn. See [Models](/docs/models) for how Platform gets its models.
+A wrong choice returns `400` with `SessionModelInvalid`. The `reason` is `provider-not-found`, `model-not-found` or `unsupported-option`. To use a model for one Turn only, put the selection in `overrides.model` when you start the Turn. See [Models](/docs/models) for how OpenBot gets its models.
 
-The execution mode is `default` or `plan`. Set it with `PUT /v1/sessions/:sessionId/mode` and `{ "expected": 4, "mode": "plan" }`. Platform saves the mode on the Session and copies it into each new Turn's `settings`, where tools and plugins can read it.
+The execution mode is `default` or `plan`. Set it with `PUT /v1/sessions/:sessionId/mode` and `{ "expected": 4, "mode": "plan" }`. OpenBot saves the mode on the Session and copies it into each new Turn's `settings`, where tools and plugins can read it.
 
 `PUT /v1/sessions/:sessionId/settings` replaces all settings at once: `{ "expected": 4, "settings": { "mode": "default" } }`.
 
@@ -281,7 +272,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions/$SESSION/fork
 ```
 
-All fields are optional: `version`, `title` and `settings`. Without `version`, the Fork starts from the latest complete point. Platform returns `201` with the new Session view. Its `session.forkedFrom` names the source Session and Version.
+All fields are optional: `version`, `title` and `settings`. Without `version`, the Fork starts from the latest complete point. OpenBot returns `201` with the new Session view. Its `session.forkedFrom` names the source Session and Version.
 
 To find Versions, use `GET /v1/sessions/:sessionId/versions`. To see the history at one Version, use `GET /v1/sessions/:sessionId/history?version=<versionId>`.
 
@@ -304,7 +295,13 @@ To get a new answer to the same question, fork from the Version before that Turn
 - Use `"expected": null` to make a new Session from the record.
 - To replace an existing Session, set `expected` to its current `session` object from `GET /v1/sessions/:sessionId`.
 
-The record's `session.id` must match the path. If it does not, Platform returns `400` with `SessionInvalidRecord`. If a Turn runs, Platform returns `409` with `SessionBusy`.
+The record's `session.id` must match the path. If it does not, OpenBot returns `400` with `SessionInvalidRecord`. If a Turn runs, OpenBot returns `409` with `SessionBusy`.
 An import restores data only. It does not restart a Turn.
 
 See all fields in the [Sessions reference](/docs/api/operations/tags/sessions/).
+
+## Turn memory and repaired receipts
+
+The create, fork and settings routes accept `memory: { use, generate }` for Session defaults. The start-Turn route uses the same object for that Turn only. See [Memory](/docs/memory#memory-for-one-turn).
+
+Resume and new-Turn preparation restore a missing tool result only when the full call matches one unique occurrence in retained history and context. Otherwise they record an unavailable result without rerunning the tool. Repeated Resume does not create another revision. Pending requests remain attached to their originating Turn and occurrence; they use the native Requests and Waiting lifecycle.

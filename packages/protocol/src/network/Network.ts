@@ -3,14 +3,18 @@ import { type HttpClientRequest } from "effect/http"
 
 export const publicProductToken = "OpenBot"
 
+export const NetworkErrorReason = Schema.Literals([
+	"BlockedTarget",
+	"Transport",
+	"TooLarge",
+	"Timeout",
+	"Redirect",
+	"Encoding",
+])
+export type NetworkErrorReason = typeof NetworkErrorReason.Type
+
 export class NetworkError extends Data.TaggedError("NetworkError")<{
-	readonly reason:
-		| "BlockedTarget"
-		| "Transport"
-		| "TooLarge"
-		| "Timeout"
-		| "Redirect"
-		| "Encoding"
+	readonly reason: NetworkErrorReason
 	readonly message: string
 }> {}
 

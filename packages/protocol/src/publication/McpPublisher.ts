@@ -7,6 +7,7 @@ import {
 	Predicate,
 	Record as RecordUtils,
 } from "effect"
+import * as Client from "../connections/Client.ts"
 import * as PublisherProtection from "./PublisherProtection.ts"
 
 import { McpProtocol, McpSchema, McpServer } from "effect/ai"
@@ -285,15 +286,13 @@ export const registerUi = Effect.fn("Publisher.registerUi")(function* (
 /** This is the native tool metadata shape. Annotate Tool.Meta with this value. */
 export const uiToolMeta = (options: {
 	readonly resourceUri: string
-	readonly visibility?: ReadonlyArray<"model" | "app">
+	readonly visibility?: ReadonlyArray<Client.ToolVisibility>
 }) =>
 	Schema.decodeEffect(
 		Schema.Struct({
 			ui: Schema.Struct({
 				resourceUri: Schema.String.check(Schema.isPattern(/^ui:\/\/[^\s]+$/)),
-				visibility: Schema.optional(
-					Schema.Array(Schema.Literals(["model", "app"])),
-				),
+				visibility: Schema.optional(Schema.Array(Client.ToolVisibility)),
 			}),
 		}),
 	)({ ui: options })

@@ -1,5 +1,5 @@
 /dist/
 /.astro/
-# Generated from the Platform API contract by scripts/api.ts.
+# Generated from the OpenBot API contract by scripts/api.ts.
 /openapi.json
 *.tsbuildinfo

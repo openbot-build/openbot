@@ -20,6 +20,7 @@ import {
 	HttpServerResponse,
 } from "effect/http"
 import * as Authorization from "../connections/Authorization.ts"
+import * as Client from "../connections/Client.ts"
 import * as Document from "../Document.ts"
 import {
 	TokenRejected,
@@ -57,7 +58,9 @@ const targetOf = (method: string, params: Schema.JsonObject | undefined) => {
 	return Predicate.isString(value) ? value : undefined
 }
 
-const listFields: Readonly<Record<string, readonly [string, string]>> = {
+const listFields: Readonly<
+	Record<Client.ListAction, readonly [string, string]>
+> = {
 	"tools/list": ["tools", "name"],
 	"resources/list": ["resources", "uri"],
 	"resources/templates/list": ["resourceTemplates", "uriTemplate"],
@@ -92,8 +95,12 @@ const filterResponse = (
 	},
 ) =>
 	Effect.gen(function* () {
+		if (
+			!Schema.is(Client.ListAction)(options.method) ||
+			response.status !== 200
+		)
+			return response
 		const fields = listFields[options.method]
-		if (fields === undefined || response.status !== 200) return response
 		const transform = (data: string) =>
 			Effect.gen(function* () {
 				const message = yield* Schema.decodeEffect(Json)(data)
