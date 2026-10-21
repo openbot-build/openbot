@@ -207,6 +207,19 @@ Platform returns `202` with `session`, `turn`, `item`, `revision` and `version`.
 
 **Resume** cleans up after a restart: `POST /v1/sessions/:sessionId/resume`. If a saved Turn still says it runs but no server runs it (`activity: "historical"`), Platform marks it `Interrupted`. It does not run the Turn again.
 
+Resume also settles retained tool calls that lack results. Before a new Turn
+starts, Platform performs the same check. If history or model context holds
+the original result, Platform restores it only when the complete call matches
+exactly one occurrence on both sides. A repeated call ID with different
+arguments can still have a unique match; repeated identical calls cannot.
+
+When no unique result is available, Platform records that the result is
+unavailable and that the original operation must be observed before another
+action. It never runs a tool to fill in a missing result. This check also applies
+to imported history and ended Turns. Repeating Resume after the repair does
+not create another revision. A repaired conversation does not prove that an
+external operation completed; inspect its saved App operation.
+
 ---
 
 ## Models and execution mode

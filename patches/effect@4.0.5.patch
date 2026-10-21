@@ -1,0 +1,166 @@
+diff --git a/dist/ai/LanguageModel.js b/dist/ai/LanguageModel.js
+index 2570165b7feb9963cb7b3527dc80642347aa088c..9186a651c9cb06680230c3fd5425928d23b34ad2 100644
+--- a/dist/ai/LanguageModel.js
++++ b/dist/ai/LanguageModel.js
+@@ -967,19 +967,22 @@ const collectToolApprovals = messages => {
+   const requests = new Map();
+   const responses = [];
+   const toolCallsById = new Map();
+-  const toolResultIds = new Set();
+-  // Collect all tool approval requests, responses, tool calls, and tool results
++  const completedCalls = new Set();
++  let occurrence = 0;
++  // Bind approvals and results to the call occurrence seen at that point, not a reused ID.
+   for (const message of messages) {
+     if (message.role === "assistant") {
+       for (const part of message.content) {
+         if (part.type === "tool-approval-request") {
+           requests.set(part.approvalId, {
+             approvalId: part.approvalId,
+-            toolCallId: part.toolCallId
++            toolCallId: part.toolCallId,
++            toolCall: toolCallsById.get(part.toolCallId)?.call,
++            occurrence: toolCallsById.get(part.toolCallId)?.occurrence
+           });
+         }
+         if (part.type === "tool-call") {
+-          toolCallsById.set(part.id, part);
++          toolCallsById.set(part.id, { call: part, occurrence: occurrence++ });
+         }
+       }
+     }
+@@ -993,7 +996,8 @@ const collectToolApprovals = messages => {
+           });
+         }
+         if (part.type === "tool-result") {
+-          toolResultIds.add(part.id);
++          const call = toolCallsById.get(part.id);
++          if (call !== undefined) completedCalls.add(call.occurrence);
+         }
+       }
+     }
+@@ -1008,14 +1012,17 @@ const collectToolApprovals = messages => {
+       const result = {
+         ...response,
+         toolCallId: request.toolCallId,
+-        toolCall: toolCallsById.get(request.toolCallId)
++        toolCall: request.toolCall
+       };
++      // A superseded approval cannot authorize a later call that reuses its ID.
++      const pending = request.occurrence === toolCallsById.get(request.toolCallId)?.occurrence &&
++        (request.occurrence === undefined || !completedCalls.has(request.occurrence));
+       if (response.approved) {
+         approved.push(result);
+-        if (!toolResultIds.has(request.toolCallId)) pendingApproved.push(result);
++        if (pending) pendingApproved.push(result);
+       } else {
+         denied.push(result);
+-        if (!toolResultIds.has(request.toolCallId)) pendingDenied.push(result);
++        if (pending) pendingDenied.push(result);
+       }
+     }
+   }
+diff --git a/dist/ai/Prompt.js b/dist/ai/Prompt.js
+index cc0c4db400dcae5b0d4b28f8b8d887cf180af84f..45af47397749d6dbaf33ef30ca057d8ef0f09080 100644
+--- a/dist/ai/Prompt.js
++++ b/dist/ai/Prompt.js
+@@ -669,6 +669,12 @@ export const fromResponseParts = parts => {
+   if (parts.length === 0) {
+     return empty;
+   }
++  // Approval receipts precede the next model output, even when it reuses a call ID.
++  const firstOutput = parts.findIndex(part => part.type !== "tool-result" || part.providerExecuted === true);
++  if (firstOutput > 0) {
++    return concat(fromResponseParts(parts.slice(0, firstOutput)), fromResponseParts(parts.slice(firstOutput)));
++  }
++
+   const assistantParts = [];
+   const toolParts = [];
+   const activeTextDeltas = new Map();
+diff --git a/src/ai/LanguageModel.ts b/src/ai/LanguageModel.ts
+index d48bf8dc2502cf4fdab274ec61d475bec12eecd8..50396912a91b3840bf115d5820eec308b865e8f3 100644
+--- a/src/ai/LanguageModel.ts
++++ b/src/ai/LanguageModel.ts
+@@ -2071,24 +2071,27 @@ const collectToolApprovals = (
+ } => {
+   const requests = new Map<
+     string,
+-    Pick<ApprovalResult, "approvalId" | "toolCallId">
++    Pick<ApprovalResult, "approvalId" | "toolCallId" | "toolCall"> & { readonly occurrence: number | undefined }
+   >()
+   const responses: Array<Omit<ApprovalResult, "toolCallId" | "toolCall">> = []
+-  const toolCallsById = new Map<string, Prompt.ToolCallPart>()
+-  const toolResultIds = new Set<string>()
++  const toolCallsById = new Map<string, { readonly call: Prompt.ToolCallPart; readonly occurrence: number }>()
++  const completedCalls = new Set<number>()
++  let occurrence = 0
+ 
+-  // Collect all tool approval requests, responses, tool calls, and tool results
++  // Bind approvals and results to the call occurrence seen at that point, not a reused ID.
+   for (const message of messages) {
+     if (message.role === "assistant") {
+       for (const part of message.content) {
+         if (part.type === "tool-approval-request") {
+           requests.set(part.approvalId, {
+             approvalId: part.approvalId,
+-            toolCallId: part.toolCallId
++            toolCallId: part.toolCallId,
++            toolCall: toolCallsById.get(part.toolCallId)?.call,
++            occurrence: toolCallsById.get(part.toolCallId)?.occurrence
+           })
+         }
+         if (part.type === "tool-call") {
+-          toolCallsById.set(part.id, part)
++          toolCallsById.set(part.id, { call: part, occurrence: occurrence++ })
+         }
+       }
+     }
+@@ -2102,7 +2105,8 @@ const collectToolApprovals = (
+           })
+         }
+         if (part.type === "tool-result") {
+-          toolResultIds.add(part.id)
++          const call = toolCallsById.get(part.id)
++          if (call !== undefined) completedCalls.add(call.occurrence)
+         }
+       }
+     }
+@@ -2119,15 +2123,18 @@ const collectToolApprovals = (
+       const result: ApprovalResult = {
+         ...response,
+         toolCallId: request.toolCallId,
+-        toolCall: toolCallsById.get(request.toolCallId)
++        toolCall: request.toolCall
+       }
+ 
++      // A superseded approval cannot authorize a later call that reuses its ID.
++      const pending = request.occurrence === toolCallsById.get(request.toolCallId)?.occurrence &&
++        (request.occurrence === undefined || !completedCalls.has(request.occurrence))
+       if (response.approved) {
+         approved.push(result)
+-        if (!toolResultIds.has(request.toolCallId)) pendingApproved.push(result)
++        if (pending) pendingApproved.push(result)
+       } else {
+         denied.push(result)
+-        if (!toolResultIds.has(request.toolCallId)) pendingDenied.push(result)
++        if (pending) pendingDenied.push(result)
+       }
+     }
+   }
+diff --git a/src/ai/Prompt.ts b/src/ai/Prompt.ts
+index 0ea19a8b93fc5398d3f76850c956cc8bfd230c77..a5f4186c8ea5f6790320f656c4ab87414744b801 100644
+--- a/src/ai/Prompt.ts
++++ b/src/ai/Prompt.ts
+@@ -2159,6 +2159,12 @@ export const fromResponseParts = (parts: ReadonlyArray<Response.AnyPart>): Promp
+     return empty
+   }
+ 
++  // Approval receipts precede the next model output, even when it reuses a call ID.
++  const firstOutput = parts.findIndex((part) => part.type !== "tool-result" || part.providerExecuted === true)
++  if (firstOutput > 0) {
++    return concat(fromResponseParts(parts.slice(0, firstOutput)), fromResponseParts(parts.slice(firstOutput)))
++  }
++
+   const assistantParts: Array<AssistantMessagePart | undefined> = []
+   const toolParts: Array<ToolMessagePart> = []
+ 

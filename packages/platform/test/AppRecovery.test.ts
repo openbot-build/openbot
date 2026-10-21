@@ -9,10 +9,19 @@ import { AppHost } from "../src/apps/AppHost.ts"
 import { ownerKey } from "../src/apps/Repository.ts"
 import { Invocations } from "../src/apps/Invocations.ts"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
-import { Effect, Layer, Match, Redacted, Schema, Stream } from "effect"
-import { LanguageModel, Response, Tool, Toolkit } from "effect/ai"
+import { Effect, Layer, Match, Option, Redacted, Schema, Stream } from "effect"
+import { LanguageModel, Prompt, Response, Tool, Toolkit } from "effect/ai"
 import { HttpClient, HttpClientResponse } from "effect/http"
-import { Config, Model, Provider } from "@openbot-build/core"
+import {
+	Config,
+	ContextWindow,
+	Model,
+	Provider,
+	SessionStoreRepository,
+	Store,
+} from "@openbot-build/core"
+import { Memory } from "@openbot-build/plugin-memory"
+import * as SessionRepository from "../src/sessions/RepositoryPostgres.ts"
 import { OpenAiCompatProvider } from "@openbot-build/provider-openai-compat"
 import { AppNetwork } from "../src/apps/AppHost.ts"
 import { startHttps } from "../../protocol/test/Fixture.ts"
@@ -22,6 +31,9 @@ import * as BrowserHost from "./BrowserHost.ts"
 const start = async (
 	options: {
 		readonly write?: boolean
+		readonly callId?: () => string
+		readonly sameTurnWrites?: number
+		readonly repeatArguments?: boolean
 		readonly refreshToken?: boolean
 		readonly scopes?: ReadonlyArray<string>
 	} = {},
@@ -72,7 +84,7 @@ const start = async (
 							Match.orElse(() => []),
 						),
 					)
-					if (results.length > 0)
+					if (results.length >= (options.sameTurnWrites ?? 1))
 						return Stream.make(
 							Response.makePart("text-start", { id: "answer" }),
 							Response.makePart("text-delta", {
@@ -82,6 +94,19 @@ const start = async (
 							Response.makePart("text-end", { id: "answer" }),
 							Response.makePart("finish", { reason: "stop", usage }),
 						)
+					const calls = prompt.content.slice(last + 1).flatMap((message) =>
+						Match.value(message).pipe(
+							Match.when({ role: "assistant" }, (message) =>
+								message.content.filter((part) => part.type === "tool-call"),
+							),
+							Match.orElse(() => []),
+						),
+					)
+					assert.ok(
+						calls.length <= results.length,
+						"An approved App call must produce its result without the model resubmitting it",
+					)
+
 					const tool = tools.find((tool) =>
 						tool.description?.includes(
 							options.write === true ? " / write_board." : " / read_later.",
@@ -93,11 +118,17 @@ const start = async (
 					)
 					return Stream.make(
 						Response.makePart("tool-call", {
-							id: "approved-read",
+							id: options.callId?.() ?? "approved-read",
 							name: tool.name,
 							params:
 								options.write === true
-									? { id: "release-plan", text: "Approved content" }
+									? {
+											id: "release-plan",
+											text:
+												options.sameTurnWrites === undefined
+													? "Approved content"
+													: `Approved content ${options.repeatArguments === true ? 1 : results.length + 1}`,
+										}
 									: { id: "release-plan" },
 							providerExecuted: false,
 						}),
@@ -212,6 +243,59 @@ const start = async (
 			session,
 			connected,
 			tools: () => preparedTools,
+			omitContextResult: (callId: string) =>
+				host.runtime.runPromise(
+					Effect.scoped(
+						Effect.gen(function* () {
+							const repository = yield* SessionRepository.make
+							const definition = yield* Store.define({
+								stores: Memory.stores,
+								schemaVersion: "timeline/1",
+							})
+							const store = yield* SessionStoreRepository.make({
+								definition,
+								persistence: repository.store(
+									JSON.stringify([
+										user.identity.organizationId,
+										user.identity.userId,
+									]),
+								),
+							})
+							yield* store.modifyEffect({
+								session,
+								update: (view) =>
+									Effect.succeed([
+										undefined,
+										Option.some({
+											value: {
+												...view.state.value,
+												conversation: {
+													...view.state.value.conversation,
+													context: ContextWindow.fromPrompt(
+														Prompt.fromMessages(
+															view.state.value.conversation.context.prompt.content.filter(
+																(message) =>
+																	!Match.value(message).pipe(
+																		Match.when({ role: "tool" }, (message) =>
+																			message.content.some(
+																				(part) =>
+																					part.type === "tool-result" &&
+																					part.id === callId,
+																			),
+																		),
+																		Match.orElse(() => false),
+																	),
+															),
+														),
+													),
+												},
+											},
+										}),
+									]),
+							})
+						}),
+					),
+				),
 			restart: async () => {
 				await host.restart()
 				address = host.address
@@ -408,6 +492,43 @@ test("an uncertain write remains observable after renewal and runtime restart wi
 		assert.equal(fixture.publisher.exchanges(), 2)
 		assert.equal(fixture.publisher.writes().length, 1)
 		assert.equal(fixture.publisher.businessCalls(), 1)
+		await fixture.omitContextResult(saved.callId)
+		const continued = await fixture.view()
+		assert.equal(
+			(
+				await fixture.post(`/v1/sessions/${fixture.session}/turns`, {
+					input: "A separate operation after observing the uncertain write",
+					expected: continued.session.revision,
+				})
+			).status,
+			202,
+		)
+		await fixture.wait()
+		const approvals = await fixture.get(
+			`/v1/sessions/${fixture.session}/approvals`,
+		)
+		assert.equal(approvals.length, 1)
+		assert.notEqual(approvals[0].turn, saved.turn)
+		assert.equal(fixture.publisher.writes().length, 1)
+		assert.equal(fixture.publisher.businessCalls(), 1)
+		const retained = Schema.decodeUnknownSync(
+			Schema.Array(AppExecution.Invocation),
+		)(await fixture.get(`/v1/sessions/${fixture.session}/app-operations`)).find(
+			(value) => value.id === saved.id,
+		)
+		assert.equal(retained?.status, "OutcomeUnknown")
+		assert.equal(retained?.callId, saved.callId)
+		assert.equal(
+			(
+				await fixture.post(
+					`/v1/sessions/${fixture.session}/turns/${approvals[0].turn}/interrupt`,
+					{},
+				)
+			).status,
+			200,
+		)
+		await fixture.wait()
+		assert.equal(fixture.publisher.writes().length, 1)
 	} finally {
 		await fixture.close()
 	}
@@ -1029,3 +1150,287 @@ test("recovered operations remain compatible with the production provider schema
 		await fixture.close()
 	}
 })
+
+test("historical App approval cannot be relabeled as the current Turn after a connection change", async () => {
+	let sequence = 0
+	const fixture = await start({
+		write: true,
+		callId: () => `write-${++sequence}`,
+	})
+	try {
+		const initial = await fixture.view()
+		assert.equal(
+			(
+				await fixture.post(`/v1/sessions/${fixture.session}/turns`, {
+					input: "First write",
+					expected: initial.session.revision,
+				})
+			).status,
+			202,
+		)
+		await fixture.wait()
+		const [old] = await fixture.get(`/v1/sessions/${fixture.session}/approvals`)
+		assert.ok(old?.app)
+		assert.equal(
+			(
+				await fixture.post(
+					`/v1/sessions/${fixture.session}/turns/${old.turn}/interrupt`,
+					{},
+				)
+			).status,
+			200,
+		)
+		const ended = await fixture.wait()
+		const changed = await fetch(
+			fixture.host.address + `/v1/connections/${fixture.connected.id}`,
+			{
+				method: "PUT",
+				headers: fixture.headers,
+				body: JSON.stringify({
+					revision: fixture.connected.revision,
+					name: "Changed transfer connection",
+					enabled: true,
+				}),
+			},
+		)
+		assert.equal(changed.status, 200)
+		assert.equal(
+			(
+				await fixture.post(`/v1/sessions/${fixture.session}/turns`, {
+					input: "Current write",
+					expected: ended.session.revision,
+				})
+			).status,
+			202,
+		)
+		await fixture.wait()
+		const [current] = await fixture.get(
+			`/v1/sessions/${fixture.session}/approvals`,
+		)
+		assert.ok(current?.app)
+		assert.notEqual(current.toolName, old.toolName)
+		assert.notEqual(current.turn, old.turn)
+		await fixture.omitContextResult(old.toolCallId)
+		const held = await fixture.view()
+		const approvals = await fixture.get(
+			`/v1/sessions/${fixture.session}/approvals`,
+		)
+		assert.deepEqual(
+			approvals.map((value: { approvalId: string }) => value.approvalId),
+			[current.approvalId],
+		)
+		const staleDecision = await fixture.post(
+			`/v1/sessions/${fixture.session}/turns/${current.turn}/approvals/${old.approvalId}`,
+			{ expected: held.session.revision, approved: true },
+		)
+		assert.equal(staleDecision.status, 409, await staleDecision.clone().text())
+		assert.equal((await fixture.view()).session.revision, held.session.revision)
+		assert.equal(fixture.publisher.writes().length, 0)
+		assert.equal(
+			(
+				await fixture.post(
+					`/v1/sessions/${fixture.session}/turns/${current.turn}/approvals/${current.approvalId}`,
+					{ expected: held.session.revision, approved: true },
+				)
+			).status,
+			202,
+		)
+		const completed = await fixture.wait()
+		assert.equal(
+			completed.response?.status,
+			"completed",
+			JSON.stringify(completed.response),
+		)
+		assert.equal(fixture.publisher.writes().length, 1)
+		assert.deepEqual(
+			await fixture.get(`/v1/sessions/${fixture.session}/approvals`),
+			[],
+		)
+	} finally {
+		await fixture.close()
+	}
+})
+
+test("a reused model call ID gets a fresh approval in the next Turn without replaying the first write", async () => {
+	const fixture = await start({ write: true })
+	try {
+		let previousApproval: string | undefined
+		for (const expectedWrites of [1, 2]) {
+			const before = await fixture.view()
+			assert.equal(
+				(
+					await fixture.post(`/v1/sessions/${fixture.session}/turns`, {
+						input: "A separately requested write",
+						expected: before.session.revision,
+					})
+				).status,
+				202,
+			)
+			const held = await fixture.wait()
+			const approvals = await fixture.get(
+				`/v1/sessions/${fixture.session}/approvals`,
+			)
+			assert.equal(approvals.length, 1)
+			const [current] = approvals
+			assert.notEqual(current.approvalId, previousApproval)
+			assert.equal(fixture.publisher.writes().length, expectedWrites - 1)
+			assert.equal(
+				(
+					await fixture.post(
+						`/v1/sessions/${fixture.session}/turns/${current.turn}/approvals/${current.approvalId}`,
+						{ expected: held.session.revision, approved: true },
+					)
+				).status,
+				202,
+			)
+			assert.equal((await fixture.wait()).response?.status, "completed")
+			assert.equal(fixture.publisher.writes().length, expectedWrites)
+			previousApproval = current.approvalId
+		}
+	} finally {
+		await fixture.close()
+	}
+})
+
+for (const outcome of [
+	"completed",
+	"unknown",
+	"rejected",
+	"second-unknown",
+] as const) {
+	test(`same Turn App calls have separate approvals and records after ${outcome}`, async () => {
+		const fixture = await start({
+			write: true,
+			sameTurnWrites: 2,
+			repeatArguments: outcome === "completed",
+		})
+		try {
+			const before = await fixture.view()
+			assert.equal(
+				(
+					await fixture.post(`/v1/sessions/${fixture.session}/turns`, {
+						input: "Perform two separately approved writes",
+						expected: before.session.revision,
+					})
+				).status,
+				202,
+			)
+			const held = await fixture.wait()
+			const [first] = await fixture.get(
+				`/v1/sessions/${fixture.session}/approvals`,
+			)
+			assert.ok(first?.app)
+			if (outcome === "unknown") fixture.publisher.setDropResult(true)
+			assert.equal(
+				(
+					await fixture.post(
+						`/v1/sessions/${fixture.session}/turns/${first.turn}/approvals/${first.approvalId}`,
+						{ expected: held.session.revision, approved: true },
+					)
+				).status,
+				202,
+			)
+			const secondView = await fixture.wait()
+			fixture.publisher.setDropResult(false)
+			const pending = await fixture.get(
+				`/v1/sessions/${fixture.session}/approvals`,
+			)
+			assert.equal(pending.length, 1)
+			const second = pending[0]
+			assert.ok(second.app)
+			assert.equal(second.turn, first.turn)
+			assert.equal(second.toolCallId, first.toolCallId)
+			assert.notEqual(second.approvalId, first.approvalId)
+			assert.notEqual(second.app.id, first.app.id)
+			assert.equal(fixture.publisher.writes().length, 1)
+			assert.equal(
+				(
+					await fixture.post(
+						`/v1/sessions/${fixture.session}/turns/${first.turn}/approvals/${first.approvalId}`,
+						{ expected: secondView.session.revision, approved: true },
+					)
+				).status,
+				409,
+			)
+			assert.equal(
+				(await fixture.view()).session.revision,
+				secondView.session.revision,
+			)
+			if (outcome === "second-unknown") fixture.publisher.setDropResult(true)
+			assert.equal(
+				(
+					await fixture.post(
+						`/v1/sessions/${fixture.session}/turns/${second.turn}/approvals/${second.approvalId}`,
+						{
+							expected: secondView.session.revision,
+							approved: outcome !== "rejected",
+						},
+					)
+				).status,
+				202,
+			)
+			assert.equal((await fixture.wait()).response?.status, "completed")
+			assert.equal(
+				fixture.publisher.writes().length,
+				outcome === "rejected" ? 1 : 2,
+			)
+			const records = Schema.decodeUnknownSync(
+				Schema.Array(AppExecution.Invocation),
+			)(await fixture.get(`/v1/sessions/${fixture.session}/app-operations`))
+			assert.equal(records.length, 2)
+			assert.equal(
+				records.find((r) => r.id === first.app.id)?.status,
+				outcome === "unknown" ? "OutcomeUnknown" : "Completed",
+			)
+			assert.equal(
+				records.find((r) => r.id === second.app.id)?.status,
+				outcome === "rejected"
+					? "Rejected"
+					: outcome === "second-unknown"
+						? "OutcomeUnknown"
+						: "Completed",
+			)
+			fixture.publisher.setDropResult(false)
+			await fixture.restart()
+			const saved = Schema.decodeUnknownSync(
+				Schema.Array(AppExecution.Invocation),
+			)(
+				await fixture.get(`/v1/sessions/${fixture.session}/app-operations`),
+			).find((record) => record.id === second.app.id)
+			assert.ok(saved)
+			assert.equal(saved.callOccurrence, 1)
+			assert.equal(
+				records.find((record) => record.id === first.app.id)?.callOccurrence,
+				undefined,
+			)
+			if (outcome === "second-unknown") {
+				const result = await fixture.host.runtime.runPromise(
+					Effect.gen(function* () {
+						return yield* (yield* Invocations).execute(
+							{
+								owner: ownerKey(fixture.user.identity),
+								session: fixture.session,
+								turn: saved.turn,
+								callId: saved.callId,
+								callOccurrence: saved.callOccurrence ?? 0,
+								toolName: saved.toolName,
+								source: saved.source,
+								arguments: saved.arguments,
+							},
+							Effect.die("An uncertain occurrence must never be sent again"),
+						)
+					}),
+				)
+				assert.equal(result._tag, "Failed")
+				assert.equal(result.operationId, second.app.id)
+			}
+			await fixture.view()
+			assert.equal(
+				fixture.publisher.writes().length,
+				outcome === "rejected" ? 1 : 2,
+			)
+		} finally {
+			await fixture.close()
+		}
+	})
+}

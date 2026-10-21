@@ -1,12 +1,17 @@
 import {
 	Context,
+	Chunk,
+	HashMap,
+	HashSet,
+	Match,
+	Option,
 	Data,
 	Schema,
 	type Duration,
 	type Effect,
-	type Option,
 	type Stream,
 } from "effect"
+import { dual } from "effect/Function"
 import { type Prompt, type Tool, type Toolkit } from "effect/ai"
 import { Id, Revision } from "./SessionIdentity.ts"
 import * as Turn from "./Turn.ts"
@@ -75,6 +80,131 @@ export const currentTurn = (session: Ref): Turn.Record | undefined =>
 	session.turns.at(-1)
 export const status = (session: Ref): Turn.Status | { readonly _tag: "Idle" } =>
 	currentTurn(session)?.status ?? { _tag: "Idle" }
+export interface PendingApproval {
+	readonly approvalId: string
+	readonly toolCallId: string
+	readonly toolCall: Prompt.ToolCallPart
+	readonly occurrence: number
+}
+const currentItems = <P>(view: View<P>): ReadonlyArray<Item.Record> => {
+	const turn = currentTurn(view.session)
+	return turn === undefined
+		? []
+		: view.state.value.conversation.history.filter(
+				(entry) =>
+					entry.origin?.session === view.session.id &&
+					entry.origin.turn === turn.id,
+			)
+}
+/** Count committed occurrences in this Turn, independently of context compaction. */
+export const toolCallCount: {
+	(callId: string): <P>(view: View<P>) => number
+	<P>(view: View<P>, callId: string): number
+} = dual(2, <P>(view: View<P>, callId: string): number =>
+	currentItems(view).reduce(
+		(count, entry) =>
+			count +
+			entry.content.content.reduce(
+				(count, message) =>
+					count +
+					Match.value(message).pipe(
+						Match.when(
+							{ role: "assistant" },
+							(message) =>
+								message.content.filter(
+									(part) => part.type === "tool-call" && part.id === callId,
+								).length,
+						),
+						Match.orElse(() => 0),
+					),
+				0,
+			),
+		0,
+	),
+)
+/** Only Items produced by the current Session and Turn can authorize its tools. */
+export const pendingApprovals = <P>(
+	view: View<P>,
+): ReadonlyArray<PendingApproval> => {
+	const turn = currentTurn(view.session)
+	if (turn === undefined || Turn.isTerminal(turn.status)) return []
+	interface Call {
+		readonly toolCall: Prompt.ToolCallPart
+		readonly occurrence: number
+		readonly ordinal: number
+	}
+	let calls = HashMap.empty<string, Call>()
+	let requests = HashMap.empty<string, Call>()
+	let order = Chunk.empty<string>()
+	let resolved = HashSet.empty<number>()
+	let ordinal = 0
+	for (const entry of currentItems(view)) {
+		for (const message of entry.content.content)
+			Match.value(message).pipe(
+				Match.when({ role: "assistant" }, (message) => {
+					for (const part of message.content)
+						Match.value(part).pipe(
+							Match.when({ type: "tool-call" }, (part) => {
+								const prior = Option.getOrUndefined(HashMap.get(calls, part.id))
+								calls = HashMap.set(calls, part.id, {
+									toolCall: part,
+									occurrence: prior === undefined ? 0 : prior.occurrence + 1,
+									ordinal: ordinal++,
+								})
+							}),
+							Match.when({ type: "tool-approval-request" }, (part) => {
+								const call = Option.getOrUndefined(
+									HashMap.get(calls, part.toolCallId),
+								)
+								if (
+									call === undefined ||
+									HashMap.has(requests, part.approvalId)
+								)
+									return
+								order = Chunk.append(order, part.approvalId)
+								requests = HashMap.set(requests, part.approvalId, call)
+							}),
+							Match.orElse(() => {}),
+						)
+				}),
+				Match.when({ role: "tool" }, (message) => {
+					for (const part of message.content)
+						Match.value(part).pipe(
+							Match.when({ type: "tool-result" }, (part) => {
+								const call = Option.getOrUndefined(HashMap.get(calls, part.id))
+								if (call !== undefined)
+									resolved = HashSet.add(resolved, call.ordinal)
+							}),
+							Match.when({ type: "tool-approval-response" }, (part) => {
+								const call = Option.getOrUndefined(
+									HashMap.get(requests, part.approvalId),
+								)
+								if (call !== undefined)
+									resolved = HashSet.add(resolved, call.ordinal)
+							}),
+							Match.orElse(() => {}),
+						)
+				}),
+				Match.orElse(() => {}),
+			)
+	}
+	return Array.from(order).flatMap((approvalId) => {
+		const call = HashMap.getUnsafe(requests, approvalId)
+		const latest = HashMap.getUnsafe(calls, call.toolCall.id)
+		return call.toolCall.providerExecuted === true ||
+			HashSet.has(resolved, call.ordinal) ||
+			latest.ordinal !== call.ordinal
+			? []
+			: [
+					{
+						approvalId,
+						toolCallId: call.toolCall.id,
+						toolCall: call.toolCall,
+						occurrence: call.occurrence,
+					},
+				]
+	})
+}
 export const position = (session: Ref): Position => ({
 	session: session.id,
 	version: session.head,

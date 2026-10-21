@@ -668,6 +668,7 @@ export const make = <
 												owner: ownerKey(options.owner),
 												session: id,
 												turn: current.id,
+												callOccurrence: entry.occurrence,
 											},
 											entry.toolCallId,
 										)
@@ -1208,7 +1209,12 @@ export const make = <
 				)
 					yield* appInvocations.value
 						.approve(
-							{ owner: ownerKey(options.owner), session: id, turn: input.turn },
+							{
+								owner: ownerKey(options.owner),
+								session: id,
+								turn: input.turn,
+								callOccurrence: selected.app.callOccurrence ?? 0,
+							},
 							selected.toolCallId,
 							input.approved,
 							input.grantReads ?? false,

@@ -12,5 +12,36 @@
       "4a5b95aec37ea39937711ef7613792a4cd173574"
     ],
     "decision": "Keep the reviewed c7e606d baseline. The newer Agent/delegation release replaces approvals and the database baseline and explicitly requires an empty database; it has not passed Kay compatibility or migration regression."
-  }
+  },
+  "selectedFixes": [
+    {
+      "repository": "https://gitlab.kai.com/KAI/e",
+      "from": "bceaffbca61d9f220b4fd5b657b78934435affab",
+      "through": "d492a00154aff992fd461f99a83d4eea5b0babdc",
+      "commits": [
+        {
+          "commit": "bdf3dab7225f1ce094883be4142c7b1f04371d5d",
+          "subject": "fix(approvals): bind approvals to their originating Turn"
+        },
+        {
+          "commit": "f5c44c99a91889f9b4ffec1dbaad933ea59ac247",
+          "subject": "fix(approvals): distinguish repeated tool call occurrences"
+        },
+        {
+          "commit": "8e27fea093f32056fb596f5bee6826d2095f8396",
+          "subject": "fix(approvals): isolate reused call IDs within a Turn"
+        },
+        {
+          "commit": "9e7dcae2401e2752d9cc01512ff40a16e6f5a074",
+          "subject": "fix(memory): restore unique receipts from earlier calls"
+        }
+      ],
+      "adaptations": [
+        "Map e Memory state to OpenBot Timeline and conversation state.",
+        "Keep OpenBot organization ownership and plugin memory stores.",
+        "Preserve per-occurrence approvals and durable App operation identity."
+      ],
+      "dependencyPatch": "patches/effect@4.0.5.patch"
+    }
+  ]
 }

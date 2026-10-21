@@ -55,7 +55,9 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `app`        | Only for App tools. The saved App call (see below). |
 
 Show the tool name and the arguments to the person before they decide.
-The list is empty when the current Turn does not wait.
+The list is empty when the current Turn does not wait. Only approval requests in
+committed Items from the current Session and Turn can appear. Requests copied
+from another Turn, a Fork, or model context cannot authorize a current call.
 
 <Callout type="info">
 	After a server restart, a waiting Turn cannot go on. The list is then empty
@@ -121,13 +123,24 @@ Each App approval belongs to one exact call. Platform saves the call before it a
 - the owner (your account),
 - the Session,
 - the Turn,
-- the tool call ID,
+- the tool call ID and its occurrence within the Turn,
 - the exact `arguments`,
 - the recipient: the App connection and its revision.
+
+A model may reuse a tool call ID, even with the same arguments. Each occurrence
+gets its own approval and saved App operation. An earlier decision cannot
+approve a later occurrence. Platform counts calls in committed Turn history,
+so compacting model context does not reset that count. Clients still answer
+with the listed `approvalId`, Turn ID, and current Session revision.
 
 If the connection changes or is turned off before the call runs, the approval fails with `409`. A new revision of the connection never reuses an old approval.
 
 The `app` field in the approval list shows the saved call. It has `id`, `toolName`, `arguments`, `readOnly`, `status` and `source`. `source` names the App (`appName`, `cardUrl`), the connection (`connectionId`, `connectionName`, `revision`) and the tool (`kind`, `name`). It never holds secrets.
+
+A saved call may also have `callOccurrence`. This is the zero-based occurrence
+of that call ID in its Turn. An absent value means the first occurrence, as
+does `0`. Later occurrences have distinct operation IDs; they do not replace
+the first operation or reuse its result.
 
 ### Read rules
 

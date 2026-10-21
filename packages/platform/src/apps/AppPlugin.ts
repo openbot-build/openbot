@@ -60,6 +60,7 @@ interface Services {
 	readonly capabilities: typeof Capabilities.Service
 	readonly invocations: typeof Invocations.Service
 	readonly policy: typeof ActionPolicy.Service
+	readonly callCount: (callId: string) => Effect.Effect<number>
 }
 interface Permits {
 	readonly check: (
@@ -147,6 +148,7 @@ const recoveredEntry = (
 	position: Position,
 	recorded: AppExecution.Invocation,
 	reason: string,
+	callCount: (callId: string) => Effect.Effect<number>,
 ): Entry => ({
 	tool: Tool.dynamic(recorded.toolName, {
 		description: `${recorded.source.appName} / ${recorded.source.name}. Observe this previously approved operation; this entry cannot start another business action.`,
@@ -158,7 +160,16 @@ const recoveredEntry = (
 		Effect.gen(function* () {
 			if (context.toolCallId === undefined)
 				return yield* denied("restore", recorded.source.name)
-			const pending = yield* invocations.pending(position, context.toolCallId)
+			const pending = yield* invocations.pending(
+				{
+					...position,
+					callOccurrence: Math.max(
+						0,
+						(yield* callCount(context.toolCallId)) - 1,
+					),
+				},
+				context.toolCallId,
+			)
 			if (Option.isNone(pending))
 				return yield* denied("restore", recorded.source.name)
 			const value = pending.value
@@ -265,6 +276,7 @@ const entriesFor = (
 				Client.Error | Schema.SchemaError
 			>,
 		) => {
+			let proposed = HashMap.empty<string, number>()
 			const name = Option.match(selected, {
 				onSome: (value) => value.name,
 				onNone: () => {
@@ -283,28 +295,37 @@ const entriesFor = (
 					description: `${origin.appName} / ${origin.connectionName} / ${origin.name}. ${description}`,
 					parameters: schema,
 					success: AppExecution.ToolResult,
-					needsApproval: needsApproval
-						? (input, context) =>
-								Schema.decodeUnknownEffect(Schema.JsonObject)(input).pipe(
-									Effect.flatMap((args) =>
-										services.invocations.propose({
-											...position,
-											source: origin,
-											toolName: name,
-											callId: context.toolCallId,
-											arguments: args,
-										}),
-									),
-									Effect.map((value) => value.status === "PendingApproval"),
-									// When the proposal cannot be saved, ask the user to approve.
-									Effect.catch((error) =>
-										Effect.logWarning(
-											"Could not record an App action proposal.",
-											error,
-										).pipe(Effect.as(true)),
-									),
-								)
-						: false,
+					needsApproval: (input, context) =>
+						Effect.gen(function* () {
+							const callOccurrence = yield* services.callCount(
+								context.toolCallId,
+							)
+							proposed = HashMap.set(
+								proposed,
+								context.toolCallId,
+								callOccurrence,
+							)
+							if (!needsApproval) return false
+							const args = yield* Schema.decodeUnknownEffect(Schema.JsonObject)(
+								input,
+							)
+							const value = yield* services.invocations.propose({
+								...position,
+								callOccurrence,
+								source: origin,
+								toolName: name,
+								callId: context.toolCallId,
+								arguments: args,
+							})
+							return value.status === "PendingApproval"
+						}).pipe(
+							Effect.catch((error) =>
+								Effect.logWarning(
+									"Could not record an App action proposal.",
+									error,
+								).pipe(Effect.as(true)),
+							),
+						),
 				}),
 				handle: (input, context) =>
 					Effect.gen(function* () {
@@ -313,6 +334,11 @@ const entriesFor = (
 						const args = yield* Schema.decodeUnknownEffect(Schema.JsonObject)(
 							input,
 						)
+						const callOccurrence =
+							Option.getOrUndefined(
+								HashMap.get(proposed, context.toolCallId),
+							) ??
+							Math.max(0, (yield* services.callCount(context.toolCallId)) - 1)
 						const operation = Effect.gen(function* () {
 							const current = yield* services.repository
 								.get(owner, origin.connectionId)
@@ -362,6 +388,7 @@ const entriesFor = (
 						return yield* services.invocations.execute(
 							{
 								...position,
+								callOccurrence,
 								source: origin,
 								toolName: name,
 								callId: context.toolCallId,
@@ -674,7 +701,7 @@ export const make: Effect.Effect<
 									issues,
 									unavailable,
 								} = yield* prepare(
-									services,
+									{ ...services, callCount: context.toolCallCount },
 									{ owner: ownerKey(identity), session: at.session, turn },
 									Arr.appendAll(
 										Record.keys(incoming.tools),
@@ -711,6 +738,7 @@ export const make: Effect.Effect<
 												HashMap.get(unavailable, operation.source.connectionId),
 												() => "CapabilityUnavailable",
 											),
+											context.toolCallCount,
 										),
 									)
 								}

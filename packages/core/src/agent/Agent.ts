@@ -65,6 +65,7 @@ export class Context extends EffectContext.Service<
 		readonly turn: Effect.Effect<Turn.Id>
 		readonly step: Effect.Effect<number>
 		readonly history: Effect.Effect<Prompt.Prompt>
+		readonly toolCallCount: (callId: string) => Effect.Effect<number>
 	}
 >()("@openbot-build/core/agent/Agent/Context") {
 	static provide<A, E, R>(
