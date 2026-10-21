@@ -108,7 +108,8 @@
   profiles.ci.module = { lib, pkgs, ... }: {
     dotenv.enable = lib.mkForce false;
     treefmt.enable = lib.mkForce false;
-    packages = lib.mkForce (with pkgs; [ git corepack docker-client openssl ripgrep postgresql_18 ]);
+    # mkForce also replaces the Node.js entry added by the language module.
+    packages = lib.mkForce ([ config.languages.javascript.package ] ++ (with pkgs; [ git corepack docker-client openssl ripgrep postgresql_18 ]));
   };
 
   treefmt = {
