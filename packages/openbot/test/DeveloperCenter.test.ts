@@ -27,11 +27,19 @@ import { Publication } from "../src/app/DevelopmentApps.ts"
 import { Business } from "../src/app/DevelopmentBusiness.ts"
 import * as TestStoresLayer from "../src/apps/DeveloperTestStores.ts"
 import { DeveloperTestStores } from "../src/apps/DeveloperTestStores.ts"
-import * as DeveloperRepositoryLayer from "../src/apps/DeveloperRepositoryPostgres.ts"
+import { eq } from "drizzle-orm"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import * as Rows from "../src/apps/DeveloperRows.ts"
+import { IndexNamespace } from "../src/apps/IndexNamespace.ts"
+import {
+	developerApps,
+	developerNotices,
+	developerProofs,
+	developerSubscriptions,
+} from "../src/database/Schema.ts"
 import * as SecretsLayer from "../src/secrets/Secrets.ts"
 import { DeveloperTests } from "../src/apps/DeveloperTests.ts"
 import { Index } from "@openbot-build/protocol"
-import { DeveloperRepository } from "../src/apps/DeveloperRepository.ts"
 import { DeveloperMonitor } from "../src/apps/DeveloperMonitor.ts"
 import { DeveloperIndexing } from "../src/apps/DeveloperIndexing.ts"
 import { IndexWork } from "../src/apps/IndexWork.ts"
@@ -126,7 +134,7 @@ test(
 			const freshStores = () =>
 				ManagedRuntime.make(
 					TestStoresLayer.layer.pipe(
-						Layer.provide(DeveloperRepositoryLayer.layerFor("development")),
+						Layer.provide(Layer.succeed(IndexNamespace, "development")),
 						Layer.provide(SecretsLayer.layer(options.secretKeys)),
 						Layer.provide(Database.layer(options)),
 						Layer.provide(NodeServices.layer),
@@ -522,10 +530,10 @@ test(
 				"SELECT generation, completed_generation, sources, requested_at FROM openbot_app_index_jobs WHERE namespace = 'development'",
 			)
 			await sql(
-				"CREATE FUNCTION reject_developer_request() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN IF NEW.kind LIKE ''%:indexRequest'' THEN RAISE EXCEPTION ''fixture write failure''; END IF; RETURN NEW; END'",
+				"CREATE FUNCTION reject_developer_request() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RAISE EXCEPTION ''fixture write failure''; END'",
 			)
 			await sql(
-				"CREATE TRIGGER reject_developer_request BEFORE INSERT ON openbot_developer_records FOR EACH ROW EXECUTE FUNCTION reject_developer_request()",
+				"CREATE TRIGGER reject_developer_request BEFORE INSERT ON openbot_developer_index_requests FOR EACH ROW EXECUTE FUNCTION reject_developer_request()",
 			)
 			try {
 				const rejected = await client.runPromise(
@@ -542,7 +550,7 @@ test(
 				)
 			} finally {
 				await sql(
-					"DROP TRIGGER reject_developer_request ON openbot_developer_records",
+					"DROP TRIGGER reject_developer_request ON openbot_developer_index_requests",
 				)
 				await sql("DROP FUNCTION reject_developer_request()")
 			}
@@ -564,15 +572,17 @@ test(
 				).check?._tag,
 				"Withdrawn",
 			)
+			// Make the App due for its next monitor check.
+			const dueNow = Effect.flatMap(makeWithDefaults(), (db) =>
+				db
+					.update(developerApps)
+					.set({ nextCheckAt: 0 })
+					.where(eq(developerApps.cardUrl, cardUrl)),
+			)
 			const monitor = async () =>
 				server.runPromise(
 					Effect.gen(function* () {
-						const records = yield* DeveloperRepository
-						const app = yield* records.apps.get(cardUrl)
-						yield* records.apps.put(cardUrl, "", cardUrl, {
-							...app,
-							nextCheckAt: 0,
-						})
+						yield* dueNow
 						yield* (yield* DeveloperMonitor).run
 					}),
 				)
@@ -634,18 +644,7 @@ test(
 			const pendingAtRestart = await call((api) =>
 				api.developer.requestIndexing({ payload: { cardUrl } }),
 			)
-			await server.runPromise(
-				Effect.flatMap(DeveloperRepository, (records) =>
-					records.apps.get(cardUrl).pipe(
-						Effect.flatMap((app) =>
-							records.apps.put(cardUrl, "", cardUrl, {
-								...app,
-								nextCheckAt: 0,
-							}),
-						),
-					),
-				),
-			)
+			await server.runPromise(dueNow)
 
 			await server.dispose()
 			const restriction = {
@@ -694,8 +693,8 @@ test(
 			assert.ok(restricted._tag === "DeveloperRestricted")
 			assert.equal(restricted.restriction.appealUrl, restriction.appealUrl)
 			let restartedApp = await server.runPromise(
-				Effect.flatMap(DeveloperRepository, (records) =>
-					records.apps.get(cardUrl),
+				Effect.flatMap(makeWithDefaults(), (db) =>
+					Rows.getApp(db, "development", cardUrl),
 				),
 			)
 			for (
@@ -705,8 +704,8 @@ test(
 			) {
 				await new Promise((resolve) => setTimeout(resolve, 10))
 				restartedApp = await server.runPromise(
-					Effect.flatMap(DeveloperRepository, (records) =>
-						records.apps.get(cardUrl),
+					Effect.flatMap(makeWithDefaults(), (db) =>
+						Rows.getApp(db, "development", cardUrl),
 					),
 				)
 			}
@@ -715,8 +714,8 @@ test(
 			assert.equal(
 				(
 					await server.runPromise(
-						Effect.flatMap(DeveloperRepository, (records) =>
-							records.tests.get(protectedTest.id),
+						Effect.flatMap(makeWithDefaults(), (db) =>
+							Rows.getTest(db, "development", protectedTest.id),
 						),
 					)
 				).value.status,
@@ -725,33 +724,34 @@ test(
 			assert.equal(
 				(
 					await server.runPromise(
-						Effect.flatMap(DeveloperRepository, (records) =>
-							records.proofs.list(),
+						Effect.flatMap(makeWithDefaults(), (db) =>
+							db
+								.select()
+								.from(developerProofs)
+								.where(eq(developerProofs.namespace, "development")),
 						),
 					)
 				).length,
 				2,
 			)
 			const persistedNotices = await server.runPromise(
-				Effect.flatMap(DeveloperRepository, (records) =>
-					records.notices.list(),
+				Effect.flatMap(makeWithDefaults(), (db) =>
+					db.select().from(developerNotices),
 				),
 			)
 			assert.ok(
 				persistedNotices.some(
-					(record) =>
-						record.value.id === notice.id && record.value.readAt !== null,
+					(row) => row.id === notice.id && row.readAt !== null,
 				),
 			)
 			const persistedSubscriptions = await server.runPromise(
-				Effect.flatMap(DeveloperRepository, (records) =>
-					records.subscriptions.list(),
+				Effect.flatMap(makeWithDefaults(), (db) =>
+					db.select().from(developerSubscriptions),
 				),
 			)
 			assert.ok(
 				persistedSubscriptions.some(
-					(record) =>
-						record.value.cardUrl === cardUrl && record.value.enabled === false,
+					(row) => row.cardUrl === cardUrl && row.enabled === false,
 				),
 			)
 		} finally {

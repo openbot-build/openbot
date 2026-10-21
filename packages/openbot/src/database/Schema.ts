@@ -8,23 +8,265 @@ import {
 	bigint,
 	bigserial,
 	uniqueIndex,
+	foreignKey,
 } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 import { openbot_auth_user } from "./AuthSchema.ts"
 const table = pgTable
-export const developerRecords = table(
-	"openbot_developer_records",
+const namespace = () => text().notNull().default("public")
+const time = (name: string) => bigint(name, { mode: "number" })
+/** A domain or App Card claim that waits for its proof. */
+export const developerClaims = table(
+	"openbot_developer_claims",
 	{
-		kind: text().notNull(),
+		namespace: namespace(),
 		id: text().notNull(),
 		owner: text().notNull(),
+		scopeKey: text("scope_key").notNull(),
 		scope: text().notNull(),
-		body: text().notNull(),
+		token: text().notNull(),
+		status: text().notNull(),
+		createdAt: time("created_at").notNull(),
+		expiresAt: time("expires_at").notNull(),
 	},
 	(t) => [
-		primaryKey({ columns: [t.kind, t.id] }),
-		index("openbot_developer_records_owner").on(t.kind, t.owner),
-		index("openbot_developer_records_scope").on(t.kind, t.scope),
+		primaryKey({ columns: [t.namespace, t.id] }),
+		index("openbot_developer_claims_owner").on(t.namespace, t.owner),
+	],
+)
+/** A confirmed claim. It has the ID of its claim. */
+export const developerProofs = table(
+	"openbot_developer_proofs",
+	{
+		namespace: namespace(),
+		id: text().notNull(),
+		owner: text().notNull(),
+		scopeKey: text("scope_key").notNull(),
+		scope: text().notNull(),
+		token: text().notNull(),
+		transition: integer().notNull(),
+		status: text().notNull(),
+		confirmedAt: time("confirmed_at"),
+		validUntil: time("valid_until").notNull(),
+		nextVerificationAt: time("next_verification_at").notNull(),
+		reason: text(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.namespace, t.id] }),
+		foreignKey({
+			columns: [t.namespace, t.id],
+			foreignColumns: [developerClaims.namespace, developerClaims.id],
+		}).onDelete("cascade"),
+		index("openbot_developer_proofs_owner").on(t.namespace, t.owner),
+		index("openbot_developer_proofs_due").on(
+			t.namespace,
+			t.status,
+			t.nextVerificationAt,
+		),
+	],
+)
+export const developerMembers = table(
+	"openbot_developer_members",
+	{
+		namespace: namespace(),
+		id: text().notNull(),
+		proofId: text("proof_id").notNull(),
+		owner: text().notNull(),
+		role: text().notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.namespace, t.id] }),
+		foreignKey({
+			columns: [t.namespace, t.proofId],
+			foreignColumns: [developerProofs.namespace, developerProofs.id],
+		}).onDelete("cascade"),
+		uniqueIndex("openbot_developer_members_proof_owner").on(
+			t.namespace,
+			t.proofId,
+			t.owner,
+		),
+		index("openbot_developer_members_owner").on(t.namespace, t.owner),
+	],
+)
+export const developerInvitations = table(
+	"openbot_developer_invitations",
+	{
+		namespace: namespace(),
+		/** A secret bearer token. */
+		id: text().notNull(),
+		proofId: text("proof_id").notNull(),
+		owner: text().notNull(),
+		role: text().notNull(),
+		expiresAt: time("expires_at").notNull(),
+		status: text().notNull(),
+		acceptedBy: text("accepted_by"),
+	},
+	(t) => [
+		primaryKey({ columns: [t.namespace, t.id] }),
+		foreignKey({
+			columns: [t.namespace, t.proofId],
+			foreignColumns: [developerProofs.namespace, developerProofs.id],
+		}).onDelete("cascade"),
+		index("openbot_developer_invitations_proof").on(t.namespace, t.proofId),
+	],
+)
+/** An App that a proof covers, with the state of its regular monitor check. */
+export const developerApps = table(
+	"openbot_developer_apps",
+	{
+		namespace: namespace(),
+		cardUrl: text("card_url").notNull(),
+		candidate: text().notNull(),
+		nextCheckAt: time("next_check_at").notNull(),
+		leaseUntil: time("lease_until").notNull().default(0),
+		monitorToken: text("monitor_token"),
+		monitorRevision: integer("monitor_revision").notNull().default(0),
+		monitorIssues: text("monitor_issues").notNull().default("[]"),
+	},
+	(t) => [
+		primaryKey({ columns: [t.namespace, t.cardUrl] }),
+		index("openbot_developer_apps_due").on(
+			t.namespace,
+			t.nextCheckAt,
+			t.leaseUntil,
+		),
+	],
+)
+export const developerReports = table(
+	"openbot_developer_reports",
+	{
+		namespace: namespace(),
+		id: text().notNull(),
+		/** The account that saved the report. It is null for a monitor report. */
+		owner: text(),
+		cardUrl: text("card_url").notNull(),
+		checkedAt: time("checked_at").notNull(),
+		report: text().notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.namespace, t.id] }),
+		index("openbot_developer_reports_owner").on(
+			t.namespace,
+			t.owner,
+			t.checkedAt,
+			t.id,
+		),
+		index("openbot_developer_reports_app").on(
+			t.namespace,
+			t.cardUrl,
+			t.checkedAt,
+			t.id,
+		),
+	],
+)
+/**
+ * A connection test. `value` holds the full test. The other columns are copies
+ * of its fields for queries, and only one function writes them.
+ */
+export const developerTests = table(
+	"openbot_developer_tests",
+	{
+		namespace: namespace(),
+		id: text().notNull(),
+		owner: text().notNull(),
+		cardUrl: text("card_url").notNull(),
+		status: text().notNull(),
+		cleanup: text().notNull(),
+		expiresAt: time("expires_at").notNull(),
+		value: text().notNull(),
+		resourceMetadataUrl: text("resource_metadata_url"),
+		cleanupToken: text("cleanup_token"),
+		cleanupLeaseUntil: time("cleanup_lease_until").notNull().default(0),
+		/** The sealed connection and credentials of the test. */
+		privateState: text("private_state"),
+	},
+	(t) => [
+		primaryKey({ columns: [t.namespace, t.id] }),
+		index("openbot_developer_tests_owner").on(t.namespace, t.owner),
+		index("openbot_developer_tests_open")
+			.on(t.namespace, t.expiresAt)
+			.where(sql`${t.cleanup} <> 'Complete'`),
+	],
+)
+/** An authorization flow of a connection test. A used flow has no `body` and no `callback`. */
+export const developerTestFlows = table(
+	"openbot_developer_test_flows",
+	{
+		namespace: namespace(),
+		flowId: text("flow_id").notNull(),
+		testId: text("test_id").notNull(),
+		owner: text().notNull(),
+		status: text().notNull(),
+		expiresAt: time("expires_at").notNull(),
+		value: text().notNull(),
+		body: text(),
+		callback: text(),
+		consumed: boolean().notNull().default(false),
+	},
+	(t) => [
+		primaryKey({ columns: [t.namespace, t.flowId] }),
+		foreignKey({
+			columns: [t.namespace, t.testId],
+			foreignColumns: [developerTests.namespace, developerTests.id],
+		}).onDelete("cascade"),
+		index("openbot_developer_test_flows_test").on(t.namespace, t.testId),
+		index("openbot_developer_test_flows_open")
+			.on(t.namespace, t.expiresAt)
+			.where(sql`${t.body} IS NOT NULL OR ${t.callback} IS NOT NULL`),
+	],
+)
+export const developerIndexRequests = table(
+	"openbot_developer_index_requests",
+	{
+		namespace: namespace(),
+		id: text().notNull(),
+		owner: text().notNull(),
+		cardUrl: text("card_url").notNull(),
+		generation: text().notNull(),
+		acceptedAt: time("accepted_at").notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.namespace, t.id] }),
+		uniqueIndex("openbot_developer_index_requests_generation").on(
+			t.namespace,
+			t.owner,
+			t.cardUrl,
+			t.generation,
+		),
+	],
+)
+export const developerSubscriptions = table(
+	"openbot_developer_subscriptions",
+	{
+		namespace: namespace(),
+		owner: text().notNull(),
+		cardUrl: text("card_url").notNull(),
+		enabled: boolean().notNull(),
+	},
+	(t) => [primaryKey({ columns: [t.namespace, t.owner, t.cardUrl] })],
+)
+export const developerNotices = table(
+	"openbot_developer_notices",
+	{
+		namespace: namespace(),
+		id: text().notNull(),
+		owner: text().notNull(),
+		cardUrl: text("card_url"),
+		kind: text().notNull(),
+		issue: text(),
+		reason: text(),
+		reportId: text("report_id"),
+		createdAt: time("created_at").notNull(),
+		readAt: time("read_at"),
+	},
+	(t) => [
+		primaryKey({ columns: [t.namespace, t.id] }),
+		index("openbot_developer_notices_owner").on(
+			t.namespace,
+			t.owner,
+			t.createdAt,
+			t.id,
+		),
 	],
 )
 export const appInvocations = table(

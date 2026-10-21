@@ -2,10 +2,21 @@ import { randomBytes, randomUUID } from "node:crypto"
 import { isIP } from "node:net"
 import { DeveloperApi as Api } from "@openbot-build/api"
 import { Discovery, Document, Network, Robots } from "@openbot-build/protocol"
+import { PgClient } from "@effect/sql-pg"
+import { and, eq, gt, inArray, ne } from "drizzle-orm"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { Clock, Context, Effect, Layer, Match, Option, Schema } from "effect"
+import {
+	developerApps,
+	developerClaims,
+	developerMembers,
+	developerProofs,
+} from "../database/Schema.ts"
 import { AppInspections } from "./AppInspections.ts"
-import { DeveloperRepository, type ProofRecord } from "./DeveloperRepository.ts"
+import * as Rows from "./DeveloperRows.ts"
+import type { ProofRecord } from "./DeveloperRows.ts"
 import { DomainControl } from "./DomainControl.ts"
+import { IndexNamespace } from "./IndexNamespace.ts"
 
 export const scopeKey = (scope: Api.ManagementScope): string =>
 	Match.value(scope).pipe(
@@ -15,12 +26,13 @@ export const scopeKey = (scope: Api.ManagementScope): string =>
 		}),
 	)
 /** A proof in these states still gives access. */
-const usableStatus: ReadonlyArray<Api.Proof["status"]> = [
+const usableStatus = [
 	"Confirmed",
 	"Unconfirmed",
-]
+] as const satisfies ReadonlyArray<Api.Proof["status"]>
 const usable = (proof: Api.Proof, now: number) =>
-	proof.validUntil > now && usableStatus.includes(proof.status)
+	proof.validUntil > now &&
+	usableStatus.some((status) => status === proof.status)
 export const normalizeScope = (
 	scope: Api.ManagementScope,
 ): Effect.Effect<Api.ManagementScope, Api.DeveloperInputInvalid> =>
@@ -125,32 +137,68 @@ const Marker = Schema.fromJsonString(
 export const make: Effect.Effect<
 	typeof DeveloperAccess.Service,
 	never,
-	| DeveloperRepository
+	| PgClient.PgClient
 	| DomainControl
 	| Network.PublicNetwork
 	| Robots.Robots
 	| AppInspections
 > = Effect.gen(function* () {
-	const records = yield* DeveloperRepository
+	const db = yield* makeWithDefaults()
+	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
+	const namespace = yield* IndexNamespace
 	const domains = yield* DomainControl
 	const network = yield* Network.PublicNetwork
 	const robots = yield* Robots.Robots
 	const inspections = yield* AppInspections
 	const notFound = () => Api.DeveloperNotFound.make({})
 	const conflict = (reason: string) => Api.DeveloperConflict.make({ reason })
+	const proofWhere = (id: string) =>
+		and(eq(developerProofs.namespace, namespace), eq(developerProofs.id, id))
+	const claimWhere = (id: string) =>
+		and(eq(developerClaims.namespace, namespace), eq(developerClaims.id, id))
+	/** Read the proof. With `lock`, keep the row locked until the transaction ends. */
+	const readProof = Effect.fn("DeveloperAccess.readProof")(function* (
+		id: string,
+		lock = false,
+	) {
+		const query = db.select().from(developerProofs).where(proofWhere(id))
+		const row = (yield* Rows.stored(lock ? query.for("update") : query))[0]
+		if (row === undefined) return yield* notFound()
+		return yield* Rows.decodeProof(row)
+	})
+	const writeProof = Effect.fn("DeveloperAccess.writeProof")(function* (
+		value: Api.Proof,
+	) {
+		const { id: _, ...row } = yield* Rows.encodeProof(value)
+		yield* Rows.stored(
+			db
+				.update(developerProofs)
+				.set({ ...row, scopeKey: scopeKey(value.scope) })
+				.where(proofWhere(value.id)),
+		)
+	})
 	const ownProof = Effect.fn("DeveloperAccess.ownProof")(function* (
 		owner: string,
 		id: string,
+		lock = false,
 	) {
-		const proof = yield* records.proofs.get(id)
+		const proof = yield* readProof(id, lock)
 		if (proof.owner !== owner) {
 			const now = yield* Clock.currentTimeMillis
-			if (
-				usable(proof.value, now) &&
-				(yield* records.members.list({ owner })).some(
-					(member) => member.value.proofId === id,
-				)
+			const member = yield* Rows.stored(
+				db
+					.select({ id: developerMembers.id })
+					.from(developerMembers)
+					.where(
+						and(
+							eq(developerMembers.namespace, namespace),
+							eq(developerMembers.proofId, id),
+							eq(developerMembers.owner, owner),
+						),
+					)
+					.limit(1),
 			)
+			if (usable(proof.value, now) && member.length > 0)
 				return yield* Api.DeveloperForbidden.make({})
 			return yield* notFound()
 		}
@@ -159,11 +207,17 @@ export const make: Effect.Effect<
 	const claim = Effect.fn("DeveloperAccess.claim")(function* (
 		owner: string,
 		id: string,
+		lock = false,
 	) {
-		const record = yield* records.claims.get(id)
-		if (record.owner !== owner) return yield* notFound()
-		return record.value
+		const query = db.select().from(developerClaims).where(claimWhere(id))
+		const row = (yield* Rows.stored(lock ? query.for("update") : query))[0]
+		if (row === undefined || row.owner !== owner) return yield* notFound()
+		return yield* Rows.decodeClaim(row)
 	})
+	const setClaimStatus = (id: string, status: Api.Challenge["status"]) =>
+		Rows.stored(
+			db.update(developerClaims).set({ status }).where(claimWhere(id)),
+		)
 	const evidence = (scope: Api.ManagementScope, token: string) =>
 		Match.value(scope).pipe(
 			Match.tagsExhaustive({
@@ -213,30 +267,67 @@ export const make: Effect.Effect<
 			}),
 			Effect.result,
 		)
+	/** The grants of the owner: the usable proofs they hold, and the usable proofs they are a member of. */
 	const grants = Effect.fn("DeveloperAccess.grants")(function* (owner: string) {
 		const now = yield* Clock.currentTimeMillis
-		const proofs = yield* records.proofs.list()
-		const members = yield* records.members.list({ owner })
-		return proofs
-			.filter((record) => usable(record.value, now))
-			.flatMap<Api.Grant>((record) => {
-				if (record.owner === owner)
-					return [
-						{
-							proofId: record.value.id,
-							scope: record.value.scope,
-							role: "administrator" as const,
-						},
-					]
-				return members
-					.filter((member) => member.value.proofId === record.value.id)
-					.map((member) => ({
-						proofId: record.value.id,
-						memberId: member.value.id,
-						scope: record.value.scope,
-						role: member.value.role,
-					}))
-			})
+		const usableProof = and(
+			eq(developerProofs.namespace, namespace),
+			inArray(developerProofs.status, [...usableStatus]),
+			gt(developerProofs.validUntil, now),
+		)
+		const held = yield* Rows.stored(
+			db
+				.select()
+				.from(developerProofs)
+				.where(and(usableProof, eq(developerProofs.owner, owner))),
+		)
+		const shared = yield* Rows.stored(
+			db
+				.select({
+					proof: developerProofs,
+					memberId: developerMembers.id,
+					role: developerMembers.role,
+				})
+				.from(developerMembers)
+				.innerJoin(
+					developerProofs,
+					and(
+						eq(developerProofs.namespace, developerMembers.namespace),
+						eq(developerProofs.id, developerMembers.proofId),
+					),
+				)
+				.where(
+					and(
+						usableProof,
+						eq(developerMembers.owner, owner),
+						ne(developerProofs.owner, owner),
+					),
+				),
+		)
+		const administered = yield* Effect.forEach(held, (row) =>
+			Rows.decodeProof(row).pipe(
+				Effect.map(({ value }): Api.Grant => ({
+					proofId: value.id,
+					scope: value.scope,
+					role: "administrator",
+				})),
+			),
+		)
+		const membered = yield* Effect.forEach(shared, (row) =>
+			Effect.gen(function* () {
+				const { value } = yield* Rows.decodeProof(row.proof)
+				const role = yield* Schema.decodeUnknownEffect(Api.MemberRole)(
+					row.role,
+				).pipe(Effect.mapError(Rows.unavailable))
+				return {
+					proofId: value.id,
+					memberId: row.memberId,
+					scope: value.scope,
+					role,
+				} satisfies Api.Grant
+			}),
+		)
+		return [...administered, ...membered]
 	})
 	const covers = (scope: Api.ManagementScope, candidate: Discovery.Candidate) =>
 		Match.value(scope).pipe(
@@ -257,7 +348,7 @@ export const make: Effect.Effect<
 		cardUrl: string,
 		write: boolean = false,
 	) {
-		const app = yield* records.apps.get(cardUrl)
+		const app = yield* Rows.getApp(db, namespace, cardUrl)
 		const all = (yield* grants(owner)).filter((grant) =>
 			covers(grant.scope, app.candidate),
 		)
@@ -273,6 +364,64 @@ export const make: Effect.Effect<
 				DeveloperNotFound: () => Effect.succeed(false),
 				DeveloperForbidden: () => Effect.succeed(false),
 			}),
+		)
+	/** Add the sources of the App to its record, or create the record. */
+	const rememberApp = (
+		scope: Api.ManagementScope,
+		observed: Discovery.Candidate,
+	): Effect.Effect<void, Api.DeveloperUnavailable> =>
+		inTransaction(
+			Effect.gen(function* () {
+				const previous = yield* Rows.findApp(
+					db,
+					namespace,
+					observed.cardUrl,
+					true,
+				)
+				const sources = [
+					...observed.sources,
+					...Option.match(previous, {
+						onNone: () => [],
+						onSome: (value) => value.candidate.sources,
+					}),
+				].filter(
+					(source, index, values) =>
+						values.findIndex(
+							(value) => value.role === source.role && value.url === source.url,
+						) === index,
+				)
+				const candidate = yield* Discovery.Candidate.decode({
+					...observed,
+					sources,
+				}).pipe(Effect.mapError(Rows.unavailable))
+				if (!covers(scope, candidate)) return true
+				if (Option.isSome(previous)) {
+					yield* Rows.putApp(db, namespace, { ...previous.value, candidate })
+					return true
+				}
+				const now = yield* Clock.currentTimeMillis
+				const encoded = yield* Schema.encodeEffect(
+					Rows.Json(Discovery.Candidate),
+				)(candidate).pipe(Effect.mapError(Rows.unavailable))
+				// Another request may add the same App first. Then read it again and merge.
+				const inserted = yield* Rows.stored(
+					db
+						.insert(developerApps)
+						.values({
+							namespace,
+							cardUrl: candidate.cardUrl,
+							candidate: encoded,
+							nextCheckAt: now + 3600000,
+						})
+						.onConflictDoNothing()
+						.returning({ cardUrl: developerApps.cardUrl }),
+				)
+				return inserted.length === 1
+			}),
+		).pipe(
+			Effect.flatMap((saved) =>
+				saved ? Effect.void : rememberApp(scope, observed),
+			),
 		)
 	const rememberApps = (scope: Api.ManagementScope) =>
 		Effect.gen(function* () {
@@ -295,52 +444,20 @@ export const make: Effect.Effect<
 						Unconfirmed: () => [],
 					}),
 				)
-				yield* records.transaction(
-					"monitor:" + app.candidate.cardUrl,
-					Effect.gen(function* () {
-						const previous = yield* records.apps.find(app.candidate.cardUrl)
-						const sources = [
-							...app.candidate.sources,
-							...evidence,
-							...Option.match(previous, {
-								onNone: () => [],
-								onSome: (value) => value.candidate.sources,
-							}),
-						].filter(
-							(source, index, values) =>
-								values.findIndex(
-									(value) =>
-										value.role === source.role && value.url === source.url,
-								) === index,
-						)
-						const candidate = yield* Discovery.Candidate.decode({
-							...app.candidate,
-							sources,
-						}).pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
-						if (!covers(scope, candidate)) return
-						const now = yield* Clock.currentTimeMillis
-						yield* records.apps.put(
-							candidate.cardUrl,
-							"",
-							scopeKey(scope),
-							Option.match(previous, {
-								onNone: () => ({ candidate, nextCheckAt: now + 3600000 }),
-								onSome: (value) => ({ ...value, candidate }),
-							}),
-						)
-					}),
-				)
+				yield* rememberApp(scope, {
+					...app.candidate,
+					sources: [...app.candidate.sources, ...evidence],
+				})
 			}
 		})
 	const recheck = Effect.fn("DeveloperAccess.recheck")(function* (id: string) {
-		const previous = yield* records.proofs.get(id)
+		const previous = yield* readProof(id)
 		if (previous.value.status === "Relinquished")
 			return yield* conflict("ProofRelinquished")
 		const checked = yield* evidence(previous.value.scope, previous.token)
-		const value = yield* records.transaction(
-			scopeKey(previous.value.scope),
+		const value = yield* inTransaction(
 			Effect.gen(function* () {
-				const current = yield* records.proofs.get(id)
+				const current = yield* readProof(id, true)
 				if (current.value.status === "Relinquished")
 					return yield* conflict("ProofRelinquished")
 				const now = yield* Clock.currentTimeMillis
@@ -369,10 +486,7 @@ export const make: Effect.Effect<
 						current.value.transition +
 						(assessed.status === current.value.status ? 0 : 1),
 				}
-				yield* records.proofs.put(id, current.owner, scopeKey(value.scope), {
-					...current,
-					value,
-				})
+				yield* writeProof(value)
 				return value
 			}),
 		)
@@ -386,29 +500,49 @@ export const make: Effect.Effect<
 		grants,
 		authorize,
 		allows,
-		ownProof,
-		claim,
+		ownProof: (owner, id) => ownProof(owner, id),
+		claim: (owner, id) => claim(owner, id),
 		recheck,
 		overview: Effect.fn("DeveloperAccess.overview")(function* (owner) {
 			const access = yield* grants(owner)
-			const apps = (yield* records.apps.list()).flatMap((app) => {
-				const applicable = access.filter((grant) =>
-					covers(grant.scope, app.candidate),
-				)
-				return applicable.length === 0
-					? []
-					: [
-							{
-								cardUrl: app.candidate.cardUrl,
-								candidate: app.candidate,
-								grants: applicable,
-							},
-						]
-			})
+			const rows = yield* Rows.stored(
+				db
+					.select()
+					.from(developerApps)
+					.where(eq(developerApps.namespace, namespace)),
+			)
+			const apps = (yield* Effect.forEach(rows, Rows.decodeApp)).flatMap(
+				(app) => {
+					const applicable = access.filter((grant) =>
+						covers(grant.scope, app.candidate),
+					)
+					return applicable.length === 0
+						? []
+						: [
+								{
+									cardUrl: app.candidate.cardUrl,
+									candidate: app.candidate,
+									grants: applicable,
+								},
+							]
+				},
+			)
+			const proofs = yield* Rows.stored(
+				db
+					.select()
+					.from(developerProofs)
+					.where(
+						and(
+							eq(developerProofs.namespace, namespace),
+							eq(developerProofs.owner, owner),
+						),
+					)
+					.orderBy(developerProofs.id),
+			)
 			return {
 				apps,
-				proofs: (yield* records.proofs.list({ owner })).map(
-					(record) => record.value,
+				proofs: yield* Effect.forEach(proofs, (row) =>
+					Rows.decodeProof(row).pipe(Effect.map((proof) => proof.value)),
 				),
 				grants: access,
 			}
@@ -426,34 +560,30 @@ export const make: Effect.Effect<
 				expiresAt: now + 86400000,
 				status: "Pending",
 			}
-			yield* records.claims.put(challenge.id, owner, scopeKey(scope), {
-				owner,
-				value: challenge,
-			})
+			const row = yield* Rows.encodeClaim(challenge)
+			yield* Rows.stored(
+				db
+					.insert(developerClaims)
+					.values({ namespace, owner, scopeKey: scopeKey(scope), ...row }),
+			)
 			return challenge
 		}),
 		revoke: (owner, id) =>
-			records.transaction(
-				"claim:" + id,
+			inTransaction(
 				Effect.gen(function* () {
-					const value = yield* claim(owner, id)
+					const value = yield* claim(owner, id, true)
 					if (value.status === "Confirmed")
 						return yield* conflict("ClaimAlreadyConfirmed")
-					const revoked: Api.Challenge = { ...value, status: "Revoked" }
-					yield* records.claims.put(id, owner, scopeKey(value.scope), {
-						owner,
-						value: revoked,
-					})
-					return revoked
+					yield* setClaimStatus(id, "Revoked")
+					return { ...value, status: "Revoked" } satisfies Api.Challenge
 				}),
 			),
 		verify: Effect.fn("DeveloperAccess.verify")(function* (owner, id) {
 			const value = yield* claim(owner, id)
 			const checked = yield* evidence(value.scope, value.token)
-			const proof = yield* records.transaction(
-				"claim:" + id,
+			const proof = yield* inTransaction(
 				Effect.gen(function* () {
-					const current = yield* claim(owner, id)
+					const current = yield* claim(owner, id, true)
 					if (current.status === "Confirmed")
 						return (yield* ownProof(owner, id)).value
 					if (current.status !== "Pending")
@@ -477,27 +607,27 @@ export const make: Effect.Effect<
 						nextVerificationAt: now + 86400000,
 						reason: null,
 					}
-					yield* records.proofs.put(id, owner, scopeKey(proof.scope), {
-						owner,
-						value: proof,
-						token: current.token,
-					})
-					yield* records.claims.put(id, owner, scopeKey(proof.scope), {
-						owner,
-						value: { ...current, status: "Confirmed" },
-					})
+					const row = yield* Rows.encodeProof(proof)
+					yield* Rows.stored(
+						db.insert(developerProofs).values({
+							namespace,
+							owner,
+							token: current.token,
+							scopeKey: scopeKey(proof.scope),
+							...row,
+						}),
+					)
+					yield* setClaimStatus(id, "Confirmed")
 					return proof
 				}),
 			)
 			yield* rememberApps(proof.scope)
 			return proof
 		}),
-		relinquish: Effect.fn("DeveloperAccess.relinquish")(function* (owner, id) {
-			const proof = yield* ownProof(owner, id)
-			return yield* records.transaction(
-				scopeKey(proof.value.scope),
+		relinquish: (owner, id) =>
+			inTransaction(
 				Effect.gen(function* () {
-					const current = yield* ownProof(owner, id)
+					const current = yield* ownProof(owner, id, true)
 					if (current.value.status === "Relinquished") return current.value
 					const value: Api.Proof = {
 						...current.value,
@@ -506,31 +636,33 @@ export const make: Effect.Effect<
 						validUntil: yield* Clock.currentTimeMillis,
 						reason: "Relinquished",
 					}
-					yield* records.proofs.put(id, owner, scopeKey(value.scope), {
-						...current,
-						value,
-					})
-					for (const member of yield* records.members.list({ scope: id })) {
-						const noticeId = yield* Effect.sync(randomUUID)
-						yield* records.notices.put(noticeId, member.owner, "", {
-							owner: member.owner,
-							value: {
-								id: noticeId,
-								cardUrl: null,
-								kind: "AccessChanged",
-								issue: null,
-								reason: "SourceProofRelinquished",
-								reportId: null,
-								createdAt: value.validUntil,
-								readAt: null,
-							},
+					yield* writeProof(value)
+					const members = yield* Rows.stored(
+						db
+							.select({ owner: developerMembers.owner })
+							.from(developerMembers)
+							.where(
+								and(
+									eq(developerMembers.namespace, namespace),
+									eq(developerMembers.proofId, id),
+								),
+							),
+					)
+					for (const member of members) {
+						yield* Rows.postNotice(db, namespace, member.owner, {
+							id: yield* Effect.sync(randomUUID),
+							cardUrl: null,
+							kind: "AccessChanged",
+							issue: null,
+							reason: "SourceProofRelinquished",
+							reportId: null,
+							createdAt: value.validUntil,
+							readAt: null,
 						})
 					}
-
 					return value
 				}),
-			)
-		}),
+			),
 	})
 })
 export const layer = Layer.effect(DeveloperAccess, make)

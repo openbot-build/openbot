@@ -17,7 +17,9 @@ import * as OrganizationFixture from "./OrganizationFixture.ts"
 import { AppNetwork } from "../src/apps/AppHost.ts"
 import { DeveloperAccess } from "../src/apps/DeveloperAccess.ts"
 import { DeveloperTests } from "../src/apps/DeveloperTests.ts"
-import { DeveloperRepository } from "../src/apps/DeveloperRepository.ts"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import * as Rows from "../src/apps/DeveloperRows.ts"
+import { developerTests } from "../src/database/Schema.ts"
 import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Postgres from "./PostgresTest.ts"
 
@@ -293,8 +295,10 @@ test(
 			assert.equal(
 				JSON.stringify(
 					await runtime.runPromise(
-						Effect.flatMap(DeveloperRepository, (records) =>
-							records.secrets.list(),
+						Effect.flatMap(makeWithDefaults(), (db) =>
+							db
+								.select({ privateState: developerTests.privateState })
+								.from(developerTests),
 						),
 					),
 				).includes("private-fixture-key"),
@@ -412,9 +416,9 @@ test(
 			remembered = (await create()).id
 			await runtime.runPromise(
 				Effect.gen(function* () {
-					const records = yield* DeveloperRepository
-					const record = yield* records.tests.get(remembered)
-					yield* records.tests.put(remembered, owner, record.value.cardUrl, {
+					const db = yield* makeWithDefaults()
+					const record = yield* Rows.getTest(db, "public", remembered)
+					yield* Rows.putTest(db, "public", {
 						...record,
 						value: {
 							...record.value,
@@ -427,8 +431,8 @@ test(
 			await runtime.dispose()
 			runtime = ManagedRuntime.make(layer)
 			const restored = await runtime.runPromise(
-				Effect.flatMap(DeveloperRepository, (records) =>
-					records.tests.get(remembered),
+				Effect.flatMap(makeWithDefaults(), (db) =>
+					Rows.getTest(db, "public", remembered),
 				),
 			)
 			assert.equal(restored.value.status, "Interrupted")

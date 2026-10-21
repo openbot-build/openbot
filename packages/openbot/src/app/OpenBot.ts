@@ -233,7 +233,6 @@ export const layer = <
 
 	const developer = DeveloperLayers.layer({
 		publicOrigin: options.auth.publicOrigin,
-		namespace: indexNamespace,
 		...(options.appNetwork === undefined
 			? {}
 			: { appNetwork: options.appNetwork }),
