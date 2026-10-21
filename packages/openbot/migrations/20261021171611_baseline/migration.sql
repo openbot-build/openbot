@@ -117,13 +117,138 @@ CREATE TABLE "openbot_timeline_contents" (
 	CONSTRAINT "openbot_timeline_contents_pkey" PRIMARY KEY("namespace","id")
 );
 --> statement-breakpoint
-CREATE TABLE "openbot_developer_records" (
-	"kind" text,
+CREATE TABLE "openbot_developer_apps" (
+	"namespace" text DEFAULT 'public',
+	"card_url" text,
+	"candidate" text NOT NULL,
+	"next_check_at" bigint NOT NULL,
+	"lease_until" bigint DEFAULT 0 NOT NULL,
+	"monitor_token" text,
+	"monitor_revision" integer DEFAULT 0 NOT NULL,
+	"monitor_issues" text DEFAULT '[]' NOT NULL,
+	CONSTRAINT "openbot_developer_apps_pkey" PRIMARY KEY("namespace","card_url")
+);
+--> statement-breakpoint
+CREATE TABLE "openbot_developer_claims" (
+	"namespace" text DEFAULT 'public',
 	"id" text,
 	"owner" text NOT NULL,
+	"scope_key" text NOT NULL,
 	"scope" text NOT NULL,
-	"body" text NOT NULL,
-	CONSTRAINT "openbot_developer_records_pkey" PRIMARY KEY("kind","id")
+	"token" text NOT NULL,
+	"status" text NOT NULL,
+	"created_at" bigint NOT NULL,
+	"expires_at" bigint NOT NULL,
+	CONSTRAINT "openbot_developer_claims_pkey" PRIMARY KEY("namespace","id")
+);
+--> statement-breakpoint
+CREATE TABLE "openbot_developer_index_requests" (
+	"namespace" text DEFAULT 'public',
+	"id" text,
+	"owner" text NOT NULL,
+	"card_url" text NOT NULL,
+	"generation" text NOT NULL,
+	"accepted_at" bigint NOT NULL,
+	CONSTRAINT "openbot_developer_index_requests_pkey" PRIMARY KEY("namespace","id")
+);
+--> statement-breakpoint
+CREATE TABLE "openbot_developer_invitations" (
+	"namespace" text DEFAULT 'public',
+	"id" text,
+	"proof_id" text NOT NULL,
+	"owner" text NOT NULL,
+	"role" text NOT NULL,
+	"expires_at" bigint NOT NULL,
+	"status" text NOT NULL,
+	"accepted_by" text,
+	CONSTRAINT "openbot_developer_invitations_pkey" PRIMARY KEY("namespace","id")
+);
+--> statement-breakpoint
+CREATE TABLE "openbot_developer_members" (
+	"namespace" text DEFAULT 'public',
+	"id" text,
+	"proof_id" text NOT NULL,
+	"owner" text NOT NULL,
+	"role" text NOT NULL,
+	CONSTRAINT "openbot_developer_members_pkey" PRIMARY KEY("namespace","id")
+);
+--> statement-breakpoint
+CREATE TABLE "openbot_developer_notices" (
+	"namespace" text DEFAULT 'public',
+	"id" text,
+	"owner" text NOT NULL,
+	"card_url" text,
+	"kind" text NOT NULL,
+	"issue" text,
+	"reason" text,
+	"report_id" text,
+	"created_at" bigint NOT NULL,
+	"read_at" bigint,
+	CONSTRAINT "openbot_developer_notices_pkey" PRIMARY KEY("namespace","id")
+);
+--> statement-breakpoint
+CREATE TABLE "openbot_developer_proofs" (
+	"namespace" text DEFAULT 'public',
+	"id" text,
+	"owner" text NOT NULL,
+	"scope_key" text NOT NULL,
+	"scope" text NOT NULL,
+	"token" text NOT NULL,
+	"transition" integer NOT NULL,
+	"status" text NOT NULL,
+	"confirmed_at" bigint,
+	"valid_until" bigint NOT NULL,
+	"next_verification_at" bigint NOT NULL,
+	"reason" text,
+	CONSTRAINT "openbot_developer_proofs_pkey" PRIMARY KEY("namespace","id")
+);
+--> statement-breakpoint
+CREATE TABLE "openbot_developer_reports" (
+	"namespace" text DEFAULT 'public',
+	"id" text,
+	"owner" text,
+	"card_url" text NOT NULL,
+	"checked_at" bigint NOT NULL,
+	"report" text NOT NULL,
+	CONSTRAINT "openbot_developer_reports_pkey" PRIMARY KEY("namespace","id")
+);
+--> statement-breakpoint
+CREATE TABLE "openbot_developer_subscriptions" (
+	"namespace" text DEFAULT 'public',
+	"owner" text,
+	"card_url" text,
+	"enabled" boolean NOT NULL,
+	CONSTRAINT "openbot_developer_subscriptions_pkey" PRIMARY KEY("namespace","owner","card_url")
+);
+--> statement-breakpoint
+CREATE TABLE "openbot_developer_test_flows" (
+	"namespace" text DEFAULT 'public',
+	"flow_id" text,
+	"test_id" text NOT NULL,
+	"owner" text NOT NULL,
+	"status" text NOT NULL,
+	"expires_at" bigint NOT NULL,
+	"value" text NOT NULL,
+	"body" text,
+	"callback" text,
+	"consumed" boolean DEFAULT false NOT NULL,
+	CONSTRAINT "openbot_developer_test_flows_pkey" PRIMARY KEY("namespace","flow_id")
+);
+--> statement-breakpoint
+CREATE TABLE "openbot_developer_tests" (
+	"namespace" text DEFAULT 'public',
+	"id" text,
+	"owner" text NOT NULL,
+	"card_url" text NOT NULL,
+	"status" text NOT NULL,
+	"cleanup" text NOT NULL,
+	"expires_at" bigint NOT NULL,
+	"value" text NOT NULL,
+	"resource_metadata_url" text,
+	"cleanup_token" text,
+	"cleanup_lease_until" bigint DEFAULT 0 NOT NULL,
+	"private_state" text,
+	CONSTRAINT "openbot_developer_tests_pkey" PRIMARY KEY("namespace","id")
 );
 --> statement-breakpoint
 CREATE TABLE "openbot_members" (
@@ -301,8 +426,21 @@ CREATE INDEX "openbot_agent_records_status" ON "openbot_agent_records" ("kind","
 CREATE INDEX "openbot_app_invocations_session" ON "openbot_app_invocations" ("owner","session");--> statement-breakpoint
 CREATE INDEX "openbot_audit_logs_list" ON "openbot_audit_logs" ("organization_id","sequence");--> statement-breakpoint
 CREATE INDEX "openbot_audit_logs_actor" ON "openbot_audit_logs" ("organization_id","actor_user_id","sequence");--> statement-breakpoint
-CREATE INDEX "openbot_developer_records_owner" ON "openbot_developer_records" ("kind","owner");--> statement-breakpoint
-CREATE INDEX "openbot_developer_records_scope" ON "openbot_developer_records" ("kind","scope");--> statement-breakpoint
+CREATE INDEX "openbot_developer_apps_due" ON "openbot_developer_apps" ("namespace","next_check_at","lease_until");--> statement-breakpoint
+CREATE INDEX "openbot_developer_claims_owner" ON "openbot_developer_claims" ("namespace","owner");--> statement-breakpoint
+CREATE UNIQUE INDEX "openbot_developer_index_requests_generation" ON "openbot_developer_index_requests" ("namespace","owner","card_url","generation");--> statement-breakpoint
+CREATE INDEX "openbot_developer_invitations_proof" ON "openbot_developer_invitations" ("namespace","proof_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "openbot_developer_members_proof_owner" ON "openbot_developer_members" ("namespace","proof_id","owner");--> statement-breakpoint
+CREATE INDEX "openbot_developer_members_owner" ON "openbot_developer_members" ("namespace","owner");--> statement-breakpoint
+CREATE INDEX "openbot_developer_notices_owner" ON "openbot_developer_notices" ("namespace","owner","created_at","id");--> statement-breakpoint
+CREATE INDEX "openbot_developer_proofs_owner" ON "openbot_developer_proofs" ("namespace","owner");--> statement-breakpoint
+CREATE INDEX "openbot_developer_proofs_due" ON "openbot_developer_proofs" ("namespace","status","next_verification_at");--> statement-breakpoint
+CREATE INDEX "openbot_developer_reports_owner" ON "openbot_developer_reports" ("namespace","owner","checked_at","id");--> statement-breakpoint
+CREATE INDEX "openbot_developer_reports_app" ON "openbot_developer_reports" ("namespace","card_url","checked_at","id");--> statement-breakpoint
+CREATE INDEX "openbot_developer_test_flows_test" ON "openbot_developer_test_flows" ("namespace","test_id");--> statement-breakpoint
+CREATE INDEX "openbot_developer_test_flows_open" ON "openbot_developer_test_flows" ("namespace","expires_at") WHERE "body" IS NOT NULL OR "callback" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX "openbot_developer_tests_owner" ON "openbot_developer_tests" ("namespace","owner");--> statement-breakpoint
+CREATE INDEX "openbot_developer_tests_open" ON "openbot_developer_tests" ("namespace","expires_at") WHERE "cleanup" <> 'Complete';--> statement-breakpoint
 CREATE INDEX "openbot_model_providers_owner" ON "openbot_model_providers" ("owner_kind","owner_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "openbot_organization_domains_verified" ON "openbot_organization_domains" ("domain") WHERE "verified_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "openbot_session_references_list" ON "openbot_session_references" ("namespace","archived","id");--> statement-breakpoint
@@ -311,6 +449,10 @@ CREATE INDEX "openbot_tokens_owner" ON "openbot_tokens" ("organization_id","user
 CREATE INDEX "openbot_auth_account_userId_idx" ON "openbot_auth_account" ("user_id");--> statement-breakpoint
 CREATE INDEX "openbot_auth_session_userId_idx" ON "openbot_auth_session" ("user_id");--> statement-breakpoint
 CREATE INDEX "openbot_auth_verification_identifier_idx" ON "openbot_auth_verification" ("identifier");--> statement-breakpoint
+ALTER TABLE "openbot_developer_invitations" ADD CONSTRAINT "openbot_developer_invitations_syY7e9iPktkd_fkey" FOREIGN KEY ("namespace","proof_id") REFERENCES "openbot_developer_proofs"("namespace","id") ON DELETE CASCADE;--> statement-breakpoint
+ALTER TABLE "openbot_developer_members" ADD CONSTRAINT "openbot_developer_members_xpS4GhBwzZLS_fkey" FOREIGN KEY ("namespace","proof_id") REFERENCES "openbot_developer_proofs"("namespace","id") ON DELETE CASCADE;--> statement-breakpoint
+ALTER TABLE "openbot_developer_proofs" ADD CONSTRAINT "openbot_developer_proofs_PQq5YDEc675j_fkey" FOREIGN KEY ("namespace","id") REFERENCES "openbot_developer_claims"("namespace","id") ON DELETE CASCADE;--> statement-breakpoint
+ALTER TABLE "openbot_developer_test_flows" ADD CONSTRAINT "openbot_developer_test_flows_fJym73jTZXuD_fkey" FOREIGN KEY ("namespace","test_id") REFERENCES "openbot_developer_tests"("namespace","id") ON DELETE CASCADE;--> statement-breakpoint
 ALTER TABLE "openbot_members" ADD CONSTRAINT "openbot_members_organization_id_openbot_organizations_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "openbot_organizations"("id") ON DELETE CASCADE;--> statement-breakpoint
 ALTER TABLE "openbot_members" ADD CONSTRAINT "openbot_members_user_id_openbot_auth_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "openbot_auth_user"("id") ON DELETE CASCADE;--> statement-breakpoint
 ALTER TABLE "openbot_organization_domains" ADD CONSTRAINT "openbot_organization_domains_OR5nkEE0qNgc_fkey" FOREIGN KEY ("organization_id") REFERENCES "openbot_organizations"("id") ON DELETE CASCADE;--> statement-breakpoint

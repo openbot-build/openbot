@@ -29,6 +29,7 @@ export const InstanceStatus = Schema.Struct({
 /** Resolve an App OAuth callback only from a server-stored authorization flow. */
 export const AuthorizationOwnerPath = "/internal/apps/authorization-owner"
 export const AuthorizationOwnerRequest = Schema.Struct({
+	kind: Schema.optionalKey(Schema.Literals(["app", "developer"])),
 	flowId: Schema.NonEmptyString,
 })
 export const AuthorizationOwnerResponse = Schema.Struct({

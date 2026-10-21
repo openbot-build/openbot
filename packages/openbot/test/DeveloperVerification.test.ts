@@ -8,8 +8,9 @@ import * as Verification from "../src/apps/DeveloperVerification.ts"
 import * as Domain from "../src/apps/DomainControl.ts"
 import * as Access from "../src/apps/DeveloperAccess.ts"
 import { AppInspections } from "../src/apps/AppInspections.ts"
-import { DeveloperRepository } from "../src/apps/DeveloperRepository.ts"
-import * as Repository from "../src/apps/DeveloperRepositoryPostgres.ts"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { developerClaims, developerProofs } from "../src/database/Schema.ts"
+import * as Rows from "../src/apps/DeveloperRows.ts"
 import * as Database from "../src/database/DatabasePostgres.ts"
 import * as Postgres from "./PostgresTest.ts"
 
@@ -100,17 +101,14 @@ test("DNS aliases preserve native lookup and do not hide resolver failures", asy
 })
 
 test(
-	"stored migrated proofs recheck through the real repository without rotating their challenge",
+	"stored migrated proofs recheck through the native tables without rotating their challenge",
 	{ timeout: 30000 },
 	async (t) => {
 		const database = await Postgres.start()
 		t.after(() => database.close())
-		const storage = Repository.layer.pipe(
-			Layer.provideMerge(
-				Database.layer({ databaseUrl: Redacted.make(database.url) }),
-			),
-			Layer.provide(NodeServices.layer),
-		)
+		const storage = Database.layer({
+			databaseUrl: Redacted.make(database.url),
+		}).pipe(Layer.provide(NodeServices.layer))
 		const records = ManagedRuntime.make(storage)
 		t.after(() => records.dispose())
 		await records.runPromise(Database.migrate)
@@ -118,30 +116,48 @@ test(
 			id = "migrated-proof",
 			now = Date.now()
 		await records.runPromise(
-			Effect.flatMap(DeveloperRepository, (repository) =>
-				repository.proofs.put(
+			Effect.gen(function* () {
+				const db = yield* makeWithDefaults()
+				const scope = {
+					_tag: "AppCard" as const,
+					cardUrl: "https://publisher.example/card.json",
+				}
+				const claim = yield* Rows.encodeClaim({
 					id,
-					owner,
-					"card:https://publisher.example/card.json",
-					{
+					scope,
+					token,
+					status: "Confirmed",
+					createdAt: now,
+					expiresAt: now + 86400000,
+				})
+				yield* db
+					.insert(developerClaims)
+					.values({
+						namespace: "public",
+						owner,
+						scopeKey: Access.scopeKey(scope),
+						...claim,
+					})
+				const proof = yield* Rows.encodeProof({
+					id,
+					transition: 1,
+					scope,
+					status: "Confirmed",
+					confirmedAt: now,
+					validUntil: now + 86400000,
+					nextVerificationAt: now,
+					reason: null,
+				})
+				yield* db
+					.insert(developerProofs)
+					.values({
+						namespace: "public",
 						owner,
 						token,
-						value: {
-							id,
-							transition: 1,
-							scope: {
-								_tag: "AppCard",
-								cardUrl: "https://publisher.example/card.json",
-							},
-							status: "Confirmed",
-							confirmedAt: now,
-							validUntil: now + 86400000,
-							nextVerificationAt: now,
-							reason: null,
-						},
-					},
-				),
-			),
+						scopeKey: Access.scopeKey(scope),
+						...proof,
+					})
+			}),
 		)
 		let published = token
 		const network = Layer.succeed(Network.PublicNetwork, {
@@ -190,8 +206,8 @@ test(
 		assert.equal(
 			(
 				await records.runPromise(
-					Effect.flatMap(DeveloperRepository, (repository) =>
-						repository.proofs.get(id),
+					Effect.flatMap(makeWithDefaults(), (db) =>
+						Rows.getProof(db, "public", id),
 					),
 				)
 			).token,

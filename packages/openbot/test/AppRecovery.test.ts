@@ -9,7 +9,7 @@ import { request as requestHttp } from "node:http"
 import { AppExecution, RequestsApi, SessionView } from "@openbot-build/api"
 import { Client } from "@openbot-build/protocol"
 import { AppHost } from "../src/apps/AppHost.ts"
-import { ownerKey } from "../src/apps/Repository.ts"
+import { ownerKey } from "../src/apps/StoredConnections.ts"
 import { Invocations } from "../src/apps/Invocations.ts"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import { Effect, Layer, Match, Option, Redacted, Schema, Stream } from "effect"
@@ -25,7 +25,8 @@ import {
 	Store,
 } from "@openbot-build/core"
 import * as Memory from "../src/plugins/memory/Memory.ts"
-import * as SessionRepository from "../src/sessions/RepositoryPostgres.ts"
+import * as StoredSessions from "../src/sessions/StoredSessions.ts"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import * as OpenAiCompatProvider from "../src/providers/openai-compat/OpenAiCompatProvider.ts"
 import { AppNetwork } from "../src/apps/AppHost.ts"
 import { startHttps } from "../../protocol/test/Fixture.ts"
@@ -301,14 +302,15 @@ const start = async (
 				host.runtime.runPromise(
 					Effect.scoped(
 						Effect.gen(function* () {
-							const repository = yield* SessionRepository.make
+							const db = yield* makeWithDefaults()
 							const definition = yield* Store.define({
 								stores: Memory.stores,
 								schemaVersion: "timeline/1",
 							})
 							const store = yield* SessionStoreRepository.make({
 								definition,
-								persistence: repository.store(
+								persistence: StoredSessions.persistence(
+									db,
 									JSON.stringify([
 										user.identity.organizationId,
 										user.identity.userId,

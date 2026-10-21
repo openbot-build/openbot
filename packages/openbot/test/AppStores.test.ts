@@ -6,7 +6,6 @@ import { Authorization, Store } from "@openbot-build/protocol"
 import { Effect, Layer, ManagedRuntime, Redacted, Result } from "effect"
 import { SqlClient } from "effect/sql"
 import * as ProtocolStores from "../src/apps/ProtocolStores.ts"
-import * as Repository from "../src/apps/RepositoryPostgres.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
 import * as Database from "../src/database/DatabasePostgres.ts"
 import * as Postgres from "./PostgresTest.ts"
@@ -15,7 +14,6 @@ test("encrypted credentials and one-time PKCE flows survive a restart and check 
 	const database = await Postgres.start()
 	const layers = (key = "test:" + "11".repeat(32)) =>
 		ProtocolStores.layer.pipe(
-			Layer.provideMerge(Repository.layer),
 			Layer.provide(Secrets.layer(Redacted.make(key))),
 			Layer.provideMerge(
 				Database.layer({ databaseUrl: Redacted.make(database.url) }),

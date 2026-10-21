@@ -9,8 +9,9 @@ import { OpenApi } from "effect/http-api"
 import * as Governance from "../src/apps/Governance.ts"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
 import * as PublicIndex from "../src/apps/Index.ts"
-import { IndexRepository } from "../src/apps/IndexRepository.ts"
-import * as Repository from "../src/apps/IndexRepositoryPostgres.ts"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import * as IndexStore from "../src/apps/IndexStore.ts"
+import { appIndexEntries } from "../src/database/Schema.ts"
 import * as Database from "../src/database/DatabasePostgres.ts"
 import * as Migration from "../src/database/Migrations.ts"
 import * as Server from "../dist/app/Server.js"
@@ -61,7 +62,7 @@ test("the stored public Index searches, merges sources and pages results without
 	const db = Database.layer({ databaseUrl: Redacted.make(database.url) }).pipe(
 		Layer.provide(NodeServices.layer),
 	)
-	const repository = Repository.layer.pipe(Layer.provideMerge(db))
+	const repository = IndexStore.layer.pipe(Layer.provideMerge(db))
 	const second = await Effect.runPromise(entry("second"))
 	const sources: ReadonlyArray<PublicIndex.SourceProvider> = [
 		{
@@ -105,7 +106,7 @@ test("the stored public Index searches, merges sources and pages results without
 			Effect.gen(function* () {
 				yield* Migration.initialize
 				const index = yield* PublicIndex.PublicIndex
-				const store = yield* IndexRepository
+				const store = yield* Index.IndexStore
 				assert.deepEqual((yield* index.search({ source: "openbot" })).apps, [])
 				yield* store.upsert(yield* entry("first"))
 				yield* store.upsert(second)
@@ -153,7 +154,9 @@ test("the stored public Index searches, merges sources and pages results without
 			assert.equal(
 				(
 					await restarted.runPromise(
-						Effect.flatMap(IndexRepository, (store) => store.list),
+						Effect.flatMap(makeWithDefaults(), (db) =>
+							db.select().from(appIndexEntries),
+						),
 					)
 				).length,
 				2,

@@ -5,16 +5,23 @@ import { setTimeout } from "node:timers/promises"
 import { NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { Network } from "@openbot-build/protocol"
+import { AppExecution } from "@openbot-build/api"
+import { SessionStoreRepository, Store, Turn } from "@openbot-build/core"
 import { Effect, Fiber, Layer, ManagedRuntime, Redacted } from "effect"
 import * as InstanceWork from "../src/execution/InstanceWork.ts"
 import * as Fence from "../src/execution/ExecutionFence.ts"
 import * as Barrier from "../src/auth/Barrier.ts"
 import * as Stored from "../src/execution/StoredExecutions.ts"
 import * as Database from "../src/database/DatabasePostgres.ts"
-import { IndexWorkRepository } from "../src/apps/IndexWorkRepository.ts"
+import * as IndexWork from "../src/apps/IndexWork.ts"
+import { IndexNamespace } from "../src/apps/IndexNamespace.ts"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import * as Secrets from "../src/secrets/Secrets.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 import * as AppFixture from "./AppFixture.ts"
 import * as Postgres from "./PostgresTest.ts"
+import * as StoredSessions from "../src/sessions/StoredSessions.ts"
+import * as StoredInvocations from "../src/apps/StoredInvocations.ts"
 
 const options = {
 	origin: "http://maintenance-authority.test",
@@ -216,9 +223,14 @@ test(
 			holdIndex = true
 			const cardUrl = publisher.origin + "/card?edition=team"
 			await host.runtime.runPromise(
-				Effect.flatMap(IndexWorkRepository, (jobs) =>
-					jobs.enqueue(cardUrl, []),
-				),
+				Effect.gen(function* () {
+					return yield* IndexWork.enqueue(
+						yield* makeWithDefaults(),
+						yield* IndexNamespace,
+						cardUrl,
+						[],
+					)
+				}),
 			)
 			await indexEntered.promise
 			const busyIndex = await control("quiesce")
@@ -233,9 +245,14 @@ test(
 			await waitFor(async () => (await control("status")).drained === true)
 			const count = publisher.requests().length
 			await host.runtime.runPromise(
-				Effect.flatMap(IndexWorkRepository, (jobs) =>
-					jobs.enqueue(cardUrl, []),
-				),
+				Effect.gen(function* () {
+					return yield* IndexWork.enqueue(
+						yield* makeWithDefaults(),
+						yield* IndexNamespace,
+						cardUrl,
+						[],
+					)
+				}),
 			)
 			await setTimeout(100)
 			assert.equal(
@@ -433,9 +450,12 @@ test("private auth revocation and retry remain counted until their actual storag
 test("restarted maintenance scan blocks durable unknown operations and unfinished developer cleanup", async (t) => {
 	const network = authority(t)
 	const database = await Postgres.start()
-	const layer = Database.layer({
-		databaseUrl: Redacted.make(database.url),
-	}).pipe(Layer.provide(NodeServices.layer))
+	const layer = Layer.merge(
+		Database.layer({
+			databaseUrl: Redacted.make(database.url),
+		}),
+		Secrets.layer(Redacted.make("test:" + "11".repeat(32))),
+	).pipe(Layer.provide(NodeServices.layer))
 	let runtime = ManagedRuntime.make(layer)
 	try {
 		await runtime.runPromise(
@@ -444,7 +464,7 @@ test("restarted maintenance scan blocks durable unknown operations and unfinishe
 				const sql = yield* PgClient.PgClient
 				const owner = JSON.stringify(["tenant", "account"])
 				yield* sql`INSERT INTO openbot_app_invocations (owner,id,session,status,body) VALUES (${owner},'unknown','session','OutcomeUnknown','{}')`
-				yield* sql`INSERT INTO openbot_developer_records (kind,id,owner,scope,body) VALUES ('public:test','cleanup',${owner},'',${JSON.stringify({ value: { status: "Succeeded", cleanup: "Pending" }, cleanupLeaseUntil: 0 })})`
+				yield* sql`INSERT INTO openbot_developer_tests (namespace,id,owner,card_url,status,cleanup,expires_at,value) VALUES ('public','cleanup',${owner},'https://example.test/card','Succeeded','Pending',0,'{}')`
 				yield* sql`INSERT INTO openbot_agent_records (kind,organization_id,id,owner,scope,status,body) VALUES ('delegation','tenant','delegation','account','','authorizing',${JSON.stringify({ userId: "account" })}), ('request','tenant','approval','agent:approver','','pending',${JSON.stringify({ chain: { organizationId: "tenant", userId: "account" } })}), ('delegation','tenant','other','other-account','','queued',${JSON.stringify({ userId: "other-account" })})`
 				assert.equal(yield* Stored.pending(options), 5)
 				assert.equal(yield* Stored.forNamespace(owner), 4)
@@ -473,7 +493,7 @@ test("restarted maintenance scan blocks durable unknown operations and unfinishe
 			Effect.gen(function* () {
 				const sql = yield* PgClient.PgClient
 				yield* sql`UPDATE openbot_app_invocations SET status='Completed'`
-				yield* sql`UPDATE openbot_developer_records SET body=${JSON.stringify({ value: { status: "Succeeded", cleanup: "Complete" }, cleanupLeaseUntil: 0 })}`
+				yield* sql`UPDATE openbot_developer_tests SET cleanup='Complete' `
 				yield* sql`UPDATE openbot_agent_records SET status=CASE WHEN kind='request' THEN 'allowed' ELSE 'completed' END`
 				assert.equal(
 					yield* Stored.pending(options),
@@ -490,5 +510,128 @@ test("restarted maintenance scan blocks durable unknown operations and unfinishe
 		await runtime.dispose()
 		await database.close()
 		network.mock.restore()
+	}
+})
+
+test("drain reads encrypted proposals against the current Turn and never discards unknown outcomes", async () => {
+	const database = await Postgres.start()
+	const runtime = ManagedRuntime.make(
+		Layer.merge(
+			Database.layer({ databaseUrl: Redacted.make(database.url) }),
+			Secrets.layer(Redacted.make("test:" + "11".repeat(32))),
+		).pipe(Layer.provide(NodeServices.layer)),
+	)
+	try {
+		await runtime.runPromise(
+			Effect.scoped(
+				Effect.gen(function* () {
+					yield* Database.migrate
+					const sql = yield* PgClient.PgClient
+					const db = yield* makeWithDefaults()
+					const secrets = yield* Secrets.Secrets
+					const owner = JSON.stringify(["tenant", "account"])
+					const definition = yield* Store.define({
+						stores: {},
+						schemaVersion: "timeline/1",
+					})
+					const store = yield* SessionStoreRepository.make({
+						definition,
+						persistence: StoredSessions.persistence(db, owner),
+					})
+					const initial = yield* store.create({ metadata: {} })
+					const turn: Turn.Record = {
+						id: Turn.Id.make("turn-history"),
+						session: initial.session.id,
+						settings: { mode: "default" },
+						status: {
+							_tag: "Completed",
+							result: { text: "done", finishReason: "stop" },
+						},
+						steps: 1,
+						input: [],
+						items: [],
+						start: initial.session.head,
+						startedAt: 0,
+						completedAt: 1,
+					}
+					const ref = { ...initial.session, turns: [turn] }
+					yield* sql`UPDATE openbot_session_references SET body=${JSON.stringify(ref)} WHERE namespace=${owner}`
+					const source: AppExecution.Source = {
+						connectionId: "connection",
+						connectionName: "Test",
+						cardUrl: "https://example.test/card",
+						appName: "Test",
+						remoteIndex: 0,
+						revision: 0,
+						kind: "tool",
+						name: "write",
+					}
+					for (const status of ["PendingApproval", "Approved"] as const) {
+						const operation: AppExecution.Invocation = {
+							id: status,
+							session: ref.id,
+							turn: turn.id,
+							callId: "call",
+							toolName: "write",
+							source,
+							arguments: {},
+							readOnly: false,
+							grantReads: false,
+							round: 0,
+							status,
+							result: null,
+						}
+						const body = yield* StoredInvocations.seal(
+							secrets,
+							owner,
+							operation,
+						)
+						yield* sql`INSERT INTO openbot_app_invocations (owner,id,session,status,body) VALUES (${owner},${status},${ref.id},${status},${body})`
+					}
+					assert.equal(
+						yield* Stored.forNamespace(owner),
+						0,
+						"terminal Turn proposals remain history",
+					)
+					yield* sql`UPDATE openbot_session_references SET body=${JSON.stringify(initial.session)} WHERE namespace=${owner}`
+					assert.equal(
+						yield* Stored.forNamespace(owner),
+						2,
+						"missing originating Turns are not proof of a terminal proposal",
+					)
+					yield* sql`UPDATE openbot_session_references SET body=${JSON.stringify(ref)} WHERE namespace=${owner}`
+					yield* sql`UPDATE openbot_app_invocations SET status='Approved' WHERE id='PendingApproval'`
+					assert.equal(
+						yield* Stored.forNamespace(owner),
+						1,
+						"the index and encrypted proposal must agree",
+					)
+					yield* sql`UPDATE openbot_app_invocations SET status='PendingApproval' WHERE id='PendingApproval'`
+					yield* sql`UPDATE openbot_session_references SET body=${JSON.stringify({ ...ref, turns: [{ ...turn, status: { _tag: "Waiting", result: { text: "", finishReason: "tool-calls" } } }] })} WHERE namespace=${owner}`
+					assert.equal(
+						yield* Stored.forNamespace(owner),
+						3,
+						"the waiting Turn and both exact-Turn proposals block",
+					)
+					yield* sql`UPDATE openbot_session_references SET body=${JSON.stringify(ref)} WHERE namespace=${owner}`
+					yield* sql`UPDATE openbot_app_invocations SET status='Sending' WHERE id='Approved'`
+					assert.equal(yield* Stored.forNamespace(owner), 1)
+					yield* sql`UPDATE openbot_app_invocations SET status='OutcomeUnknown' WHERE id='Approved'`
+					assert.equal(yield* Stored.forNamespace(owner), 1)
+					assert.deepEqual(
+						(yield* sql<{
+							status: string
+						}>`SELECT status FROM openbot_app_invocations ORDER BY id`).map(
+							(row) => row.status,
+						),
+						["OutcomeUnknown", "PendingApproval"],
+						"scanning does not mutate or resend old proposals",
+					)
+				}),
+			),
+		)
+	} finally {
+		await runtime.dispose()
+		await database.close()
 	}
 })

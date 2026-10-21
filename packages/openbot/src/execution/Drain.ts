@@ -2,7 +2,9 @@ import { createHash, timingSafeEqual } from "node:crypto"
 import { ExecutionApi } from "@openbot-build/api"
 import { Effect, Layer, Redacted, Schema } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
-import { AuthorizationRepository } from "../apps/AuthorizationRepository.ts"
+import { appAuthorizations, developerTestFlows } from "../database/Schema.ts"
+import { and, eq } from "drizzle-orm"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { accountId } from "./OwnedWrites.ts"
 import * as StoredExecutions from "./StoredExecutions.ts"
 import { Backend } from "../app/Backend.ts"
@@ -19,7 +21,7 @@ export const layer = (options?: Options) =>
 		? Layer.empty
 		: Layer.unwrap(
 				Effect.gen(function* () {
-					const authorizations = yield* AuthorizationRepository
+					const db = yield* makeWithDefaults()
 					const backend = yield* Backend
 					const fence = yield* ExecutionFence
 					const expected = createHash("sha256")
@@ -122,15 +124,28 @@ export const layer = (options?: Options) =>
 										),
 									),
 								)
-								const record = yield* authorizations.get(input.flowId)
+								const record =
+									input.kind === "developer"
+										? (yield* db
+												.select({ owner: developerTestFlows.owner })
+												.from(developerTestFlows)
+												.where(
+													and(
+														eq(developerTestFlows.namespace, "public"),
+														eq(developerTestFlows.flowId, input.flowId),
+													),
+												))[0]
+										: (yield* db
+												.select({ owner: appAuthorizations.owner })
+												.from(appAuthorizations)
+												.where(eq(appAuthorizations.id, input.flowId)))[0]
+								if (record === undefined)
+									return HttpServerResponse.empty({ status: 404 })
 								const id = accountId(record.owner)
 								if (id.length === 0)
 									return HttpServerResponse.empty({ status: 404 })
 								return HttpServerResponse.jsonUnsafe({ accountId: id })
 							}).pipe(
-								Effect.catchTag("ExperienceNotFound", () =>
-									Effect.succeed(HttpServerResponse.empty({ status: 404 })),
-								),
 								Effect.orElseSucceed(() =>
 									HttpServerResponse.empty({ status: 503 }),
 								),

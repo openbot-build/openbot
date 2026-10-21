@@ -26,7 +26,8 @@ import { getTableName, is, Table } from "drizzle-orm"
 import * as Migration from "../src/database/Migrations.ts"
 import * as AuthSchema from "../src/database/AuthSchema.ts"
 import * as DatabaseSchema from "../src/database/Schema.ts"
-import * as RepositoryPostgres from "../src/sessions/RepositoryPostgres.ts"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import * as StoredSessions from "../src/sessions/StoredSessions.ts"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 import * as ManagedSessions from "../src/sessions/ManagedSessions.ts"
@@ -57,14 +58,14 @@ test(
 					Effect.gen(function* () {
 						yield* Migration.initialize
 						yield* Migration.check
-						const repository = yield* RepositoryPostgres.make,
+						const db = yield* makeWithDefaults(),
 							definition = yield* Store.define({
 								stores: {},
 								schemaVersion: "timeline/1",
 							})
 						const store = yield* SessionStoreRepository.make({
 							definition,
-							persistence: repository.store("alice"),
+							persistence: StoredSessions.persistence(db, "alice"),
 						})
 						const root = yield* store.create({
 							metadata: {},
@@ -77,29 +78,29 @@ test(
 						assert.equal(settings.session.revision, 1)
 						assert.ok(
 							Option.isNone(
-								yield* repository.store("bob").getRef(root.session.id),
+								yield* StoredSessions.persistence(db, "bob").getRef(
+									root.session.id,
+								),
 							),
 						)
 						const competing = yield* Effect.forEach(
 							["first", "second"],
 							(title) =>
-								repository
-									.save("alice", {
-										delta: {
-											expected: settings.session,
-											session: {
-												...settings.session,
-												revision: Session.Revision.make(
-													settings.session.revision + 1,
-												),
-												metadata: { ...settings.session.metadata, title },
-											},
-											versions: [],
-											messages: [],
+								StoredSessions.save(db, "alice", {
+									delta: {
+										expected: settings.session,
+										session: {
+											...settings.session,
+											revision: Session.Revision.make(
+												settings.session.revision + 1,
+											),
+											metadata: { ...settings.session.metadata, title },
 										},
-										response: Option.none(),
-									})
-									.pipe(Effect.exit),
+										versions: [],
+										messages: [],
+									},
+									response: Option.none(),
+								}).pipe(Effect.exit),
 							{ concurrency: 2 },
 						)
 						assert.equal(competing.filter(Exit.isSuccess).length, 1)
@@ -159,7 +160,7 @@ test(
 						)
 						const fresh = yield* SessionStoreRepository.make({
 							definition,
-							persistence: repository.store("alice"),
+							persistence: StoredSessions.persistence(db, "alice"),
 						})
 						assert.deepEqual(yield* fresh.read(root.session.id), changed)
 						yield* store.remove(changed.session)
@@ -238,12 +239,10 @@ test(
 			}),
 		)
 		const runtime = ManagedRuntime.make(
-			RepositoryPostgres.layer.pipe(
-				Layer.provideMerge(
-					DatabasePostgres.layer({
-						databaseUrl: Redacted.make(database.url),
-					}).pipe(Layer.provide(NodeServices.layer)),
-				),
+			DatabasePostgres.layer({
+				databaseUrl: Redacted.make(database.url),
+			}).pipe(
+				Layer.provide(NodeServices.layer),
 				Layer.provideMerge(model),
 				Layer.provideMerge(Layer.succeed(ResidentConfiguration, 7)),
 			),

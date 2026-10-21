@@ -7,7 +7,7 @@ import { Effect, Layer, Option, Redacted } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { Authorizations } from "./Authorizations.ts"
-import { ownersOf } from "./Repository.ts"
+import { ownersOf } from "./StoredConnections.ts"
 import { Auth } from "../auth/Auth.ts"
 import * as HttpMiddleware from "../auth/HttpMiddleware.ts"
 

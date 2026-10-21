@@ -12,7 +12,12 @@ import {
 	Order,
 	Schema,
 } from "effect"
-import { IndexRepository } from "./IndexRepository.ts"
+import { eq } from "drizzle-orm"
+import type { PgClient } from "@effect/sql-pg"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { appIndexEntries } from "../database/Schema.ts"
+import { IndexNamespace } from "./IndexNamespace.ts"
+import * as IndexStore from "./IndexStore.ts"
 import { Governance } from "./Governance.ts"
 
 export type Error =
@@ -90,10 +95,11 @@ export const make = (
 ): Effect.Effect<
 	typeof PublicIndex.Service,
 	never,
-	IndexRepository | Governance
+	PgClient.PgClient | Governance
 > =>
 	Effect.gen(function* () {
-		const repository = yield* IndexRepository
+		const db = yield* makeWithDefaults()
+		const namespace = yield* IndexNamespace
 		const governance = yield* Governance
 		const local: Api.Source = {
 			id: "openbot",
@@ -107,7 +113,7 @@ export const make = (
 		const providers: ReadonlyArray<SourceProvider> = [
 			{
 				source: local,
-				checks: repository.checks.pipe(
+				checks: IndexStore.checks(db, namespace).pipe(
 					Effect.mapError(() =>
 						Api.IndexUnavailable.make({
 							issues: [
@@ -119,18 +125,25 @@ export const make = (
 						}),
 					),
 				),
-				entries: repository.list.pipe(
-					Effect.mapError(() =>
-						Api.IndexUnavailable.make({
-							issues: [
-								{
-									source: local.id,
-									message: "The public Index could not be read.",
-								},
-							],
-						}),
+				entries: db
+					.select()
+					.from(appIndexEntries)
+					.where(eq(appIndexEntries.namespace, namespace))
+					.pipe(
+						Effect.flatMap((rows) =>
+							Effect.forEach(rows, (row) => IndexStore.decode(row.body)),
+						),
+						Effect.mapError(() =>
+							Api.IndexUnavailable.make({
+								issues: [
+									{
+										source: local.id,
+										message: "The public Index could not be read.",
+									},
+								],
+							}),
+						),
 					),
-				),
 			},
 			...(options.providers ?? []),
 		]

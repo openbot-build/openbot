@@ -1,4 +1,5 @@
 import * as AuthDrain from "../auth/Drain.ts"
+import type { PgClient } from "@effect/sql-pg"
 import type { Discovery } from "@openbot-build/protocol"
 import * as AppDiscovery from "../apps/Discovery.ts"
 import { readFileSync } from "node:fs"
@@ -20,7 +21,6 @@ import * as Setup from "../platform/Setup.ts"
 import type { Auth } from "../auth/Auth.ts"
 import type { Configuration } from "../auth/Model.ts"
 import type { IndexWork } from "../apps/IndexWork.ts"
-import type { IndexWorkRepository } from "../apps/IndexWorkRepository.ts"
 
 export const layerApi = (options: { readonly publicOrigin: string }) =>
 	Layer.mergeAll(
@@ -44,7 +44,7 @@ export type AppOptions<
 		DiscoveryServices
 	>
 	/** Work that runs each time an app starts, such as indexing the development App. */
-	readonly startup?: Layer.Layer<never, never, IndexWork | IndexWorkRepository>
+	readonly startup?: Layer.Layer<never, never, IndexWork | PgClient.PgClient>
 	/** More routes, such as the routes of the development tools. */
 	readonly routes?: (
 		auth: Configuration,

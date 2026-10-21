@@ -1,5 +1,12 @@
-import { InvocationRepository } from "../../apps/InvocationRepository.ts"
-import { ViewRepository } from "../../apps/ViewRepository.ts"
+import type { PgClient } from "@effect/sql-pg"
+import {
+	makeWithDefaults,
+	type EffectPgDatabase,
+} from "drizzle-orm/effect-postgres"
+import * as StoredConnections from "../../apps/StoredConnections.ts"
+import * as StoredInvocations from "../../apps/StoredInvocations.ts"
+import * as StoredViews from "../../apps/StoredViews.ts"
+import { Secrets } from "../../secrets/Secrets.ts"
 import { createHash } from "node:crypto"
 import { Agent, Plugin } from "@openbot-build/core"
 import { AppExecution, AppViewsApi, type Identity } from "@openbot-build/api"
@@ -27,7 +34,7 @@ import { Capabilities, type Opened } from "../../apps/Capabilities.ts"
 import { Invocations, type Position } from "../../apps/Invocations.ts"
 import { ActionPolicy } from "../../apps/ActionPolicy.ts"
 import { Gate } from "../../capabilities/Gate.ts"
-import { organizationOf, Repository, ownerKey } from "../../apps/Repository.ts"
+import { organizationOf, ownerKey } from "../../apps/StoredConnections.ts"
 
 export const pluginId = Plugin.Id.make("@openbot-build/openbot/k-apps")
 export type Tools = Record<
@@ -53,7 +60,8 @@ export interface Entry {
 	) => Effect.Effect<AppExecution.ToolResult>
 }
 interface Services {
-	readonly repository: typeof Repository.Service
+	readonly db: EffectPgDatabase
+	readonly secrets: typeof Secrets.Service
 	readonly capabilities: typeof Capabilities.Service
 	readonly invocations: typeof Invocations.Service
 	readonly policy: typeof ActionPolicy.Service
@@ -176,7 +184,8 @@ const makePermits: Effect.Effect<Permits> = Effect.gen(function* () {
 
 /** A recorded call remains addressable even when its App cannot currently be opened. */
 const recoveredEntry = (
-	records: typeof InvocationRepository.Service,
+	db: EffectPgDatabase,
+	secrets: typeof Secrets.Service,
 	invocations: typeof Invocations.Service,
 	position: Position,
 	recorded: AppExecution.Invocation,
@@ -234,13 +243,18 @@ const recoveredEntry = (
 			}
 			return yield* Match.value(value.status).pipe(
 				Match.when("Approved", () =>
-					records
-						.change(position.owner, value.id, ["Approved"], (current) => ({
+					StoredInvocations.change(
+						db,
+						secrets,
+						position.owner,
+						value.id,
+						["Approved"],
+						(current) => ({
 							...current,
 							status: "Failed",
 							result: unavailable,
-						}))
-						.pipe(Effect.as(unavailable)),
+						}),
+					).pipe(Effect.as(unavailable)),
 				),
 				Match.whenOr("Sending", "OutcomeUnknown", () =>
 					Effect.succeed(unknown),
@@ -276,7 +290,8 @@ const entriesFor = (
 	Effect.gen(function* () {
 		const owner = position.owner
 		const stored = opened.stored
-		const app = yield* services.repository.getApp(
+		const app = yield* StoredConnections.getApp(
+			services.db,
 			owner,
 			stored.connection.cardUrl,
 		)
@@ -387,9 +402,12 @@ const entriesFor = (
 							) ??
 							Math.max(0, (yield* services.callCount(context.toolCallId)) - 1)
 						const operation = Effect.gen(function* () {
-							const current = yield* services.repository
-								.get(owner, origin.connectionId)
-								.pipe(Effect.mapError(() => denied("invoke", origin.name)))
+							const current = yield* StoredConnections.get(
+								services.db,
+								services.secrets,
+								owner,
+								origin.connectionId,
+							).pipe(Effect.mapError(() => denied("invoke", origin.name)))
 							if (current.revision !== origin.revision)
 								return yield* denied("invoke", origin.name)
 							return yield* Match.value(yield* perform(args)).pipe(
@@ -593,7 +611,11 @@ const prepare = (
 	Effect.gen(function* () {
 		const owner = position.owner
 		const permits = yield* makePermits
-		const read = yield* services.repository.list(owner).pipe(Effect.result)
+		const read = yield* StoredConnections.list(
+			services.db,
+			services.secrets,
+			owner,
+		).pipe(Effect.result)
 		const rows = Match.value(read).pipe(
 			Match.tag("Success", ({ success }) => success),
 			Match.tag("Failure", () => []),
@@ -621,13 +643,16 @@ const prepare = (
 			const policy = Client.InvocationPolicy.of({
 				check: (invocation) =>
 					Effect.gen(function* () {
-						const current = yield* services.repository
-							.get(owner, stored.connection.connectionId)
-							.pipe(
-								Effect.mapError(() =>
-									denied(invocation.action, invocation.target),
-								),
-							)
+						const current = yield* StoredConnections.get(
+							services.db,
+							services.secrets,
+							owner,
+							stored.connection.connectionId,
+						).pipe(
+							Effect.mapError(() =>
+								denied(invocation.action, invocation.target),
+							),
+						)
 						if (
 							current.revision !== stored.revision ||
 							invocation.connection.owner !== owner ||
@@ -695,22 +720,22 @@ export const make: Effect.Effect<
 	typeof AppPlugin.Service,
 	never,
 	| Capabilities
-	| Repository
+	| PgClient.PgClient
+	| Secrets
 	| Invocations
 	| ActionPolicy
 	| PublicIndex
 	| Connections
-	| ViewRepository
-	| InvocationRepository
 	| Gate
 > = Effect.gen(function* () {
 	const index = yield* PublicIndex
 	const connections = yield* Connections
-	const views = yield* ViewRepository
-	const records = yield* InvocationRepository
+	const db = yield* makeWithDefaults()
+	const secrets = yield* Secrets
 	const services = {
 		capabilities: yield* Capabilities,
-		repository: yield* Repository,
+		db,
+		secrets,
 		invocations: yield* Invocations,
 		policy: yield* ActionPolicy,
 		gate: yield* Gate,
@@ -762,7 +787,9 @@ export const make: Effect.Effect<
 									session: at.session,
 									turn,
 								}
-								const operations = yield* records.list(
+								const operations = yield* StoredInvocations.list(
+									db,
+									secrets,
 									position.owner,
 									position.session,
 								)
@@ -777,7 +804,8 @@ export const make: Effect.Effect<
 									entries = Arr.append(
 										entries,
 										recoveredEntry(
-											records,
+											db,
+											secrets,
 											services.invocations,
 											position,
 											operation,
@@ -790,20 +818,28 @@ export const make: Effect.Effect<
 									)
 								}
 								// Saved selections only add context. The Turn goes on without them.
-								const savedSelections = yield* views
-									.contexts(ownerKey(identity), at.session)
-									.pipe(
-										Effect.catch((error) =>
-											Effect.logWarning(
-												"Could not read the saved App selections.",
-												error,
-											).pipe(Effect.as([])),
-										),
-									)
+								const savedSelections = yield* StoredViews.contexts(
+									db,
+									secrets,
+									ownerKey(identity),
+									at.session,
+								).pipe(
+									Effect.catch((error) =>
+										Effect.logWarning(
+											"Could not read the saved App selections.",
+											error,
+										).pipe(Effect.as([])),
+									),
+								)
 								const confirmed = yield* Effect.forEach(
 									savedSelections,
 									(selection) =>
-										records.get(ownerKey(identity), selection.operationId).pipe(
+										StoredInvocations.get(
+											db,
+											secrets,
+											ownerKey(identity),
+											selection.operationId,
+										).pipe(
 											Effect.map((operation) => ({
 												source: operation.source,
 												selection: selection.context,

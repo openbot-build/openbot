@@ -2,8 +2,12 @@ import { PgClient } from "@effect/sql-pg"
 import { Session, Turn } from "@openbot-build/core"
 import { Data, Effect, Redacted, Schema } from "effect"
 import type { Options } from "./ExecutionFence.ts"
+import { Secrets } from "../secrets/Secrets.ts"
+import * as StoredInvocations from "../apps/StoredInvocations.ts"
 
-export class StoredOwnerMismatch extends Data.TaggedError("StoredOwnerMismatch")<{}> {}
+export class StoredOwnerMismatch extends Data.TaggedError(
+	"StoredOwnerMismatch",
+)<{}> {}
 
 /** Inspect durable state without opening a runtime or replaying any model or tool. */
 const stored = Effect.gen(function* () {
@@ -14,17 +18,22 @@ const stored = Effect.gen(function* () {
 	}>`SELECT namespace,body FROM openbot_session_references`
 	const operations = yield* sql<{
 		owner: string
-	}>`SELECT owner FROM openbot_app_invocations WHERE status NOT IN ('Completed','Failed','Rejected')`
+		id: string
+		session: string
+		status: string
+		body: string
+	}>`SELECT owner,id,session,status,body FROM openbot_app_invocations WHERE status NOT IN ('Completed','Failed','Rejected')`
 	const authorizations = yield* sql<{
 		owner: string
 	}>`SELECT owner FROM openbot_app_authorizations WHERE status NOT IN ('Waiting','Succeeded','Cancelled','Failed')`
 	const developer = yield* sql<{
 		owner: string
-	}>`SELECT owner FROM openbot_developer_records WHERE (kind LIKE '%:test' AND (coalesce(body::jsonb#>>'{value,status}','') NOT IN ('Succeeded','Failed','Cancelled','Interrupted') OR body::jsonb#>>'{value,cleanup}'='Pending' OR coalesce((body::jsonb->>'cleanupLeaseUntil')::numeric,0)<>0)) OR (kind LIKE '%:testFlow' AND body::jsonb#>>'{value,status}' IN ('Received','Exchanging'))`
+	}>`SELECT owner FROM openbot_developer_tests WHERE status NOT IN ('Succeeded','Failed','Cancelled','Interrupted') OR cleanup='Pending' OR cleanup_lease_until<>0 UNION ALL SELECT owner FROM openbot_developer_test_flows WHERE status IN ('Received','Exchanging')`
 	const publicWork = yield* sql<{
 		count: number
-	}>`SELECT ((SELECT count(*) FROM openbot_app_index_jobs WHERE claim IS NOT NULL OR lease_until <> 0) + (SELECT count(*) FROM openbot_developer_records WHERE kind LIKE '%:app' AND coalesce((body::jsonb->>'leaseUntil')::numeric,0) <> 0))::int AS count`
+	}>`SELECT ((SELECT count(*) FROM openbot_app_index_jobs WHERE claim IS NOT NULL OR lease_until <> 0) + (SELECT count(*) FROM openbot_developer_apps WHERE lease_until <> 0))::int AS count`
 	const counts = new Map<string, number>()
+	const references = new Map<string, Session.Ref>()
 	// Request owners are approvers. The chain names the person whose work waits.
 	// Agent records are plain JSON, unlike encrypted App invocation bodies.
 	const agents = yield* sql<{
@@ -42,13 +51,39 @@ const stored = Effect.gen(function* () {
 			row.body,
 		)
 		const turn = Session.currentTurn(ref)
+		references.set(JSON.stringify([row.namespace, ref.id]), ref)
 		if (
 			ref.pending.length > 0 ||
 			(turn !== undefined && !Turn.isTerminal(turn.status))
 		)
 			counts.set(row.namespace, (counts.get(row.namespace) ?? 0) + 1)
 	}
-	for (const row of [...operations, ...authorizations, ...developer]) {
+	const activeOperations: Array<{ readonly owner: string }> = []
+	for (const row of operations) {
+		// Sending and unknown outcomes always need an operator, even if the Turn ended.
+		if (row.status === "Sending" || row.status === "OutcomeUnknown") {
+			activeOperations.push(row)
+			continue
+		}
+		const operation = yield* StoredInvocations.decodeBody(yield* Secrets, row)
+		const ref = references.get(JSON.stringify([row.owner, row.session]))
+		const origins =
+			ref?.turns.filter(
+				(turn) => turn.id === operation.turn && turn.session === row.session,
+			) ?? []
+		// Only an intact, unanswered proposal for a proven terminal Turn is history.
+		// Missing Sessions and unknown result states remain blocked for review.
+		const historical =
+			(row.status === "PendingApproval" || row.status === "Approved") &&
+			operation.id === row.id &&
+			operation.session === row.session &&
+			operation.status === row.status &&
+			operation.result === null &&
+			origins.length === 1 &&
+			Turn.isTerminal(origins[0]!.status)
+		if (!historical) activeOperations.push(row)
+	}
+	for (const row of [...activeOperations, ...authorizations, ...developer]) {
 		const owner = yield* Schema.decodeEffect(
 			Schema.fromJsonString(
 				Schema.Tuple([Schema.NonEmptyString, Schema.NonEmptyString]),

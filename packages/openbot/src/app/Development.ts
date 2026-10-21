@@ -4,7 +4,9 @@ import type * as Configuration from "../configuration/Configuration.ts"
 import type { Configuration as AuthConfiguration } from "../auth/Model.ts"
 import { createHmac } from "node:crypto"
 import * as Server from "./Server.ts"
-import { IndexWorkRepository } from "../apps/IndexWorkRepository.ts"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { IndexNamespace } from "../apps/IndexNamespace.ts"
+import * as IndexJobs from "../apps/IndexWork.ts"
 import { IndexWork } from "../apps/IndexWork.ts"
 import * as DevelopmentModel from "./DevelopmentModel.ts"
 import * as DevelopmentApps from "./DevelopmentApps.ts"
@@ -125,9 +127,13 @@ export const layer = (
 				// Index the simulated App in the background, so the server listens at once.
 				startup: Layer.effectDiscard(
 					Effect.gen(function* () {
-						const jobs = yield* IndexWorkRepository
 						const work = yield* IndexWork
-						yield* jobs.enqueue(cardUrl, [])
+						yield* IndexJobs.enqueue(
+							yield* makeWithDefaults(),
+							yield* IndexNamespace,
+							cardUrl,
+							[],
+						)
 						yield* work.runOne(cardUrl)
 					}).pipe(
 						Effect.catchCause((cause) =>

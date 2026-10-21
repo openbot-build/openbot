@@ -1,9 +1,21 @@
+import * as OwnedWrites from "../execution/OwnedWrites.ts"
+import * as InstanceWork from "../execution/InstanceWork.ts"
 import { createHash } from "node:crypto"
-import { AppExecution, SessionConflict } from "@openbot-build/api"
-import { Context, Effect, Layer, Match, Option } from "effect"
+import {
+	AppExecution,
+	ExperienceStorageUnavailable,
+	SessionConflict,
+} from "@openbot-build/api"
+import { Context, Effect, Layer, Match, Option, Schema } from "effect"
+import type { PgClient } from "@effect/sql-pg"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { appInvocations } from "../database/Schema.ts"
+import { Secrets } from "../secrets/Secrets.ts"
 import { ActionPolicy } from "./ActionPolicy.ts"
-import { InvocationRepository, type Error } from "./InvocationRepository.ts"
-import { organizationOf, Repository } from "./Repository.ts"
+import * as StoredConnections from "./StoredConnections.ts"
+import { organizationOf } from "./StoredConnections.ts"
+import * as StoredInvocations from "./StoredInvocations.ts"
+import type { Error } from "./StoredInvocations.ts"
 
 export interface Position {
 	readonly owner: string
@@ -48,12 +60,65 @@ export class Invocations extends Context.Service<
 
 export const make: Effect.Effect<
 	typeof Invocations.Service,
-	never,
-	InvocationRepository | Repository | ActionPolicy
+	ExperienceStorageUnavailable,
+	PgClient.PgClient | Secrets | ActionPolicy
 > = Effect.gen(function* () {
-	const records = yield* InvocationRepository
-	const connections = yield* Repository
+	const db = yield* makeWithDefaults()
+	const secrets = yield* Secrets
 	const policy = yield* ActionPolicy
+	// An operation that was sending when the host stopped may or may not have reached the App.
+	yield* InstanceWork.wrap(StoredInvocations.recover(db)).pipe(
+		Effect.mapError(StoredInvocations.unavailable),
+	)
+	const conflict = () =>
+		SessionConflict.make({
+			message:
+				"This App operation changed or was already submitted. Review its recorded result.",
+		})
+	const get = (owner: string, id: string) =>
+		StoredInvocations.get(db, secrets, owner, id)
+	const put = (owner: string, value: AppExecution.Invocation) =>
+		Effect.gen(function* () {
+			const body = yield* StoredInvocations.seal(secrets, owner, value)
+			yield* db
+				.insert(appInvocations)
+				.values({
+					owner,
+					id: value.id,
+					session: value.session,
+					status: value.status,
+					body,
+				})
+				.onConflictDoNothing()
+			const saved = yield* get(owner, value.id)
+			if (
+				saved.session !== value.session ||
+				saved.turn !== value.turn ||
+				saved.callId !== value.callId ||
+				(saved.callOccurrence ?? 0) !== (value.callOccurrence ?? 0) ||
+				saved.toolName !== value.toolName ||
+				!Schema.toEquivalence(AppExecution.Source)(
+					saved.source,
+					value.source,
+				) ||
+				!Schema.toEquivalence(Schema.JsonObject)(
+					saved.arguments,
+					value.arguments,
+				)
+			)
+				return yield* conflict()
+			return saved
+		}).pipe(
+			(effect) => OwnedWrites.write(owner, effect),
+			Effect.mapError(StoredInvocations.failure),
+		)
+	const change = (
+		owner: string,
+		id: string,
+		expected: ReadonlyArray<AppExecution.Invocation["status"]>,
+		update: (value: AppExecution.Invocation) => AppExecution.Invocation,
+		round?: number,
+	) => StoredInvocations.change(db, secrets, owner, id, expected, update, round)
 	const id = (input: Position, callId: string) =>
 		createHash("sha256")
 			.update(
@@ -70,15 +135,18 @@ export const make: Effect.Effect<
 			.digest("hex")
 	const valid = (owner: string, value: AppExecution.Invocation) =>
 		Effect.gen(function* () {
-			const connection = yield* connections
-				.get(owner, value.source.connectionId)
-				.pipe(
-					Effect.mapError(() =>
-						SessionConflict.make({
-							message: "The App connection is no longer available.",
-						}),
-					),
-				)
+			const connection = yield* StoredConnections.get(
+				db,
+				secrets,
+				owner,
+				value.source.connectionId,
+			).pipe(
+				Effect.mapError(() =>
+					SessionConflict.make({
+						message: "The App connection is no longer available.",
+					}),
+				),
+			)
 			if (
 				connection.revision !== value.source.revision ||
 				connection.connection.state !== "Enabled"
@@ -95,7 +163,7 @@ export const make: Effect.Effect<
 				source: input.source,
 			})
 			const prior = readOnly
-				? yield* records.list(input.owner, input.session)
+				? yield* StoredInvocations.list(db, secrets, input.owner, input.session)
 				: []
 			// Only a completed, explicitly granted read covers another read from the
 			// same connection version. Tool annotations never grant write access.
@@ -110,7 +178,7 @@ export const make: Effect.Effect<
 						value.source.revision === input.source.revision &&
 						value.source.name === input.source.name,
 				)
-			return yield* records.put(input.owner, {
+			return yield* put(input.owner, {
 				id: id(input, input.callId),
 				session: input.session,
 				turn: input.turn,
@@ -136,7 +204,7 @@ export const make: Effect.Effect<
 	) =>
 		Effect.gen(function* () {
 			yield* valid(owner, value)
-			yield* records.change(
+			yield* change(
 				owner,
 				value.id,
 				expected,
@@ -156,72 +224,68 @@ export const make: Effect.Effect<
 						),
 						Match.exhaustive,
 					)
-					return records
-						.change(owner, value.id, ["Sending"], (value) => ({
-							...value,
-							status,
-							result: recorded,
-							round: status === "InputRequired" ? value.round + 1 : value.round,
-						}))
-						.pipe(
-							Effect.as(recorded),
-							Effect.orElseSucceed(
-								() =>
-									({
-										_tag: "Failed",
-										operationId: value.id,
-										source: value.source,
-										reason: "OutcomeUnknown",
-										message:
-											"The App returned a response, but it could not be saved. Check the recorded operation before taking another action.",
-										result: Match.value(recorded).pipe(
-											Match.tag("Completed", ({ result }) => result),
-											Match.orElse(() => null),
-										),
-									}) as const,
-							),
-						)
+					return change(owner, value.id, ["Sending"], (value) => ({
+						...value,
+						status,
+						result: recorded,
+						round: status === "InputRequired" ? value.round + 1 : value.round,
+					})).pipe(
+						Effect.as(recorded),
+						Effect.orElseSucceed(
+							() =>
+								({
+									_tag: "Failed",
+									operationId: value.id,
+									source: value.source,
+									reason: "OutcomeUnknown",
+									message:
+										"The App returned a response, but it could not be saved. Check the recorded operation before taking another action.",
+									result: Match.value(recorded).pipe(
+										Match.tag("Completed", ({ result }) => result),
+										Match.orElse(() => null),
+									),
+								}) as const,
+						),
+					)
 				}),
 				Effect.ensuring(
-					records
-						.change(owner, value.id, ["Sending"], (current) => ({
-							...current,
-							status: value.readOnly ? "Failed" : "OutcomeUnknown",
-							result: value.readOnly
-								? {
-										_tag: "Failed",
-										source: value.source,
-										operationId: value.id,
-										reason: "Interrupted",
-										message: "This read did not finish.",
-									}
-								: null,
-						}))
-						.pipe(
-							// After a normal finish the status is no longer "Sending", so this
-							// change fails with a conflict. That is expected and safe to skip.
-							Effect.catchTag("SessionConflict", () => Effect.void),
-							Effect.catch((error) =>
-								Effect.logWarning("App operation status could not be closed", {
-									source: "apps",
-									operation: value.id,
-									error: error._tag,
-								}),
-							),
+					change(owner, value.id, ["Sending"], (current) => ({
+						...current,
+						status: value.readOnly ? "Failed" : "OutcomeUnknown",
+						result: value.readOnly
+							? {
+									_tag: "Failed",
+									source: value.source,
+									operationId: value.id,
+									reason: "Interrupted",
+									message: "This read did not finish.",
+								}
+							: null,
+					})).pipe(
+						// After a normal finish the status is no longer "Sending", so this
+						// change fails with a conflict. That is expected and safe to skip.
+						Effect.catchTag("SessionConflict", () => Effect.void),
+						Effect.catch((error) =>
+							Effect.logWarning("App operation status could not be closed", {
+								source: "apps",
+								operation: value.id,
+								error: error._tag,
+							}),
 						),
+					),
 				),
 			)
 		})
 	return Invocations.of({
 		propose,
 		pending: (input, callId) =>
-			records.get(input.owner, id(input, callId)).pipe(
+			get(input.owner, id(input, callId)).pipe(
 				Effect.asSome,
 				Effect.catchTag("ExperienceNotFound", () => Effect.succeedNone),
 			),
 		approve: (input, callId, approved, grantReads = false) =>
 			Effect.gen(function* () {
-				const value = yield* records.get(input.owner, id(input, callId))
+				const value = yield* get(input.owner, id(input, callId))
 				yield* valid(input.owner, value)
 				if (value.status === (approved ? "Approved" : "Rejected")) return
 				const allowReads =
@@ -231,25 +295,18 @@ export const make: Effect.Effect<
 								source: value.source,
 							})
 						: false
-				yield* records.change(
-					input.owner,
-					value.id,
-					["PendingApproval"],
-					(value) => ({
-						...value,
-						status: approved ? "Approved" : "Rejected",
-						grantReads: allowReads,
-					}),
-				)
+				yield* change(input.owner, value.id, ["PendingApproval"], (value) => ({
+					...value,
+					status: approved ? "Approved" : "Rejected",
+					grantReads: allowReads,
+				}))
 			}),
 		resume: (owner, id, operation) =>
-			records
-				.get(owner, id)
-				.pipe(
-					Effect.flatMap((value) =>
-						submit(owner, value, ["InputRequired"], operation),
-					),
+			get(owner, id).pipe(
+				Effect.flatMap((value) =>
+					submit(owner, value, ["InputRequired"], operation),
 				),
+			),
 		execute: (input, operation) =>
 			propose(input).pipe(
 				Effect.flatMap((value) =>

@@ -13,8 +13,8 @@ import { Effect, Layer, ManagedRuntime, Redacted, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import * as Database from "../src/database/DatabasePostgres.ts"
 import * as Migration from "../src/database/Migrations.ts"
-import * as RepositoryLayer from "../src/apps/DeveloperRepositoryPostgres.ts"
-import { DeveloperRepository } from "../src/apps/DeveloperRepository.ts"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import * as Rows from "../src/apps/DeveloperRows.ts"
 import * as AccessLayer from "../src/apps/DeveloperAccess.ts"
 import { DeveloperAccess } from "../src/apps/DeveloperAccess.ts"
 import * as MembersLayer from "../src/apps/DeveloperMembers.ts"
@@ -26,7 +26,7 @@ import {
 	DomainControl,
 	DomainControlUnavailable,
 } from "../src/apps/DomainControl.ts"
-import { ownerKey } from "../src/apps/Repository.ts"
+import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Postgres from "./PostgresTest.ts"
 
 const alice = ownerKey({
@@ -133,7 +133,6 @@ test("developer proofs, members and report history stay saved without sharing ac
 			Layer.mergeAll(MembersLayer.layer, ReportsLayer.layer).pipe(
 				Layer.provideMerge(AccessLayer.layer),
 				Layer.provideMerge(dependencies),
-				Layer.provideMerge(RepositoryLayer.layer),
 				Layer.provideMerge(
 					Database.layer({ databaseUrl: Redacted.make(database.url) }),
 				),
@@ -151,7 +150,19 @@ test("developer proofs, members and report history stay saved without sharing ac
 				const access = yield* DeveloperAccess
 				const members = yield* DeveloperMembers
 				const reports = yield* DeveloperReports
-				const records = yield* DeveloperRepository
+				const db = yield* makeWithDefaults()
+				const seedApp = (app: {
+					readonly candidate: Discovery.Candidate
+					readonly nextCheckAt: number
+				}) =>
+					Rows.putApp(db, "public", {
+						...app,
+						cardUrl: app.candidate.cardUrl,
+						leaseUntil: 0,
+						monitorToken: null,
+						monitorRevision: 0,
+						monitorIssues: [],
+					})
 				const challenge = yield* access.start(alice, {
 					_tag: "AppCard",
 					cardUrl,
@@ -295,7 +306,7 @@ test("developer proofs, members and report history stay saved without sharing ac
 				tokens = [...tokens, domain.token]
 				yield* access.verify(alice, domain.id)
 				const child = "https://sub.publisher.example/card"
-				yield* records.apps.put(child, "", "", {
+				yield* seedApp({
 					candidate: yield* Discovery.Candidate.decode({
 						...candidate,
 						cardUrl: child,
@@ -307,7 +318,7 @@ test("developer proofs, members and report history stay saved without sharing ac
 					"DeveloperNotFound",
 				)
 				const distinct = cardUrl.replace("notes", "other")
-				yield* records.apps.put(distinct, "", "", {
+				yield* seedApp({
 					candidate: yield* Discovery.Candidate.decode({
 						...candidate,
 						cardUrl: distinct,
@@ -320,7 +331,7 @@ test("developer proofs, members and report history stay saved without sharing ac
 					"DeveloperNotFound",
 				)
 				const unlisted = "https://publisher.example/unlisted?app=private"
-				yield* records.apps.put(unlisted, "", "", {
+				yield* seedApp({
 					candidate: yield* Discovery.Candidate.decode({
 						...candidate,
 						cardUrl: unlisted,
@@ -333,7 +344,7 @@ test("developer proofs, members and report history stay saved without sharing ac
 					"DeveloperNotFound",
 				)
 				const hosted = "https://hosting.example/customer/card"
-				yield* records.apps.put(hosted, "", "", {
+				yield* seedApp({
 					candidate: yield* Discovery.Candidate.decode({
 						...candidate,
 						cardUrl: hosted,

@@ -9,7 +9,7 @@ import * as Development from "../dist/Development.js"
 import * as Database from "../dist/database/DatabasePostgres.js"
 import { Scenarios } from "../src/app/DevelopmentScenarios.ts"
 import { Business } from "../src/app/DevelopmentBusiness.ts"
-import { ownerKey } from "../src/apps/Repository.ts"
+import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Postgres from "./PostgresTest.ts"
 
 test("development Apps show protocol, requirement, expiry and cleanup failures through the standard APIs", async () => {

@@ -7,7 +7,6 @@ import { Session } from "@openbot-build/core"
 import { Effect, Layer, ManagedRuntime, Redacted, Stream } from "effect"
 import * as ManagedSessions from "../src/sessions/ManagedSessions.ts"
 import * as DevelopmentModel from "../src/app/DevelopmentModel.ts"
-import * as RepositoryPostgres from "../src/sessions/RepositoryPostgres.ts"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
@@ -18,13 +17,9 @@ test(
 		const database = await PostgresTest.start()
 		const runtime = ManagedRuntime.make(
 			Layer.mergeAll(
-				RepositoryPostgres.layer.pipe(
-					Layer.provideMerge(
-						DatabasePostgres.layer({
-							databaseUrl: Redacted.make(database.url),
-						}),
-					),
-				),
+				DatabasePostgres.layer({
+					databaseUrl: Redacted.make(database.url),
+				}),
 				DevelopmentModel.layerTools,
 			).pipe(Layer.provide(NodeServices.layer)),
 		)

@@ -2,10 +2,20 @@ import { Effect } from "effect"
 import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { migrate } from "drizzle-orm/effect-postgres/migrator"
 import { fileURLToPath } from "node:url"
-import * as Shared from "../sessions/RepositoryEncoding.ts"
+import * as Shared from "../sessions/SessionEncoding.ts"
 import {
 	appInvocations,
-	developerRecords,
+	developerClaims,
+	developerProofs,
+	developerMembers,
+	developerInvitations,
+	developerApps,
+	developerReports,
+	developerTests,
+	developerTestFlows,
+	developerIndexRequests,
+	developerSubscriptions,
+	developerNotices,
 	appIndexEntries,
 	appIndexJobs,
 	appIndexResults,
@@ -40,7 +50,17 @@ const folder = fileURLToPath(new URL("../../migrations", import.meta.url))
 
 export const check = Effect.gen(function* () {
 	const db = yield* makeWithDefaults()
-	yield* db.select().from(developerRecords).limit(0)
+	yield* db.select().from(developerClaims).limit(0)
+	yield* db.select().from(developerProofs).limit(0)
+	yield* db.select().from(developerMembers).limit(0)
+	yield* db.select().from(developerInvitations).limit(0)
+	yield* db.select().from(developerApps).limit(0)
+	yield* db.select().from(developerReports).limit(0)
+	yield* db.select().from(developerTests).limit(0)
+	yield* db.select().from(developerTestFlows).limit(0)
+	yield* db.select().from(developerIndexRequests).limit(0)
+	yield* db.select().from(developerSubscriptions).limit(0)
+	yield* db.select().from(developerNotices).limit(0)
 	yield* db.select().from(appInvocations).limit(0)
 	yield* db.select().from(appIndexEntries).limit(0)
 	yield* db.select().from(appIndexJobs).limit(0)

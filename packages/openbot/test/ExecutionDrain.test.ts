@@ -209,6 +209,35 @@ test(
 				},
 			)
 			assert.equal(missingOwner.status, 404)
+			await host.runtime.runPromise(
+				Effect.gen(function* () {
+					const sql = yield* SqlClient.SqlClient
+					const owner = JSON.stringify([
+						alice.identity.organizationId,
+						alice.identity.userId,
+					])
+					for (const namespace of ["public", "private-test"]) {
+						yield* sql`INSERT INTO openbot_developer_tests(namespace,id,owner,card_url,status,cleanup,expires_at,value) VALUES (${namespace},'callback-test',${owner},'https://example.test/card','Failed','Complete',0,'{}')`
+						yield* sql`INSERT INTO openbot_developer_test_flows(namespace,flow_id,test_id,owner,status,expires_at,value) VALUES (${namespace},${namespace + "-flow"},'callback-test',${owner},'Waiting',0,'{}')`
+					}
+				}),
+			)
+			const developerOwner = (flowId: string, token = "test-only") =>
+				fetch(host.address + "/internal/apps/authorization-owner", {
+					method: "POST",
+					headers: {
+						authorization: "Bearer " + token,
+						"content-type": "application/json",
+					},
+					body: JSON.stringify({ kind: "developer", flowId }),
+				})
+			assert.equal((await developerOwner("public-flow", "wrong")).status, 401)
+			assert.equal((await developerOwner("private-test-flow")).status, 404)
+			const publicOwner = await developerOwner("public-flow")
+			assert.equal(publicOwner.status, 200)
+			assert.deepEqual(await publicOwner.json(), {
+				accountId: alice.identity.userId,
+			})
 			const busy = await drain()
 			assert.equal(busy.status, 200, await busy.clone().text())
 			assert.equal((await busy.json()).drained, false)

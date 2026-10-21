@@ -1,10 +1,14 @@
-import { organizationOf } from "./Repository.ts"
+import { organizationOf } from "./StoredConnections.ts"
 import { AppExecution, SessionConflict } from "@openbot-build/api"
 import { Client, McpClient } from "@openbot-build/protocol"
 import { Context, Effect, Layer, Match, Schema } from "effect"
 import { failed, json } from "./AppResults.ts"
 import { Capabilities } from "./Capabilities.ts"
-import { InvocationRepository, type Error } from "./InvocationRepository.ts"
+import type { PgClient } from "@effect/sql-pg"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { Secrets } from "../secrets/Secrets.ts"
+import * as StoredInvocations from "./StoredInvocations.ts"
+import type { Error } from "./StoredInvocations.ts"
 import { Invocations } from "./Invocations.ts"
 import { ActionPolicy } from "./ActionPolicy.ts"
 
@@ -28,17 +32,18 @@ const invalid = () =>
 export const make: Effect.Effect<
 	typeof Operations.Service,
 	never,
-	Capabilities | InvocationRepository | Invocations | ActionPolicy
+	Capabilities | PgClient.PgClient | Secrets | Invocations | ActionPolicy
 > = Effect.gen(function* () {
 	const capabilities = yield* Capabilities
-	const records = yield* InvocationRepository
+	const db = yield* makeWithDefaults()
+	const secrets = yield* Secrets
 	const invocations = yield* Invocations
 	const actions = yield* ActionPolicy
 	return Operations.of({
 		respond: (owner, id, round, responses) =>
 			Effect.scoped(
 				Effect.gen(function* () {
-					const value = yield* records.get(owner, id)
+					const value = yield* StoredInvocations.get(db, secrets, owner, id)
 					const request = yield* Match.value(value.result).pipe(
 						Match.when({ _tag: "InputRequired" }, ({ request }) =>
 							Schema.decodeUnknownEffect(Schema.JsonObject)(request).pipe(
@@ -205,7 +210,7 @@ export const make: Effect.Effect<
 								),
 							),
 					)
-					return yield* records.get(owner, id)
+					return yield* StoredInvocations.get(db, secrets, owner, id)
 				}),
 			),
 	})

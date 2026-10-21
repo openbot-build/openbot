@@ -43,7 +43,7 @@ export const CapabilityRequest = Schema.Struct({
 		Person: { userId: Schema.String },
 		Agent: { agent: AgentId },
 	}),
-	/** The Agents between the person and the requesting Agent, from the top. */
+	/** The owner chain of the requesting Agent, from the top: each Agent decides for the one after it. */
 	chain: Schema.Array(AgentId),
 	session: Session.Id,
 	turn: Turn.Id,

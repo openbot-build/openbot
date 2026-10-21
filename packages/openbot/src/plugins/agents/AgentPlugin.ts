@@ -15,7 +15,7 @@ import {
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
 import { Gate } from "../../capabilities/Gate.ts"
-import { Requests } from "../../capabilities/Requests.ts"
+import { Requests, sessionOf } from "../../capabilities/Requests.ts"
 import { Rules } from "../../capabilities/Rules.ts"
 import { Work, callerOf } from "../../capabilities/Work.ts"
 import { Organization } from "../../organization/Organization.ts"
@@ -84,6 +84,10 @@ const SpawnInput = Schema.Struct({
 	reason: Schema.String,
 })
 const AgentInput = Schema.Struct({ agent: Schema.String })
+const PromoteInput = Schema.Struct({
+	agent: Schema.String,
+	reason: Schema.String,
+})
 export const ReportInput = Schema.Struct({
 	/** A child Agent can not report `cancelled`. Only the parent cancels. */
 	status: AgentsApi.DelegationResultStatus.pick(["completed", "failed"]),
@@ -108,7 +112,9 @@ const RuleInput = Schema.Struct({
 /** The tool names of this plugin. Delegation and review code finds calls by these names. */
 export const names = {
 	delegate: "openbot_delegate",
-	spawn: "openbot_spawn_subagent",
+	spawn: "openbot_start_session_agent",
+	create: "openbot_create_agent",
+	promote: "openbot_promote_agent",
 	list: "openbot_list_agents",
 	details: "openbot_agent_details",
 	report: "openbot_report",
@@ -133,21 +139,32 @@ type Services =
 	| Signals
 	| AuthorizationServices
 
+/** What the Sessions of one member give to the Agent plugin. */
+interface ForOwnerInput {
+	readonly memoryDefaults: Memory.Settings
+	readonly owner: typeof Identity.Service
+	readonly namespace: string
+	readonly read: (
+		session: Session.Id,
+	) => Effect.Effect<
+		Session.View<SessionHost.Values>,
+		Session.SessionNotFound | SessionStore.SessionStoreError
+	>
+	/** The memory of each delegated Session of an Agent. A promotion adopts it. */
+	readonly delegatedMemory: (agent: AgentsApi.AgentId) => Effect.Effect<
+		ReadonlyArray<{
+			readonly session: Session.Id
+			readonly memory: Memory.State
+		}>,
+		unknown
+	>
+}
+
 /** Builds the Agent plugin for the Sessions of one member. */
 export class AgentPlugin extends Context.Service<
 	AgentPlugin,
 	{
-		readonly forOwner: (input: {
-			readonly owner: typeof Identity.Service
-			readonly namespace: string
-			readonly memoryDefaults: Memory.Settings
-			readonly read: (
-				session: Session.Id,
-			) => Effect.Effect<
-				Session.View<SessionHost.Values>,
-				Session.SessionNotFound | SessionStore.SessionStoreError
-			>
-		}) => Plugin.Plugin<Tools>
+		readonly forOwner: (input: ForOwnerInput) => Plugin.Plugin<Tools>
 	}
 >()("@openbot-build/openbot/plugins/agents/AgentPlugin") {}
 
@@ -211,8 +228,23 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 			<A, I>(schema: Schema.Codec<A, I>) =>
 			(input: unknown) =>
 				Schema.decodeUnknownEffect(schema)(input)
+		/** A Session Agent of the current Session, found by its id. */
+		const ownSessionAgent = (id: string) =>
+			Effect.gen(function* () {
+				const current = yield* work
+				const found = yield* agents.find(current.caller.organizationId, id)
+				return Option.filter(
+					found,
+					(agent) =>
+						agent.kind === "session" &&
+						agent.owner._tag === "Session" &&
+						agent.owner.session === current.session &&
+						!agent.archived,
+				)
+			})
 		const workEntries = (
 			delegated: boolean,
+			delegatedMemory: ForOwnerInput["delegatedMemory"],
 			callCount: (callId: string) => Effect.Effect<number>,
 		): ReadonlyArray<Entry> => [
 			entry(
@@ -301,9 +333,11 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 								})
 								return true
 							}
+							const owner = target.value.owner
 							const own =
-								target.value.owner._tag === "Session" &&
-								target.value.owner.session === current.session
+								(owner._tag === "Session" &&
+									owner.session === current.session) ||
+								(owner._tag === "Agent" && owner.agent === current.agent.id)
 							const answer = yield* gate.check({
 								capability: {
 									action: "agents.delegate",
@@ -313,7 +347,8 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 								toolCallId: context.toolCallId,
 								callOccurrence,
 								target: target.value,
-								// An Agent may always give work to the subagents it started.
+								// An Agent may always give work to the Agents it owns, and to the
+								// Session Agents of this Session.
 								implicit: own,
 							})
 							yield* record(answer === "allow" ? "queued" : "authorizing")
@@ -324,7 +359,7 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 			),
 			entry(
 				names.spawn,
-				"Start a new subagent for this Session. It keeps its own context while this Session lasts. Give it a clear role and instructions.",
+				"Start a new Session Agent for this Session. It keeps its own context while this Session lasts. Give it a clear role and instructions.",
 				{
 					type: "object",
 					properties: { name: text, role: text, instructions: text, reason },
@@ -334,8 +369,9 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 					Effect.gen(function* () {
 						const current = yield* work
 						const spawn = yield* decode(SpawnInput)(input)
-						const agent = yield* agents.createSubagent(current.caller, {
+						const agent = yield* agents.createSessionAgent(current.caller, {
 							session: current.session,
+							agent: current.agent.id,
 							name: spawn.name,
 							role: spawn.role,
 							instructions: spawn.instructions,
@@ -358,8 +394,99 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 					),
 			),
 			entry(
+				names.create,
+				"Make a new lasting Agent that you own. It keeps its own memory and can work for you in later Sessions. Give it a clear role and instructions.",
+				{
+					type: "object",
+					properties: { name: text, role: text, instructions: text, reason },
+					required: ["name", "role", "instructions", "reason"],
+				},
+				(input) =>
+					Effect.gen(function* () {
+						const current = yield* work
+						const create = yield* decode(SpawnInput)(input)
+						const agent = yield* agents.createOwned(
+							current.caller.organizationId,
+							current.agent,
+							{
+								name: create.name,
+								role: create.role,
+								instructions: create.instructions,
+							},
+						)
+						return json({ agent: agent.id, name: agent.name })
+					}),
+				(input, context) =>
+					pauseOnFailure(
+						Effect.gen(function* () {
+							const create = yield* decode(SpawnInput)(input)
+							const answer = yield* gate.check({
+								capability: { action: "agents.create", target: "*" },
+								reason: create.reason,
+								toolCallId: context.toolCallId,
+								callOccurrence: yield* callCount(context.toolCallId),
+							})
+							return answer === "pause"
+						}),
+					),
+			),
+			entry(
+				names.promote,
+				`Make a Session Agent of this Session a lasting Agent that you own. It keeps what it learned. Use an Agent id from ${names.list}.`,
+				{
+					type: "object",
+					properties: { agent: text, reason },
+					required: ["agent", "reason"],
+				},
+				(input) =>
+					Effect.gen(function* () {
+						const current = yield* work
+						const promote = yield* decode(PromoteInput)(input)
+						const found = yield* ownSessionAgent(promote.agent)
+						if (Option.isNone(found))
+							return json({
+								error: `This is not a Session Agent of this Session. Use ${names.list}.`,
+							})
+						const agent = yield* agents
+							.promote(
+								current.caller,
+								found.value.id,
+								found.value.revision,
+								current.agent.id,
+							)
+							.pipe(Effect.provideContext(services))
+						// The memory of its delegated Sessions becomes its long-term memory.
+						const worked = yield* delegatedMemory(agent.id)
+						yield* Effect.forEach(worked, (row) =>
+							memories.adopt(
+								current.caller.organizationId,
+								agent.id,
+								row.session,
+								row.memory,
+							),
+						)
+						return json({ agent: agent.id, name: agent.name })
+					}),
+				(input, context) =>
+					pauseOnFailure(
+						Effect.gen(function* () {
+							const promote = yield* decode(PromoteInput)(input)
+							// The handler explains a wrong id, so no decision is needed for it.
+							if (Option.isNone(yield* ownSessionAgent(promote.agent)))
+								return false
+							const answer = yield* gate.check({
+								capability: { action: "agents.promote", target: promote.agent },
+								reason: promote.reason,
+								toolCallId: context.toolCallId,
+								callOccurrence: yield* callCount(context.toolCallId),
+							})
+							return answer === "pause"
+						}),
+					),
+			),
+			entry(
 				names.list,
-				"List the Agents you can give work to, with their ids and roles. It includes the subagents of this Session.",
+				"List the Agents you can give work to, with their ids and roles. It includes the Session Agents of this Session.",
 				{ type: "object", properties: {} },
 				() =>
 					Effect.gen(function* () {
@@ -378,6 +505,7 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 									name: agent.name,
 									role: agent.role,
 									kind: agent.kind,
+									owner: agent.owner,
 								})),
 						)
 					}),
@@ -402,6 +530,7 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 									name: agent.name,
 									role: agent.role,
 									kind: agent.kind,
+									owner: agent.owner,
 									instructions: agent.instructions,
 								}),
 						})
@@ -461,7 +590,11 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 									organizationId,
 									agent: current.agent,
 									capability: stored.value.request.capability,
-									session: current.chain.sessions.at(-1) ?? current.session,
+									session: sessionOf({
+										chain: stored.value.chain,
+										agent: current.agent.id,
+										current: stored.value.request.session,
+									}),
 								})
 							: false
 					const outcome = yield* requests.decide(organizationId, request, {
@@ -652,6 +785,10 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 									namespace: input.namespace,
 									agent,
 									chain: state.chain,
+									deciders: yield* agents.ownerChain(
+										{ organizationId, userId: state.chain.userId },
+										agent,
+									),
 									session: at.session,
 									turn,
 								})
@@ -660,6 +797,7 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 										? reviewEntries(state.review)
 										: workEntries(
 												state.kind === "delegated",
+												input.delegatedMemory,
 												context.toolCallCount,
 											)
 								const incoming = yield* options.toolkit

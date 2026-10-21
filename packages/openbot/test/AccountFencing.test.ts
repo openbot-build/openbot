@@ -19,11 +19,10 @@ import * as Fence from "../src/execution/ExecutionFence.ts"
 import * as AccountNetwork from "../src/execution/AccountNetwork.ts"
 import * as OwnedWrites from "../src/execution/OwnedWrites.ts"
 import * as ProtocolStores from "../src/apps/ProtocolStores.ts"
-import * as Repository from "../src/apps/RepositoryPostgres.ts"
-import * as Developer from "../src/apps/DeveloperRepositoryPostgres.ts"
-import { DeveloperRepository } from "../src/apps/DeveloperRepository.ts"
-import * as Invocations from "../src/apps/InvocationRepositoryPostgres.ts"
-import { InvocationRepository } from "../src/apps/InvocationRepository.ts"
+import * as DeveloperRows from "../src/apps/DeveloperRows.ts"
+import { PgClient } from "@effect/sql-pg"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import * as StoredInvocations from "../src/apps/StoredInvocations.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
 import * as Database from "../src/database/DatabasePostgres.ts"
 import * as Postgres from "./PostgresTest.ts"
@@ -84,9 +83,7 @@ test("account persistence, background recovery and MCP sends retain routing leas
 	)
 	const runtime = ManagedRuntime.make(
 		Layer.mergeAll(
-			ProtocolStores.layer.pipe(Layer.provideMerge(Repository.layer)),
-			Developer.layer,
-			Invocations.layer,
+			ProtocolStores.layer,
 			AccountNetwork.layer(owner, transport),
 			Fence.layer({
 				origin: "http://authority.test",
@@ -229,25 +226,28 @@ test("account persistence, background recovery and MCP sends retain routing leas
 		assert.equal(writes, 1)
 		await runtime.runPromise(
 			Effect.gen(function* () {
-				const records = yield* DeveloperRepository
-				yield* records.transaction(
-					"test",
+				const sql = yield* PgClient.PgClient
+				const db = yield* makeWithDefaults()
+				const transaction = DeveloperRows.transaction(sql)
+				const post = (id: string, target: string) =>
+					DeveloperRows.postNotice(db, "public", target, {
+						id,
+						cardUrl: null,
+						kind: "AccessChanged",
+						issue: null,
+						reason: "MembershipRemoved",
+						reportId: null,
+						createdAt: 0,
+						readAt: null,
+					})
+				yield* transaction(
 					Effect.gen(function* () {
-						yield* records.secrets.put("secret", owner, "scope", {
-							owner,
-							body: "opaque",
-						})
+						yield* post("notice", owner)
 						assert.ok(
 							leases.size > 0,
 							"background account lease must remain until commit",
 						)
-						yield* records.transaction(
-							"nested",
-							records.secrets.put("secret", owner, "scope", {
-								owner,
-								body: "updated",
-							}),
-						)
+						yield* transaction(post("nested", owner))
 						assert.ok(
 							leases.size > 0,
 							"nested transaction must not release outer leases",
@@ -255,45 +255,45 @@ test("account persistence, background recovery and MCP sends retain routing leas
 					}),
 				)
 				assert.equal(leases.size, 0)
-				assert.equal((yield* records.secrets.get("secret")).body, "updated")
 				const otherOwner = JSON.stringify(["org", "charlie"])
 				yield* admitted(
-					records.transaction(
-						"cross-account",
-						Effect.gen(function* () {
-							yield* records.secrets.put("shared", otherOwner, "scope", {
-								owner: otherOwner,
-								body: "cross-account",
-							})
-							assert.ok(
-								[...leases.values()].some(
-									(value) => value.accountId === "charlie",
-								),
-								"target account lease must span the caller's transaction",
-							)
-						}),
-					),
+					Effect.gen(function* () {
+						yield* post("shared", otherOwner)
+						assert.ok(
+							[...leases.values()].some(
+								(value) => value.accountId === "charlie",
+							),
+							"target account lease must span the caller's transaction",
+						)
+					}).pipe(transaction),
 				)
 				assert.equal(leases.size, 0)
-				yield* records.secrets
-					.put("secret", otherOwner, "scope", {
-						owner: otherOwner,
-						body: "stolen",
-					})
-					.pipe(Effect.flip)
-				assert.equal((yield* records.secrets.get("secret")).owner, owner)
-
-				yield* records.secrets
-					.put("blocked", bob, "scope", { owner: bob, body: "bad" })
-					.pipe(Effect.flip)
-				const sql = yield* SqlClient.SqlClient
+				yield* post("notice", otherOwner)
 				assert.equal(
-					(yield* sql`SELECT id FROM openbot_developer_records WHERE id = 'blocked'`)
+					(yield* sql<{
+						owner: string
+					}>`SELECT owner FROM openbot_developer_notices WHERE namespace='public' AND id='notice'`)[0]
+						?.owner,
+					owner,
+				)
+				yield* transaction(
+					post("rollback", owner).pipe(Effect.andThen(Effect.fail("stop"))),
+				).pipe(Effect.flip)
+				assert.equal(leases.size, 0)
+				assert.equal(
+					(yield* sql`SELECT id FROM openbot_developer_notices WHERE id='rollback'`)
 						.length,
 					0,
 				)
+				yield* post("blocked", bob).pipe(Effect.flip)
+				assert.equal(
+					(yield* sql`SELECT id FROM openbot_developer_notices WHERE id='blocked'`)
+						.length,
+					0,
+				)
+
 				yield* sql`INSERT INTO openbot_app_invocations (owner,id,session,status,body) VALUES (${owner},'allowed','session','Sending','opaque'),(${bob},'blocked','session','Sending','opaque')`
-				yield* (yield* InvocationRepository).recover
+				yield* StoredInvocations.recover(yield* makeWithDefaults())
 				const rows = yield* sql<{
 					id: string
 					status: string

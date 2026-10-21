@@ -76,6 +76,8 @@ A resource key is a name with parts that dots separate:
 | One model provider       | `openbot.org.<org>.model.<provider>`                    |
 | The whole platform       | `openbot.platform`                                      |
 
+An Agent that another Agent owns has the key of the member or the organization at the top of its owner tree. So `openbot.org.<org>.user.<user>.agent.<agent>` is also the key of an Agent that the Main Agent of that member owns. When an Agent makes or promotes an Agent, the member it works for needs `agents.write` on that place.
+
 A key covers itself and every key below it. So `openbot.org.<org>` covers everything in the organization, and `openbot.org.<org>.user.<user>` covers everything of one member.
 
 In a policy, you can write two placeholders:

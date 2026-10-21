@@ -248,7 +248,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 `GET /v1/agents/:agentId/memory/log` lists each change with its `version`, the time, what made it (`consolidation`, `person` or `promotion`), and the changed keys.
 
-When you [promote](/docs/agents#promote-a-subagent) a subagent, the lasting entries of its Session memory become its Agent memory.
+When you or an Agent [promote](/docs/agents#promote-a-session-agent) a Session Agent, the lasting entries of its Session memory become its Agent memory.
 
 ## Memory for one Turn
 
@@ -260,9 +260,9 @@ The start-Turn route accepts the same object, but applies it to that Turn only:
 
 ```json
 {
-  "expected": 3,
-  "input": "Answer without using or updating learned facts this time.",
-  "memory": { "use": false, "generate": false }
+	"expected": 3,
+	"input": "Answer without using or updating learned facts this time.",
+	"memory": { "use": false, "generate": false }
 }
 ```
 

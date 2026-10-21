@@ -48,7 +48,9 @@ import {
 	type SessionView,
 	type StartTurnRequest,
 } from "@openbot-build/api"
-import { Repository } from "./Repository.ts"
+import type { PgClient } from "@effect/sql-pg"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import * as StoredSessions from "./StoredSessions.ts"
 import {
 	Sessions,
 	type Options,
@@ -111,10 +113,10 @@ export const make = <
 ): Effect.Effect<
 	Instance<Tools, E, R>,
 	Session.SessionError | SessionStore.SessionStoreError | BuildE,
-	BuildR | Repository | Scope.Scope | ExecutionServices<Tools, R>
+	BuildR | PgClient.PgClient | Scope.Scope | ExecutionServices<Tools, R>
 > =>
 	Effect.gen(function* () {
-		const repository = yield* Repository,
+		const db = yield* makeWithDefaults(),
 			scope = yield* Scope.Scope
 		const namespace = options.namespace ?? "local"
 		const environment = (yield* Effect.context<
@@ -298,56 +300,54 @@ export const make = <
 		const store: SessionStore.Store<SessionHost.Values> =
 			yield* SessionStoreRepository.make({
 				definition,
-				persistence: repository.store(namespace),
+				persistence: StoredSessions.persistence(db, namespace),
 				onCommit: ({ delta, view }) =>
-					repository
-						.save(namespace, {
-							delta,
-							response: Option.flatMap(
-								Option.fromNullishOr(view),
-								currentResponse,
-							),
-						})
-						.pipe(
-							Effect.tap(() => {
-								if (view === undefined) return Effect.void
-								const turn = Session.currentTurn(view.session)
-								const previous = delta.expected?.turns.find(
-									(entry) => entry.id === turn?.id,
-								)
-								return turn === undefined ||
-									previous === undefined ||
-									previous.status._tag === "Failed"
-									? Effect.void
-									: ErrorReporting.failedTurn(turn)
-							}),
-							Effect.tap(() => {
-								if (view === undefined) return Effect.void
-								const turn = Session.currentTurn(view.session)
-								const previous = delta.expected?.turns.find(
-									(entry) => entry.id === turn?.id,
-								)
-								// Code that writes the store directly may make a Session without OpenBot data.
-								if (
-									turn === undefined ||
-									previous?.status._tag === turn.status._tag ||
-									view.session.business[sessionHostId] === undefined
-								)
-									return Effect.void
-								const state = SessionHost.hostState(view.session)
-								// Delegation, reviews and memory react to changes of the Turn status.
-								return publish(
-									Signal.TurnChanged({
-										organizationId: state.chain.organizationId,
-										userId: state.chain.userId,
-										session: view.session.id,
-										turn: turn.id,
-										status: turn.status._tag,
-									}),
-								)
-							}),
+					StoredSessions.save(db, namespace, {
+						delta,
+						response: Option.flatMap(
+							Option.fromNullishOr(view),
+							currentResponse,
 						),
-				onRemove: (ref) => repository.remove(namespace, ref),
+					}).pipe(
+						Effect.tap(() => {
+							if (view === undefined) return Effect.void
+							const turn = Session.currentTurn(view.session)
+							const previous = delta.expected?.turns.find(
+								(entry) => entry.id === turn?.id,
+							)
+							return turn === undefined ||
+								previous === undefined ||
+								previous.status._tag === "Failed"
+								? Effect.void
+								: ErrorReporting.failedTurn(turn)
+						}),
+						Effect.tap(() => {
+							if (view === undefined) return Effect.void
+							const turn = Session.currentTurn(view.session)
+							const previous = delta.expected?.turns.find(
+								(entry) => entry.id === turn?.id,
+							)
+							// Code that writes the store directly may make a Session without OpenBot data.
+							if (
+								turn === undefined ||
+								previous?.status._tag === turn.status._tag ||
+								view.session.business[sessionHostId] === undefined
+							)
+								return Effect.void
+							const state = SessionHost.hostState(view.session)
+							// Delegation, reviews and memory react to changes of the Turn status.
+							return publish(
+								Signal.TurnChanged({
+									organizationId: state.chain.organizationId,
+									userId: state.chain.userId,
+									session: view.session.id,
+									turn: turn.id,
+									status: turn.status._tag,
+								}),
+							)
+						}),
+					),
+				onRemove: (ref) => StoredSessions.remove(db, namespace, ref),
 			})
 		const memories = MemoryOperations.make({
 			store,
@@ -395,6 +395,20 @@ export const make = <
 							owner: options.owner,
 							namespace,
 							read: (id) => store.read(id),
+							delegatedMemory: (agent) =>
+								list({ agent, kind: "delegated" }).pipe(
+									Effect.flatMap((rows) =>
+										Effect.forEach(rows, (row) =>
+											store.read(row.session.id).pipe(
+												Effect.map((view) => ({
+													session: row.session.id,
+													memory:
+														view.state.value[Memory.storeKey] ?? Memory.empty(),
+												})),
+											),
+										),
+									),
+								),
 						}),
 					) as unknown as typeof apps)
 		const runtime = yield* SessionRuntime.make({
@@ -589,30 +603,31 @@ export const make = <
 				.modifyEffect({
 					session: id,
 					expectedRevision: input.expected,
-					update: (view) =>
-						Effect.succeed([
+					update: (view) => {
+						// A `null` title removes the title.
+						const title =
+							input.title === undefined
+								? view.session.metadata.title
+								: (input.title ?? undefined)
+						return Effect.succeed([
 							undefined,
 							Option.some({
 								session: {
 									metadata: {
-										...view.session.metadata,
-										...(input.title === undefined
-											? {}
-											: { title: input.title }),
-										...(input.archived === undefined
-											? {}
-											: { archived: input.archived }),
+										...(title === undefined ? {} : { title }),
+										archived: input.archived ?? view.session.metadata.archived,
 									},
 								},
 							}),
-						] as const),
+						] as const)
+					},
 				})
 				.pipe(
 					Effect.mapError(publicError),
 					Effect.flatMap(({ view }) => project(view)),
 				)
 		const list: typeof Sessions.Service.list = (input) =>
-			repository.list(namespace, input).pipe(
+			StoredSessions.list(db, namespace, input).pipe(
 				Effect.mapError(publicError),
 				// Review Sessions are hidden unless the caller asks for them.
 				Effect.map((rows) =>
@@ -657,13 +672,12 @@ export const make = <
 								...input.settings,
 								model: yield* validateSelection(input.settings.model),
 							}
+				const title = input.title ?? source.session.metadata.title
 				return yield* store
 					.fork({
 						source: id,
 						...(input.version === undefined ? {} : { version: input.version }),
-						metadata: {
-							title: input.title ?? source.session.metadata.title,
-						},
+						metadata: title === undefined ? {} : { title },
 						...(settings === undefined ? {} : { settings }),
 						// The Fork keeps the OpenBot data of its source, such as the Agent and the
 						// memory switches. It is new direct work, so it has no parent tool call.

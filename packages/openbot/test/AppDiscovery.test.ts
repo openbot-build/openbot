@@ -1,9 +1,7 @@
-import * as IndexWorkRepository from "../src/apps/IndexWorkRepositoryPostgres.ts"
 import * as AgentFixture from "./AgentFixture.ts"
 import * as DeveloperLayers from "../src/apps/DeveloperLayers.ts"
 import * as AppExperience from "../src/apps/Experience.ts"
 import * as Views from "../src/apps/Views.ts"
-import * as ViewRepository from "../src/apps/ViewRepositoryPostgres.ts"
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises"
@@ -41,17 +39,14 @@ import { Server, Auth, DatabasePostgres } from "@openbot-build/openbot"
 import * as Migration from "@openbot-build/openbot/StorageMigration"
 import * as Connections from "../src/apps/Connections.ts"
 import * as Authorizations from "../src/apps/Authorizations.ts"
-import * as AuthorizationRepository from "../src/apps/AuthorizationRepositoryPostgres.ts"
 import * as ProtocolStores from "../src/apps/ProtocolStores.ts"
 import * as AppHost from "../src/apps/AppHost.ts"
 import * as Invocations from "../src/apps/Invocations.ts"
 import * as Operations from "../src/apps/Operations.ts"
-import * as InvocationRepository from "../src/apps/InvocationRepositoryPostgres.ts"
 import * as ActionPolicy from "../src/apps/ActionPolicy.ts"
 import * as Lifecycle from "../src/apps/Lifecycle.ts"
 import * as ConnectionLocks from "../src/apps/ConnectionLocks.ts"
 import * as Capabilities from "../src/apps/Capabilities.ts"
-import * as AppRepository from "../src/apps/RepositoryPostgres.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
 import * as Probe from "../src/apps/Probe.ts"
 import * as TokensPostgres from "../src/auth/TokensPostgres.ts"
@@ -67,7 +62,7 @@ import {
 import * as AppDiscovery from "../src/apps/Discovery.ts"
 import * as Governance from "../src/apps/Governance.ts"
 import * as PublicIndex from "../src/apps/Index.ts"
-import * as IndexRepository from "../src/apps/IndexRepositoryPostgres.ts"
+import * as IndexStore from "../src/apps/IndexStore.ts"
 
 // These tests check runtime boundaries. All protocol traffic stays in local fixtures.
 const fixture = async () => {
@@ -437,12 +432,11 @@ const startApi = async (
 							Layer.provide(OrganizationFixture.layerDefaultSettings),
 						),
 					),
-					Layer.provide(IndexWorkRepository.layer),
 					Layer.provide(
 						Secrets.layer(Redacted.make("test:" + "11".repeat(32))),
 					),
 					Layer.provide(discovery),
-					Layer.provide(IndexRepository.layer),
+					Layer.provide(IndexStore.layer),
 				),
 				Layer.mergeAll(
 					AppExperience.layer.pipe(Layer.provideMerge(Lifecycle.layer)),
@@ -476,18 +470,9 @@ const startApi = async (
 					Layer.provideMerge(AppConnections.layerConnectionScopes),
 					Layer.provide(ConnectionLocks.layer),
 					Layer.provide(NodeCrypto.layer),
+					Layer.provideMerge(ProtocolStores.layer),
 					Layer.provideMerge(
-						Layer.mergeAll(
-							InvocationRepository.layer,
-							ViewRepository.layer,
-							ProtocolStores.layer,
-							AuthorizationRepository.layer,
-						).pipe(
-							Layer.provideMerge(AppRepository.layer),
-							Layer.provide(
-								Secrets.layer(Redacted.make("test:" + "11".repeat(32))),
-							),
-						),
+						Secrets.layer(Redacted.make("test:" + "11".repeat(32))),
 					),
 				),
 				PublicIndex.layer({ publicOrigin }).pipe(
@@ -496,7 +481,7 @@ const startApi = async (
 							Layer.provide(OrganizationFixture.layerDefaultSettings),
 						),
 					),
-					Layer.provide(IndexRepository.layer),
+					Layer.provide(IndexStore.layer),
 				),
 				TokensPostgres.layer,
 				OrganizationFixture.layerEveryoneAdministrator,

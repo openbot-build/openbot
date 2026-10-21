@@ -15,7 +15,6 @@ import {
 import * as ManagedSessions from "../src/sessions/ManagedSessions.ts"
 import * as AgentFixture from "./AgentFixture.ts"
 import * as DevelopmentModel from "../src/app/DevelopmentModel.ts"
-import * as RepositoryPostgres from "../src/sessions/RepositoryPostgres.ts"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 import * as InstanceWork from "../src/execution/InstanceWork.ts"
@@ -28,13 +27,7 @@ test(
 		const database = await PostgresTest.start()
 		const runtime = ManagedRuntime.make(
 			Layer.mergeAll(
-				RepositoryPostgres.layer.pipe(
-					Layer.provideMerge(
-						DatabasePostgres.layer({
-							databaseUrl: Redacted.make(database.url),
-						}),
-					),
-				),
+				DatabasePostgres.layer({ databaseUrl: Redacted.make(database.url) }),
 				DevelopmentModel.layerTools,
 			).pipe(Layer.provide(NodeServices.layer)),
 		)
@@ -149,13 +142,7 @@ test(
 			Layer.mergeAll(
 				InstanceWork.layer,
 				Signals.layer,
-				RepositoryPostgres.layer.pipe(
-					Layer.provideMerge(
-						DatabasePostgres.layer({
-							databaseUrl: Redacted.make(database.url),
-						}),
-					),
-				),
+				DatabasePostgres.layer({ databaseUrl: Redacted.make(database.url) }),
 				DevelopmentModel.toolkit.toLayer({
 					DevelopmentConfirmation: ({ description }) =>
 						Effect.sync(() => {
@@ -309,13 +296,7 @@ test(
 			Layer.mergeAll(
 				InstanceWork.layer,
 				Signals.layer,
-				RepositoryPostgres.layer.pipe(
-					Layer.provideMerge(
-						DatabasePostgres.layer({
-							databaseUrl: Redacted.make(database.url),
-						}),
-					),
-				),
+				DatabasePostgres.layer({ databaseUrl: Redacted.make(database.url) }),
 				DevelopmentModel.layerTools,
 			).pipe(Layer.provide(NodeServices.layer)),
 		)

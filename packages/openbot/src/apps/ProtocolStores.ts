@@ -5,8 +5,13 @@ import type { PgClient } from "@effect/sql-pg"
 import { Context, Effect, Layer, Match, Schema } from "effect"
 import { and, eq } from "drizzle-orm"
 import { makeWithDefaults } from "drizzle-orm/effect-postgres"
-import { appAuthorizations, appSecrets } from "../database/Schema.ts"
-import { Repository, type Error as RepositoryError } from "./Repository.ts"
+import {
+	appAuthorizations,
+	appConnections,
+	appSecrets,
+} from "../database/Schema.ts"
+import { IndexNamespace } from "./IndexNamespace.ts"
+import * as StoredConnections from "./StoredConnections.ts"
 import { Secrets } from "../secrets/Secrets.ts"
 
 export interface OwnedStores {
@@ -31,7 +36,7 @@ const unavailable = () =>
 		reason: "Unavailable",
 		operation: "Owned App storage",
 	})
-const translate = (error: RepositoryError | Store.StoreError) =>
+const translate = (error: StoredConnections.Error | Store.StoreError) =>
 	Match.value(error).pipe(
 		Match.tag("ExperienceNotFound", missing),
 		Match.tag("StoreError", (error) => error),
@@ -45,9 +50,9 @@ const flowCodec = Schema.fromJsonString(Schema.toCodecJson(Authorization.Flow))
 export const make: Effect.Effect<
 	typeof ProtocolStores.Service,
 	never,
-	Repository | PgClient.PgClient | Secrets
+	PgClient.PgClient | Secrets
 > = Effect.gen(function* () {
-	const repository = yield* Repository
+	const namespace = yield* IndexNamespace
 	const secrets = yield* Secrets
 	const db = yield* makeWithDefaults()
 	return ProtocolStores.of({
@@ -77,7 +82,7 @@ export const make: Effect.Effect<
 				save: (input) =>
 					owned(input.connection).pipe(
 						Effect.andThen(
-							repository.save(owner, {
+							StoredConnections.save(db, secrets, namespace, owner, {
 								...input,
 								name: (input.app.card.title ?? input.app.card.name).slice(
 									0,
@@ -90,16 +95,22 @@ export const make: Effect.Effect<
 					),
 				get: (key) =>
 					owned(key).pipe(
-						Effect.andThen(repository.get(owner, key.connectionId)),
+						Effect.andThen(
+							StoredConnections.get(db, secrets, owner, key.connectionId),
+						),
 						Effect.map((stored) => stored.connection),
 						Effect.mapError(translate),
 					),
 				getApp: (cardUrl) =>
-					repository.getApp(owner, cardUrl).pipe(Effect.mapError(translate)),
+					StoredConnections.getApp(db, owner, cardUrl).pipe(
+						Effect.mapError(translate),
+					),
 				update: ({ key, change }) =>
 					owned(key).pipe(
 						Effect.andThen(
-							repository.update(
+							StoredConnections.update(
+								db,
+								secrets,
 								owner,
 								key.connectionId,
 								(stored) => ({
@@ -115,11 +126,41 @@ export const make: Effect.Effect<
 						Effect.mapError(translate),
 					),
 				updateApp: (app) =>
-					repository.updateApp(owner, app).pipe(Effect.mapError(translate)),
+					StoredConnections.updateApp(db, owner, app).pipe(
+						Effect.mapError(translate),
+					),
 				delete: (key) =>
 					owned(key).pipe(
-						Effect.andThen(repository.remove(owner, key.connectionId)),
-						Effect.mapError(translate),
+						Effect.andThen(
+							db
+								.transaction((tx) =>
+									Effect.gen(function* () {
+										const rows = yield* tx
+											.delete(appConnections)
+											.where(
+												StoredConnections.connectionWhere(
+													owner,
+													key.connectionId,
+												),
+											)
+											.returning({ id: appConnections.id })
+										if (rows.length === 0) return yield* missing()
+										yield* tx
+											.delete(appSecrets)
+											.where(
+												and(
+													eq(appSecrets.owner, owner),
+													eq(appSecrets.connectionId, key.connectionId),
+												),
+											)
+									}),
+								)
+								.pipe(
+									Effect.mapError((error) =>
+										error instanceof Store.StoreError ? error : unavailable(),
+									),
+								),
+						),
 					),
 			})
 			const credentials = Store.CredentialStore.of({
@@ -276,6 +317,7 @@ export const make: Effect.Effect<
 				)
 			return {
 				...service,
+				apps: { ...apps, delete: (key) => write(apps.delete(key)) },
 				credentials: {
 					...credentials,
 					put: (credential) => write(credentials.put(credential)),
