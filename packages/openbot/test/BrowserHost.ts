@@ -53,6 +53,8 @@ export async function start(options: {
 		readonly intervalMs?: number
 		readonly retryMs?: number
 	}
+	/** How often the Workflow worker starts scheduled Runs and checks waiting Runs. */
+	readonly workflowIntervalMs?: number
 	/** Organization settings for the Agents of each new organization. */
 	readonly agents?: {
 		readonly memory?: boolean
@@ -139,7 +141,27 @@ export async function start(options: {
 		success: Schema.Struct({ applied: Schema.String }),
 		needsApproval: true,
 	})
-	const toolkit = Toolkit.make(confirm)
+	// A small store of named values, so a test can change state with a tool and check it.
+	// A key in `locked` cannot change, unless the call sets `force`.
+	const values = new Map<string, string>()
+	const locked = new Set<string>()
+	const setValue = Tool.make("SetValue", {
+		description: "Set a named value",
+		parameters: Schema.Struct({
+			key: Schema.String,
+			value: Schema.String,
+			force: Schema.optionalKey(Schema.Boolean),
+		}),
+		success: Schema.Struct({ key: Schema.String, value: Schema.String }),
+		failure: Schema.Struct({ error: Schema.String }),
+		failureMode: "return",
+	})
+	const getValue = Tool.make("GetValue", {
+		description: "Read a named value",
+		parameters: Schema.Struct({ key: Schema.String }),
+		success: Schema.Struct({ value: Schema.NullOr(Schema.String) }),
+	})
+	const toolkit = Toolkit.make(confirm, setValue, getValue)
 	let toolCalls = 0
 	const handlers = toolkit.toLayer({
 		ConfirmChange: ({ description }) =>
@@ -147,6 +169,15 @@ export async function start(options: {
 				toolCalls++
 				return { applied: description }
 			}),
+		SetValue: ({ key, value, force }) =>
+			locked.has(key) && force !== true
+				? Effect.fail({ error: "The value " + key + " is locked." })
+				: Effect.sync(() => {
+						values.set(key, value)
+						return { key, value }
+					}),
+		GetValue: ({ key }) =>
+			Effect.sync(() => ({ value: values.get(key) ?? null })),
 	})
 	const usage = {
 		inputTokens: { total: 12, uncached: 12, cacheRead: 0, cacheWrite: 0 },
@@ -255,6 +286,9 @@ export async function start(options: {
 		...(options.indexWork === undefined
 			? {}
 			: { indexWork: options.indexWork }),
+		...(options.workflowIntervalMs === undefined
+			? {}
+			: { workflows: { interval: options.workflowIntervalMs } }),
 		...(options.discovery === undefined
 			? {}
 			: { discovery: options.discovery }),
@@ -440,6 +474,8 @@ export async function start(options: {
 			},
 			login,
 			toolCalls: () => toolCalls,
+			values,
+			locked,
 			consolidations: () => consolidations,
 			close: async () => {
 				await runtime.dispose()

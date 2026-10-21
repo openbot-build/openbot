@@ -18,6 +18,7 @@ This page shows how the check works, how a person answers requests, and what eac
 | `agents.spawn`    | `*`                         | It starts a Session Agent.                             |
 | `agents.create`   | `*`                         | It makes a lasting Agent that it owns.                 |
 | `agents.promote`  | The ID of the Session Agent | It makes a Session Agent a lasting Agent that it owns. |
+| `workflows.run`   | The ID of the Workflow      | It starts a Run of a [Workflow](/docs/workflows).      |
 
 Each capability tool takes a `reason`. App tools get an extra `openbot_reason` parameter for it. OpenBot never sends it to the App.
 

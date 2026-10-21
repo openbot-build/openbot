@@ -47,6 +47,7 @@ export interface CreateInput {
 	readonly chain: SessionHost.Chain
 	readonly parent?: SessionParent
 	readonly review?: string
+	readonly run?: string
 	readonly title?: string
 	readonly settings?: CreateSessionRequest["settings"]
 }

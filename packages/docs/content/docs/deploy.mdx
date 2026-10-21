@@ -78,7 +78,7 @@ docker run --rm --env-file openbot.env \
   openbot:$OPENBOT_RELEASE /app/dist/app/Migrate.mjs
 ```
 
-It is safe to run it more than once. It only applies the migrations that the database does not have yet.
+It is safe to run it more than once. It only applies the migrations that the database does not have yet. It also makes the tables with the prefix `openbot_cluster_`. They keep the durable state of [Workflow Runs](/docs/workflows), so a Run goes on after a restart.
 Migrations only go forward. There is no way to undo one, so make a backup first.
 
 </Step>

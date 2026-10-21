@@ -1,0 +1,220 @@
+---
+title: Workflows
+description: Steps that run in order, with exact tool calls, goals for an Agent, and checks.
+---
+
+A **Workflow** is a list of steps that run in order. Some steps are exact: they call one tool with fixed arguments, or they compare two values. Other steps give a goal or a question to an Agent. One Workflow can mix both kinds.
+Each start of a Workflow is a **Run**. A Run goes on in the background. It keeps going after a server restart, and it can wait for a long time, for example for a person to approve a tool call.
+This page shows the steps, how OpenBot records and replays Agent work, the triggers, and the reports.
+
+---
+
+## Make a Workflow
+
+`POST /v1/workflows` makes a Workflow:
+
+```json
+{
+	"name": "Paint the door",
+	"steps": [
+		{
+			"_tag": "Call",
+			"id": "set-mode",
+			"tool": "SetValue",
+			"arguments": { "key": "mode", "value": "{{input.mode}}" }
+		},
+		{ "_tag": "Act", "id": "paint", "goal": "set color to blue" },
+		{ "_tag": "Assert", "id": "painted", "condition": "color is blue" },
+		{
+			"_tag": "Extract",
+			"id": "read",
+			"name": "color",
+			"instruction": "the color of the door",
+			"schema": { "type": "string" }
+		},
+		{
+			"_tag": "Expect",
+			"id": "color-ok",
+			"value": "{{vars.color}}",
+			"operator": "equals",
+			"expected": "blue"
+		}
+	]
+}
+```
+
+| Field         | Meaning                                                                                                                                                                                      |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | A short name. It has 1 to 100 characters.                                                                                                                                                    |
+| `description` | Optional text for people.                                                                                                                                                                    |
+| `agent`       | Optional. The [Agent](/docs/agents) that does the steps. Without it, the Main Agent of the member that a Run works for does them. You need `agents.delegate` on every Agent of the Workflow. |
+| `judge`       | Optional. A [model](/docs/models) for the check steps (`Assert`, `WaitFor` and `Extract`). Without it, the model of the Agent works.                                                         |
+| `steps`       | 1 to 100 steps. Each step has an `id` that is unique in the Workflow. An `id` starts with a small letter and has only small letters, numbers, `-` and `_`.                                   |
+| `schedule`    | Optional. Start a Run at fixed times. See [Schedules](#schedules).                                                                                                                           |
+| `shared`      | Optional. `true` makes a shared Workflow of the organization.                                                                                                                                |
+| `owner`       | Optional. The ID of an Agent that owns the Workflow. That Agent may always run it with its tool. You cannot use it with `shared`.                                                            |
+
+`GET /v1/workflows` lists the Workflows that you can read. `PATCH /v1/workflows/:workflowId` changes one. It needs `expected`, the current `revision`. To archive a Workflow, send `"archived": true`.
+
+---
+
+## The steps
+
+| `_tag`    | Fields                                                    | What happens                                                                                                           | Model    |
+| --------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------- |
+| `Call`    | `tool`, `arguments`                                       | OpenBot calls the tool once with these arguments. The tool result is the output of the step.                           | No       |
+| `Act`     | `goal`, `agent`                                           | The Agent reaches the goal with its tools, then calls `openbot_step_result`.                                           | Recorded |
+| `Assert`  | `condition`, `agent`                                      | The Agent looks with its tools, but changes nothing. It calls `openbot_check` with `passed` and its evidence.          | Yes      |
+| `WaitFor` | `condition`, `timeoutSeconds`, `intervalSeconds`, `agent` | Like `Assert`, again and again, with a pause of `intervalSeconds` between checks, until it passes or the time is over. | Yes      |
+| `Extract` | `name`, `instruction`, `schema`, `agent`                  | The Agent finds a value. It must match the JSON Schema in `schema`. The value goes into `vars.<name>`.                 | Yes      |
+| `Expect`  | `value`, `operator`, `expected`                           | OpenBot compares two texts. `operator` is `equals`, `contains`, `matches` (a regular expression) or `not_empty`.       | No       |
+| `Explore` | `goal`, `agent`                                           | The Agent plans its own steps. It reports each problem it finds with `openbot_report_finding`.                         | Yes      |
+
+A step with `agent` uses that Agent instead of the Agent of the Workflow. Each Agent of a Run works in its own [Session](/docs/sessions) with `kind: "workflow"`. So an Agent remembers the earlier steps of the same Run.
+
+A tool that asks for approval, such as an App tool, works in a step like everywhere else. The Run waits until the [request](/docs/requests) is answered.
+
+When a step fails, the Run fails, and the steps after it are `skipped`.
+
+### Templates
+
+Text fields and the `arguments` of a `Call` can use values from the Run:
+
+| Template              | Value                                                                                        |
+| --------------------- | -------------------------------------------------------------------------------------------- |
+| `{{input.name}}`      | A field of the input of the Run.                                                             |
+| `{{vars.name}}`       | A value that an `Extract` step found.                                                        |
+| `{{steps.id.output}}` | The output of an earlier step. You can go deeper, such as `{{steps.set-mode.output.value}}`. |
+
+A text that is only one template, such as `"{{input.count}}"`, keeps the type of the value. So a number stays a number. A template with no value makes the step fail.
+
+---
+
+## Record and replay
+
+A live `Act` step costs model calls. So OpenBot records the tool calls of an `Act` step that passed, but only after a later `Assert`, `WaitFor` or `Expect` step passes too. The check confirms that the calls had the right effect.
+
+The next Run replays the recorded calls one by one, with no model. If a call does not work, for example because something changed, OpenBot gives the goal to the Agent. It tells the Agent which calls already ran. The Agent goes on from the current state. The new calls replace the old recording.
+
+A recording belongs to the step `id`, the goal after its templates are filled in, and the Agent. A change to any of them starts a new recording. `Assert`, `WaitFor`, `Extract` and `Explore` always run live.
+
+`cache` in a start request says how a Run uses recordings:
+
+| `cache` | Replays | Records |
+| ------- | ------- | ------- |
+| `use`   | Yes     | Yes     |
+| `read`  | Yes     | No      |
+| `off`   | No      | No      |
+
+Use `read` in CI, so that CI never changes the recordings. `GET /v1/workflows/:workflowId/recordings` lists the recordings, and `DELETE` on the same path removes them.
+
+---
+
+## Start a Run
+
+`POST /v1/workflows/:workflowId/runs` starts a Run and returns `202` with the Run. You need `workflows.run` on the Workflow.
+
+```json
+{ "input": { "mode": "fast" }, "cache": "use" }
+```
+
+`GET /v1/workflow-runs/:runId` reads a Run:
+
+| Field       | Meaning                                                                                       |
+| ----------- | --------------------------------------------------------------------------------------------- |
+| `status`    | `queued`, `running`, `passed`, `failed` or `cancelled`.                                       |
+| `trigger`   | `manual`, `schedule`, `webhook`, `agent` or `explore`.                                        |
+| `steps`     | One result for each step, with `status`, `mode`, `attempts`, `turns`, `output` and `message`. |
+| `summary`   | Counts of the steps by status and by mode.                                                    |
+| `variables` | The values from `Extract` steps.                                                              |
+| `findings`  | The problems that `Explore` steps reported.                                                   |
+| `sessions`  | The Sessions where the Agents of the Run work. Open them to read every Turn.                  |
+| `error`     | Why the Run stopped, when it stopped for a reason other than a failed step.                   |
+
+The `mode` of a step result is `deterministic` (no model), `live` (the Agent did it), `replayed` (recorded calls ran again) or `handed_off` (a replay did not work, so the Agent finished it).
+
+`GET /v1/workflow-runs` lists your Runs, newest first. Add `workflow=<id>` or `status=<status>` to filter them. `POST /v1/workflow-runs/:runId/cancel` stops a Run and the Turns that it started.
+
+A Run works for one member. Only that member can read it.
+
+---
+
+## Reports
+
+| Route                                          | Format                                                |
+| ---------------------------------------------- | ----------------------------------------------------- |
+| `GET /v1/workflow-runs/:runId/report/markdown` | A short Markdown report for people and coding agents. |
+| `GET /v1/workflow-runs/:runId/report/junit`    | JUnit XML for CI systems. Each step is one test case. |
+
+---
+
+## Explore
+
+`POST /v1/explorations` starts a Run with only a goal:
+
+```json
+{ "goal": "Look for problems in the sign-up flow", "agent": "agt_…" }
+```
+
+The Run has one `Explore` step. The Agent plans its own steps and reports each problem with a `severity` (`low`, `medium`, `high` or `critical`), a `title`, what it `expected`, what it `observed`, and the `reproduction` steps. The Run has `workflow: null` and `trigger: "explore"`. Explorations never record.
+
+---
+
+## Triggers
+
+### Schedules
+
+```json
+{ "schedule": { "cron": "0 9 * * 1-5", "timeZone": "Europe/Berlin" } }
+```
+
+`cron` has five fields: minute, hour, day of the month, month and day of the week. Without `timeZone`, the time zone is UTC. A scheduled Run works for the **actor** of the Workflow: the last member who changed its schedule or its webhook. The actor must still have `workflows.run` when the Run starts.
+
+### Webhooks
+
+`PUT /v1/workflows/:workflowId/webhook` makes a new secret and returns it once:
+
+```json
+{
+	"url": "https://openbot.example.com/v1/hooks/workflows/wfl_…",
+	"secret": "owh_…"
+}
+```
+
+Another system starts a Run with a `POST` to the `url`, with `Authorization: Bearer <secret>`. The JSON body is the input of the Run. The answer is `202` with `{ "run": "run_…" }`. A wrong secret gets `401`. A new secret replaces the old one. `DELETE` on the same path removes the webhook. A webhook Run works for the actor too.
+
+### Agents
+
+Every Agent has these tools:
+
+| Tool                     | What it does                                                                                       |
+| ------------------------ | -------------------------------------------------------------------------------------------------- |
+| `openbot_list_workflows` | Lists the Workflows that it can run.                                                               |
+| `openbot_run_workflow`   | Starts a Run. The Run goes on in the background. Its result comes to the Session as a new message. |
+
+The first time an Agent runs a Workflow, the decider above it must agree. The capability is `workflows.run` with the Workflow ID as the target. See [Requests](/docs/requests). An Agent may always run the Workflows that it owns.
+
+In a workflow Session, the Agent also has the tools that answer a step: `openbot_step_result`, `openbot_check`, `openbot_extract` and `openbot_report_finding`.
+
+---
+
+## Permissions
+
+| Permission        | Lets you                                                             |
+| ----------------- | -------------------------------------------------------------------- |
+| `workflows.read`  | Read Workflows, their Runs, reports and recordings.                  |
+| `workflows.write` | Make and change Workflows, their schedules, webhooks and recordings. |
+| `workflows.run`   | Start and cancel Runs, from a client or from an Agent.               |
+
+Your own Workflows are below `openbot.org.<org>.user.<user>.workflow`. Shared Workflows are below `openbot.org.<org>.workflow`. Members may read and run shared Workflows. Administrators may also change them. See [Permissions](/docs/permissions).
+
+## Errors
+
+| Status | Error                        | When                                                             |
+| ------ | ---------------------------- | ---------------------------------------------------------------- |
+| `400`  | `WorkflowInvalid`            | The steps, the schedule or an Agent are not valid.               |
+| `401`  | `WorkflowHookDenied`         | The webhook secret is wrong, or the Workflow has no webhook.     |
+| `403`  | `PermissionDenied`           | You may read the Workflow, but not change or run it.             |
+| `404`  | `WorkflowNotFound`           | There is no Workflow or Run with this ID that you may read.      |
+| `409`  | `WorkflowConflict`           | The Workflow changed since you read it. Read it again and retry. |
+| `503`  | `WorkflowStorageUnavailable` | OpenBot cannot reach its database right now.                     |

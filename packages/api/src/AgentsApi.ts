@@ -101,6 +101,7 @@ export const CapabilityAction = Schema.Literals([
 	"agents.create",
 	"agents.promote",
 	"agents.delegate",
+	"workflows.run",
 ])
 export type CapabilityAction = typeof CapabilityAction.Type
 export const Capability = Schema.Struct({

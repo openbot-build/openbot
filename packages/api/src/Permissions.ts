@@ -9,6 +9,7 @@ export const ResourceKind = Schema.Literals([
 	"user",
 	"session",
 	"agent",
+	"workflow",
 	"request",
 	"connection",
 	"apps",
@@ -72,6 +73,25 @@ const permissionTree = {
 				name: "Agents Delegate",
 				description:
 					"Give work to an Agent, from a client or from another Agent.",
+			},
+		},
+	},
+	workflows: {
+		scope: "workflow",
+		actions: {
+			read: {
+				name: "Workflows Read",
+				description: "Read Workflows, their Runs, reports and recorded steps.",
+			},
+			write: {
+				name: "Workflows Write",
+				description:
+					"Create and change Workflows, their schedules, webhooks and recorded steps.",
+			},
+			run: {
+				name: "Workflows Run",
+				description:
+					"Start and cancel Runs of a Workflow, from a client or from an Agent.",
 			},
 		},
 	},
@@ -307,6 +327,8 @@ const organization = organizationResource
 const self = selfResource
 /** The shared Agents of the organization. */
 const sharedAgents = "openbot.org.{org}.agent"
+/** The shared Workflows of the organization. */
+const sharedWorkflows = "openbot.org.{org}.workflow"
 const own: ReadonlyArray<PermissionGroupId> = [
 	"responses.run",
 	"sessions.read",
@@ -315,6 +337,9 @@ const own: ReadonlyArray<PermissionGroupId> = [
 	"agents.read",
 	"agents.write",
 	"agents.delegate",
+	"workflows.read",
+	"workflows.write",
+	"workflows.run",
 	"connections.read",
 	"connections.write",
 	"apps.use",
@@ -331,6 +356,11 @@ const useSharedAgents: Policy = {
 	effect: "allow",
 	permissionGroups: ["agents.read", "agents.delegate"],
 	resources: [sharedAgents],
+}
+const useSharedWorkflows: Policy = {
+	effect: "allow",
+	permissionGroups: ["workflows.read", "workflows.run"],
+	resources: [sharedWorkflows],
 }
 
 /**
@@ -357,14 +387,20 @@ export const builtinRoles = [
 		id: "administrator",
 		name: "Administrator",
 		description:
-			"Manage the organization, its members and its shared Agents. Work only with your own Sessions and connections.",
+			"Manage the organization, its members, its shared Agents and its shared Workflows. Work only with your own Sessions and connections.",
 		policies: [
 			ownWork,
 			useSharedAgents,
+			useSharedWorkflows,
 			{
 				effect: "allow",
 				permissionGroups: ["agents.write"],
 				resources: [sharedAgents],
+			},
+			{
+				effect: "allow",
+				permissionGroups: ["workflows.write"],
+				resources: [sharedWorkflows],
 			},
 			{
 				effect: "allow",
@@ -393,6 +429,7 @@ export const builtinRoles = [
 		policies: [
 			ownWork,
 			useSharedAgents,
+			useSharedWorkflows,
 			{
 				effect: "allow",
 				permissionGroups: [
@@ -411,10 +448,11 @@ export const builtinRoles = [
 		id: "member",
 		name: "Member",
 		description:
-			"Work with your own Agents, Sessions, connections and tokens, and use the shared Agents and the models of the organization.",
+			"Work with your own Agents, Sessions, Workflows, connections and tokens, and use the shared Agents, Workflows and models of the organization.",
 		policies: [
 			ownWork,
 			useSharedAgents,
+			useSharedWorkflows,
 			{
 				effect: "allow",
 				permissionGroups: ["models.use", "organization.read"],
