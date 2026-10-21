@@ -18,7 +18,8 @@ trap cleanup EXIT
 docker network create "$network" >/dev/null
 docker run --detach --name "$postgres" --network "$network"   -e POSTGRES_USER=openbot -e POSTGRES_PASSWORD=fixture-only -e POSTGRES_DB=openbot   postgres:18-alpine >/dev/null
 for attempt in $(seq 1 60); do
-  if docker exec "$postgres" pg_isready -U openbot -d openbot >/dev/null; then break; fi
+  # The entrypoint's temporary setup server listens only on a Unix socket.
+  if docker exec "$postgres" pg_isready -h 127.0.0.1 -U openbot -d openbot >/dev/null; then break; fi
   [[ "$attempt" -lt 60 ]] || exit 1
   sleep 1
 done
