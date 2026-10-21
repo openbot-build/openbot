@@ -1,7 +1,7 @@
 {
 	"version": "8",
 	"dialect": "postgres",
-	"id": "740c160f-a200-4d83-befc-489eccfa493a",
+	"id": "23d3c984-9d74-41ed-912c-3bc64be2a953",
 	"prevIds": ["00000000-0000-0000-0000-000000000000"],
 	"ddl": [
 		{
@@ -205,6 +205,24 @@
 		{
 			"isRlsEnabled": false,
 			"name": "openbot_timeline_versions",
+			"entityType": "tables",
+			"schema": "public"
+		},
+		{
+			"isRlsEnabled": false,
+			"name": "openbot_workflow_recordings",
+			"entityType": "tables",
+			"schema": "public"
+		},
+		{
+			"isRlsEnabled": false,
+			"name": "openbot_workflow_runs",
+			"entityType": "tables",
+			"schema": "public"
+		},
+		{
+			"isRlsEnabled": false,
+			"name": "openbot_workflows",
 			"entityType": "tables",
 			"schema": "public"
 		},
@@ -3451,6 +3469,500 @@
 			"default": null,
 			"generated": null,
 			"identity": null,
+			"name": "organization_id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_recordings"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "workflow_id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_recordings"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "step_key",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_recordings"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "step",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_recordings"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "calls",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_recordings"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "verified_at",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_recordings"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "organization_id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "workflow_id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "user_id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "trigger",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "status",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "body",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "waiting_session",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "waiting_turn",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "waiting_token",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "parent_session",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "parent_tool_call",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "created_at",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "finished_at",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "organization_id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "owner_kind",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "owner_user_id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "owner_agent",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "name",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "description",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "agent",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "definition",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "schedule_cron",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "schedule_time_zone",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "next_run_at",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "hook_secret_hash",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "actor",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"type": "integer",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "revision",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"type": "boolean",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "archived",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "created_at",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "updated_at",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
 			"name": "id",
 			"entityType": "columns",
 			"schema": "public",
@@ -4708,6 +5220,251 @@
 			"nameExplicit": true,
 			"columns": [
 				{
+					"value": "organization_id",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "user_id",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "created_at",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_workflow_runs_user",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "organization_id",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "workflow_id",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "created_at",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_workflow_runs_workflow",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "waiting_session",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_workflow_runs_waiting",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "status",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_workflow_runs_status",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "organization_id",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "parent_session",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "parent_tool_call",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": true,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_workflow_runs_parent",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "id",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": true,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_workflows_id",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "organization_id",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "owner_user_id",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_workflows_owner",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "organization_id",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "owner_agent",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_workflows_owner_agent",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "next_run_at",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": "\"schedule_cron\" IS NOT NULL AND NOT \"archived\"",
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_workflows_due",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_workflows"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
 					"value": "user_id",
 					"isExpression": false,
 					"asc": true,
@@ -4922,6 +5679,32 @@
 			"entityType": "fks",
 			"schema": "public",
 			"table": "openbot_tokens"
+		},
+		{
+			"nameExplicit": false,
+			"columns": ["organization_id", "workflow_id"],
+			"schemaTo": "public",
+			"tableTo": "openbot_workflows",
+			"columnsTo": ["organization_id", "id"],
+			"onUpdate": "NO ACTION",
+			"onDelete": "CASCADE",
+			"name": "openbot_workflow_recordings_qHUhb7a5aVIj_fkey",
+			"entityType": "fks",
+			"schema": "public",
+			"table": "openbot_workflow_recordings"
+		},
+		{
+			"nameExplicit": false,
+			"columns": ["organization_id", "workflow_id"],
+			"schemaTo": "public",
+			"tableTo": "openbot_workflows",
+			"columnsTo": ["organization_id", "id"],
+			"onUpdate": "NO ACTION",
+			"onDelete": "CASCADE",
+			"name": "openbot_workflow_runs_vsPNiGW05x4T_fkey",
+			"entityType": "fks",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
 		},
 		{
 			"nameExplicit": false,
@@ -5164,6 +5947,30 @@
 			"entityType": "pks",
 			"schema": "public",
 			"table": "openbot_timeline_versions"
+		},
+		{
+			"columns": ["organization_id", "workflow_id", "step_key"],
+			"nameExplicit": false,
+			"name": "openbot_workflow_recordings_pkey",
+			"entityType": "pks",
+			"schema": "public",
+			"table": "openbot_workflow_recordings"
+		},
+		{
+			"columns": ["organization_id", "id"],
+			"nameExplicit": false,
+			"name": "openbot_workflow_runs_pkey",
+			"entityType": "pks",
+			"schema": "public",
+			"table": "openbot_workflow_runs"
+		},
+		{
+			"columns": ["organization_id", "id"],
+			"nameExplicit": false,
+			"name": "openbot_workflows_pkey",
+			"entityType": "pks",
+			"schema": "public",
+			"table": "openbot_workflows"
 		},
 		{
 			"columns": ["id"],

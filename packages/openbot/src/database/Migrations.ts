@@ -1,4 +1,5 @@
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
+import { SqlMessageStorage, SqlRunnerStorage } from "effect/cluster"
 import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { migrate } from "drizzle-orm/effect-postgres/migrator"
 import { fileURLToPath } from "node:url"
@@ -38,6 +39,9 @@ import {
 	tokens,
 	auditLogs,
 	agentRecords,
+	workflows,
+	workflowRuns,
+	workflowRecordings,
 } from "./Schema.ts"
 import {
 	openbot_auth_user,
@@ -47,6 +51,9 @@ import {
 } from "./AuthSchema.ts"
 
 const folder = fileURLToPath(new URL("../../migrations", import.meta.url))
+
+/** The table prefix of the durable execution tables of Workflow Runs. */
+export const clusterPrefix = "openbot_cluster"
 
 export const check = Effect.gen(function* () {
 	const db = yield* makeWithDefaults()
@@ -87,6 +94,9 @@ export const check = Effect.gen(function* () {
 	yield* db.select().from(tokens).limit(0)
 	yield* db.select().from(auditLogs).limit(0)
 	yield* db.select().from(agentRecords).limit(0)
+	yield* db.select().from(workflows).limit(0)
+	yield* db.select().from(workflowRuns).limit(0)
+	yield* db.select().from(workflowRecordings).limit(0)
 	yield* db
 		.select({ id: openbot_auth_user.id })
 		.from(openbot_auth_user)
@@ -105,9 +115,20 @@ export const check = Effect.gen(function* () {
 		.limit(0)
 }).pipe(Effect.mapError(Shared.databaseError))
 
-/** Apply the current schema with the standard Drizzle migrator, which keeps a journal. */
+/**
+ * Apply the current schema with the standard Drizzle migrator, which keeps a journal.
+ * Then make the tables of the durable execution. Effect keeps their own journal.
+ */
 export const initialize = Effect.gen(function* () {
 	const db = yield* makeWithDefaults()
 	yield* migrate(db, { migrationsFolder: folder })
+	yield* Effect.scoped(
+		Layer.build(
+			Layer.mergeAll(
+				SqlMessageStorage.layerMigrations({ prefix: clusterPrefix }),
+				SqlRunnerStorage.layerMigrations({ prefix: clusterPrefix }),
+			),
+		),
+	)
 	yield* check
 }).pipe(Effect.mapError(Shared.databaseError))

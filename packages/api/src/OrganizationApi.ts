@@ -87,6 +87,13 @@ const auditActionTree = {
 	request: ["resolved"],
 	grant: ["created", "revoked"],
 	rule: ["created", "updated"],
+	workflow: [
+		"created",
+		"updated",
+		"hook_changed",
+		"run_started",
+		"run_finished",
+	],
 } as const satisfies Record<string, ReadonlyArray<string>>
 type AuditActionTree = typeof auditActionTree
 /** The audit actions of one resource, such as `token.created`. */

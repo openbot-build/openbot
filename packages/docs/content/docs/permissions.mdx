@@ -32,6 +32,9 @@ List them with `GET /v1/organization/permission_groups`.
 | `agents.read`           | Agent        | Read Agents, their memory, Rules and Grants.                                    |
 | `agents.write`          | Agent        | Create and change Agents, their memory, Rules and Grants.                       |
 | `agents.delegate`       | Agent        | Give work to an Agent, from a client or from another Agent.                     |
+| `workflows.read`        | Workflow     | Read Workflows, their Runs, reports and recorded steps.                         |
+| `workflows.write`       | Workflow     | Create and change Workflows, their schedules, webhooks and recorded steps.      |
+| `workflows.run`         | Workflow     | Start and cancel Runs of a Workflow, from a client or from an Agent.            |
 | `connections.read`      | Connection   | Read App connections and App accounts.                                          |
 | `connections.write`     | Connection   | Create, change and delete App connections, and sign in to App accounts.         |
 | `apps.use`              | Apps         | Find Apps, and use App operations and App views.                                |
@@ -70,13 +73,15 @@ A resource key is a name with parts that dots separate:
 | One Session              | `openbot.org.<org>.user.<user>.session.<session>`       |
 | One Agent of a member    | `openbot.org.<org>.user.<user>.agent.<agent>`           |
 | One shared Agent         | `openbot.org.<org>.agent.<agent>`                       |
+| One Workflow of a member | `openbot.org.<org>.user.<user>.workflow.<workflow>`     |
+| One shared Workflow      | `openbot.org.<org>.workflow.<workflow>`                 |
 | The requests of a member | `openbot.org.<org>.user.<user>.request`                 |
 | One connection           | `openbot.org.<org>.user.<user>.connection.<connection>` |
 | The Apps of a member     | `openbot.org.<org>.user.<user>.apps`                    |
 | One model provider       | `openbot.org.<org>.model.<provider>`                    |
 | The whole platform       | `openbot.platform`                                      |
 
-An Agent that another Agent owns has the key of the member or the organization at the top of its owner tree. So `openbot.org.<org>.user.<user>.agent.<agent>` is also the key of an Agent that the Main Agent of that member owns. When an Agent makes or promotes an Agent, the member it works for needs `agents.write` on that place.
+An Agent that another Agent owns has the key of the member or the organization at the top of its owner tree. So `openbot.org.<org>.user.<user>.agent.<agent>` is also the key of an Agent that the Main Agent of that member owns. When an Agent makes or promotes an Agent, the member it works for needs `agents.write` on that place. A Workflow that an Agent owns has the same place, with `workflow` instead of `agent`. The Runs of a member are below `openbot.org.<org>.user.<user>.workflow`.
 
 A key covers itself and every key below it. So `openbot.org.<org>` covers everything in the organization, and `openbot.org.<org>.user.<user>` covers everything of one member.
 
@@ -172,13 +177,13 @@ List them with `GET /v1/organization/roles`. The list has the built-in roles and
 
 Every organization has these roles. They cannot change. A change returns `409` with `RoleReadOnly`.
 
-| Role                      | What it can do                                                                                                                                |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `super_administrator`     | Everything in the organization. Only a Super Administrator can give or take away this role.                                                   |
-| `administrator`           | Manage the organization, its members and its shared Agents, and read the audit log. Work only with your own Sessions and connections.         |
-| `administrator_read_only` | Read the organization, its members and the audit log, and use the shared Agents. Work only with your own Sessions and connections.            |
-| `member`                  | Work with your own Agents, Sessions, connections and tokens, use the shared Agents and the models of the organization, and read its settings. |
-| `auditor`                 | Read the organization, its members and the audit log. Nothing else.                                                                           |
+| Role                      | What it can do                                                                                                                                                  |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `super_administrator`     | Everything in the organization. Only a Super Administrator can give or take away this role.                                                                     |
+| `administrator`           | Manage the organization, its members, its shared Agents and its shared Workflows, and read the audit log. Work only with your own Sessions and connections.     |
+| `administrator_read_only` | Read the organization, its members and the audit log, and use the shared Agents and Workflows. Work only with your own Sessions and connections.                |
+| `member`                  | Work with your own Agents, Sessions, Workflows, connections and tokens, use the shared Agents, Workflows and models of the organization, and read its settings. |
+| `auditor`                 | Read the organization, its members and the audit log. Nothing else.                                                                                             |
 
 Some built-in roles also hold the groups for roles, model providers and SSO:
 

@@ -492,6 +492,15 @@ const startApi = async (
 					Layer.provide(TokensPostgres.layer),
 					Layer.provide(OrganizationFixture.layerAuthorization),
 				),
+				AgentFixture.layerWorkflowServices.pipe(
+					Layer.provide(AgentFixture.layerAgentServices),
+					Layer.provide(OrganizationFixture.layerNoAudit),
+					Layer.provide(TokensPostgres.layer),
+					Layer.provide(OrganizationFixture.layerAuthorization),
+					Layer.provide(
+						Layer.succeed(Backend, { get: unused, forCaller: unused }),
+					),
+				),
 				Layer.succeed(Auth.Auth, auth),
 				Layer.succeed(Backend, { get: unused, forCaller: unused }),
 			]),

@@ -374,6 +374,56 @@ CREATE TABLE "openbot_timeline_versions" (
 	CONSTRAINT "openbot_timeline_versions_pkey" PRIMARY KEY("namespace","id")
 );
 --> statement-breakpoint
+CREATE TABLE "openbot_workflow_recordings" (
+	"organization_id" text,
+	"workflow_id" text,
+	"step_key" text,
+	"step" text NOT NULL,
+	"calls" text NOT NULL,
+	"verified_at" bigint NOT NULL,
+	CONSTRAINT "openbot_workflow_recordings_pkey" PRIMARY KEY("organization_id","workflow_id","step_key")
+);
+--> statement-breakpoint
+CREATE TABLE "openbot_workflow_runs" (
+	"organization_id" text,
+	"id" text,
+	"workflow_id" text,
+	"user_id" text NOT NULL,
+	"trigger" text NOT NULL,
+	"status" text NOT NULL,
+	"body" text NOT NULL,
+	"waiting_session" text,
+	"waiting_turn" text,
+	"waiting_token" text,
+	"parent_session" text,
+	"parent_tool_call" text,
+	"created_at" bigint NOT NULL,
+	"finished_at" bigint,
+	CONSTRAINT "openbot_workflow_runs_pkey" PRIMARY KEY("organization_id","id")
+);
+--> statement-breakpoint
+CREATE TABLE "openbot_workflows" (
+	"organization_id" text,
+	"id" text,
+	"owner_kind" text NOT NULL,
+	"owner_user_id" text,
+	"owner_agent" text,
+	"name" text NOT NULL,
+	"description" text NOT NULL,
+	"agent" text,
+	"definition" text NOT NULL,
+	"schedule_cron" text,
+	"schedule_time_zone" text,
+	"next_run_at" bigint,
+	"hook_secret_hash" text,
+	"actor" text,
+	"revision" integer NOT NULL,
+	"archived" boolean NOT NULL,
+	"created_at" bigint NOT NULL,
+	"updated_at" bigint NOT NULL,
+	CONSTRAINT "openbot_workflows_pkey" PRIMARY KEY("organization_id","id")
+);
+--> statement-breakpoint
 CREATE TABLE "openbot_auth_account" (
 	"id" text PRIMARY KEY,
 	"account_id" text NOT NULL,
@@ -446,6 +496,15 @@ CREATE UNIQUE INDEX "openbot_organization_domains_verified" ON "openbot_organiza
 CREATE INDEX "openbot_session_references_list" ON "openbot_session_references" ("namespace","archived","id");--> statement-breakpoint
 CREATE INDEX "openbot_sso_connections_organization" ON "openbot_sso_connections" ("organization_id");--> statement-breakpoint
 CREATE INDEX "openbot_tokens_owner" ON "openbot_tokens" ("organization_id","user_id");--> statement-breakpoint
+CREATE INDEX "openbot_workflow_runs_user" ON "openbot_workflow_runs" ("organization_id","user_id","created_at");--> statement-breakpoint
+CREATE INDEX "openbot_workflow_runs_workflow" ON "openbot_workflow_runs" ("organization_id","workflow_id","created_at");--> statement-breakpoint
+CREATE INDEX "openbot_workflow_runs_waiting" ON "openbot_workflow_runs" ("waiting_session");--> statement-breakpoint
+CREATE INDEX "openbot_workflow_runs_status" ON "openbot_workflow_runs" ("status");--> statement-breakpoint
+CREATE UNIQUE INDEX "openbot_workflow_runs_parent" ON "openbot_workflow_runs" ("organization_id","parent_session","parent_tool_call");--> statement-breakpoint
+CREATE UNIQUE INDEX "openbot_workflows_id" ON "openbot_workflows" ("id");--> statement-breakpoint
+CREATE INDEX "openbot_workflows_owner" ON "openbot_workflows" ("organization_id","owner_user_id");--> statement-breakpoint
+CREATE INDEX "openbot_workflows_owner_agent" ON "openbot_workflows" ("organization_id","owner_agent");--> statement-breakpoint
+CREATE INDEX "openbot_workflows_due" ON "openbot_workflows" ("next_run_at") WHERE "schedule_cron" IS NOT NULL AND NOT "archived";--> statement-breakpoint
 CREATE INDEX "openbot_auth_account_userId_idx" ON "openbot_auth_account" ("user_id");--> statement-breakpoint
 CREATE INDEX "openbot_auth_session_userId_idx" ON "openbot_auth_session" ("user_id");--> statement-breakpoint
 CREATE INDEX "openbot_auth_verification_identifier_idx" ON "openbot_auth_verification" ("identifier");--> statement-breakpoint
@@ -461,5 +520,7 @@ ALTER TABLE "openbot_roles" ADD CONSTRAINT "openbot_roles_organization_id_openbo
 ALTER TABLE "openbot_sso_connections" ADD CONSTRAINT "openbot_sso_connections_GKfeJctzB5DC_fkey" FOREIGN KEY ("organization_id") REFERENCES "openbot_organizations"("id") ON DELETE CASCADE;--> statement-breakpoint
 ALTER TABLE "openbot_tokens" ADD CONSTRAINT "openbot_tokens_organization_id_openbot_organizations_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "openbot_organizations"("id") ON DELETE CASCADE;--> statement-breakpoint
 ALTER TABLE "openbot_tokens" ADD CONSTRAINT "openbot_tokens_user_id_openbot_auth_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "openbot_auth_user"("id") ON DELETE CASCADE;--> statement-breakpoint
+ALTER TABLE "openbot_workflow_recordings" ADD CONSTRAINT "openbot_workflow_recordings_qHUhb7a5aVIj_fkey" FOREIGN KEY ("organization_id","workflow_id") REFERENCES "openbot_workflows"("organization_id","id") ON DELETE CASCADE;--> statement-breakpoint
+ALTER TABLE "openbot_workflow_runs" ADD CONSTRAINT "openbot_workflow_runs_vsPNiGW05x4T_fkey" FOREIGN KEY ("organization_id","workflow_id") REFERENCES "openbot_workflows"("organization_id","id") ON DELETE CASCADE;--> statement-breakpoint
 ALTER TABLE "openbot_auth_account" ADD CONSTRAINT "openbot_auth_account_user_id_openbot_auth_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "openbot_auth_user"("id") ON DELETE CASCADE;--> statement-breakpoint
 ALTER TABLE "openbot_auth_session" ADD CONSTRAINT "openbot_auth_session_user_id_openbot_auth_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "openbot_auth_user"("id") ON DELETE CASCADE;

@@ -38,6 +38,8 @@ export const SessionHostState = Schema.Struct({
 	chain: Chain,
 	/** The request that a review Session decides. */
 	review: Schema.optionalKey(Schema.String),
+	/** The Workflow Run that a workflow Session works for. */
+	run: Schema.optionalKey(Schema.String),
 })
 export type SessionHostState = typeof SessionHostState.Type
 /** The plugin data in a Session: learned memory and the OpenBot data. */

@@ -2,6 +2,8 @@ import { AgentsApi } from "@openbot-build/api"
 import { Effect, Layer } from "effect"
 import * as AgentLayers from "../src/agents/AgentLayers.ts"
 import * as Judge from "../src/capabilities/Judge.ts"
+import * as Tasks from "../src/workflows/Tasks.ts"
+import * as WorkflowLayers from "../src/workflows/WorkflowLayers.ts"
 
 /** A Main Agent for tests that use Sessions without the Agent services. */
 export const agent: AgentsApi.Agent = {
@@ -43,3 +45,8 @@ export const layerNoHelper = Layer.succeed(Judge.HelperModel, {
 
 /** The Agent services for tests that serve the HTTP API without a coordinator. */
 export const layerAgentServices = AgentLayers.layer({ helper: layerNoHelper })
+
+/** The Workflow services for tests that serve the HTTP API without the Workflow worker. */
+export const layerWorkflowServices = Tasks.layer.pipe(
+	Layer.provideMerge(WorkflowLayers.layerServices),
+)

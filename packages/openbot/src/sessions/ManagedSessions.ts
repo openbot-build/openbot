@@ -65,6 +65,7 @@ import {
 	empty as emptyAppPlugin,
 } from "../plugins/apps/AppPlugin.ts"
 import { AgentPlugin } from "../plugins/agents/AgentPlugin.ts"
+import { WorkflowPlugin } from "../plugins/workflows/WorkflowPlugin.ts"
 import { Signal, publish } from "../agents/Signals.ts"
 
 /** The response of the current Turn, when the Session has one. */
@@ -120,6 +121,7 @@ export const make = <
 		const fallback = yield* Effect.serviceOption(LanguageModel.LanguageModel)
 		const appPlugin = yield* Effect.serviceOption(AppPlugin)
 		const agentPlugin = yield* Effect.serviceOption(AgentPlugin)
+		const workflowPlugin = yield* Effect.serviceOption(WorkflowPlugin)
 		const modelFor = (view: Session.View, turn?: Turn.Record) =>
 			options.resolveModel === undefined
 				? Effect.serviceOption(LanguageModel.LanguageModel).pipe(
@@ -338,33 +340,45 @@ export const make = <
 			options.owner === undefined || Option.isNone(appPlugin)
 				? emptyAppPlugin
 				: appPlugin.value.forOwner(options.owner)
+		const agentPluginFor = (
+			agent: typeof AgentPlugin.Service,
+			owner: NonNullable<typeof options.owner>,
+		) =>
+			agent.forOwner({
+				owner,
+				namespace,
+				read: (id) => store.read(id),
+				delegatedMemory: (agent) =>
+					list({ agent, kind: "delegated" }).pipe(
+						Effect.flatMap((rows) =>
+							Effect.forEach(rows, (row) =>
+								store.read(row.session.id).pipe(
+									Effect.map((view) => ({
+										session: row.session.id,
+										memory: view.state.value[Memory.storeKey] ?? Memory.empty(),
+									})),
+								),
+							),
+						),
+					),
+			})
 		// The Agent plugin runs inside the App plugin, so it sees every tool of the Turn.
+		// The Workflow plugin runs inside the Agent plugin, so its tools see the current Agent.
 		const hostPlugin =
 			options.owner === undefined || Option.isNone(agentPlugin)
 				? apps
-				: // Both plugins add tools at run time with JSON Schema parameters. TypeScript
+				: // The plugins add tools at run time with JSON Schema parameters. TypeScript
 					// cannot see that their merged tool types fit the App tool type.
 					(PluginComposition.merge(
 						apps,
-						agentPlugin.value.forOwner({
-							owner: options.owner,
-							namespace,
-							read: (id) => store.read(id),
-							delegatedMemory: (agent) =>
-								list({ agent, kind: "delegated" }).pipe(
-									Effect.flatMap((rows) =>
-										Effect.forEach(rows, (row) =>
-											store.read(row.session.id).pipe(
-												Effect.map((view) => ({
-													session: row.session.id,
-													memory:
-														view.state.value[Memory.storeKey] ?? Memory.empty(),
-												})),
-											),
-										),
-									),
+						Option.isNone(workflowPlugin)
+							? agentPluginFor(agentPlugin.value, options.owner)
+							: PluginComposition.merge(
+									agentPluginFor(agentPlugin.value, options.owner),
+									workflowPlugin.value.forOwner({
+										read: (id) => store.read(id),
+									}),
 								),
-						}),
 					) as unknown as typeof apps)
 		const runtime = yield* SessionRuntime.make({
 			store,
@@ -439,6 +453,7 @@ export const make = <
 					chain: input.chain,
 					...(input.parent === undefined ? {} : { parent: input.parent }),
 					...(input.review === undefined ? {} : { review: input.review }),
+					...(input.run === undefined ? {} : { run: input.run }),
 				}
 				return yield* store
 					.create({
@@ -576,6 +591,7 @@ export const make = <
 		const forked = ({
 			parent: _parent,
 			review: _review,
+			run: _run,
 			...kept
 		}: SessionHost.SessionHostState): SessionHost.SessionHostState => ({
 			...kept,

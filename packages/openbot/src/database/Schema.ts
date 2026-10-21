@@ -626,3 +626,103 @@ export const agentRecords = table(
 		index("openbot_agent_records_status").on(t.kind, t.status),
 	],
 )
+/** A Workflow: its owner, its steps and its triggers. `definition` holds the steps and the judge as JSON. */
+export const workflows = table(
+	"openbot_workflows",
+	{
+		organizationId: text("organization_id").notNull(),
+		id: text().notNull(),
+		ownerKind: text("owner_kind").notNull(),
+		ownerUserId: text("owner_user_id"),
+		ownerAgent: text("owner_agent"),
+		name: text().notNull(),
+		description: text().notNull(),
+		agent: text(),
+		definition: text().notNull(),
+		scheduleCron: text("schedule_cron"),
+		scheduleTimeZone: text("schedule_time_zone"),
+		nextRunAt: time("next_run_at"),
+		hookSecretHash: text("hook_secret_hash"),
+		actor: text(),
+		revision: integer().notNull(),
+		archived: boolean().notNull(),
+		createdAt: time("created_at").notNull(),
+		updatedAt: time("updated_at").notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.organizationId, t.id] }),
+		// A webhook names only the Workflow, so its ID must find it.
+		uniqueIndex("openbot_workflows_id").on(t.id),
+		index("openbot_workflows_owner").on(t.organizationId, t.ownerUserId),
+		index("openbot_workflows_owner_agent").on(t.organizationId, t.ownerAgent),
+		index("openbot_workflows_due")
+			.on(t.nextRunAt)
+			.where(sql`${t.scheduleCron} IS NOT NULL AND NOT ${t.archived}`),
+	],
+)
+/**
+ * One Run of a Workflow, or one exploration. `body` holds the step results, variables and findings as JSON.
+ * `waiting_*` names the Turn that the durable execution waits for.
+ */
+export const workflowRuns = table(
+	"openbot_workflow_runs",
+	{
+		organizationId: text("organization_id").notNull(),
+		id: text().notNull(),
+		workflowId: text("workflow_id"),
+		userId: text("user_id").notNull(),
+		trigger: text().notNull(),
+		status: text().notNull(),
+		body: text().notNull(),
+		waitingSession: text("waiting_session"),
+		waitingTurn: text("waiting_turn"),
+		waitingToken: text("waiting_token"),
+		parentSession: text("parent_session"),
+		parentToolCall: text("parent_tool_call"),
+		createdAt: time("created_at").notNull(),
+		finishedAt: time("finished_at"),
+	},
+	(t) => [
+		primaryKey({ columns: [t.organizationId, t.id] }),
+		foreignKey({
+			columns: [t.organizationId, t.workflowId],
+			foreignColumns: [workflows.organizationId, workflows.id],
+		}).onDelete("cascade"),
+		index("openbot_workflow_runs_user").on(
+			t.organizationId,
+			t.userId,
+			t.createdAt,
+		),
+		index("openbot_workflow_runs_workflow").on(
+			t.organizationId,
+			t.workflowId,
+			t.createdAt,
+		),
+		index("openbot_workflow_runs_waiting").on(t.waitingSession),
+		index("openbot_workflow_runs_status").on(t.status),
+		uniqueIndex("openbot_workflow_runs_parent").on(
+			t.organizationId,
+			t.parentSession,
+			t.parentToolCall,
+		),
+	],
+)
+/** The tool calls of one `Act` step that a later check confirmed. Runs replay them without a model. */
+export const workflowRecordings = table(
+	"openbot_workflow_recordings",
+	{
+		organizationId: text("organization_id").notNull(),
+		workflowId: text("workflow_id").notNull(),
+		stepKey: text("step_key").notNull(),
+		step: text().notNull(),
+		calls: text().notNull(),
+		verifiedAt: time("verified_at").notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.organizationId, t.workflowId, t.stepKey] }),
+		foreignKey({
+			columns: [t.organizationId, t.workflowId],
+			foreignColumns: [workflows.organizationId, workflows.id],
+		}).onDelete("cascade"),
+	],
+)
