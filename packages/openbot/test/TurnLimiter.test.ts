@@ -11,7 +11,7 @@ import {
 	Stream,
 } from "effect"
 import assert from "node:assert/strict"
-import * as TurnLimiter from "../src/limits/TurnLimiter.ts"
+import * as TurnLimiter from "../src/plugins/turn-limiter/TurnLimiter.ts"
 import { test } from "node:test"
 import { Session, Plugin, PluginComposition } from "@openbot-build/core"
 

@@ -21,7 +21,6 @@ All packages are named `@openbot-build/<name>`, have version `0.1.0`, and use `e
 | `provider-openai-compat` | Models from the OpenAI Chat Completions API and services that copy it.                |
 | `provider-anthropic`     | Models from the Anthropic Messages API.                                               |
 | `protocol`               | The OpenBot App Protocol: publish, find, connect, and index Apps.                     |
-| `app-host`               | Service contracts for programs that host Apps and an App Index.                       |
 | `protocol-test`          | A public test service for the App Protocol. See [Protocol test](/docs/protocol-test). |
 | `docs`                   | This docs site.                                                                       |
 
@@ -356,24 +355,3 @@ const publisher = McpPublisher.layer({
 ```
 
 Serve `publisher` with `HttpRouter.serve` and an HTTP server Layer. See [Protocol](/docs/protocol) for the full guide.
-
-## app-host
-
-`@openbot-build/app-host` has only contracts, with no default code. It defines two services:
-
-- `App.App` finds Apps, adds them, manages connections, and handles App sign-in.
-- `Index.Index` manages App Index sources, searches them, and syncs public entries.
-
-```ts
-import { App, Index } from "@openbot-build/app-host"
-import { Effect } from "effect"
-
-const found = Effect.flatMap(App.App, (apps) =>
-	apps.discover("https://apps.example.com"),
-)
-const results = Effect.flatMap(Index.Index, (index) =>
-	index.search({ query: "calendar" }),
-)
-```
-
-Your program provides the Layers that implement these services. OpenBot has its own implementation.

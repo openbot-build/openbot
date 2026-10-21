@@ -1,9 +1,9 @@
 import { AppExecution, Identity } from "@openbot-build/api"
 import { Array as Arr, Effect, Schema, type JsonSchema } from "effect"
 import { Tool } from "effect/ai"
-import { Connections } from "./Connections.ts"
+import { Connections } from "../../apps/Connections.ts"
 import type { Entry } from "./AppPlugin.ts"
-import type { PublicIndex } from "./Index.ts"
+import type { PublicIndex } from "../../apps/Index.ts"
 
 /** The names of the assistance tools. A name gets a suffix when another tool already uses it. */
 export const names = {

@@ -2,8 +2,8 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { Config, Item, Model, Provider } from "@openbot-build/core"
-import * as LanguageModelMemory from "../src/memory/LanguageModelMemory.ts"
-import * as Memory from "../src/memory/Memory.ts"
+import * as LanguageModelMemory from "../src/plugins/memory/LanguageModelMemory.ts"
+import * as Memory from "../src/plugins/memory/Memory.ts"
 import {
 	Array as EffectArray,
 	Cause,

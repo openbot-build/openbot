@@ -1,5 +1,5 @@
-import { InvocationRepository } from "./InvocationRepository.ts"
-import { ViewRepository } from "./ViewRepository.ts"
+import { InvocationRepository } from "../../apps/InvocationRepository.ts"
+import { ViewRepository } from "../../apps/ViewRepository.ts"
 import { createHash } from "node:crypto"
 import { Agent, Plugin } from "@openbot-build/core"
 import { AppExecution, AppViewsApi, type Identity } from "@openbot-build/api"
@@ -19,15 +19,15 @@ import {
 	type JsonSchema,
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
-import { json, failed } from "./AppResults.ts"
+import { json, failed } from "../../apps/AppResults.ts"
 import * as Assistance from "./Assistance.ts"
-import { PublicIndex } from "./Index.ts"
-import { Connections } from "./Connections.ts"
-import { Capabilities, type Opened } from "./Capabilities.ts"
-import { Invocations, type Position } from "./Invocations.ts"
-import { ActionPolicy } from "./ActionPolicy.ts"
-import { Gate } from "../capabilities/Gate.ts"
-import { Repository, ownerKey } from "./Repository.ts"
+import { PublicIndex } from "../../apps/Index.ts"
+import { Connections } from "../../apps/Connections.ts"
+import { Capabilities, type Opened } from "../../apps/Capabilities.ts"
+import { Invocations, type Position } from "../../apps/Invocations.ts"
+import { ActionPolicy } from "../../apps/ActionPolicy.ts"
+import { Gate } from "../../capabilities/Gate.ts"
+import { Repository, ownerKey } from "../../apps/Repository.ts"
 
 export const pluginId = Plugin.Id.make("@openbot-build/openbot/k-apps")
 export type Tools = Record<
@@ -115,7 +115,7 @@ export class AppPlugin extends Context.Service<
 	{
 		readonly forOwner: (owner: typeof Identity.Service) => Plugin.Plugin<Tools>
 	}
->()("@openbot-build/openbot/apps/AppPlugin") {}
+>()("@openbot-build/openbot/plugins/apps/AppPlugin") {}
 
 const hash = (value: unknown) =>
 	createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 40)

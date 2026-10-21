@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { Item, Session } from "@openbot-build/core"
-import * as AgentMemory from "../src/memory/AgentMemory.ts"
+import * as AgentMemory from "../src/plugins/memory/AgentMemory.ts"
 import { Effect, Exit } from "effect"
 
 const source = (item: string) => ({

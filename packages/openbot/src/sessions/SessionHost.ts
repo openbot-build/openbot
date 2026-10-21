@@ -5,7 +5,7 @@ import {
 	SessionKind,
 	SessionParent,
 } from "@openbot-build/api"
-import type * as Memory from "../memory/Memory.ts"
+import type * as Memory from "../plugins/memory/Memory.ts"
 import { Schema } from "effect"
 
 /** The OpenBot plugin that adds the host toolkit, the user plugin and the execution services. */

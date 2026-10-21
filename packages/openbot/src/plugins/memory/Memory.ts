@@ -64,7 +64,7 @@ export class MemoryModel extends Context.Service<
 			LanguageModel.LanguageModel
 		>
 	}
->()("@openbot-build/openbot/memory/Memory/MemoryModel") {}
+>()("@openbot-build/openbot/plugins/memory/Memory/MemoryModel") {}
 
 export class MemoryPolicy extends Context.Service<
 	MemoryPolicy,
@@ -77,7 +77,7 @@ export class MemoryPolicy extends Context.Service<
 		) => Effect.Effect<State, MemoryError>
 		readonly project: (state: State) => string
 	}
->()("@openbot-build/openbot/memory/Memory/MemoryPolicy") {}
+>()("@openbot-build/openbot/plugins/memory/Memory/MemoryPolicy") {}
 
 export const Settings = Api.Settings
 export type Settings = Api.Settings

@@ -14,11 +14,11 @@ import {
 	Timeline,
 	Turn,
 } from "@openbot-build/core"
-import * as Memory from "../memory/Memory.ts"
-import * as MemoryRules from "../memory/MemoryRules.ts"
-import * as LanguageModelMemory from "../memory/LanguageModelMemory.ts"
-import * as MemoryOperations from "../memory/MemoryOperations.ts"
-import * as MemoryPlugin from "../memory/MemoryPlugin.ts"
+import * as Memory from "../plugins/memory/Memory.ts"
+import * as MemoryRules from "../plugins/memory/MemoryRules.ts"
+import * as LanguageModelMemory from "../plugins/memory/LanguageModelMemory.ts"
+import * as MemoryOperations from "../plugins/memory/MemoryOperations.ts"
+import * as MemoryPlugin from "../plugins/memory/MemoryPlugin.ts"
 import {
 	Array,
 	Cause,
@@ -58,8 +58,11 @@ import * as SessionEvents from "./SessionEvents.ts"
 import * as SessionHost from "./SessionHost.ts"
 import { sessionHostId } from "./SessionHost.ts"
 import * as ErrorReporting from "../app/ErrorReporting.ts"
-import { AppPlugin, empty as emptyAppPlugin } from "../apps/AppPlugin.ts"
-import { AgentPlugin } from "../agents/AgentPlugin.ts"
+import {
+	AppPlugin,
+	empty as emptyAppPlugin,
+} from "../plugins/apps/AppPlugin.ts"
+import { AgentPlugin } from "../plugins/agents/AgentPlugin.ts"
 import { Signal, publish } from "../agents/Signals.ts"
 
 /** The response of the current Turn, when the Session has one. */

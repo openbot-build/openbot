@@ -36,8 +36,8 @@ import {
 } from "@openbot-build/api"
 import { Context, Effect, Layer, Scope, Stream } from "effect"
 import { LanguageModel, type Tool, type Toolkit } from "effect/ai"
-import type * as Memory from "../memory/Memory.ts"
-import type { Tools as AppTools } from "../apps/AppPlugin.ts"
+import type * as Memory from "../plugins/memory/Memory.ts"
+import type { Tools as AppTools } from "../plugins/apps/AppPlugin.ts"
 import type * as SessionHost from "./SessionHost.ts"
 
 /** What a new Session needs: the Agent that works in it and where the work came from. */
