@@ -105,6 +105,12 @@
     };
   };
 
+  profiles.ci.module = { lib, pkgs, ... }: {
+    dotenv.enable = lib.mkForce false;
+    treefmt.enable = lib.mkForce false;
+    packages = lib.mkForce (with pkgs; [ git corepack docker-client openssl ripgrep postgresql_18 ]);
+  };
+
   treefmt = {
     enable = true;
     config = {

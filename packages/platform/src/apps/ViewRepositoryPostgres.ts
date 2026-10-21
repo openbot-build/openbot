@@ -1,3 +1,5 @@
+import * as OwnedWrites from "../execution/OwnedWrites.ts"
+import { FenceUnavailable } from "../execution/ExecutionFence.ts"
 import type { PgClient } from "@effect/sql-pg"
 import {
 	AppViewsApi as Api,
@@ -83,12 +85,31 @@ export const make: Effect.Effect<
 			Effect.flatMap((row) => decode(Action, row)),
 			Effect.mapError(error),
 		)
-	return ViewRepository.of({
+	const service = ViewRepository.of({
 		recover: db
-			.update(appSecrets)
-			.set({ consumed: true })
+			.selectDistinct({ owner: appSecrets.owner })
+			.from(appSecrets)
 			.where(eq(appSecrets.kind, "app-view"))
-			.pipe(Effect.asVoid, Effect.mapError(unavailable)),
+			.pipe(
+				Effect.flatMap((rows) =>
+					Effect.forEach(rows, ({ owner }) =>
+						OwnedWrites.recover(
+							owner,
+							db
+								.update(appSecrets)
+								.set({ consumed: true })
+								.where(
+									and(
+										eq(appSecrets.owner, owner),
+										eq(appSecrets.kind, "app-view"),
+									),
+								),
+						),
+					),
+				),
+				Effect.asVoid,
+				Effect.mapError(unavailable),
+			),
 		open: (owner, view) =>
 			Effect.gen(function* () {
 				const body = yield* seal(View, owner, "app-view", view.id, view)
@@ -266,6 +287,39 @@ export const make: Effect.Effect<
 				)
 				return Arr.getSomes(values)
 			}).pipe(Effect.mapError(error)),
+	})
+	return ViewRepository.of({
+		...service,
+		open: (...args) =>
+			OwnedWrites.write(args[0], service.open(...args)).pipe(
+				Effect.mapError((error) =>
+					error instanceof FenceUnavailable ? unavailable() : error,
+				),
+			),
+		close: (...args) =>
+			OwnedWrites.write(args[0], service.close(...args)).pipe(
+				Effect.mapError((error) =>
+					error instanceof FenceUnavailable ? unavailable() : error,
+				),
+			),
+		confirm: (...args) =>
+			OwnedWrites.write(args[0], service.confirm(...args)).pipe(
+				Effect.mapError((error) =>
+					error instanceof FenceUnavailable ? unavailable() : error,
+				),
+			),
+		claim: (...args) =>
+			OwnedWrites.write(args[0], service.claim(...args)).pipe(
+				Effect.mapError((error) =>
+					error instanceof FenceUnavailable ? unavailable() : error,
+				),
+			),
+		accepted: (...args) =>
+			OwnedWrites.write(args[0], service.accepted(...args)).pipe(
+				Effect.mapError((error) =>
+					error instanceof FenceUnavailable ? unavailable() : error,
+				),
+			),
 	})
 })
 export const layer = Layer.effect(ViewRepository, make)

@@ -1,3 +1,4 @@
+import * as InstanceWork from "../execution/InstanceWork.ts"
 import { AppIndexApi } from "@openbot-build/platform-api"
 import { Index, Indexing } from "@openbot-build/protocol"
 import { Clock, Context, Effect, Layer, Match, Option, Schedule } from "effect"
@@ -92,12 +93,17 @@ export const layer = (options: Options = {}) =>
 					),
 				)
 			return IndexWork.of({
-				runOne: Effect.fn("IndexWork.runOne")(function* (cardUrl) {
-					return yield* Option.match(yield* repository.claim(cardUrl), {
-						onNone: () => Effect.succeed(false),
-						onSome: verify,
-					})
-				}),
+				runOne: (cardUrl) =>
+					InstanceWork.wrap(
+						Effect.gen(function* () {
+							return yield* Option.match(yield* repository.claim(cardUrl), {
+								onNone: () => Effect.succeed(false),
+								onSome: verify,
+							})
+						}),
+					).pipe(
+						Effect.catchTag("InstancePaused", () => Effect.succeed(false)),
+					),
 			})
 		}),
 	)
@@ -109,7 +115,7 @@ export const layerWorker = (options: Options = {}) =>
 			const repository = yield* IndexWorkRepository
 			const work = yield* IndexWork
 			const { retryMs } = settings(options)
-			yield* repository.restart
+			yield* InstanceWork.wrap(repository.restart)
 			const drain: Effect.Effect<void, Index.IndexError> = Effect.suspend(() =>
 				work
 					.runOne()

@@ -52,11 +52,7 @@ export interface CompleteAuthorizationRequest {
 	readonly flowId: string
 	readonly callbackUrl: string
 }
-export type ClientInfo = NonNullable<
-	NonNullable<
-		Client.Client["discovery"]["_meta"]
-	>["io.modelcontextprotocol/serverInfo"]
->
+export type ClientInfo = NonNullable<Client.Client["serverInfo"]>
 
 export interface OpenRequest {
 	readonly key: Store.ConnectionKey

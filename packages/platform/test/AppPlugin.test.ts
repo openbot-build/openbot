@@ -17,11 +17,28 @@ import {
 import { LanguageModel, Response, Tool } from "effect/ai"
 import { AppNetwork } from "../src/apps/AppHost.ts"
 import { AppPlugin } from "../src/apps/AppPlugin.ts"
+import * as Probe from "../src/apps/Probe.ts"
 import * as Fixture from "./AppFixture.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 
-test("the Platform App plugin combines live paged capabilities with caller tools and records real handler results for the current account", async () => {
-	const publisher = await Fixture.start({ capabilities: true })
+const exerciseAppPlugin = async (mode: "published" | "manual" | "legacy") => {
+	const publisher = await Fixture.start({
+		capabilities: true,
+		standardMcp: mode === "legacy",
+	})
+	const workId = crypto.randomUUID()
+	const personalId = crypto.randomUUID()
+	const workCardUrl =
+		mode === "published"
+			? publisher.origin + "/card"
+			: "urn:openbot:manual:" + workId
+	const network = (owner: string, origins: ReadonlyArray<string>) =>
+		NodeHttpServer.layerUserNetwork({
+			owner,
+			allowedOrigins: origins,
+			ca: publisher.ca,
+			allowAddress: (ip) => ip === "127.0.0.1",
+		})
 	let observed: ReadonlyArray<{
 		readonly input: string
 		readonly descriptions: ReadonlyArray<string>
@@ -84,16 +101,18 @@ test("the Platform App plugin combines live paged capabilities with caller tools
 									: input.includes("prompt")
 										? "review_document"
 										: "read_later"
-					const selected = tools.find(
-						(tool) =>
-							tool.description?.includes(
-								(input.includes("write")
-									? "Personal documents"
-									: "Work documents") +
-									" / " +
-									wanted,
-							) === true,
-					)
+					const selected = input.includes("access")
+						? tools.find((tool) => tool.name === "openbot_app_access")
+						: tools.find(
+								(tool) =>
+									tool.description?.includes(
+										(input.includes("write")
+											? "Personal documents"
+											: "Work documents") +
+											" / " +
+											wanted,
+									) === true,
+							)
 					if (selected === undefined)
 						return Stream.make(
 							Response.makePart("text-start", { id: "answer" }),
@@ -140,17 +159,19 @@ test("the Platform App plugin combines live paged capabilities with caller tools
 						Response.makePart("tool-call", {
 							id: "app-call-" + last,
 							name: selected.name,
-							params: input.includes("write")
-								? { id: "release-plan", text: priorDocument }
-								: input.includes("resource")
-									? {}
-									: input.includes("prompt")
-										? { subject: "Release" }
-										: {
-												id: input.includes("invalid parameters")
-													? 17
-													: "release-plan",
-											},
+							params: input.includes("access")
+								? {}
+								: input.includes("write")
+									? { id: "release-plan", text: priorDocument }
+									: input.includes("resource")
+										? {}
+										: input.includes("prompt")
+											? { subject: "Release" }
+											: {
+													id: input.includes("invalid parameters")
+														? 17
+														: "release-plan",
+												},
 							providerExecuted: false,
 						}),
 						Response.makePart("finish", { reason: "tool-calls", usage }),
@@ -162,20 +183,15 @@ test("the Platform App plugin combines live paged capabilities with caller tools
 	const host = await BrowserHost.start({
 		publicOrigin,
 		model,
-		appReadRules: [
-			{ cardUrl: publisher.origin + "/card", tool: "read_document" },
-		],
+		appReadRules: [{ cardUrl: workCardUrl, tool: "read_document" }],
 		discovery: publisher.discovery,
-		appProbe: publisher.probe,
-		appNetwork: Layer.succeed(AppNetwork, {
-			layer: (owner, origins) =>
-				NodeHttpServer.layerUserNetwork({
-					owner,
-					allowedOrigins: origins,
-					ca: publisher.ca,
-					allowAddress: (ip) => ip === "127.0.0.1",
-				}),
-		}),
+		appProbe:
+			mode === "published"
+				? publisher.probe
+				: Probe.layerWithNetwork((connection) =>
+						network(connection.owner, [new URL(connection.endpoint).origin]),
+					),
+		appNetwork: Layer.succeed(AppNetwork, { layer: network }),
 	})
 	try {
 		const alice = await host.login("plugin-alice")
@@ -206,10 +222,21 @@ test("the Platform App plugin combines live paged capabilities with caller tools
 		assert.equal(empty.status, 201)
 		assert.equal(publisher.requests().length, 0)
 		const work = Schema.decodeUnknownSync(SessionView)(await empty.json())
-		for (const [path, name, account] of [
-			["/card", "Work documents", "Work"],
-			["/second", "Personal documents", "Personal"],
+		for (const [path, name, account, id] of [
+			["/card", "Work documents", "Work", workId],
+			["/second", "Personal documents", "Personal", personalId],
 		] as const) {
+			if (mode !== "published") {
+				const response = await post("/v1/connections/manual", {
+					id,
+					name,
+					url: publisher.origin + "/mcp",
+					transport: "streamable-http",
+					headers: { "X-Account": account, "X-Secret": "private-" + account },
+				})
+				assert.equal(response.status, 201, await response.clone().text())
+				continue
+			}
 			const draft = await (
 				await post("/v1/connection-drafts", { input: publisher.origin + path })
 			).json()
@@ -279,6 +306,8 @@ test("the Platform App plugin combines live paged capabilities with caller tools
 			).json()
 			if (input.includes("covered")) assert.equal(approvals.length, 0)
 			for (const approval of input.includes("hold") ? [] : approvals) {
+				if (!input.includes("write"))
+					assert.equal(approval.app?.source.cardUrl, workCardUrl)
 				assert.equal(publisher.businessCalls(), callsBefore)
 				assert.equal(
 					approval.app.source.connectionName,
@@ -314,6 +343,38 @@ test("the Platform App plugin combines live paged capabilities with caller tools
 		assert.match(history, /read_later/)
 		assert.match(history, /outputSchema/)
 		assert.equal(history.includes("private-Work"), false)
+		assert.ok(history.includes(workCardUrl))
+		const access = await run("Inspect account access")
+		assert.match(JSON.stringify(access.response), /AppAccess/)
+		assert.ok(JSON.stringify(access.response).includes(workCardUrl))
+		assert.equal(
+			JSON.stringify(access.response).includes("private-Work"),
+			false,
+		)
+		assert.equal(publisher.businessCalls(), 1)
+		if (mode === "legacy") {
+			assert.ok(publisher.operations().includes("initialize"))
+			assert.equal(
+				publisher
+					.requests()
+					.some((request) => request.path.startsWith("/card")),
+				false,
+			)
+			await host.restart()
+			const stored = await fetch(
+				host.address + `/v1/sessions/${work.session.id}/app-operations`,
+				{ headers: headers() },
+			)
+			assert.equal(stored.status, 200)
+			const invocations = Schema.decodeUnknownSync(
+				Schema.Array(AppExecution.Invocation),
+			)(await stored.json())
+			assert.equal(invocations.length, 1)
+			assert.equal(invocations[0]?.status, "Completed")
+			assert.equal(invocations[0]?.source.cardUrl, workCardUrl)
+			assert.equal(invocations[0]?.result?.source.cardUrl, workCardUrl)
+			return
+		}
 		assert.ok(
 			observed[0]?.descriptions.includes(
 				"Apply the proposed change after approval",
@@ -390,6 +451,8 @@ test("the Platform App plugin combines live paged capabilities with caller tools
 			(value) => value.status === "InputRequired",
 		)
 		assert.ok(pendingInput)
+		assert.equal(pendingInput.source.cardUrl, workCardUrl)
+		assert.equal(pendingInput.result?.source.cardUrl, workCardUrl)
 		const operationPath = "/v1/app-operations/" + pendingInput.id
 		assert.equal(
 			(
@@ -417,7 +480,12 @@ test("the Platform App plugin combines live paged capabilities with caller tools
 			},
 		})
 		assert.equal(resumed.status, 200, await resumed.clone().text())
-		assert.equal((await resumed.json()).status, "Completed")
+		const resumedInvocation = Schema.decodeUnknownSync(AppExecution.Invocation)(
+			await resumed.json(),
+		)
+		assert.equal(resumedInvocation.status, "Completed")
+		assert.equal(resumedInvocation.source.cardUrl, workCardUrl)
+		assert.equal(resumedInvocation.result?.source.cardUrl, workCardUrl)
 		assert.equal(publisher.inputStarts(), 1)
 		assert.equal(publisher.businessCalls(), 4)
 		assert.equal(
@@ -550,6 +618,7 @@ test("the Platform App plugin combines live paged capabilities with caller tools
 		const execution = Schema.decodeUnknownSync(AppExecution.Result)(
 			resultParts[0]?.result,
 		)
+		assert.equal(execution.source.cardUrl, workCardUrl)
 		assert.equal(execution.source.connectionName, "Work documents")
 		assert.equal(execution.source.name, "read_later")
 		assert.equal(execution.source.kind, "tool")
@@ -557,4 +626,11 @@ test("the Platform App plugin combines live paged capabilities with caller tools
 		await host.close()
 		await publisher.close()
 	}
-})
+}
+
+test("the Platform App plugin records real published capability results for the current account", () =>
+	exerciseAppPlugin("published"))
+test("manual modern MCP provenance survives tool encoding, approvals, failures and input continuation after restart", () =>
+	exerciseAppPlugin("manual"))
+test("manual legacy MCP tools and account access encode private provenance through real Turns and persisted results", () =>
+	exerciseAppPlugin("legacy"))

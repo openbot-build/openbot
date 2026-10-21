@@ -151,7 +151,7 @@ export const make: Effect.Effect<
 				clientInfo: { name: "OpenBot", version: "1.0.0" },
 				capabilities: { ...Ui.clientCapabilities, elicitation: { form: {} } },
 			})
-			const advertised = client.discovery.capabilities
+			const advertised = client.capabilities
 			return {
 				stored,
 				client,

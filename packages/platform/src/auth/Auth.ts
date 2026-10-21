@@ -9,6 +9,7 @@ export class Auth extends Context.Service<
 	Auth,
 	{
 		/** The Better Auth Web handler. Platform mounts it at `/auth/*`. */
+		readonly sessionCookie?: string
 		readonly handler: (request: Request) => Promise<Response>
 		readonly resolveSession: (
 			credential: Redacted.Redacted<string>,

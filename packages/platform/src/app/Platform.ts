@@ -1,3 +1,6 @@
+import * as InstanceWork from "../execution/InstanceWork.ts"
+import type * as DeveloperVerification from "../apps/DeveloperVerification.ts"
+import * as AuthBarrier from "../auth/Barrier.ts"
 import * as DeveloperLayers from "../apps/DeveloperLayers.ts"
 import type * as DomainControl from "../apps/DomainControl.ts"
 import * as AppExperience from "../apps/Experience.ts"
@@ -54,6 +57,8 @@ import * as OrganizationPostgres from "../organization/OrganizationPostgres.ts"
 import type * as OrganizationSettings from "../organization/Organization.ts"
 import { AuthConfigurationError, type Configuration } from "../auth/Model.js"
 
+import * as ExecutionFence from "../execution/ExecutionFence.ts"
+
 export interface Options<
 	Tools extends Record<string, Tool.Any> = {},
 	E = never,
@@ -61,10 +66,12 @@ export interface Options<
 	BuildE = never,
 	BuildR = never,
 > {
+	readonly execution?: ExecutionFence.Options | undefined
 	readonly databaseUrl: Redacted.Redacted<string>
 	readonly indexNamespace?: "public" | "development"
 	readonly indexPublicNetwork?: Layer.Layer<Network.PublicNetwork>
 	readonly indexWork?: IndexWork.Options
+	readonly developerVerification?: DeveloperVerification.Settings | undefined
 	readonly domainControl?: Layer.Layer<DomainControl.DomainControl>
 	readonly appRestrictions?: ReadonlyArray<AppIndexApi.Restriction>
 	readonly appReadRules?: ReadonlyArray<ActionPolicy.ReadRule>
@@ -139,6 +146,7 @@ export const layer = <
 	)
 
 	const developer = DeveloperLayers.layer({
+		verification: options.developerVerification,
 		publicOrigin: options.auth.publicOrigin,
 		namespace: indexNamespace,
 		...(options.appNetwork === undefined
@@ -209,6 +217,9 @@ export const layer = <
 		Layer.provideMerge(AuditLogPostgres.layer),
 		Layer.provideMerge(RepositoryPostgres.layer),
 		Layer.provideMerge(checked),
+		Layer.provideMerge(ExecutionFence.layer(options.execution)),
+		Layer.provideMerge(AuthBarrier.layer(options.execution)),
+		Layer.provideMerge(InstanceWork.layer),
 		Layer.provideMerge(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
 	)
 	return Layer.mergeAll(Views.layer, AppExperience.layer, developer).pipe(

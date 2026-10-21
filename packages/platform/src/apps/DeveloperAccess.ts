@@ -5,6 +5,7 @@ import { Discovery, Document, Network, Robots } from "@openbot-build/protocol"
 import { Clock, Context, Effect, Layer, Match, Option, Schema } from "effect"
 import { AppInspections } from "./AppInspections.ts"
 import { DeveloperRepository, type ProofRecord } from "./DeveloperRepository.ts"
+import * as Verification from "./DeveloperVerification.ts"
 import { DomainControl } from "./DomainControl.ts"
 
 export const scopeKey = (scope: Api.ManagementScope): string =>
@@ -103,20 +104,6 @@ export class DeveloperAccess extends Context.Service<
 	}
 >()("@openbot-build/platform/apps/DeveloperAccess") {}
 
-const Marker = Schema.fromJsonString(
-	Schema.Struct({
-		_meta: Schema.optionalKey(
-			Schema.Struct({
-				"openbot/developer-verification": Schema.optionalKey(
-					Schema.Struct({
-						version: Schema.Literal(1),
-						tokens: Schema.Array(Schema.String),
-					}),
-				),
-			}),
-		),
-	}),
-)
 export const make: Effect.Effect<
 	typeof DeveloperAccess.Service,
 	never,
@@ -126,6 +113,7 @@ export const make: Effect.Effect<
 	| Robots.Robots
 	| AppInspections
 > = Effect.gen(function* () {
+	const verification = yield* Verification.Options
 	const records = yield* DeveloperRepository
 	const domains = yield* DomainControl
 	const network = yield* Network.PublicNetwork
@@ -198,12 +186,11 @@ export const make: Effect.Effect<
 							return false
 						if (card.status === 404 || card.status === 410) return false
 						if (card.status !== 200) return yield* conflict("CardUnconfirmed")
-						const marker = yield* Schema.decodeEffect(Marker)(card.text)
-						return (
-							marker._meta?.["openbot/developer-verification"]?.tokens.includes(
-								token,
-							) ?? false
-						)
+						return yield* Verification.hasToken({
+							text: card.text,
+							token,
+							settings: verification,
+						})
 					}),
 			}),
 			Effect.result,
@@ -529,3 +516,9 @@ export const make: Effect.Effect<
 	})
 })
 export const layer = Layer.effect(DeveloperAccess, make)
+
+export const layerWithVerification = (settings: Verification.Settings) =>
+	Layer.effect(
+		DeveloperAccess,
+		make.pipe(Effect.provideService(Verification.Options, settings)),
+	)

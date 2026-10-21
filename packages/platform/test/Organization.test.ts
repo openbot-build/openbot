@@ -217,6 +217,12 @@ test(
 			)
 			assert.equal((await keyed(token.secret, "/v1/sessions")).status, 401)
 
+			assert.equal((await account(carol.session, "/auth/session")).status, 403)
+			await assert.rejects(
+				host.login("carol"),
+				"Removed members cannot rejoin through an allowed domain",
+			)
+
 			const audit = await (
 				await account(alice.session, "/v1/organization/audit_logs?limit=100")
 			).json()

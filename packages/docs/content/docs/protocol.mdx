@@ -151,6 +151,8 @@ After the user adds the App, the host:
 2. calls `tools/list`, `resources/list` and `prompts/list`;
 3. does the work with `tools/call`, `resources/read` and `prompts/get`.
 
+This publication contract stays pinned to MCP `2026-07-28`. OpenBot also supports manually added standard MCP endpoints through `McpClient.open({ ..., protocol: "standard" })`. Those connections negotiate the version and can work without `server/discover`. They do not become public OpenBot publications.
+
 All messages, results, and errors follow MCP. Name your tools by what they do, such as `create_event`. Describe input with `inputSchema`. Return structured output with `outputSchema` and `structuredContent`. Always return a clear text result too.
 
 ### Account sign-in

@@ -336,7 +336,7 @@ test(
 				).status,
 				404,
 			)
-			const identity = await call((api) => api.account.session({}))
+			const identity = await call((api) => api.account.session({ query: {} }))
 			const owner = ownerKey(identity.identity)
 			const wrongOwner = await server.runPromise(
 				Effect.flatMap(DeveloperTests, (tests) =>
@@ -455,7 +455,7 @@ test(
 				api.developer.runTest({ params: { id: protectedTest.id } }),
 			)
 			assert.equal((await settle(protectedTest.id)).status, "Succeeded")
-			const account = await call((api) => api.account.session({}))
+			const account = await call((api) => api.account.session({ query: {} }))
 			assert.equal(
 				await server.runPromise(
 					Effect.flatMap(Business, (business) =>

@@ -30,7 +30,6 @@ export const configure =
 							isSecret: true,
 							isRequired: true,
 						})),
-						supportedProtocolVersions: [Document.protocolVersion],
 					},
 				],
 			}).pipe(

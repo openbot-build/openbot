@@ -1,3 +1,5 @@
+import * as OwnedWrites from "../execution/OwnedWrites.ts"
+import { FenceUnavailable } from "../execution/ExecutionFence.ts"
 import {
 	DeltaValidation,
 	Item,
@@ -182,7 +184,7 @@ export const make = Effect.gen(function* () {
 		return { storage, refRow }
 	}
 	const store = (namespace: string) => readers(namespace, db).storage
-	const save: typeof Repository.Service.save = (namespace, input) =>
+	const saveUnfenced: typeof Repository.Service.save = (namespace, input) =>
 		db
 			.transaction((tx) =>
 				Effect.gen(function* () {
@@ -298,7 +300,7 @@ export const make = Effect.gen(function* () {
 				}),
 			)
 			.pipe(Effect.mapError(databaseError))
-	const remove: typeof Repository.Service.remove = (namespace, ref) =>
+	const removeUnfenced: typeof Repository.Service.remove = (namespace, ref) =>
 		db
 			.transaction((tx) =>
 				Effect.gen(function* () {
@@ -321,6 +323,18 @@ export const make = Effect.gen(function* () {
 				}),
 			)
 			.pipe(Effect.mapError(databaseError))
+	const save: typeof Repository.Service.save = (namespace, input) =>
+		OwnedWrites.sessionWrite(namespace, saveUnfenced(namespace, input)).pipe(
+			Effect.mapError((error) =>
+				error instanceof FenceUnavailable ? databaseError(error) : error,
+			),
+		)
+	const remove: typeof Repository.Service.remove = (namespace, ref) =>
+		OwnedWrites.sessionWrite(namespace, removeUnfenced(namespace, ref)).pipe(
+			Effect.mapError((error) =>
+				error instanceof FenceUnavailable ? databaseError(error) : error,
+			),
+		)
 	const list: typeof Repository.Service.list = (namespace, input) =>
 		db
 			.select({

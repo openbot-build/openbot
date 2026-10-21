@@ -1,6 +1,12 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { AppExecution, AppIndexApi } from "@openbot-build/platform-api"
+import {
+	AppExecution,
+	AppIndexApi,
+	AppExperienceApi,
+	ConnectionsApi,
+} from "@openbot-build/platform-api"
+import { Document, Index } from "@openbot-build/protocol"
 import { Effect, Schema } from "effect"
 import * as Assistance from "../src/apps/Assistance.ts"
 import { PublicIndex } from "../src/apps/Index.ts"
@@ -86,5 +92,85 @@ test("App assistance shows public candidates and the account's access needs with
 		)
 	} finally {
 		await host.close()
+	}
+})
+
+test("owned tool output identities encode without relaxing public Card contracts", () => {
+	const manual = "urn:openbot:manual:827409f8-bc90-4bca-a30e-df5bd4f6e893"
+	for (const cardUrl of ["https://publisher.example/card", manual]) {
+		const source: AppExecution.Source = {
+			connectionId: "owned-connection",
+			connectionName: "Work documents",
+			cardUrl,
+			appName: "Documents",
+			remoteIndex: 0,
+			revision: 0,
+			kind: "tool",
+			name: "read_document",
+		}
+		const results: ReadonlyArray<AppExecution.ToolResult> = [
+			{
+				_tag: "Completed",
+				source,
+				result: { content: [{ type: "text", text: "Document result" }] },
+			},
+			{
+				_tag: "InputRequired",
+				source,
+				request: { inputRequests: [{ id: "consent", mode: "form" }] },
+			},
+			{
+				_tag: "Failed",
+				source,
+				reason: "Schema",
+				message: "The provider returned invalid output.",
+			},
+			{
+				_tag: "AppAccess",
+				connections: [
+					{
+						id: source.connectionId,
+						name: source.connectionName,
+						cardUrl,
+						revision: 0,
+						enabled: true,
+						availability: { _tag: "Unverified" },
+					},
+				],
+			},
+		]
+		for (const result of results) {
+			const encoded = Schema.encodeSync(AppExecution.ToolResult)(result)
+			assert.deepEqual(
+				Schema.decodeSync(AppExecution.ToolResult)(encoded),
+				result,
+			)
+		}
+	}
+	for (const invalid of [
+		"urn:example:private",
+		"urn:openbot:manual:" + "-".repeat(36),
+		"urn:openbot:manual:not-a-uuid",
+		"http://publisher.example/card",
+		"https://user:secret@publisher.example/card",
+	]) {
+		assert.throws(() =>
+			Schema.decodeSync(AppExecution.Source.fields.cardUrl)(invalid),
+		)
+		assert.throws(() =>
+			Schema.decodeSync(AppExecution.AccessConnection.fields.cardUrl)(invalid),
+		)
+	}
+	for (const publicIdentity of [
+		Document.Link,
+		Index.Entry.fields.cardUrl,
+		ConnectionsApi.ConnectionRequest.fields.cardUrl,
+		AppExperienceApi.Entry.fields.cardUrl,
+	]) {
+		assert.throws(() => Schema.decodeSync(publicIdentity)(manual))
+		assert.equal(
+			Schema.decodeSync(publicIdentity)("https://publisher.example/card"),
+			"https://publisher.example/card",
+		)
 	}
 })

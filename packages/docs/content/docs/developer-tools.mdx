@@ -107,6 +107,17 @@ To check now, call `POST /v1/developer/proofs/:id/verify`. To give up a proof, c
 
 `GET /v1/developer` returns your Apps, your proofs, and your access `grants`.
 
+### Proofs imported from another host
+
+An operator can accept additional proof locations during a migration. Both options are comma-separated lists and are empty by default:
+
+| Variable | Additional locations |
+| --- | --- |
+| `OPENBOT_DEVELOPER_VERIFICATION_METADATA_ALIASES` | Exact keys inside a Card’s `_meta` object, such as `legacy.example/developer-verification`. |
+| `OPENBOT_DEVELOPER_VERIFICATION_DNS_ALIASES` | Single DNS labels such as `_legacy-verification`, queried before the publisher hostname. |
+
+Native OpenBot locations remain accepted. New challenges still use the native token format. An imported proof keeps its stored challenge token, and rechecking requires that exact token at an accepted location. Configuring a location does not grant access or accept a token from another proof. Missing records suspend a proof; DNS failures retain the existing unavailable-verification behavior. Remove aliases only after publishers have moved their existing tokens to native locations.
+
 ---
 
 ## Members and roles

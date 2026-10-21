@@ -24,7 +24,7 @@ It must use `https`. It must not have a path, a trailing slash, a user name, or 
 
 Platform uses this value in three places:
 
-- It builds the sign-in redirect URI `<origin>/auth/callback/oidc`.
+- It builds the sign-in redirect URI from the origin and `OPENBOT_OIDC_CALLBACK_PATH`.
 - It checks the `Origin` header of browser requests that change data. The header must be exactly equal to this value.
 - It builds links in App authorization and in the App Index.
 
@@ -47,6 +47,10 @@ When the server starts, it checks that all tables exist. If they do not exist, i
 | `OPENBOT_OIDC_ISSUER`        | Yes, unless dev mode |         | The HTTPS address of your OpenID Connect provider, with no trailing slash. |
 | `OPENBOT_OIDC_CLIENT_ID`     | Yes, unless dev mode |         | The client ID that your provider gave you.                                 |
 | `OPENBOT_OIDC_CLIENT_SECRET` | No                   | empty   | The client secret. Leave it empty for a public client.                     |
+| `OPENBOT_OIDC_PROVIDER_ID` | No | `oidc` | Stored provider name. Keep it stable when importing existing accounts. |
+| `OPENBOT_OIDC_CALLBACK_PATH` | No | `/auth/callback/oidc` | Public callback alias. It must match the URI registered with the provider. |
+| `OPENBOT_AUTH_SESSION_COOKIE` | No | `__Host-openbot-session` | Host-only session cookie name. |
+| `OPENBOT_AUTH_LOGIN_COOKIE` | No | `__Host-openbot-login` | Host-only login-state cookie name. It must differ from the session cookie. |
 | `OPENBOT_DEV_MODE`           | No                   | `0`     | Set to `1` to use a local test account instead of a provider.              |
 
 OpenID Connect (OIDC) is a standard way to sign people in with an outside account provider.
@@ -64,10 +68,14 @@ Never use it on a public server. See [Authentication](/docs/authentication).
 | Variable                        | Required | Default | Meaning                                                                                                           |
 | ------------------------------- | -------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
 | `OPENBOT_OWNER_EMAILS`          | No       | empty   | Emails, with commas between them. These people join as Super Administrators when the provider verified the email. |
+| `OPENBOT_OWNER_USER_IDS` | No | empty | Case-sensitive IDs that may first join as Super Administrators. |
+| `OPENBOT_MEMBER_USER_IDS` | No | empty | Case-sensitive IDs that may first join with the default member roles. |
+| `OPENBOT_ALLOW_FIRST_LOGIN_ADMIN` | No | `true` | Allow first-login admin bootstrap only when explicit owner and member lists are empty. Set `false` in a managed deployment. |
 | `OPENBOT_ALLOWED_EMAIL_DOMAINS` | No       | empty   | Email domains, with commas between them. Platform uses them only when it creates the organization.                |
 
 One deployment has one organization. Platform creates it when the first account signs in.
-With `OPENBOT_OWNER_EMAILS` empty, that first account becomes the Super Administrator. One person alone needs no setting.
+The first account becomes the Super Administrator only when all owner/member lists are empty and `OPENBOT_ALLOW_FIRST_LOGIN_ADMIN` is `true`.
+An existing suspended or removed membership stays denied. Bootstrap lists and allowed email domains do not restore it.
 After Platform creates the organization, change the allowed domains with `PATCH /v1/organization`. See [Organization](/docs/organization).
 
 ## Secrets
@@ -183,3 +191,12 @@ OPENBOT_MODEL_ENDPOINT=https://api.openai.com/v1
 OPENBOT_MODEL_API_KEY=sk-...
 OPENBOT_MODEL_ID=gpt-4.1
 ```
+
+## Execution authority
+
+| Variable | Required | Default | Meaning |
+| --- | --- | --- | --- |
+| `OPENBOT_EXECUTION_AUTHORITY_ORIGIN` | No | disabled | Private origin of the account execution authority. |
+| `OPENBOT_EXECUTION_AUTHORITY_TOKEN` | When origin is set | | Internal bearer secret for authority calls and runtime control routes. |
+
+A configured authority controls account admission and the global authentication cutover. Network errors deny new work. The runtime captures an epoch when it admits work and keeps it for background tasks. It never refreshes a stale task into a new epoch. See [Internal platform fork](/docs/internal-fork#execution-and-release-safety).

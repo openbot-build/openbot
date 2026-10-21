@@ -180,3 +180,35 @@ Learn from the history now:
 </Callout>
 
 See all fields in the [Sessions reference](/docs/api/operations/tags/sessions/).
+
+## Memory for one Turn
+
+The create, settings, and fork routes accept a top-level `memory` object with
+optional `use` and `generate` booleans. They change the Session's defaults.
+A fork changes only the new Session.
+
+The start-Turn route accepts the same object, but applies it to that Turn only:
+
+```json
+{
+  "expected": 3,
+  "input": "Answer without using or updating learned facts this time.",
+  "memory": { "use": false, "generate": false }
+}
+```
+
+A missing switch follows the Session setting. The next Turn follows the Session
+settings again unless its own request sets a switch. These fields take booleans;
+use the `Configure` memory command when you need to clear a Session override.
+
+Platform saves the resolved values in
+`turn.settings.pluginSettings["@openbot-build/plugin-memory"]`. This is a
+snapshot, so an approval continuation uses the same memory switches as the
+Turn that requested approval. The map is a generic host-plugin setting in Core;
+the memory package owns the meaning of its key.
+
+`use: false` stops learned facts from being added to this Turn's instructions.
+It does not remove facts or conversation history. `generate: false` skips
+memory consolidation for this Turn. It does not permanently exclude its Items
+from later consolidation. Do not use these switches alone as a promise that a
+conversation will never be saved or learned from.

@@ -38,6 +38,7 @@ ENV OPENBOT_HOST=0.0.0.0 \
     OPENBOT_PORT=3000
 COPY --link --from=build-platform /workspace/.devenv/platform/dist/app ./dist/app
 COPY --link --from=build-platform /workspace/packages/platform/migrations ./migrations
+COPY --link --from=build-platform /workspace/LICENSE /workspace/upstream.json ./
 EXPOSE 3000
 HEALTHCHECK --interval=5s --timeout=5s --start-period=10s --retries=12 \
     CMD ["/usr/local/bin/node", "--input-type=module", "-e", "const response = await fetch('http://127.0.0.1:3000/health'); if (response.status !== 200 || (await response.json()).status !== 'ok') process.exit(1)"]

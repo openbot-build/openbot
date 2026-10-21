@@ -109,9 +109,32 @@ export class OriginCheck extends HttpApiMiddleware.Service<OriginCheck>()(
 export class NoStore extends HttpApiMiddleware.Service<NoStore>()(
 	"@openbot-build/platform-api/AuthApi/NoStore",
 ) {}
+/** Stable browser entry points for same-origin clients and reverse proxies. */
+export const LoginApi = HttpApiGroup.make("login")
+	.add(
+		HttpApiEndpoint.get("login", "/auth/login", {
+			query: { returnTo: Schema.optionalKey(ReturnTo) },
+			success: HttpApiSchema.Empty(303),
+			error: AuthErrors,
+		}),
+		HttpApiEndpoint.get("callback", "/auth/callback", {
+			success: HttpApiSchema.Empty(303),
+			error: AuthErrors,
+		}),
+		HttpApiEndpoint.post("logout", "/auth/logout", {
+			success: HttpApiSchema.NoContent,
+			error: AuthErrors,
+		}).middleware(OriginCheck),
+	)
+	.middleware(NoStore)
 export const AccountApi = HttpApiGroup.make("account")
 	.add(
-		HttpApiEndpoint.get("session", "/auth/session", { success: SessionInfo }),
+		HttpApiEndpoint.get("session", "/auth/session", {
+			query: {
+				refresh: Schema.optionalKey(Schema.Literals(["true", "false"])),
+			},
+			success: SessionInfo,
+		}),
 	)
 	.middleware(SessionAuth)
 	.middleware(NoStore)

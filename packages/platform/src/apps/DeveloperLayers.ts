@@ -11,6 +11,7 @@ import * as Access from "./DeveloperAccess.ts"
 import * as Members from "./DeveloperMembers.ts"
 import * as Reports from "./DeveloperReports.ts"
 import * as Repository from "./DeveloperRepositoryPostgres.ts"
+import type * as Verification from "./DeveloperVerification.ts"
 import * as DomainControl from "./DomainControl.ts"
 import * as Tests from "./DeveloperTests.ts"
 import * as Indexing from "./DeveloperIndexing.ts"
@@ -24,6 +25,7 @@ import { AppNetwork, layerNetwork } from "./AppHost.ts"
 
 export const layer = (
 	options: {
+		readonly verification?: Verification.Settings | undefined
 		readonly publicNetwork?: Layer.Layer<Network.PublicNetwork>
 		readonly domainControl?: Layer.Layer<DomainControl.DomainControl>
 		readonly namespace?: string
@@ -43,8 +45,13 @@ export const layer = (
 			),
 		),
 	)
-	const access = Access.layer.pipe(
-		Layer.provide(options.domainControl ?? DomainControl.layer),
+	const access = Access.layerWithVerification(options.verification ?? {}).pipe(
+		Layer.provide(
+			options.domainControl ??
+				DomainControl.layerWithLabels({
+					aliases: options.verification?.dnsLabels,
+				}),
+		),
 		Layer.provide(RobotsPolicy.layer),
 		Layer.provide(publicNetwork),
 		Layer.provideMerge(inspections),

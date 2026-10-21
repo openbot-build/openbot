@@ -1,3 +1,6 @@
+import * as InstanceWork from "../execution/InstanceWork.ts"
+import * as Fence from "../execution/ExecutionFence.ts"
+import * as OwnedWrites from "../execution/OwnedWrites.ts"
 import { randomUUID } from "node:crypto"
 import {
 	type DeveloperFailure,
@@ -368,73 +371,98 @@ export const make = (
 				}),
 			)
 		})
-		for (const record of yield* records.tests.list()) {
-			if (working(record.value))
-				yield* put({
-					...record,
-					value: {
-						...record.value,
-						status: "Interrupted",
-						reason: "ExecutionInterrupted",
-						authorization:
-							record.value.authorization?.status === "Exchanging"
-								? { ...record.value.authorization, status: "Failed" }
-								: record.value.authorization,
-					},
-				})
-		}
-		const sweep = Effect.gen(function* () {
-			const now = yield* Clock.currentTimeMillis
-			for (const flow of yield* records.flows.list()) {
-				if (
-					flow.value.expiresAt > now ||
-					(flow.body === "" && flow.callback === null)
-				)
-					continue
-				yield* records.transaction(
-					"flow:" + flow.value.flowId,
-					Effect.gen(function* () {
-						const current = yield* records.flows.get(flow.value.flowId)
-						const value: Api.TestAuthorization = [
-							"Waiting",
-							"Received",
-						].includes(current.value.status)
-							? { ...current.value, status: "Expired" }
-							: current.value
-						yield* records.flows.put(
-							value.flowId,
-							current.owner,
-							current.testId,
-							{ ...current, consumed: true, body: "", callback: null, value },
+		yield* InstanceWork.wrap(
+			Effect.gen(function* () {
+				for (const record of yield* records.tests.list()) {
+					if (working(record.value))
+						yield* OwnedWrites.recover(
+							record.owner,
+							put({
+								...record,
+								value: {
+									...record.value,
+									status: "Interrupted",
+									reason: "ExecutionInterrupted",
+									authorization:
+										record.value.authorization?.status === "Exchanging"
+											? { ...record.value.authorization, status: "Failed" }
+											: record.value.authorization,
+								},
+							}),
 						)
-						const test = yield* records.tests.find(current.testId)
-						if (
-							Option.isSome(test) &&
-							test.value.value.authorization?.flowId === value.flowId
-						)
-							yield* put({
-								...test.value,
-								value: { ...test.value.value, authorization: value },
-							})
-					}),
-				)
-			}
+				}
+			}),
+		).pipe(
+			Effect.catchTag("InstancePaused", () =>
+				Api.DeveloperUnavailable.make({}),
+			),
+		)
+		const sweep = InstanceWork.wrap(
+			Effect.gen(function* () {
+				const now = yield* Clock.currentTimeMillis
+				for (const flow of yield* records.flows.list()) {
+					if (
+						flow.value.expiresAt > now ||
+						(flow.body === "" && flow.callback === null)
+					)
+						continue
+					yield* OwnedWrites.recover(
+						flow.owner,
+						records.transaction(
+							"flow:" + flow.value.flowId,
+							Effect.gen(function* () {
+								const current = yield* records.flows.get(flow.value.flowId)
+								const value: Api.TestAuthorization = [
+									"Waiting",
+									"Received",
+								].includes(current.value.status)
+									? { ...current.value, status: "Expired" }
+									: current.value
+								yield* records.flows.put(
+									value.flowId,
+									current.owner,
+									current.testId,
+									{
+										...current,
+										consumed: true,
+										body: "",
+										callback: null,
+										value,
+									},
+								)
+								const test = yield* records.tests.find(current.testId)
+								if (
+									Option.isSome(test) &&
+									test.value.value.authorization?.flowId === value.flowId
+								)
+									yield* put({
+										...test.value,
+										value: { ...test.value.value, authorization: value },
+									})
+							}),
+						),
+					)
+				}
 
-			for (const record of yield* records.tests.list()) {
-				if (record.value.cleanup === "Complete") continue
-				const allowed = yield* access.allows(
-					record.owner,
-					record.value.cardUrl,
-					true,
-				)
-				if (
-					!allowed ||
-					record.value.expiresAt <= now ||
-					record.value.cleanup === "Pending"
-				)
-					yield* cleanup(record.owner, record.value.id)
-			}
-		})
+				for (const record of yield* records.tests.list()) {
+					if (record.value.cleanup === "Complete") continue
+					const allowed = yield* access.allows(
+						record.owner,
+						record.value.cardUrl,
+						true,
+					)
+					if (
+						!allowed ||
+						record.value.expiresAt <= now ||
+						record.value.cleanup === "Pending"
+					)
+						yield* OwnedWrites.recover(
+							record.owner,
+							cleanup(record.owner, record.value.id),
+						)
+				}
+			}),
+		).pipe(Effect.catchTag("InstancePaused", () => Effect.void))
 		return DeveloperTests.of({
 			get,
 			configure,
@@ -629,6 +657,18 @@ export const make = (
 									),
 								),
 						),
+						(operation) =>
+							Fence.guard(
+								OwnedWrites.accountId(owner),
+								"continue",
+								operation,
+							).pipe(
+								Effect.mapError((error) =>
+									error instanceof Fence.FenceUnavailable
+										? Api.DeveloperUnavailable.make({})
+										: error,
+								),
+							),
 					),
 					{ onlyIfMissing: true },
 				)

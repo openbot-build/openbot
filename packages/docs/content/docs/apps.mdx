@@ -3,7 +3,7 @@ title: Apps
 description: Connect outside services so the Agent can use them in Turns.
 ---
 
-An **App** is an outside service that the Agent can use. Each App is published on the web with the [OpenBot App Protocol](/docs/protocol). This page shows how to connect an App to your account, sign in to it, and use it in Turns.
+An **App** is an outside service that the Agent can use. An App can use the [OpenBot App Protocol](/docs/protocol), or a standard remote MCP server can be added as a manual connection. This page shows how to connect an App to your account, sign in to it, and use it in Turns.
 
 All examples use a user token. The same calls also work with the session cookie. See [Authentication](/docs/authentication).
 
@@ -137,7 +137,7 @@ Some Apps need the user's own account. Platform uses OAuth with PKCE for this. T
 
 To see the flow, call `GET /v1/app-authorizations/:flowId`. Its `status` is `Waiting`, `Received`, `Processing`, `Succeeded`, `Cancelled` or `Failed`.
 
-Platform's OAuth client ID is a public document at `https://api.example.com/v1/apps/client-metadata`. Providers read it, so you do not need to register Platform with each provider.
+Platform's OAuth client ID is a public document at `https://api.example.com/v1/apps/client-metadata`. Published Apps use this document. For a manual MCP connection, Platform can also register a client at the provider's advertised registration endpoint. The provider must support the client document or dynamic client registration. Registration and token exchange keep PKCE, resource binding, and redirect checks. Client secrets are encrypted and belong to one account connection.
 
 To sign out of the App, send `DELETE /v1/connections/:connectionId/authorization`. The answer is `Revoked`, or `LocalOnly` when the provider cannot revoke tokens. In both cases Platform deletes its stored tokens.
 
@@ -153,7 +153,7 @@ To sign out of the App, send `DELETE /v1/connections/:connectionId/authorization
 | Review a changed App         | Make a new draft from the Card URL. Then `POST /v1/connections/:connectionId/revalidate`. |
 | Remove                       | `DELETE /v1/connections/:connectionId`                                                    |
 
-A refresh never asks for more access. If it fails, the connection becomes `AuthorizationExpired`.
+A refresh never asks for more access. If it fails, the connection becomes `AuthorizationExpired`. Before opening a connection, Platform refreshes an expired stored token. An authorization rejection from a remote call is returned to the caller. Platform does not repeat the business call after that rejection, a transport failure, or an unclear result. Rotating a token alone keeps the connection revision; a change to scopes or connection settings does not.
 
 When an App changes its endpoint, private settings, provider, or scopes, the connection becomes `NeedsRevalidation`. The Agent cannot use it until you review it. Send `{ "revision", "draftId", "remoteIndex", "values", "confirmed": true }` to `revalidate`. Platform does not send old tokens to a new endpoint. An App that needs sign-in then needs a new sign-in.
 
@@ -162,6 +162,8 @@ Remove returns 204. Platform first turns the connection off, then revokes and de
 ### Manual connections
 
 You can also connect an MCP server that has no Server Card. Send `POST /v1/connections/manual` with a new UUID `id`, a `name`, the HTTPS `url`, `"transport": "streamable-http"`, and `headers`. Change it with `PUT /v1/connections/:connectionId/manual`. Set a header to `null` to remove it. Manual connections never go into the public [App Index](/docs/app-index).
+
+Manual connections negotiate the MCP version and read the live capabilities. They do not need a Server Card or the newer `server/discover` method. If the server uses the current OpenBot protocol, the host restores its full client capabilities. Published Apps keep their pinned protocol contract. The manual identity is `urn:openbot:manual:<UUID>`; tool results and App views keep that identity without treating it as a public Card URL.
 
 ---
 
@@ -193,6 +195,8 @@ Platform records each App call as an App operation. Read them with `GET /v1/sess
 | `InputRequired`                           | The App asks for more input. See below.                |
 | `Completed`, `Failed`                     | The call ended. `result` holds the details.            |
 | `OutcomeUnknown`                          | Platform sent the call but did not get a clear answer. |
+
+Platform keeps recorded operations even when their App can no longer open. If restoring such an operation, an `Approved` call that was never sent ends as `Failed`. A saved `Sending` or `OutcomeUnknown` call is never sent again. A saved `Completed`, `Failed`, or `InputRequired` result is returned as recorded. The stored result remains readable after a restart; this does not resume a running Turn.
 
 Some Apps ask a question in the middle of a call. The operation then has status `InputRequired`, a `round` number, and the App's request in `result.request`. Send the answer with the same round:
 

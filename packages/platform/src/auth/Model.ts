@@ -11,6 +11,9 @@ export const Timestamp = Schema.String.check(
 )
 
 export const Credential = Schema.Redacted(Schema.NonEmptyString)
+const HostCookie = Schema.String.check(
+	Schema.isPattern(/^__Host-[A-Za-z0-9_-]+$/),
+)
 const SharedConfiguration = Schema.Struct({
 	publicOrigin: Schema.NonEmptyString.check(
 		Schema.makeFilter(
@@ -26,6 +29,12 @@ const SharedConfiguration = Schema.Struct({
 			},
 			{ message: "Expected a canonical HTTPS origin" },
 		),
+	),
+	sessionCookie: HostCookie.pipe(
+		Schema.withDecodingDefault(Effect.succeed("__Host-openbot-session")),
+	),
+	loginCookie: HostCookie.pipe(
+		Schema.withDecodingDefault(Effect.succeed("__Host-openbot-login")),
 	),
 	secret: Schema.Redacted(Schema.String.check(Schema.isMinLength(32))),
 	sessionTtlMs: Schema.Int.check(Schema.isGreaterThan(0)).pipe(
@@ -54,6 +63,12 @@ export const OidcConfiguration = Schema.Struct({
 			{ message: "Expected an HTTPS issuer without a trailing slash" },
 		),
 	),
+	providerId: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]+$/)).pipe(
+		Schema.withDecodingDefault(Effect.succeed("oidc")),
+	),
+	callbackPath: Schema.String.check(
+		Schema.isPattern(/^\/auth\/callback(?:\/[A-Za-z0-9_-]+)?$/),
+	).pipe(Schema.withDecodingDefault(Effect.succeed("/auth/callback/oidc"))),
 	clientId: Schema.NonEmptyString,
 	clientSecret: Schema.optional(Credential),
 })

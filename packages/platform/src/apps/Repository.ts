@@ -62,6 +62,7 @@ export class Repository extends Context.Service<
 			id: string,
 			change: (stored: StoredConnection) => StoredConnection,
 			revision?: number,
+			intent?: "credential-renewal",
 		) => Effect.Effect<StoredConnection, Error>
 		readonly remove: (owner: string, id: string) => Effect.Effect<void, Error>
 		readonly saveDraft: (

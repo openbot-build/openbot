@@ -37,6 +37,12 @@ test("encrypted credentials and one-time PKCE flows survive a restart and check 
 				const reference = yield* stores.credentials.put(
 					yield* Store.Credential.decode({
 						binding,
+						clientId: "registered-client",
+						clientAuthentication: {
+							method: "client_secret_post",
+							secret: Redacted.make("private-client-secret"),
+							expiresAt: Date.now() + 60000,
+						},
 						accessToken: Redacted.make("private-access-token"),
 						refreshToken: Redacted.make("private-refresh-token"),
 						scopes: ["documents"],
@@ -46,7 +52,12 @@ test("encrypted credentials and one-time PKCE flows survive a restart and check 
 					yield* Authorization.Flow.decode({
 						flowId: "flow",
 						binding,
-						clientId: "https://platform.test/client",
+						clientId: "registered-client",
+						clientAuthentication: {
+							method: "client_secret_post",
+							secret: Redacted.make("private-client-secret"),
+							expiresAt: Date.now() + 60000,
+						},
 						redirectUri: "https://platform.test/callback",
 						scopes: ["documents"],
 						verifier: Redacted.make("private-pkce-verifier"),
@@ -113,6 +124,23 @@ test("encrypted credentials and one-time PKCE flows survive a restart and check 
 					Redacted.value((yield* alice.flows.get(request)).verifier),
 					"private-pkce-verifier",
 				)
+				const persistedFlow = yield* alice.flows.get(request)
+				assert.equal(persistedFlow.scopeSelection, undefined)
+				const persistedCredential = yield* alice.credentials.get({
+					binding,
+					reference,
+				})
+				for (const authentication of [
+					persistedFlow.clientAuthentication,
+					persistedCredential.clientAuthentication,
+				]) {
+					assert.equal(authentication?.method, "client_secret_post")
+					assert.ok(authentication !== undefined && "secret" in authentication)
+					assert.equal(
+						Redacted.value(authentication.secret),
+						"private-client-secret",
+					)
+				}
 				const claims = yield* Effect.all(
 					[
 						alice.flows.consume(request).pipe(Effect.result),

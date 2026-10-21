@@ -1,4 +1,4 @@
-import type { Plugin, Session } from "@openbot-build/core"
+import type { Plugin, Session, Turn } from "@openbot-build/core"
 import { MemoryOverrides } from "@openbot-build/platform-api"
 import type { Memory } from "@openbot-build/plugin-memory"
 import { Schema } from "effect"
@@ -37,7 +37,12 @@ export const overrides = (session: Session.Ref): MemoryOverrides =>
 export const settings = (input: {
 	readonly defaults: Memory.Settings
 	readonly session: Session.Ref
-}): Memory.Settings => ({ ...input.defaults, ...overrides(input.session) })
+	readonly turn?: Turn.Record | undefined
+}): Memory.Settings => {
+	const stored = input.turn?.settings.pluginSettings?.["@openbot-build/plugin-memory"]
+	const selected = Schema.is(MemoryOverrides)(stored) ? stored : {}
+	return { ...input.defaults, ...overrides(input.session), ...selected }
+}
 
 /** A boolean sets a switch, null removes it, and a missing value keeps it. */
 const change = (

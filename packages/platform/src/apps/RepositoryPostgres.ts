@@ -1,3 +1,5 @@
+import * as OwnedWrites from "../execution/OwnedWrites.ts"
+import { FenceUnavailable } from "../execution/ExecutionFence.ts"
 import {
 	ConnectionsApi as Api,
 	ExperienceNotFound,
@@ -5,7 +7,7 @@ import {
 } from "@openbot-build/platform-api"
 import { Store } from "@openbot-build/protocol"
 import type { PgClient } from "@effect/sql-pg"
-import { Clock, Effect, Layer, Schema } from "effect"
+import { Clock, Effect, Equal, HashSet, Layer, Match, Schema } from "effect"
 import { and, eq, inArray, sql } from "drizzle-orm"
 import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import {
@@ -24,6 +26,42 @@ const failure = (error: unknown) =>
 	error instanceof ExperienceNotFound || error instanceof Api.ConnectionConflict
 		? error
 		: unavailable()
+const sameConnection = Schema.toEquivalence(Store.UserConnection)
+/** Credential rotation does not change the operation the user approved. */
+const credentialRotation = (
+	previous: StoredConnection,
+	next: StoredConnection,
+) =>
+	previous.name === next.name &&
+	Match.value(previous.connection.authorization).pipe(
+		Match.tag("Authorized", (before) =>
+			Match.value(next.connection.authorization).pipe(
+				Match.tag(
+					"Authorized",
+					(after) =>
+						before.credentialRef !== after.credentialRef &&
+						Equal.equals(
+							HashSet.fromIterable(before.scopes),
+							HashSet.fromIterable(after.scopes),
+						) &&
+						sameConnection(
+							{
+								...previous.connection,
+								authorization: {
+									...before,
+									credentialRef: after.credentialRef,
+									scopes: after.scopes,
+								},
+							},
+							next.connection,
+						),
+				),
+				Match.orElse(() => false),
+			),
+		),
+		Match.orElse(() => false),
+	)
+
 const connectionCodec = Schema.fromJsonString(
 	Schema.toCodecJson(StoredConnection),
 )
@@ -76,7 +114,7 @@ export const makeFor = (
 				Effect.mapError(unavailable),
 			)
 		})
-		return Repository.of({
+		const service = Repository.of({
 			list: (owner) =>
 				db
 					.select()
@@ -216,7 +254,7 @@ export const makeFor = (
 						}),
 					)
 					.pipe(Effect.mapError(failure)),
-			update: (owner, id, change, revision) =>
+			update: (owner, id, change, revision, intent) =>
 				db
 					.transaction((tx) =>
 						Effect.gen(function* () {
@@ -233,10 +271,22 @@ export const makeFor = (
 									"RevisionChanged",
 									"This connection changed. Refresh it before updating.",
 								)
-							const updated = yield* Schema.decodeEffect(StoredConnection)({
-								...change(previous),
-								revision: previous.revision + 1,
-							})
+							const next = yield* Schema.decodeEffect(StoredConnection)(
+								change(previous),
+							)
+							const updated = {
+								...next,
+								revision:
+									previous.revision +
+									(Match.value(intent).pipe(
+										Match.when("credential-renewal", () =>
+											credentialRotation(previous, next),
+										),
+										Match.orElse(() => false),
+									)
+										? 0
+										: 1),
+							}
 							if (
 								updated.connection.owner !== owner ||
 								updated.connection.connectionId !== id ||
@@ -302,6 +352,45 @@ export const makeFor = (
 						}),
 					)
 					.pipe(Effect.mapError(unavailable)),
+		})
+		return Repository.of({
+			...service,
+			updateApp: (...args) =>
+				OwnedWrites.write(args[0], service.updateApp(...args)).pipe(
+					Effect.mapError((error) =>
+						error instanceof FenceUnavailable ? unavailable() : error,
+					),
+				),
+			save: (...args) =>
+				OwnedWrites.write(args[0], service.save(...args)).pipe(
+					Effect.mapError((error) =>
+						error instanceof FenceUnavailable ? unavailable() : error,
+					),
+				),
+			update: (...args) =>
+				OwnedWrites.write(args[0], service.update(...args)).pipe(
+					Effect.mapError((error) =>
+						error instanceof FenceUnavailable ? unavailable() : error,
+					),
+				),
+			remove: (...args) =>
+				OwnedWrites.write(args[0], service.remove(...args)).pipe(
+					Effect.mapError((error) =>
+						error instanceof FenceUnavailable ? unavailable() : error,
+					),
+				),
+			saveDraft: (...args) =>
+				OwnedWrites.write(args[0], service.saveDraft(...args)).pipe(
+					Effect.mapError((error) =>
+						error instanceof FenceUnavailable ? unavailable() : error,
+					),
+				),
+			clearDrafts: (...args) =>
+				OwnedWrites.write(args[0], service.clearDrafts(...args)).pipe(
+					Effect.mapError((error) =>
+						error instanceof FenceUnavailable ? unavailable() : error,
+					),
+				),
 		})
 	})
 export const make = makeFor("public")

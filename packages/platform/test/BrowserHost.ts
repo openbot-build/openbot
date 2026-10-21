@@ -23,6 +23,11 @@ import type { AppNetwork } from "../src/apps/AppHost.ts"
 
 /** A disposable Platform host with real PostgreSQL and signed OIDC test identities. */
 export async function start(options: {
+	readonly execution?: {
+		readonly origin: string
+		readonly token: Redacted.Redacted<string>
+		readonly backend: "e" | "openbot"
+	}
 	readonly publicOrigin: string
 	readonly port?: number
 	readonly model?: typeof LanguageModel.LanguageModel.Service
@@ -35,7 +40,16 @@ export async function start(options: {
 		readonly tool: string
 	}>
 	readonly appRestrictions?: ReadonlyArray<AppIndexApi.Restriction>
+	readonly authCompatibility?: {
+		readonly sessionCookie?: string
+		readonly loginCookie?: string
+		readonly providerId?: string
+		readonly callbackPath?: string
+	}
 	readonly organization?: {
+		readonly ownerUserIds?: ReadonlyArray<string>
+		readonly memberUserIds?: ReadonlyArray<string>
+		readonly allowFirstLoginAdmin?: boolean
 		readonly ownerEmails?: ReadonlyArray<string>
 		readonly allowedEmailDomains?: ReadonlyArray<string>
 	}
@@ -225,6 +239,9 @@ export async function start(options: {
 		],
 	}
 	const configuration = {
+		...(options.execution === undefined
+			? {}
+			: { execution: options.execution }),
 		...(options.appReadRules === undefined
 			? {}
 			: { appReadRules: options.appReadRules }),
@@ -255,6 +272,7 @@ export async function start(options: {
 			"1111111111111111111111111111111111111111111111111111111111111111",
 		),
 		auth: {
+			...options.authCompatibility,
 			publicOrigin: options.publicOrigin,
 			issuer,
 			clientId: "browser-fixture",
@@ -306,7 +324,7 @@ export async function start(options: {
 					origin: options.publicOrigin,
 				},
 				body: JSON.stringify({
-					provider: "oidc",
+					provider: options.authCompatibility?.providerId ?? "oidc",
 					callbackURL: options.publicOrigin + (returnTo ?? "/"),
 					disableRedirect: true,
 				}),
@@ -324,7 +342,8 @@ export async function start(options: {
 			})
 			const callback = await fetch(
 				address +
-					"/auth/callback/oidc?" +
+					(options.authCompatibility?.callbackPath ?? "/auth/callback/oidc") +
+					"?" +
 					new URLSearchParams({
 						state: authorization.searchParams.get("state") ?? "",
 						iss: issuer,
@@ -335,7 +354,12 @@ export async function start(options: {
 			const cookie =
 				callback.headers
 					.getSetCookie()
-					.find((value) => value.startsWith(AuthApi.SessionCookie + "="))
+					.find((value) =>
+						value.startsWith(
+							(options.authCompatibility?.sessionCookie ??
+								AuthApi.SessionCookie) + "=",
+						),
+					)
 					?.split(";")[0] ?? ""
 			const session = Redacted.make(
 				decodeURIComponent(cookie.slice(cookie.indexOf("=") + 1)),

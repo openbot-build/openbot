@@ -31,11 +31,17 @@ const InputMessage = Schema.Struct({
 	]),
 })
 
+export const TurnMemory = Schema.Struct({
+	use: Schema.optionalKey(Schema.Boolean),
+	generate: Schema.optionalKey(Schema.Boolean),
+})
+
 export const SettingsPatch = Schema.Struct({
 	mode: Schema.optionalKey(Config.Mode),
 	model: Schema.optionalKey(Config.Selection),
 })
 export const CreateSessionRequest = Schema.Struct({
+	memory: Schema.optionalKey(TurnMemory),
 	title: Schema.optionalKey(Schema.String),
 	settings: Schema.optionalKey(SettingsPatch),
 })
@@ -43,6 +49,8 @@ export type CreateSessionRequest = typeof CreateSessionRequest.Type
 
 /** Text-only Responses input. The stream watches a background execution. */
 export const StartTurnRequest = Schema.Struct({
+	/** Applies to this Turn only. */
+	memory: Schema.optionalKey(TurnMemory),
 	expected: Session.Revision,
 	overrides: Schema.optionalKey(SettingsPatch),
 	input: Schema.Union([
@@ -299,6 +307,7 @@ export const UpdateSessionRequest = Schema.Struct({
 	archived: Schema.optionalKey(Schema.Boolean),
 })
 export const ForkSessionRequest = Schema.Struct({
+	memory: Schema.optionalKey(TurnMemory),
 	version: Schema.optionalKey(Timeline.VersionId),
 	title: Schema.optionalKey(Schema.String),
 	settings: Schema.optionalKey(SettingsPatch),
@@ -508,6 +517,7 @@ export const SessionsApi = HttpApiGroup.make("sessions")
 				payload: Schema.Struct({
 					expected: Session.Revision,
 					settings: Turn.Settings,
+					memory: Schema.optionalKey(TurnMemory),
 				}),
 				success: SessionView,
 				error: [

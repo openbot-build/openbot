@@ -1,3 +1,4 @@
+import * as ExecutionFence from "../execution/ExecutionFence.ts"
 import {
 	Agent,
 	Config,
@@ -145,7 +146,26 @@ export const make = <
 							),
 						)
 		const memoryPolicy = options.memory?.policy ?? MemoryRules.policy,
-			memoryModel = options.memory?.model ?? LanguageModelMemory.model,
+			selectedMemoryModel = options.memory?.model ?? LanguageModelMemory.model,
+			memoryModel: typeof Memory.MemoryModel.Service = {
+				extract: (input) =>
+					options.owner === undefined
+						? selectedMemoryModel.extract(input)
+						: ExecutionFence.guard(
+								options.owner.userId,
+								"send",
+								selectedMemoryModel.extract(input),
+							).pipe(
+								Effect.catchTag("FenceUnavailable", () =>
+									Effect.fail(
+										new Memory.MemoryError({
+											reason: "model-failed",
+											message: "The account is temporarily unavailable.",
+										}),
+									),
+								),
+							),
+			},
 			memoryDefaults: Memory.Settings = {
 				use: true,
 				generate: true,
@@ -165,6 +185,7 @@ export const make = <
 				return SessionHost.settings({
 					defaults: memoryDefaults,
 					session: view.session,
+					turn: Session.currentTurn(view.session),
 				})
 			}),
 			languageModel: Effect.gen(function* (): Effect.fn.Return<
@@ -222,13 +243,32 @@ export const make = <
 								middleware === undefined
 									? next(supplied)
 									: middleware(next, supplied)
-							if (options.layerExecution === undefined) return stream
+							const guarded =
+								options.owner === undefined
+									? stream
+									: Stream.unwrap(
+											ExecutionFence.guardScoped(
+												options.owner.userId,
+												"send",
+												Effect.succeed(stream),
+											).pipe(
+												Effect.mapError(
+													() =>
+														new SessionStore.SessionStoreError({
+															reason: "storage-failed",
+															message:
+																"The account is temporarily unavailable.",
+														}),
+												),
+											),
+										)
+							if (options.layerExecution === undefined) return guarded
 							const currentEnvironment = yield* Effect.context<R>()
 							const execution = yield* Layer.build(
 								options.layerExecution(view.session, namespace),
 							)
 							// Each Turn owns the host resources built for its Session.
-							return stream.pipe(
+							return guarded.pipe(
 								Stream.provideContext(
 									Context.merge(
 										Context.merge(environment, currentEnvironment),
@@ -412,6 +452,10 @@ export const make = <
 						: yield* validateSelection(settings.model)
 				return yield* store
 					.create({
+						business:
+							input.memory === undefined
+								? {}
+								: { [sessionHostId]: { memory: input.memory } },
 						metadata: {
 							...(input.title === undefined ? {} : { title: input.title }),
 						},
@@ -443,11 +487,25 @@ export const make = <
 					.modifyEffect({
 						session: id,
 						expectedRevision: input.expected,
-						update: () =>
+						update: (current) =>
 							Effect.succeed([
 								undefined,
 								Option.some({
 									session: {
+										...(input.memory === undefined
+											? {}
+											: {
+													business: {
+														...current.session.business,
+														[sessionHostId]: {
+															...SessionHost.hostState(current.session),
+															memory: {
+																...SessionHost.overrides(current.session),
+																...input.memory,
+															},
+														},
+													},
+												}),
 										settings: {
 											...input.settings,
 											...(selection === undefined ? {} : { model: selection }),
@@ -551,7 +609,18 @@ export const make = <
 						...(settings === undefined ? {} : { settings }),
 						// The Fork keeps the Platform data of its source, such as the memory switches.
 						business: EffectRecord.filter(
-							{ [sessionHostId]: source.session.business[sessionHostId] },
+							{
+								[sessionHostId]:
+									input.memory === undefined
+										? source.session.business[sessionHostId]
+										: {
+												...SessionHost.hostState(source.session),
+												memory: {
+													...SessionHost.overrides(source.session),
+													...input.memory,
+												},
+											},
+							},
 							Predicate.isNotUndefined,
 						),
 					})
@@ -665,14 +734,37 @@ export const make = <
 			ServiceError | SessionExecutionUnavailable
 		> =>
 			Effect.gen(function* () {
+				const executionEnvironment = Context.add(
+					Context.add(
+						environment,
+						ExecutionFence.CurrentExecution,
+						yield* ExecutionFence.CurrentExecution,
+					),
+					ExecutionFence.CurrentSessionOwner,
+					options.owner === undefined
+						? undefined
+						: { namespace, accountId: options.owner.userId },
+				)
 				const view = yield* read(id)
-				const overrides =
+				const modelOverrides =
 					input.overrides?.model === undefined
 						? input.overrides
 						: {
 								...input.overrides,
 								model: yield* validateSelection(input.overrides.model),
 							}
+				const overrides = {
+					...modelOverrides,
+					pluginSettings: {
+						"@openbot-build/plugin-memory": {
+							...SessionHost.settings({
+								defaults: memoryDefaults,
+								session: view.session,
+							}),
+							...input.memory,
+						},
+					},
+				}
 				const model = yield* modelFor({
 					...view,
 					session: {
@@ -732,6 +824,8 @@ export const make = <
 									},
 								])
 								.pipe(Effect.asVoid)
+				const startedAt = performance.now()
+				let measuredFirstText = false
 				const execution = runtime
 					.stream({
 						base: { session: id, revision: input.expected },
@@ -740,7 +834,11 @@ export const make = <
 					})
 					.pipe(
 						Stream.provideContext(
-							Context.add(environment, LanguageModel.LanguageModel, model),
+							Context.add(
+								executionEnvironment,
+								LanguageModel.LanguageModel,
+								model,
+							),
 						),
 						Stream.runForEach((event) =>
 							Match.value(event).pipe(
@@ -762,6 +860,19 @@ export const make = <
 								Match.tag("ResponsePart", (event) =>
 									Effect.gen(function* () {
 										step = event.step
+										if (
+											!measuredFirstText &&
+											event.part.type === "text-delta" &&
+											event.part.delta.length > 0
+										) {
+											measuredFirstText = true
+											yield* Effect.logInfo(
+												JSON.stringify({
+													event: "turn_first_text",
+													durationMs: performance.now() - startedAt,
+												}),
+											)
+										}
 										if (sink === undefined) return
 										const output = yield* Option.match(
 											HashMap.get(outputs, event.item),
@@ -953,7 +1064,7 @@ export const make = <
 										yield* runtime.runQueued(id).pipe(
 											Effect.provideContext(
 												Context.add(
-													environment,
+													executionEnvironment,
 													LanguageModel.LanguageModel,
 													model,
 												),
@@ -1002,7 +1113,25 @@ export const make = <
 							}),
 						),
 					)
-				yield* Effect.forkIn(execution, scope)
+				yield* Effect.forkIn(
+					options.owner === undefined
+						? execution
+						: ExecutionFence.guard(
+								options.owner.userId,
+								"continue",
+								execution,
+							).pipe(
+								Effect.catchTag("FenceUnavailable", () =>
+									Deferred.fail(
+										accepted,
+										SessionConflict.make({
+											message: "The account is temporarily unavailable.",
+										}),
+									),
+								),
+							),
+					scope,
+				)
 				return yield* Deferred.await(accepted)
 			})
 		const send: typeof Sessions.Service.send = (id, input) => start(id, input)
@@ -1014,6 +1143,17 @@ export const make = <
 			})
 		const startAction: typeof Sessions.Service.startAction = (id, input) =>
 			Effect.gen(function* () {
+				const executionEnvironment = Context.add(
+					Context.add(
+						environment,
+						ExecutionFence.CurrentExecution,
+						yield* ExecutionFence.CurrentExecution,
+					),
+					ExecutionFence.CurrentSessionOwner,
+					options.owner === undefined
+						? undefined
+						: { namespace, accountId: options.owner.userId },
+				)
 				yield* read(id)
 				return yield* runtime
 					.startAction({
@@ -1022,12 +1162,23 @@ export const make = <
 						...(input.turn === undefined ? {} : { turn: input.turn }),
 					})
 					.pipe(
-						Effect.provideContext(environment),
+						Effect.provideContext(executionEnvironment),
 						Effect.mapError(publicError),
 					)
 			})
 		const approve: typeof Sessions.Service.approve = (id, input) =>
 			Effect.gen(function* () {
+				const executionEnvironment = Context.add(
+					Context.add(
+						environment,
+						ExecutionFence.CurrentExecution,
+						yield* ExecutionFence.CurrentExecution,
+					),
+					ExecutionFence.CurrentSessionOwner,
+					options.owner === undefined
+						? undefined
+						: { namespace, accountId: options.owner.userId },
+				)
 				const view = yield* read(id)
 				const turn = Session.currentTurn(view.session)
 				const model =
@@ -1081,13 +1232,13 @@ export const make = <
 					model === undefined
 						? runtime
 								.approveAction(approval)
-								.pipe(Effect.provideContext(environment))
+								.pipe(Effect.provideContext(executionEnvironment))
 						: runtime
 								.approve(approval)
 								.pipe(
 									Effect.provideContext(
 										Context.add(
-											environment,
+											executionEnvironment,
 											LanguageModel.LanguageModel,
 											model,
 										),

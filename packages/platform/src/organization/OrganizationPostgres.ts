@@ -1,7 +1,8 @@
+import { Barrier } from "../auth/Barrier.ts"
 import { OrganizationApi, Permissions } from "@openbot-build/platform-api"
 import type { PgClient } from "@effect/sql-pg"
 import { Clock, DateTime, Effect, Layer, Option, Schema } from "effect"
-import { and, asc, eq, gt, sql } from "drizzle-orm"
+import { and, asc, eq, gt, ne, sql } from "drizzle-orm"
 import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { randomUUID } from "node:crypto"
 import { members, organizations, tokens } from "../database/Schema.ts"
@@ -62,6 +63,8 @@ export const make = (
 		const ownerEmails = (options.ownerEmails ?? []).map((email) =>
 			email.trim().toLowerCase(),
 		)
+		const ownerUserIds = options.ownerUserIds ?? []
+		const memberUserIds = options.memberUserIds ?? []
 		const unavailable = () => OrganizationUnavailable.make({})
 
 		/** Run one change to members at a time, so the Super Administrator check stays true. */
@@ -133,15 +136,21 @@ export const make = (
 						const email = account.email?.trim().toLowerCase()
 						const verified = account.emailVerified === true
 						const roles =
-							email !== undefined && verified && ownerEmails.includes(email)
+							ownerUserIds.includes(account.id) ||
+							(email !== undefined && verified && ownerEmails.includes(email))
 								? ["super_administrator"]
-								: (count?.total ?? 0) === 0 && ownerEmails.length === 0
+								: options.allowFirstLoginAdmin !== false &&
+									  (count?.total ?? 0) === 0 &&
+									  ownerEmails.length === 0 &&
+									  ownerUserIds.length === 0 &&
+									  memberUserIds.length === 0
 									? ["super_administrator"]
-									: email !== undefined &&
-										  verified &&
-										  decodeDomains(organization.allowedEmailDomains).includes(
-												domainOf(email),
-										  )
+									: memberUserIds.includes(account.id) ||
+										  (email !== undefined &&
+												verified &&
+												decodeDomains(
+													organization.allowedEmailDomains,
+												).includes(domainOf(email)))
 										? decodeRoles(organization.defaultRoles)
 										: undefined
 						if (roles === undefined) return yield* MembershipRejected.make({})
@@ -196,7 +205,9 @@ export const make = (
 						.select()
 						.from(members)
 						.where(eq(members.organizationId, organizationId))
-					const all = rows.map(memberView)
+					const all = rows
+						.filter((row) => row.status !== "removed")
+						.map(memberView)
 					const target = all.find((member) => member.userId === userId)
 					if (target === undefined)
 						return yield* OrganizationApi.MemberNotFound.make({ userId })
@@ -211,7 +222,7 @@ export const make = (
 				}),
 			)
 
-		return Organization.of({
+		const service = Organization.of({
 			admit,
 			member: (organizationId, userId) =>
 				db
@@ -219,6 +230,7 @@ export const make = (
 					.from(members)
 					.where(
 						and(
+							ne(members.status, "removed"),
 							eq(members.organizationId, organizationId),
 							eq(members.userId, userId),
 						),
@@ -274,6 +286,7 @@ export const make = (
 					.from(members)
 					.where(
 						and(
+							ne(members.status, "removed"),
 							eq(members.organizationId, organizationId),
 							after === undefined ? undefined : gt(members.userId, after),
 						),
@@ -343,7 +356,8 @@ export const make = (
 									),
 								)
 							yield* tx
-								.delete(members)
+								.update(members)
+								.set({ status: "removed", roles: "[]", policies: "[]" })
 								.where(
 									and(
 										eq(members.organizationId, organizationId),
@@ -359,6 +373,33 @@ export const make = (
 							? error
 							: unavailable(),
 					),
+				),
+		})
+		return Organization.of({
+			...service,
+			update: (...args) =>
+				Effect.flatMap(Effect.serviceOption(Barrier), (barrier) =>
+					Option.isSome(barrier)
+						? barrier.value
+								.wrap(service.update(...args))
+								.pipe(Effect.catchTag("AuthUnavailable", () => unavailable()))
+						: service.update(...args),
+				),
+			updateMember: (...args) =>
+				Effect.flatMap(Effect.serviceOption(Barrier), (barrier) =>
+					Option.isSome(barrier)
+						? barrier.value
+								.wrap(service.updateMember(...args))
+								.pipe(Effect.catchTag("AuthUnavailable", () => unavailable()))
+						: service.updateMember(...args),
+				),
+			removeMember: (...args) =>
+				Effect.flatMap(Effect.serviceOption(Barrier), (barrier) =>
+					Option.isSome(barrier)
+						? barrier.value
+								.wrap(service.removeMember(...args))
+								.pipe(Effect.catchTag("AuthUnavailable", () => unavailable()))
+						: service.removeMember(...args),
 				),
 		})
 	})

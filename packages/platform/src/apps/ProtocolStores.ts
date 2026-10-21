@@ -1,3 +1,5 @@
+import * as OwnedWrites from "../execution/OwnedWrites.ts"
+import { FenceUnavailable } from "../execution/ExecutionFence.ts"
 import { Authorization, Store } from "@openbot-build/protocol"
 import type { PgClient } from "@effect/sql-pg"
 import { Context, Effect, Layer, Match, Schema } from "effect"
@@ -18,7 +20,7 @@ export interface OwnedStores {
 export class ProtocolStores extends Context.Service<
 	ProtocolStores,
 	{
-		readonly bind: (owner: string) => OwnedStores
+		readonly bind: (owner: string, intent?: "credential-renewal") => OwnedStores
 	}
 >()("@openbot-build/platform/apps/ProtocolStores") {}
 
@@ -49,7 +51,7 @@ export const make: Effect.Effect<
 	const secrets = yield* Secrets
 	const db = yield* makeWithDefaults()
 	return ProtocolStores.of({
-		bind: (owner) => {
+		bind: (owner, intent) => {
 			const owned = (key: Store.ConnectionKey) =>
 				key.owner === owner ? Effect.void : Effect.fail(missing())
 			const where = (kind: string, id: string) =>
@@ -97,11 +99,17 @@ export const make: Effect.Effect<
 				update: ({ key, change }) =>
 					owned(key).pipe(
 						Effect.andThen(
-							repository.update(owner, key.connectionId, (stored) => ({
-								...stored,
-								connection: change(stored.connection),
-								verification: null,
-							})),
+							repository.update(
+								owner,
+								key.connectionId,
+								(stored) => ({
+									...stored,
+									connection: change(stored.connection),
+									verification: null,
+								}),
+								undefined,
+								intent,
+							),
 						),
 						Effect.map((stored) => stored.connection),
 						Effect.mapError(translate),
@@ -231,7 +239,7 @@ export const make: Effect.Effect<
 						})
 				}),
 			})
-			return {
+			const service: OwnedStores = {
 				apps,
 				credentials,
 				flows,
@@ -259,6 +267,26 @@ export const make: Effect.Effect<
 							}),
 						)
 						.pipe(Effect.asVoid, Effect.mapError(unavailable)),
+			}
+			const write = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+				OwnedWrites.write(owner, effect).pipe(
+					Effect.mapError((error) =>
+						error instanceof FenceUnavailable ? unavailable() : error,
+					),
+				)
+			return {
+				...service,
+				credentials: {
+					...credentials,
+					put: (credential) => write(credentials.put(credential)),
+					deleteConnection: (key) => write(credentials.deleteConnection(key)),
+				},
+				flows: {
+					...flows,
+					save: (flow) => write(flows.save(flow)),
+					consume: (input) => write(flows.consume(input)),
+				},
+				clearFlows: (id) => write(service.clearFlows(id)),
 			}
 		},
 	})

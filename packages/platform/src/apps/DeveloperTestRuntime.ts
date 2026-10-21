@@ -1,3 +1,4 @@
+import * as AccountNetwork from "../execution/AccountNetwork.ts"
 import { DeveloperApi as Api } from "@openbot-build/platform-api"
 import {
 	App,
@@ -112,7 +113,11 @@ export const make = (
 	Effect.gen(function* () {
 		const stores = yield* DeveloperTestStores
 		const records = yield* DeveloperRepository
-		const network = yield* AppNetwork
+		const configuredNetwork = yield* AppNetwork
+		const network = {
+			layer: (owner: string, origins: ReadonlyArray<string>) =>
+				AccountNetwork.layer(owner, configuredNetwork.layer(owner, origins)),
+		}
 		const crypto = yield* Crypto.Crypto
 		const active = yield* App.ConnectionScopes
 		const access = yield* DeveloperAccess
@@ -278,7 +283,7 @@ export const make = (
 							const lists = [
 								{
 									name: "tools" as const,
-									advertised: client.discovery.capabilities.tools !== undefined,
+									advertised: client.capabilities.tools !== undefined,
 									read: () =>
 										collect((cursor) =>
 											client
@@ -297,8 +302,7 @@ export const make = (
 								},
 								{
 									name: "resources" as const,
-									advertised:
-										client.discovery.capabilities.resources !== undefined,
+									advertised: client.capabilities.resources !== undefined,
 									read: () =>
 										collect((cursor) =>
 											client
@@ -313,8 +317,7 @@ export const make = (
 								},
 								{
 									name: "resourceTemplates" as const,
-									advertised:
-										client.discovery.capabilities.resources !== undefined,
+									advertised: client.capabilities.resources !== undefined,
 									read: () =>
 										collect((cursor) =>
 											client
@@ -331,8 +334,7 @@ export const make = (
 								},
 								{
 									name: "prompts" as const,
-									advertised:
-										client.discovery.capabilities.prompts !== undefined,
+									advertised: client.capabilities.prompts !== undefined,
 									read: () =>
 										collect((cursor) =>
 											client

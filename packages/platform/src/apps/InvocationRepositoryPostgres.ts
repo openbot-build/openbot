@@ -1,3 +1,5 @@
+import * as OwnedWrites from "../execution/OwnedWrites.ts"
+import { FenceUnavailable } from "../execution/ExecutionFence.ts"
 import type { PgClient } from "@effect/sql-pg"
 import {
 	AppExecution,
@@ -70,12 +72,31 @@ export const make: Effect.Effect<
 				return yield* ExperienceNotFound.make({ id: "App operation" })
 			return yield* decode(row)
 		}).pipe(Effect.mapError(mapError))
-	return InvocationRepository.of({
+	const service = InvocationRepository.of({
 		recover: db
-			.update(appInvocations)
-			.set({ status: "OutcomeUnknown" })
+			.selectDistinct({ owner: appInvocations.owner })
+			.from(appInvocations)
 			.where(eq(appInvocations.status, "Sending"))
-			.pipe(Effect.asVoid, Effect.mapError(unavailable)),
+			.pipe(
+				Effect.flatMap((rows) =>
+					Effect.forEach(rows, ({ owner }) =>
+						OwnedWrites.recover(
+							owner,
+							db
+								.update(appInvocations)
+								.set({ status: "OutcomeUnknown" })
+								.where(
+									and(
+										eq(appInvocations.owner, owner),
+										eq(appInvocations.status, "Sending"),
+									),
+								),
+						),
+					),
+				),
+				Effect.asVoid,
+				Effect.mapError(unavailable),
+			),
 		get,
 		list: (owner, session) =>
 			db
@@ -156,6 +177,21 @@ export const make: Effect.Effect<
 					}),
 				)
 				.pipe(Effect.mapError(mapError)),
+	})
+	return InvocationRepository.of({
+		...service,
+		put: (...args) =>
+			OwnedWrites.write(args[0], service.put(...args)).pipe(
+				Effect.mapError((error) =>
+					error instanceof FenceUnavailable ? unavailable() : error,
+				),
+			),
+		change: (...args) =>
+			OwnedWrites.write(args[0], service.change(...args)).pipe(
+				Effect.mapError((error) =>
+					error instanceof FenceUnavailable ? unavailable() : error,
+				),
+			),
 	})
 })
 export const layer = Layer.effect(InvocationRepository, make)

@@ -7,6 +7,7 @@ import { OpenApi } from "effect/http-api"
 // The title and a short description for each API group, in reading order.
 // The sidebar uses this order. A group with a description gets its own page.
 const groups = [
+	["login", "Browser login", "Start and complete browser login, and sign out."],
 	["account", "Account", "Read the signed-in user."],
 	["userTokens", "User tokens", "Make, list, check, and revoke user tokens."],
 	[

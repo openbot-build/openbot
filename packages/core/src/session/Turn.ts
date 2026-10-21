@@ -9,6 +9,8 @@ export { Id } from "./TurnIdentity.ts"
 
 export const Settings = Schema.Struct({
 	mode: Config.Mode,
+	/** Persisted settings for host plugins for this Turn. */
+	pluginSettings: Schema.optionalKey(Schema.Record(Schema.String, Schema.JsonObject)),
 	model: Schema.optionalKey(Config.Selection),
 })
 export type Settings = typeof Settings.Type
