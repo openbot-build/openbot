@@ -144,7 +144,7 @@ test(
 				).json(),
 			)
 			const sessions = await runtime.runPromise(
-				backend.get(session.identity.tenantId),
+				backend.forCaller({ kind: "member", ...session.identity }),
 			)
 			saved = await runtime.runPromise(wait(sessions, work.session.id, true))
 			const memory = await runtime.runPromise(sessions.memory(work.session.id))
@@ -187,7 +187,7 @@ test(
 			)
 			const restartedSessions = await runtime.runPromise(
 				Effect.flatMap(Backend.Backend, (backend) =>
-					backend.get(session.identity.tenantId),
+					backend.forCaller({ kind: "member", ...session.identity }),
 				),
 			)
 			continued = await runtime.runPromise(

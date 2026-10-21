@@ -31,6 +31,7 @@ import {
 	OpenApi,
 } from "effect/http-api"
 import * as PostgresTest from "./PostgresTest.ts"
+import * as OrganizationFixture from "./OrganizationFixture.ts"
 
 const environment = {
 	OPENBOT_DATABASE_URL: "postgres://localhost/development",
@@ -314,10 +315,10 @@ test(
 			)
 			const openapi = await (await request("/openapi.json")).json()
 			assert.deepEqual(openapi.paths["/v1/sessions"].post.security, [
-				{ apiKey: [] },
+				{ token: [] },
 				{ session: [] },
 			])
-			assert.deepEqual(openapi.components.securitySchemes.apiKey, {
+			assert.deepEqual(openapi.components.securitySchemes.token, {
 				type: "http",
 				scheme: "Bearer",
 			})
@@ -418,20 +419,29 @@ test("business authentication keeps session Origin checks and typed failures", a
 				: unavailable
 					? failure
 					: Effect.succeed({
-							identity: { userId: "session-user", tenantId: "session-user" },
+							identity: {
+								userId: "session-user",
+								organizationId: "session-user",
+							},
 							profile: {},
 							expiresAt: "2099-01-01T00:00:00.000Z",
 							setCookies: [],
 						}),
 	})
-	const apiKeys = Layer.succeed(Auth.ApiKeys, {
+	const tokens = Layer.succeed(Auth.Tokens, {
 		create: () => Effect.die("unused"),
 		list: () => Effect.die("unused"),
 		revoke: () => Effect.die("unused"),
+		find: () => Effect.die("unused"),
 		authenticate: (credential) =>
-			Redacted.value(credential) === "obk_valid"
-				? Effect.succeed({ userId: "key-user", tenantId: "key-user" })
-				: Effect.fail(Auth.Model.CredentialRejected.make({ kind: "apiKey" })),
+			Redacted.value(credential) === "obut_valid"
+				? Effect.succeed({
+						kind: "user_token" as const,
+						userId: "key-user",
+						organizationId: "key-user",
+						tokenId: "key-1",
+					})
+				: Effect.fail(Auth.Model.CredentialRejected.make({ kind: "token" })),
 	})
 	const api = HttpApi.make("auth-probe").add(
 		HttpApiGroup.make("probe")
@@ -452,7 +462,9 @@ test("business authentication keeps session Origin checks and typed failures", a
 			Layer.provide(handlers),
 			Layer.provide(Auth.HttpHandlers.layer({ publicOrigin })),
 			Layer.provide(auth),
-			Layer.provide(apiKeys),
+			Layer.provide(tokens),
+			Layer.provide(OrganizationFixture.layerEveryoneAdministrator),
+			Layer.provide(OrganizationFixture.layerNoAudit),
 			Layer.provide(HttpServer.layerServices),
 		),
 		{ disableLogger: true },
@@ -469,8 +481,9 @@ test("business authentication keeps session Origin checks and typed failures", a
 			new Request(publicOrigin + "/identity", { headers: cookie }),
 		)
 		assert.deepEqual(await session.json(), {
+			kind: "member",
 			userId: "session-user",
-			tenantId: "session-user",
+			organizationId: "session-user",
 		})
 		for (const headers of [
 			{},
@@ -501,15 +514,17 @@ test("business authentication keeps session Origin checks and typed failures", a
 		)
 		assert.equal((await write({ ...cookie, origin: publicOrigin })).status, 200)
 		assert.equal((await write({ authorization: "Bearer retired" })).status, 401)
-		const keyed = await write({ authorization: "Bearer obk_valid" })
+		const keyed = await write({ authorization: "Bearer obut_valid" })
 		assert.equal(keyed.status, 200)
 		assert.deepEqual(await keyed.json(), {
+			kind: "user_token",
 			userId: "key-user",
-			tenantId: "key-user",
+			organizationId: "key-user",
+			tokenId: "key-1",
 		})
 		const spec = OpenApi.fromApi(PlatformApi)
 		assert.deepEqual(spec.paths["/v1/sessions"]?.post?.security, [
-			{ apiKey: [] },
+			{ token: [] },
 			{ session: [] },
 		])
 		assert.equal(spec.components.securitySchemes["bearer"], undefined)

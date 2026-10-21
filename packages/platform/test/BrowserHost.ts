@@ -35,6 +35,10 @@ export async function start(options: {
 		readonly tool: string
 	}>
 	readonly appRestrictions?: ReadonlyArray<AppIndexApi.Restriction>
+	readonly organization?: {
+		readonly ownerEmails?: ReadonlyArray<string>
+		readonly allowedEmailDomains?: ReadonlyArray<string>
+	}
 	readonly indexWork?: {
 		readonly intervalMs?: number
 		readonly retryMs?: number
@@ -240,6 +244,10 @@ export async function start(options: {
 			? {}
 			: { discovery: options.discovery }),
 		...(options.appProbe === undefined ? {} : { appProbe: options.appProbe }),
+		// Test accounts have verified emails at example.com, so they all join one organization.
+		organization: options.organization ?? {
+			allowedEmailDomains: ["example.com"],
+		},
 		host: "127.0.0.1",
 		port: options.port ?? 0,
 		databaseUrl: Redacted.make(database.url),
@@ -334,7 +342,7 @@ export async function start(options: {
 					const info = yield* auth.resolveSession(session)
 					return {
 						session,
-						identity: info.identity,
+						identity: { kind: "member" as const, ...info.identity },
 						returnLocation: callback.headers.get("location"),
 					}
 				}),

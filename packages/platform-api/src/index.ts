@@ -3,7 +3,14 @@ export { PlatformApi } from "./PlatformApi.ts"
 export { Caller, Identity } from "./Identity.ts"
 export { SessionApprovalsApi, ToolApproval } from "./SessionApprovalsApi.ts"
 export * as AuthApi from "./AuthApi.ts"
-export * as ApiKeysApi from "./ApiKeysApi.ts"
+export * as UserTokensApi from "./UserTokensApi.ts"
+export * as OrganizationApi from "./OrganizationApi.ts"
+export * as Permissions from "./Permissions.ts"
+export {
+	Authorize,
+	AuthorizationUnavailable,
+	PermissionDenied,
+} from "./Permissions.ts"
 export {
 	AgentAuth,
 	ForbiddenOrigin,
@@ -11,6 +18,7 @@ export {
 	AuthSession,
 	AuthenticationRequired,
 	AuthenticationUnavailable,
+	MembershipRequired,
 } from "./AuthApi.ts"
 export {
 	SessionsApi,

@@ -6,6 +6,7 @@ import {
 	index,
 	boolean,
 	bigint,
+	bigserial,
 } from "drizzle-orm/pg-core"
 import { openbot_auth_user } from "./AuthSchema.ts"
 const table = pgTable
@@ -177,21 +178,76 @@ export const refs = table(
 	],
 )
 
-/** API keys store only a SHA-256 hash of their long random secret. */
-export const apiKeys = table(
-	"openbot_api_keys",
+/** One deployment has one organization. Lists are JSON text. */
+export const organizations = table("openbot_organizations", {
+	id: text().primaryKey(),
+	name: text().notNull(),
+	allowedEmailDomains: text("allowed_email_domains").notNull(),
+	defaultRoles: text("default_roles").notNull(),
+	createdAt: bigint("created_at", { mode: "number" }).notNull(),
+})
+
+/** Roles and policies are JSON text. */
+export const members = table(
+	"openbot_members",
 	{
-		id: text().primaryKey(),
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
 		userId: text("user_id")
 			.notNull()
 			.references(() => openbot_auth_user.id, { onDelete: "cascade" }),
-		tenantId: text("tenant_id").notNull(),
+		email: text(),
+		name: text(),
+		status: text().notNull(),
+		roles: text().notNull(),
+		policies: text().notNull(),
+		joinedAt: bigint("joined_at", { mode: "number" }).notNull(),
+	},
+	(t) => [primaryKey({ columns: [t.organizationId, t.userId] })],
+)
+
+/** User tokens store only a SHA-256 hash of their long random secret. */
+export const tokens = table(
+	"openbot_tokens",
+	{
+		id: text().primaryKey(),
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
+		userId: text("user_id")
+			.notNull()
+			.references(() => openbot_auth_user.id, { onDelete: "cascade" }),
 		name: text().notNull(),
 		prefix: text().notNull(),
 		hash: text().notNull().unique(),
+		policies: text().notNull(),
 		createdAt: bigint("created_at", { mode: "number" }).notNull(),
 		expiresAt: bigint("expires_at", { mode: "number" }),
 		lastUsedAt: bigint("last_used_at", { mode: "number" }),
 	},
-	(t) => [index("openbot_api_keys_owner").on(t.tenantId, t.userId)],
+	(t) => [index("openbot_tokens_owner").on(t.organizationId, t.userId)],
+)
+
+/** The audit log only grows. The sequence gives a stable order. */
+export const auditLogs = table(
+	"openbot_audit_logs",
+	{
+		sequence: bigserial({ mode: "number" }).primaryKey(),
+		organizationId: text("organization_id").notNull(),
+		createdAt: bigint("created_at", { mode: "number" }).notNull(),
+		action: text().notNull(),
+		actorUserId: text("actor_user_id").notNull(),
+		actor: text().notNull(),
+		resource: text().notNull(),
+		details: text().notNull(),
+	},
+	(t) => [
+		index("openbot_audit_logs_list").on(t.organizationId, t.sequence),
+		index("openbot_audit_logs_actor").on(
+			t.organizationId,
+			t.actorUserId,
+			t.sequence,
+		),
+	],
 )

@@ -49,14 +49,14 @@ export const make = (options: {
 export const layer = (options: {
 	readonly baseUrl: string
 	/**
-	 * An API key sent as `Authorization: Bearer` on normal operations.
+	 * A user token sent as `Authorization: Bearer` on normal operations.
 	 * Leave it out in a same-origin browser client that uses the session Cookie.
 	 */
-	readonly apiKey?: string | Redacted.Redacted<string>
+	readonly token?: string | Redacted.Redacted<string>
 	readonly onUnauthorized?: () => void
 }): Layer.Layer<Client> => {
-	const apiKey = Option.map(Option.fromNullishOr(options.apiKey), (key) =>
-		Redacted.isRedacted(key) ? Redacted.value(key) : key,
+	const token = Option.map(Option.fromNullishOr(options.token), (token) =>
+		Redacted.isRedacted(token) ? Redacted.value(token) : token,
 	)
 	const reportUnauthorized = (response: { readonly status: number }) =>
 		Effect.sync(() => {
@@ -74,9 +74,9 @@ export const layer = (options: {
 				),
 				HttpApiMiddleware.layerClient(AgentAuth, ({ request, next }) =>
 					next(
-						Option.match(apiKey, {
+						Option.match(token, {
 							onNone: () => request,
-							onSome: (key) => HttpClientRequest.bearerToken(request, key),
+							onSome: (token) => HttpClientRequest.bearerToken(request, token),
 						}),
 					).pipe(Effect.tap(reportUnauthorized)),
 				),

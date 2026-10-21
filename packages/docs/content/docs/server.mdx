@@ -32,15 +32,15 @@ You can also write these values in code.
 
 ## What the package exports
 
-| Export                                                      | What it is                                                                      |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `Server.layer(options)`                                     | Platform with its own Node.js HTTP or HTTPS server.                             |
-| `Server.layerApi(options)`                                  | Only the HTTP routes, for an HTTP server that you already have.                 |
-| `Platform.layer(options)`                                   | The services behind the routes: sign-in, API keys, storage, Sessions, and Apps. |
-| `DatabasePostgres`                                          | The database Layer and the `migrate` program.                                   |
-| `EnvironmentConfiguration`                                  | Reads Platform settings from environment variables.                             |
-| `Lark`, `LarkConfiguration`                                 | Error alerts to Lark. See [Alerts](/docs/alerts).                               |
-| `Auth`, `Sessions`, `AppHost`, `AppPlugin`, `Configuration` | Service types for advanced setups.                                              |
+| Export                                                      | What it is                                                                                 |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `Server.layer(options)`                                     | Platform with its own Node.js HTTP or HTTPS server.                                        |
+| `Server.layerApi(options)`                                  | Only the HTTP routes, for an HTTP server that you already have.                            |
+| `Platform.layer(options)`                                   | The services behind the routes: sign-in, tokens, permissions, storage, Sessions, and Apps. |
+| `DatabasePostgres`                                          | The database Layer and the `migrate` program.                                              |
+| `EnvironmentConfiguration`                                  | Reads Platform settings from environment variables.                                        |
+| `Lark`, `LarkConfiguration`                                 | Error alerts to Lark. See [Alerts](/docs/alerts).                                          |
+| `Auth`, `Sessions`, `AppHost`, `AppPlugin`, `Configuration` | Service types for advanced setups.                                                         |
 
 ---
 

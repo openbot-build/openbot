@@ -70,20 +70,20 @@ In development, this signs you in to a local test account at once. The sign-in c
 
 <Step>
 
-### Make an API key
+### Make a user token
 
 ```sh
 curl -b cookies.txt \
   -H 'Origin: https://localhost:8443' \
   -H 'Content-Type: application/json' \
   -d '{"name":"local"}' \
-  https://localhost:8443/auth/api-keys
+  https://localhost:8443/v1/user/tokens
 ```
 
-The answer has a `secret` that starts with `obk_`. You see it only once, so keep it:
+You are the first account, so you are the Super Administrator of the organization. The answer has a `secret` that starts with `obut_`. You see it only once, so keep it:
 
 ```sh
-export OPENBOT_API_KEY=obk_...
+export OPENBOT_TOKEN=obut_...
 ```
 
 </Step>
@@ -95,7 +95,7 @@ export OPENBOT_API_KEY=obk_...
 Make a Session:
 
 ```sh
-curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"title":"My first Session"}' \
   https://localhost:8443/v1/sessions
@@ -104,7 +104,7 @@ curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
 Take `session.id` and `session.revision` from the answer. Then give the Session some work:
 
 ```sh
-curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"expected":0,"input":"Hello"}' \
   https://localhost:8443/v1/sessions/<sessionId>/turns

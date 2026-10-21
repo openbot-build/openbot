@@ -47,12 +47,21 @@ export class ForbiddenOrigin extends Schema.TaggedError<ForbiddenOrigin>()(
 	"ForbiddenOrigin",
 	{},
 ) {}
+/** The account signed in, but it is not an active member of the organization. */
+export class MembershipRequired extends Schema.TaggedError<MembershipRequired>()(
+	"MembershipRequired",
+	{},
+) {}
 export const AuthErrors = [
 	AuthenticationRequired.pipe(HttpApiSchema.status(401)),
+	MembershipRequired.pipe(HttpApiSchema.status(403)),
 	AuthenticationUnavailable.pipe(HttpApiSchema.status(503)),
 ] as const
 export const SessionInfo = Schema.Struct({
-	identity: Schema.Struct({ userId: Schema.String, tenantId: Schema.String }),
+	identity: Schema.Struct({
+		userId: Schema.String,
+		organizationId: Schema.String,
+	}),
 	profile: Schema.Struct({
 		name: Schema.optionalKey(Schema.String),
 		email: Schema.optionalKey(Schema.String),
@@ -68,7 +77,7 @@ export class AuthSession extends Context.Service<
 	}
 >()("@openbot-build/platform-api/AuthApi/AuthSession") {}
 /**
- * Authorizes ordinary business operations with an API key (`Authorization: Bearer`).
+ * Finds the caller of ordinary business operations from a user token (`Authorization: Bearer`).
  * Same-origin browser clients can use the signed-in session Cookie instead.
  * Both schemes read their credential from the current request.
  * @effect-expect-leaking HttpServerRequest | ParsedSearchParams | RouteContext
@@ -79,7 +88,7 @@ export class AgentAuth extends HttpApiMiddleware.Service<
 >()("@openbot-build/platform-api/AuthApi/AgentAuth", {
 	requiredForClient: true,
 	security: {
-		apiKey: HttpApiSecurity.bearer,
+		token: HttpApiSecurity.bearer,
 		session: HttpApiSecurity.apiKey({ in: "cookie", key: SessionCookie }),
 	},
 	error: [...AuthErrors, ForbiddenOrigin.pipe(HttpApiSchema.status(403))],

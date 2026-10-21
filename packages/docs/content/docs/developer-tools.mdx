@@ -5,7 +5,7 @@ description: Check, test and manage the Apps you publish.
 
 These tools are for people who publish Apps. You can check your App, prove that you control it, share access with your team, run private tests, ask for indexing, and get notices when something breaks.
 
-Only the inspection call is public. All other calls need an API key or the session cookie. See [Authentication](/docs/authentication).
+Only the inspection call is public. All other calls need a user token or the session cookie, and the `apps.publish` permission. See [Authentication](/docs/authentication).
 
 ---
 
@@ -47,7 +47,7 @@ Most tools need proof that you control the App. You can prove control in two way
 
 ```sh
 curl -X POST https://api.example.com/v1/developer/claims \
-  -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "_tag": "PublisherHostname", "hostname": "apps.example.com" }'
 ```
@@ -89,7 +89,7 @@ Platform reads the Card at its exact URL, with no redirects. Your `robots.txt` m
 
 ```sh
 curl -X POST https://api.example.com/v1/developer/claims/<claim id>/verify \
-  -H "Authorization: Bearer $OPENBOT_API_KEY"
+  -H "Authorization: Bearer $OPENBOT_TOKEN"
 ```
 
 On success you get a **proof**. You become the `administrator` for that scope. On failure you get 409 `DeveloperConflict`. Its `reason` can be `ProofMismatch`, `ClaimExpired`, `VerificationUnavailable`, `RobotsDenied`, `RobotsUnconfirmed` or `CardUnconfirmed`.
@@ -173,7 +173,7 @@ You do not have to wait for a user to connect your App. Ask Platform to check it
 
 ```sh
 curl -X POST https://api.example.com/v1/developer/indexing \
-  -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "cardUrl": "https://apps.example.com/mcp/server-card" }'
 ```

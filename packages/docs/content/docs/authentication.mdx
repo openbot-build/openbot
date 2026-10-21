@@ -1,17 +1,19 @@
 ---
 title: Authentication
-description: Sign in, create API keys, and call the API.
+description: Sign in, create user tokens, and call the API.
 ---
 
 This page shows how people sign in to OpenBot and how programs call the API.
-A person signs in once in a browser. Then the person creates API keys for scripts and services.
+A person signs in once in a browser. Then the person creates user tokens for scripts and services.
 
 There are two ways to call the business routes under `/v1`:
 
 | Way            | Who uses it                             | What you send                       |
 | -------------- | --------------------------------------- | ----------------------------------- |
-| API key        | Scripts, backend services, bots         | `Authorization: Bearer <key>`       |
+| User token     | Scripts, backend services, bots         | `Authorization: Bearer <token>`     |
 | Session cookie | A browser client on the Platform origin | The `__Host-openbot-session` cookie |
+
+Both ways need a permission for each call. See [Permissions](/docs/permissions).
 
 ---
 
@@ -54,11 +56,11 @@ curl -c cookies.txt https://localhost:8443/auth/login
 
 ### Read and end the sign-in
 
-`GET /auth/session` returns the signed-in account. It needs the session cookie.
+`GET /auth/session` returns the signed-in account. It needs the session cookie. `organizationId` is the ID of the organization.
 
 ```json
 {
-	"identity": { "userId": "u_123", "tenantId": "u_123" },
+	"identity": { "userId": "u_123", "organizationId": "org_8f3a" },
 	"profile": {
 		"name": "Ada",
 		"email": "ada@example.com",
@@ -69,6 +71,17 @@ curl -c cookies.txt https://localhost:8443/auth/login
 ```
 
 `POST /auth/logout` ends the sign-in. It returns `204` and needs the `Origin` header (see below).
+
+---
+
+## Membership
+
+Every account that signs in must be a member of the organization. One deployment has one organization. See [Organization](/docs/organization).
+
+- The first account that signs in creates the organization and becomes a Super Administrator. This is also how one person uses OpenBot alone.
+- An account with a verified email in an allowed email domain joins as a member.
+- Other accounts get `403` with `MembershipRequired`. An administrator must allow their email domain first.
+- A suspended member gets `403` with `MembershipRequired` when they use the cookie. Their tokens stop working at once and get `401` with `AuthenticationRequired`.
 
 ---
 
@@ -93,44 +106,58 @@ curl -b cookies.txt \
   https://localhost:8443/v1/sessions
 ```
 
-Requests with an API key do not need the `Origin` header.
+Requests with a user token do not need the `Origin` header.
 
 ---
 
-## API keys
+## User tokens
 
-An API key lets a program act for your account. You manage keys only with the session cookie. An API key cannot list, create or revoke keys. If you try, Platform returns `401`.
+A user token lets a program act for you. A token can never do more than you can do. It can also have its own policies, so it does less. See [Permissions](/docs/permissions).
 
-See the full shapes in the [API keys reference](/docs/api/apiKeys).
+You can manage tokens with the session cookie, or with a token that has the `tokens.write` permission. A token made without policies cannot manage tokens.
 
-### Create a key
+See the full shapes in the [User tokens reference](/docs/api/userTokens).
+
+### Create a token
 
 ```sh
 curl -b cookies.txt \
   -H "Origin: https://api.example.com" \
   -H "Content-Type: application/json" \
   -d '{"name":"CI bot","expiresInDays":90}' \
-  https://api.example.com/auth/api-keys
+  https://api.example.com/v1/user/tokens
 ```
 
-| Field           | Rules                                                                                          |
-| --------------- | ---------------------------------------------------------------------------------------------- |
-| `name`          | Required. 1 to 80 characters after trimming spaces.                                            |
-| `expiresInDays` | Optional. A whole number from 1 to 365. Leave it out for a key that works until you revoke it. |
+| Field           | Rules                                                                                                                               |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `name`          | Required. 1 to 80 characters after trimming spaces.                                                                                 |
+| `expiresInDays` | Optional. A whole number from 1 to 365. Leave it out for a token that works until you revoke it.                                    |
+| `policies`      | Optional. Policies that limit the token. Leave it out to allow everything that you can do, except `tokens.read` and `tokens.write`. |
 
 Platform returns `201`:
 
 ```json
 {
-	"key": {
+	"token": {
 		"id": "5f0c2a8e-7d1b-4c3e-9a55-2b6f1e8d4c10",
 		"name": "CI bot",
-		"prefix": "obk_Xr4pQ2aL",
+		"prefix": "obut_Xr4pQ2aL",
+		"policies": [
+			{
+				"effect": "allow",
+				"permissionGroups": [
+					"responses.run",
+					"sessions.read",
+					"sessions.write"
+				],
+				"resources": ["openbot.org.{org}"]
+			}
+		],
 		"createdAt": "2026-10-20T09:00:00.000Z",
 		"expiresAt": "2027-01-18T09:00:00.000Z",
 		"lastUsedAt": null
 	},
-	"secret": "obk_Xr4pQ2aL..."
+	"secret": "obut_Xr4pQ2aL..."
 }
 ```
 
@@ -139,56 +166,76 @@ Platform returns `201`:
 	keeps only a SHA-256 hash of it.
 </Callout>
 
-Every secret starts with `obk_`, so a leaked key is easy to spot. The `prefix` is the first 12 characters. Use it to tell your keys apart.
+Every secret starts with `obut_`, so a leaked token is easy to spot. The `prefix` is the first 13 characters. Use it to tell your tokens apart.
 
-### List keys
+### List tokens
 
 ```sh
-curl -b cookies.txt https://api.example.com/auth/api-keys
+curl -b cookies.txt https://api.example.com/v1/user/tokens
 ```
 
-The answer is `{ "keys": [ ... ] }`, oldest first. The list never contains secrets.
-`lastUsedAt` changes at most once a minute. Expired keys stay in the list until you revoke them.
+The answer is `{ "items": [ ... ] }`, oldest first. The list never contains secrets.
+`lastUsedAt` changes at most once a minute. Expired tokens stay in the list until you revoke them.
 
-### Revoke a key
+### Revoke a token
 
 ```sh
 curl -X DELETE -b cookies.txt \
   -H "Origin: https://api.example.com" \
-  https://api.example.com/auth/api-keys/5f0c2a8e-7d1b-4c3e-9a55-2b6f1e8d4c10
+  https://api.example.com/v1/user/tokens/5f0c2a8e-7d1b-4c3e-9a55-2b6f1e8d4c10
 ```
 
-Platform returns `204` and deletes the key. The key stops working at once.
+Platform returns `204` and deletes the token. The token stops working at once.
+
+### Check a token
+
+`GET /v1/tokens/verify` shows who the caller is. For a token, it also shows the token and its policies. Every caller can use it.
+
+```json
+{
+	"caller": {
+		"kind": "user_token",
+		"userId": "u_123",
+		"organizationId": "org_8f3a",
+		"tokenId": "5f0c2a8e-7d1b-4c3e-9a55-2b6f1e8d4c10"
+	},
+	"token": { "id": "5f0c2a8e-7d1b-4c3e-9a55-2b6f1e8d4c10", "name": "CI bot" }
+}
+```
+
+With the session cookie, `caller.kind` is `member` and `token` is `null`.
 
 ### Limits and errors
 
-| Status | Error                      | When                                                  |
-| ------ | -------------------------- | ----------------------------------------------------- |
-| `401`  | `AuthenticationRequired`   | No valid session cookie.                              |
-| `403`  | `ForbiddenOrigin`          | A write without the exact `Origin` header.            |
-| `404`  | `ApiKeyNotFound`           | No key with this ID in your account.                  |
-| `409`  | `ApiKeyLimitReached`       | You already have 25 keys. The body has `"limit": 25`. |
-| `503`  | `ApiKeyStorageUnavailable` | Platform cannot reach its database.                   |
+| Status | Error                     | When                                                      |
+| ------ | ------------------------- | --------------------------------------------------------- |
+| `400`  | `TokenPolicyInvalid`      | A policy names a resource outside your organization.      |
+| `401`  | `AuthenticationRequired`  | No valid cookie or token.                                 |
+| `403`  | `PermissionDenied`        | The caller does not have `tokens.read` or `tokens.write`. |
+| `403`  | `ForbiddenOrigin`         | A cookie write without the exact `Origin` header.         |
+| `404`  | `TokenNotFound`           | You have no token with this ID.                           |
+| `409`  | `TokenLimitReached`       | You already have 25 tokens. The body has `"limit": 25`.   |
+| `503`  | `TokenStorageUnavailable` | Platform cannot reach its database.                       |
 
-An account can hold 25 keys at a time. Expired keys count too, so revoke old keys to make room.
+A member can hold 25 tokens at a time. Expired tokens count too, so revoke old tokens to make room.
 
 ---
 
-## Use a key
+## Use a token
 
-Send the key in the `Authorization` header on any `/v1` route:
+Send the token in the `Authorization` header on any `/v1` route:
 
 ```sh
-curl -H "Authorization: Bearer $OPENBOT_API_KEY" \
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions
 ```
 
-A revoked, expired or unknown key gets `401` with `AuthenticationRequired`. If Platform cannot check the key, it returns `503` with `AuthenticationUnavailable`.
+A revoked, expired or unknown token gets `401` with `AuthenticationRequired`. If Platform cannot check the token, it returns `503` with `AuthenticationUnavailable`.
 
-### Each account is its own tenant
+### Your own space
 
-A tenant is a private space for data. Each account is one tenant. Your keys and your cookie see only your own Sessions, Apps and connections.
-If you ask for a Session from another tenant, Platform answers `404`, as if it does not exist.
+Inside the organization, each member has their own Sessions, Apps and connections. Your tokens and your cookie see only your own.
+If you ask for a Session of another member, Platform answers `404`, as if it does not exist.
 
 ---
 
@@ -197,7 +244,7 @@ If you ask for a Session from another tenant, Platform answers `404`, as if it d
 Some flows send the browser back to your client after a round trip. You choose the place with `returnTo`, for example on `/auth/login`:
 
 ```sh
-https://api.example.com/auth/login?returnTo=/settings/keys
+https://api.example.com/auth/login?returnTo=/settings/tokens
 ```
 
 A return path must be a path on the same origin. It must start with one `/`. It cannot point to `/auth/*`, `/v1/*` or `/development/*`, because Platform owns those paths. The default is `/`.

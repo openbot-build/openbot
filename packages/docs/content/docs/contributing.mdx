@@ -58,7 +58,7 @@ When you change a file in `packages/*/src`, devenv starts Platform again.
 </Steps>
 
 The development server uses a local test account, test models, and a test App. No outside service is needed.
-To sign in and make an API key, see [Quick start](/docs/quickstart).
+To sign in and make a user token, see [Quick start](/docs/quickstart).
 
 ---
 
@@ -134,7 +134,7 @@ Use short sentences and common words. Explain each technical term the first time
 
 OpenBot has no user interface. Do not add pages, front ends, or client apps to the repository. The docs site is the only exception.
 Every new feature starts as an operation in the `@openbot-build/platform-api` contract. Then the server handles it.
-Every operation must work with an API key and with the sign-in cookie.
+Every operation must work with a user token and with the sign-in cookie. It must also say which permission it needs, with a `Required` or `GroupRequired` annotation. See [Permissions](/docs/permissions).
 
 ### One current model
 

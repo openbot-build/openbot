@@ -7,7 +7,8 @@ You give work to an Agent in plain language. OpenBot runs the work on a server, 
 ## Features
 
 - **API first.** Every feature is an HTTP call. One typed contract makes the server, the TypeScript client, and the API reference.
-- **API keys.** Sign in once in a browser, make a key, and call the API from any program.
+- **User tokens.** Sign in once in a browser, make a token, and call the API from any program.
+- **Organization and permissions.** Many people can share one OpenBot. Roles and policies decide what each person and each token may do.
 - **Sessions and Memory.** Work happens in Sessions and Turns. Memory keeps versions, so you can go back and try again.
 - **Approvals.** Risky tool calls wait until a person says yes.
 - **Open Apps.** Agents find and use Apps that publishers put on the open web with the OpenBot App Protocol.
@@ -22,18 +23,18 @@ devenv shell -- mkcert -install
 devenv shell -- pnpm dev
 ```
 
-OpenBot now runs at `https://localhost:8443` with a test account and test models. Sign in and make an API key:
+OpenBot now runs at `https://localhost:8443` with a test account and test models. Sign in and make a user token:
 
 ```sh
 curl -c cookies.txt https://localhost:8443/auth/login
 curl -b cookies.txt -H 'Origin: https://localhost:8443' -H 'Content-Type: application/json' \
-  -d '{"name":"local"}' https://localhost:8443/auth/api-keys
+  -d '{"name":"local"}' https://localhost:8443/v1/user/tokens
 ```
 
 Then call the API with the `secret` from the answer:
 
 ```sh
-curl -H "Authorization: Bearer $OPENBOT_API_KEY" -H 'Content-Type: application/json' \
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
   -d '{"title":"My first Session"}' https://localhost:8443/v1/sessions
 ```
 

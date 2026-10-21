@@ -5,7 +5,7 @@ description: Connect outside services so the Agent can use them in Turns.
 
 An **App** is an outside service that the Agent can use. Each App is published on the web with the [OpenBot App Protocol](/docs/protocol). This page shows how to connect an App to your account, sign in to it, and use it in Turns.
 
-All examples use an API key. The same calls also work with the session cookie. See [Authentication](/docs/authentication).
+All examples use a user token. The same calls also work with the session cookie. See [Authentication](/docs/authentication).
 
 | Word             | Meaning                                                                                    |
 | ---------------- | ------------------------------------------------------------------------------------------ |
@@ -27,7 +27,7 @@ Give Platform the App's address. This can be a domain, an App page, a Catalog li
 
 ```sh
 curl -X POST https://api.example.com/v1/connection-drafts \
-  -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "input": "apps.example.com" }'
 ```
@@ -50,7 +50,7 @@ Show the user the App name, its source, and the endpoint. Then create the connec
 
 ```sh
 curl -X POST https://api.example.com/v1/connections \
-  -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "draftId": "<draft id>",
@@ -74,7 +74,7 @@ Platform reads the Card again before it saves. The new connection uses the draft
 
 ```sh
 curl -X POST https://api.example.com/v1/connections/<connection id>/verify \
-  -H "Authorization: Bearer $OPENBOT_API_KEY"
+  -H "Authorization: Bearer $OPENBOT_TOKEN"
 ```
 
 `Verified` returns the live `protocolVersion`, `tools`, `resources`, `resourceTemplates` and `prompts`. `Unavailable` returns the connection, and its `availability` says why.
@@ -117,7 +117,7 @@ Some Apps need the user's own account. Platform uses OAuth with PKCE for this. T
 
    ```sh
    curl -X POST https://api.example.com/v1/connections/<connection id>/authorization \
-     -H "Authorization: Bearer $OPENBOT_API_KEY" \
+     -H "Authorization: Bearer $OPENBOT_TOKEN" \
      -H "Content-Type: application/json" \
      -d '{ "revision": 0, "scopes": [], "returnTo": "/apps" }'
    ```
@@ -132,7 +132,7 @@ Some Apps need the user's own account. Platform uses OAuth with PKCE for this. T
 
    ```sh
    curl -X POST https://api.example.com/v1/app-authorizations/<flow id>/complete \
-     -H "Authorization: Bearer $OPENBOT_API_KEY"
+     -H "Authorization: Bearer $OPENBOT_TOKEN"
    ```
 
 To see the flow, call `GET /v1/app-authorizations/:flowId`. Its `status` is `Waiting`, `Received`, `Processing`, `Succeeded`, `Cancelled` or `Failed`.
@@ -198,7 +198,7 @@ Some Apps ask a question in the middle of a call. The operation then has status 
 
 ```sh
 curl -X POST https://api.example.com/v1/app-operations/<operation id>/inputs \
-  -H "Authorization: Bearer $OPENBOT_API_KEY" \
+  -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "round": 1, "responses": { "<input key>": { "action": "accept", "content": { "label": "Team sync" } } } }'
 ```
@@ -240,7 +240,7 @@ Export your App list. The file has no secrets and no sign-ins.
 
 ```sh
 curl https://api.example.com/v1/app-experience/export \
-  -H "Authorization: Bearer $OPENBOT_API_KEY"
+  -H "Authorization: Bearer $OPENBOT_TOKEN"
 ```
 
 ```json

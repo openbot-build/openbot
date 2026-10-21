@@ -75,9 +75,10 @@ export const Configuration = Schema.Union([
 	DevelopmentConfiguration,
 ])
 export type Configuration = typeof Configuration.Encoded
+/** A signed-in account and its organization. */
 export const Identity = Schema.Struct({
 	userId: Schema.NonEmptyString,
-	tenantId: Schema.NonEmptyString,
+	organizationId: Schema.NonEmptyString,
 })
 export type Identity = typeof Identity.Type
 export const Profile = Schema.Struct({
@@ -106,5 +107,6 @@ export class AuthRequestInvalid extends Schema.TaggedError<AuthRequestInvalid>()
 ) {}
 export class CredentialRejected extends Schema.TaggedError<CredentialRejected>()(
 	"CredentialRejected",
-	{ kind: Schema.Literals(["session", "apiKey"]) },
+	/** `membership` means the credential is valid, but the account is not an active member. */
+	{ kind: Schema.Literals(["session", "token", "membership"]) },
 ) {}

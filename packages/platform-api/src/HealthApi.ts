@@ -9,7 +9,7 @@ export const Service = Schema.Struct({
 	documentation: Schema.Literal("/docs"),
 	openapi: Schema.Literal("/openapi.json"),
 	login: Schema.Literal("/auth/login"),
-	apiKeys: Schema.Literal("/auth/api-keys"),
+	tokens: Schema.Literal("/v1/user/tokens"),
 })
 export type Service = typeof Service.Type
 export const service: Service = {
@@ -17,13 +17,13 @@ export const service: Service = {
 	documentation: "/docs",
 	openapi: "/openapi.json",
 	login: "/auth/login",
-	apiKeys: "/auth/api-keys",
+	tokens: "/v1/user/tokens",
 }
 
 export const HealthApi = HttpApiGroup.make("health").add(
 	HttpApiEndpoint.get("getService", "/", { success: Service }).annotate(
 		OpenApi.Description,
-		"Shows where to find the API reference, sign in and manage API keys.",
+		"Shows where to find the API reference, sign in and manage API tokens.",
 	),
 	HttpApiEndpoint.get("getHealth", "/health", { success: Health }).annotate(
 		OpenApi.Description,

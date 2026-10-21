@@ -5,6 +5,8 @@
 		"quickstart",
 		"---Usage---",
 		"authentication",
+		"organization",
+		"permissions",
 		"sessions",
 		"memory",
 		"approvals",

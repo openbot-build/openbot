@@ -10,7 +10,8 @@ const output = "content/docs/api"
 const groups = [
 	["account", "Account"],
 	["login", "Sign-in"],
-	["apiKeys", "API keys"],
+	["userTokens", "User tokens"],
+	["organization", "Organization"],
 	["sessions", "Sessions"],
 	["approvals", "Approvals"],
 	["apps", "App discovery"],
@@ -60,7 +61,7 @@ description: Every Platform HTTP operation, made from the API contract.
 This reference is made from the same contract that the server and the TypeScript client use, so it always matches the running Platform.
 You can also read the raw document at \`/openapi.json\` on any Platform, or open \`/docs\` on a Platform for an interactive view.
 
-Most operations need an API key in the \`Authorization: Bearer <key>\` header. See [Authentication](/docs/authentication).
+Most operations need a user token in the \`Authorization: Bearer <token>\` header and a permission. See [Authentication](/docs/authentication) and [Permissions](/docs/permissions).
 `,
 )
 await writeFile(

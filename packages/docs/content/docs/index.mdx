@@ -27,7 +27,8 @@ You bring the client: a script, a backend service, a chat bot, or your own web o
 | ------------ | ----------------------------------------------------------------------------------------------- |
 | Platform     | The server. It runs Sessions, stores data in PostgreSQL, and serves the HTTP API.               |
 | Sign-in      | A person signs in once in a browser with an OpenID Connect provider.                            |
-| API keys     | Programs send a key in the `Authorization: Bearer <key>` header for every call.                 |
+| User tokens  | Programs send a token in the `Authorization: Bearer <token>` header for every call.             |
+| Permissions  | Roles and policies decide what each member and each token may do.                               |
 | API contract | One typed contract makes the server, the TypeScript client, and the [API reference](/docs/api). |
 | App Protocol | An open way to publish Apps on the web so that Agents can find and use them.                    |
 
@@ -43,7 +44,7 @@ curl https://api.example.com/
 	"documentation": "/docs",
 	"openapi": "/openapi.json",
 	"login": "/auth/login",
-	"apiKeys": "/auth/api-keys"
+	"tokens": "/v1/user/tokens"
 }
 ```
 
@@ -64,7 +65,7 @@ See the [LICENSE](https://github.com/openbot-build/openbot/blob/main/LICENSE) fi
 		Run OpenBot on your computer and make your first call.
 	</Card>
 	<Card title="Authentication" href="/docs/authentication">
-		Sign in and make API keys.
+		Sign in and make user tokens.
 	</Card>
 	<Card title="Sessions" href="/docs/sessions">
 		Give work to the Agent and read the results.

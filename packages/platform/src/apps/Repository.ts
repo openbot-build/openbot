@@ -22,9 +22,9 @@ export interface SaveRequest {
 	readonly draftRevision?: number
 }
 export const ownerKey = (owner: {
-	readonly tenantId: string
+	readonly organizationId: string
 	readonly userId: string
-}) => JSON.stringify([owner.tenantId, owner.userId])
+}) => JSON.stringify([owner.organizationId, owner.userId])
 
 export class Repository extends Context.Service<
 	Repository,

@@ -1,15 +1,3 @@
-CREATE TABLE "openbot_api_keys" (
-	"id" text PRIMARY KEY,
-	"user_id" text NOT NULL,
-	"tenant_id" text NOT NULL,
-	"name" text NOT NULL,
-	"prefix" text NOT NULL,
-	"hash" text NOT NULL UNIQUE,
-	"created_at" bigint NOT NULL,
-	"expires_at" bigint,
-	"last_used_at" bigint
-);
---> statement-breakpoint
 CREATE TABLE "openbot_app_authorizations" (
 	"id" text PRIMARY KEY,
 	"owner" text NOT NULL,
@@ -99,6 +87,17 @@ CREATE TABLE "openbot_app_secrets" (
 	CONSTRAINT "openbot_app_secrets_pkey" PRIMARY KEY("owner","kind","id")
 );
 --> statement-breakpoint
+CREATE TABLE "openbot_audit_logs" (
+	"sequence" bigserial PRIMARY KEY,
+	"organization_id" text NOT NULL,
+	"created_at" bigint NOT NULL,
+	"action" text NOT NULL,
+	"actor_user_id" text NOT NULL,
+	"actor" text NOT NULL,
+	"resource" text NOT NULL,
+	"details" text NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "openbot_memory_contents" (
 	"namespace" text,
 	"id" text,
@@ -116,6 +115,26 @@ CREATE TABLE "openbot_developer_records" (
 	CONSTRAINT "openbot_developer_records_pkey" PRIMARY KEY("kind","id")
 );
 --> statement-breakpoint
+CREATE TABLE "openbot_members" (
+	"organization_id" text,
+	"user_id" text,
+	"email" text,
+	"name" text,
+	"status" text NOT NULL,
+	"roles" text NOT NULL,
+	"policies" text NOT NULL,
+	"joined_at" bigint NOT NULL,
+	CONSTRAINT "openbot_members_pkey" PRIMARY KEY("organization_id","user_id")
+);
+--> statement-breakpoint
+CREATE TABLE "openbot_organizations" (
+	"id" text PRIMARY KEY,
+	"name" text NOT NULL,
+	"allowed_email_domains" text NOT NULL,
+	"default_roles" text NOT NULL,
+	"created_at" bigint NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "openbot_session_references" (
 	"namespace" text,
 	"id" text,
@@ -128,6 +147,19 @@ CREATE TABLE "openbot_session_references" (
 	"response_summary" text,
 	"revision" integer NOT NULL,
 	CONSTRAINT "openbot_session_references_pkey" PRIMARY KEY("namespace","id")
+);
+--> statement-breakpoint
+CREATE TABLE "openbot_tokens" (
+	"id" text PRIMARY KEY,
+	"organization_id" text NOT NULL,
+	"user_id" text NOT NULL,
+	"name" text NOT NULL,
+	"prefix" text NOT NULL,
+	"hash" text NOT NULL UNIQUE,
+	"policies" text NOT NULL,
+	"created_at" bigint NOT NULL,
+	"expires_at" bigint,
+	"last_used_at" bigint
 );
 --> statement-breakpoint
 CREATE TABLE "openbot_memory_versions" (
@@ -187,14 +219,19 @@ CREATE TABLE "openbot_auth_verification" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX "openbot_api_keys_owner" ON "openbot_api_keys" ("tenant_id","user_id");--> statement-breakpoint
 CREATE INDEX "openbot_app_invocations_session" ON "openbot_app_invocations" ("owner","session");--> statement-breakpoint
+CREATE INDEX "openbot_audit_logs_list" ON "openbot_audit_logs" ("organization_id","sequence");--> statement-breakpoint
+CREATE INDEX "openbot_audit_logs_actor" ON "openbot_audit_logs" ("organization_id","actor_user_id","sequence");--> statement-breakpoint
 CREATE INDEX "openbot_developer_records_owner" ON "openbot_developer_records" ("kind","owner");--> statement-breakpoint
 CREATE INDEX "openbot_developer_records_scope" ON "openbot_developer_records" ("kind","scope");--> statement-breakpoint
 CREATE INDEX "openbot_session_references_list" ON "openbot_session_references" ("namespace","archived","id");--> statement-breakpoint
+CREATE INDEX "openbot_tokens_owner" ON "openbot_tokens" ("organization_id","user_id");--> statement-breakpoint
 CREATE INDEX "openbot_auth_account_userId_idx" ON "openbot_auth_account" ("user_id");--> statement-breakpoint
 CREATE INDEX "openbot_auth_session_userId_idx" ON "openbot_auth_session" ("user_id");--> statement-breakpoint
 CREATE INDEX "openbot_auth_verification_identifier_idx" ON "openbot_auth_verification" ("identifier");--> statement-breakpoint
-ALTER TABLE "openbot_api_keys" ADD CONSTRAINT "openbot_api_keys_user_id_openbot_auth_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "openbot_auth_user"("id") ON DELETE CASCADE;--> statement-breakpoint
+ALTER TABLE "openbot_members" ADD CONSTRAINT "openbot_members_organization_id_openbot_organizations_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "openbot_organizations"("id") ON DELETE CASCADE;--> statement-breakpoint
+ALTER TABLE "openbot_members" ADD CONSTRAINT "openbot_members_user_id_openbot_auth_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "openbot_auth_user"("id") ON DELETE CASCADE;--> statement-breakpoint
+ALTER TABLE "openbot_tokens" ADD CONSTRAINT "openbot_tokens_organization_id_openbot_organizations_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "openbot_organizations"("id") ON DELETE CASCADE;--> statement-breakpoint
+ALTER TABLE "openbot_tokens" ADD CONSTRAINT "openbot_tokens_user_id_openbot_auth_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "openbot_auth_user"("id") ON DELETE CASCADE;--> statement-breakpoint
 ALTER TABLE "openbot_auth_account" ADD CONSTRAINT "openbot_auth_account_user_id_openbot_auth_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "openbot_auth_user"("id") ON DELETE CASCADE;--> statement-breakpoint
 ALTER TABLE "openbot_auth_session" ADD CONSTRAINT "openbot_auth_session_user_id_openbot_auth_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "openbot_auth_user"("id") ON DELETE CASCADE;

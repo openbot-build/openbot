@@ -39,7 +39,7 @@ export const layer = HttpApiBuilder.group(
 									"The operation's Session is unavailable or is running another Turn.",
 							})
 						const sessions = yield* backend
-							.get(identity.tenantId, identity)
+							.forCaller(identity)
 							.pipe(Effect.mapError(conflict))
 						const view = yield* sessions
 							.get(operation.session)

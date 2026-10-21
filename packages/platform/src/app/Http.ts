@@ -10,6 +10,7 @@ import * as IndexHandlers from "../apps/IndexHttpHandlers.ts"
 import * as AppAuthorizationHandlers from "../apps/AuthorizationHttpHandlers.ts"
 import * as ConnectionHandlers from "../apps/ConnectionHttpHandlers.ts"
 import * as SessionHandlers from "../sessions/SessionHandlers.ts"
+import * as OrganizationHandlers from "../organization/HttpHandlers.ts"
 
 const cloudHealth = HttpApiBuilder.group(PlatformApi, "health", (handlers) =>
 	handlers
@@ -33,6 +34,7 @@ export const layerPlatform = (publicOrigin: string) =>
 					ConnectionHandlers.layer,
 					SessionHandlers.layerPlatform,
 					SessionHandlers.layerPlatformApprovals,
+					OrganizationHandlers.layer,
 				),
 			),
 		),

@@ -44,22 +44,22 @@ const id = await Effect.runPromise(
 		Effect.provide(
 			layer({
 				baseUrl: "https://api.example.com",
-				apiKey: process.env.OPENBOT_API_KEY,
+				token: process.env.OPENBOT_TOKEN,
 			}),
 		),
 	),
 )
 ```
 
-| Option           | Required | What it does                                                                                        |
-| ---------------- | -------- | --------------------------------------------------------------------------------------------------- |
-| `baseUrl`        | Yes      | The origin of Platform, such as `https://api.example.com`.                                          |
-| `apiKey`         | No       | An API key, as a string or an Effect `Redacted` value. It is sent as `Authorization: Bearer <key>`. |
-| `onUnauthorized` | No       | A function that runs when a protected request returns `401`.                                        |
+| Option           | Required | What it does                                                                                            |
+| ---------------- | -------- | ------------------------------------------------------------------------------------------------------- |
+| `baseUrl`        | Yes      | The origin of Platform, such as `https://api.example.com`.                                              |
+| `token`          | No       | A user token, as a string or an Effect `Redacted` value. It is sent as `Authorization: Bearer <token>`. |
+| `onUnauthorized` | No       | A function that runs when a protected request returns `401`.                                            |
 
-To make an API key, see [Authentication](/docs/authentication).
+To make a user token, see [Authentication](/docs/authentication).
 
-The client never saves the key and never puts it in a URL. `onUnauthorized` does not sign in or try the request again. Use it to tell the user, for example after a key expires or someone revokes it.
+The client never saves the token and never puts it in a URL. `onUnauthorized` does not sign in or try the request again. Use it to tell the user, for example after a token expires or someone revokes it.
 
 ## Call an operation
 
@@ -90,17 +90,18 @@ const archived =
 
 Some groups and their pages:
 
-| Group         | Use it to                                     | Reference                            |
-| ------------- | --------------------------------------------- | ------------------------------------ |
-| `sessions`    | Make Sessions, start Turns, and read results. | [Sessions](/docs/api/sessions)       |
-| `approvals`   | Answer approval requests.                     | [Approvals](/docs/api/approvals)     |
-| `apps`        | Find an App at an address.                    | [App discovery](/docs/api/apps)      |
-| `connections` | Add and manage App connections.               | [Connections](/docs/api/connections) |
-| `appIndex`    | Search the public App Index.                  | [App Index](/docs/api/appIndex)      |
-| `apiKeys`     | List, make, and revoke API keys.              | [API keys](/docs/api/apiKeys)        |
-| `health`      | Read the service document and health.         | [Health](/docs/api/health)           |
+| Group          | Use it to                                     | Reference                              |
+| -------------- | --------------------------------------------- | -------------------------------------- |
+| `sessions`     | Make Sessions, start Turns, and read results. | [Sessions](/docs/api/sessions)         |
+| `approvals`    | Answer approval requests.                     | [Approvals](/docs/api/approvals)       |
+| `apps`         | Find an App at an address.                    | [App discovery](/docs/api/apps)        |
+| `connections`  | Add and manage App connections.               | [Connections](/docs/api/connections)   |
+| `appIndex`     | Search the public App Index.                  | [App Index](/docs/api/appIndex)        |
+| `userTokens`   | List, make, revoke and check user tokens.     | [User tokens](/docs/api/userTokens)    |
+| `organization` | Manage the organization and its members.      | [Organization](/docs/api/organization) |
+| `health`       | Read the service document and health.         | [Health](/docs/api/health)             |
 
-The `apiKeys` operations only work with the sign-in cookie, so only a browser client on the same origin can use them.
+Every operation needs a permission. A call without it fails with `PermissionDenied`. See [Permissions](/docs/permissions).
 
 ## Handle errors
 
@@ -134,7 +135,7 @@ All error schemas are exported from `@openbot-build/platform-api`.
 
 ## Use the client in a browser
 
-A web app on the same origin as Platform can use the sign-in cookie instead of a key. Leave out `apiKey`:
+A web app on the same origin as Platform can use the sign-in cookie instead of a token. Leave out `token`:
 
 ```ts
 import { layer } from "@openbot-build/client"
@@ -153,7 +154,8 @@ The browser also adds the `Origin` header. For requests that change data, Platfo
 To serve your web app on the same origin, see [Deploy](/docs/deploy#your-own-client-on-the-same-origin).
 
 <Callout type="warn">
-	Do not put an API key in browser code. Anyone who opens the page can read it.
+	Do not put a user token in browser code. Anyone who opens the page can read
+	it.
 </Callout>
 
 ## Custom setup
@@ -161,7 +163,7 @@ To serve your web app on the same origin, see [Deploy](/docs/deploy#your-own-cli
 `make({ baseUrl })` builds the `Client` service without the default parts. You then give it:
 
 - an `HttpClient` service,
-- client middleware for `AgentAuth`, used by API key routes,
+- client middleware for `AgentAuth`, used by token routes,
 - client middleware for `SessionAuth`, used by cookie-only routes.
 
 Use this when you need your own HTTP client, logging, or headers. See `packages/client/src/Client.ts` for how `layer` does it.

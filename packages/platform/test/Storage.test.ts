@@ -32,7 +32,7 @@ import * as BackendLayers from "../src/app/BackendLayers.ts"
 import { Backend } from "../src/app/Backend.ts"
 
 test(
-	"PostgreSQL saves independent Session revisions and immutable Memory in one step within each tenant",
+	"PostgreSQL saves independent Session revisions and immutable Memory in one step within each namespace",
 	{ timeout: 30000 },
 	async () => {
 		const database = await PostgresTest.start(),
@@ -193,7 +193,6 @@ test(
 						.map((row) => row.tablename)
 						.sort()
 					assert.deepEqual(tables, [
-						"openbot_api_keys",
 						"openbot_app_authorizations",
 						"openbot_app_connections",
 						"openbot_app_drafts",
@@ -203,14 +202,18 @@ test(
 						"openbot_app_invocations",
 						"openbot_app_records",
 						"openbot_app_secrets",
+						"openbot_audit_logs",
 						"openbot_auth_account",
 						"openbot_auth_session",
 						"openbot_auth_user",
 						"openbot_auth_verification",
 						"openbot_developer_records",
+						"openbot_members",
 						"openbot_memory_contents",
 						"openbot_memory_versions",
+						"openbot_organizations",
 						"openbot_session_references",
+						"openbot_tokens",
 					])
 				}),
 			)
