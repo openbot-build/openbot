@@ -1,0 +1,126 @@
+---
+title: Internal platform fork
+description: Source history and release rules for the internal OpenBot build.
+---
+
+This repository is a derived build of [OpenBot](https://github.com/openbot-build/openbot).
+Its starting commit is [c7e606dd18d23328fc1d18a29bd483569ae4fc5c](https://github.com/openbot-build/openbot/tree/c7e606dd18d23328fc1d18a29bd483569ae4fc5c).
+The machine-readable record is `upstream.json`. Keep it when updating the source.
+
+The `upstream` Git remote points to the original project. The `origin` remote
+points to the internal fork. Keep upstream commits in history. Record the new
+upstream base when taking later changes.
+
+## Package boundary
+
+OpenBot stays headless. Its packages provide the API, identity, membership,
+permissions, Session runtime, memory, and App protocol. The Kay repository owns
+the browser client and its business rules. No Kay page or UI dependency belongs
+in this repository.
+
+This fork adds configurable browser login aliases and cookie names, explicit
+member bootstrap, standard hosted MCP support, per-Turn memory switches, and
+private execution controls. The public package names remain
+`@openbot-build/*`. Data conversion from another package namespace is a separate
+migration, not a direct shared-database mode.
+
+## License and source
+
+The license remains `AGPL-3.0-only`. The official `LICENSE` text is unchanged.
+The Platform image includes `/app/LICENSE` and `/app/upstream.json`. Release
+artifacts include the complete source archive for that commit. Retain that
+archive for each deployed release and make the corresponding source available
+to users as required by the license. A private registry does not change the
+license.
+
+## GitLab pipeline
+
+The pipeline uses this repository's locked `devenv` environment and the
+`ci` profile. It installs the frozen pnpm lockfile, then runs:
+
+```sh
+devenv --profile ci shell -- pnpm build
+devenv --profile ci shell -- pnpm typecheck
+devenv --profile ci shell -- pnpm -r test
+```
+
+The PostgreSQL tests start disposable local databases. The job user must be
+allowed to run `initdb`; PostgreSQL does not run as root. Runner tags match the
+internal ARM64 Docker runner. Docker builds use native build stages and produce
+a `linux/amd64` Platform runtime.
+
+After checks pass, the pipeline builds `openbot-platform:$CI_COMMIT_SHA`. It
+checks the architecture and revision label. Before publication it starts the
+actual image with a disposable PostgreSQL database, runs schema migrations,
+checks production OIDC configuration health and rejection of unsigned requests,
+then uses an explicit development fixture to check real SDK cookie issue,
+lookup, and logout in the packaged runtime. The integration suite covers the
+signed OIDC callback flow. Container fixtures contain no production secrets. The release directory contains:
+
+- `platform.tar.gz`: the exact Platform image.
+- `source.tar.gz`: the source at that commit.
+- `image.env`: the commit and local image name; protected builds also record the registry digest, stable source URL, and source checksum.
+- `SHA256SUMS`, `LICENSE`, and `upstream.json`.
+
+Protected builds publish the source archive to the GitLab generic package
+`openbot-source`, keyed by its complete commit SHA. The upload verifies an existing
+archive byte-for-byte and refuses to replace different content. Retain these
+packages for every deployed release; do not include them in package cleanup
+rules. The 30-day CI artifact expiry does not remove the generic package.
+Deployment serves the verified archive at its public source URL.
+
+Only protected refs publish to the registry. They publish a commit tag and
+record its digest. The pipeline does not create or deploy a `latest` tag.
+Deployment must select the recorded digest or the verified commit artifact.
+This repository builds the Platform artifact. The Kay deployment pipeline
+coordinates it with the gateway and the business service.
+
+## Execution and release safety
+
+When execution authority is configured, new writes require a durable admission
+lease for the account. The runtime keeps its admitted epoch for background
+work. Storage writes and external sends obtain their own leases. Stream leases
+last until their owning scope closes. A failed release blocks migration.
+
+The private `POST /internal/execution/drain` route accepts `accountId`,
+`sourceTenantId`, `migrationId`, and `epoch`. It requires the internal bearer
+token and a matching authority response in `DRAINING`. Here
+`sourceTenantId` is the runtime namespace: the JSON pair of organization ID and
+user ID for OpenBot. A pending approval, queued input, running Turn, or unsettled
+lease prevents a successful drain.
+
+The private `POST /internal/apps/authorization-owner` route accepts
+`{ "flowId": "..." }` and returns only `{ "accountId": "..." }` from the saved
+authorization flow. It uses the same internal token. It returns `404` when
+the flow does not exist. A gateway may use this to route a callback during a
+mixed-backend migration. It must not trust a browser-supplied account ID.
+
+Keep every `/internal/*` route off public ingress. Use a private service network.
+Never freeze an account based only on HTTP request counts. Background work and
+database commits can continue after an HTTP response ends.
+
+## Sign-out during an identity handoff
+
+The private `POST /internal/auth/session` route validates the SDK-signed browser
+cookie and reads the session store without refreshing or deleting expired rows.
+A gateway must verify this proof before cancelling a frozen identity migration.
+`POST /internal/auth/revoke` requires both the original cookie and a durable
+revocation receipt bound to its account and HMAC token digest. It confirms removal
+from the SDK store instead of relying on a successful browser sign-out response.
+
+A lost response retains the durable lease. The private
+`POST /internal/auth/revocation-status` route can reconcile that receipt, including
+an explicit retry of only its original token. The authority supplies the stored
+account and digest; callers cannot select an arbitrary user. It returns success
+only after the matching session is absent. No raw cookie or token is persisted
+in the revocation ledger. These routes require the internal bearer token.
+
+## New upstream changes
+
+The comparison from the pinned base to upstream
+[`4a5b95a`](https://github.com/openbot-build/openbot/compare/c7e606dd18d23328fc1d18a29bd483569ae4fc5c...4a5b95aec37ea39937711ef7613792a4cd173574)
+contains two additional commits. They introduce lasting Agents and delegation,
+replace approvals with requests, and recreate the database baseline with an
+explicit empty-database prerequisite. These changes are excluded from this Kay
+migration. Adopting them requires a separate data converter, contract comparison
+and regression run. `upstream.json` records the compared head and this decision.

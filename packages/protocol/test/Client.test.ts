@@ -501,7 +501,7 @@ test("the protocol client uses live discovery, standard pages, schemas, headers 
 					yield* fixture.prepare
 					const client = yield* fixture.connect()
 					assert.equal(
-						client.discovery.supportedVersions.includes(
+						client.discovery?.supportedVersions.includes(
 							Document.protocolVersion,
 						),
 						true,
@@ -720,6 +720,70 @@ test("MRTR stays pending until a capable host explicitly resumes the same operat
 							}),
 						),
 						Match.orElse(() => Effect.void),
+					)
+				}),
+			),
+		)
+	} finally {
+		await fixture.close()
+	}
+})
+
+test("manual auto negotiation preserves modern MRTR form continuation without a second discovery", async () => {
+	const fixture = await service()
+	try {
+		await using runtime = ManagedRuntime.make(
+			fixture.layers.pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
+		)
+		await runtime.runPromise(
+			Effect.scoped(
+				Effect.gen(function* () {
+					yield* fixture.prepare
+					const client = yield* McpClient.open({
+						key: fixture.key,
+						clientInfo: { name: "manual-host", version: "1.0.0" },
+						protocol: "standard",
+						capabilities: { elicitation: { form: {} } },
+					})
+					assert.equal(client.protocolVersion, Document.protocolVersion)
+					assert.ok(client.discovery !== undefined)
+					assert.equal(fixture.state.writes, 0)
+					const operation = yield* client.callTool(
+						{ name: "NeedInput" },
+						{ source: "host" },
+					)
+					assert.equal(fixture.state.writes, 0)
+					assert.ok(operation._tag === "InputRequired")
+					const completed = yield* operation.respond({
+						consent: { action: "accept", content: { text: "yes" } },
+					})
+					assert.equal(completed._tag, "Completed")
+					assert.equal(fixture.state.writes, 1)
+					assert.equal(
+						fixture.requests.filter(
+							({ request }) => request.method === "server/discover",
+						).length,
+						1,
+					)
+					assert.equal(
+						fixture.requests.some(
+							({ request }) => request.method === "initialize",
+						),
+						false,
+					)
+					const calls = fixture.requests.filter(
+						({ request }) => request.method === "tools/call",
+					)
+					assert.equal(calls.length, 2)
+					for (const { request } of calls) {
+						const meta = paramsOf(request.params)._meta
+						assert.deepEqual(meta?.[Mcp.CLIENT_CAPABILITIES_META_KEY], {
+							elicitation: { form: {} },
+						})
+					}
+					assert.equal(
+						calls[1]?.request.params?.["requestState"],
+						"server-owned-operation-1",
 					)
 				}),
 			),

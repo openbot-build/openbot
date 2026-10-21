@@ -4,7 +4,7 @@ import { ConnectionsApi } from "./ConnectionsApi.ts"
 import { HttpApi, OpenApi } from "effect/http-api"
 import { SessionsApi } from "./SessionsApi.ts"
 import { HealthApi } from "./HealthApi.ts"
-import { AccountApi, AgentAuth } from "./AuthApi.ts"
+import { AccountApi, LoginApi, AgentAuth } from "./AuthApi.ts"
 import { UserTokensApi } from "./UserTokensApi.ts"
 import { OrganizationApi } from "./OrganizationApi.ts"
 import { AppsApi } from "./AppsApi.ts"
@@ -82,6 +82,7 @@ export class PlatformApi extends HttpApi.make("openbot-platform-api")
 			.middleware(Authorize)
 			.middleware(AgentAuth),
 		AccountApi,
+		LoginApi,
 		UserTokensApi.annotate(GroupRequired, {
 			read: [requires("tokens.read").on("user")],
 			write: [requires("tokens.write").on("user")],

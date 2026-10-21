@@ -351,3 +351,54 @@ devenv shell -- hadolint deploy/docker/Dockerfile
 devenv shell -- dive --ci --source docker openbot-platform:local
 devenv shell -- trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed openbot-platform:local
 ```
+
+## Coordinate a per-account migration
+
+A managed deployment can set OPENBOT_EXECUTION_AUTHORITY_ORIGIN and OPENBOT_EXECUTION_AUTHORITY_TOKEN to use an external execution authority. Without these settings the host uses its normal local execution policy. The authority origin must be private to the service network.
+
+New business writes acquire an admission lease for the authenticated account. Background Turns inherit its epoch. Persistence and network operations acquire leases with that captured epoch; they never resolve a fresh epoch to bypass a migration. Provider response streams keep their lease until the owning scope closes. Failed lease release leaves migration blocked and requires operator reconciliation; elapsed time alone is not proof that an operation stopped.
+
+The private POST /internal/execution/drain route takes accountId, sourceTenantId (the runtime namespace), migrationId and epoch. It checks the internal bearer token and asks the authority to verify the current migration and DRAINING phase. It reports drained only after local operation leases, live Session runners, queued inputs and unfinished Turns are empty and the account runtime scope has closed. Pending approvals defer the migration. This route must never be exposed by the public reverse proxy.
+
+DRAINING keeps the admitted epoch and blocks new admissions while existing work settles. Only after the durable leases and runtime drain receipt agree may the coordinator freeze writes and advance the epoch. Activation or abort advances the epoch again, so an old continuation cannot become valid on a later route.
+
+### Drain an instance before replacement
+
+With an execution authority configured, private POST routes at
+`/internal/execution/quiesce`, `/internal/execution/status` and
+`/internal/execution/resume` control one running instance. They require the same
+internal bearer token and must be blocked by the public proxy. Quiescence stays
+in effect until resume or process exit; polling status does not reopen admission.
+
+The instance gate covers authentication writes, including private revocation and
+revocation retries, public index verification, developer monitoring and developer
+test cleanup. It counts complete operations from before their first lease or
+network request until their final write settles. Already admitted work may finish
+its nested operations while new requests and worker passes are paused. A cancelled
+request does not release its count while its database operation is still running.
+Account leases still enforce the authority's current phase and captured epoch.
+
+The response reports these counts:
+
+| Field              | Meaning                                                                                             |
+| ------------------ | --------------------------------------------------------------------------------------------------- |
+| `instanceTasks`    | Running authentication and public/background work, including work not yet holding an account lease. |
+| `authLeases`       | Outstanding authentication leases; a failed release retains its count.                              |
+| `activeLeases`     | Account admission, continuation, persistence and send leases.                                       |
+| `activeExecutions` | Live Session execution reported by the runtime.                                                     |
+| `persistedPending` | Unfinished durable work still assigned to this runtime, plus public worker claims.                  |
+
+`drained` is true only while paused, with zero writers before and after the
+durable-state scan, no active executions and no durable blockers. The scan does
+not open Sessions or replay tools. It includes unopened approvals, nonterminal
+MCP operations, received authorization callbacks, unfinished developer tests or
+cleanup and outstanding public worker claims. `Sending` and `OutcomeUnknown`
+remain blockers; stopping or resending them is not a recovery strategy.
+
+Stop an instance only after it acknowledges drain. On a timeout, resume admission
+or leave the instance paused for investigation. Never discard a lease because it
+is old. This mechanism proves that one cooperating process can stop; it does not
+establish multi-instance execution safety or transfer a live task to a replacement.
+A previous runtime without these controls requires a separate, verified
+maintenance procedure and cannot be upgraded by treating an empty queue as a
+drain receipt.

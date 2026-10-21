@@ -15,6 +15,12 @@ export class OrganizationUnavailable extends Schema.TaggedError<OrganizationUnav
 export interface Options {
 	/** People with these verified emails join as Super Administrators. */
 	readonly ownerEmails?: ReadonlyArray<string>
+	/** Existing account IDs admitted as Super Administrators. IDs are case-sensitive. */
+	readonly ownerUserIds?: ReadonlyArray<string>
+	/** Existing account IDs admitted with the organization default roles. */
+	readonly memberUserIds?: ReadonlyArray<string>
+	/** Disable for deployments that import accounts or require explicit admission. */
+	readonly allowFirstLoginAdmin?: boolean
 	/** The allowed email domains of a new organization. After that, the API owns them. */
 	readonly allowedEmailDomains?: ReadonlyArray<string>
 }
@@ -33,7 +39,7 @@ export interface Page {
 
 /**
  * The one organization of a deployment and its members.
- * The first account to sign in creates it and becomes a Super Administrator.
+ * Deployment settings control admission; existing membership stays authoritative.
  */
 export class Organization extends Context.Service<
 	Organization,

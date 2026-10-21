@@ -1,3 +1,4 @@
+import * as AccountNetwork from "../execution/AccountNetwork.ts"
 import { App as HostApp } from "@openbot-build/app-host"
 import {
 	App,
@@ -13,6 +14,7 @@ import {
 } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import {
+	Clock,
 	Context,
 	Crypto,
 	Effect,
@@ -114,7 +116,11 @@ export const make: Effect.Effect<
 	const discovery = yield* Discovery.Discovery
 	const rules = yield* Discovery.Rules
 	const active = yield* App.ConnectionScopes
-	const network = yield* AppNetwork
+	const configuredNetwork = yield* AppNetwork
+	const network = {
+		layer: (owner: string, origins: ReadonlyArray<string>) =>
+			AccountNetwork.layer(owner, configuredNetwork.layer(owner, origins)),
+	}
 	const crypto = yield* Crypto.Crypto
 	const probe = yield* Probe
 	const locks = yield* ConnectionLocks
@@ -338,19 +344,45 @@ export const make: Effect.Effect<
 					}),
 					beginAuthorization: (input) =>
 						Effect.scoped(
-							withNetwork(
-								input.key,
-								[
+							Effect.gen(function* () {
+								const connection = yield* stores.apps.get(input.key)
+								const app = yield* stores.apps.getApp(connection.cardUrl)
+								const origins = [
 									input.issuer,
 									input.clientId,
 									...(input.resourceMetadataUrl === undefined
 										? []
 										: [input.resourceMetadataUrl]),
-								],
-								OAuthAuthorization.begin(input).pipe(
-									Effect.provideContext(services),
-								),
-							),
+								]
+								const { metadata } = yield* withNetwork(
+									input.key,
+									origins,
+									OAuthAuthorization.discover({
+										resource: connection.endpoint,
+										issuer: input.issuer,
+										...(input.resourceMetadataUrl === undefined
+											? {}
+											: { resourceMetadataUrl: input.resourceMetadataUrl }),
+									}).pipe(Effect.provideContext(services)),
+								)
+								return yield* withNetwork(
+									input.key,
+									[
+										...origins,
+										...(metadata.registration_endpoint === undefined
+											? []
+											: [metadata.registration_endpoint]),
+									],
+									OAuthAuthorization.begin({
+										...input,
+										clientRegistration: app.sources.some(
+											(source) => source.role === "manual",
+										)
+											? "dynamic"
+											: "cimd",
+									}).pipe(Effect.provideContext(services)),
+								)
+							}),
 						),
 					completeAuthorization: (input) =>
 						Effect.scoped(
@@ -368,6 +400,7 @@ export const make: Effect.Effect<
 					open: (input) =>
 						Effect.gen(function* () {
 							const connection = yield* stores.apps.get(input.key)
+							const app = yield* stores.apps.getApp(connection.cardUrl)
 							yield* governance.check(connection.cardUrl).pipe(
 								Effect.mapError(
 									() =>
@@ -377,12 +410,74 @@ export const make: Effect.Effect<
 										}),
 								),
 							)
+							yield* locks.withConnection(
+								input.key,
+								Effect.gen(function* () {
+									const current = yield* stores.apps.get(input.key)
+									if (current.state !== "Enabled") return
+									yield* Match.value(current.authorization).pipe(
+										Match.tag("Authorized", (auth) =>
+											Effect.gen(function* () {
+												const credential = yield* stores.credentials.get({
+													binding: auth.binding,
+													reference: auth.credentialRef,
+												})
+												if (
+													credential.expiresAt !== undefined &&
+													credential.expiresAt <=
+														(yield* Clock.currentTimeMillis)
+												)
+													yield* host.refreshAuthorization(input.key).pipe(
+														Effect.catchTags({
+															AuthorizationError: (error) =>
+																Effect.fail(
+																	new Client.AuthorizationRequired({
+																		reason: Match.value(error.reason).pipe(
+																			Match.when(
+																				"ScopeRequired",
+																				() => "InsufficientScope" as const,
+																			),
+																			Match.orElse(() => "Expired" as const),
+																		),
+																		scopes: credential.scopes,
+																	}),
+																),
+															NetworkError: () =>
+																Effect.fail(
+																	new Client.ClientError({
+																		reason: "Network",
+																		issue:
+																			"App authorization renewal is temporarily unavailable.",
+																	}),
+																),
+															SchemaError: () =>
+																Effect.fail(
+																	new Client.ClientError({
+																		reason: "Protocol",
+																		issue:
+																			"The App authorization response is invalid.",
+																	}),
+																),
+														}),
+													)
+											}),
+										),
+										Match.orElse(() => Effect.void),
+									)
+								}),
+							)
 							return yield* withNetwork(
 								input.key,
 								[],
-								McpClient.open({ ...input, eagerLists: false }).pipe(
-									Effect.provideContext(services),
-								),
+								McpClient.open({
+									...input,
+									eagerLists: false,
+									protocol: app.sources.some(
+										(source) => source.role === "manual",
+									)
+										? "standard"
+										: "openbot",
+								}).pipe(Effect.provideContext(services)),
 							)
 						}),
 					setEnabled: ({ key, enabled }) =>
@@ -479,15 +574,22 @@ export const make: Effect.Effect<
 							)
 						}),
 					),
+				// Finish credential rotation before honoring cancellation of its caller.
 				refreshAuthorization: (key) =>
 					Effect.scoped(
 						withAuthorizationNetwork(
 							key,
 							OAuthAuthorization.refresh(key).pipe(
-								Effect.provideContext(services),
+								Effect.provideContext(
+									Context.add(
+										services,
+										Store.AppStore,
+										persistent.bind(owner, "credential-renewal").apps,
+									),
+								),
 							),
 						),
-					),
+					).pipe(Effect.uninterruptible),
 				revokeAuthorization: revoke,
 			}
 			return {

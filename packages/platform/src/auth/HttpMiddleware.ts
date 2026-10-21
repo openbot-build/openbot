@@ -1,5 +1,5 @@
 import { AuthApi, type Caller, Identity } from "@openbot-build/platform-api"
-import { Effect, Layer, Match, Option } from "effect"
+import { Effect, Layer, Match, Option, Redacted } from "effect"
 import {
 	Cookies,
 	HttpEffect,
@@ -8,6 +8,11 @@ import {
 	HttpServerResponse,
 } from "effect/http"
 import { Tokens } from "./Tokens.ts"
+import {
+	ExecutionFence,
+	RequestEpoch,
+	CurrentSessionOwner,
+} from "../execution/ExecutionFence.ts"
 import { Auth } from "./Auth.js"
 import { AuthUnavailable, CredentialRejected } from "./Model.ts"
 import { Organization } from "../organization/Organization.ts"
@@ -59,19 +64,25 @@ export const layerSessionAuth = Layer.effect(
 	Effect.gen(function* () {
 		const auth = yield* Auth
 		return {
-			session: (httpEffect, { credential }) =>
-				auth.resolveSession(credential).pipe(
-					Effect.mapError(publicError),
-					Effect.flatMap(({ setCookies, ...session }) =>
-						Effect.andThen(
-							setSessionCookies(setCookies),
-							Effect.provideService(httpEffect, AuthApi.AuthSession, {
-								session,
-								credential,
-							}),
-						),
-					),
-				),
+			session: (httpEffect) =>
+				Effect.gen(function* () {
+					const request = yield* HttpServerRequest.HttpServerRequest
+					const credential = Redacted.make(
+						request.cookies[auth.sessionCookie ?? AuthApi.SessionCookie] ?? "",
+					)
+					const refresh =
+						new URL(request.url, "https://request.invalid").searchParams.get(
+							"refresh",
+						) !== "false"
+					const { setCookies, ...session } = yield* auth
+						.resolveSession(credential, { refresh })
+						.pipe(Effect.mapError(publicError))
+					yield* setSessionCookies(setCookies)
+					return yield* Effect.provideService(httpEffect, AuthApi.AuthSession, {
+						session,
+						credential,
+					})
+				}),
 		}
 	}),
 )
@@ -85,6 +96,7 @@ export const layerAgentAuth = (config: { readonly publicOrigin: string }) =>
 		AuthApi.AgentAuth,
 		Effect.gen(function* () {
 			const auth = yield* Auth
+			const fence = yield* Effect.serviceOption(ExecutionFence)
 			const tokens = yield* Tokens
 			const organization = yield* Organization
 			/** A token stops working as soon as its member is suspended or removed. */
@@ -105,12 +117,52 @@ export const layerAgentAuth = (config: { readonly publicOrigin: string }) =>
 						Effect.flatMap(activeMember),
 						Effect.mapError(publicError),
 						Effect.flatMap((caller) =>
-							Effect.provideService(httpEffect, Identity, caller),
+							Effect.gen(function* () {
+								const request = yield* HttpServerRequest.HttpServerRequest
+								const operation = Effect.provideService(
+									httpEffect,
+									Identity,
+									caller,
+								).pipe(
+									Effect.provideService(CurrentSessionOwner, {
+										namespace: JSON.stringify([
+											caller.organizationId,
+											caller.userId,
+										]),
+										accountId: caller.userId,
+									}),
+								)
+								return yield* HttpMethod.hasBody(request.method) &&
+								Option.isSome(fence)
+									? fence.value.admit(caller.userId, operation).pipe(
+											Effect.provideService(
+												RequestEpoch,
+												request.headers["x-kay-epoch"] === undefined
+													? undefined
+													: {
+															accountId: caller.userId,
+															epoch: /^[0-9]+$/.test(
+																request.headers["x-kay-epoch"],
+															)
+																? Number(request.headers["x-kay-epoch"])
+																: Number.NaN,
+														},
+											),
+											Effect.catchTag("FenceUnavailable", () =>
+												AuthApi.AuthenticationUnavailable.make({}),
+											),
+										)
+									: operation
+							}),
 						),
 					),
-				session: (httpEffect, { credential }) =>
+				session: (httpEffect) =>
 					Effect.gen(function* () {
 						const request = yield* HttpServerRequest.HttpServerRequest
+						const credential = Redacted.make(
+							request.cookies[auth.sessionCookie ?? AuthApi.SessionCookie] ??
+								"",
+						)
 						const forbiddenOrigin =
 							HttpMethod.hasBody(request.method) &&
 							request.headers["origin"] !== config.publicOrigin
@@ -121,10 +173,37 @@ export const layerAgentAuth = (config: { readonly publicOrigin: string }) =>
 							.pipe(Effect.mapError(publicError))
 						if (forbiddenOrigin) return yield* AuthApi.ForbiddenOrigin.make({})
 						yield* setSessionCookies(session.setCookies)
-						return yield* Effect.provideService(httpEffect, Identity, {
+						const operation = Effect.provideService(httpEffect, Identity, {
 							kind: "member",
 							...session.identity,
-						})
+						}).pipe(
+							Effect.provideService(CurrentSessionOwner, {
+								namespace: JSON.stringify([
+									session.identity.organizationId,
+									session.identity.userId,
+								]),
+								accountId: session.identity.userId,
+							}),
+						)
+						return yield* HttpMethod.hasBody(request.method) &&
+						Option.isSome(fence)
+							? fence.value.admit(session.identity.userId, operation).pipe(
+									Effect.provideService(
+										RequestEpoch,
+										request.headers["x-kay-epoch"] === undefined
+											? undefined
+											: {
+													accountId: session.identity.userId,
+													epoch: /^[0-9]+$/.test(request.headers["x-kay-epoch"])
+														? Number(request.headers["x-kay-epoch"])
+														: Number.NaN,
+												},
+									),
+									Effect.catchTag("FenceUnavailable", () =>
+										AuthApi.AuthenticationUnavailable.make({}),
+									),
+								)
+							: operation
 					}),
 			}
 		}),

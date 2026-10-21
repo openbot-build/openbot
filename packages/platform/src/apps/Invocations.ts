@@ -225,7 +225,38 @@ export const make: Effect.Effect<
 		execute: (input, operation) =>
 			propose(input).pipe(
 				Effect.flatMap((value) =>
-					submit(input.owner, value, ["Approved"], operation),
+					Match.value(value.status).pipe(
+						Match.when("Approved", () =>
+							submit(input.owner, value, ["Approved"], operation),
+						),
+						Match.whenOr("Sending", "OutcomeUnknown", () =>
+							Effect.succeed({
+								_tag: "Failed",
+								operationId: value.id,
+								source: value.source,
+								reason: "OutcomeUnknown",
+								message:
+									"This operation may have reached the App. Check its actual state; do not submit it again.",
+							} satisfies AppExecution.Result),
+						),
+						Match.whenOr("Completed", "Failed", "InputRequired", () =>
+							value.result === null
+								? Effect.fail(
+										SessionConflict.make({
+											message:
+												"This operation has no recorded result. Review its state before continuing.",
+										}),
+									)
+								: Effect.succeed(value.result),
+						),
+						Match.orElse(() =>
+							Effect.fail(
+								SessionConflict.make({
+									message: "This App operation has not been approved.",
+								}),
+							),
+						),
+					),
 				),
 			),
 	})

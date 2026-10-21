@@ -1,3 +1,4 @@
+import * as AuthDrain from "../auth/Drain.ts"
 import type { Discovery } from "@openbot-build/protocol"
 import * as AppDiscovery from "../apps/Discovery.ts"
 import { readFileSync } from "node:fs"
@@ -8,6 +9,8 @@ import * as Http from "./Http.ts"
 import { Layer } from "effect"
 import { type Tool } from "effect/ai"
 import { HttpRouter } from "effect/http"
+import * as ExecutionDrain from "../execution/Drain.ts"
+import * as InstanceControl from "../execution/InstanceControl.ts"
 import * as Platform from "./Platform.ts"
 import * as AuthHttpHandlers from "../auth/HttpHandlers.ts"
 import * as ErrorReporting from "./ErrorReporting.ts"
@@ -43,7 +46,7 @@ export const layer = <
 	},
 ) =>
 	HttpRouter.serve(
-		Layer.merge(layerApi(options.auth), options.routes ?? Layer.empty),
+		Layer.mergeAll(layerApi(options.auth), options.routes ?? Layer.empty, ExecutionDrain.layer(options.execution), InstanceControl.layer(options.execution), AuthDrain.layer(options.execution)),
 	).pipe(
 		Layer.provideMerge(Platform.layer(options)),
 		Layer.provide(options.discovery ?? AppDiscovery.layerPublic),

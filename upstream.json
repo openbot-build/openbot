@@ -1,0 +1,16 @@
+{
+  "repository": "https://github.com/openbot-build/openbot",
+  "commit": "c7e606dd18d23328fc1d18a29bd483569ae4fc5c",
+  "license": "AGPL-3.0-only",
+  "licenseGitBlob": "be3f7b28e564e7dd05eaf59d64adba1a4065ac0e",
+  "derivativeRepository": "https://gitlab.kai.com/KAI/Kay/OpenBot",
+  "scope": "Generic platform extensions. Kay UI and business policy stay in a separate repository.",
+  "upstreamReview": {
+    "observedHead": "4a5b95aec37ea39937711ef7613792a4cd173574",
+    "excludedCommits": [
+      "268d04286a0c33885ac8f322c1b2ba59bad9fe2c",
+      "4a5b95aec37ea39937711ef7613792a4cd173574"
+    ],
+    "decision": "Keep the reviewed c7e606d baseline. The newer Agent/delegation release replaces approvals and the database baseline and explicitly requires an empty database; it has not passed Kay compatibility or migration regression."
+  }
+}

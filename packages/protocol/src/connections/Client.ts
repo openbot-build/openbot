@@ -105,7 +105,11 @@ export interface Client {
 		options: CallOptions,
 	) => Effect.Effect<OperationResult<unknown>, Error>
 	readonly key: Store.ConnectionKey
-	readonly discovery: Mcp.DiscoverResult
+	/** Only a real server/discover response; absent for initialize-based servers. */
+	readonly discovery: Mcp.DiscoverResult | undefined
+	readonly capabilities: Mcp.ServerCapabilities
+	readonly protocolVersion: string
+	readonly serverInfo: Mcp.Implementation | undefined
 	readonly notifications: Stream.Stream<Mcp.Notification>
 	readonly listTools: (options?: {
 		readonly cursor?: string

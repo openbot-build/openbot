@@ -15,6 +15,7 @@ import {
 	Predicate,
 	Record,
 	Schema,
+	Struct,
 } from "effect"
 import { dual } from "effect/Function"
 import * as AppConnections from "./AppConnections.ts"
@@ -182,6 +183,8 @@ export const open = Effect.fn("Client.open")(function* (options: {
 	readonly capabilities?: Mcp.ClientCapabilities
 	readonly inputs?: InputHandler
 	readonly eagerLists?: boolean
+	/** OpenBot publication stays pinned; privately configured MCP endpoints negotiate normally. */
+	readonly protocol?: "openbot" | "standard"
 }) {
 	const store = yield* Store.AppStore
 	const credentials = yield* Store.CredentialStore
@@ -304,67 +307,93 @@ export const open = Effect.fn("Client.open")(function* (options: {
 		}
 		const queue = yield* Queue.make<Mcp.Notification>()
 		let dirty = HashSet.empty<string>()
-		const capabilities = {
+		const declaredCapabilities = {
 			...options.capabilities,
 			...options.inputs?.capabilities,
 		}
-		const sdk = new Mcp.Client(options.clientInfo, {
-			versionNegotiation: {
-				mode: { pin: Document.protocolVersion },
-				probe: { maxRetries: 0 },
-			},
-			inputRequired: { autoFulfill: false },
-			enforceStrictCapabilities: true,
-			capabilities,
-			cachePartition: JSON.stringify([
-				initial.owner,
-				initial.connectionId,
-				initial.endpoint,
-			]),
-		})
+		// Probe conservatively until the actual wire revision is known.
+		let capabilities: Mcp.ClientCapabilities =
+			options.protocol === "standard"
+				? Struct.omit(declaredCapabilities, [
+						"elicitation",
+						"sampling",
+						"roots",
+					])
+				: declaredCapabilities
+		const makeClient = () =>
+			new Mcp.Client(options.clientInfo, {
+				versionNegotiation: {
+					mode:
+						options.protocol === "standard"
+							? "auto"
+							: { pin: Document.protocolVersion },
+					probe: { maxRetries: 0 },
+				},
+				inputRequired: { autoFulfill: false },
+				enforceStrictCapabilities: true,
+				capabilities,
+				cachePartition: JSON.stringify([
+					initial.owner,
+					initial.connectionId,
+					initial.endpoint,
+				]),
+			})
+		let sdk = makeClient()
 		const notify = async (notification: Mcp.Notification) => {
 			Queue.offerUnsafe(queue, notification)
 		}
-		sdk.fallbackNotificationHandler = notify
-		sdk.setNotificationHandler(
-			"notifications/tools/list_changed",
-			async (notification) => {
-				dirty = HashSet.add(dirty, "tools")
-				await notify(notification)
-			},
-		)
-		sdk.setNotificationHandler(
-			"notifications/resources/list_changed",
-			async (notification) => {
-				dirty = HashSet.add(dirty, "resources")
-				dirty = HashSet.add(dirty, "templates")
-				await notify(notification)
-			},
-		)
-		sdk.setNotificationHandler(
-			"notifications/prompts/list_changed",
-			async (notification) => {
-				dirty = HashSet.add(dirty, "prompts")
-				await notify(notification)
-			},
-		)
-		const transport = new Sdk.HttpTransport(new URL(initial.endpoint), {
-			fetch,
-			authProvider: { token },
-			requestInit: {
-				headers: Redacted.value(initial.headers),
-				redirect: "manual",
-			},
-			redirectPolicy: "same-origin",
-			onInsufficientScope: "throw",
-			maxStepUpRetries: 0,
-			reconnectionOptions: {
-				maxRetries: 0,
-				maxReconnectionDelay: 0,
-				initialReconnectionDelay: 0,
-				reconnectionDelayGrowFactor: 1,
-			},
-		})
+		const registerNotifications = () => {
+			sdk.fallbackNotificationHandler = notify
+			sdk.setNotificationHandler(
+				"notifications/tools/list_changed",
+				async (notification) => {
+					dirty = HashSet.add(dirty, "tools")
+					await notify(notification)
+				},
+			)
+			sdk.setNotificationHandler(
+				"notifications/resources/list_changed",
+				async (notification) => {
+					dirty = HashSet.add(dirty, "resources")
+					dirty = HashSet.add(dirty, "templates")
+					await notify(notification)
+				},
+			)
+			sdk.setNotificationHandler(
+				"notifications/prompts/list_changed",
+				async (notification) => {
+					dirty = HashSet.add(dirty, "prompts")
+					await notify(notification)
+				},
+			)
+		}
+		registerNotifications()
+		const HttpTransport =
+			options.protocol === "standard"
+				? Mcp.StreamableHTTPClientTransport
+				: Sdk.HttpTransport
+		const makeTransport = (modern = false) =>
+			new (modern ? Sdk.HttpTransport : HttpTransport)(
+				new URL(initial.endpoint),
+				{
+					fetch,
+					authProvider: { token },
+					requestInit: {
+						headers: Redacted.value(initial.headers),
+						redirect: "manual",
+					},
+					redirectPolicy: "same-origin",
+					onInsufficientScope: "throw",
+					maxStepUpRetries: 0,
+					reconnectionOptions: {
+						maxRetries: 0,
+						maxReconnectionDelay: 0,
+						initialReconnectionDelay: 0,
+						reconnectionDelayGrowFactor: 1,
+					},
+				},
+			)
+		let transport = makeTransport()
 		yield* Scope.addFinalizer(
 			scope,
 			Effect.gen(function* () {
@@ -419,10 +448,32 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			Effect.tryPromise({ try: request, catch: mapError })
 		yield* invoke((signal) => sdk.connect(transport, { signal }))
 		const discovery = sdk.getDiscoverResult()
-		if (discovery === undefined)
+		if (options.protocol === "standard" && discovery !== undefined) {
+			// Reuse this live discovery only within the same owner and authorization context.
+			// The SDK fixes capabilities at connect time; a modern client can now expose MRTR.
+			yield* invoke(() => sdk.close())
+			capabilities = declaredCapabilities
+			sdk = makeClient()
+			registerNotifications()
+			transport = makeTransport(true)
+			yield* invoke((signal) =>
+				sdk.connect(transport, {
+					signal,
+					prior: { kind: "modern", discover: discovery },
+				}),
+			)
+		}
+		if (options.protocol !== "standard" && discovery === undefined)
 			return yield* new ClientError({
 				reason: "Protocol",
 				issue: "Missing real-time server discovery",
+			})
+		const serverCapabilities = sdk.getServerCapabilities()
+		const protocolVersion = sdk.getNegotiatedProtocolVersion()
+		if (serverCapabilities === undefined || protocolVersion === undefined)
+			return yield* new ClientError({
+				reason: "Protocol",
+				issue: "Missing negotiated MCP server capabilities",
 			})
 		const requireCapability = (name: "tools" | "resources" | "prompts") =>
 			sdk.getServerCapabilities()?.[name] === undefined
@@ -971,6 +1022,9 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			),
 			key: options.key,
 			discovery,
+			capabilities: serverCapabilities,
+			protocolVersion,
+			serverInfo: sdk.getServerVersion(),
 			notifications: Stream.fromQueue(queue),
 			listTools: lists.tools,
 			modelTools: allTools("model"),
@@ -1036,7 +1090,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			}),
 			close: Scope.close(scope, Exit.void),
 		}
-		// Read only the lists advertised by the live discovery response.
+		// Read only the lists advertised by the real negotiated handshake.
 		if (options.eagerLists !== false) {
 			if (sdk.getServerCapabilities()?.tools !== undefined) yield* lists.tools()
 			if (sdk.getServerCapabilities()?.resources !== undefined) {

@@ -75,6 +75,7 @@ test("live connection management closes old clients, asks for review of changed 
 		assert.equal(verify.status, 200, await verify.clone().text())
 		const verified = await verify.json()
 		assert.equal(verified._tag, "Verified")
+		assert.equal(verified.capabilities.protocolVersion, "2026-07-28")
 		assert.equal(
 			verified.capabilities.connection.availability._tag,
 			"Available",
@@ -218,7 +219,10 @@ test("live connection management closes old clients, asks for review of changed 
 })
 
 test("manual MCP connections stay private, keep secret headers and use the live lifecycle without Card discovery", async () => {
-	const publisher = await Fixture.start({ capabilities: true })
+	const publisher = await Fixture.start({
+		capabilities: true,
+		standardMcp: true,
+	})
 	const publicOrigin = "https://platform.fixture.test"
 	const network = (owner: string, origins: ReadonlyArray<string>) =>
 		NodeHttpServer.layerUserNetwork({
@@ -283,6 +287,7 @@ test("manual MCP connections stay private, keep secret headers and use the live 
 		)
 		const verified = await (await send(path + "/verify", "POST")).json()
 		assert.equal(verified._tag, "Verified")
+		assert.equal(verified.capabilities.protocolVersion, "2025-11-25")
 		assert.ok(verified.capabilities.tools.length > 0)
 		await host.runtime.runPromise(
 			Effect.gen(function* () {
@@ -314,6 +319,9 @@ test("manual MCP connections stay private, keep secret headers and use the live 
 				})
 			}).pipe(Effect.provideService(Scope.Scope, scope)),
 		)
+		assert.equal(client.protocolVersion, "2025-11-25")
+		assert.equal(client.discovery, undefined)
+		assert.ok(publisher.operations().includes("initialize"))
 		const updated = await send(path + "/manual", "PUT", {
 			name: "Updated manual documents",
 			transport: "streamable-http",
@@ -344,10 +352,9 @@ test("manual MCP connections stay private, keep secret headers and use the live 
 			404,
 		)
 		await host.restart()
-		assert.equal(
-			(await (await send(path + "/verify", "POST")).json())._tag,
-			"Verified",
-		)
+		const reopened = await (await send(path + "/verify", "POST")).json()
+		assert.equal(reopened._tag, "Verified")
+		assert.equal(reopened.capabilities.protocolVersion, "2025-11-25")
 		assert.equal(
 			publisher.requests().some((request) => request.path.startsWith("/card")),
 			false,

@@ -45,10 +45,22 @@ export class CredentialBinding extends Schema.Opaque<CredentialBinding>()(
 		)
 }
 
+/** Persisted with the grant; secrets never leave the encrypted credential store. */
+export const OAuthClientAuthentication = Schema.Union([
+	Schema.Struct({ method: Schema.Literal("none") }),
+	Schema.Struct({
+		method: Schema.Literals(["client_secret_basic", "client_secret_post"]),
+		secret: Schema.Redacted(Schema.NonEmptyString),
+		expiresAt: Schema.optional(Schema.Finite),
+	}),
+])
+export type OAuthClientAuthentication = typeof OAuthClientAuthentication.Type
+
 export class Credential extends Schema.Opaque<Credential>()(
 	Schema.Struct({
 		binding: CredentialBinding,
 		clientId: Schema.optional(Schema.String),
+		clientAuthentication: Schema.optional(OAuthClientAuthentication),
 		accessToken: Schema.Redacted(Schema.NonEmptyString),
 		refreshToken: Schema.optional(Schema.Redacted(Schema.NonEmptyString)),
 		expiresAt: Schema.optional(Schema.Finite),

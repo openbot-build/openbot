@@ -57,12 +57,19 @@ export const ManualConnectionUpdate = Schema.Struct({
 })
 export type ManualConnectionUpdate = typeof ManualConnectionUpdate.Type
 const ManualIdentity = Schema.String.check(
-	Schema.isPattern(/^urn:openbot:manual:[0-9a-f-]{36}$/i),
+	Schema.isPattern(
+		/^urn:openbot:manual:[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i,
+	),
 )
+/** Owner-scoped provenance, not evidence of public K publication. */
+export const OwnedConnectionIdentity = Schema.Union([
+	Document.Link,
+	ManualIdentity,
+])
 export const Connection = Schema.Struct({
 	id: Schema.NonEmptyString,
 	name: ConnectionName,
-	cardUrl: Schema.Union([Document.Link, ManualIdentity]),
+	cardUrl: OwnedConnectionIdentity,
 	card: Document.ServerCard,
 	endpoint: Schema.String,
 	remoteIndex: Schema.Natural,

@@ -1,3 +1,4 @@
+import * as AccountNetwork from "../execution/AccountNetwork.ts"
 // @effect-diagnostics strictEffectProvide:off
 import { ConnectionsApi as Api } from "@openbot-build/platform-api"
 import {
@@ -41,6 +42,11 @@ export const layerWithNetwork = (
 					yield* McpClient.open({
 						key: input.connection,
 						clientInfo: { name: "OpenBot", version: "0.1.0" },
+						protocol: input.app.sources.some(
+							(source) => source.role === "manual",
+						)
+							? "standard"
+							: "openbot",
 					})
 					return { requiresAuthorization: false } as const
 				}),
@@ -60,7 +66,10 @@ export const layerWithNetwork = (
 						MemoryStore.layerCredentials,
 						AppConnections.layerConnectionScopes,
 						McpClient.layerPolicy(() => Effect.void),
-						network(input.connection),
+						AccountNetwork.layer(
+							input.connection.owner,
+							network(input.connection),
+						),
 					),
 				),
 				Effect.mapError(() =>

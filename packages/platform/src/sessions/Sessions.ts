@@ -200,6 +200,7 @@ export class Sessions extends Context.Service<
 			input: {
 				readonly expected: Session.Revision
 				readonly settings: Turn.Settings
+			readonly memory?: { readonly use?: boolean; readonly generate?: boolean }
 			},
 		) => Effect.Effect<SessionView, ServiceError | SessionModelInvalid>
 		readonly turns: (

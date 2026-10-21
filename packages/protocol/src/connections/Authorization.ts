@@ -5,6 +5,8 @@ export class AuthorizationError extends Data.TaggedError("AuthorizationError")<{
 	readonly reason:
 		| "Metadata"
 		| "CimdUnsupported"
+		| "ClientRegistrationUnsupported"
+		| "ClientRegistrationFailed"
 		| "ClientMetadata"
 		| "CallbackMismatch"
 		| "FlowExpired"
@@ -73,6 +75,10 @@ export class ServerMetadata extends Schema.Opaque<ServerMetadata>()(
 			authorization_endpoint: Schema.NonEmptyString,
 			token_endpoint: Schema.NonEmptyString,
 			revocation_endpoint: Schema.optional(Schema.String),
+			registration_endpoint: Schema.optional(Schema.String),
+			revocation_endpoint_auth_methods_supported: Schema.optional(
+				Schema.Array(Schema.String),
+			),
 			client_id_metadata_document_supported: Schema.optional(Schema.Boolean),
 			authorization_response_iss_parameter_supported: Schema.optional(
 				Schema.Boolean,
@@ -98,13 +104,17 @@ export class ServerMetadata extends Schema.Opaque<ServerMetadata>()(
 		)
 }
 
+export const ScopeSelection = Schema.Literals(["Explicit", "ProviderDefault"])
+
 export class Flow extends Schema.Opaque<Flow>()(
 	Schema.Struct({
 		flowId: Schema.String,
 		binding: Store.CredentialBinding,
 		clientId: Schema.String,
+		clientAuthentication: Schema.optional(Store.OAuthClientAuthentication),
 		redirectUri: Schema.String,
 		scopes: Schema.Array(Schema.String),
+		scopeSelection: Schema.optional(ScopeSelection),
 		verifier: Schema.Redacted(Schema.String),
 		expiresAt: Schema.Finite,
 		metadata: ServerMetadata,

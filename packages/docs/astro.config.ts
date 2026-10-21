@@ -63,6 +63,7 @@ export default defineConfig({
 						"docs/models",
 						"docs/error-logs",
 						"docs/deploy",
+						"docs/internal-fork",
 					],
 				},
 				{

@@ -17,6 +17,27 @@ import * as HttpMiddleware from "./HttpMiddleware.ts"
 
 /** Better Auth serves its own routes. Platform adds the session and user token routes. */
 export const layer = (config: { readonly publicOrigin: string }) => {
+	const login = HttpApiBuilder.group(PlatformApi, "login", (handlers) =>
+		Effect.gen(function* () {
+			const auth = yield* Auth
+			return handlers
+				.handleRaw("login", () =>
+					HttpEffect.fromWebHandler(auth.handler).pipe(
+						Effect.mapError(() => AuthApi.AuthenticationUnavailable.make({})),
+					),
+				)
+				.handleRaw("callback", () =>
+					HttpEffect.fromWebHandler(auth.handler).pipe(
+						Effect.mapError(() => AuthApi.AuthenticationUnavailable.make({})),
+					),
+				)
+				.handleRaw("logout", () =>
+					HttpEffect.fromWebHandler(auth.handler).pipe(
+						Effect.mapError(() => AuthApi.AuthenticationUnavailable.make({})),
+					),
+				)
+		}),
+	)
 	const account = HttpApiBuilder.group(PlatformApi, "account", (handlers) =>
 		handlers.handle("session", () =>
 			Effect.map(AuthApi.AuthSession, ({ session }) => session),
@@ -81,7 +102,7 @@ export const layer = (config: { readonly publicOrigin: string }) => {
 					)
 			}),
 	)
-	return Layer.mergeAll(account, userTokens).pipe(
+	return Layer.mergeAll(login, account, userTokens).pipe(
 		Layer.provideMerge(
 			Layer.merge(HttpMiddleware.layerAgentAuth(config), Authorize.layer),
 		),

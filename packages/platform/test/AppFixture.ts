@@ -25,7 +25,13 @@ const Request = Schema.Struct({
 export const start = async (
 	options: {
 		readonly capabilities?: boolean
+		readonly standardMcp?: boolean
 		readonly presentation?: boolean
+		readonly dcr?: "none" | "client_secret_basic" | "client_secret_post"
+		readonly defaultScopes?: boolean
+		readonly refreshToken?: boolean
+		readonly rotateRefreshToken?: boolean
+		readonly scopes?: ReadonlyArray<string>
 	} = {},
 ) => {
 	let origin = ""
@@ -38,8 +44,12 @@ export const start = async (
 	let accessTokens = HashSet.empty<string>()
 	let refreshTokens = HashSet.empty<string>()
 	let exchanges = 0
-	let cimd = true
+	let cimd = options.dcr === undefined
+	let registrations = 0
+	const dynamicClientId = "fixture-registered-client"
+	const dynamicClientSecret = "fixture-private-client-secret"
 	let rejectGrant = false
+	let grantedScope = (options.scopes ?? ["documents"]).join(" ")
 	let operations: ReadonlyArray<string> = []
 	let revocationSupported = true
 	let revocationFails = false
@@ -47,6 +57,7 @@ export const start = async (
 	let inFlight = 0
 	let maxInFlight = 0
 	let businessCalls = 0
+	let toolDescription = "Read a document from this business account"
 	let invalidOutput = false
 	let inputRequired = false
 	let dropResult = false
@@ -58,7 +69,7 @@ export const start = async (
 	}> = []
 	const readTool = (name: string) => ({
 		name,
-		description: "Read a document from this business account",
+		description: toolDescription,
 		inputSchema: {
 			type: "object",
 			properties: { id: { type: "string" } },
@@ -173,7 +184,9 @@ export const start = async (
 				JSON.stringify({
 					resource: origin + "/protected",
 					authorization_servers: [origin],
-					scopes_supported: ["documents"],
+					...(options.defaultScopes === true
+						? {}
+						: { scopes_supported: options.scopes ?? ["documents"] }),
 				}),
 			)
 			return
@@ -188,12 +201,42 @@ export const start = async (
 						? { revocation_endpoint: origin + "/revoke" }
 						: {}),
 					client_id_metadata_document_supported: cimd,
+					...(options.dcr === undefined
+						? {}
+						: { registration_endpoint: origin + "/register" }),
 					authorization_response_iss_parameter_supported: true,
 					code_challenge_methods_supported: ["S256"],
 					response_types_supported: ["code"],
-					token_endpoint_auth_methods_supported: ["none"],
+					token_endpoint_auth_methods_supported: [options.dcr ?? "none"],
 				}),
 			)
+			return
+		}
+		if (path === "/register") {
+			let body = ""
+			req.setEncoding("utf8")
+			req.on("data", (part: string) => {
+				body += part
+			})
+			req.on("end", () => {
+				registrations++
+				const metadata = Schema.decodeUnknownSync(Schema.JsonObject)(
+					JSON.parse(body),
+				)
+				res.writeHead(201)
+				res.end(
+					JSON.stringify({
+						...metadata,
+						client_id: dynamicClientId,
+						...(options.dcr === "none"
+							? {}
+							: {
+									client_secret: dynamicClientSecret,
+									client_secret_expires_at: 0,
+								}),
+					}),
+				)
+			})
 			return
 		}
 		if (path === "/token" || path === "/revoke") {
@@ -204,6 +247,23 @@ export const start = async (
 			})
 			req.on("end", () => {
 				const form = new URLSearchParams(body)
+				if (options.dcr !== undefined) {
+					const basic =
+						req.headers.authorization ===
+						`Basic ${Buffer.from(dynamicClientId + ":" + dynamicClientSecret).toString("base64")}`
+					const valid =
+						options.dcr === "client_secret_basic"
+							? basic
+							: form.get("client_id") === dynamicClientId &&
+								(options.dcr === "none" ||
+									form.get("client_secret") === dynamicClientSecret)
+					if (!valid) {
+						res.writeHead(401)
+						res.end(JSON.stringify({ error: "invalid_client" }))
+						return
+					}
+					if (basic) form.set("client_id", dynamicClientId)
+				}
 				if (path === "/revoke") {
 					if (revocationFails) {
 						res.writeHead(503)
@@ -243,6 +303,16 @@ export const start = async (
 					res.end(JSON.stringify({ error: "invalid_grant" }))
 					return
 				}
+				if (options.rotateRefreshToken === true)
+					Match.value(form.get("grant_type")).pipe(
+						Match.when("refresh_token", () => {
+							refreshTokens = HashSet.remove(
+								refreshTokens,
+								form.get("refresh_token") ?? "",
+							)
+						}),
+						Match.orElse(() => undefined),
+					)
 				const access = randomUUID()
 				const refresh = randomUUID()
 				accessTokens = HashSet.add(accessTokens, access)
@@ -254,10 +324,12 @@ export const start = async (
 					res.end(
 						JSON.stringify({
 							access_token: access,
-							refresh_token: refresh,
+							...(options.refreshToken === false
+								? {}
+								: { refresh_token: refresh }),
 							token_type: "Bearer",
 							expires_in: 3600,
-							scope: "documents",
+							scope: grantedScope,
 						}),
 					)
 				}, tokenDelay)
@@ -325,20 +397,66 @@ export const start = async (
 			)
 		) {
 			res.writeHead(401, {
-				"www-authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource", scope="documents"`,
+				"www-authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource"${options.defaultScopes === true ? "" : ', scope="documents"'}`,
 			})
 			res.end("{}")
 			return
 		}
 		if (path === "/mcp" || path === "/mcp-updated" || path === "/protected") {
+			if (options.standardMcp === true && req.method !== "POST") {
+				res.writeHead(405).end()
+				return
+			}
 			let body = ""
 			req.setEncoding("utf8")
 			req.on("data", (part: string) => {
 				body += part
 			})
 			req.on("end", () => {
-				const request = Schema.decodeSync(Schema.fromJsonString(Request))(body)
-				operations = Arr.append(operations, request.method)
+				const wire = Schema.decodeSync(
+					Schema.fromJsonString(
+						Schema.Struct({
+							...Request.fields,
+							id: Schema.optionalKey(Request.fields.id),
+						}),
+					),
+				)(body)
+				operations = Arr.append(operations, wire.method)
+				if (wire.id === undefined) {
+					res.writeHead(202).end()
+					return
+				}
+				const request = { ...wire, id: wire.id }
+				if (
+					options.standardMcp === true &&
+					request.method === "server/discover"
+				) {
+					res.end(
+						JSON.stringify({
+							jsonrpc: "2.0",
+							id: request.id,
+							error: { code: -32601, message: "Method not found" },
+						}),
+					)
+					return
+				}
+				if (options.standardMcp === true && request.method === "initialize") {
+					res.end(
+						JSON.stringify({
+							jsonrpc: "2.0",
+							id: request.id,
+							result: {
+								protocolVersion: "2025-11-25",
+								serverInfo: {
+									name: "Standard Platform fixture",
+									version: "1.0.0",
+								},
+								capabilities: { tools: {}, resources: {}, prompts: {} },
+							},
+						}),
+					)
+					return
+				}
 				const result = Match.value(request.method).pipe(
 					Match.when("server/discover", () => ({
 						supportedVersions: [Document.protocolVersion],
@@ -540,7 +658,9 @@ export const start = async (
 						jsonrpc: "2.0",
 						id: request.id,
 						result: {
-							resultType: "complete",
+							...(options.standardMcp === true
+								? {}
+								: { resultType: "complete" }),
 							...(request.method === "resources/read"
 								? { ttlMs: 60000, cacheScope: "private" }
 								: {}),
@@ -581,6 +701,9 @@ export const start = async (
 		setDropResult: (value: boolean) => {
 			dropResult = value
 		},
+		setToolDescription: (value: string) => {
+			toolDescription = value
+		},
 		setInvalidOutput: (value: boolean) => {
 			invalidOutput = value
 		},
@@ -596,8 +719,12 @@ export const start = async (
 		},
 		issueCode,
 		exchanges: () => exchanges,
+		registrations: () => registrations,
 		setCimd: (value: boolean) => {
 			cimd = value
+		},
+		setGrantedScope: (scope: string) => {
+			grantedScope = scope
 		},
 		setRejectGrant: (value: boolean) => {
 			rejectGrant = value

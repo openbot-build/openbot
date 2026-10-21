@@ -3,7 +3,7 @@ import {
 	ExperienceStorageUnavailable,
 	Identity,
 } from "@openbot-build/platform-api"
-import { App, Client, Discovery, Document } from "@openbot-build/protocol"
+import { App, Client, Discovery } from "@openbot-build/protocol"
 import {
 	Clock,
 	Context,
@@ -143,6 +143,7 @@ export const make: Effect.Effect<
 						policy: metadataPolicy,
 					})
 					return {
+						protocolVersion: opened.client.protocolVersion,
 						tools: yield* Effect.forEach(opened.tools, json),
 						resources: yield* Effect.forEach(opened.resources, json),
 						resourceTemplates: yield* Effect.forEach(
@@ -203,7 +204,6 @@ export const make: Effect.Effect<
 							_tag: "Verified",
 							capabilities: {
 								connection: yield* connections.getConnection(id),
-								protocolVersion: Document.protocolVersion,
 								...success,
 							},
 						} as const

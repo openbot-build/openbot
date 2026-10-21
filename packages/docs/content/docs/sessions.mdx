@@ -27,7 +27,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions
 ```
 
-Both fields are optional. `settings` can hold `mode` and `model`. To set the memory switches, see [Memory](/docs/memory#switches). Creating a Session does not call a model.
+All fields are optional. `settings` can hold `mode` and `model`. Top-level `memory` can set the Session defaults for `use` and `generate`. See [Memory](/docs/memory#memory-for-one-turn). Creating a Session does not call a model.
 Platform returns `201` with the Session view. Here is a short form of it:
 
 ```json
@@ -100,6 +100,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `stream`     | Optional. `true` sends live events. See [Stream the answer](#stream-the-answer). |
 | `background` | Optional. Only `true` is allowed. Every Turn runs in the background.             |
 | `overrides`  | Optional. Settings for this Turn only: `mode` and `model`.                       |
+| `memory` | Optional. This Turn only: `use` and `generate` booleans. See [Memory](/docs/memory#memory-for-one-turn). |
 
 `input` takes text only. These three forms are the same:
 

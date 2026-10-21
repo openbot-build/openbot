@@ -6,6 +6,17 @@ import type { Caller, Identity } from "@openbot-build/platform-api"
 export class Backend extends Context.Service<
 	Backend,
 	{
+		readonly status?: Effect.Effect<
+			{ readonly activeExecutions: number },
+			SessionStore.SessionStoreError | Session.SessionError
+		>
+		readonly drain?: (
+			accountId: string,
+			namespace: string,
+		) => Effect.Effect<
+			{ readonly drained: boolean; readonly activeExecutions: number },
+			SessionStore.SessionStoreError | Session.SessionError
+		>
 		readonly get: (
 			namespace: string,
 			owner?: typeof Identity.Service,

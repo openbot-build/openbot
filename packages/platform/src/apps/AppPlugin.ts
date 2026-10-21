@@ -35,10 +35,10 @@ import { Repository, ownerKey } from "./Repository.ts"
 export const pluginId = Plugin.Id.make("@openbot-build/platform/k-apps")
 export type Tools = Record<
 	string,
-	Tool.Dynamic<
+	Tool.Tool<
 		string,
 		{
-			readonly parameters: JsonSchema.JsonSchema
+			readonly parameters: typeof Schema.Unknown
 			readonly success: typeof AppExecution.ToolResult
 			readonly failure: typeof Schema.Never
 			readonly failureMode: "error"
@@ -138,6 +138,87 @@ const makePermits: Effect.Effect<Permits> = Effect.gen(function* () {
 			)
 		},
 	}
+})
+
+/** A recorded call remains addressable even when its App cannot currently be opened. */
+const recoveredEntry = (
+	records: typeof InvocationRepository.Service,
+	invocations: typeof Invocations.Service,
+	position: Position,
+	recorded: AppExecution.Invocation,
+	reason: string,
+): Entry => ({
+	tool: Tool.dynamic(recorded.toolName, {
+		description: `${recorded.source.appName} / ${recorded.source.name}. Observe this previously approved operation; this entry cannot start another business action.`,
+		parameters: { type: "object", properties: {}, additionalProperties: true },
+		success: AppExecution.ToolResult,
+		needsApproval: false,
+	}).annotate(Tool.Strict, false),
+	handle: (input, context) =>
+		Effect.gen(function* () {
+			if (context.toolCallId === undefined)
+				return yield* denied("restore", recorded.source.name)
+			const pending = yield* invocations.pending(position, context.toolCallId)
+			if (Option.isNone(pending))
+				return yield* denied("restore", recorded.source.name)
+			const value = pending.value
+			if (value.toolName !== recorded.toolName)
+				return yield* denied("restore", recorded.source.name)
+			const args = yield* Schema.decodeUnknownEffect(Schema.JsonObject)(input)
+			if (
+				value.session !== position.session ||
+				value.turn !== position.turn ||
+				value.callId !== context.toolCallId ||
+				!Schema.toEquivalence(Schema.JsonObject)(value.arguments, args)
+			)
+				return yield* denied("restore", recorded.source.name)
+			const unavailable: AppExecution.Result = {
+				_tag: "Failed",
+				operationId: value.id,
+				source: value.source,
+				reason,
+				message:
+					"This App operation was not sent. Restore account access or review the current connection before requesting it again.",
+			}
+			const unknown: AppExecution.Result = {
+				_tag: "Failed",
+				operationId: value.id,
+				source: value.source,
+				reason: "OutcomeUnknown",
+				message:
+					"This operation may have reached the App. Check its actual state; do not submit it again.",
+			}
+			return yield* Match.value(value.status).pipe(
+				Match.when("Approved", () =>
+					records
+						.change(position.owner, value.id, ["Approved"], (current) => ({
+							...current,
+							status: "Failed",
+							result: unavailable,
+						}))
+						.pipe(Effect.as(unavailable)),
+				),
+				Match.whenOr("Sending", "OutcomeUnknown", () =>
+					Effect.succeed(unknown),
+				),
+				Match.whenOr("Completed", "Failed", "InputRequired", () =>
+					Effect.succeed(value.result ?? unknown),
+				),
+				Match.orElse(() => Effect.fail(denied("restore", value.source.name))),
+			)
+		}).pipe(
+			Effect.catch((error) => failed({ source: recorded.source, error })),
+			Effect.orElseSucceed(
+				() =>
+					({
+						_tag: "Failed",
+						source: recorded.source,
+						reason: "Storage",
+						message:
+							"The recorded App operation could not be restored. Check its original outcome before taking another action; nothing was resubmitted.",
+					}) satisfies AppExecution.Result,
+			),
+		),
 })
 
 const entriesFor = (
@@ -442,6 +523,7 @@ const prepare = (
 			Match.exhaustive,
 		)
 		let entries: ReadonlyArray<Entry> = []
+		let unavailable = HashMap.empty<string, string>()
 		let issues: ReadonlyArray<string> = Match.value(read).pipe(
 			Match.tag("Failure", () => [
 				"App connection storage is unavailable. No App connection can be used in this Turn.",
@@ -521,6 +603,11 @@ const prepare = (
 					entries = Arr.appendAll(entries, success)
 				}),
 				Match.tag("Failure", ({ failure }) => {
+					unavailable = HashMap.set(
+						unavailable,
+						stored.connection.connectionId,
+						failure._tag,
+					)
 					issues = Arr.append(
 						issues,
 						`${stored.name}: ${failure._tag}. Review this connection in My Apps.`,
@@ -529,7 +616,7 @@ const prepare = (
 				Match.exhaustive,
 			)
 		}
-		return { entries, issues }
+		return { entries, issues, unavailable }
 	})
 
 export const make: Effect.Effect<
@@ -582,7 +669,11 @@ export const make: Effect.Effect<
 									connections,
 									occupied: Record.keys(incoming.tools),
 								})
-								const { entries: connected, issues } = yield* prepare(
+								const {
+									entries: connected,
+									issues,
+									unavailable,
+								} = yield* prepare(
 									services,
 									{ owner: ownerKey(identity), session: at.session, turn },
 									Arr.appendAll(
@@ -591,7 +682,38 @@ export const make: Effect.Effect<
 									),
 									selected,
 								)
-								const entries = Arr.appendAll(assistance, connected)
+								let entries = Arr.appendAll(assistance, connected)
+								const position = {
+									owner: ownerKey(identity),
+									session: at.session,
+									turn,
+								}
+								const operations = yield* records.list(
+									position.owner,
+									position.session,
+								)
+								for (const operation of operations) {
+									if (
+										operation.turn !== turn ||
+										entries.some(
+											(entry) => entry.tool.name === operation.toolName,
+										)
+									)
+										continue
+									entries = Arr.append(
+										entries,
+										recoveredEntry(
+											records,
+											services.invocations,
+											position,
+											operation,
+											Option.getOrElse(
+												HashMap.get(unavailable, operation.source.connectionId),
+												() => "CapabilityUnavailable",
+											),
+										),
+									)
+								}
 								// Saved selections only add context. The Turn goes on without them.
 								const savedSelections = yield* views
 									.contexts(ownerKey(identity), at.session)

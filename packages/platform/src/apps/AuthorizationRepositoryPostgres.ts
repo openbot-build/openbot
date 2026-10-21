@@ -1,3 +1,5 @@
+import * as OwnedWrites from "../execution/OwnedWrites.ts"
+import { FenceUnavailable } from "../execution/ExecutionFence.ts"
 import {
 	AppAuthorizationApi as Api,
 	ConnectionsApi,
@@ -83,12 +85,35 @@ export const make: Effect.Effect<
 		if (row === undefined) return yield* ExperienceNotFound.make({ id })
 		return yield* decode(row).pipe(Effect.mapError(unavailable))
 	})
-	return AuthorizationRepository.of({
+	const service = AuthorizationRepository.of({
 		recover: db
-			.update(appAuthorizations)
-			.set({ status: "Failed", reason: "Interrupted", callback: null })
+			.selectDistinct({ owner: appAuthorizations.owner })
+			.from(appAuthorizations)
 			.where(eq(appAuthorizations.status, "Processing"))
-			.pipe(Effect.asVoid, Effect.mapError(unavailable)),
+			.pipe(
+				Effect.flatMap((rows) =>
+					Effect.forEach(rows, ({ owner }) =>
+						OwnedWrites.recover(
+							owner,
+							db
+								.update(appAuthorizations)
+								.set({
+									status: "Failed",
+									reason: "Interrupted",
+									callback: null,
+								})
+								.where(
+									and(
+										eq(appAuthorizations.owner, owner),
+										eq(appAuthorizations.status, "Processing"),
+									),
+								),
+						),
+					),
+				),
+				Effect.asVoid,
+				Effect.mapError(unavailable),
+			),
 		begin: (flow, input) =>
 			db
 				.transaction((tx) =>
@@ -221,6 +246,36 @@ export const make: Effect.Effect<
 						rows.length === 1 ? Effect.void : Effect.fail(consumed()),
 					),
 				),
+	})
+	return AuthorizationRepository.of({
+		...service,
+		begin: (flow, input) =>
+			OwnedWrites.write(flow.binding.owner, service.begin(flow, input)).pipe(
+				Effect.mapError((error) =>
+					error instanceof FenceUnavailable ? unavailable() : error,
+				),
+			),
+		receive: (id, input) =>
+			service.get(id).pipe(
+				Effect.flatMap((record) =>
+					OwnedWrites.write(record.owner, service.receive(id, input)),
+				),
+				Effect.mapError((error) =>
+					error instanceof FenceUnavailable ? unavailable() : error,
+				),
+			),
+		claim: (...args) =>
+			OwnedWrites.write(args[0], service.claim(...args)).pipe(
+				Effect.mapError((error) =>
+					error instanceof FenceUnavailable ? unavailable() : error,
+				),
+			),
+		finish: (...args) =>
+			OwnedWrites.write(args[0], service.finish(...args)).pipe(
+				Effect.mapError((error) =>
+					error instanceof FenceUnavailable ? unavailable() : error,
+				),
+			),
 	})
 })
 export const layer = Layer.effect(AuthorizationRepository, make)

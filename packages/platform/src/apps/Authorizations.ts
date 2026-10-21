@@ -1,3 +1,5 @@
+import * as Fence from "../execution/ExecutionFence.ts"
+import * as OwnedWrites from "../execution/OwnedWrites.ts"
 import {
 	AppAuthorizationApi as Api,
 	ConnectionsApi,
@@ -74,6 +76,10 @@ export const authorizationFailure = (reason: string) =>
 						"This authorization has already been handled. Open My Apps to view the current connection.",
 					FlowExpired:
 						"This authorization expired. Start a new authorization from My Apps.",
+					ClientRegistrationUnsupported:
+						"This provider requires a pre-registered OAuth client. Use the provider’s supported connection setup.",
+					ClientRegistrationFailed:
+						"The provider could not register this connection. Review its requirements and try authorization again.",
 					CimdUnsupported:
 						"This authorization provider does not support the required public client metadata.",
 					CallbackMismatch:
@@ -378,36 +384,50 @@ export const make = (
 						issuer === null)
 				)
 					return yield* authorizationFailure("CallbackMismatch")
-				const error = url.searchParams.get("error")
-				if (error !== null)
-					yield* intents.receive(id, {
-						callback: null,
-						status: error === "access_denied" ? "Cancelled" : "Failed",
-						reason: error === "access_denied" ? null : "GrantRejected",
-					})
-				else {
-					if (url.searchParams.get("code") === null)
-						return yield* authorizationFailure("CallbackMismatch")
-					yield* intents.receive(id, {
-						callback: url.href,
-						status: "Received",
-						reason: null,
-					})
-					// A failed completion is already saved on the flow. The caller reads
-					// that state after the redirect, so the redirect still happens.
-					yield* Option.match(owner, {
-						onNone: () => Effect.void,
-						onSome: (owner) =>
-							complete(owner, id).pipe(
-								Effect.catchTag("AppAuthorizationFailed", () => Effect.void),
-							),
-					})
-				}
-				return {
-					flowId: id,
-					returnTo: record.state.returnTo,
-					requiresLogin: Option.isNone(owner),
-				}
+				return yield* Fence.admit(
+					OwnedWrites.accountId(record.owner),
+					Effect.gen(function* () {
+						const error = url.searchParams.get("error")
+						if (error !== null)
+							yield* intents.receive(id, {
+								callback: null,
+								status: error === "access_denied" ? "Cancelled" : "Failed",
+								reason: error === "access_denied" ? null : "GrantRejected",
+							})
+						else {
+							if (url.searchParams.get("code") === null)
+								return yield* authorizationFailure("CallbackMismatch")
+							yield* intents.receive(id, {
+								callback: url.href,
+								status: "Received",
+								reason: null,
+							})
+							// A failed completion is already saved on the flow. The caller reads
+							// that state after the redirect, so the redirect still happens.
+							yield* Option.match(owner, {
+								onNone: () => Effect.void,
+								onSome: (owner) =>
+									complete(owner, id).pipe(
+										Effect.catchTag(
+											"AppAuthorizationFailed",
+											() => Effect.void,
+										),
+									),
+							})
+						}
+						return {
+							flowId: id,
+							returnTo: record.state.returnTo,
+							requiresLogin: Option.isNone(owner),
+						}
+					}),
+				).pipe(
+					Effect.mapError((error) =>
+						error instanceof Fence.FenceUnavailable
+							? ExperienceStorageUnavailable.make({})
+							: error,
+					),
+				)
 			}),
 		})
 	})

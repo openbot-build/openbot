@@ -1,8 +1,13 @@
+import type * as DeveloperVerification from "../apps/DeveloperVerification.ts"
 import { type Config, type Redacted } from "effect"
 import { type Configuration as Authentication } from "../auth/Model.ts"
 import type * as Organization from "../organization/Organization.ts"
 
+import type { Options as ExecutionOptions } from "../execution/ExecutionFence.ts"
+
 export interface Settings {
+	readonly developerVerification?: DeveloperVerification.Settings | undefined
+	readonly execution?: ExecutionOptions | undefined
 	readonly host: string
 	readonly port: number
 	readonly databaseUrl: Redacted.Redacted<string>

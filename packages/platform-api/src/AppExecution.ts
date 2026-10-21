@@ -1,14 +1,13 @@
-import { Document } from "@openbot-build/protocol"
 import { Schema } from "effect"
 import { Session, Turn } from "@openbot-build/core"
 import * as Index from "./AppIndexApi.ts"
-import { Availability } from "./ConnectionsApi.ts"
+import { Availability, OwnedConnectionIdentity } from "./ConnectionsApi.ts"
 
 /** Safe source details for one live capability. It never contains configured secrets. */
 export const Source = Schema.Struct({
 	connectionId: Schema.String,
 	connectionName: Schema.String,
-	cardUrl: Document.Link,
+	cardUrl: OwnedConnectionIdentity,
 	appName: Schema.String,
 	remoteIndex: Schema.Natural,
 	revision: Schema.Natural,
@@ -67,7 +66,7 @@ export type Invocation = typeof Invocation.Type
 export const AccessConnection = Schema.Struct({
 	id: Schema.String,
 	name: Schema.String,
-	cardUrl: Document.Link,
+	cardUrl: OwnedConnectionIdentity,
 	revision: Schema.Natural,
 	enabled: Schema.Boolean,
 	availability: Availability,

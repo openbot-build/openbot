@@ -1,6 +1,7 @@
+import { Barrier } from "../auth/Barrier.ts"
 import { Caller, OrganizationApi } from "@openbot-build/platform-api"
 import type { PgClient } from "@effect/sql-pg"
-import { Clock, DateTime, Effect, Layer, Schema } from "effect"
+import { Option, Clock, DateTime, Effect, Layer, Schema } from "effect"
 import { and, desc, eq, lt } from "drizzle-orm"
 import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { auditLogs } from "../database/Schema.ts"
@@ -19,7 +20,7 @@ export const make: Effect.Effect<
 > = Effect.gen(function* () {
 	const db = yield* makeWithDefaults()
 	const unavailable = () => AuditUnavailable.make({})
-	return AuditLog.of({
+	const service = AuditLog.of({
 		record: (entry) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
@@ -72,6 +73,17 @@ export const make: Effect.Effect<
 							: null,
 				}
 			}).pipe(Effect.mapError(unavailable)),
+	})
+	return AuditLog.of({
+		...service,
+		record: (...args) =>
+			Effect.flatMap(Effect.serviceOption(Barrier), (barrier) =>
+				Option.isSome(barrier)
+					? barrier.value
+							.wrap(service.record(...args))
+							.pipe(Effect.catchTag("AuthUnavailable", () => unavailable()))
+					: service.record(...args),
+			),
 	})
 })
 export const layer = Layer.effect(AuditLog, make)
