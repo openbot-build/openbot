@@ -332,6 +332,7 @@ test("one plugin builds its runtime and store in order, reads state in middlewar
 					turn: Effect.succeed(Turn.Id.make("test-turn")),
 					step: Effect.succeed(0),
 					history: Effect.succeed(Prompt.empty),
+					toolCallCount: () => Effect.succeed(0),
 				})
 				const program = Effect.gen(function* () {
 					const read = yield* own.snapshot
@@ -437,6 +438,7 @@ const counterStore = (
 			turn: Effect.succeed(Turn.Id.make("test-turn")),
 			step: Effect.succeed(0),
 			history: Effect.succeed(Prompt.empty),
+			toolCallCount: () => Effect.succeed(0),
 		})
 		return { own, runtime, runtimeStore, storage, initial, context }
 	})

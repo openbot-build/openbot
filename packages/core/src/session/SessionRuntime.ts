@@ -36,7 +36,7 @@ import * as Turn from "./Turn.ts"
 import * as Agent from "../agent/Agent.ts"
 import * as Timeline from "../timeline/Timeline.ts"
 import * as Item from "../timeline/Item.ts"
-import { fullHistory, unansweredCalls } from "../timeline/TimelineState.ts"
+import { finishToolCalls, fullHistory } from "../timeline/TimelineState.ts"
 import type * as Config from "../models/Config.ts"
 import * as ConfigurationOperations from "../models/ConfigurationOperations.ts"
 import * as ContextWindow from "../context/ContextWindow.ts"
@@ -254,15 +254,16 @@ export const make = <
 									session: view.session.id,
 									message: "The Session already has an unfinished Turn",
 								})
+							const settled = finishToolCalls({
+								item: Item.Id.make(yield* id()),
+							})(view.state.value)
 							const settings = { ...view.session.settings, ...input.overrides }
-							const window = Match.value(
-								view.state.value.conversation.context,
-							).pipe(
+							const window = Match.value(settled.conversation.context).pipe(
 								Match.tag("Native", (window) =>
 									settings.model?.provider === window.provider &&
 									settings.model.model === window.model
 										? window
-										: ContextWindow.fromPrompt(fullHistory(view.state.value)),
+										: ContextWindow.fromPrompt(fullHistory(settled)),
 								),
 								Match.tag("Prompt", (window) => window),
 								Match.exhaustive,
@@ -283,11 +284,11 @@ export const make = <
 								undefined,
 								Option.some({
 									value: {
-										...view.state.value,
+										...settled,
 										conversation: {
-											...view.state.value.conversation,
+											...settled.conversation,
 											closed: false,
-											history: A.append(view.state.value.conversation.history, {
+											history: A.append(settled.conversation.history, {
 												id: item,
 												content: prompt,
 												origin: { session: view.session.id, turn, step: 0 },
@@ -319,57 +320,21 @@ export const make = <
 							const current = yield* requireTurn(view, turn)
 							if (Turn.isTerminal(current.status))
 								return [false, Option.none()] as const
-							// Record an unavailable result for each unanswered tool call before later input uses this history.
-							const calls = unansweredCalls(
-								view.state.value.conversation.history,
-							)
 							const completedAt = yield* Clock.currentTimeMillis
 							const item = Item.Id.make(yield* id())
-							const prompt = Prompt.make(
-								HashMap.size(calls) === 0
-									? []
-									: [
-											{
-												role: "tool",
-												content: Array.from(calls, ([id, call]) =>
-													Prompt.toolResultPart({
-														id,
-														name: call.name,
-														isFailure: true,
-														providerExecuted: false,
-														result:
-															"The tool result is unavailable because its execution context ended.",
-													}),
-												),
-											},
-										],
-							)
-							const history =
-								prompt.content.length === 0
-									? view.state.value.conversation.history
-									: A.append(view.state.value.conversation.history, {
-											id: item,
-											content: prompt,
-											origin: {
-												session,
-												turn,
-												step: current.steps,
-											},
-										})
+							const settled = finishToolCalls({
+								item,
+								origin: { session, turn, step: current.steps },
+							})(view.state.value)
+							const historyAdded =
+								settled.conversation.history !==
+								view.state.value.conversation.history
 							return [
 								true,
 								Option.some({
 									value: {
-										...view.state.value,
-										conversation: {
-											...view.state.value.conversation,
-											history,
-											context: ContextWindow.append(
-												view.state.value.conversation.context,
-												prompt,
-											),
-											closed: true,
-										},
+										...settled,
+										conversation: { ...settled.conversation, closed: true },
 									},
 									session: {
 										pending: view.session.pending.filter(
@@ -381,7 +346,7 @@ export const make = <
 												...entry,
 												status,
 												completedAt,
-												...(prompt.content.length === 0
+												...(!historyAdded
 													? {}
 													: { items: A.append(entry.items, item) }),
 											}
@@ -604,6 +569,11 @@ export const make = <
 							.read(session)
 							.pipe(Effect.map((view) => Session.position(view.session))),
 						turn: Effect.succeed(turn),
+						toolCallCount: (callId) =>
+							options.store.read(session).pipe(
+								Effect.map((view) => Session.toolCallCount(view, callId)),
+								Effect.orDie,
+							),
 						step: Ref.get(step),
 						history: Ref.get(chatRef).pipe(
 							Effect.flatMap((chat) => Ref.get(chat.history)),
@@ -1498,30 +1468,16 @@ export const make = <
 											turn: input.turn,
 											message: "The Turn is not waiting for approval",
 										})
-									const messages = fullHistory(view.state.value).content
-									const requested = messages.some(
-										(message) =>
-											message.role === "assistant" &&
-											message.content.some(
-												(part) =>
-													part.type === "tool-approval-request" &&
-													part.approvalId === input.approval,
-											),
+									if (
+										!Session.pendingApprovals(view).some(
+											(request) => request.approvalId === input.approval,
+										)
 									)
-									const answered = messages.some(
-										(message) =>
-											message.role === "tool" &&
-											message.content.some(
-												(part) =>
-													part.type === "tool-approval-response" &&
-													part.approvalId === input.approval,
-											),
-									)
-									if (!requested || answered)
 										return yield* new Turn.Conflict({
 											session: input.session,
 											turn: input.turn,
-											message: "The approval request is no longer pending",
+											message:
+												"The approval does not belong to the current Turn or is no longer pending",
 										})
 									const content = Prompt.make([
 										{
@@ -1585,17 +1541,38 @@ export const make = <
 			session,
 		) =>
 			Effect.gen(function* () {
-				const view = yield* options.store.read(session),
-					current = Session.currentTurn(view.session)
-
+				const view = yield* options.store.read(session)
+				const current = Session.currentTurn(view.session)
 				if (
-					current === undefined ||
-					Turn.isTerminal(current.status) ||
 					HashMap.has(yield* SynchronizedRef.get(active), session) ||
-					(yield* canApprove({ session, turn: current.id }))
+					(current !== undefined &&
+						(yield* canApprove({ session, turn: current.id })))
 				)
 					return view
-				return yield* close(session, current.id, { _tag: "Interrupted" })
+				if (current !== undefined && !Turn.isTerminal(current.status))
+					return yield* close(session, current.id, { _tag: "Interrupted" })
+				const repaired = yield* options.store.modifyEffect({
+					session,
+					update: (latest) =>
+						Effect.gen(function* () {
+							const turn = Session.currentTurn(latest.session)
+							if (
+								HashMap.has(yield* SynchronizedRef.get(active), session) ||
+								(turn !== undefined && !Turn.isTerminal(turn.status))
+							)
+								return [undefined, Option.none()] as const
+							const value = finishToolCalls({
+								item: Item.Id.make(yield* id()),
+							})(latest.state.value)
+							return [
+								undefined,
+								value === latest.state.value
+									? Option.none()
+									: Option.some({ value }),
+							] as const
+						}),
+				})
+				return repaired.view
 			})
 		const belongs = (event: Event, session: Session.Id) =>
 			Match.value(event).pipe(

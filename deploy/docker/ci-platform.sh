@@ -23,9 +23,7 @@ if [[ "${CI_COMMIT_REF_PROTECTED:-false}" == true ]] && [[ -n "${CI_REGISTRY_IMA
   node deploy/docker/publish-source.mjs
   registry_image="$CI_REGISTRY_IMAGE/platform:$CI_COMMIT_SHA"
   printf '%s' "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" --username "$CI_REGISTRY_USER" --password-stdin
-  docker tag "$image" "$registry_image"
-  docker push "$registry_image"
-  digest="$(docker image inspect "$registry_image" --format '{{index .RepoDigests 0}}')"
+  digest="$(bash deploy/docker/publish-platform.sh "$image" "$registry_image" "$CI_COMMIT_SHA")"
   [[ "$digest" == "$CI_REGISTRY_IMAGE/platform@sha256:"* ]]
   printf 'OPENBOT_REGISTRY_IMAGE=%s\n' "$digest" >> .devenv/release/image.env
 fi

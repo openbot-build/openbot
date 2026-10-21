@@ -40,7 +40,7 @@ check:
     - devenv --profile ci shell -- pnpm build
     - devenv --profile ci shell -- pnpm typecheck
     - devenv --profile ci shell -- pnpm -r test
-    - devenv --profile ci shell -- node --test deploy/docker/publish-source.test.mjs
+    - devenv --profile ci shell -- node --test deploy/docker/*.test.mjs
 
 platform-image:
   extends: .devenv

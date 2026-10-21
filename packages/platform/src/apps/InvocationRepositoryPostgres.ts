@@ -130,6 +130,7 @@ export const make: Effect.Effect<
 					saved.session !== value.session ||
 					saved.turn !== value.turn ||
 					saved.callId !== value.callId ||
+					(saved.callOccurrence ?? 0) !== (value.callOccurrence ?? 0) ||
 					saved.toolName !== value.toolName ||
 					!Schema.toEquivalence(AppExecution.Source)(
 						saved.source,

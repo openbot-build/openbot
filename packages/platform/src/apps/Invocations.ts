@@ -9,6 +9,7 @@ export interface Position {
 	readonly owner: string
 	readonly session: AppExecution.Invocation["session"]
 	readonly turn: AppExecution.Invocation["turn"]
+	readonly callOccurrence?: number
 }
 export interface Proposal extends Position {
 	readonly callId: string
@@ -54,7 +55,17 @@ export const make: Effect.Effect<
 	const policy = yield* ActionPolicy
 	const id = (input: Position, callId: string) =>
 		createHash("sha256")
-			.update(JSON.stringify([input.owner, input.session, input.turn, callId]))
+			.update(
+				JSON.stringify([
+					input.owner,
+					input.session,
+					input.turn,
+					callId,
+					...(input.callOccurrence !== undefined && input.callOccurrence > 0
+						? [input.callOccurrence]
+						: []),
+				]),
+			)
 			.digest("hex")
 	const valid = (owner: string, value: AppExecution.Invocation) =>
 		Effect.gen(function* () {
@@ -98,6 +109,9 @@ export const make: Effect.Effect<
 				session: input.session,
 				turn: input.turn,
 				callId: input.callId,
+				...(input.callOccurrence !== undefined && input.callOccurrence > 0
+					? { callOccurrence: input.callOccurrence }
+					: {}),
 				toolName: input.toolName,
 				source: input.source,
 				arguments: input.arguments,

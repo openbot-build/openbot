@@ -115,6 +115,27 @@ account and digest; callers cannot select an arbitrary user. It returns success
 only after the matching session is absent. No raw cookie or token is persisted
 in the revocation ledger. These routes require the internal bearer token.
 
+## Selected fixes from e
+
+This fork also carries four fixes from [e](https://gitlab.kai.com/KAI/e),
+reviewed through commit `d492a00154aff992fd461f99a83d4eea5b0babdc`:
+
+- `bdf3dab`: bind approvals to their originating Session and Turn.
+- `f5c44c9`: give repeated tool call occurrences separate saved App operations.
+- `8e27fea`: isolate approval decisions when a model reuses a call ID within one Turn.
+- `9e7dcae`: restore an earlier tool result only when both retained views identify one matching occurrence.
+
+The port uses OpenBot Timeline and `conversation` state in place of e Memory
+state. It keeps OpenBot organization ownership and the memory plugin boundary.
+Approval occurrence counts come from committed Turn Items, not model context.
+Retained tool calls are settled without invoking their handlers.
+
+The pinned `effect@4.0.5` patch binds approval decisions to call occurrences and
+keeps earlier tool results before later model output. Both the dependency source
+and its built JavaScript are patched. `upstream.json` records the source range,
+full commit IDs, adaptations, and patch path. These selected fixes do not change
+the OpenBot base commit.
+
 ## New upstream changes
 
 The comparison from the pinned base to upstream

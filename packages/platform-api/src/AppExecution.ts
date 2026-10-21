@@ -43,6 +43,7 @@ export const Invocation = Schema.Struct({
 	session: Session.Id,
 	turn: Turn.Id,
 	callId: Schema.String,
+	callOccurrence: Schema.optionalKey(Schema.Natural),
 	toolName: Schema.String,
 	source: Source,
 	arguments: Schema.JsonObject,

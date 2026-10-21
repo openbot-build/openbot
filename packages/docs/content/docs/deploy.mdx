@@ -316,6 +316,12 @@ The workflow runs for pull requests, pushes to `main`, and tags like `v1.2.3`. I
 
 The images go to the GitHub container registry, at `ghcr.io/openbot-build/openbot/platform` and `ghcr.io/openbot-build/openbot/protocol-test`. The workflow does not deploy Platform. To use a published image with Compose, pull it and tag it as `openbot-platform:<tag>`.
 
+The GitLab pipeline publishes protected commits as one AMD64 image. It skips the
+Buildx image index and attestation, which the registry rejects during upload.
+After the push, it reads the digest from the registry, pulls that exact image,
+and checks its architecture and revision before recording the release. The
+commit-keyed source archive and image revision label remain available.
+
 ### Publish the docs site
 
 The workflow `.github/workflows/docs.yml` publishes the docs site to [GitHub Pages](https://docs.github.com/pages) at [openbot.build](https://openbot.build). It runs for each push to `main`. You can also start it by hand from the Actions tab.
