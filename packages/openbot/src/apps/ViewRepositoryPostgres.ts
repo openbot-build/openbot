@@ -9,7 +9,7 @@ import { and, eq, like } from "drizzle-orm"
 import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { Array as Arr, Effect, Layer, Option, Schema } from "effect"
 import { appSecrets } from "../database/Schema.ts"
-import { Secrets } from "./Secrets.ts"
+import { Secrets } from "../secrets/Secrets.ts"
 import { Action, View, ViewRepository } from "./ViewRepository.ts"
 
 const unavailable = () => ExperienceStorageUnavailable.make({})

@@ -12,93 +12,88 @@ OpenBot is built with [Effect](https://effect.website). You build it from Layers
 
 ## The smallest program
 
-This program does the same as `openbot` without a model:
+This program does the same as `openbot`:
 
 ```ts
 import { NodeRuntime } from "@effect/platform-node"
 import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
 import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/http"
 
 NodeRuntime.runMain(
 	Effect.gen(function* () {
 		const settings = yield* EnvironmentConfiguration.load
-		return yield* Layer.launch(Server.layer(settings))
+		return yield* Layer.launch(
+			Server.layer(settings).pipe(Layer.provide(FetchHttpClient.layer)),
+		)
 	}),
 )
 ```
 
-`EnvironmentConfiguration.load` reads the variables in [Configuration](/docs/configuration). It returns `host`, `port`, `databaseUrl`, `appEncryptionKey`, `auth`, and `tls`.
+`EnvironmentConfiguration.load` reads the variables in [Configuration](/docs/configuration). It returns `host`, `port`, `databaseUrl`, `secretKeys`, and `tls`.
 You can also write these values in code.
+
+The program still needs a platform. Run the setup program once before people use it. See [Platform](/docs/platform#setup).
 
 ## What the package exports
 
-| Export                                                      | What it is                                                                                 |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `Server.layer(options)`                                     | OpenBot with its own Node.js HTTP or HTTPS server.                                         |
-| `Server.layerApi(options)`                                  | Only the HTTP routes, for an HTTP server that you already have.                            |
-| `OpenBot.layer(options)`                                    | The services behind the routes: sign-in, tokens, permissions, storage, Sessions, and Apps. |
-| `DatabasePostgres`                                          | The database Layer and the `migrate` program.                                              |
-| `EnvironmentConfiguration`                                  | Reads OpenBot settings from environment variables.                                         |
-| `Auth`, `Sessions`, `AppHost`, `AppPlugin`, `Configuration` | Service types for advanced setups.                                                         |
+| Export                                                      | What it is                                                                                                   |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `Server.layer(options)`                                     | OpenBot with its own Node.js HTTP or HTTPS server. It reads sign-in from the platform settings.              |
+| `Server.layerFixed(options)`                                | OpenBot with one fixed sign-in configuration. For tests and the development server.                          |
+| `Server.layerApi(options)`                                  | Only the HTTP routes, for an HTTP server that you already have.                                              |
+| `OpenBot.layerShared(options)`                              | The services that live as long as the instance: the database pool, the secret keys, and the shared settings. |
+| `OpenBot.layer(options)`                                    | The services behind the routes: sign-in, tokens, permissions, storage, Sessions, and Apps.                   |
+| `DatabasePostgres`                                          | The database Layer and the `migrate` program.                                                                |
+| `EnvironmentConfiguration`                                  | Reads the instance settings from environment variables.                                                      |
+| `Auth`, `Sessions`, `AppHost`, `AppPlugin`, `Configuration` | Service types for advanced setups.                                                                           |
 
 ---
 
 ## Options
 
-`Server.layer` takes all `OpenBot.layer` options, plus a few for the HTTP server.
+`Server.layer` takes instance options and app options.
 
-### Required
+### Instance options
 
-| Option             | Type               | What it is                                          |
-| ------------------ | ------------------ | --------------------------------------------------- |
-| `host`             | `string`           | The address to listen on, such as `127.0.0.1`.      |
-| `port`             | `number`           | The port to listen on, such as `3000`.              |
-| `databaseUrl`      | `Redacted<string>` | The PostgreSQL URL.                                 |
-| `appEncryptionKey` | `Redacted<string>` | 64 hexadecimal characters. It encrypts App secrets. |
-| `auth`             | object             | Sign-in settings. See below.                        |
+| Option        | Type               | What it is                                                                              |
+| ------------- | ------------------ | --------------------------------------------------------------------------------------- |
+| `host`        | `string`           | Required. The address to listen on, such as `127.0.0.1`.                                |
+| `port`        | `number`           | Required. The port to listen on, such as `3000`.                                        |
+| `databaseUrl` | `Redacted<string>` | Required. The PostgreSQL URL.                                                           |
+| `secretKeys`  | `Redacted<string>` | Required. The secret key list. See [Secret keys](/docs/configuration#secret-keys).      |
+| `tls`         | object             | Optional. `{ certFile, keyFile }` paths to PEM files. OpenBot then serves HTTPS itself. |
 
 ### Sign-in
 
-`auth` has one of two forms:
+`Server.layer` takes no sign-in options. It reads the public origin, the platform provider, and the sign-in secret from the [platform settings](/docs/platform#platform-settings).
 
-```ts
-import { Redacted } from "effect"
+- Before setup, every route except `/health` answers `503` with `SetupRequired`.
+- When one of these settings changes, the server builds a new app with the new values. The new app takes requests first, and then the old app stops.
 
-// OpenID Connect
-const auth = {
-	mode: "oidc" as const,
-	publicOrigin: "https://api.example.com",
-	secret: Redacted.make(process.env.BETTER_AUTH_SECRET ?? ""),
-	issuer: "https://id.example.com",
-	clientId: "openbot",
-	// Leave out clientSecret for a public PKCE client.
-	clientSecret: Redacted.make("your-client-secret"),
-}
+`Server.layerFixed` serves one fixed `auth` configuration instead, and never builds a new app. It also gives the app services to your program, so tests can use them. When the database has no platform settings, it writes them first, for the `publicOrigin` of `auth`. Tests and the development server use it.
 
-// Local test account, only for a loopback HTTPS origin
-const development = {
-	mode: "development" as const,
-	publicOrigin: "https://localhost:8443",
-	secret: Redacted.make(process.env.BETTER_AUTH_SECRET ?? ""),
-}
-```
+### App options
 
-`secret` must have at least 32 characters. `clientSecret` must not be empty when you give it.
-`sessionTtlMs` sets how long a sign-in lasts. The default is 30 days.
+| Option          | What it does                                                                                       |
+| --------------- | -------------------------------------------------------------------------------------------------- |
+| `sessions`      | Tools and memory for Sessions. See below.                                                          |
+| `builtinModels` | Models that every organization can use, given in code. See [Models](/docs/models#built-in-models). |
+| `routes`        | A function that gets the sign-in configuration and returns a Layer with your own HTTP routes.      |
+| `discovery`     | A Layer that finds Apps on the web. The default reads public Catalogs over the internet.           |
+| `indexSources`  | More sources for the App Index search, next to the OpenBot Index.                                  |
+| `indexWork`     | Timing of the App Index worker: `{ intervalMs, retryMs }`.                                         |
 
-### Optional
+Some values were options before. They are settings in the database now, so every instance shares them:
 
-| Option            | What it does                                                                             |
-| ----------------- | ---------------------------------------------------------------------------------------- |
-| `tls`             | `{ certFile, keyFile }` paths to PEM files. OpenBot then serves HTTPS itself.            |
-| `sessions`        | Models, tools, and memory for Sessions. See below.                                       |
-| `agents`          | The helper model, the request timeout, and Agent memory. See [Agents](#agents).          |
-| `routes`          | A Layer with your own HTTP routes, served next to the OpenBot routes.                    |
-| `discovery`       | A Layer that finds Apps on the web. The default reads public Catalogs over the internet. |
-| `indexSources`    | More sources for the App Index search, next to the OpenBot Index.                        |
-| `appRestrictions` | Apps that this OpenBot blocks: `{ cardUrl, reason, appealUrl }`.                         |
-| `appReadRules`    | App tools that you trust to only read: `{ cardUrl, tool }`.                              |
-| `indexWork`       | Timing of the App Index worker: `{ intervalMs, retryMs }`.                               |
+| Old option              | Setting                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------- |
+| `appRestrictions`       | `appRestrictions` in the [platform settings](/docs/platform#platform-settings). |
+| `appReadRules`          | `appReadRules` in the [organization settings](/docs/organization#settings).     |
+| `agents.helperModel`    | `helperModel` in the organization settings.                                     |
+| `agents.requestTimeout` | `requestTimeoutMs` in the organization settings.                                |
+| `agents.memory`         | `agentMemory` in the organization settings.                                     |
+| `appEncryptionKey`      | The `secretKeys` instance option.                                               |
 
 ---
 
@@ -110,23 +105,10 @@ The `sessions` option sets how Sessions do their work.
 | ---------------- | ------------------------------------------------------------------------------- |
 | `runtime`        | The Agent definition: `toolkit`, `plugin`, `providers`, `compaction`, and more. |
 | `layerExecution` | A function that builds extra services for each Turn, such as tool handlers.     |
-| `modelCatalog`   | The providers and models that clients can see.                                  |
-| `defaults`       | Default Turn settings, such as the model.                                       |
-| `resolveModel`   | Returns the `LanguageModel` for a model selection.                              |
-| `memory`         | Learned memory: your own `model` and `policy`, and `defaults` for the switches. |
+| `memory`         | Learned memory: your own `model` and `policy`.                                  |
 
-For models, see [Models](/docs/models). You can also give a single `LanguageModel` Layer with `Layer.provide`.
-
-### Memory defaults
-
-`memory.defaults` sets the server default for the two memory switches, `use` and `generate`. Both are on when you leave them out. Each Session can override them. See [Memory](/docs/memory#switches).
-This example keeps memory in the instructions, but stops learning by default:
-
-```ts
-sessions: {
-	memory: { defaults: { generate: false } },
-},
-```
+Models come from the model providers in the database and from `builtinModels`. See [Models](/docs/models).
+The memory switches of a new Session come from `memory` in the [organization settings](/docs/organization#settings). See [Memory](/docs/memory#switches).
 
 ### Add a tool
 
@@ -154,38 +136,16 @@ const server = (settings: Configuration.Settings) =>
 			runtime: { toolkit },
 			layerExecution: () => handlers,
 		},
-	}).pipe(Layer.provide(handlers), Layer.provide(model))
+	}).pipe(Layer.provide(handlers))
 ```
 
-`model` is a `LanguageModel` Layer, as in [Models](/docs/models).
 Add `needsApproval: true` to `Tool.make` when each call needs a decision. OpenBot then makes a `tools.call` request for it. See [Requests](/docs/requests).
-
----
-
-## Agents
-
-The `agents` option sets how [Agents](/docs/agents) work together.
-
-| Field            | What it does                                                                                                                                                         |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `helperModel`    | A model selection for the work that OpenBot does itself: the [judge of Rules](/docs/rules) and Agent memory. Without it, OpenBot uses the default model of Sessions. |
-| `requestTimeout` | How long a [request](/docs/requests) waits before it is denied, in milliseconds. The default is 24 hours.                                                            |
-| `memory`         | `false` stops learning [Agent memory](/docs/memory#agent-memory). It is on by default.                                                                               |
-
-```ts
-agents: {
-	helperModel: { provider: "openai-compat", model: "small-model" },
-	requestTimeout: 60 * 60 * 1000,
-},
-```
-
-`helperModel` must be a model that `sessions.resolveModel` can return.
 
 ---
 
 ## Your own routes
 
-`routes` adds HTTP routes to the same server. The Layer can use the `Auth` service to check the sign-in cookie.
+`routes` adds HTTP routes to the same server. It is a function that gets the current sign-in configuration and returns a Layer. The Layer can use the `Auth` service to check the sign-in cookie.
 
 ```ts
 import { HttpRouter, HttpServerResponse } from "effect/http"
@@ -196,48 +156,25 @@ const routes = HttpRouter.add(
 	HttpServerResponse.text("ready"),
 )
 
-Server.layer({ ...settings, routes })
+Server.layer({ ...settings, routes: () => routes })
 ```
 
 Do not use paths under `/auth/` or `/v1/`. OpenBot owns them.
 
 ## Use your own HTTP server
 
+`Server.layerApp(options)` returns a function. It gets one sign-in configuration and returns the OpenBot routes and services for it.
 `Server.layerApi({ publicOrigin })` gives only the OpenBot routes. It also adds error logging for failed requests.
-Serve it with `HttpRouter.serve`, then give it `OpenBot.layer`, a `Discovery` service, and an HTTP server:
 
-```ts
-import { NodeHttpServer } from "@effect/platform-node"
-import { OpenBot, Server } from "@openbot-build/openbot"
-import { CatalogDiscovery } from "@openbot-build/protocol"
-import * as PublicNetwork from "@openbot-build/protocol/NodeHttpServer"
-import { Layer } from "effect"
-import { HttpRouter } from "effect/http"
-import { createServer } from "node:http"
-
-const discovery = CatalogDiscovery.layer().pipe(
-	Layer.provide(CatalogDiscovery.layerRules),
-	Layer.provide(PublicNetwork.layerPublicNetwork()),
-)
-
-const app = HttpRouter.serve(
-	Layer.merge(Server.layerApi(options.auth), routes),
-).pipe(
-	Layer.provideMerge(OpenBot.layer(options)),
-	Layer.provide(discovery),
-	Layer.provideMerge(
-		NodeHttpServer.layer(() => createServer(), { host: "0.0.0.0", port: 3000 }),
-	),
-)
-```
-
-This is what `Server.layer` does inside. `options` has the same fields as above, and `routes` is your own routes Layer.
+`Server.layer` and `Server.layerFixed` start their own Node.js server.
+To put OpenBot inside a server that you already have, build the same parts yourself. Read `packages/openbot/src/app/Server.ts` for how `layerFixed` serves one configuration, and `packages/openbot/src/app/Supervisor.ts` for how `Server.layer` builds a new app when the platform settings change.
+Keep the sign-in secret in the platform settings, not in your own environment variable. Every instance must use the same one.
 
 ---
 
 ## Migrate the database
 
-`DatabasePostgres.migrate` applies the migrations. `OpenBot.layer` only checks that the tables exist, and fails if they do not.
+`DatabasePostgres.migrate` applies the migrations. `OpenBot.layerShared` only checks that the tables exist, and fails if they do not.
 Run migrations in their own program before you start the server:
 
 ```ts

@@ -12,7 +12,7 @@ import { AppInspections } from "./AppInspections.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import { DeveloperMembers } from "./DeveloperMembers.ts"
 import { DeveloperReports } from "./DeveloperReports.ts"
-import { ownerKey } from "./Repository.ts"
+import { ownerKey, ownersOf } from "./Repository.ts"
 import { DeveloperTests } from "./DeveloperTests.ts"
 import { DeveloperIndexing } from "./DeveloperIndexing.ts"
 import { DeveloperNotifications } from "./DeveloperNotifications.ts"
@@ -39,9 +39,7 @@ export const layerPublic = HttpApiBuilder.group(
 										Effect.tap(({ setCookies }) =>
 											HttpMiddleware.setSessionCookies(setCookies),
 										),
-										Effect.map((value) =>
-											Option.some(ownerKey(value.identity)),
-										),
+										Effect.map((value) => Option.some(ownersOf(value))),
 										// A rejected session is the same as no session: the caller must log in.
 										Effect.catchTag(
 											"CredentialRejected",

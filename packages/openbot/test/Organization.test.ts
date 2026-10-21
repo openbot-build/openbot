@@ -1,5 +1,8 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
+import { AuthApi } from "@openbot-build/api"
+import { Effect, Layer, Redacted } from "effect"
+import { DomainControl } from "../src/apps/DomainControl.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 import { withCookie, withToken } from "./Caller.ts"
 
@@ -8,12 +11,16 @@ const member = (userId: string) =>
 	"/v1/organization/members/" + encodeURIComponent(userId)
 
 test(
-	"The first account owns the organization, and others join only from allowed domains",
+	"Each account gets its own organization, and others join after a domain is verified",
 	{ timeout: 60000 },
 	async () => {
+		let records: ReadonlyArray<string> = []
 		const host = await BrowserHost.start({
 			publicOrigin,
-			organization: { allowedEmailDomains: [] },
+			sharedDomain: false,
+			domainControl: Layer.succeed(DomainControl, {
+				tokens: () => Effect.sync(() => records),
+			}),
 		})
 		try {
 			const account = withCookie({ address: host.address, publicOrigin })
@@ -22,31 +29,217 @@ test(
 				await account(alice.session, "/v1/organization")
 			).json()
 			assert.equal(organization.id, alice.identity.organizationId)
-			assert.deepEqual(organization.allowedEmailDomains, [])
+			assert.equal(organization.status, "active")
 			const self = await (
 				await account(alice.session, member(alice.identity.userId))
 			).json()
 			assert.deepEqual(self.roles, ["super_administrator"])
 
-			// Bob has a verified email, but his domain is not allowed yet.
-			await assert.rejects(host.login("bob"))
-
-			const allowed = await account(
-				alice.session,
-				"/v1/organization",
-				"PATCH",
-				{
-					allowedEmailDomains: ["example.com"],
-				},
-			)
-			assert.equal(allowed.status, 200, await allowed.clone().text())
+			// Bob has a verified email in the same domain, but nobody verified the domain.
 			const bob = await host.login("bob")
-			assert.equal(bob.identity.organizationId, alice.identity.organizationId)
+			assert.notEqual(
+				bob.identity.organizationId,
+				alice.identity.organizationId,
+			)
+
+			// A domain does nothing until its TXT record proves control.
+			const added = await (
+				await account(alice.session, "/v1/organization/domains", "POST", {
+					domain: "example.com",
+				})
+			).json()
+			assert.equal(added.recordName, "_openbot-verification.example.com")
+			assert.equal(added.verifiedAt, null)
+			const early = await account(
+				alice.session,
+				"/v1/organization/domains/example.com/verify",
+				"POST",
+			)
+			assert.equal(early.status, 409)
+			assert.equal((await early.json())._tag, "DomainNotVerified")
+			records = [added.recordValue]
+			const verified = await account(
+				alice.session,
+				"/v1/organization/domains/example.com/verify",
+				"POST",
+			)
+			assert.equal(verified.status, 200, await verified.clone().text())
+
+			// Bob cannot take the domain for his own organization now. He names it,
+			// because he now also belongs to Alice's organization.
+			const inOwn = (path: string, method = "GET", payload?: unknown) =>
+				fetch(host.address + path, {
+					method,
+					headers: {
+						cookie:
+							AuthApi.SessionCookie +
+							"=" +
+							encodeURIComponent(Redacted.value(bob.session)),
+						origin: publicOrigin,
+						[AuthApi.OrganizationHeader]: bob.identity.organizationId,
+						...(payload === undefined
+							? {}
+							: { "content-type": "application/json" }),
+					},
+					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+				})
+			await inOwn("/v1/organization/domains", "POST", { domain: "example.com" })
+			const taken = await inOwn(
+				"/v1/organization/domains/example.com/verify",
+				"POST",
+			)
+			assert.equal((await taken.json())._tag, "DomainTaken")
+
+			// Carol signs in for the first time and joins Alice's organization.
+			const carol = await host.login("carol")
+			assert.equal(carol.identity.organizationId, alice.identity.organizationId)
 			const joined = await (
-				await account(alice.session, member(bob.identity.userId))
+				await account(alice.session, member(carol.identity.userId))
 			).json()
 			assert.deepEqual(joined.roles, ["member"])
-			assert.equal(joined.status, "active")
+
+			// Bob joins too. With two organizations, a cookie request must name one.
+			const ambiguous = await account(bob.session, "/v1/organization")
+			assert.equal(ambiguous.status, 400)
+			assert.equal((await ambiguous.json())._tag, "OrganizationRequired")
+			const chosen = await fetch(host.address + "/v1/organization", {
+				headers: {
+					cookie:
+						AuthApi.SessionCookie +
+						"=" +
+						encodeURIComponent(Redacted.value(bob.session)),
+					"openbot-organization": alice.identity.organizationId,
+				},
+			})
+			assert.equal((await chosen.json()).id, alice.identity.organizationId)
+			const listed = await (
+				await withCookie({ address: host.address, publicOrigin })(
+					bob.session,
+					"/v1/organizations",
+				)
+			).json()
+			assert.equal(listed.items.length, 2)
+		} finally {
+			await host.close()
+		}
+	},
+)
+
+test(
+	"Settings and custom roles change through the API, and roles never give more than their writer has",
+	{ timeout: 60000 },
+	async () => {
+		const host = await BrowserHost.start({ publicOrigin })
+		try {
+			const account = withCookie({ address: host.address, publicOrigin })
+			const alice = await host.login("alice")
+			const bob = await host.login("bob")
+			const settings = await (
+				await account(alice.session, "/v1/organization/settings")
+			).json()
+			assert.equal(settings.joinByDomain, true)
+			assert.deepEqual(settings.defaultRoles, ["member"])
+
+			// A change must name the version that it read.
+			const stale = await account(
+				alice.session,
+				"/v1/organization/settings",
+				"PATCH",
+				{ expectedVersion: settings.version + 5, agentMemory: false },
+			)
+			assert.equal(stale.status, 409)
+			const changed = await (
+				await account(alice.session, "/v1/organization/settings", "PATCH", {
+					expectedVersion: settings.version,
+					agentMemory: false,
+				})
+			).json()
+			assert.equal(changed.agentMemory, false)
+			assert.equal(changed.version, settings.version + 1)
+			const unknownRole = await account(
+				alice.session,
+				"/v1/organization/settings",
+				"PATCH",
+				{
+					expectedVersion: changed.version,
+					defaultRoles: ["role_" + "0".repeat(32)],
+				},
+			)
+			assert.equal((await unknownRole.json())._tag, "SettingsInvalid")
+
+			// A custom role that only reads the audit log.
+			const created = await account(
+				alice.session,
+				"/v1/organization/roles",
+				"POST",
+				{
+					name: "Log reader",
+					description: "Reads the audit log.",
+					policies: [
+						{
+							effect: "allow",
+							permissionGroups: ["audit_logs.read"],
+							resources: ["openbot.org.{org}"],
+						},
+					],
+				},
+			)
+			assert.equal(created.status, 200, await created.clone().text())
+			const role = await created.json()
+			assert.equal(role.builtin, false)
+			assert.equal(
+				(await account(bob.session, "/v1/organization/audit_logs")).status,
+				403,
+			)
+			assert.equal(
+				(
+					await account(alice.session, member(bob.identity.userId), "PATCH", {
+						roles: ["member", role.id],
+					})
+				).status,
+				200,
+			)
+			assert.equal(
+				(await account(bob.session, "/v1/organization/audit_logs")).status,
+				200,
+			)
+			// The role is in use, so it cannot go.
+			const inUse = await account(
+				alice.session,
+				"/v1/organization/roles/" + role.id,
+				"DELETE",
+			)
+			assert.equal((await inUse.json())._tag, "RoleInUse")
+			const builtin = await account(
+				alice.session,
+				"/v1/organization/roles/member",
+				"PATCH",
+				{ name: "Changed" },
+			)
+			assert.equal((await builtin.json())._tag, "RoleReadOnly")
+
+			// Bob becomes an Administrator. He can write roles, but not one with more than he has.
+			await account(alice.session, member(bob.identity.userId), "PATCH", {
+				roles: ["administrator"],
+			})
+			const escalation = await account(
+				bob.session,
+				"/v1/organization/roles",
+				"POST",
+				{
+					name: "Everything",
+					description: "Too much.",
+					policies: [
+						{
+							effect: "allow",
+							permissionGroups: ["sessions.read"],
+							resources: ["openbot.org.{org}"],
+						},
+					],
+				},
+			)
+			assert.equal(escalation.status, 403)
+			assert.equal((await escalation.json())._tag, "PermissionDenied")
 		} finally {
 			await host.close()
 		}
@@ -141,9 +334,15 @@ test(
 				},
 			)
 			assert.equal(allow.status, 403)
-			const defaults = await account(bob.session, "/v1/organization", "PATCH", {
-				defaultRoles: ["super_administrator"],
-			})
+			const { version } = await (
+				await account(bob.session, "/v1/organization/settings")
+			).json()
+			const defaults = await account(
+				bob.session,
+				"/v1/organization/settings",
+				"PATCH",
+				{ expectedVersion: version, defaultRoles: ["super_administrator"] },
+			)
 			assert.equal(defaults.status, 403)
 
 			// The organization keeps at least one active Super Administrator.

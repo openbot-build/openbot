@@ -15,6 +15,7 @@ import { userKey } from "../authorization/Policy.ts"
 import { Tokens } from "./Tokens.ts"
 import { Auth } from "./Auth.ts"
 import * as HttpMiddleware from "./HttpMiddleware.ts"
+import * as PlatformHandlers from "../platform/HttpHandlers.ts"
 
 /** Better Auth serves its own routes. OpenBot adds the session and user token routes. */
 export const layer = (config: { readonly publicOrigin: string }) => {
@@ -82,15 +83,40 @@ export const layer = (config: { readonly publicOrigin: string }) => {
 					)
 			}),
 	)
-	return Layer.mergeAll(account, userTokens).pipe(
+	const signIn = HttpApiBuilder.group(OpenBotApi, "signIn", (handlers) =>
+		Effect.gen(function* () {
+			const auth = yield* Auth
+			return handlers.handle("signIn", ({ payload }) =>
+				Effect.gen(function* () {
+					const providerId = auth.signInProvider(payload.email)
+					if (Option.isNone(providerId))
+						return yield* AuthApi.SignInUnavailable.make({})
+					const started = yield* auth
+						.startSignIn({
+							providerId: providerId.value,
+							returnTo: payload.returnTo,
+						})
+						.pipe(
+							Effect.mapError(() => AuthApi.AuthenticationUnavailable.make({})),
+						)
+					yield* HttpMiddleware.setSessionCookies(started.setCookies)
+					return { url: started.url }
+				}),
+			)
+		}),
+	)
+	return Layer.mergeAll(account, userTokens, signIn).pipe(
 		Layer.provideMerge(
-			Layer.merge(HttpMiddleware.layerAgentAuth(config), Authorize.layer),
+			Layer.mergeAll(
+				HttpMiddleware.layerAgentAuth(config),
+				HttpMiddleware.layerAccountAuth(config),
+				Authorize.layer,
+				PlatformHandlers.layerAuthorize,
+				HttpMiddleware.layerSessionAuth,
+				HttpMiddleware.layerOrigin(config),
+				HttpMiddleware.layerNoStore,
+			),
 		),
-		Layer.provide([
-			HttpMiddleware.layerSessionAuth,
-			HttpMiddleware.layerOrigin(config),
-			HttpMiddleware.layerNoStore,
-		]),
 	)
 }
 

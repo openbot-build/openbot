@@ -156,8 +156,12 @@ export const make = <
 				const context = yield* Agent.Context,
 					at = yield* context.at,
 					view = yield* store.read(at.session)
+				const organizationDefaults =
+					options.memoryDefaults === undefined
+						? {}
+						: yield* options.memoryDefaults
 				return SessionHost.settings({
-					defaults: memoryDefaults,
+					defaults: { ...memoryDefaults, ...organizationDefaults },
 					session: view.session,
 				})
 			}),

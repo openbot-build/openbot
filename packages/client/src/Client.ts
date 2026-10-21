@@ -5,7 +5,13 @@ import {
 	type HttpApiGroup,
 	HttpApiMiddleware,
 } from "effect/http-api"
-import { OpenBotApi, AgentAuth, SessionAuth } from "@openbot-build/api"
+import {
+	AccountAuth,
+	AgentAuth,
+	AuthApi,
+	OpenBotApi,
+	SessionAuth,
+} from "@openbot-build/api"
 import {
 	type HttpClientError,
 	FetchHttpClient,
@@ -36,6 +42,7 @@ export const make = (options: {
 	never,
 	| HttpClient.HttpClient
 	| HttpApiMiddleware.ForClient<AgentAuth>
+	| HttpApiMiddleware.ForClient<AccountAuth>
 	| HttpApiMiddleware.ForClient<SessionAuth>
 > =>
 	HttpApiClient.make(OpenBotApi, options).pipe(
@@ -49,6 +56,11 @@ export const layer = (options: {
 	 * Leave it out in a same-origin browser client that uses the session Cookie.
 	 */
 	readonly token?: string | Redacted.Redacted<string>
+	/**
+	 * The organization of requests with the session Cookie, sent in the
+	 * `OpenBot-Organization` header. A token belongs to one organization, so it needs none.
+	 */
+	readonly organization?: string
 	readonly onUnauthorized?: () => void
 }): Layer.Layer<Client> => {
 	const token = Option.map(Option.fromNullishOr(options.token), (token) =>
@@ -69,6 +81,21 @@ export const layer = (options: {
 					),
 				),
 				HttpApiMiddleware.layerClient(AgentAuth, ({ request, next }) =>
+					next(
+						Option.match(token, {
+							onNone: () =>
+								options.organization === undefined
+									? request
+									: HttpClientRequest.setHeader(
+											request,
+											AuthApi.OrganizationHeader,
+											options.organization,
+										),
+							onSome: (token) => HttpClientRequest.bearerToken(request, token),
+						}),
+					).pipe(Effect.tap(reportUnauthorized)),
+				),
+				HttpApiMiddleware.layerClient(AccountAuth, ({ request, next }) =>
 					next(
 						Option.match(token, {
 							onNone: () => request,

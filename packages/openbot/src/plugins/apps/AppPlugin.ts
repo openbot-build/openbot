@@ -27,7 +27,7 @@ import { Capabilities, type Opened } from "../../apps/Capabilities.ts"
 import { Invocations, type Position } from "../../apps/Invocations.ts"
 import { ActionPolicy } from "../../apps/ActionPolicy.ts"
 import { Gate } from "../../capabilities/Gate.ts"
-import { Repository, ownerKey } from "../../apps/Repository.ts"
+import { organizationOf, Repository, ownerKey } from "../../apps/Repository.ts"
 
 export const pluginId = Plugin.Id.make("@openbot-build/openbot/k-apps")
 export type Tools = Record<
@@ -255,7 +255,10 @@ const entriesFor = (
 										toolCallId: context.toolCallId,
 										app: invocation,
 										// The deployment owner says which tools only read.
-										implicit: services.policy.isRead(origin),
+										implicit: yield* services.policy.isRead({
+											organizationId: organizationOf(owner),
+											source: origin,
+										}),
 									})
 									if (answer === "allow")
 										yield* services.invocations.approve(
@@ -378,7 +381,10 @@ const entriesFor = (
 								{ name: tool.name, arguments: args },
 								{
 									source: Option.isNone(selected) ? "model" : "app",
-									readOnly: services.policy.isRead(origin),
+									readOnly: yield* services.policy.isRead({
+										organizationId: organizationOf(owner),
+										source: origin,
+									}),
 								},
 							),
 						)

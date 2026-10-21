@@ -1,9 +1,8 @@
 import type { Session } from "@openbot-build/core"
+import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
 import type { AgentsApi, AppExecution } from "@openbot-build/api"
 import { Context, Effect, Layer, Option } from "effect"
-import { Tokens } from "../auth/Tokens.ts"
 import { can } from "../authorization/Check.ts"
-import { Organization } from "../organization/Organization.ts"
 import { Signal, Signals } from "../agents/Signals.ts"
 import { type Capability, describe, permission } from "./Capability.ts"
 import { Grants } from "./Grants.ts"
@@ -53,14 +52,14 @@ export class Gate extends Context.Service<
 export const make: Effect.Effect<
 	typeof Gate.Service,
 	never,
-	Grants | Rules | Judge | Requests | Signals | Organization | Tokens
+	Grants | Rules | Judge | Requests | Signals | AuthorizationServices
 > = Effect.gen(function* () {
 	const grants = yield* Grants
 	const rules = yield* Rules
 	const judge = yield* Judge
 	const requests = yield* Requests
 	const signals = yield* Signals
-	const services = yield* Effect.context<Organization | Tokens>()
+	const services = yield* Effect.context<AuthorizationServices>()
 	/** The verdict of the Rules for an Agent, and the Agents that wrote the Rules it quotes. */
 	const judged = (input: {
 		readonly organizationId: string

@@ -1,3 +1,4 @@
+import { organizationOf } from "./Repository.ts"
 import { AppExecution, SessionConflict } from "@openbot-build/api"
 import { Client, McpClient } from "@openbot-build/protocol"
 import { Context, Effect, Layer, Match, Schema } from "effect"
@@ -48,8 +49,12 @@ export const make: Effect.Effect<
 					)
 					if (value.status !== "InputRequired" || value.round !== round)
 						return yield* invalid()
-					if (actions.isRead(value.source) !== value.readOnly)
-						return yield* invalid()
+					// The read rules changed since the call started, so the old decision no longer holds.
+					const readOnly = yield* actions.isRead({
+						organizationId: organizationOf(owner),
+						source: value.source,
+					})
+					if (readOnly !== value.readOnly) return yield* invalid()
 					const continuation = Match.value(value.source.kind).pipe(
 						Match.when(
 							"tool",

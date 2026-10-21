@@ -58,8 +58,8 @@ Two switches control memory:
 - `use`: OpenBot adds the active facts to the model's instructions.
 - `generate`: OpenBot learns new facts after each Turn.
 
-The server sets a default for each switch. Both are on unless the server changes them. See [Server](/docs/server#sessions).
-A Session can override each switch with `Configure`. A switch that the Session does not set follows the server default.
+The organization sets a default for each switch with `memory` in its [settings](/docs/organization#settings). Both are on unless the organization changes them.
+A Session can override each switch with `Configure`. A switch that the Session does not set follows the organization default.
 `settings` shows the result, and `overrides` shows what the Session set. A Fork keeps the overrides of its source Session.
 
 ---
@@ -131,7 +131,7 @@ On success, OpenBot returns the new Session view. It has a new `session.revision
 For each field of `Configure`:
 
 - `true` or `false` sets the switch for this Session.
-- `null` removes the setting. The switch then follows the server default.
+- `null` removes the setting. The switch then follows the organization default.
 - A missing field keeps the switch as it is.
 
 Configure does not change the history, so `session.head` stays the same.
@@ -159,7 +159,7 @@ Keep using the facts, but stop learning new ones:
 }
 ```
 
-Follow the server default for learning again:
+Follow the organization default for learning again:
 
 ```json
 {
@@ -199,7 +199,7 @@ Facts that matter for one task only stay in Session memory.
 
 ### How it learns
 
-When a Turn of the Agent completes and its queue is empty, OpenBot asks the [helper model](/docs/server#agents) which lasting experience to keep. Review Sessions do not teach anything. A Session whose `generate` switch is off does not teach its Agent either.
+When a Turn of the Agent completes and its queue is empty, OpenBot asks the helper model which lasting experience to keep. The helper model is `helperModel` in the [organization settings](/docs/organization#settings). To stop this learning, set `agentMemory` to `false` there. Review Sessions do not teach anything. A Session whose `generate` switch is off does not teach its Agent either.
 
 - Each entry names its sources: Session and Item IDs.
 - Tool results from Apps are outside data. An entry that only App results support is never kept.

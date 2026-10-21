@@ -18,6 +18,12 @@ import {
 	versions,
 	contents,
 	organizations,
+	settings,
+	platformAdmins,
+	roles,
+	modelProviders,
+	organizationDomains,
+	ssoConnections,
 	members,
 	tokens,
 	auditLogs,
@@ -51,6 +57,12 @@ export const check = Effect.gen(function* () {
 	yield* db.select({ id: versions.id }).from(versions).limit(0)
 	yield* db.select({ id: contents.id }).from(contents).limit(0)
 	yield* db.select().from(organizations).limit(0)
+	yield* db.select().from(settings).limit(0)
+	yield* db.select().from(platformAdmins).limit(0)
+	yield* db.select().from(roles).limit(0)
+	yield* db.select().from(modelProviders).limit(0)
+	yield* db.select().from(organizationDomains).limit(0)
+	yield* db.select().from(ssoConnections).limit(0)
 	yield* db.select().from(members).limit(0)
 	yield* db.select().from(tokens).limit(0)
 	yield* db.select().from(auditLogs).limit(0)

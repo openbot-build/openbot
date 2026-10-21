@@ -26,6 +26,29 @@ export const ownerKey = (owner: {
 	readonly userId: string
 }) => JSON.stringify([owner.organizationId, owner.userId])
 
+/** The organization of an owner key. */
+export const organizationOf = (owner: string): string => {
+	const parsed: unknown = JSON.parse(owner)
+	return Array.isArray(parsed) && typeof parsed[0] === "string" ? parsed[0] : ""
+}
+
+/** The owner keys of a signed-in account: one for each active membership. */
+export const ownersOf = (session: {
+	readonly userId: string
+	readonly memberships: ReadonlyArray<{
+		readonly organizationId: string
+		readonly status: string
+	}>
+}) =>
+	session.memberships
+		.filter((membership) => membership.status === "active")
+		.map((membership) =>
+			ownerKey({
+				organizationId: membership.organizationId,
+				userId: session.userId,
+			}),
+		)
+
 export class Repository extends Context.Service<
 	Repository,
 	{

@@ -71,8 +71,13 @@ export const layer = <
 						onNone: () =>
 							Effect.gen(function* () {
 								const runtimeScope = yield* Scope.fork(scope)
+								const organization =
+									owner === undefined || options.organization === undefined
+										? {}
+										: options.organization(owner.organizationId)
 								const instance = yield* ManagedSessions.make({
 									...options,
+									...organization,
 									namespace,
 									...(owner === undefined ? {} : { owner }),
 								}).pipe(

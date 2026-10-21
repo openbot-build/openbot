@@ -41,14 +41,18 @@ export const selection = Config.Selection.make({
 	model: Model.Id.make("mock-text" satisfies Scenario),
 })
 
+/** The first model is the default of a new Session. */
 export const catalog = Effect.succeed({
 	providers: [{ id: provider, name: "Development scenarios (simulated)" }],
-	models: Scenario.literals.map((scenario) =>
+	models: [
+		selection.model,
+		...Scenario.literals.filter((scenario) => scenario !== selection.model),
+	].map((scenario) =>
 		Config.Model.make({
 			provider,
 			id: Model.Id.make(scenario),
 			name: `${scenario} (simulated)`,
-			description: descriptions[scenario],
+			description: descriptions[scenario as Scenario],
 			reasoningEfforts: [],
 			serviceTiers: [],
 		}),
@@ -476,11 +480,17 @@ export const make = Effect.gen(function* () {
 			)
 			return models[scenario]
 		})
+	const { providers, models: list } = yield* catalog
 	return {
-		modelCatalog: catalog,
-		defaults: Effect.succeed({ model: selection }),
-		resolveModel: resolve,
-		runtime: { toolkit },
-		layerExecution: () => layerTools,
+		/** Every organization of a development platform can use the simulated models. */
+		builtinModels: {
+			providers,
+			models: list,
+			resolve: (selection: Config.Selection) => resolve(selection),
+		},
+		sessions: {
+			runtime: { toolkit },
+			layerExecution: () => layerTools,
+		},
 	}
 })

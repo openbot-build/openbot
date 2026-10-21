@@ -16,7 +16,7 @@ import {
 	appSecrets,
 } from "../database/Schema.ts"
 import { Repository, StoredConnection } from "./Repository.ts"
-import { Secrets } from "./Secrets.ts"
+import { Secrets } from "../secrets/Secrets.ts"
 
 const unavailable = () => ExperienceStorageUnavailable.make({})
 /** Keep the errors that callers handle. Every other storage failure becomes one error. */
