@@ -17,7 +17,7 @@ test("the development host serves a saved, owner-bound App service through the r
 		host: "127.0.0.1",
 		port: 0,
 		databaseUrl: Redacted.make(database.url),
-		appEncryptionKey: Redacted.make("11".repeat(32)),
+		secretKeys: Redacted.make("test:" + "11".repeat(32)),
 		auth: {
 			mode: "development" as const,
 			publicOrigin: "https://localhost:8443",
@@ -79,7 +79,7 @@ test("the development host serves a saved, owner-bound App service through the r
 			}),
 		)
 		await runtime.dispose()
-		const production = ManagedRuntime.make(Server.layer(configuration))
+		const production = ManagedRuntime.make(Server.layerFixed(configuration))
 		try {
 			assert.deepEqual(
 				await production.runPromise(

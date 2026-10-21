@@ -15,7 +15,7 @@ import {
 	appSecrets,
 } from "../database/Schema.ts"
 import { AuthorizationRepository, Record } from "./AuthorizationRepository.ts"
-import { Secrets } from "./Secrets.ts"
+import { Secrets } from "../secrets/Secrets.ts"
 
 const unavailable = () => ExperienceStorageUnavailable.make({})
 const conflict = () =>

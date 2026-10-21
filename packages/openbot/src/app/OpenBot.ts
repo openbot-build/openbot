@@ -1,5 +1,4 @@
 import * as DeveloperLayers from "../apps/DeveloperLayers.ts"
-import type * as DomainControl from "../apps/DomainControl.ts"
 import * as AppExperience from "../apps/Experience.ts"
 import * as Views from "../apps/Views.ts"
 import * as ViewRepository from "../apps/ViewRepositoryPostgres.ts"
@@ -16,7 +15,8 @@ import * as InvocationRepository from "../apps/InvocationRepositoryPostgres.ts"
 import { InvocationRepository as InvocationRecords } from "../apps/InvocationRepository.ts"
 import * as ActionPolicy from "../apps/ActionPolicy.ts"
 import * as AppRepositoryPostgres from "../apps/RepositoryPostgres.ts"
-import * as AppSecrets from "../apps/Secrets.ts"
+import * as Secrets from "../secrets/Secrets.ts"
+import * as SettingsPostgres from "../settings/SettingsPostgres.ts"
 import * as AppProbe from "../apps/Probe.ts"
 import * as AppHost from "../apps/AppHost.ts"
 import * as Authorizations from "../apps/Authorizations.ts"
@@ -33,20 +33,26 @@ import * as ProtocolNodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import * as IndexWork from "../apps/IndexWork.ts"
 import * as IndexWorkRepositoryPostgres from "../apps/IndexWorkRepositoryPostgres.ts"
 import * as Governance from "../apps/Governance.ts"
-import type { AppIndexApi } from "@openbot-build/api"
 import * as IndexRepositoryPostgres from "../apps/IndexRepositoryPostgres.ts"
 import { ResolvedConfiguration } from "../auth/Configuration.js"
 import * as BackendLayers from "./BackendLayers.ts"
 import * as AgentLayers from "../agents/AgentLayers.ts"
 import * as Coordinator from "../agents/Coordinator.ts"
 import * as Judge from "../capabilities/Judge.ts"
-import type { Config } from "@openbot-build/core"
 import * as Sessions from "../sessions/Sessions.ts"
+import { Config } from "@openbot-build/core"
 import * as Backend from "./Backend.ts"
 import { Repository } from "../sessions/Repository.ts"
 import { NodeServices, NodeCrypto } from "@effect/platform-node"
-import { Effect, Layer, type Redacted, Schema, SchemaIssue } from "effect"
-import { LanguageModel, type Tool } from "effect/ai"
+import {
+	Effect,
+	Layer,
+	Option,
+	type Redacted,
+	Schema,
+	SchemaIssue,
+} from "effect"
+import { type Tool } from "effect/ai"
 import { FetchHttpClient } from "effect/http"
 import * as RepositoryPostgres from "../sessions/RepositoryPostgres.ts"
 import * as DatabasePostgres from "../database/DatabasePostgres.ts"
@@ -54,7 +60,13 @@ import * as BetterAuth from "../auth/BetterAuth.ts"
 import * as TokensPostgres from "../auth/TokensPostgres.ts"
 import * as AuditLogPostgres from "../audit/AuditLogPostgres.ts"
 import * as OrganizationPostgres from "../organization/OrganizationPostgres.ts"
-import type * as OrganizationSettings from "../organization/Organization.ts"
+import * as PlatformAdminsPostgres from "../platform/PlatformAdminsPostgres.ts"
+import * as RolesPostgres from "../authorization/RolesPostgres.ts"
+import * as ModelRegistry from "../models/ModelRegistry.ts"
+import * as ModelProvidersPostgres from "../models/ModelProvidersPostgres.ts"
+import * as SsoPostgres from "../sso/SsoPostgres.ts"
+import * as DomainControl from "../apps/DomainControl.ts"
+import { Settings } from "../settings/Settings.ts"
 import { AuthConfigurationError, type Configuration } from "../auth/Model.js"
 
 export interface Options<
@@ -69,34 +81,41 @@ export interface Options<
 	readonly indexPublicNetwork?: Layer.Layer<Network.PublicNetwork>
 	readonly indexWork?: IndexWork.Options
 	readonly domainControl?: Layer.Layer<DomainControl.DomainControl>
-	readonly appRestrictions?: ReadonlyArray<AppIndexApi.Restriction>
-	readonly appReadRules?: ReadonlyArray<ActionPolicy.ReadRule>
-	readonly appEncryptionKey: Redacted.Redacted<string>
 	readonly appProbe?: Layer.Layer<AppProbe.Probe>
 	readonly appNetwork?: Layer.Layer<AppHost.AppNetwork>
 	readonly auth: Configuration
-	readonly organization?: OrganizationSettings.Options | undefined
 	readonly indexSources?: ReadonlyArray<AppIndex.SourceProvider>
 	readonly sessions?: Omit<
 		Sessions.Options<Tools, E, R, BuildE, BuildR>,
 		"namespace"
 	>
-	readonly agents?: AgentOptions
-}
-
-export interface AgentOptions {
 	/**
-	 * The model that OpenBot uses for its own work: the judge of Rules and Agent memory.
-	 * Without it, OpenBot uses the default model of Sessions.
+	 * Models that the program gives itself, such as the simulated model of
+	 * development. Every organization can use them. All other models come from
+	 * the model providers that the API stores.
 	 */
-	readonly helperModel?: Config.Selection
-	/** How long a request waits for a decision before it is denied, in milliseconds. */
-	readonly requestTimeout?: number
-	/** Learn Agent memory after each Turn. It is on by default. */
-	readonly memory?: boolean
+	readonly builtinModels?: ModelRegistry.Builtin
 }
 
-/** Scoped database resources, with a separate stored runtime for each member. */
+/**
+ * The services that live as long as the instance, outside of each app:
+ * the database pool, the secret keys and the shared settings.
+ * A new app after a change to the platform settings uses the same ones.
+ */
+export const layerShared = (options: {
+	readonly databaseUrl: Redacted.Redacted<string>
+	readonly secretKeys: Redacted.Redacted<string>
+}) =>
+	SettingsPostgres.layer.pipe(
+		Layer.provideMerge(Secrets.layer(options.secretKeys)),
+		Layer.provideMerge(
+			Layer.effectDiscard(DatabasePostgres.check).pipe(
+				Layer.provideMerge(DatabasePostgres.layer(options)),
+			),
+		),
+	)
+
+/** The app of one platform configuration, with a separate stored runtime for each member. */
 export const layer = <
 	Tools extends Record<string, Tool.Any> = {},
 	E = never,
@@ -106,42 +125,97 @@ export const layer = <
 >(
 	options: Options<Tools, E, R, BuildE, BuildR>,
 ) => {
-	const checked = Layer.effectDiscard(DatabasePostgres.check).pipe(
-		Layer.provideMerge(DatabasePostgres.layer(options)),
-	)
+	/**
+	 * Each member gets the models and memory switches of their organization.
+	 * A host that gives its own `resolveModel`, such as a test, keeps it.
+	 */
 	const sessions: Layer.Layer<
 		Backend.Backend,
 		never,
-		Repository | Sessions.ExecutionServices<Tools, R> | BuildR
-	> = BackendLayers.layer(options.sessions)
+		| Repository
+		| Sessions.ExecutionServices<Tools, R>
+		| BuildR
+		| ModelRegistry.ModelRegistry
+		| Settings
+	> = Layer.unwrap(
+		Effect.gen(function* () {
+			const registry = yield* ModelRegistry.ModelRegistry
+			const settings = yield* Settings
+			const organization = (
+				organizationId: string,
+			): Sessions.OrganizationOptions => ({
+				modelCatalog: registry
+					.catalog(organizationId)
+					.pipe(Effect.orElseSucceed(() => ({ providers: [], models: [] }))),
+				defaults: registry.defaultSelection(organizationId).pipe(
+					Effect.map(
+						Option.match({
+							onNone: () => ({}),
+							onSome: (model) => ({ model }),
+						}),
+					),
+					Effect.orElseSucceed(() => ({})),
+				),
+				resolveModel: (selection) =>
+					registry.resolve(organizationId, selection),
+				memoryDefaults: settings.organization(organizationId).pipe(
+					Effect.map((current) => current.document.memory),
+					Effect.orElseSucceed(() => ({})),
+				),
+			})
+			// A runtime without an owner has no organization. It can use only the built-in models.
+			const builtin = options.builtinModels
+			const first = builtin?.models[0]
+			const fallback =
+				builtin === undefined || first === undefined
+					? {}
+					: {
+							modelCatalog: Effect.succeed({
+								providers: builtin.providers,
+								models: builtin.models,
+							}),
+							defaults: Effect.succeed({
+								model: Config.Selection.make({
+									provider: first.provider,
+									model: first.id,
+								}),
+							}),
+							resolveModel: (selection: Config.Selection | undefined) =>
+								builtin.resolve(
+									selection ??
+										Config.Selection.make({
+											provider: first.provider,
+											model: first.id,
+										}),
+								),
+						}
+			return BackendLayers.layer(
+				options.sessions?.resolveModel === undefined
+					? { ...fallback, ...options.sessions, organization }
+					: options.sessions,
+			)
+		}),
+	)
 
-	// The helper model comes from the Session models, or from the model of the host.
+	// The helper model comes from the settings of the organization, or from the model of the host.
 	const helper = Layer.effect(
 		Judge.HelperModel,
 		Effect.gen(function* () {
-			const ambient = yield* Effect.serviceOption(LanguageModel.LanguageModel)
+			const registry = yield* ModelRegistry.ModelRegistry
 			const resolve = options.sessions?.resolveModel
 			return Judge.HelperModel.of({
-				model: Effect.mapError(
-					resolve === undefined
-						? Effect.fromOption(ambient).pipe(Effect.mapError(String))
-						: resolve(options.agents?.helperModel).pipe(
-								Effect.mapError(String),
-							),
-					() =>
-						new Judge.HelperModelUnavailable({
-							message: "No helper model is configured.",
-						}),
-				),
+				model: (organizationId) =>
+					Effect.mapError(
+						resolve === undefined
+							? registry.helper(organizationId)
+							: resolve(undefined),
+						(error) =>
+							new Judge.HelperModelUnavailable({ message: error.message }),
+					),
 			})
 		}),
 	)
-	const agents = AgentLayers.layer({
-		helper,
-		...(options.agents?.requestTimeout === undefined
-			? {}
-			: { requestTimeout: options.agents.requestTimeout }),
-	})
+	const agents = AgentLayers.layer({ helper })
 
 	const indexNamespace = options.indexNamespace ?? "public"
 	const indexStorage = IndexRepositoryPostgres.layerFor(indexNamespace)
@@ -150,10 +224,7 @@ export const layer = <
 		AuthorizationRepository.layer,
 		InvocationRepository.layer,
 		ViewRepository.layer,
-	).pipe(
-		Layer.provideMerge(AppRepositoryPostgres.layerFor(indexNamespace)),
-		Layer.provideMerge(AppSecrets.layer(options.appEncryptionKey)),
-	)
+	).pipe(Layer.provideMerge(AppRepositoryPostgres.layerFor(indexNamespace)))
 	const viewRecovery = Layer.effectDiscard(
 		Effect.flatMap(ViewRecords, (records) => records.recover),
 	)
@@ -179,7 +250,7 @@ export const layer = <
 		Layer.provide(options.appNetwork ?? AppHost.layerNetwork),
 		Layer.provide(NodeCrypto.layer),
 		Layer.provideMerge(appStorage),
-		Layer.provideMerge(ActionPolicy.layer(options.appReadRules)),
+		Layer.provideMerge(ActionPolicy.layer),
 	)
 
 	const developer = DeveloperLayers.layer({
@@ -248,22 +319,32 @@ export const layer = <
 		Layer.provideMerge(apps),
 		Layer.provideMerge(agents),
 		Layer.provideMerge(index),
-		Layer.provideMerge(Governance.layer(options.appRestrictions)),
+		Layer.provideMerge(Governance.layer),
 		Layer.provideMerge(TokensPostgres.layer),
-		Layer.provideMerge(OrganizationPostgres.layer(options.organization)),
+		Layer.provideMerge(OrganizationPostgres.layer),
+		Layer.provideMerge(PlatformAdminsPostgres.layer),
+		Layer.provideMerge(RolesPostgres.layer),
+		Layer.provideMerge(
+			ModelRegistry.layer(
+				options.builtinModels === undefined
+					? {}
+					: { builtin: options.builtinModels },
+			),
+		),
+		Layer.provideMerge(ModelProvidersPostgres.layer),
+		Layer.provideMerge(
+			SsoPostgres.layer.pipe(
+				Layer.provide(options.domainControl ?? DomainControl.layer),
+			),
+		),
 		Layer.provideMerge(AuditLogPostgres.layer),
 		Layer.provideMerge(RepositoryPostgres.layer),
-		Layer.provideMerge(checked),
 		Layer.provideMerge(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
 	)
 	return Layer.mergeAll(
 		Views.layer,
 		AppExperience.layer,
 		developer,
-		Coordinator.layer(
-			options.agents?.memory === undefined
-				? {}
-				: { memory: options.agents.memory },
-		),
+		Coordinator.layer,
 	).pipe(Layer.provideMerge(base))
 }

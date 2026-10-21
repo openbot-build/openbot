@@ -95,6 +95,13 @@ export interface Options<
 	readonly memory?: Memory.Options & {
 		readonly defaults?: Partial<Memory.Settings>
 	}
+	/** The memory switches of the organization. They come after `memory.defaults`. */
+	readonly memoryDefaults?: Effect.Effect<Partial<Memory.Settings>>
+	/**
+	 * The settings of the organization of the owner, read on each use.
+	 * They come before the static options above.
+	 */
+	readonly organization?: (organizationId: string) => OrganizationOptions
 	readonly namespace?: string
 	readonly runtime?: Agent.Definition<Tools, E, R, BuildE, BuildR>
 	readonly layerExecution?: (
@@ -102,6 +109,11 @@ export interface Options<
 		namespace: string,
 	) => Layer.Layer<ExecutionServices<Tools, R>, E>
 }
+
+/** The options that come from the settings of an organization. */
+export type OrganizationOptions = Required<
+	Pick<Options, "modelCatalog" | "defaults" | "resolveModel" | "memoryDefaults">
+>
 
 export class Sessions extends Context.Service<
 	Sessions,

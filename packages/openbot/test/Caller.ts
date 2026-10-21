@@ -45,3 +45,13 @@ export const withToken =
 			},
 			...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
 		})
+
+/** The member of the first organization of a signed-in account. */
+export const memberOf = (session: {
+	readonly userId: string
+	readonly memberships: ReadonlyArray<{ readonly organizationId: string }>
+}) => {
+	const first = session.memberships[0]
+	if (first === undefined) throw new Error("The account has no organization")
+	return { userId: session.userId, organizationId: first.organizationId }
+}

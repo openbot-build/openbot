@@ -7,7 +7,7 @@ import { Effect, Layer, Option, Redacted } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { Authorizations } from "./Authorizations.ts"
-import { ownerKey } from "./Repository.ts"
+import { ownersOf } from "./Repository.ts"
 import { Auth } from "../auth/Auth.ts"
 import * as HttpMiddleware from "../auth/HttpMiddleware.ts"
 
@@ -54,14 +54,12 @@ export const layer = (publicOrigin: string) =>
 							const cookie = request.cookies[AuthApi.SessionCookie]
 							const owner =
 								cookie === undefined
-									? Option.none<string>()
+									? Option.none<ReadonlyArray<string>>()
 									: yield* auth.resolveSession(Redacted.make(cookie)).pipe(
 											Effect.tap(({ setCookies }) =>
 												HttpMiddleware.setSessionCookies(setCookies),
 											),
-											Effect.map((session) =>
-												Option.some(ownerKey(session.identity)),
-											),
+											Effect.map((session) => Option.some(ownersOf(session))),
 											// A rejected cookie means the caller must log in first.
 											Effect.catchTag(
 												"CredentialRejected",

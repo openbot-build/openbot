@@ -59,7 +59,14 @@ export const make: Effect.Effect<
 		create: (owner, input) =>
 			Effect.gen(function* () {
 				const policies = input.policies ?? defaultTokenPolicies
-				if (!inOrganization({ policies, organizationId: owner.organizationId }))
+				if (
+					!inOrganization({
+						policies,
+						organizationId: owner.organizationId,
+						// A platform admin can make a token for the platform API.
+						platform: true,
+					})
+				)
 					return yield* UserTokensApi.TokenPolicyInvalid.make({
 						message:
 							"A token policy can only name resources in your own organization.",

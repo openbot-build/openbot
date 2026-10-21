@@ -30,7 +30,7 @@ OpenBot checks each attempt in this order. The first step that decides wins.
 3. **Rules.** A judge model reads the [Rules](/docs/rules) for this Agent in plain language. Only a Rule that the judge quotes can allow or deny.
 4. **The decider above.** OpenBot makes a request. The decider is the Agent that gave this Agent its work. For the first Agent of the work, the decider is the person.
 
-Some calls need no decision: tool calls that the deployment owner marks as reads, and work for subagents that the Agent started itself.
+Some calls need no decision: tool calls that the organization marks as reads, and work for subagents that the Agent started itself.
 
 When any check fails, the call waits. It never runs without a decision.
 
@@ -100,7 +100,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 The waiting work goes on at once. When you deny, the tool does not run. The model gets a tool result with your reason, and the Turn goes on.
 
-A request that nobody answers is denied after 24 hours. The deployment owner can change this time. See [Server](/docs/server#agents).
+A request that nobody answers is denied after 24 hours. An organization can change this time with `requestTimeoutMs` in its [settings](/docs/organization#settings).
 
 ### Errors
 
@@ -123,4 +123,4 @@ You can still [interrupt](/docs/sessions#steer-queue-and-interrupt) a waiting Tu
 
 An App is an outside service that a person connects. See [Apps](/docs/apps). Each App call is bound to one exact call: the owner, the Session, the Turn, the tool call, the exact arguments, and the App connection with its revision. OpenBot saves the call before the check. If the connection changes before the call runs, the call fails, and a new revision never uses an old decision.
 
-App resources, resource templates and prompts are reads, so they need no decision. An App's own notes never decide which tools are safe. Only the deployment owner can mark tools as reads, with the `appReadRules` option. See [Server](/docs/server).
+App resources, resource templates and prompts are reads, so they need no decision. An App's own notes never decide which tools are safe. Only the organization can mark tools as reads, with `appReadRules` in its [settings](/docs/organization#settings).

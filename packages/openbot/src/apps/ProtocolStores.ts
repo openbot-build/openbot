@@ -5,7 +5,7 @@ import { and, eq } from "drizzle-orm"
 import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { appAuthorizations, appSecrets } from "../database/Schema.ts"
 import { Repository, type Error as RepositoryError } from "./Repository.ts"
-import { Secrets } from "./Secrets.ts"
+import { Secrets } from "../secrets/Secrets.ts"
 
 export interface OwnedStores {
 	readonly apps: typeof Store.AppStore.Service

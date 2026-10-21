@@ -3,7 +3,7 @@ title: Deploy
 description: Run OpenBot on your own server.
 ---
 
-This page shows how to run OpenBot in production. You build a Docker image, prepare the database, and start the server behind a reverse proxy.
+This page shows how to run OpenBot in production. You build a Docker image, prepare the database, set up the platform, and start the server behind a reverse proxy.
 For every setting, see [Configuration](/docs/configuration).
 
 ---
@@ -12,8 +12,8 @@ For every setting, see [Configuration](/docs/configuration).
 
 - A Linux server with Docker and Docker Compose.
 - A domain name for OpenBot, such as `api.example.com`, and a TLS certificate for it.
-- An OpenID Connect provider, such as `https://id.example.com`. Register a client with the redirect URI `https://api.example.com/auth/callback/oidc`.
-- A model service, if you want the Agent to do work. See [Models](/docs/models).
+- An OpenID Connect provider for the platform, such as `https://id.example.com`. Register a client with the redirect URI `https://api.example.com/auth/callback/oidc`. You can skip it when people sign in only through the [SSO connections](/docs/sso) of organizations.
+- A model service, if you want the Agent to do work. You add it through the API after setup. See [Models](/docs/models).
 
 ## Build the images
 
@@ -37,25 +37,34 @@ On a computer that is not `x86_64`, Docker needs QEMU (a program that runs code 
 
 Both images start from [distroless](https://github.com/GoogleContainerTools/distroless), with the same Node.js version as development. Distroless images have no shell and no package manager, so you cannot `docker exec` a shell in them. They run as the user `nonroot` (65532).
 
-The OpenBot image has Node.js, the bundled server, the bundled migration program, and the database migrations. It has no build tools and no secrets.
+The OpenBot image has Node.js, the bundled server, the bundled migration and setup programs, and the database migrations. It has no build tools and no secrets.
 
-| Path in the image           | What it is                                       |
-| --------------------------- | ------------------------------------------------ |
-| `/app/dist/app/Main.mjs`    | The server. The image runs it by default.        |
-| `/app/dist/app/Migrate.mjs` | The migration program. It prepares the database. |
-| `/app/migrations`           | The database migrations.                         |
+| Path in the image           | What it is                                                |
+| --------------------------- | --------------------------------------------------------- |
+| `/app/dist/app/Main.mjs`    | The server. The image runs it by default.                 |
+| `/app/dist/app/Migrate.mjs` | The migration program. It prepares the database.          |
+| `/app/dist/app/Setup.mjs`   | The setup program. It writes the first platform settings. |
+| `/app/migrations`           | The database migrations.                                  |
 
 The server in the image listens on `0.0.0.0:3000`. The image has a health check that calls `/health` every five seconds.
 
 ### Secrets as files
 
-OpenBot reads each setting from an environment variable first. When the variable is not set, OpenBot reads the file `/run/secrets/<NAME>` instead, for example `/run/secrets/BETTER_AUTH_SECRET`. This is where Docker and Compose put secrets. An empty file counts as not set. See [Configuration](/docs/configuration#secrets-as-files).
+OpenBot reads each setting from an environment variable first. When the variable is not set, OpenBot reads the file `/run/secrets/<NAME>` instead, for example `/run/secrets/OPENBOT_SECRET_KEYS`. This is where Docker and Compose put secrets. An empty file counts as not set. See [Configuration](/docs/configuration#secrets-as-files).
 
 Environment variables show in `docker inspect`. Files in `/run/secrets` do not. Compose uses files for all secrets.
 
 ## Run with Docker
 
-Put your settings in a file, for example `openbot.env`. Start from `deploy/docker/production.env.example`. `docker run` does not fill in `${POSTGRES_PASSWORD}`, so write the full `OPENBOT_DATABASE_URL` yourself.
+Put your settings in a file, for example `openbot.env`. It needs only `OPENBOT_DATABASE_URL` and `OPENBOT_SECRET_KEYS`. Start from `deploy/docker/production.env.example`. `docker run` does not fill in `${POSTGRES_PASSWORD}`, so write the full `OPENBOT_DATABASE_URL` yourself.
+
+Make the secret keys once:
+
+```sh
+echo "OPENBOT_SECRET_KEYS=k1:$(openssl rand -hex 32)" >> openbot.env
+```
+
+See [Secret keys](/docs/configuration#secret-keys).
 
 <Steps>
 <Step>
@@ -71,6 +80,26 @@ docker run --rm --env-file openbot.env \
 
 It is safe to run it more than once. It only applies the migrations that the database does not have yet.
 Migrations only go forward. There is no way to undo one, so make a backup first.
+
+</Step>
+<Step>
+
+### Set up the platform
+
+Run the setup program once, on a new database:
+
+```sh
+docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
+  /app/dist/app/Setup.mjs \
+  --public-origin=https://api.example.com \
+  --oidc-issuer=https://id.example.com \
+  --oidc-client-id=openbot \
+  --admin-email=alice@example.com
+```
+
+It writes the public origin, the platform provider, and the first platform admins to the database. Give a client secret with `-e OPENBOT_SETUP_OIDC_CLIENT_SECRET=...`, not on the command line. See [Platform](/docs/platform#setup) for every flag.
+
+You can also run setup after the server starts. Until then, every route except `/health` answers `503` with `SetupRequired`.
 
 </Step>
 <Step>
@@ -97,7 +126,9 @@ curl http://127.0.0.1:8080/health
 { "status": "ok" }
 ```
 
-`/health` only shows that the HTTP server can answer. It does not check the database or the model.
+`/health` only shows that the HTTP server can answer. It does not check the database, the setup, or the model.
+
+Alice can now sign in. She is a platform admin. Next, add a model provider. See [Models](/docs/models).
 
 </Step>
 </Steps>
@@ -110,10 +141,11 @@ You can also run the programs with Node.js on the server:
 pnpm install --frozen-lockfile
 pnpm --filter-prod @openbot-build/openbot... build
 pnpm --filter @openbot-build/openbot migrate
+pnpm --filter @openbot-build/openbot setup --public-origin=https://api.example.com --admin-email=alice@example.com
 pnpm --filter @openbot-build/openbot start
 ```
 
-The package `@openbot-build/openbot` also has the commands `openbot-migrate` and `openbot`.
+The package `@openbot-build/openbot` also has the commands `openbot-migrate`, `openbot-setup` and `openbot`.
 
 ---
 
@@ -133,7 +165,8 @@ The file `deploy/docker/compose.production.yaml` runs these services:
 The `protocol-test` service is the public test service for the App Protocol. See [Protocol test](/docs/protocol-test).
 The file needs `PROTOCOL_TEST_PUBLIC_ORIGIN` even if you only use OpenBot.
 
-Compose gives the secrets to the containers as files in `/run/secrets`, not as environment variables. These are `POSTGRES_PASSWORD`, `OPENBOT_DATABASE_URL`, `BETTER_AUTH_SECRET`, `OPENBOT_APP_ENCRYPTION_KEY`, `OPENBOT_OIDC_CLIENT_SECRET`, and `OPENBOT_MODEL_API_KEY`. Compose takes their values from `.env.production`. The `migrate` service gets only `OPENBOT_DATABASE_URL`.
+Compose gives the secrets to the containers as files in `/run/secrets`, not as environment variables. These are `POSTGRES_PASSWORD`, `OPENBOT_DATABASE_URL`, and `OPENBOT_SECRET_KEYS`. Compose takes their values from `.env.production`.
+The `openbot` service gets only `OPENBOT_DATABASE_URL` and `OPENBOT_SECRET_KEYS`. It has no other environment variables, because every other setting lives in the database. The `migrate` service gets only `OPENBOT_DATABASE_URL`.
 
 In the template, `OPENBOT_DATABASE_URL` uses `${POSTGRES_PASSWORD}`, so you set the password only once.
 
@@ -144,9 +177,8 @@ In the template, `OPENBOT_DATABASE_URL` uses `${POSTGRES_PASSWORD}`, so you set 
 
 ```sh
 cp deploy/docker/production.env.example .env.production
-openssl rand -hex 32   # use the output for POSTGRES_PASSWORD
-openssl rand -hex 32   # use the output for BETTER_AUTH_SECRET
-openssl rand -hex 32   # use the output for OPENBOT_APP_ENCRYPTION_KEY
+openssl rand -hex 32           # use the output for POSTGRES_PASSWORD
+echo "k1:$(openssl rand -hex 32)"  # use the output for OPENBOT_SECRET_KEYS
 ```
 
 Fill in the values in `.env.production`.
@@ -184,10 +216,38 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 `--wait` returns when all services are healthy. The images check their health every five seconds. When a service process stops, Compose starts it again.
 
 </Step>
+<Step>
+
+### Set up the platform
+
+Run the setup program once, after the first `up`:
+
+```sh
+docker compose --env-file .env.production -f deploy/docker/compose.production.yaml \
+  run --rm openbot /app/dist/app/Setup.mjs \
+  --public-origin=https://api.example.com \
+  --oidc-issuer=https://id.example.com \
+  --oidc-client-id=openbot \
+  --admin-email=alice@example.com
+```
+
+Until you do this, every route except `/health` answers `503` with `SetupRequired`. See [Platform](/docs/platform#setup).
+
+</Step>
 </Steps>
 
 To release a new version, build new images, set the new `OPENBOT_RELEASE`, back up the database, and run `up -d --wait` again. `migrate` runs again before the new OpenBot starts.
 Never delete the `postgres` volume. It holds all your data.
+
+## Many instances
+
+You can run many OpenBot instances behind one load balancer. Give every instance:
+
+- the same `OPENBOT_DATABASE_URL`,
+- the same `OPENBOT_SECRET_KEYS`.
+
+Nothing else is needed. All shared settings live in the database. When an admin changes them, every instance uses the change at once. See [Configuration](/docs/configuration#how-a-change-reaches-every-instance).
+Run the migration program and the setup program only once, not on each instance.
 
 ---
 
@@ -267,8 +327,8 @@ A return path can be any path on the same origin, except paths under `/auth/`, `
 
 Back up two things, and keep them together:
 
-1. **The database.** It holds accounts, the organization and its members, user tokens, the audit log, Sessions and their Timelines, and App connections.
-2. **The secrets file.** `OPENBOT_APP_ENCRYPTION_KEY` decrypts App secrets in the database. A database backup without this key cannot restore App connections. Also keep `BETTER_AUTH_SECRET`, or everyone must sign in again.
+1. **The database.** It holds the platform and organization settings, accounts, organizations and their members, user tokens, model providers, SSO connections, the audit log, Sessions and their Timelines, and App connections.
+2. **`OPENBOT_SECRET_KEYS`.** The keys decrypt the secrets in the database: App secrets, model provider keys, SSO client secrets, and the sign-in secret. A database backup without the keys cannot restore them.
 
 With Compose, make a database backup like this:
 
@@ -331,7 +391,7 @@ The repository settings must use **GitHub Actions** as the Pages source, with `o
 
 ### Check the images
 
-`deploy/docker/check.sh` starts `compose.production.yaml` with test settings. The extra file `compose.check.yaml` removes the host ports and adds a `check` service. `check.env` has the test settings. None of them are real secrets.
+`deploy/docker/check.sh` starts `compose.production.yaml` with test settings. The extra file `compose.check.yaml` removes the host ports and adds two services. The `setup` service runs the setup program with test values after `migrate`, and before `openbot` starts. The `check` service runs the checks. `check.env` has the test settings. None of them are real secrets.
 
 The `check` service runs `check.mjs` inside the Compose network, after OpenBot and the protocol test service are healthy. It checks that:
 
@@ -340,7 +400,7 @@ The `check` service runs `check.mjs` inside the Compose network, after OpenBot a
 - the protocol test Catalog has the right public origin,
 - MCP discovery on the protocol test service works.
 
-So the check also proves that migrations, secret files, and health checks work in the real production setup. At the end, the script removes the containers and the test database.
+So the check also proves that migrations, the setup program, secret files, and health checks work in the real production setup. At the end, the script removes the containers and the test database.
 
 Run the same checks on your computer:
 

@@ -1,3 +1,4 @@
+import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
 import {
 	AgentsApi,
 	type Caller,
@@ -9,11 +10,9 @@ import { Effect, Schema } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Backend } from "../app/Backend.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
-import { Tokens } from "../auth/Tokens.ts"
 import { agentKey } from "../authorization/Policy.ts"
 import { Grants } from "../capabilities/Grants.ts"
 import { Rules } from "../capabilities/Rules.ts"
-import { Organization } from "../organization/Organization.ts"
 import { AgentMemories } from "./AgentMemories.ts"
 import { Agents } from "./Agents.ts"
 
@@ -27,7 +26,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "agents", (handlers) =>
 		const grants = yield* Grants
 		const audit = yield* AuditLog
 		const backend = yield* Backend
-		const services = yield* Effect.context<Organization | Tokens>()
+		const services = yield* Effect.context<AuthorizationServices>()
 		const access = (
 			caller: Caller,
 			id: string,

@@ -18,7 +18,7 @@ import { DeveloperAccess } from "./DeveloperAccess.ts"
 import { DeveloperRepository, type TestRecord } from "./DeveloperRepository.ts"
 import { DeveloperTestStores } from "./DeveloperTestStores.ts"
 import { DeveloperTestRuntime } from "./DeveloperTestRuntime.ts"
-import { Secrets } from "./Secrets.ts"
+import { Secrets } from "../secrets/Secrets.ts"
 
 export class DeveloperTests extends Context.Service<
 	DeveloperTests,
@@ -73,7 +73,8 @@ export class DeveloperTests extends Context.Service<
 		) => Effect.Effect<Api.ConnectionTest, DeveloperFailure>
 		readonly receive: (
 			url: string,
-			owner: Option.Option<string>,
+			/** The owners that the signed-in account can act as: one for each active membership. */
+			owners: Option.Option<ReadonlyArray<string>>,
 		) => Effect.Effect<
 			{
 				readonly testId: string
@@ -751,7 +752,7 @@ export const make = (
 				yield* put({ ...current, value })
 				return value
 			}),
-			receive: Effect.fn("DeveloperTests.receive")(function* (input, owner) {
+			receive: Effect.fn("DeveloperTests.receive")(function* (input, owners) {
 				const url = yield* Effect.try({
 					try: () => new URL(input, publicOrigin),
 					catch: () => conflict("CallbackMismatch"),
@@ -771,7 +772,7 @@ export const make = (
 					"flow:" + id,
 					Effect.gen(function* () {
 						const flow = yield* records.flows.get(id)
-						if (Option.exists(owner, (value) => value !== flow.owner))
+						if (Option.exists(owners, (owners) => !owners.includes(flow.owner)))
 							return yield* Api.DeveloperNotFound.make({})
 						const test = yield* owned(flow.owner, flow.testId)
 						if (

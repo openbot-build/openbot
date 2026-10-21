@@ -32,10 +32,9 @@ export class HelperModelUnavailable extends Data.TaggedError(
 export class HelperModel extends Context.Service<
 	HelperModel,
 	{
-		readonly model: Effect.Effect<
-			LanguageModel.LanguageModel,
-			HelperModelUnavailable
-		>
+		readonly model: (
+			organizationId: string,
+		) => Effect.Effect<LanguageModel.LanguageModel, HelperModelUnavailable>
 	}
 >()("@openbot-build/openbot/capabilities/Judge/HelperModel") {}
 
@@ -104,7 +103,7 @@ export const make: Effect.Effect<
 					.find(input.organizationId, key)
 					.pipe(Effect.orElseSucceed(() => Option.none<Verdict>()))
 				if (Option.isSome(cached)) return cached.value
-				const model = yield* helper.model
+				const model = yield* helper.model(input.organizationId)
 				const verdict = yield* LanguageModel.generateObject({
 					objectName: "rule_decision",
 					schema: Verdict,

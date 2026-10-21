@@ -5,7 +5,7 @@ const path = (relative: string) =>
 	fileURLToPath(new URL(relative, import.meta.url))
 
 export default defineConfig(
-	["Main", "Migrate"].map((name) =>
+	["Main", "Migrate", "Setup"].map((name) =>
 		defineConfig({
 			cwd: path("../../packages/openbot"),
 			entry: { [name]: `src/app/${name}.ts` },

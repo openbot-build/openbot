@@ -1,15 +1,17 @@
 import { type Config, type Redacted } from "effect"
-import { type Configuration as Authentication } from "../auth/Model.ts"
-import type * as Organization from "../organization/Organization.ts"
 
+/**
+ * The configuration of one instance. Only values that belong to this instance
+ * alone live here. Every value that all instances share lives in the database,
+ * and the API changes it. The one exception is `secretKeys`: all instances need
+ * the same keys, but the keys protect the database, so they cannot live in it.
+ */
 export interface Settings {
 	readonly host: string
 	readonly port: number
 	readonly databaseUrl: Redacted.Redacted<string>
-	readonly appEncryptionKey: Redacted.Redacted<string>
-	readonly auth: Authentication
-	/** Who becomes a Super Administrator, and the first allowed email domains. */
-	readonly organization?: Organization.Options | undefined
+	/** `OPENBOT_SECRET_KEYS`, such as `k2:<hex>,k1:<hex>`. The first key encrypts. */
+	readonly secretKeys: Redacted.Redacted<string>
 	/** PEM file paths for serving HTTPS directly, usually during local development. */
 	readonly tls?:
 		{ readonly certFile: string; readonly keyFile: string } | undefined

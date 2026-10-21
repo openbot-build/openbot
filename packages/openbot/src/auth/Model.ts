@@ -70,26 +70,35 @@ export const DevelopmentConfiguration = Schema.Struct({
 		),
 	),
 })
+/** The platform has no sign-in provider. People sign in through the SSO connections of organizations. */
+export const NoProviderConfiguration = Schema.Struct({
+	...SharedConfiguration.fields,
+	mode: Schema.Literal("none"),
+})
 export const Configuration = Schema.Union([
 	OidcConfiguration,
 	DevelopmentConfiguration,
+	NoProviderConfiguration,
 ])
 export type Configuration = typeof Configuration.Encoded
-/** A signed-in account and its organization. */
-export const Identity = Schema.Struct({
-	userId: Schema.NonEmptyString,
-	organizationId: Schema.NonEmptyString,
-})
-export type Identity = typeof Identity.Type
 export const Profile = Schema.Struct({
 	name: Schema.optional(Schema.String),
 	email: Schema.optional(Schema.String),
 	emailVerified: Schema.optional(Schema.Boolean),
 })
 export type Profile = typeof Profile.Type
+export const Membership = Schema.Struct({
+	organizationId: Schema.String,
+	name: Schema.String,
+	status: Schema.Literals(["active", "suspended"]),
+	roles: Schema.Array(Schema.String),
+})
+/** A signed-in account, its organizations, and whether it is a platform admin. */
 export const SessionInfo = Schema.Struct({
-	identity: Identity,
+	userId: Schema.NonEmptyString,
 	profile: Profile,
+	memberships: Schema.Array(Membership),
+	platformAdmin: Schema.Boolean,
 	expiresAt: Timestamp,
 })
 export type SessionInfo = typeof SessionInfo.Type

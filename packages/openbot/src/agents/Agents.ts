@@ -1,11 +1,10 @@
 import { randomUUID } from "node:crypto"
+import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
 import type { Config, Session } from "@openbot-build/core"
 import { AgentsApi, type Caller, Permissions } from "@openbot-build/api"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
-import type { Tokens } from "../auth/Tokens.ts"
 import { can } from "../authorization/Check.ts"
 import { agentKey } from "../authorization/Policy.ts"
-import type { Organization } from "../organization/Organization.ts"
 import { AgentRecords, type Keys } from "./AgentRecords.ts"
 
 type Agent = AgentsApi.Agent
@@ -47,15 +46,15 @@ export class Agents extends Context.Service<
 			caller: Caller,
 			id: string,
 			permission: Permissions.PermissionGroupId,
-		) => Effect.Effect<Agent, Failure, Organization | Tokens>
+		) => Effect.Effect<Agent, Failure, AuthorizationServices>
 		readonly list: (
 			caller: Caller,
 			input: { readonly archived?: boolean; readonly session?: Session.Id },
-		) => Effect.Effect<ReadonlyArray<Agent>, Failure, Organization | Tokens>
+		) => Effect.Effect<ReadonlyArray<Agent>, Failure, AuthorizationServices>
 		readonly create: (
 			caller: Caller,
 			input: AgentsApi.CreateAgentRequest,
-		) => Effect.Effect<Agent, Failure, Organization | Tokens>
+		) => Effect.Effect<Agent, Failure, AuthorizationServices>
 		/** Makes a subagent. The Session owns it, and it lives as long as the Session. */
 		readonly createSubagent: (
 			subject: Subject,
@@ -71,13 +70,13 @@ export class Agents extends Context.Service<
 			caller: Caller,
 			id: string,
 			input: AgentsApi.UpdateAgentRequest,
-		) => Effect.Effect<Agent, Failure, Organization | Tokens>
+		) => Effect.Effect<Agent, Failure, AuthorizationServices>
 		/** Changes the owner of a subagent to the member of its Session. */
 		readonly promote: (
 			caller: Caller,
 			id: string,
 			expected: number,
-		) => Effect.Effect<Agent, Failure, Organization | Tokens>
+		) => Effect.Effect<Agent, Failure, AuthorizationServices>
 		/** The subagents that a Session owns. */
 		readonly ownedBy: (
 			subject: Subject,

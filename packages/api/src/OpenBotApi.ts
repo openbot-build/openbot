@@ -4,9 +4,12 @@ import { ConnectionsApi } from "./ConnectionsApi.ts"
 import { HttpApi, OpenApi } from "effect/http-api"
 import { SessionsApi } from "./SessionsApi.ts"
 import { HealthApi } from "./HealthApi.ts"
-import { AccountApi, AgentAuth } from "./AuthApi.ts"
+import { AccountApi, AgentAuth, SignInApi } from "./AuthApi.ts"
 import { UserTokensApi } from "./UserTokensApi.ts"
-import { OrganizationApi } from "./OrganizationApi.ts"
+import { OrganizationApi, OrganizationsApi } from "./OrganizationApi.ts"
+import { ModelProvidersApi } from "./ModelProvidersApi.ts"
+import { SsoApi } from "./SsoApi.ts"
+import { PlatformApi } from "./PlatformApi.ts"
 import { AppsApi } from "./AppsApi.ts"
 import { AppIndexApi } from "./AppIndexApi.ts"
 import {
@@ -30,7 +33,6 @@ const apps = [requires("apps.use").on("apps")]
  */
 export class OpenBotApi extends HttpApi.make("openbot-api")
 	.add(
-		HealthApi,
 		DeveloperPublicApi,
 		DeveloperApi.annotate(GroupRequired, {
 			read: [requires("apps.publish").on("apps")],
@@ -71,6 +73,9 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 			.middleware(Authorize)
 			.middleware(AgentAuth),
 		AccountApi,
+		SignInApi,
+		OrganizationsApi,
+		PlatformApi,
 		UserTokensApi.annotate(GroupRequired, {
 			read: [requires("tokens.read").on("user")],
 			write: [requires("tokens.write").on("user")],
@@ -83,7 +88,20 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 		})
 			.middleware(Authorize)
 			.middleware(AgentAuth),
+		ModelProvidersApi.annotate(GroupRequired, {
+			read: [requires("model_providers.read").on("organization")],
+			write: [requires("model_providers.write").on("organization")],
+		})
+			.middleware(Authorize)
+			.middleware(AgentAuth),
+		SsoApi.annotate(GroupRequired, {
+			read: [requires("sso.read").on("organization")],
+			write: [requires("sso.write").on("organization")],
+		})
+			.middleware(Authorize)
+			.middleware(AgentAuth),
 	)
+	.add(HealthApi)
 	.annotate(OpenApi.Title, "OpenBot API")
 	.annotate(OpenApi.Version, "0.1.0")
 	.annotate(

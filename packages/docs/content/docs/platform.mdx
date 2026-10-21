@@ -1,0 +1,283 @@
+---
+title: Platform
+description: Platform admins, the setup program, platform settings, and shared model providers.
+---
+
+The platform is the whole OpenBot deployment. One platform has many organizations.
+Platform admins run the platform. This page shows how to set it up and how to manage it with `/v1/platform`.
+
+---
+
+## Platform admins
+
+A platform admin manages the platform. A platform admin is **not** a member of every organization. They cannot read the Sessions, Agents or members of an organization unless they are also a member of it. They manage the platform only through `/v1/platform`.
+
+A platform admin is an email address. The entry links to an account the first time someone signs in with that email, and the provider verified it.
+
+| Route                               | What it does                                    |
+| ----------------------------------- | ----------------------------------------------- |
+| `GET /v1/platform/admins`           | Lists the platform admins.                      |
+| `POST /v1/platform/admins`          | Adds a platform admin. The body is `{ email }`. |
+| `DELETE /v1/platform/admins/:email` | Removes a platform admin.                       |
+
+```sh
+curl -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"bob@example.com"}' \
+  https://api.example.com/v1/platform/admins
+```
+
+```json
+{
+	"email": "bob@example.com",
+	"userId": null,
+	"addedAt": "2026-10-21T09:00:00.000Z"
+}
+```
+
+`userId` is `null` until Bob signs in for the first time.
+The platform must keep at least one admin. Removing the last one returns `409` with `LastPlatformAdmin`.
+
+---
+
+## Setup
+
+A new database has no platform settings. Until you run the setup program, every route except `/health` answers `503` with `SetupRequired`.
+
+The setup program connects to the database with `OPENBOT_DATABASE_URL` and `OPENBOT_SECRET_KEYS`. It writes the first platform settings and the first platform admins.
+In the image, it is `/app/dist/app/Setup.mjs`. From the code, run `pnpm --filter @openbot-build/openbot setup`. The package also has the command `openbot-setup`.
+
+```sh
+docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
+  /app/dist/app/Setup.mjs \
+  --public-origin=https://api.example.com \
+  --oidc-issuer=https://id.example.com \
+  --oidc-client-id=openbot \
+  --admin-email=alice@example.com
+```
+
+| Flag                   | Required     | What it does                                                                                                   |
+| ---------------------- | ------------ | -------------------------------------------------------------------------------------------------------------- |
+| `--public-origin`      | Yes          | The public HTTPS origin of OpenBot, such as `https://api.example.com`. No path and no trailing slash.          |
+| `--oidc-issuer`        | With the ID  | The HTTPS address of the platform OpenID Connect provider, with no trailing slash.                             |
+| `--oidc-client-id`     | With issuer  | The client ID at that provider.                                                                                |
+| `--oidc-client-secret` | No           | The client secret. Leave it out for a public client that uses PKCE.                                            |
+| `--admin-email`        | At least one | A person with this verified email becomes a platform admin when they sign in. Repeat the flag for more people. |
+| `--force`              | No           | Write the settings even when they exist. Use it only for recovery, when no platform admin can sign in.         |
+
+Set `--oidc-issuer` and `--oidc-client-id` together, or leave both out. Leave both out when people sign in only through the [SSO connections](/docs/sso) of organizations.
+
+A command line can show up in process lists. So you can give the client secret in the environment variable `OPENBOT_SETUP_OIDC_CLIENT_SECRET` instead of `--oidc-client-secret`. This is the better way.
+
+Setup also makes a random sign-in secret. Better Auth uses it to sign the sign-in cookies. OpenBot stores it encrypted, and you never see it.
+
+### Run setup again
+
+- With the same origin and provider, setup changes nothing. It only adds the admin emails.
+- With other values, setup fails. It tells you to use `PATCH /v1/platform/settings` instead.
+- With `--force`, setup writes the new values. It keeps the current sign-in secret, so nobody is signed out because of it.
+
+---
+
+## Platform settings
+
+`GET /v1/platform/settings` reads the settings. `PATCH /v1/platform/settings` changes them.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/platform/settings
+```
+
+```json
+{
+	"version": 3,
+	"publicOrigin": "https://api.example.com",
+	"identityProvider": {
+		"issuer": "https://id.example.com",
+		"clientId": "openbot",
+		"clientSecret": { "set": true, "hint": "…k9Qz" }
+	},
+	"organizationCreation": "anyone",
+	"policyCeiling": [],
+	"appRestrictions": [],
+	"updatedAt": "2026-10-21T09:00:00.000Z"
+}
+```
+
+| Field                  | What it is                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `version`              | Goes up by one with each change.                                                                                    |
+| `publicOrigin`         | The public HTTPS origin of OpenBot.                                                                                 |
+| `identityProvider`     | The platform OpenID Connect provider, or `null` when people sign in only through SSO connections.                   |
+| `organizationCreation` | Who can create an organization: `anyone` or `platform_admins`. See [Organization creation](#organization-creation). |
+| `policyCeiling`        | Deny policies for every organization. See [Policy ceiling](#policy-ceiling).                                        |
+| `appRestrictions`      | Apps that the App Index hides. See [App Index](/docs/app-index#host-restrictions).                                  |
+| `updatedAt`            | When the settings last changed.                                                                                     |
+
+### Secrets never come back
+
+A secret goes in, but it never comes out. The answer shows `{ set, hint }` instead:
+
+- `set` is `true` when a secret is stored.
+- `hint` is `…` and the last 4 characters, so you can tell secrets apart. It is `null` for a secret shorter than 12 characters.
+
+### Change the settings
+
+The body of `PATCH` needs `expectedVersion`, the `version` that you read. Add only the fields that you want to change.
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":3,"organizationCreation":"platform_admins"}' \
+  https://api.example.com/v1/platform/settings
+```
+
+If someone changed the settings after you read them, OpenBot returns `409` with `SettingsConflict` and the current `version`. Read the settings again, then try again.
+
+`identityProvider` in `PATCH` works like this:
+
+| Value                                      | What happens                                     |
+| ------------------------------------------ | ------------------------------------------------ |
+| `null`                                     | Removes the platform provider.                   |
+| `{ issuer, clientId }`                     | Sets the provider, and keeps the current secret. |
+| `{ issuer, clientId, clientSecret: "…" }`  | Sets the provider and a new secret.              |
+| `{ issuer, clientId, clientSecret: null }` | Sets the provider as a public PKCE client.       |
+
+Every instance uses a change at once. See [Configuration](/docs/configuration#how-a-change-reaches-every-instance).
+
+<Callout type="warn">
+	A new `publicOrigin` signs everyone out. It also changes the sign-in redirect
+	URI to `<publicOrigin>/auth/callback/oidc`. Add the new redirect URI at your
+	provider first. Then change the origin.
+</Callout>
+
+---
+
+## Policy ceiling
+
+`policyCeiling` is a list of policies that apply in every organization. They can only say `deny`. OpenBot checks them before the policies of the organization, so no role and no token can do what they deny.
+A resource can use `{org}` for the organization of the request. See [Permissions](/docs/permissions#policies).
+
+This ceiling stops every organization from adding its own model providers:
+
+```json
+{
+	"expectedVersion": 4,
+	"policyCeiling": [
+		{
+			"effect": "deny",
+			"permissionGroups": ["model_providers.write"],
+			"resources": ["openbot.org.{org}"]
+		}
+	]
+}
+```
+
+The list holds up to 50 policies.
+
+---
+
+## Organization creation
+
+When an account signs in and has no organization, OpenBot can make one for it. `organizationCreation` decides this:
+
+| Value             | What happens                                                                                                                                             |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `anyone`          | The default. A new account without an organization gets one named "Personal", where it is Super Administrator. Anyone can call `POST /v1/organizations`. |
+| `platform_admins` | New accounts get no organization of their own. Only platform admins can call `POST /v1/organizations`.                                                   |
+
+See [Organization](/docs/organization#who-can-join) for all the ways an account joins.
+
+---
+
+## Organizations
+
+`GET /v1/platform/organizations` lists every organization of the platform in pages. Use `limit` (1 to 100) and `after` with the `next` value of the last page.
+
+`PATCH /v1/platform/organizations/:organizationId` changes the `status` of an organization: `active` or `suspended`.
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"suspended"}' \
+  https://api.example.com/v1/platform/organizations/org_8f3a
+```
+
+Nobody can use a suspended organization. Its tokens stop working at once. Set `status` to `active` to undo it.
+
+---
+
+## Shared model providers
+
+A platform can pay for a model provider and share it with organizations. Organizations can also bring their own keys. See [Models](/docs/models).
+
+| Route                                             | What it does                |
+| ------------------------------------------------- | --------------------------- |
+| `GET /v1/platform/model_providers`                | Lists the shared providers. |
+| `POST /v1/platform/model_providers`               | Adds a shared provider.     |
+| `GET /v1/platform/model_providers/:providerId`    | Reads one shared provider.  |
+| `PATCH /v1/platform/model_providers/:providerId`  | Changes a shared provider.  |
+| `DELETE /v1/platform/model_providers/:providerId` | Removes a shared provider.  |
+
+The body is the same as for an organization provider, plus `availability`:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "kind": "openai",
+    "name": "OpenAI",
+    "apiKey": "sk-...",
+    "models": [{ "id": "gpt-4.1", "name": "GPT-4.1", "reasoningEfforts": [], "serviceTiers": [] }],
+    "availability": { "_tag": "All" }
+  }' \
+  https://api.example.com/v1/platform/model_providers
+```
+
+| `availability`                                       | Who can use the provider       |
+| ---------------------------------------------------- | ------------------------------ |
+| `{ "_tag": "All" }`                                  | Every organization.            |
+| `{ "_tag": "None" }`                                 | No organization.               |
+| `{ "_tag": "Selected", "organizations": ["org_…"] }` | Only the listed organizations. |
+
+---
+
+## Call the platform API
+
+`/v1/platform` accepts two kinds of callers:
+
+- The **session cookie** of a platform admin.
+- A **user token** of a platform admin. The token's own policies must allow `platform.read` (for `GET`) or `platform.write` (for all other methods) on the resource `openbot.platform`.
+
+The permission groups `platform.read` and `platform.write` only work on `openbot.platform`. No role in an organization gives them.
+A token made without `policies` never gets them. So a token for the platform must name them when you create it:
+
+```sh
+curl -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Platform admin","expiresInDays":30,"policies":[{"effect":"allow","permissionGroups":["platform.read","platform.write"],"resources":["openbot.platform"]}]}' \
+  https://api.example.com/v1/user/tokens
+```
+
+The token still works only while its account is a platform admin. Other callers get `403` with `PermissionDenied`.
+
+OpenBot writes each platform change to the audit log, with the organization ID `platform`. The API cannot read these entries yet.
+
+See the full shapes in the [Platform reference](/docs/api/operations/tags/platform/).
+
+---
+
+## Errors
+
+| Status | Error                   | When                                                                |
+| ------ | ----------------------- | ------------------------------------------------------------------- |
+| `400`  | `SettingsInvalid`       | A value in the change is not valid.                                 |
+| `403`  | `PermissionDenied`      | The caller is not a platform admin, or the token does not allow it. |
+| `404`  | `OrganizationNotFound`  | No organization has this ID.                                        |
+| `404`  | `PlatformAdminNotFound` | No platform admin has this email.                                   |
+| `409`  | `SettingsConflict`      | Someone changed the settings after you read them.                   |
+| `409`  | `LastPlatformAdmin`     | The change would leave the platform without an admin.               |
+| `503`  | `SetupRequired`         | Nobody has run the setup program yet.                               |
+| `503`  | `PlatformUnavailable`   | OpenBot cannot reach its database.                                  |

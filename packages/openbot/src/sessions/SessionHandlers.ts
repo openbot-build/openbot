@@ -1,3 +1,4 @@
+import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
 import {
 	SessionStorageUnavailable,
 	Identity,
@@ -10,8 +11,6 @@ import { HttpApiBuilder, type HttpApiEndpoint } from "effect/http-api"
 import { Backend } from "../app/Backend.ts"
 import { Agents } from "../agents/Agents.ts"
 import { Delegations } from "../agents/Delegations.ts"
-import { Tokens } from "../auth/Tokens.ts"
-import { Organization } from "../organization/Organization.ts"
 
 type Request<K extends keyof typeof SessionsApi.endpoints> = Omit<
 	HttpApiEndpoint.Request<(typeof SessionsApi.endpoints)[K]>,
@@ -29,7 +28,7 @@ const implementations = Effect.gen(function* () {
 	const current = yield* currentSessions
 	const agents = yield* Agents
 	const delegations = yield* Delegations
-	const services = yield* Effect.context<Organization | Tokens>()
+	const services = yield* Effect.context<AuthorizationServices>()
 	const model = yield* Effect.serviceOption(LanguageModel.LanguageModel)
 	/** Give the host model to operations that may run one. */
 	const withModel = <A, E, R>(effect: Effect.Effect<A, E, R>) =>

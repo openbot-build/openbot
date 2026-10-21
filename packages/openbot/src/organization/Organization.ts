@@ -1,23 +1,10 @@
-import type { OrganizationApi } from "@openbot-build/api"
+import type { AuthApi, OrganizationApi, PlatformApi } from "@openbot-build/api"
 import { Context, type Effect, type Option, Schema } from "effect"
 
-/** The account is not an active member, and it cannot join on its own. */
-export class MembershipRejected extends Schema.TaggedError<MembershipRejected>()(
-	"MembershipRejected",
-	{},
-) {}
 export class OrganizationUnavailable extends Schema.TaggedError<OrganizationUnavailable>()(
 	"OrganizationUnavailable",
 	{},
 ) {}
-
-/** Settings that only the deployment controls. */
-export interface Options {
-	/** People with these verified emails join as Super Administrators. */
-	readonly ownerEmails?: ReadonlyArray<string>
-	/** The allowed email domains of a new organization. After that, the API owns them. */
-	readonly allowedEmailDomains?: ReadonlyArray<string>
-}
 
 export interface Account {
 	readonly id: string
@@ -26,24 +13,38 @@ export interface Account {
 	readonly emailVerified?: boolean | undefined
 }
 
-export interface Page {
-	readonly items: ReadonlyArray<OrganizationApi.Member>
+export interface Page<A> {
+	readonly items: ReadonlyArray<A>
 	readonly next: string | null
 }
 
 /**
- * The one organization of a deployment and its members.
- * The first account to sign in creates it and becomes a Super Administrator.
+ * The organizations of the platform and their members.
+ * One account can be a member of many organizations.
  */
 export class Organization extends Context.Service<
 	Organization,
 	{
-		/** Find the member for a signed-in account. A new account joins when the rules allow it. */
+		/**
+		 * Runs when an account signs in or uses the session cookie.
+		 * The account joins the organization that verified its email domain, when
+		 * that organization lets people join by domain. An account with no
+		 * organization gets a personal one, when the platform lets anyone create one.
+		 * `only` limits joining to one organization, such as the owner of an SSO connection.
+		 */
 		readonly admit: (
 			account: Account,
+			options?: { readonly only?: string },
 		) => Effect.Effect<
-			{ readonly organizationId: string; readonly joined: boolean },
-			MembershipRejected | OrganizationUnavailable
+			ReadonlyArray<AuthApi.Membership>,
+			OrganizationUnavailable
+		>
+		/** The organizations of an account, with the status of each membership. */
+		readonly memberships: (
+			userId: string,
+		) => Effect.Effect<
+			ReadonlyArray<AuthApi.Membership>,
+			OrganizationUnavailable
 		>
 		readonly member: (
 			organizationId: string,
@@ -52,17 +53,48 @@ export class Organization extends Context.Service<
 			Option.Option<OrganizationApi.Member>,
 			OrganizationUnavailable
 		>
+		/** The member, only when both the member and the organization are active. */
+		readonly activeMember: (
+			organizationId: string,
+			userId: string,
+		) => Effect.Effect<
+			Option.Option<OrganizationApi.Member>,
+			OrganizationUnavailable
+		>
 		readonly get: (
 			organizationId: string,
-		) => Effect.Effect<OrganizationApi.Organization, OrganizationUnavailable>
+		) => Effect.Effect<
+			Option.Option<OrganizationApi.Organization>,
+			OrganizationUnavailable
+		>
+		/** Every organization of the platform, for platform admins. */
+		readonly list: (options: {
+			readonly after?: string
+			readonly limit: number
+		}) => Effect.Effect<
+			Page<OrganizationApi.Organization>,
+			OrganizationUnavailable
+		>
+		/** Creates an organization. The owner becomes its Super Administrator. */
+		readonly create: (input: {
+			readonly name: string
+			readonly owner: Account
+		}) => Effect.Effect<OrganizationApi.Organization, OrganizationUnavailable>
 		readonly update: (
 			organizationId: string,
 			patch: OrganizationApi.UpdateOrganizationRequest,
 		) => Effect.Effect<OrganizationApi.Organization, OrganizationUnavailable>
+		readonly setStatus: (
+			organizationId: string,
+			status: OrganizationApi.Organization["status"],
+		) => Effect.Effect<
+			OrganizationApi.Organization,
+			PlatformApi.OrganizationNotFound | OrganizationUnavailable
+		>
 		readonly listMembers: (
 			organizationId: string,
 			options: { readonly after?: string; readonly limit: number },
-		) => Effect.Effect<Page, OrganizationUnavailable>
+		) => Effect.Effect<Page<OrganizationApi.Member>, OrganizationUnavailable>
 		/** Fails with LastSuperAdministrator when no active Super Administrator would be left. */
 		readonly updateMember: (
 			organizationId: string,
@@ -84,5 +116,13 @@ export class Organization extends Context.Service<
 			| OrganizationApi.LastSuperAdministrator
 			| OrganizationUnavailable
 		>
+		/** Whether a member or the default roles use a role. */
+		readonly roleInUse: (
+			organizationId: string,
+			roleId: string,
+		) => Effect.Effect<boolean, OrganizationUnavailable>
 	}
 >()("@openbot-build/openbot/organization/Organization") {}
+
+export const domainOf = (email: string) =>
+	email.slice(email.lastIndexOf("@") + 1).toLowerCase()

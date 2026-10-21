@@ -33,11 +33,12 @@ export const direct = (
 
 /** A helper model that is not there. The judge then answers no_match, and memory learns nothing. */
 export const layerNoHelper = Layer.succeed(Judge.HelperModel, {
-	model: Effect.fail(
-		new Judge.HelperModelUnavailable({
-			message: "No helper model in this test.",
-		}),
-	),
+	model: () =>
+		Effect.fail(
+			new Judge.HelperModelUnavailable({
+				message: "No helper model in this test.",
+			}),
+		),
 })
 
 /** The Agent services for tests that serve the HTTP API without a coordinator. */

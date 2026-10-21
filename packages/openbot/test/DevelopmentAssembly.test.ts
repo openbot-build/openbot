@@ -1,3 +1,4 @@
+import { memberOf } from "./Caller.ts"
 // @effect-diagnostics strictEffectProvide:off
 import * as AgentFixture from "./AgentFixture.ts"
 import assert from "node:assert/strict"
@@ -38,8 +39,9 @@ const settings = (databaseUrl: string) => ({
 	host: "127.0.0.1",
 	port: 0,
 	databaseUrl: Redacted.make(databaseUrl),
-	appEncryptionKey: Redacted.make(
-		"1111111111111111111111111111111111111111111111111111111111111111",
+	secretKeys: Redacted.make(
+		"test:" +
+			"1111111111111111111111111111111111111111111111111111111111111111",
 	),
 	auth: {
 		mode: "development" as const,
@@ -152,7 +154,7 @@ test(
 				).json(),
 			)
 			const sessions = await runtime.runPromise(
-				backend.forCaller({ kind: "member", ...session.identity }),
+				backend.forCaller({ kind: "member", ...memberOf(session) }),
 			)
 			saved = await runtime.runPromise(wait(sessions, work.session.id, true))
 			const memory = await runtime.runPromise(sessions.memory(work.session.id))
@@ -195,7 +197,7 @@ test(
 			)
 			const restartedSessions = await runtime.runPromise(
 				Effect.flatMap(Backend.Backend, (backend) =>
-					backend.forCaller({ kind: "member", ...session.identity }),
+					backend.forCaller({ kind: "member", ...memberOf(session) }),
 				),
 			)
 			continued = await runtime.runPromise(
@@ -322,9 +324,10 @@ test(
 		let calls = HashMap.empty<Session.Id, number>()
 		const layer = Layer.unwrap(
 			Effect.gen(function* () {
-				const sessions = yield* DevelopmentModel.make
-				return Server.layer({
+				const { builtinModels, sessions } = yield* DevelopmentModel.make
+				return Server.layerFixed({
 					...options,
+					builtinModels,
 					sessions: {
 						...sessions,
 						layerExecution: (ref) =>
@@ -453,7 +456,7 @@ test("discovery injection keeps construction failures and required services", ()
 			return yield* new DiscoveryStartupFailed()
 		}),
 	)
-	const server = Server.layer({
+	const server = Server.layerFixed({
 		...settings("postgresql://unused"),
 		discovery: injected,
 	})

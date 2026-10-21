@@ -18,8 +18,7 @@
     umask 077
     mkdir -p .devenv/dev
     if [ ! -f .env.development ]; then
-      sed -e "s/^BETTER_AUTH_SECRET=$/BETTER_AUTH_SECRET=$(openssl rand -hex 32)/" \
-        -e "s/^OPENBOT_APP_ENCRYPTION_KEY=$/OPENBOT_APP_ENCRYPTION_KEY=$(openssl rand -hex 32)/" \
+      sed -e "s/^OPENBOT_SECRET_KEYS=$/OPENBOT_SECRET_KEYS=dev:$(openssl rand -hex 32)/" \
         .env.development.example > .env.development
     fi
     if [ ! -f .devenv/dev/cert.pem ] || [ ! -f .devenv/dev/key.pem ]; then
@@ -53,7 +52,7 @@
       ];
       exec = ''
         set -eu
-        : "''${BETTER_AUTH_SECRET:?Run pnpm dev:setup first}"
+        : "''${OPENBOT_SECRET_KEYS:?Run pnpm dev:setup first}"
         pnpm --filter-prod @openbot-build/openbot... build
         pnpm --filter @openbot-build/openbot migrate
         exec pnpm --filter @openbot-build/openbot start:development
@@ -90,7 +89,7 @@
       }/${config.dotenv.resolved.OPENBOT_DEV_DATABASE_NAME or "openbot"}";
     OPENBOT_HOST = "127.0.0.1";
     OPENBOT_PORT = config.dotenv.resolved.OPENBOT_DEV_HTTPS_PORT or "8443";
-    OPENBOT_PUBLIC_ORIGIN = "https://localhost:${
+    OPENBOT_DEV_PUBLIC_ORIGIN = "https://localhost:${
       config.dotenv.resolved.OPENBOT_DEV_HTTPS_PORT or "8443"
     }";
     OPENBOT_TLS_CERT = "${config.devenv.root}/.devenv/dev/cert.pem";

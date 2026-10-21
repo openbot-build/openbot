@@ -33,9 +33,14 @@ test(
 				Effect.scoped(
 					Effect.gen(function* () {
 						yield* DatabasePostgres.migrate
-						const options = yield* DevelopmentModel.make
+						const { builtinModels: models, sessions: options } =
+							yield* DevelopmentModel.make
 						const sessions = yield* ManagedSessions.make({
 							...options,
+							modelCatalog: Effect.succeed(models),
+							defaults: Effect.succeed({ model: DevelopmentModel.selection }),
+							resolveModel: (selection) =>
+								models.resolve(selection ?? DevelopmentModel.selection),
 							namespace: "memory-owner",
 						})
 						let source = yield* sessions.create(AgentFixture.direct())

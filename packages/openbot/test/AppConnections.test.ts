@@ -7,16 +7,17 @@ import { CatalogDiscovery, Store, Document } from "@openbot-build/protocol"
 import { Effect, Layer, ManagedRuntime, Redacted } from "effect"
 import { SqlClient } from "effect/sql"
 import * as Governance from "../src/apps/Governance.ts"
+import * as OrganizationFixture from "./OrganizationFixture.ts"
 import * as Connections from "../src/apps/Connections.ts"
 import { Repository, ownerKey } from "../src/apps/Repository.ts"
 import * as RepositoryPostgres from "../src/apps/RepositoryPostgres.ts"
-import * as Secrets from "../src/apps/Secrets.ts"
+import * as Secrets from "../src/secrets/Secrets.ts"
 import * as Database from "../src/database/DatabasePostgres.ts"
 import * as Postgres from "./PostgresTest.ts"
 import * as Fixture from "./AppFixture.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 
-const encryptionKey = Redacted.make("11".repeat(32))
+const encryptionKey = Redacted.make("test:" + "11".repeat(32))
 const alice = { organizationId: "organization", userId: "alice" }
 const bob = { organizationId: "organization", userId: "bob" }
 const asOwner = <A, E, R>(operation: Effect.Effect<A, E, R>, owner = alice) =>
@@ -38,7 +39,11 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 				Layer.provide(publisher.discovery),
 				Layer.provide(CatalogDiscovery.layerRules),
 				Layer.provide(publisher.probe),
-				Layer.provide(Governance.layer()),
+				Layer.provide(
+					Governance.layer.pipe(
+						Layer.provide(OrganizationFixture.layerDefaultSettings),
+					),
+				),
 				Layer.provideMerge(repository),
 			),
 		)

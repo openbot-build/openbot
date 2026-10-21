@@ -1,5 +1,9 @@
 import { Option, Schema } from "effect"
-import { DevelopmentConfiguration, OidcConfiguration } from "./Model.js"
+import {
+	DevelopmentConfiguration,
+	NoProviderConfiguration,
+	OidcConfiguration,
+} from "./Model.js"
 
 export const ResolvedConfiguration = Schema.Union([
 	OidcConfiguration.pipe(
@@ -12,5 +16,6 @@ export const ResolvedConfiguration = Schema.Union([
 		),
 	),
 	DevelopmentConfiguration,
+	NoProviderConfiguration,
 ])
 export type ResolvedConfiguration = typeof ResolvedConfiguration.Type

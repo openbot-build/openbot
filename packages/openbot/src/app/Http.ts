@@ -13,6 +13,9 @@ import * as SessionHandlers from "../sessions/SessionHandlers.ts"
 import * as AgentHandlers from "../agents/HttpHandlers.ts"
 import * as RequestHandlers from "../capabilities/HttpHandlers.ts"
 import * as OrganizationHandlers from "../organization/HttpHandlers.ts"
+import * as ModelProviderHandlers from "../models/HttpHandlers.ts"
+import * as PlatformHandlers from "../platform/HttpHandlers.ts"
+import * as SsoHandlers from "../sso/HttpHandlers.ts"
 
 const cloudHealth = HttpApiBuilder.group(OpenBotApi, "health", (handlers) =>
 	handlers
@@ -38,6 +41,9 @@ export const layerPlatform = (publicOrigin: string) =>
 					AgentHandlers.layer,
 					RequestHandlers.layer,
 					OrganizationHandlers.layer,
+					ModelProviderHandlers.layer,
+					PlatformHandlers.layer,
+					SsoHandlers.layer({ publicOrigin }),
 				),
 			),
 		),

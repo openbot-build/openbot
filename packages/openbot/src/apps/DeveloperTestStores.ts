@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { Authorization, Store } from "@openbot-build/protocol"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { DeveloperRepository } from "./DeveloperRepository.ts"
-import { Secrets } from "./Secrets.ts"
+import { Secrets } from "../secrets/Secrets.ts"
 
 const PrivateState = Schema.Struct({
 	connection: Schema.NullOr(Store.UserConnection),

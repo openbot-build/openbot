@@ -1,4 +1,4 @@
-import { Context, Effect, type Redacted } from "effect"
+import { Context, type Effect, type Option, type Redacted } from "effect"
 import type {
 	AuthUnavailable,
 	CredentialRejected,
@@ -10,6 +10,18 @@ export class Auth extends Context.Service<
 	{
 		/** The Better Auth Web handler. OpenBot mounts it at `/auth/*`. */
 		readonly handler: (request: Request) => Promise<Response>
+		/** The provider for a sign-in: the SSO connection of the email domain, or the platform provider. */
+		readonly signInProvider: (
+			email: string | undefined,
+		) => Option.Option<string>
+		/** The address of the provider, and the cookie that keeps the sign-in state. */
+		readonly startSignIn: (input: {
+			readonly providerId: string
+			readonly returnTo?: string | undefined
+		}) => Effect.Effect<
+			{ readonly url: string; readonly setCookies: ReadonlyArray<string> },
+			AuthUnavailable
+		>
 		readonly resolveSession: (
 			credential: Redacted.Redacted<string>,
 			options?: { readonly refresh: boolean },

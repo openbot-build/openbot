@@ -1,8 +1,6 @@
 import { type Caller, Permissions } from "@openbot-build/api"
 import { Effect } from "effect"
-import type { Tokens } from "../auth/Tokens.ts"
-import type { Organization } from "../organization/Organization.ts"
-import { policySets } from "./Authorize.ts"
+import { policySets, type Services } from "./Authorize.ts"
 import { allowed } from "./Policy.ts"
 
 /**
@@ -13,15 +11,12 @@ export const can = (input: {
 	readonly caller: Caller
 	readonly permission: Permissions.PermissionGroupId
 	readonly key: string
-}): Effect.Effect<
-	boolean,
-	Permissions.AuthorizationUnavailable,
-	Organization | Tokens
-> =>
+}): Effect.Effect<boolean, Permissions.AuthorizationUnavailable, Services> =>
 	policySets(input.caller).pipe(
-		Effect.map((sets) =>
+		Effect.map(({ sets, ceiling }) =>
 			allowed({
 				sets,
+				ceiling,
 				permission: input.permission,
 				key: input.key,
 				subject: {

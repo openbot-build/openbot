@@ -1,3 +1,4 @@
+import { memberOf } from "./Caller.ts"
 // @effect-diagnostics strictEffectProvide:off
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
@@ -27,7 +28,7 @@ import { Business } from "../src/app/DevelopmentBusiness.ts"
 import * as TestStoresLayer from "../src/apps/DeveloperTestStores.ts"
 import { DeveloperTestStores } from "../src/apps/DeveloperTestStores.ts"
 import * as DeveloperRepositoryLayer from "../src/apps/DeveloperRepositoryPostgres.ts"
-import * as SecretsLayer from "../src/apps/Secrets.ts"
+import * as SecretsLayer from "../src/secrets/Secrets.ts"
 import { DeveloperTests } from "../src/apps/DeveloperTests.ts"
 import { DeveloperRepository } from "../src/apps/DeveloperRepository.ts"
 import { DeveloperMonitor } from "../src/apps/DeveloperMonitor.ts"
@@ -36,6 +37,8 @@ import { DeveloperIndexing } from "../src/apps/DeveloperIndexing.ts"
 import { IndexWork } from "../src/apps/IndexWork.ts"
 import { ownerKey } from "../src/apps/Repository.ts"
 import * as Postgres from "./PostgresTest.ts"
+import { OpenBot } from "@openbot-build/openbot"
+import { Settings } from "../src/settings/Settings.ts"
 
 const cardUrl = "https://app.development.test/card.json"
 test(
@@ -47,7 +50,7 @@ test(
 			host: "127.0.0.1",
 			port: 0,
 			databaseUrl: Redacted.make(database.url),
-			appEncryptionKey: Redacted.make("11".repeat(32)),
+			secretKeys: Redacted.make("test:" + "11".repeat(32)),
 			auth: {
 				mode: "development" as const,
 				publicOrigin: "https://localhost:8443",
@@ -124,7 +127,7 @@ test(
 				ManagedRuntime.make(
 					TestStoresLayer.layer.pipe(
 						Layer.provide(DeveloperRepositoryLayer.layerFor("development")),
-						Layer.provide(SecretsLayer.layer(options.appEncryptionKey)),
+						Layer.provide(SecretsLayer.layer(options.secretKeys)),
 						Layer.provide(Database.layer(options)),
 						Layer.provide(NodeServices.layer),
 					),
@@ -337,14 +340,14 @@ test(
 				404,
 			)
 			const identity = await call((api) => api.account.session({}))
-			const owner = ownerKey(identity.identity)
+			const owner = ownerKey(memberOf(identity))
 			const wrongOwner = await server.runPromise(
 				Effect.flatMap(DeveloperTests, (tests) =>
 					tests.receive(
 						callback.toString(),
-						Option.some(
+						Option.some([
 							ownerKey({ organizationId: "another", userId: "another" }),
-						),
+						]),
 					),
 				).pipe(Effect.flip),
 			)
@@ -459,7 +462,7 @@ test(
 			assert.equal(
 				await server.runPromise(
 					Effect.flatMap(Business, (business) =>
-						business.executions(ownerKey(account.identity)),
+						business.executions(ownerKey(memberOf(account))),
 					),
 				),
 				0,
@@ -650,9 +653,22 @@ test(
 				reason: "Fixture deployment restriction.",
 				appealUrl: "https://publisher.example/appeal",
 			}
-			server = ManagedRuntime.make(
-				Development.layer({ ...options, appRestrictions: [restriction] }),
+			// The platform owns App restrictions. Write them while OpenBot is stopped.
+			const shared = ManagedRuntime.make(
+				OpenBot.layerShared(options).pipe(Layer.provide(NodeServices.layer)),
 			)
+			await shared.runPromise(
+				Effect.gen(function* () {
+					const settings = yield* Settings
+					const current = yield* settings.platform
+					if (Option.isNone(current)) throw new Error("No platform settings")
+					yield* settings.updatePlatform(current.value.version, (document) =>
+						Effect.succeed({ ...document, appRestrictions: [restriction] }),
+					)
+				}),
+			)
+			await shared.dispose()
+			server = ManagedRuntime.make(Development.layer(options))
 			await server.runPromise(
 				Effect.flatMap(IndexWork, (work) => work.runOne(cardUrl)),
 			)

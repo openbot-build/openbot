@@ -179,7 +179,7 @@ Removing an Index entry never removes anyone's connection. Users can still use a
 
 ## Host restrictions
 
-A deployment owner can block some Apps. Each restriction has a `cardUrl`, a public `reason`, and an HTTPS `appealUrl`. They are set in code with the OpenBot `appRestrictions` option.
+A platform admin can block some Apps. Each restriction has a `cardUrl`, a public `reason`, and an HTTPS `appealUrl`. They live in `appRestrictions` in the platform settings. Change them with `PATCH /v1/platform/settings`. See [Platform](/docs/platform#platform-settings).
 
 A blocked App:
 

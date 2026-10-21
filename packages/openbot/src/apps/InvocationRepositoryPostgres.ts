@@ -10,7 +10,7 @@ import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { Effect, Layer, Schema } from "effect"
 import { appInvocations } from "../database/Schema.ts"
 import { InvocationRepository } from "./InvocationRepository.ts"
-import { Secrets } from "./Secrets.ts"
+import { Secrets } from "../secrets/Secrets.ts"
 
 const unavailable = () => ExperienceStorageUnavailable.make({})
 const conflict = () =>

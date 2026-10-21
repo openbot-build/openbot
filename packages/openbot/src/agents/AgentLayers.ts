@@ -16,19 +16,12 @@ import * as Signals from "./Signals.ts"
  * requests, the capability gate and the Agent plugin. The coordinator is separate,
  * because it needs the Session runtimes.
  */
-export const layer = (options: {
-	readonly helper: Layer.Layer<Judge.HelperModel>
-	readonly requestTimeout?: number
+export const layer = <R>(options: {
+	readonly helper: Layer.Layer<Judge.HelperModel, never, R>
 }) =>
 	AgentPlugin.layer.pipe(
 		Layer.provideMerge(Gate.layer),
-		Layer.provideMerge(
-			Requests.layer(
-				options.requestTimeout === undefined
-					? {}
-					: { timeout: options.requestTimeout },
-			),
-		),
+		Layer.provideMerge(Requests.layer),
 		Layer.provideMerge(
 			Layer.mergeAll(
 				Judge.layer,

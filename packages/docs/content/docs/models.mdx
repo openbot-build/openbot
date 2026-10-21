@@ -1,55 +1,151 @@
 ---
 title: Models
-description: Connect OpenBot to a language model.
+description: Connect OpenBot to language models with model providers.
 ---
 
 An Agent needs a language model to do work. OpenBot does not include a model. You connect one.
-This page shows the three ways to do it: environment variables, your own code, and test models for development.
+A **model provider** is a model service, its API key, and the list of its models. You add providers through the API. OpenBot stores them in the database, so every instance uses the same ones.
+
+There are two kinds of providers:
+
+| Kind                  | Who adds it                               | Who can use it                                                                                  |
+| --------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Organization provider | An organization, with its own key         | Only that organization. This is "bring your own key".                                           |
+| Shared provider       | A platform admin, with the platform's key | The organizations in its `availability`. See [Platform](/docs/platform#shared-model-providers). |
+
+When you run OpenBot from code, you can also give built-in models. See [Built-in models](#built-in-models).
 
 ---
 
-## Use an OpenAI-compatible model
+## Add a provider
 
-The `openbot` program can use one model from any service that offers the OpenAI Chat Completions API.
-Set these three variables:
-
-```sh
-OPENBOT_MODEL_ENDPOINT=https://api.openai.com/v1
-OPENBOT_MODEL_API_KEY=sk-...
-OPENBOT_MODEL_ID=gpt-4.1
-```
-
-| Variable                 | Rule                                                                                              |
-| ------------------------ | ------------------------------------------------------------------------------------------------- |
-| `OPENBOT_MODEL_ENDPOINT` | An `http` or `https` base URL, often ending in `/v1`. No user name, password, query, or `#` part. |
-| `OPENBOT_MODEL_API_KEY`  | Not empty. OpenBot sends it to the endpoint only.                                                 |
-| `OPENBOT_MODEL_ID`       | Not empty. The model name that the service expects.                                               |
-
-Set all three, or none of them. If you set only some, or the endpoint is not a valid URL, OpenBot does not start.
-
-This model is the default for every new Session. It also appears in the model list of each Session:
+`POST /v1/organization/model_providers` adds a provider to your organization. It needs `model_providers.write`.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  https://api.example.com/v1/sessions/$SESSION_ID/models
+  -H "Content-Type: application/json" \
+  -d '{
+    "kind": "openai-compat",
+    "name": "Local vLLM",
+    "endpoint": "https://llm.example.com/v1",
+    "apiKey": "sk-...",
+    "models": [
+      { "id": "qwen3-32b", "name": "Qwen3 32B", "reasoningEfforts": [], "serviceTiers": [], "contextWindow": 131072 }
+    ]
+  }' \
+  https://api.example.com/v1/organization/model_providers
 ```
 
-The list has one provider with the ID `openai-compat` and one model with the ID from `OPENBOT_MODEL_ID`.
-This model does not support the `reasoningEffort` or `serviceTier` options.
+| Field      | Rules                                                                                                                                                    |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`     | Required. The API that the service speaks: `openai`, `anthropic` or `openai-compat`. See the table below.                                                |
+| `name`     | Required. 1 to 120 characters.                                                                                                                           |
+| `endpoint` | Required for `openai-compat`. Optional for the others. An `http` or `https` base URL, often ending in `/v1`. No user name, password, query, or `#` part. |
+| `apiKey`   | Required. OpenBot stores it encrypted and sends it to the endpoint only.                                                                                 |
+| `models`   | Required. 1 to 200 models.                                                                                                                               |
 
-You can save the model choice on a Session. Send the current Session revision as `expected`:
+| `kind`          | API                                                     |
+| --------------- | ------------------------------------------------------- |
+| `openai`        | OpenAI Responses API.                                   |
+| `anthropic`     | Anthropic Messages API.                                 |
+| `openai-compat` | OpenAI Chat Completions API, and services that copy it. |
+
+Each model has these fields:
+
+| Field              | Rules                                                                        |
+| ------------------ | ---------------------------------------------------------------------------- |
+| `id`               | Required. The model name that the service expects, such as `gpt-4.1`.        |
+| `name`             | Required. A name for people.                                                 |
+| `reasoningEfforts` | Required. The `reasoningEffort` values that the model accepts. Can be empty. |
+| `serviceTiers`     | Required. The `serviceTier` values that the model accepts. Can be empty.     |
+| `contextWindow`    | Optional. The size of the context window, in tokens.                         |
+| `maxOutputTokens`  | Optional. The most tokens that the model can write in one answer.            |
+
+OpenBot answers with the provider. Its `id` starts with `prov_`. A provider ID is unique in the whole platform. A model selection names it as `provider`.
+The API key never comes back. The answer shows `apiKey: { set, hint }` instead. See [Platform](/docs/platform#secrets-never-come-back).
+
+### Change or remove a provider
+
+| Route                                                 | What it does         |
+| ----------------------------------------------------- | -------------------- |
+| `GET /v1/organization/model_providers`                | Lists the providers. |
+| `GET /v1/organization/model_providers/:providerId`    | Reads one provider.  |
+| `PATCH /v1/organization/model_providers/:providerId`  | Changes a provider.  |
+| `DELETE /v1/organization/model_providers/:providerId` | Removes a provider.  |
+
+Reading needs `model_providers.read`. Changes need `model_providers.write`.
+
+The body of `PATCH` needs `expectedVersion`, the `version` that you read. If someone changed the provider after you read it, OpenBot returns `409` with `ModelProviderConflict`. Leave out `apiKey` to keep the current key.
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":0,"apiKey":"sk-new..."}' \
+  https://api.example.com/v1/organization/model_providers/prov_4c1e...
+```
+
+The next model call after a change uses the new key or endpoint. OpenBot builds each model once, and builds it again when its provider changes.
+
+You cannot remove a provider while `defaultModel` or `helperModel` in the [organization settings](/docs/organization#settings) names it. OpenBot returns `409` with `ModelProviderInUse`. Change the setting first.
+
+---
+
+## Choose a model
+
+`GET /v1/organization/models` lists the models that your organization can use now. It needs `models.use`.
+The list has your own providers, and the shared providers that the platform makes available to you.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/organization/models
+```
+
+```json
+{
+	"providers": [
+		{
+			"id": "prov_4c1e...",
+			"owner": "organization",
+			"kind": "openai-compat",
+			"name": "Local vLLM"
+		}
+	],
+	"models": [
+		{
+			"provider": "prov_4c1e...",
+			"id": "qwen3-32b",
+			"name": "Qwen3 32B",
+			"reasoningEfforts": [],
+			"serviceTiers": [],
+			"contextWindow": 131072
+		}
+	],
+	"defaultModel": {
+		"_tag": "Config.Selection",
+		"provider": "prov_4c1e...",
+		"model": "qwen3-32b"
+	}
+}
+```
+
+`defaultModel` is the model of a new Session. Set it with `defaultModel` in the [organization settings](/docs/organization#settings). When it is `null`, OpenBot uses the first model in the list.
+`helperModel` in the same settings sets the model that OpenBot uses for its own work: the [judge of Rules](/docs/rules) and [Agent memory](/docs/memory#agent-memory).
+
+A Session can save its own choice. Send the current Session revision as `expected`:
 
 ```sh
 curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"expected":3,"selection":{"_tag":"Config.Selection","provider":"openai-compat","model":"gpt-4.1"}}' \
+  -d '{"expected":3,"selection":{"_tag":"Config.Selection","provider":"prov_4c1e...","model":"qwen3-32b"}}' \
   https://api.example.com/v1/sessions/$SESSION_ID/model
 ```
 
-See the [Sessions API reference](/docs/api/operations/tags/sessions/) for all fields.
+`GET /v1/sessions/:id/models` shows the same models for one Session. See the [Sessions API reference](/docs/api/operations/tags/sessions/) for all fields.
+
+To limit which providers a member may choose, use `models.use` on `openbot.org.<org>.model.<providerId>`. See [Permissions](/docs/permissions#limit-models).
 
 ## Run without a model
 
-If you set none of the model variables, OpenBot still starts. You can make, read, rename, fork, and delete Sessions.
+An organization without any provider can still make, read, rename, fork, and delete Sessions.
 
 Work that needs a model fails with status `503` and the error `SessionExecutionUnavailable`. This includes:
 
@@ -63,14 +159,23 @@ Work that needs a model fails with status `503` and the error `SessionExecutionU
 
 ---
 
-## Use your own model in code
+## Built-in models
 
-When you run OpenBot from your own program, you can use any model that works with Effect AI. Effect AI is the AI library of Effect. Its `LanguageModel` service is the common interface for all models.
-See [Run from code](/docs/server) to set up the program.
+When you run OpenBot from your own program, you can give models in code with the `builtinModels` option. See [Run from code](/docs/server).
 
-### One model
+- Every organization can use them.
+- The API cannot change them.
+- They show in the model list next to the stored providers.
 
-Give a `LanguageModel` Layer to `Server.layer`. A Layer is an Effect recipe that builds a service. OpenBot uses this model for every Turn.
+`builtinModels` has three fields:
+
+| Field       | What it is                                                                     |
+| ----------- | ------------------------------------------------------------------------------ |
+| `providers` | The providers to show, such as `{ id, name }`.                                 |
+| `models`    | The models to show, as `Config.Model` values.                                  |
+| `resolve`   | A function that gets a selection and returns an Effect with a `LanguageModel`. |
+
+This example gives one Anthropic model with a key from the environment of your program:
 
 ```ts
 import { NodeRuntime } from "@effect/platform-node"
@@ -80,89 +185,71 @@ import {
 	EnvironmentConfiguration,
 	Server,
 } from "@openbot-build/openbot"
-import { Effect, Layer, Redacted } from "effect"
+import { Context, Effect, Layer, Redacted } from "effect"
+import { LanguageModel } from "effect/ai"
 import { FetchHttpClient } from "effect/http"
 
 const selection = Config.Selection.make({
-	provider: Provider.Id.make("anthropic"),
+	provider: Provider.Id.make("house"),
 	model: Model.Id.make("claude-sonnet-4-5"),
 })
 
-const model = Layer.unwrap(
-	AnthropicProvider.make({ max_tokens: 4096 }).model(selection),
-).pipe(
-	Layer.provide(
-		AnthropicProvider.layerClient({
-			apiKey: Redacted.make(process.env.ANTHROPIC_API_KEY ?? ""),
-		}),
-	),
-	Layer.provide(FetchHttpClient.layer),
-)
-
 NodeRuntime.runMain(
-	Effect.gen(function* () {
-		const settings = yield* EnvironmentConfiguration.load
-		return yield* Layer.launch(
-			Server.layer(settings).pipe(Layer.provide(model)),
-		)
-	}),
-)
-```
-
-With this setup, the model list of a Session is empty. Every Turn uses the one model.
-
-### A model list
-
-To show models in the list and let clients choose, pass three `sessions` options to `Server.layer`:
-
-| Option         | What it does                                                                  |
-| -------------- | ----------------------------------------------------------------------------- |
-| `modelCatalog` | An Effect that returns the providers and models that clients can see.         |
-| `defaults`     | An Effect that returns default Turn settings, such as `{ model: selection }`. |
-| `resolveModel` | A function that gets the chosen selection and returns a `LanguageModel`.      |
-
-```ts
-import { Config } from "@openbot-build/core"
-import { Effect } from "effect"
-import { LanguageModel } from "effect/ai"
-
-// `selection` is from the example above.
-// `claude` is a LanguageModel that your program built from the model Layer.
-const sessions = (claude: LanguageModel.LanguageModel) => ({
-	modelCatalog: Effect.succeed({
-		providers: [{ id: selection.provider, name: "Anthropic" }],
-		models: [
-			Config.Model.make({
-				provider: selection.provider,
-				id: selection.model,
-				name: "Claude Sonnet 4.5",
-				reasoningEfforts: [],
-				serviceTiers: [],
-			}),
-		],
-	}),
-	defaults: Effect.succeed({ model: selection }),
-	resolveModel: (requested: Config.Selection | undefined) =>
-		requested === undefined || requested.model === selection.model
-			? Effect.succeed(claude)
-			: Effect.fail(
-					new Config.ModelConfigurationError({
-						reason: "model-not-found",
-						message: "This model is not available",
+	Effect.scoped(
+		Effect.gen(function* () {
+			const settings = yield* EnvironmentConfiguration.load
+			// Build the model once. It lives as long as the program.
+			const layer = Layer.unwrap(
+				AnthropicProvider.make({ max_tokens: 4096 }).model(selection),
+			).pipe(
+				Layer.provide(
+					AnthropicProvider.layerClient({
+						apiKey: Redacted.make(process.env.ANTHROPIC_API_KEY ?? ""),
 					}),
 				),
-})
+				Layer.provide(FetchHttpClient.layer),
+			)
+			const claude = Context.get(
+				yield* Layer.build(layer),
+				LanguageModel.LanguageModel,
+			)
+			const builtinModels = {
+				providers: [{ id: selection.provider, name: "House models" }],
+				models: [
+					Config.Model.make({
+						provider: selection.provider,
+						id: selection.model,
+						name: "Claude Sonnet 4.5",
+						reasoningEfforts: [],
+						serviceTiers: [],
+					}),
+				],
+				resolve: (requested: Config.Selection) =>
+					requested.model === selection.model
+						? Effect.succeed(claude)
+						: Effect.fail(
+								new Config.ModelConfigurationError({
+									reason: "model-not-found",
+									message: "This model is not available",
+								}),
+							),
+			}
+			return yield* Layer.launch(
+				Server.layer({ ...settings, builtinModels }).pipe(
+					Layer.provide(FetchHttpClient.layer),
+				),
+			)
+		}),
+	),
+)
 ```
 
-`resolveModel` gets `undefined` when the Session has no saved choice. When it fails, starting a Turn returns `503`.
-To build `claude`, use `Layer.build` on the model Layer in a scope, then read the service with `Context.get(context, LanguageModel.LanguageModel)`.
-The built-in production model in `packages/openbot/src/app/ProductionModel.ts` follows this pattern. It is a good full example.
+When `resolve` fails, starting a Turn returns `503`.
+The development entry point uses `builtinModels` for its test models. See `packages/openbot/src/app/DevelopmentModel.ts` for a full example.
 
----
+### Provider modules
 
-## Model providers
-
-A model provider turns a model name into a `LanguageModel` for one kind of API. `@openbot-build/openbot` exports three of them. Each one has the same parts:
+A provider module turns a model name into a `LanguageModel` for one kind of API. `@openbot-build/openbot` exports three of them. Each one has the same parts:
 
 | Part                        | What it does                                                            |
 | --------------------------- | ----------------------------------------------------------------------- |
@@ -177,6 +264,7 @@ A model provider turns a model name into a `LanguageModel` for one kind of API. 
 | `OpenAiCompatProvider` | `openai-compat` | OpenAI Chat Completions API, and services that copy it.                     |
 | `AnthropicProvider`    | `anthropic`     | Anthropic Messages API.                                                     |
 
+OpenBot uses these modules for the stored providers too.
 Context compaction makes a long history shorter so that it fits in the model's context window.
 See [Packages](/docs/packages) for a short example of each provider.
 
@@ -204,4 +292,4 @@ curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: applicat
   https://localhost:8443/v1/sessions/$SESSION_ID/model
 ```
 
-The production program never uses these models, even when `OPENBOT_DEV_MODE=1`.
+The development entry point gives these models with `builtinModels`, so every organization of the development platform can use them. The production program never uses them.

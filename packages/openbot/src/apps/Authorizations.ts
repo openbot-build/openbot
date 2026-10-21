@@ -62,7 +62,8 @@ export class Authorizations extends Context.Service<
 		) => Effect.Effect<Api.Revocation, Error, Identity>
 		readonly receive: (
 			url: string,
-			owner: Option.Option<string>,
+			/** The owners that the signed-in account can act as: one for each active membership. */
+			owners: Option.Option<ReadonlyArray<string>>,
 		) => Effect.Effect<Receipt, Error>
 	}
 >()("@openbot-build/openbot/apps/Authorizations") {}
@@ -341,77 +342,81 @@ export const make = (
 					.revokeAuthorization({ owner, connectionId: id })
 					.pipe(Effect.mapError(sdkFailure))
 			}),
-			receive: Effect.fn("AppAuthorizations.receive")(function* (input, owner) {
-				const url = yield* Effect.try({
-					try: () => new URL(input, publicOrigin),
-					catch: () => authorizationFailure("CallbackMismatch"),
-				})
-				if (
-					url.origin !== publicOrigin ||
-					url.pathname !== "/auth/apps/callback" ||
-					[...url.searchParams.keys()].some(
-						(key) => url.searchParams.getAll(key).length !== 1,
+			receive: Effect.fn("AppAuthorizations.receive")(
+				function* (input, owners) {
+					const url = yield* Effect.try({
+						try: () => new URL(input, publicOrigin),
+						catch: () => authorizationFailure("CallbackMismatch"),
+					})
+					if (
+						url.origin !== publicOrigin ||
+						url.pathname !== "/auth/apps/callback" ||
+						[...url.searchParams.keys()].some(
+							(key) => url.searchParams.getAll(key).length !== 1,
+						)
 					)
-				)
-					return yield* authorizationFailure("CallbackMismatch")
-				const id = url.searchParams.get("state")
-				if (id === null) return yield* authorizationFailure("CallbackMismatch")
-				const record = yield* intents.get(id)
-				if (Option.exists(owner, (owner) => owner !== record.owner))
-					return yield* ExperienceNotFound.make({ id })
-				if (record.state.status !== "Waiting")
-					return yield* authorizationFailure("AlreadyConsumed")
-				if (record.state.expiresAt <= (yield* Clock.currentTimeMillis))
-					return yield* authorizationFailure("FlowExpired")
-				const flow = yield* protocols
-					.bind(record.owner)
-					.flows.get({
-						key: {
-							owner: record.owner,
-							connectionId: record.state.connectionId,
-						},
-						flowId: id,
-					})
-					.pipe(Effect.mapError(sdkFailure))
-				const issuer = url.searchParams.get("iss")
-				if (
-					(issuer !== null && issuer !== flow.binding.issuer) ||
-					(flow.metadata.authorization_response_iss_parameter_supported ===
-						true &&
-						issuer === null)
-				)
-					return yield* authorizationFailure("CallbackMismatch")
-				const error = url.searchParams.get("error")
-				if (error !== null)
-					yield* intents.receive(id, {
-						callback: null,
-						status: error === "access_denied" ? "Cancelled" : "Failed",
-						reason: error === "access_denied" ? null : "GrantRejected",
-					})
-				else {
-					if (url.searchParams.get("code") === null)
 						return yield* authorizationFailure("CallbackMismatch")
-					yield* intents.receive(id, {
-						callback: url.href,
-						status: "Received",
-						reason: null,
-					})
-					// A failed completion is already saved on the flow. The caller reads
-					// that state after the redirect, so the redirect still happens.
-					yield* Option.match(owner, {
-						onNone: () => Effect.void,
-						onSome: (owner) =>
-							complete(owner, id).pipe(
-								Effect.catchTag("AppAuthorizationFailed", () => Effect.void),
-							),
-					})
-				}
-				return {
-					flowId: id,
-					returnTo: record.state.returnTo,
-					requiresLogin: Option.isNone(owner),
-				}
-			}),
+					const id = url.searchParams.get("state")
+					if (id === null)
+						return yield* authorizationFailure("CallbackMismatch")
+					const record = yield* intents.get(id)
+					if (Option.exists(owners, (owners) => !owners.includes(record.owner)))
+						return yield* ExperienceNotFound.make({ id })
+					if (record.state.status !== "Waiting")
+						return yield* authorizationFailure("AlreadyConsumed")
+					if (record.state.expiresAt <= (yield* Clock.currentTimeMillis))
+						return yield* authorizationFailure("FlowExpired")
+					const flow = yield* protocols
+						.bind(record.owner)
+						.flows.get({
+							key: {
+								owner: record.owner,
+								connectionId: record.state.connectionId,
+							},
+							flowId: id,
+						})
+						.pipe(Effect.mapError(sdkFailure))
+					const issuer = url.searchParams.get("iss")
+					if (
+						(issuer !== null && issuer !== flow.binding.issuer) ||
+						(flow.metadata.authorization_response_iss_parameter_supported ===
+							true &&
+							issuer === null)
+					)
+						return yield* authorizationFailure("CallbackMismatch")
+					const error = url.searchParams.get("error")
+					if (error !== null)
+						yield* intents.receive(id, {
+							callback: null,
+							status: error === "access_denied" ? "Cancelled" : "Failed",
+							reason: error === "access_denied" ? null : "GrantRejected",
+						})
+					else {
+						if (url.searchParams.get("code") === null)
+							return yield* authorizationFailure("CallbackMismatch")
+						yield* intents.receive(id, {
+							callback: url.href,
+							status: "Received",
+							reason: null,
+						})
+						// A failed completion is already saved on the flow. The caller reads
+						// that state after the redirect, so the redirect still happens.
+						yield* Option.match(owners, {
+							onNone: () => Effect.void,
+							// The check above made sure that the account can act as this owner.
+							onSome: () =>
+								complete(record.owner, id).pipe(
+									Effect.catchTag("AppAuthorizationFailed", () => Effect.void),
+								),
+						})
+					}
+					return {
+						flowId: id,
+						returnTo: record.state.returnTo,
+						requiresLogin: Option.isNone(owners),
+					}
+				},
+			),
 		})
 	})
 export const layer = (publicOrigin: string) =>
