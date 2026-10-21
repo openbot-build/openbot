@@ -16,4 +16,6 @@ dist/
 .env.development
 
 # Local Claude Code state and session worktrees.
-.claude/
+# Keep the skill links into .agents/skills.
+.claude/*
+!.claude/skills/
