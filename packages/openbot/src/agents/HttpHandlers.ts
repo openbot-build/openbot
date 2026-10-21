@@ -65,6 +65,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "agents", (handlers) =>
 							...(query.session === undefined
 								? {}
 								: { session: query.session }),
+							...(query.agent === undefined ? {} : { agent: query.agent }),
 						})
 						.pipe(Effect.provideContext(services))
 				}),
@@ -103,7 +104,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "agents", (handlers) =>
 				Effect.gen(function* () {
 					const caller = yield* Identity
 					const agent = yield* agents
-						.promote(caller, params.agentId, payload.expected)
+						.promote(caller, params.agentId, payload.expected, payload.agent)
 						.pipe(Effect.provideContext(services))
 					// The memory of its delegated Sessions becomes its long-term memory.
 					const sessions = yield* backend

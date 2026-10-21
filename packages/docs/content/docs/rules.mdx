@@ -51,7 +51,7 @@ A **Rule** is a sentence in plain language for one Agent. When no Grant decides 
 - A deny wins over an allow.
 - When the judge fails or is slow, there is no decision.
 
-A Rule that an Agent wrote counts only when that Agent may use the capability itself.
+A Rule that an Agent wrote counts only when that Agent is above this Agent in its [owner chain](/docs/requests#the-chain-of-deciders), and may use the capability itself.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \

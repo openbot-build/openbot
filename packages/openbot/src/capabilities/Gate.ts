@@ -120,6 +120,7 @@ export const make: Effect.Effect<
 					.create(organizationId, {
 						agent: current.agent.id,
 						chain: current.chain,
+						deciders: current.deciders,
 						capability: attempt.capability,
 						reason: attempt.reason,
 						session: current.session,
@@ -143,6 +144,7 @@ export const make: Effect.Effect<
 				caller: current.caller,
 				capability: attempt.capability,
 				session: current.session,
+				self: current.agent,
 				...(attempt.target === undefined ? {} : { agent: attempt.target }),
 			})
 			const member = yield* can({
@@ -196,14 +198,16 @@ export const make: Effect.Effect<
 				const all = yield* Effect.forEach(authors, (author) =>
 					author._tag === "Agent"
 						? Effect.gen(function* () {
+								// Only an Agent above this one in its owner chain can set its Rules.
+								if (!current.deciders.includes(author.agent)) return false
 								const index = current.chain.agents.indexOf(author.agent)
-								// Only an Agent above this one in the chain can set its Rules.
-								if (index < 0) return false
 								return yield* holds({
 									organizationId,
 									agent: { ...current.agent, id: author.agent },
 									capability: attempt.capability,
-									session: current.chain.sessions[index] ?? current.session,
+									session:
+										(index < 0 ? undefined : current.chain.sessions[index]) ??
+										current.session,
 									depth: 1,
 								})
 							})

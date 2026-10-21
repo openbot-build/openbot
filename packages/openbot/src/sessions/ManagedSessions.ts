@@ -350,6 +350,20 @@ export const make = <
 							owner: options.owner,
 							namespace,
 							read: (id) => store.read(id),
+							delegatedMemory: (agent) =>
+								list({ agent, kind: "delegated" }).pipe(
+									Effect.flatMap((rows) =>
+										Effect.forEach(rows, (row) =>
+											store.read(row.session.id).pipe(
+												Effect.map((view) => ({
+													session: row.session.id,
+													memory:
+														view.state.value[Memory.storeKey] ?? Memory.empty(),
+												})),
+											),
+										),
+									),
+								),
 						}),
 					) as unknown as typeof apps)
 		const runtime = yield* SessionRuntime.make({

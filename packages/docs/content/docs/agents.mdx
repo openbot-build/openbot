@@ -10,21 +10,23 @@ This page shows the kinds of Agents and the routes under `/v1/agents`. Every rou
 
 ## Three kinds of Agents
 
-| Kind         | Owner                         | Lives                               | What it is for                                                       |
-| ------------ | ----------------------------- | ----------------------------------- | -------------------------------------------------------------------- |
-| `main`       | One member                    | As long as the member               | Acts for the person. Does simple work itself and gives work away.    |
-| `persistent` | A member, or the organization | Until you archive it                | A lasting worker with a role. It learns from its work over time.     |
-| `session`    | One Session                   | As long as the Session that owns it | A helper for one line of work. It keeps its context in that Session. |
+| Kind         | Owner                                        | Lives                               | What it is for                                                       |
+| ------------ | -------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------- |
+| `main`       | One member                                   | As long as the member               | Acts for the person. Does simple work itself and gives work away.    |
+| `persistent` | A member, the organization, or another Agent | Until you archive it                | A lasting worker with a role. It learns from its work over time.     |
+| `session`    | One Session                                  | As long as the Session that owns it | A helper for one line of work. It keeps its context in that Session. |
 
 Every member has exactly one **Main Agent**. OpenBot makes it the first time it is needed. A Session that you create without an Agent belongs to your Main Agent.
 
 A **Session Agent** is "almost lasting". An Agent starts it with a tool while it works. The Session Agent keeps its context while its Session lasts, so the Agent can give it work many times. When you delete the Session, its Session Agents are archived too. You can [promote](#promote-a-session-agent) a useful Session Agent to a lasting Agent.
 
+An Agent can own lasting Agents too. See [Agents that own Agents](#agents-that-own-agents).
+
 Every Session belongs to one Agent. See [Sessions](/docs/sessions). How Agents give work to each other is on [Delegation](/docs/delegation).
 
 ### No limits that an Agent knows
 
-Agents have no list of things they may do. An Agent just tries. When it tries something new for the first time, such as starting a Session Agent or calling an App tool, the decider above it decides. See [Requests](/docs/requests). The decisions are kept, so the limits of each Agent grow from real work.
+Agents have no list of things they may do. An Agent just tries. When it tries something new for the first time, such as making an Agent or calling an App tool, the decider above it decides. See [Requests](/docs/requests). The decisions are kept, so the limits of each Agent grow from real work.
 
 ---
 
@@ -37,13 +39,14 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/agents
 ```
 
-| Field          | Meaning                                                                             |
-| -------------- | ----------------------------------------------------------------------------------- |
-| `name`         | Required. A short name, up to 100 characters.                                       |
-| `role`         | Required. What the Agent does, in one line. Other Agents read it to choose workers. |
-| `instructions` | Required. The lasting instructions of the Agent, like a job description.            |
-| `model`        | Optional. The default model for new Sessions of this Agent.                         |
-| `shared`       | Optional. `true` makes an organization Agent that every member can use.             |
+| Field          | Meaning                                                                                 |
+| -------------- | --------------------------------------------------------------------------------------- |
+| `name`         | Required. A short name, up to 100 characters.                                           |
+| `role`         | Required. What the Agent does, in one line. Other Agents read it to choose workers.     |
+| `instructions` | Required. The lasting instructions of the Agent, like a job description.                |
+| `model`        | Optional. The default model for new Sessions of this Agent.                             |
+| `shared`       | Optional. `true` makes an organization Agent that every member can use.                 |
+| `agent`        | Optional. The ID of the Agent that owns the new Agent. You cannot use it with `shared`. |
 
 OpenBot returns `201` with the Agent:
 
@@ -62,11 +65,11 @@ OpenBot returns `201` with the Agent:
 }
 ```
 
-`owner` is `Member`, `Organization` or `Session`. A shared Agent works with the permissions and the App connections of the member who uses it, never with those of the person who made it.
+`owner` is `Member`, `Organization`, `Session` or `Agent`. A shared Agent works with the permissions and the App connections of the member who uses it, never with those of the person who made it.
 
 ## List, read and change Agents
 
-`GET /v1/agents` lists your Main Agent, your own Agents and the shared Agents that you may use. Add `?archived=false` to hide archived Agents. Add `?session=<id>` to list the Session Agents of one Session.
+`GET /v1/agents` lists your Main Agent, your own Agents and the shared Agents that you may use. Add `?archived=false` to hide archived Agents. Add `?session=<id>` to list the Session Agents of one Session. Add `?agent=<id>` to list the Agents that one Agent owns.
 
 `GET /v1/agents/:agentId` returns one Agent.
 
@@ -77,7 +80,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/agents/$AGENT
 ```
 
-`expected` is the current `revision`. You can change `name`, `role`, `instructions`, `model` (send `null` to remove it) and `archived`. The Main Agent cannot be archived.
+`expected` is the current `revision`. You can change `name`, `role`, `instructions`, `model` (send `null` to remove it) and `archived`. The Main Agent cannot be archived. When you archive an Agent, OpenBot also archives every Agent that it owns, and the Agents below them. When you unarchive it, only that one Agent comes back.
 
 ## Promote a Session Agent
 
@@ -88,7 +91,21 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/agents/$AGENT/promote
 ```
 
-The Session Agent becomes a lasting Agent of the member. OpenBot also adds the lasting entries of its Session memory to its [Agent memory](/docs/memory#agent-memory).
+The Session Agent becomes a lasting Agent of the member. Send `agent` with the ID of an Agent to make that Agent its owner. OpenBot also adds the lasting entries of its Session memory to its [Agent memory](/docs/memory#agent-memory).
+
+An Agent can promote a Session Agent of its own Session with the `openbot_promote_agent` tool. Then the Agent owns it.
+
+---
+
+## Agents that own Agents
+
+An Agent can own lasting Agents. So an Agent can build its own team, and each member of the team keeps its own memory.
+
+- An Agent makes an Agent that it owns with the `openbot_create_agent` tool. A person makes one with `POST /v1/agents` and the `agent` field.
+- The owner is `{ "_tag": "Agent", "agent": "<owner ID>", "userId": "<member>" }`. `userId` is the member at the top of the owner tree. It is `null` when the organization owns the Agent at the top.
+- An Agent can give work to the Agents it owns without a request.
+- The **owner chain** of an Agent goes up through its owners to a Main Agent, and then to the person. For example: **person → Main → Worker → Scout**. Requests of an Agent go up this chain, also when a person works with the Agent directly. See [Requests](/docs/requests#the-chain-of-deciders).
+- In the chain, the owner of a member's Agent or of a shared Agent is the Main Agent of the person who works with it.
 
 ---
 

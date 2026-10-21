@@ -5,7 +5,12 @@ import {
 	type Permissions,
 } from "@openbot-build/api"
 import { Option } from "effect"
-import { agentKey, resourceKey } from "../authorization/Policy.ts"
+import {
+	agentKey,
+	agentPlace,
+	resourceKey,
+	rootOf,
+} from "../authorization/Policy.ts"
 
 export type Capability = AgentsApi.Capability
 
@@ -48,6 +53,8 @@ export const permission = (input: {
 	readonly session: string
 	/** The target Agent, for actions on an Agent. */
 	readonly agent?: AgentsApi.Agent
+	/** The Agent that tries the action. The Agents it makes go below its owner tree. */
+	readonly self: AgentsApi.Agent
 }): {
 	readonly permission: Permissions.PermissionGroupId
 	readonly key: string
@@ -74,6 +81,15 @@ export const permission = (input: {
 				permission: "agents.write",
 				key:
 					resourceKey({ subject, kind: "user", id: Option.none() }) + ".agent",
+			}
+		case "agents.create":
+		case "agents.promote":
+			return {
+				permission: "agents.write",
+				key: agentPlace({
+					organizationId: subject.organizationId,
+					root: rootOf(input.self.owner),
+				}),
 			}
 		case "agents.delegate":
 			return onAgent("agents.delegate")
