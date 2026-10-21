@@ -35,14 +35,17 @@ export const validateDelta: {
 	): Effect.Effect<SessionStore.Delta, SessionStore.SessionStoreError> =>
 		Effect.gen(function* () {
 			const current = yield* storage.getRef(input.session.id)
-			if (!Equal.equals(current, input.expected))
+			if (!Equal.equals(Option.getOrNull(current), input.expected))
 				return yield* error("reference-conflict", {
 					message: "The full expected reference is stale",
 				})
 			if (
-				current !== null &&
-				input.session.revision !== current.revision + 1 &&
-				!Equal.equals(current, input.session)
+				Option.exists(
+					current,
+					(current) =>
+						input.session.revision !== current.revision + 1 &&
+						!Equal.equals(current, input.session),
+				)
 			)
 				return yield* error("reference-conflict", {
 					message: "A Session update must increase its revision by exactly one",
@@ -60,38 +63,52 @@ export const validateDelta: {
 				return yield* error("message-conflict", {
 					message: "Duplicate message content ID",
 				})
-			let needed = HashSet.fromIterable<Memory.VersionId>([input.session.head])
-			for (const version of input.versions) {
-				needed = HashSet.add(needed, version.id)
-				for (const parent of version.parents)
-					needed = HashSet.add(needed, parent)
-			}
+			const needed = HashSet.fromIterable<Memory.VersionId>([
+				input.session.head,
+				...input.versions.flatMap((version) => [
+					version.id,
+					...version.parents,
+				]),
+			])
 			const existing = HashMap.fromIterable(
 				(yield* batches(Array.from(needed), storage.headers)).map((v) => [
 					v.id,
 					v,
 				]),
 			)
-			for (const id of needed)
-				if (!HashMap.has(incoming, id) && !HashMap.has(existing, id))
-					return yield* error(
-						id === input.session.head ? "reference-invalid" : "parent-missing",
-						{ message: "A referenced version is missing", version: id },
-					)
+			const missing = Array.from(needed).find(
+				(id) => !HashMap.has(incoming, id) && !HashMap.has(existing, id),
+			)
+			if (missing !== undefined)
+				return yield* error(
+					missing === input.session.head
+						? "reference-invalid"
+						: "parent-missing",
+					{ message: "A referenced version is missing", version: missing },
+				)
 			if (!acyclic(incoming))
 				return yield* error("version-cycle", {
 					message: "The submitted versions contain a cycle",
 				})
-			if (current !== null && current.head !== input.session.head) {
-				const submitted = HashMap.union(
-					incoming,
-					HashMap.filter(existing, (_, id) => id === current.head),
+			if (
+				Option.exists(
+					current,
+					(current) =>
+						current.head !== input.session.head &&
+						!reaches(
+							HashMap.union(
+								incoming,
+								HashMap.filter(existing, (_, id) => id === current.head),
+							),
+							input.session.head,
+							current.head,
+							true,
+						),
 				)
-				if (!reaches(submitted, input.session.head, current.head, true))
-					return yield* error("reference-conflict", {
-						message: "The new head must build on the expected head",
-					})
-			}
+			)
+				return yield* error("reference-conflict", {
+					message: "The new head must build on the expected head",
+				})
 			let versions: ReadonlyArray<SessionStore.Snapshot> = []
 			let remapped = HashMap.empty<string, string>()
 			const ordered = [
@@ -102,9 +119,8 @@ export const validateDelta: {
 				const version = Optic.id<SessionStore.Snapshot>()
 					.key("history")
 					.forEach((ref) => ref.key("content"))
-					.modifyAll(
-						(content) =>
-							Option.getOrUndefined(HashMap.get(remapped, content)) ?? content,
+					.modifyAll((content) =>
+						Option.getOrElse(HashMap.get(remapped, content), () => content),
 					)(supplied)
 				const ids = EffectArray.dedupe(
 					version.history.map((ref) => ref.content),
@@ -119,23 +135,25 @@ export const validateDelta: {
 						message,
 					]),
 				)
-				let identities = HashSet.empty<string>()
-				for (const ref of version.history) {
-					const message = Option.getOrUndefined(
-						HashMap.get(references, ref.content),
-					)
-					if (message === undefined)
-						return yield* error("message-missing", {
-							message: "A referenced message content is missing",
-							version: version.id,
-						})
-					if (
-						message.message !== ref.message ||
-						HashSet.has(identities, ref.message)
-					)
-						return yield* invalid()
-					identities = HashSet.add(identities, ref.message)
-				}
+				if (
+					version.history.some((ref) => !HashMap.has(references, ref.content))
+				)
+					return yield* error("message-missing", {
+						message: "A referenced message content is missing",
+						version: version.id,
+					})
+				if (
+					version.history.some((ref) =>
+						Option.exists(
+							HashMap.get(references, ref.content),
+							(message) => message.message !== ref.message,
+						),
+					) ||
+					HashSet.size(
+						HashSet.fromIterable(version.history.map((ref) => ref.message)),
+					) !== version.history.length
+				)
+					return yield* invalid()
 				if (Object.hasOwn(version.value, "history")) return yield* invalid()
 
 				if (HashMap.has(existing, version.id)) {
@@ -149,23 +167,23 @@ export const validateDelta: {
 					])
 					const { id, schemaVersion, parents } = version
 					if (
-						!Equal.equals(Option.getOrUndefined(HashMap.get(existing, id)), {
-							id,
-							schemaVersion,
-							parents,
-						}) ||
+						!Option.exists(HashMap.get(existing, id), (header) =>
+							Equal.equals(header, { id, schemaVersion, parents }),
+						) ||
 						!same(previous.raw, raw)
 					)
 						return yield* error("version-conflict", {
 							message: "The same version ID has different contents",
 							version: id,
 						})
-					for (let index = 0; index < supplied.history.length; index++)
-						remapped = HashMap.set(
-							remapped,
-							supplied.history[index]!.content,
-							previous.snapshot.history[index]!.content,
-						)
+					remapped = EffectArray.zip(
+						supplied.history,
+						previous.snapshot.history,
+					).reduce(
+						(remapped, [next, stored]) =>
+							HashMap.set(remapped, next.content, stored.content),
+						remapped,
+					)
 				} else versions = EffectArray.append(versions, version)
 			}
 			const used = HashSet.fromIterable(
@@ -178,17 +196,19 @@ export const validateDelta: {
 					storage.contents,
 				)).map((m) => [m.id, m]),
 			)
-			for (const message of input.messages) {
-				const previous = Option.getOrUndefined(HashMap.get(old, message.id))
-				if (
-					previous !== undefined &&
-					(previous.message !== message.message ||
-						!same(previous.content, message.content))
+			if (
+				input.messages.some((message) =>
+					Option.exists(
+						HashMap.get(old, message.id),
+						(previous) =>
+							previous.message !== message.message ||
+							!same(previous.content, message.content),
+					),
 				)
-					return yield* error("message-conflict", {
-						message: "The same message content ID has different contents",
-					})
-			}
+			)
+				return yield* error("message-conflict", {
+					message: "The same message content ID has different contents",
+				})
 			return {
 				...input,
 				versions,

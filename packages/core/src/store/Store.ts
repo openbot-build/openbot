@@ -47,6 +47,8 @@ export const define: SessionStore.DefinitionFactory["define"] = (input) =>
 		const business = Schema.StructWithRest(Schema.Struct(fields("session")), [
 			Schema.Record(Schema.String, Schema.Unknown),
 		])
+		// The fields come from Object.fromEntries at run time, so TypeScript only sees a
+		// string record. The schemas match Plugins<S>, but the compiler cannot prove it.
 		return {
 			...input,
 			schema: codec(memorySchema),

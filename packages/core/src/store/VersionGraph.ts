@@ -3,10 +3,8 @@ import {
 	Effect,
 	Graph,
 	HashMap,
-	HashSet,
 	JsonPatch,
 	Option,
-	Predicate,
 } from "effect"
 import { dual } from "effect/Function"
 import { batches } from "./GraphTraversal.ts"
@@ -33,14 +31,18 @@ const index = (versions: ReadonlyArray<Memory.Version>): Indexed => {
 		})
 		versions.forEach((version) => {
 			version.parents.forEach((parent, order) => {
-				const target = HashMap.get(indexes, parent)
-				if (Option.isSome(target))
-					Graph.addEdge(
-						mutable,
-						HashMap.getUnsafe(indexes, version.id),
-						target.value,
-						order === 0 ? 0 : 1,
-					)
+				Option.match(
+					Option.all([
+						HashMap.get(indexes, version.id),
+						HashMap.get(indexes, parent),
+					]),
+					{
+						onNone: () => {},
+						onSome: ([source, target]) => {
+							Graph.addEdge(mutable, source, target, order === 0 ? 0 : 1)
+						},
+					},
+				)
 			})
 		})
 	})
@@ -57,37 +59,49 @@ const load = (
 	roots: ReadonlyArray<Memory.VersionId>,
 ) =>
 	Effect.gen(function* () {
-		let found = HashMap.empty<Memory.VersionId, Memory.Version>()
-		let ordered: ReadonlyArray<Memory.Version> = []
+		// Read the ancestry one generation at a time. Each generation is one batch of reads.
 		const visit = (
 			pending: ReadonlyArray<Memory.VersionId>,
-		): Effect.Effect<void, SessionStore.SessionStoreError> => {
+			found: HashMap.HashMap<Memory.VersionId, Memory.Version>,
+			ordered: ReadonlyArray<Memory.Version>,
+		): Effect.Effect<
+			{
+				readonly found: HashMap.HashMap<Memory.VersionId, Memory.Version>
+				readonly ordered: ReadonlyArray<Memory.Version>
+			},
+			SessionStore.SessionStoreError
+		> => {
 			const ids = EffectArray.dedupe(
 				pending.filter((id) => !HashMap.has(found, id)),
 			)
-			if (ids.length === 0) return Effect.void
-			return Effect.gen(function* () {
-				const rows = HashMap.fromIterable(
-					(yield* batches(ids, storage.headers)).map(
-						(row) => [row.id, row] as const,
+			if (ids.length === 0) return Effect.succeed({ found, ordered })
+			return batches(ids, storage.headers).pipe(
+				Effect.flatMap((headers) => {
+					const rows = HashMap.fromIterable(
+						headers.map((row) => [row.id, row] as const),
+					)
+					return Effect.forEach(ids, (id) =>
+						Effect.fromOption(HashMap.get(rows, id), () =>
+							error("parent-missing", {
+								message: "A version or its parent is missing",
+								version: id,
+							}),
+						),
+					)
+				}),
+				Effect.flatMap((generation) =>
+					visit(
+						generation.flatMap((version) => version.parents),
+						generation.reduce(
+							(found, version) => HashMap.set(found, version.id, version),
+							found,
+						),
+						[...ordered, ...generation],
 					),
-				)
-				for (const id of ids) {
-					const row = HashMap.get(rows, id)
-					if (Option.isNone(row))
-						return yield* error("parent-missing", {
-							message: "A version or its parent is missing",
-							version: id,
-						})
-					found = HashMap.set(found, id, row.value)
-					ordered = EffectArray.append(ordered, row.value)
-				}
-				return yield* visit(
-					ids.flatMap((id) => HashMap.getUnsafe(found, id).parents),
-				)
-			})
+				),
+			)
 		}
-		yield* visit(roots)
+		const { found, ordered } = yield* visit(roots, HashMap.empty(), [])
 		const indexed = index(ordered)
 		if (!Graph.isAcyclic(indexed.graph))
 			return yield* error("version-cycle", {
@@ -161,15 +175,18 @@ export const reaches: {
 		firstParent: boolean = false,
 	): boolean => {
 		const loaded = index(Array.from(HashMap.values(versions)))
-		const source = HashMap.get(loaded.indexes, from),
-			target = HashMap.get(loaded.indexes, to)
-		if (Option.isNone(source) || Option.isNone(target)) return false
 		const selected = firstParent
 			? Graph.mutate(loaded.graph, (mutable) => {
 					Graph.filterEdges(mutable, (order) => order === 0)
 				})
 			: loaded.graph
-		return Graph.hasPath(selected, source.value, target.value)
+		return Option.exists(
+			Option.all([
+				HashMap.get(loaded.indexes, from),
+				HashMap.get(loaded.indexes, to),
+			]),
+			([source, target]) => Graph.hasPath(selected, source, target),
+		)
 	},
 )
 
@@ -196,40 +213,43 @@ export const mergeBases: {
 		target: Memory.VersionId,
 		source: Memory.VersionId,
 	) =>
-		load(storage, [target, source]).pipe(
-			Effect.map((loaded) => {
-				const targetIndex = HashMap.getUnsafe(loaded.indexes, target),
-					sourceIndex = HashMap.getUnsafe(loaded.indexes, source)
-				const ancestors = (start: Graph.NodeIndex) =>
-					HashSet.fromIterable(
-						Graph.indices(
-							Graph.dfs(loaded.graph, {
-								start: [start],
-								direction: "outgoing",
-							}),
-						),
-					)
-				const common = Array.from(
-					HashSet.intersection(ancestors(targetIndex), ancestors(sourceIndex)),
+		Effect.gen(function* () {
+			const loaded = yield* load(storage, [target, source])
+			// load fails when a root is missing, so both roots have an index here.
+			const [targetIndex, sourceIndex] = yield* Effect.fromOption(
+				Option.all([
+					HashMap.get(loaded.indexes, target),
+					HashMap.get(loaded.indexes, source),
+				]),
+				() =>
+					error("parent-missing", {
+						message: "A version or its parent is missing",
+					}),
+			)
+			const ancestors = (start: Graph.NodeIndex) =>
+				HashMap.fromIterable(
+					Graph.entries(
+						Graph.dfs(loaded.graph, { start: [start], direction: "outgoing" }),
+					),
 				)
-				return {
-					alreadyMerged: Graph.hasPath(loaded.graph, targetIndex, sourceIndex),
-					candidates: common
-						.filter(
-							(candidate) =>
-								!common.some(
-									(other) =>
-										other !== candidate &&
-										Graph.hasPath(loaded.graph, other, candidate),
-								),
-						)
-						.map(
-							(candidate) =>
-								Option.getOrThrow(Graph.getNode(loaded.graph, candidate)).id,
-						),
-				}
-			}),
-		),
+			const sourceAncestors = ancestors(sourceIndex)
+			const common = Array.from(ancestors(targetIndex)).filter(([index]) =>
+				HashMap.has(sourceAncestors, index),
+			)
+			return {
+				alreadyMerged: Graph.hasPath(loaded.graph, targetIndex, sourceIndex),
+				candidates: common
+					.filter(
+						([candidate]) =>
+							!common.some(
+								([other]) =>
+									other !== candidate &&
+									Graph.hasPath(loaded.graph, other, candidate),
+							),
+					)
+					.map(([, version]) => version.id),
+			}
+		}),
 )
 
 export const exportRecord: {
@@ -250,50 +270,49 @@ export const exportRecord: {
 	): Effect.Effect<SessionStore.Record, SessionStore.SessionStoreError> =>
 		Effect.gen(function* () {
 			const headers = yield* graph(storage, ref.head)
-			let versions: ReadonlyArray<SessionStore.Snapshot> = [],
-				messages = HashMap.empty<string, SessionStore.Content>()
-			for (const id of HashMap.keys(headers)) {
-				const loaded = yield* readRaw(storage, id)
-				versions = EffectArray.append(versions, loaded.snapshot)
-				for (const content of loaded.messages)
-					messages = HashMap.set(messages, content.id, content)
-			}
+			const loaded = yield* Effect.forEach(HashMap.keys(headers), (id) =>
+				readRaw(storage, id),
+			)
 			return {
 				formatVersion: 3,
 				session: ref,
-				versions,
-				messages: Array.from(HashMap.values(messages)),
+				versions: loaded.map(({ snapshot }) => snapshot),
+				messages: Array.from(
+					HashMap.values(
+						HashMap.fromIterable(
+							loaded.flatMap(({ messages }) =>
+								messages.map((content) => [content.id, content] as const),
+							),
+						),
+					),
+				),
 			}
 		}),
 )
 
-/** Build a Diff from raw snapshots. The default base is the first parent. */
+/** Build a Diff from raw snapshots. A null base compares with an empty value. */
 export const diff: {
 	(
 		version: Memory.VersionId,
-		base?: Memory.VersionId | null,
+		base: Memory.VersionId | null,
 	): (
 		storage: SessionStore.Persistence,
 	) => Effect.Effect<JsonPatch.JsonPatch, SessionStore.SessionStoreError>
 	(
 		storage: SessionStore.Persistence,
 		version: Memory.VersionId,
-		base?: Memory.VersionId | null,
+		base: Memory.VersionId | null,
 	): Effect.Effect<JsonPatch.JsonPatch, SessionStore.SessionStoreError>
 } = dual(
-	(args) => Predicate.isObjectOrArray(args[0]),
+	3,
 	(
 		storage: SessionStore.Persistence,
 		version: Memory.VersionId,
-		base?: Memory.VersionId | null,
+		base: Memory.VersionId | null,
 	) =>
 		Effect.gen(function* () {
 			const target = yield* readRaw(storage, version)
-			const parent =
-				base === null ? undefined : (base ?? target.snapshot.parents[0])
-			return JsonPatch.get(
-				parent === undefined ? {} : (yield* readRaw(storage, parent)).raw,
-				target.raw,
-			)
+			const before = base === null ? {} : (yield* readRaw(storage, base)).raw
+			return JsonPatch.get(before, target.raw)
 		}),
 )

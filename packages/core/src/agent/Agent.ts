@@ -14,6 +14,7 @@ import {
 	type Tool,
 } from "effect/ai"
 import type * as Session from "../session/Session.ts"
+import type * as SessionStore from "../store/SessionStore.ts"
 import type * as Turn from "../session/Turn.ts"
 import type * as Item from "../memory/Item.ts"
 import type * as Plugin from "../plugins/Plugin.ts"
@@ -57,7 +58,10 @@ export class Context extends EffectContext.Service<
 	Context,
 	{
 		readonly options: Omit<Options<Record<string, Tool.Any>>, "toolkit">
-		readonly at: Effect.Effect<Session.Position>
+		readonly at: Effect.Effect<
+			Session.Position,
+			Session.SessionNotFound | SessionStore.SessionStoreError
+		>
 		readonly turn: Effect.Effect<Turn.Id>
 		readonly step: Effect.Effect<number>
 		readonly history: Effect.Effect<Prompt.Prompt>

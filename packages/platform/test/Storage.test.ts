@@ -65,9 +65,10 @@ test(
 						})
 						assert.equal(settings.session.head, root.session.head)
 						assert.equal(settings.session.revision, 1)
-						assert.equal(
-							yield* repository.store("bob").getRef(root.session.id),
-							null,
+						assert.ok(
+							Option.isNone(
+								yield* repository.store("bob").getRef(root.session.id),
+							),
 						)
 						const competing = yield* Effect.forEach(
 							["first", "second"],

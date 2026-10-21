@@ -4,6 +4,7 @@ import {
 	Schema,
 	type Duration,
 	type Effect,
+	type Option,
 	type Stream,
 } from "effect"
 import { type Prompt, type Tool, type Toolkit } from "effect/ai"
@@ -183,7 +184,7 @@ export interface Runtime<
 	readonly runQueued: (
 		session: Id,
 	) => Effect.Effect<
-		Receipt | undefined,
+		Option.Option<Receipt>,
 		RuntimeError,
 		Agent.RuntimeServices<Tools, R>
 	>

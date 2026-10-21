@@ -28,6 +28,12 @@ export const same: {
 	(left: Schema.Json, right: Schema.Json) =>
 		JsonPatch.get(left, right).length === 0,
 )
+const decodeEntry = Schema.decodeUnknownEffect(
+	Schema.Struct({
+		content: Schema.Json,
+		origin: Schema.optionalKey(Schema.Json),
+	}),
+)
 const encodedHistory = Schema.Array(
 	Schema.Struct({
 		id: Item.Id,
@@ -55,37 +61,36 @@ export const unpack: {
 			const messages = HashMap.fromIterable(
 				contents.map((entry) => [entry.id, entry]),
 			)
-			let ids = HashSet.empty<string>()
-			let history = Chunk.empty<{
-				readonly id: string
-				readonly content: Schema.Json
-			}>()
-			for (const ref of snapshot.history) {
-				const entry = Option.getOrUndefined(HashMap.get(messages, ref.content))
-				if (entry === undefined)
-					return yield* error("message-missing", {
-						message: "A referenced message content is missing",
-						version: snapshot.id,
-					})
-				if (entry.message !== ref.message || HashSet.has(ids, ref.message))
-					return yield* invalid()
-				ids = HashSet.add(ids, ref.message)
-				history = Chunk.append(history, {
-					id: ref.message,
-					...(yield* Schema.decodeUnknownEffect(
-						Schema.Struct({
-							content: Schema.Json,
-							origin: Schema.optionalKey(Schema.Json),
-						}),
-					)(entry.content).pipe(Effect.mapError(invalid))),
-				})
-			}
+			if (
+				HashSet.size(
+					HashSet.fromIterable(snapshot.history.map((ref) => ref.message)),
+				) !== snapshot.history.length
+			)
+				return yield* invalid()
+			const history = yield* Effect.forEach(snapshot.history, (ref) =>
+				Option.match(HashMap.get(messages, ref.content), {
+					onNone: () =>
+						Effect.fail(
+							error("message-missing", {
+								message: "A referenced message content is missing",
+								version: snapshot.id,
+							}),
+						),
+					onSome: (entry) =>
+						entry.message !== ref.message
+							? Effect.fail(invalid())
+							: decodeEntry(entry.content).pipe(
+									Effect.mapError(invalid),
+									Effect.map((decoded) => ({ id: ref.message, ...decoded })),
+								),
+				}),
+			)
 			const core = yield* Schema.decodeUnknownEffect(Schema.JsonObject)(
 				snapshot.value["memory"],
 			).pipe(Effect.mapError(invalid))
 			return Optic.id<Schema.JsonObject>()
 				.key("memory")
-				.replace({ ...core, history: Array.from(history) }, snapshot.value)
+				.replace({ ...core, history }, snapshot.value)
 		}),
 )
 
@@ -149,54 +154,68 @@ export const pack: {
 			).pipe(Effect.mapError(invalid))
 			const { history: _, ...rest } = core
 			const value = { ...object, memory: rest }
-			let existing = HashMap.empty<string, Chunk.Chunk<SessionStore.Content>>()
-			for (const base of reusable)
-				for (const message of base.messages) {
-					let revisions =
-						Option.getOrUndefined(HashMap.get(existing, message.message)) ??
-						Chunk.empty<SessionStore.Content>()
-					revisions = Chunk.append(revisions, message)
-					existing = HashMap.set(existing, message.message, revisions)
-				}
-			let history = Chunk.empty<SessionStore.Snapshot["history"][number]>()
-			let messages = Chunk.empty<SessionStore.Content>()
-			let seen = HashSet.empty<string>()
-			for (const entry of entries) {
-				if (HashSet.has(seen, entry.id)) return yield* invalid()
-				seen = HashSet.add(seen, entry.id)
+			if (
+				HashSet.size(HashSet.fromIterable(entries.map((entry) => entry.id))) !==
+				entries.length
+			)
+				return yield* invalid()
+			// Stored contents by message ID, so unchanged messages keep their content rows.
+			const existing = reusable
+				.flatMap((base) => base.messages)
+				.reduce(
+					(existing, message) =>
+						HashMap.set(
+							existing,
+							message.message,
+							Chunk.append(
+								Option.getOrElse(HashMap.get(existing, message.message), () =>
+									Chunk.empty<SessionStore.Content>(),
+								),
+								message,
+							),
+						),
+					HashMap.empty<string, Chunk.Chunk<SessionStore.Content>>(),
+				)
+			const packed = yield* Effect.forEach(entries, (entry) => {
 				const payload: Schema.JsonObject = {
 					content: entry.content,
 					...(entry.origin === undefined ? {} : { origin: entry.origin }),
 				}
-				const previous = Option.getOrUndefined(
+				return Option.match(
 					Option.flatMap(HashMap.get(existing, entry.id), (revisions) =>
-						Chunk.findFirst(
-							revisions,
-							(candidate) =>
-								candidate.message === entry.id &&
-								same(candidate.content, payload),
+						Chunk.findFirst(revisions, (candidate) =>
+							same(candidate.content, payload),
 						),
 					),
+					{
+						onSome: (content) =>
+							Effect.succeed({
+								content,
+								created: Option.none<SessionStore.Content>(),
+							}),
+						onNone: () =>
+							Effect.map(generate(), (id) => {
+								const content: SessionStore.Content = {
+									id,
+									message: entry.id,
+									content: payload,
+								}
+								return { content, created: Option.some(content) }
+							}),
+					},
 				)
-				const content = previous ?? {
-					id: yield* generate(),
-					message: entry.id,
-					content: payload,
-				}
-				if (previous === undefined) messages = Chunk.append(messages, content)
-				history = Chunk.append(history, {
-					message: entry.id,
-					content: content.id,
-				})
-			}
+			})
 			return {
 				snapshot: {
 					...version,
 					snapshotFormatVersion: 2,
 					value,
-					history: Array.from(history),
+					history: packed.map(({ content }) => ({
+						message: content.message,
+						content: content.id,
+					})),
 				},
-				messages: Array.from(messages),
+				messages: EffectArray.getSomes(packed.map(({ created }) => created)),
 			}
 		}),
 )
@@ -222,14 +241,18 @@ export const readRaw: {
 	>
 } = dual(2, (storage: SessionStore.Persistence, id: Memory.VersionId) =>
 	Effect.gen(function* () {
-		const snapshot = yield* storage.snapshot(id)
-		if (snapshot === null)
-			return yield* error("parent-missing", {
-				message: "The version is missing",
-				version: id,
-			})
+		const snapshot = yield* storage.snapshot(id).pipe(
+			Effect.flatMap((snapshot) =>
+				Effect.fromOption(snapshot, () =>
+					error("parent-missing", {
+						message: "The version is missing",
+						version: id,
+					}),
+				),
+			),
+		)
 		const ids = EffectArray.dedupe(snapshot.history.map((ref) => ref.content))
-		const messages = Array.from(yield* batches(ids, storage.contents))
+		const messages = yield* batches(ids, storage.contents)
 		const raw = yield* unpack(snapshot, messages)
 		return { snapshot, messages, raw }
 	}),

@@ -1,6 +1,7 @@
 import {
+	Array as EffectArray,
 	Option,
-	Chunk,
+	HashMap,
 	HashSet,
 	Effect,
 	JsonPatch,
@@ -19,6 +20,57 @@ import { project } from "./Store.ts"
 import { error, invalid } from "./StoreErrors.ts"
 import { omitOptional } from "./PromptCodec.ts"
 
+/** Find the version in the record and check that the current head reaches it. */
+const reachable = (
+	record: SessionStore.Record,
+	version: Memory.VersionId,
+): Effect.Effect<SessionStore.Snapshot, SessionStore.SessionStoreError> =>
+	Effect.gen(function* () {
+		const node = record.versions.find((v) => v.id === version)
+		if (node === undefined)
+			return yield* error("parent-missing", {
+				message: "The version is missing",
+				version,
+			})
+		const versions = HashMap.fromIterable(
+			record.versions.map((v) => [v.id, v] as const),
+		)
+		const visit = (
+			pending: ReadonlyArray<Memory.VersionId>,
+			seen: HashSet.HashSet<Memory.VersionId>,
+		): Effect.Effect<
+			HashSet.HashSet<Memory.VersionId>,
+			SessionStore.SessionStoreError
+		> =>
+			// suspend keeps long histories off the JavaScript call stack.
+			Effect.suspend(() =>
+				EffectArray.match(pending, {
+					onEmpty: () => Effect.succeed(seen),
+					onNonEmpty: ([id, ...rest]) =>
+						HashSet.has(seen, id)
+							? visit(rest, seen)
+							: Option.match(HashMap.get(versions, id), {
+									onNone: () =>
+										Effect.fail(
+											error("parent-missing", {
+												message: "A parent version is missing",
+												version: id,
+											}),
+										),
+									onSome: (current) =>
+										visit([...current.parents, ...rest], HashSet.add(seen, id)),
+								}),
+				}),
+			)
+		const seen = yield* visit([record.session.head], HashSet.empty())
+		if (!HashSet.has(seen, version))
+			return yield* error("version-unreachable", {
+				message: "The version is not reachable from the current head",
+				version,
+			})
+		return node
+	})
+
 export const original: {
 	(
 		version?: Memory.VersionId,
@@ -35,42 +87,9 @@ export const original: {
 		record: SessionStore.Record,
 		version = record.session.head,
 	): Effect.Effect<Schema.JsonObject, SessionStore.SessionStoreError> =>
-		Effect.gen(function* () {
-			const node = record.versions.find((v) => v.id === version)
-			if (node === undefined)
-				return yield* error("parent-missing", {
-					message: "The version is missing",
-					version: version,
-				})
-			let reachable = HashSet.empty<Memory.VersionId>(),
-				pending: Chunk.Chunk<Memory.VersionId> = Chunk.of(record.session.head)
-			const visit: Effect.Effect<void, SessionStore.SessionStoreError> =
-				Effect.suspend(() => {
-					const id = Option.getOrUndefined(Chunk.last(pending))
-					pending = Chunk.dropRight(pending, 1)
-					if (id === undefined) return Effect.void
-					if (HashSet.has(reachable, id)) return visit
-					reachable = HashSet.add(reachable, id)
-					const current = record.versions.find((v) => v.id === id)
-					if (current === undefined)
-						return error("parent-missing", {
-							message: "A parent version is missing",
-							version: id,
-						})
-					pending = Chunk.appendAll(
-						pending,
-						Chunk.fromIterable(current.parents),
-					)
-					return visit
-				})
-			yield* visit
-			if (!HashSet.has(reachable, version))
-				return yield* error("version-unreachable", {
-					message: "The version is not reachable from the current head",
-					version: version,
-				})
-			return yield* unpack(node, record.messages)
-		}),
+		reachable(record, version).pipe(
+			Effect.flatMap((node) => unpack(node, record.messages)),
+		),
 )
 export const make = <
 	States extends Plugin.Stores,
@@ -79,9 +98,11 @@ export const make = <
 		input,
 	) =>
 		Effect.gen(function* () {
-			const id = input.version ?? input.record.session.head
-			const raw = yield* original(input.record, id)
-			const snapshot = input.record.versions.find((v) => v.id === id)!
+			const snapshot = yield* reachable(
+				input.record,
+				input.version ?? input.record.session.head,
+			)
+			const raw = yield* unpack(snapshot, input.record.messages)
 			return yield* project(input.definition, snapshot, raw)
 		})
 	const validate = (
@@ -103,18 +124,16 @@ export const make = <
 			const versions = HashSet.fromIterable(
 				record.versions.map((version) => version.id),
 			)
-			for (const turn of [
-				...record.session.inheritedTurns,
-				...record.session.turns,
-			]) {
-				if (
-					!HashSet.has(versions, turn.start) ||
-					(turn.end !== undefined && !HashSet.has(versions, turn.end))
+			if (
+				[...record.session.inheritedTurns, ...record.session.turns].some(
+					(turn) =>
+						!HashSet.has(versions, turn.start) ||
+						(turn.end !== undefined && !HashSet.has(versions, turn.end)),
 				)
-					return yield* error("reference-invalid", {
-						message: "A Turn refers to a missing Memory version",
-					})
-			}
+			)
+				return yield* error("reference-invalid", {
+					message: "A Turn refers to a missing Memory version",
+				})
 			if (
 				record.session.turns.some((turn) => turn.session !== record.session.id)
 			)

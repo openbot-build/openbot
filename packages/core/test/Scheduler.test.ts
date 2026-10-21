@@ -1,7 +1,7 @@
 // @effect-diagnostics strictEffectProvide:off
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { Deferred, Effect, Exit, Fiber, Stream } from "effect"
+import { Deferred, Effect, Exit, Fiber, Option, Stream } from "effect"
 import { Prompt } from "effect/ai"
 import {
 	Session,
@@ -71,8 +71,8 @@ test("steering stays in the current Turn and queued input starts a separate Turn
 						/ordinary queued input/,
 					)
 					const next = yield* runtime.runQueued(base.session)
-					assert.ok(next !== undefined)
-					assert.notEqual(next.turn, turn.id)
+					assert.ok(Option.isSome(next))
+					assert.notEqual(next.value.turn, turn.id)
 					const wait: Effect.Effect<void, Session.RuntimeError> =
 						Effect.suspend(() =>
 							runtime
