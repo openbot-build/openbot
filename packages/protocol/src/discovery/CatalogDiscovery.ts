@@ -1,6 +1,6 @@
-import { Chunk } from "effect"
 import {
 	Array as EffectArray,
+	Chunk,
 	Option,
 	HashSet,
 	HashMap,
@@ -12,6 +12,7 @@ import {
 	Schema,
 	Match,
 	Predicate,
+	Record as RecordUtils,
 } from "effect"
 import { parse, defaultTreeAdapter, type DefaultTreeAdapterTypes } from "parse5"
 import * as Document from "../Document.ts"
@@ -225,13 +226,9 @@ export const catalogLinks = (options: {
 				node.tagName === "base" && node.attrs.some((a) => a.name === "href"),
 		)
 		const baseHref = baseTag?.attrs.find((a) => a.name === "href")?.value
-		if (baseHref !== undefined) {
-			try {
-				base = new URL(baseHref, options.responseUrl).href
-			} catch {
-				/* HTML URL resolution ignores an invalid base. */
-			}
-		}
+		// HTML URL resolution ignores an invalid base.
+		if (baseHref !== undefined && URL.canParse(baseHref, options.responseUrl))
+			base = new URL(baseHref, options.responseUrl).href
 		for (const node of elements) {
 			const rel = node.attrs
 				.find((a) => a.name === "rel")
@@ -247,13 +244,9 @@ export const catalogLinks = (options: {
 		}
 	}
 	return EffectArray.dedupe(
-		declarations.flatMap((href) => {
-			try {
-				return [new URL(href, base).href]
-			} catch {
-				return []
-			}
-		}),
+		declarations.flatMap((href) =>
+			URL.canParse(href, base) ? [new URL(href, base).href] : [],
+		),
 	)
 }
 
@@ -289,47 +282,60 @@ export const layer = (options: Options = {}) =>
 					url,
 					accept,
 				])
-				const cached = Option.getOrUndefined(
-					HashMap.get(yield* Ref.get(cache), key),
-				)
+				const cached = HashMap.get(yield* Ref.get(cache), key)
 				const now = yield* Clock.currentTimeMillis
-				if (!refresh && cached !== undefined && cached.freshUntil > now)
+				const fresh = Option.filter(
+					cached,
+					(entry) => !refresh && entry.freshUntil > now,
+				)
+				if (Option.isSome(fresh))
 					return {
-						response: cached.response,
-						parsed: cached.parsed,
+						response: fresh.value.response,
+						parsed: fresh.value.parsed,
 					}
-				const headers: Record<string, string> = {
-					...options.headersByOrigin?.[new URL(url).origin],
-					accept,
-				}
-				if (cached?.response.headers["etag"] !== undefined)
-					headers["if-none-match"] = cached.response.headers["etag"]
-				if (cached?.response.headers["last-modified"] !== undefined)
-					headers["if-modified-since"] =
-						cached.response.headers["last-modified"]
+				const cachedHeaders = Option.match(cached, {
+					onNone: () => ({}),
+					onSome: (entry) =>
+						RecordUtils.filter(
+							{
+								"if-none-match": entry.response.headers["etag"],
+								"if-modified-since": entry.response.headers["last-modified"],
+							},
+							Predicate.isNotUndefined,
+						),
+				})
 				const received = yield* network.readDocument({
 					url,
-					headers,
+					headers: {
+						...options.headersByOrigin?.[new URL(url).origin],
+						accept,
+						...cachedHeaders,
+					},
 				})
-				if (received.status === 304 && cached === undefined)
-					return yield* new DiscoveryError({
-						reason: "Http",
-						issues: [
-							{
-								url,
-								reason: "304 without a validated cached copy",
-							},
-						],
-					})
 				const response =
-					received.status === 304 && cached !== undefined
-						? {
-								...cached.response,
-								headers: {
-									...cached.response.headers,
-									...received.headers,
-								},
-							}
+					received.status === 304
+						? yield* Option.match(cached, {
+								onNone: () =>
+									Effect.fail(
+										new DiscoveryError({
+											reason: "Http",
+											issues: [
+												{
+													url,
+													reason: "304 without a validated cached copy",
+												},
+											],
+										}),
+									),
+								onSome: (entry) =>
+									Effect.succeed<Network.DocumentResponse>({
+										...entry.response,
+										headers: {
+											...entry.response.headers,
+											...received.headers,
+										},
+									}),
+							})
 						: received
 				if (response.status !== 200)
 					return yield* new DiscoveryError({
@@ -414,18 +420,11 @@ export const layer = (options: Options = {}) =>
 								Number(maxAge) - Number(response.headers["age"] ?? "0"),
 							) *
 								1000
-				yield* Ref.update(cache, (old) => {
-					let updated = old
-					if (control.includes("no-store"))
-						updated = HashMap.remove(updated, key)
-					else
-						updated = HashMap.set(updated, key, {
-							response,
-							parsed,
-							freshUntil,
-						})
-					return updated
-				})
+				yield* Ref.update(cache, (old) =>
+					control.includes("no-store")
+						? HashMap.remove(old, key)
+						: HashMap.set(old, key, { response, parsed, freshUntil }),
+				)
 				return { response, parsed }
 			})
 			const makeCandidate = Effect.fn("Discovery.makeCandidate")(
@@ -575,15 +574,16 @@ export const layer = (options: Options = {}) =>
 												]),
 									]
 									for (const target of urls) {
-										const result = yield* Effect.result(visit(target, chain))
-										Match.value(result).pipe(
-											Match.tag("Failure", ({ failure }) => {
-												issues = EffectArray.append(issues, {
-													url: target,
-													reason: String(failure),
-												})
-											}),
-											Match.orElse(() => undefined),
+										// One broken link is an issue of the result. It does not stop the other links.
+										yield* visit(target, chain).pipe(
+											Effect.catch((failure) =>
+												Effect.sync(() => {
+													issues = EffectArray.append(issues, {
+														url: target,
+														reason: String(failure),
+													})
+												}),
+											),
 										)
 									}
 								}),
@@ -660,61 +660,53 @@ const requirement = (
 	choices: input.choices,
 })
 
-export const requirements = (
-	remote: Document.Remote,
-): ReadonlyArray<ConfigurationRequirement> => {
-	let result: ReadonlyArray<ConfigurationRequirement> = []
-	for (const [name, input] of Object.entries(remote.variables ?? {})) {
-		if (
-			(input.isRequired === true ||
-				referencedVariables(remote.url).includes(name)) &&
+/** A variable needs a value from the user when nothing in the Card gives one. */
+const variableRequirements = (options: {
+	readonly prefix: string
+	readonly template: string
+	readonly variables: Readonly<Record<string, Document.Input>> | undefined
+	readonly isSecret: boolean
+}): ReadonlyArray<ConfigurationRequirement> => {
+	const referenced = referencedVariables(options.template)
+	const declared = Object.entries(options.variables ?? {}).flatMap(
+		([name, input]) =>
+			(input.isRequired === true || referenced.includes(name)) &&
 			input.value === undefined &&
 			input.default === undefined
-		)
-			result = EffectArray.append(
-				result,
-				requirement(`variable:${name}`, input),
-			)
-	}
-	for (const name of referencedVariables(remote.url)) {
-		if (remote.variables?.[name] === undefined)
-			result = EffectArray.append(result, {
-				key: `variable:${name}`,
-				isSecret: false,
-			})
-	}
-	for (const header of remote.headers ?? []) {
-		if (
-			header.isRequired === true &&
-			header.value === undefined &&
-			header.default === undefined
-		)
-			result = EffectArray.append(
-				result,
-				requirement(`header:${header.name}`, header),
-			)
-		for (const [name, input] of Object.entries(header.variables ?? {})) {
-			if (
-				(input.isRequired === true ||
-					referencedVariables(header.value ?? "").includes(name)) &&
-				input.value === undefined &&
-				input.default === undefined
-			)
-				result = EffectArray.append(
-					result,
-					requirement(`header:${header.name}:variable:${name}`, input),
-				)
-		}
-		for (const name of referencedVariables(header.value ?? "")) {
-			if (header.variables?.[name] === undefined)
-				result = EffectArray.append(result, {
-					key: `header:${header.name}:variable:${name}`,
-					isSecret: header.isSecret === true,
-				})
-		}
-	}
-	return result
+				? [requirement(`${options.prefix}${name}`, input)]
+				: [],
+	)
+	const undeclared = referenced.flatMap((name) =>
+		options.variables?.[name] === undefined
+			? [{ key: `${options.prefix}${name}`, isSecret: options.isSecret }]
+			: [],
+	)
+	return [...declared, ...undeclared]
 }
+
+export const requirements = (
+	remote: Document.Remote,
+): ReadonlyArray<ConfigurationRequirement> => [
+	...variableRequirements({
+		prefix: "variable:",
+		template: remote.url,
+		variables: remote.variables,
+		isSecret: false,
+	}),
+	...(remote.headers ?? []).flatMap((header) => [
+		...(header.isRequired === true &&
+		header.value === undefined &&
+		header.default === undefined
+			? [requirement(`header:${header.name}`, header)]
+			: []),
+		...variableRequirements({
+			prefix: `header:${header.name}:variable:`,
+			template: header.value ?? "",
+			variables: header.variables,
+			isSecret: header.isSecret === true,
+		}),
+	]),
+]
 
 export const layerRules = Layer.succeed(Rules, {
 	compare,

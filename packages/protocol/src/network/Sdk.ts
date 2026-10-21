@@ -4,7 +4,14 @@ import {
 	type FetchLike,
 	type JSONRPCMessage,
 } from "@modelcontextprotocol/client"
-import { Cause, Effect, Exit, Scope, Stream, Match, Predicate } from "effect"
+import {
+	Effect,
+	Exit,
+	Predicate,
+	Record as RecordUtils,
+	Scope,
+	Stream,
+} from "effect"
 import { HttpClientRequest } from "effect/http"
 import * as Network from "./Network.ts"
 
@@ -26,6 +33,13 @@ export class HttpTransport extends StreamableHTTPClientTransport {
 	}
 }
 
+/** The reply body holds decoded bytes, so it must not report the compressed encoding or length. */
+const decodedHeaders = (headers: Readonly<Record<string, string>>) =>
+	RecordUtils.remove(
+		RecordUtils.remove(headers, "content-encoding"),
+		"content-length",
+	)
+
 /** Promise conversion happens only in callbacks that the external SDK calls. */
 export const fetch = Effect.fn("Sdk.fetch")(function* (
 	options: { readonly documents?: boolean } = {},
@@ -33,14 +47,16 @@ export const fetch = Effect.fn("Sdk.fetch")(function* (
 	const network = yield* Network.Network
 	const ownerScope = yield* Effect.scope
 	const context = yield* Effect.context<Scope.Scope>()
-	const run = Effect.runPromiseExitWith(context)
-	const callback: FetchLike = async (input, init) => {
+	// A failed Effect rejects the Promise, which is how a fetch callback reports an error.
+	const run = Effect.runPromiseWith(context)
+	const fork = Effect.runForkWith(context)
+	const callback: FetchLike = (input, init) => {
 		const request = new Request(input, init)
-		const exit = await run(
+		return run(
 			Effect.gen(function* () {
 				const scope = yield* Scope.fork(ownerScope)
 				const close = () => {
-					void run(Scope.close(scope, Exit.void))
+					fork(Scope.close(scope, Exit.void))
 				}
 				request.signal.addEventListener("abort", close, { once: true })
 				yield* Scope.addFinalizer(
@@ -86,24 +102,16 @@ export const fetch = Effect.fn("Sdk.fetch")(function* (
 							headers: Object.fromEntries(request.headers),
 						})
 						yield* Scope.close(scope, Exit.void)
-						const headers = {
-							...reply.headers,
-						}
-						delete headers["content-encoding"]
-						delete headers["content-length"]
 						return new Response(
 							[204, 205, 304].includes(reply.status) ? null : reply.text,
 							{
 								status: reply.status,
-								headers,
+								headers: decodedHeaders(reply.headers),
 							},
 						)
 					}
 					const reply = yield* network.execute(outgoing)
-					const headers = { ...reply.headers }
-					// execute gives decoded bytes, so fetch must not report the compressed length.
-					delete headers["content-encoding"]
-					delete headers["content-length"]
+					const headers = decodedHeaders(reply.headers)
 					if (
 						request.method === "HEAD" ||
 						[204, 205, 304].includes(reply.status)
@@ -149,25 +157,10 @@ export const fetch = Effect.fn("Sdk.fetch")(function* (
 									}),
 								)
 							: effect,
-					Effect.onExit((exit) =>
-						Match.value(exit).pipe(
-							Match.tagsExhaustive({
-								Failure: (exit) => Scope.close(scope, exit),
-								Success: () => Effect.void,
-							}),
-						),
-					),
+					Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
 				)
 			}),
 			{ signal: request.signal },
-		)
-		return Match.value(exit).pipe(
-			Match.tagsExhaustive({
-				Failure: (exit) => {
-					throw Cause.squash(exit.cause)
-				},
-				Success: (exit) => exit.value,
-			}),
 		)
 	}
 	return callback

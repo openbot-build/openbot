@@ -96,25 +96,27 @@ export const makeInspection: Effect.Effect<
 		robots: boolean,
 	) {
 		const now = yield* Clock.currentTimeMillis
-		const cached = Option.getOrUndefined(
-			HashMap.get(yield* Ref.get(cache), url),
+		const cached = HashMap.get(yield* Ref.get(cache), url)
+		const fresh = Option.filter(
+			cached,
+			(entry) => robots && entry.freshUntil > now,
 		)
-		if (robots && cached !== undefined && cached.freshUntil > now)
-			return cached.response
+		if (Option.isSome(fresh)) return fresh.value.response
 		const reply = yield* network.readDocument({
 			url,
 			followRedirects: false,
-			...(cached === undefined
-				? {}
-				: {
-						validators: Record.filter(
-							{
-								etag: cached.response.headers["etag"],
-								lastModified: cached.response.headers["last-modified"],
-							},
-							Predicate.isNotUndefined,
-						),
-					}),
+			...Option.match(cached, {
+				onNone: () => ({}),
+				onSome: (entry) => ({
+					validators: Record.filter(
+						{
+							etag: entry.response.headers["etag"],
+							lastModified: entry.response.headers["last-modified"],
+						},
+						Predicate.isNotUndefined,
+					),
+				}),
+			}),
 		})
 		if (reply.url !== url)
 			return yield* documentError(
@@ -122,41 +124,40 @@ export const makeInspection: Effect.Effect<
 				"Redirect",
 				"Public adapter followed a redirect before robots could be checked",
 			)
-		let response = reply
-		if (reply.status === 304) {
-			if (cached === undefined)
-				return yield* documentError(
-					url,
-					"InvalidDocument",
-					"304 has no validated anonymous cached copy",
-				)
-			response = {
-				...cached.response,
-				headers: {
-					...cached.response.headers,
-					...reply.headers,
-				},
-			}
-		}
+		if (reply.status !== 304) return reply
 		// The consumer below caches only responses that it parsed successfully.
-		return response
+		return yield* Option.match(cached, {
+			onNone: () =>
+				Effect.fail(
+					documentError(
+						url,
+						"InvalidDocument",
+						"304 has no validated anonymous cached copy",
+					),
+				),
+			onSome: (entry) =>
+				Effect.succeed<Network.DocumentResponse>({
+					...entry.response,
+					headers: {
+						...entry.response.headers,
+						...reply.headers,
+					},
+				}),
+		})
 	})
 	const remember = Effect.fn("Indexing.remember")(function* (
 		response: Network.DocumentResponse,
 		robots: boolean,
 	) {
 		const now = yield* Clock.currentTimeMillis
-		yield* Ref.update(cache, (entries) => {
-			let next = entries
-			if (/\bno-store\b/i.test(response.headers["cache-control"] ?? ""))
-				next = HashMap.remove(next, response.url)
-			else
-				next = HashMap.set(next, response.url, {
-					response,
-					freshUntil: cacheExpiry(response, now, robots),
-				})
-			return next
-		})
+		yield* Ref.update(cache, (entries) =>
+			/\bno-store\b/i.test(response.headers["cache-control"] ?? "")
+				? HashMap.remove(entries, response.url)
+				: HashMap.set(entries, response.url, {
+						response,
+						freshUntil: cacheExpiry(response, now, robots),
+					}),
+		)
 	})
 	const robots = Effect.fn("Indexing.robots")(function* (target: string) {
 		const original = new URL("/robots.txt", target).href
@@ -276,9 +277,8 @@ export const makeInspection: Effect.Effect<
 	})
 	return PublicationInspection.of({
 		inspect: Effect.fn("PublicationInspection.inspect")(
-			function* (value, prior) {
+			function* (value, previous) {
 				const input = yield* Input.decode(value)
-				const previous = Option.fromNullishOr(prior)
 				const stageNames: ReadonlyArray<InspectionStage["name"]> = [
 					"CardRead",
 					"CardSchema",
@@ -286,13 +286,11 @@ export const makeInspection: Effect.Effect<
 					"PublisherAssociation",
 					"Eligibility",
 				]
-				let stages: ReadonlyArray<InspectionStage> = stageNames.map((name) =>
-					Schema.decodeSync(InspectionStage)({
-						name,
-						source: input.cardUrl,
-						status: "NotChecked",
-					}),
-				)
+				let stages: ReadonlyArray<InspectionStage> = stageNames.map((name) => ({
+					name,
+					source: input.cardUrl,
+					status: "NotChecked",
+				}))
 				const stage = (
 					name: InspectionStage["name"],
 					status: InspectionStage["status"],
@@ -387,11 +385,12 @@ export const makeInspection: Effect.Effect<
 						| Document.InvalidDocument
 						| Document.IncompatibleCard
 					> = []
-					if (card.websiteUrl !== undefined) {
+					const websiteUrl = card.websiteUrl
+					if (websiteUrl !== undefined) {
 						const website = yield* Effect.result(
 							Effect.gen(function* () {
 								const url = yield* Schema.decodeEffect(Document.Link)(
-									card.websiteUrl!,
+									websiteUrl,
 								)
 								const page = yield* read(url)
 								if (page.status !== 200)
@@ -430,18 +429,15 @@ export const makeInspection: Effect.Effect<
 							}),
 						)
 					}
-					let withdrawn = Match.value(previous).pipe(
-						Match.tag("Some", ({ value }) =>
-							value.evidence.every(
-								(item) =>
-									!probes.some(
-										(probe) =>
-											probe.catalogUrl === item.catalogUrl &&
-											probe.association === item.association,
-									),
-							),
+					let withdrawn = Option.exists(previous, (value) =>
+						value.evidence.every(
+							(item) =>
+								!probes.some(
+									(probe) =>
+										probe.catalogUrl === item.catalogUrl &&
+										probe.association === item.association,
+								),
 						),
-						Match.orElse(() => false),
 					)
 					for (const probe of probes) {
 						const checked = yield* Effect.result(
@@ -463,33 +459,29 @@ export const makeInspection: Effect.Effect<
 													cardUrl: input.cardUrl,
 												}),
 											)
-										else
-											Match.value(previous).pipe(
-												Match.tag("Some", ({ value }) => {
-													if (
-														value.evidence.some(
-															(item) => item.catalogUrl === probe.catalogUrl,
-														)
-													) {
-														if (success.declared) withdrawn = true
-														else
-															failures = EffectArray.append(
-																failures,
-																documentError(
-																	probe.catalogUrl,
-																	"Unavailable",
-																	"Previously verified publisher Catalog is no longer available",
-																),
-															)
-													}
-												}),
-												Match.orElse(() => undefined),
+										else if (
+											Option.exists(previous, (value) =>
+												value.evidence.some(
+													(item) => item.catalogUrl === probe.catalogUrl,
+												),
 											)
+										) {
+											if (success.declared) withdrawn = true
+											else
+												failures = EffectArray.append(
+													failures,
+													documentError(
+														probe.catalogUrl,
+														"Unavailable",
+														"Previously verified publisher Catalog is no longer available",
+													),
+												)
+										}
 									}),
 							}),
 						)
 					}
-					if (evidence.length === 0) {
+					if (!EffectArray.isReadonlyArrayNonEmpty(evidence)) {
 						if (withdrawn) return yield* exclude("DeclarationWithdrawn", true)
 						const failure = failures[0]
 						if (failure !== undefined) return yield* failure
@@ -498,7 +490,7 @@ export const makeInspection: Effect.Effect<
 					yield* stage(
 						"PublisherAssociation",
 						"Passed",
-						evidence[0]!.catalogUrl,
+						EffectArray.headNonEmpty(evidence).catalogUrl,
 					)
 					const entry = yield* Index.Entry.decode({
 						cardUrl: input.cardUrl,
@@ -573,10 +565,7 @@ export const layer = Layer.effect(
 		return Indexing.of({
 			sync: Effect.fn("Indexing.sync")(function* (input) {
 				const previous = yield* index.get(input.cardUrl)
-				const result = yield* inspection.inspect(
-					input,
-					Option.getOrUndefined(previous),
-				)
+				const result = yield* inspection.inspect(input, previous)
 				return yield* Match.value(result).pipe(
 					Match.tagsExhaustive({
 						Eligible: ({ entry }) =>

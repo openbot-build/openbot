@@ -10,7 +10,7 @@ import {
 	type McpUiUpdateModelContextRequest,
 } from "@modelcontextprotocol/ext-apps/app-bridge"
 import { type CallToolResult } from "@modelcontextprotocol/client"
-import { Context, Data, Effect, Schema } from "effect"
+import { Context, Data, Effect, type Option, Schema } from "effect"
 import type * as Store from "../connections/Store.ts"
 import * as Ui from "./Ui.ts"
 
@@ -71,7 +71,7 @@ export type State = typeof State.Type
 export interface Session {
 	readonly state: Effect.Effect<State>
 	readonly ready: Effect.Effect<void, Ui.UiError>
-	readonly result: Effect.Effect<CallToolResult | undefined>
+	readonly result: Effect.Effect<Option.Option<CallToolResult>>
 	readonly inputPartial: (
 		args: Schema.JsonObject,
 	) => Effect.Effect<void, Ui.UiError>

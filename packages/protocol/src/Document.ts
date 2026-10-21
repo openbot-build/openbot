@@ -15,6 +15,10 @@ export class InvalidDocument extends Data.TaggedError("InvalidDocument")<{
 	readonly kind: "Card" | "Catalog" | "Publication"
 	readonly issue: string
 }> {}
+const invalid =
+	(kind: InvalidDocument["kind"]) => (error: Schema.SchemaError) =>
+		new InvalidDocument({ kind, issue: error.message })
+
 export class IncompatibleCard extends Data.TaggedError("IncompatibleCard")<{
 	readonly reason: string
 }> {}
@@ -136,13 +140,7 @@ export class Input extends Schema.Opaque<Input>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Input)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new InvalidDocument({
-						kind: "Card",
-						issue: error.message,
-					}),
-			),
+			Effect.mapError(invalid("Card")),
 		)
 }
 export class HeaderInput extends Schema.Opaque<HeaderInput>()(
@@ -159,13 +157,7 @@ export class HeaderInput extends Schema.Opaque<HeaderInput>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(HeaderInput)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new InvalidDocument({
-						kind: "Card",
-						issue: error.message,
-					}),
-			),
+			Effect.mapError(invalid("Card")),
 		)
 }
 export class Remote extends Schema.Opaque<Remote>()(
@@ -186,13 +178,7 @@ export class Remote extends Schema.Opaque<Remote>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Remote)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new InvalidDocument({
-						kind: "Card",
-						issue: error.message,
-					}),
-			),
+			Effect.mapError(invalid("Card")),
 		)
 }
 export class ServerCard extends Schema.Opaque<ServerCard>()(
@@ -239,13 +225,7 @@ export class ServerCard extends Schema.Opaque<ServerCard>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(ServerCard)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new InvalidDocument({
-						kind: "Card",
-						issue: error.message,
-					}),
-			),
+			Effect.mapError(invalid("Card")),
 		)
 }
 
@@ -278,13 +258,7 @@ export class CatalogEntry extends Schema.Opaque<CatalogEntry>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(CatalogEntry)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new InvalidDocument({
-						kind: "Catalog",
-						issue: error.message,
-					}),
-			),
+			Effect.mapError(invalid("Catalog")),
 		)
 }
 export class Catalog extends Schema.Opaque<Catalog>()(
@@ -311,13 +285,7 @@ export class Catalog extends Schema.Opaque<Catalog>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Catalog)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new InvalidDocument({
-						kind: "Catalog",
-						issue: error.message,
-					}),
-			),
+			Effect.mapError(invalid("Catalog")),
 		)
 }
 

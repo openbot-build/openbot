@@ -3,12 +3,14 @@ import {
 	type JSONRPCMessage,
 	type Transport,
 } from "@modelcontextprotocol/client"
+import { Option } from "effect"
 
-export const decodeMessage = async (
+/** The SDK schema is synchronous, so a message is checked at once. */
+export const decodeMessage = (
 	value: unknown,
-): Promise<JSONRPCMessage | undefined> => {
+): Option.Option<JSONRPCMessage> => {
 	const parsed = specTypeSchemas.JSONRPCMessage["~standard"].validate(value)
-	return parsed.issues === undefined ? parsed.value : undefined
+	return parsed.issues === undefined ? Option.some(parsed.value) : Option.none()
 }
 
 /** The host-side transport has an exact target origin, source Window and instance lifetime. */
@@ -17,37 +19,36 @@ export class FrameTransport implements Transport {
 	public onerror?: (error: Error) => void
 	public onmessage?: Transport["onmessage"]
 	private closed = false
-	private listener: ((event: MessageEvent) => void) | undefined
+	private readonly listener = (event: MessageEvent) => {
+		if (
+			this.closed ||
+			!event.isTrusted ||
+			event.source !== this.peer ||
+			event.origin !== this.origin
+		)
+			return
+		// The frame is not trusted, so the host drops a message that is not JSON-RPC.
+		Option.match(decodeMessage(event.data), {
+			onNone: () => undefined,
+			onSome: (message) => this.onmessage?.(message),
+		})
+	}
 	public constructor(
 		private readonly peer: Window,
 		private readonly origin: string,
 	) {}
 	public async start(): Promise<void> {
-		this.listener = (event) => {
-			if (
-				this.closed ||
-				!event.isTrusted ||
-				event.source !== this.peer ||
-				event.origin !== this.origin
-			)
-				return
-			void decodeMessage(event.data)
-				.then((message) => {
-					if (!this.closed && message !== undefined) this.onmessage?.(message)
-				})
-				.catch(() => this.onerror?.(new Error("Invalid Apps message")))
-		}
 		window.addEventListener("message", this.listener)
 	}
 	public async send(message: JSONRPCMessage): Promise<void> {
+		// The SDK Transport contract reports a failed send as a rejected Promise.
 		if (this.closed) throw new Error("Apps transport closed")
 		this.peer.postMessage(message, this.origin)
 	}
 	public async close(): Promise<void> {
 		if (this.closed) return
 		this.closed = true
-		if (this.listener !== undefined)
-			window.removeEventListener("message", this.listener)
+		window.removeEventListener("message", this.listener)
 		this.onclose?.()
 	}
 }
