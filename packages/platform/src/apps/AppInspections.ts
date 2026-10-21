@@ -90,6 +90,7 @@ export const make: Effect.Effect<
 														cardUrl: candidate.cardUrl,
 														sources: candidate.sources,
 													}),
+													Option.none(),
 												)
 												.pipe(
 													Effect.catchTag("IndexingError", (error) =>

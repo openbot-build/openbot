@@ -11,7 +11,7 @@ import {
 	Scope,
 	Semaphore,
 	Match,
-	type Option,
+	Option,
 } from "effect"
 import {
 	AppBridge,
@@ -33,6 +33,13 @@ import {
 	type Source,
 	type Session,
 } from "./Apps.ts"
+
+const allContentTypes = {
+	text: {},
+	image: {},
+	audio: {},
+	resource: {},
+}
 
 const sdk = <A>(call: () => Promise<A>) =>
 	Effect.tryPromise({
@@ -73,14 +80,14 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 	const run = Effect.runPromiseExitWith(context)
 	const source: Source = { key: options.client.key, tool: options.tool }
 	const state = yield* Ref.make<State>({ _tag: "Loading" })
-	const result = yield* Ref.make<CallToolResult | undefined>(options.result)
+	const result = yield* Ref.make(Option.fromUndefinedOr(options.result))
 	const lock = Semaphore.makeUnsafe(1)
 	let scope: Scope.Closeable | undefined
 	let bridge: AppBridge | undefined
 	let ready = Deferred.makeUnsafe<void, Ui.UiError>()
 	let args = options.arguments
 	let partials: ReadonlyArray<Schema.JsonObject> = []
-	let cancellation: string | undefined
+	let cancellation = Option.none<string>()
 	let inputSent = false
 	let resultSent = false
 	let cancellationSent = false
@@ -131,12 +138,12 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 							inputSent = true
 						}
 						const completed = yield* Ref.get(result)
-						if (completed !== undefined && inputSent && !resultSent) {
-							yield* sdk(() => current.sendToolResult(completed))
+						if (Option.isSome(completed) && inputSent && !resultSent) {
+							yield* sdk(() => current.sendToolResult(completed.value))
 							resultSent = true
 						}
-						if (cancellation !== undefined && !cancellationSent) {
-							const reason = cancellation
+						if (Option.isSome(cancellation) && !cancellationSent) {
+							const reason = cancellation.value
 							yield* sdk(() => current.sendToolCancelled({ reason }))
 							cancellationSent = true
 						}
@@ -146,6 +153,8 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 			)
 		}),
 	)
+	// AppBridge handlers must return a Promise. A rejected Promise is how the SDK
+	// sends an error reply to the App, so this boundary throws a plain Error.
 	const invoke = async <A, E>(
 		effect: Effect.Effect<A, E>,
 		signal?: AbortSignal,
@@ -176,24 +185,20 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 			}),
 			signal === undefined ? undefined : { signal },
 		)
-		return Match.value(exit).pipe(
-			Match.tagsExhaustive({
-				Failure: (exit) => {
-					// Standard UI errors never include credential details or internal network failures.
-					const error = Cause.findErrorOption(exit.cause)
-					throw new Error(
-						Match.value<Option.Option<unknown>>(error).pipe(
-							Match.when(
-								{ _tag: "Some", value: Match.instanceOf(HostActionDenied) },
-								({ value }) => value.action,
-							),
-							Match.orElse(() => "Host rejected the UI request" as const),
-						),
-					)
-				},
-				Success: (exit) => ({ value: exit.value }),
-			}),
-		).value
+		if (Exit.isSuccess(exit)) return exit.value
+		// Standard UI errors never include credential details or internal network failures.
+		throw new Error(
+			Cause.findErrorOption(exit.cause).pipe(
+				Option.filter(
+					(error): error is HostActionDenied =>
+						error instanceof HostActionDenied,
+				),
+				Option.match({
+					onNone: () => "Host rejected the UI request",
+					onSome: (denied) => denied.action,
+				}),
+			),
+		)
 	}
 	const start = Effect.fn("Apps.load")(function* () {
 		if (disposed)
@@ -272,23 +277,13 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 				...(actions.message === undefined
 					? {}
 					: {
-							message: actions.contentTypes ?? {
-								text: {},
-								image: {},
-								audio: {},
-								resource: {},
-							},
+							message: actions.contentTypes ?? allContentTypes,
 						}),
 				...(actions.openLink === undefined ? {} : { openLinks: {} }),
 				...(actions.updateModelContext === undefined
 					? {}
 					: {
-							updateModelContext: actions.contentTypes ?? {
-								text: {},
-								image: {},
-								audio: {},
-								resource: {},
-							},
+							updateModelContext: actions.contentTypes ?? allContentTypes,
 						}),
 			},
 			{ hostContext },
@@ -352,7 +347,8 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 		if (actions.size !== undefined) {
 			const action = actions.size
 			current.onsizechange = (params) => {
-				void invoke(action(source, params)).catch(() => {})
+				// A size change is a notification. It has no reply, so a denied action has no one to tell.
+				void invoke(action(source, params)).catch(() => undefined)
 			}
 		}
 		current.onrequestteardown = () => {
@@ -395,15 +391,16 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 		yield* Scope.addFinalizer(
 			uiScope,
 			Effect.gen(function* () {
+				// Teardown is best effort. The frame is removed below even when the App does not answer.
 				yield* Match.value(yield* Ref.get(state)).pipe(
 					Match.tag("Ready", () =>
 						sdk(() => current.teardownResource({}, { timeout: 1000 })).pipe(
-							Effect.ignore,
+							Effect.ignore({ log: "Debug" }),
 						),
 					),
 					Match.orElse(() => Effect.void),
 				)
-				yield* sdk(() => current.close()).pipe(Effect.ignore)
+				yield* sdk(() => current.close()).pipe(Effect.ignore({ log: "Debug" }))
 				frame.removeEventListener("load", navigated)
 				frame.remove()
 				if (id === generation)
@@ -490,10 +487,11 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 			Effect.sync(() => {
 				args = value
 			}).pipe(Effect.andThen(flush)),
-		toolResult: (value) => Ref.set(result, value).pipe(Effect.andThen(flush)),
+		toolResult: (value) =>
+			Ref.set(result, Option.some(value)).pipe(Effect.andThen(flush)),
 		cancel: (reason) =>
 			Effect.sync(() => {
-				cancellation = reason
+				cancellation = Option.some(reason)
 			}).pipe(
 				Effect.andThen(
 					Effect.forEach(pendingActions, (interrupt) => interrupt, {

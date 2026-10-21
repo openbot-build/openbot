@@ -1,7 +1,9 @@
 import {
+	Array as EffectArray,
 	Effect,
 	Exit,
 	Layer,
+	Option,
 	Schema,
 	Scope,
 	Stream,
@@ -62,13 +64,21 @@ export const isPublicAddress = (input: string): boolean => {
 	)
 }
 
-const layerNetwork = (options: PublicOptions | UserOptions, user: boolean) => {
-	const allow = (address: string, hostname: string) =>
-		user && Predicate.hasProperty(options, "allowAddress")
-			? options.allowAddress(address, hostname)
-			: isPublicAddress(address)
+/** The rules that differ between the public network and a user network. */
+interface Guard {
+	readonly identity: typeof Network.Network.Service.identity
+	readonly allowAddress: (address: string, hostname: string) => boolean
+	/** None means that every public origin is allowed. */
+	readonly allowedOrigins: Option.Option<ReadonlyArray<string>>
+}
+
+const layerNetwork = (options: PublicOptions, guard: Guard) => {
+	const allow = guard.allowAddress
+	const resolver = options.lookup ?? lookup
+	const maxRedirects = options.maxRedirects ?? 5
+	const maxBytes = options.maxBytes ?? 1024 * 1024
+	const timeoutMs = options.timeoutMs ?? 10_000
 	const guardedLookup: LookupFunction = (hostname, requested, callback) => {
-		const resolver = options.lookup ?? lookup
 		resolver(
 			hostname,
 			{
@@ -83,7 +93,7 @@ const layerNetwork = (options: PublicOptions | UserOptions, user: boolean) => {
 					return
 				}
 				if (
-					addresses.length === 0 ||
+					!EffectArray.isReadonlyArrayNonEmpty(addresses) ||
 					addresses.some((a) => !allow(a.address, hostname))
 				) {
 					callback(
@@ -100,8 +110,8 @@ const layerNetwork = (options: PublicOptions | UserOptions, user: boolean) => {
 					callback(null, addresses)
 					return
 				}
-				const first = addresses[0]
-				if (first !== undefined) callback(null, first.address, first.family)
+				const first = EffectArray.headNonEmpty(addresses)
+				callback(null, first.address, first.family)
 			},
 		)
 	}
@@ -125,9 +135,10 @@ const layerNetwork = (options: PublicOptions | UserOptions, user: boolean) => {
 				const normalized = yield* Schema.decodeEffect(Document.Link)(input)
 				const url = new URL(normalized)
 				if (
-					user &&
-					Predicate.hasProperty(options, "allowedOrigins") &&
-					!options.allowedOrigins.includes(url.origin)
+					Option.exists(
+						guard.allowedOrigins,
+						(origins) => !origins.includes(url.origin),
+					)
 				) {
 					return yield* new Network.NetworkError({
 						reason: "BlockedTarget",
@@ -192,7 +203,7 @@ const layerNetwork = (options: PublicOptions | UserOptions, user: boolean) => {
 							location !== undefined
 						) {
 							yield* Scope.close(hopScope, Exit.void)
-							if (hop >= (options.maxRedirects ?? 5))
+							if (hop >= maxRedirects)
 								return yield* new Network.NetworkError({
 									reason: "Redirect",
 									message: "Redirect limit exceeded",
@@ -299,7 +310,7 @@ const layerNetwork = (options: PublicOptions | UserOptions, user: boolean) => {
 					)
 					const text = yield* HttpNetwork.readBounded({
 						reply,
-						maxBytes: options.maxBytes ?? 1024 * 1024,
+						maxBytes,
 					})
 					return {
 						url: reply.url,
@@ -310,7 +321,7 @@ const layerNetwork = (options: PublicOptions | UserOptions, user: boolean) => {
 				},
 				Effect.scoped,
 				Effect.timeoutOrElse({
-					duration: options.timeoutMs ?? 10_000,
+					duration: timeoutMs,
 					orElse: () =>
 						Effect.fail(
 							new Network.NetworkError({
@@ -321,12 +332,7 @@ const layerNetwork = (options: PublicOptions | UserOptions, user: boolean) => {
 				}),
 			)
 			return Network.Network.of({
-				identity: {
-					scope: user ? "user" : "public",
-					owner: Predicate.hasProperty(options, "owner")
-						? options.owner
-						: "anonymous",
-				},
+				identity: guard.identity,
 				execute,
 				readDocument,
 			})
@@ -335,32 +341,41 @@ const layerNetwork = (options: PublicOptions | UserOptions, user: boolean) => {
 }
 
 export const layerUserNetwork = (options: UserOptions) =>
-	layerNetwork(options, true)
+	layerNetwork(options, {
+		identity: { scope: "user", owner: options.owner },
+		allowAddress: options.allowAddress,
+		allowedOrigins: Option.some(options.allowedOrigins),
+	})
 export const layerPublicNetwork = (options: PublicOptions = {}) => {
-	const network = layerNetwork(options, false)
+	const network = layerNetwork(options, {
+		identity: { scope: "public", owner: "anonymous" },
+		allowAddress: isPublicAddress,
+		allowedOrigins: Option.none(),
+	})
 	const anonymous = Layer.effect(
 		Network.PublicNetwork,
 		Effect.gen(function* () {
 			const net = yield* Network.Network
 			return Network.PublicNetwork.of({
-				readDocument: (input) => {
-					const headers: Record<string, string> = {
-						"user-agent": `${Network.publicProductToken}/0.1 public catalog crawler`,
-						accept: `${Document.cardMediaType}, ${Document.catalogMediaType}, text/html, text/plain`,
-					}
-					if (input.validators?.etag !== undefined)
-						headers["if-none-match"] = input.validators.etag
-					if (input.validators?.lastModified !== undefined)
-						headers["if-modified-since"] = input.validators.lastModified
-					return net.readDocument({
+				readDocument: (input) =>
+					net.readDocument({
 						url: input.url,
-						headers,
+						headers: {
+							"user-agent": `${Network.publicProductToken}/0.1 public catalog crawler`,
+							accept: `${Document.cardMediaType}, ${Document.catalogMediaType}, text/html, text/plain`,
+							...RecordUtils.filter(
+								{
+									"if-none-match": input.validators?.etag,
+									"if-modified-since": input.validators?.lastModified,
+								},
+								Predicate.isNotUndefined,
+							),
+						},
 						...RecordUtils.filter(
 							{ followRedirects: input.followRedirects },
 							Predicate.isNotUndefined,
 						),
-					})
-				},
+					}),
 			})
 		}),
 	)

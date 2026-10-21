@@ -1,8 +1,9 @@
 import {
 	Clock,
-	Context,
 	Effect,
+	Option,
 	Redacted,
+	Result,
 	Schema,
 	Stream,
 	Match,
@@ -34,15 +35,14 @@ const identities = new WeakMap<HttpServerRequest.HttpServerRequest, Identity>()
 /** Use this only during an invocation. The key is the real HTTP request that Effect MCP keeps. */
 export const currentIdentity = Effect.gen(function* () {
 	yield* McpSchema.McpRequestContext
-	const context = yield* Effect.context<never>()
-	const request = Context.getOrUndefined(
-		context,
+	const request = yield* Effect.serviceOption(
 		HttpServerRequest.HttpServerRequest,
 	)
-	const identity = request === undefined ? undefined : identities.get(request)
-	if (identity === undefined)
-		return yield* new TokenRejected({ reason: "Missing" })
-	return identity
+	return yield* Effect.fromOption(
+		Option.flatMap(request, (request) =>
+			Option.fromUndefinedOr(identities.get(request)),
+		),
+	).pipe(Effect.mapError(() => new TokenRejected({ reason: "Missing" })))
 })
 
 const Request = Schema.Struct({
@@ -97,9 +97,11 @@ const filterResponse = (
 		const transform = (data: string) =>
 			Effect.gen(function* () {
 				const message = yield* Schema.decodeEffect(Json)(data)
-				const rawResult = message["result"]
-				if (!Schema.is(Schema.JsonObject)(rawResult)) return data
-				const result = yield* Schema.decodeEffect(Schema.JsonObject)(rawResult)
+				const decoded = Schema.decodeUnknownOption(Schema.JsonObject)(
+					message["result"],
+				)
+				if (Option.isNone(decoded)) return data
+				const result = decoded.value
 				const entries = result[fields[0]]
 				if (!ArrayUtils.isArray(entries)) return data
 				const visible = yield* Effect.filter(entries, (entry) => {
@@ -181,6 +183,9 @@ export const middleware = (options: Options) =>
 			// Both capabilities are required when the protected layer is built.
 			const verifier = yield* TokenVerifier
 			const policy = yield* AccessPolicy
+			const resource = new URL(options.resource)
+			const allowedOrigins = options.allowedOrigins ?? []
+			const scopes = options.scopes ?? []
 			return (
 				http: Effect.Effect<
 					HttpServerResponse.HttpServerResponse,
@@ -189,16 +194,12 @@ export const middleware = (options: Options) =>
 			) =>
 				Effect.gen(function* () {
 					const request = yield* HttpServerRequest.HttpServerRequest
-					const url = new URL(request.originalUrl, options.resource)
-					if (url.pathname !== new URL(options.resource).pathname)
-						return yield* http
-					if (url.search !== new URL(options.resource).search)
+					const url = new URL(request.originalUrl, resource)
+					if (url.pathname !== resource.pathname) return yield* http
+					if (url.search !== resource.search)
 						return HttpServerResponse.empty({ status: 404 })
 					const origin = request.headers["origin"]
-					if (
-						origin !== undefined &&
-						!(options.allowedOrigins ?? []).includes(origin)
-					)
+					if (origin !== undefined && !allowedOrigins.includes(origin))
 						return HttpServerResponse.empty({ status: 403 })
 					const match = /^Bearer ([^\s,]+)$/i.exec(
 						request.headers["authorization"] ?? "",
@@ -210,99 +211,64 @@ export const middleware = (options: Options) =>
 							.verify(Redacted.make(match[1]))
 							.pipe(Effect.flatMap(Identity.decode)),
 					)
-					return yield* Match.value(verified).pipe(
-						Match.tagsExhaustive({
-							Failure: () =>
-								Effect.succeed(challenge(options.metadataUrl, "invalid_token")),
-							Success: ({ success: identity }) =>
-								Effect.gen(function* () {
-									const now = yield* Clock.currentTimeMillis
-									if (
-										!options.authorizationServers.includes(identity.issuer) ||
-										!identity.audiences.includes(options.resource) ||
-										identity.expiresAt <= now
-									)
-										return challenge(options.metadataUrl, "invalid_token")
-									const missing = (options.scopes ?? []).filter(
-										(scope) => !identity.scopes.includes(scope),
-									)
-									if (missing.length !== 0)
-										return challenge(
-											options.metadataUrl,
-											"insufficient_scope",
-											missing,
-										)
-									const parsed = yield* Effect.result(
-										request.text.pipe(
-											Effect.flatMap(
-												Schema.decodeEffect(Schema.fromJsonString(Request)),
-											),
-										),
-									)
-									return yield* Match.value(parsed).pipe(
-										Match.tagsExhaustive({
-											Failure: () => http,
-											Success: ({ success: { method, params } }) =>
-												Effect.gen(function* () {
-													const target = targetOf(method, params)
-													const args = params?.["arguments"]
-													const operation: Operation = {
-														method,
-														...RecordUtils.filter(
-															{ target },
-															Predicate.isNotUndefined,
-														),
-														...(Schema.is(Schema.JsonObject)(args)
-															? { arguments: args }
-															: {}),
-													}
-													const access = yield* Effect.result(
-														policy.check(identity, operation),
-													)
-													return yield* Match.value(access).pipe(
-														Match.tagsExhaustive({
-															Failure: ({ failure }) =>
-																Effect.succeed(
-																	challenge(
-																		options.metadataUrl,
-																		"insufficient_scope",
-																		failure.scopes,
-																	),
-																),
-															Success: () =>
-																Effect.gen(function* () {
-																	identities.set(request, identity)
-																	const response = yield* http
-																	return yield* filterResponse(response, {
-																		method,
-																		identity,
-																		policy,
-																	}).pipe(
-																		Effect.map((response) =>
-																			HttpServerResponse.setHeader(
-																				response,
-																				"cache-control",
-																				"no-store",
-																			),
-																		),
-																		Effect.catchTag(
-																			["SchemaError", "InvalidDocument"],
-																			() =>
-																				Effect.succeed(
-																					HttpServerResponse.empty({
-																						status: 502,
-																					}),
-																				),
-																		),
-																	)
-																}),
-														}),
-													)
-												}),
-										}),
-									)
-								}),
-						}),
+					if (Result.isFailure(verified))
+						return challenge(options.metadataUrl, "invalid_token")
+					const identity = verified.success
+					const now = yield* Clock.currentTimeMillis
+					if (
+						!options.authorizationServers.includes(identity.issuer) ||
+						!identity.audiences.includes(options.resource) ||
+						identity.expiresAt <= now
+					)
+						return challenge(options.metadataUrl, "invalid_token")
+					const missing = scopes.filter(
+						(scope) => !identity.scopes.includes(scope),
+					)
+					if (missing.length !== 0)
+						return challenge(options.metadataUrl, "insufficient_scope", missing)
+					// A body that is not a JSON-RPC request goes on to MCP, which sends the protocol error.
+					const parsed = yield* Effect.result(
+						request.text.pipe(
+							Effect.flatMap(
+								Schema.decodeEffect(Schema.fromJsonString(Request)),
+							),
+						),
+					)
+					if (Result.isFailure(parsed)) return yield* http
+					const { method, params } = parsed.success
+					const args = params?.["arguments"]
+					const operation: Operation = {
+						method,
+						...RecordUtils.filter(
+							{ target: targetOf(method, params) },
+							Predicate.isNotUndefined,
+						),
+						...(Schema.is(Schema.JsonObject)(args) ? { arguments: args } : {}),
+					}
+					const access = yield* Effect.result(policy.check(identity, operation))
+					if (Result.isFailure(access))
+						return challenge(
+							options.metadataUrl,
+							"insufficient_scope",
+							access.failure.scopes,
+						)
+					identities.set(request, identity)
+					const response = yield* http
+					return yield* filterResponse(response, {
+						method,
+						identity,
+						policy,
+					}).pipe(
+						Effect.map((response) =>
+							HttpServerResponse.setHeader(
+								response,
+								"cache-control",
+								"no-store",
+							),
+						),
+						Effect.catchTag(["SchemaError", "InvalidDocument"], () =>
+							Effect.succeed(HttpServerResponse.empty({ status: 502 })),
+						),
 					)
 				})
 		}),

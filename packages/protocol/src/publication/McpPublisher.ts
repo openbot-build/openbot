@@ -218,16 +218,14 @@ const documentResponse = (options: {
 	if (config.noindex === true && options.mediaType === Document.cardMediaType)
 		headers["x-robots-tag"] = "noindex"
 	const inm = request.headers["if-none-match"]
+	const etag = config.etag
 	const etagMatch =
 		inm !== undefined &&
-		config.etag !== undefined &&
+		etag !== undefined &&
 		(inm.trim() === "*" ||
 			inm
 				.split(",")
-				.some(
-					(t) =>
-						t.trim().replace(/^W\//, "") === config.etag?.replace(/^W\//, ""),
-				))
+				.some((t) => t.trim().replace(/^W\//, "") === etag.replace(/^W\//, "")))
 	const since = request.headers["if-modified-since"]
 	if (
 		etagMatch ||

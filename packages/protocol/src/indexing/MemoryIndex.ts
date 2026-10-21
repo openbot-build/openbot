@@ -1,4 +1,4 @@
-import { HashMap, Effect, Layer, Option, Ref, Schema } from "effect"
+import { HashMap, Effect, Layer, Ref, Schema } from "effect"
 import * as Document from "../Document.ts"
 import { IndexError, Entry, IndexStore } from "./Index.ts"
 
@@ -21,11 +21,7 @@ export const layer = Layer.effect(
 				identity(cardUrl).pipe(
 					Effect.flatMap((key) =>
 						Ref.get(state).pipe(
-							Effect.map((entries) =>
-								Option.fromUndefinedOr(
-									Option.getOrUndefined(HashMap.get(entries, key)),
-								),
-							),
+							Effect.map((entries) => HashMap.get(entries, key)),
 						),
 					),
 				),
@@ -39,13 +35,7 @@ export const layer = Layer.effect(
 				),
 			withdraw: (cardUrl) =>
 				identity(cardUrl).pipe(
-					Effect.flatMap((key) =>
-						Ref.update(state, (entries) => {
-							let next = entries
-							next = HashMap.remove(next, key)
-							return next
-						}),
-					),
+					Effect.flatMap((key) => Ref.update(state, HashMap.remove(key))),
 				),
 		})
 	}),

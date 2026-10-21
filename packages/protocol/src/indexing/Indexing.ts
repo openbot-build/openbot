@@ -1,4 +1,4 @@
-import { Context, Data, Effect, Schema } from "effect"
+import { Context, Data, Effect, Option, Schema } from "effect"
 import * as Index from "./Index.ts"
 import * as Discovery from "../discovery/Discovery.ts"
 import * as Document from "../Document.ts"
@@ -108,10 +108,10 @@ export class PublicationInspection extends Context.Service<
 	{
 		readonly inspect: (
 			input: Input,
-			previous?: Index.Entry,
+			previous: Option.Option<Index.Entry>,
 		) => Effect.Effect<InspectionResult, IndexingError>
 	}
 >()("@openbot-build/protocol/indexing/Indexing/PublicationInspection") {}
 
 export const inspect = (input: Input) =>
-	PublicationInspection.use((service) => service.inspect(input))
+	PublicationInspection.use((service) => service.inspect(input, Option.none()))
