@@ -2,7 +2,15 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { Config as ModelConfig, Model, Provider } from "@openbot-build/core"
-import { ConfigProvider, Effect, Match, Redacted, Schema, Stream } from "effect"
+import {
+	ConfigProvider,
+	Effect,
+	Match,
+	Option,
+	Redacted,
+	Schema,
+	Stream,
+} from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import * as ProductionModel from "../src/app/ProductionModel.ts"
 
@@ -15,24 +23,24 @@ const settings = {
 test("production model configuration is optional, all-or-nothing and redacted", async () => {
 	const parse = (values: Record<string, string>) =>
 		ProductionModel.load.parse(ConfigProvider.fromUnknown(values))
-	assert.equal(await Effect.runPromise(parse({})), undefined)
-	assert.equal(
-		await Effect.runPromise(
-			parse({
-				OPENBOT_MODEL_ENDPOINT: "",
-				OPENBOT_MODEL_API_KEY: "",
-				OPENBOT_MODEL_ID: "",
-			}),
+	assert.ok(Option.isNone(await Effect.runPromise(parse({}))))
+	assert.ok(
+		Option.isNone(
+			await Effect.runPromise(
+				parse({
+					OPENBOT_MODEL_ENDPOINT: "",
+					OPENBOT_MODEL_API_KEY: "",
+					OPENBOT_MODEL_ID: "",
+				}),
+			),
 		),
-		undefined,
 	)
 	const values = {
 		OPENBOT_MODEL_ENDPOINT: settings.endpoint,
 		OPENBOT_MODEL_API_KEY: "fixture-key",
 		OPENBOT_MODEL_ID: settings.model,
 	}
-	const loaded = await Effect.runPromise(parse(values))
-	assert.ok(loaded)
+	const loaded = Option.getOrThrow(await Effect.runPromise(parse(values)))
 	assert.equal(Redacted.value(loaded.apiKey), "fixture-key")
 	assert.ok(!JSON.stringify(loaded).includes("fixture-key"))
 	for (const invalid of [

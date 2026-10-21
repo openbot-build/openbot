@@ -7,7 +7,7 @@ import { DrizzleQueryError } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { Pool } from "pg"
 import { decodeJwt } from "jose"
-import { Effect, Layer, Match, Redacted, Predicate, Schema } from "effect"
+import { Effect, Exit, Layer, Match, Redacted, Predicate, Schema } from "effect"
 import * as tables from "../database/AuthSchema.ts"
 import { Auth } from "./Auth.ts"
 import { developmentLogin } from "./DevelopmentLogin.ts"
@@ -25,22 +25,22 @@ const providerId = "oidc"
 const attempt = <A, E>(
 	run: (signal: AbortSignal) => Promise<A>,
 	onApiError: (error: APIError) => E,
-) =>
-	Effect.tryPromise({
-		try: run,
-		catch: (cause) => {
-			if (cause instanceof APIError) {
-				return onApiError(cause)
-			}
-			if (
-				cause instanceof DrizzleQueryError ||
-				(Predicate.isError(cause) && Predicate.hasProperty(cause, "code"))
-			) {
-				return AuthUnavailable.make({ dependency: "storage" })
-			}
-			throw cause
-		},
-	})
+): Effect.Effect<A, E | AuthUnavailable> =>
+	Effect.flatten(
+		Effect.promise((signal) =>
+			run(signal).then(
+				(value) => Exit.succeed(value),
+				(cause: unknown): Exit.Exit<never, E | AuthUnavailable> =>
+					cause instanceof APIError
+						? Exit.fail(onApiError(cause))
+						: cause instanceof DrizzleQueryError ||
+							  (Predicate.isError(cause) &&
+									Predicate.hasProperty(cause, "code"))
+							? Exit.fail(AuthUnavailable.make({ dependency: "storage" }))
+							: Exit.die(cause),
+			),
+		),
+	)
 
 export const layer = (
 	config: ResolvedConfiguration & {
@@ -55,7 +55,13 @@ export const layer = (
 					() =>
 						new Pool({ connectionString: Redacted.value(config.databaseUrl) }),
 				),
-				(pool) => Effect.promise(() => pool.end()),
+				// Closing the pool is best-effort cleanup. Log a failure, but do not fail shutdown.
+				(pool) =>
+					Effect.tryPromise(() => pool.end()).pipe(
+						Effect.catch((error) =>
+							Effect.logWarning("The auth database pool did not close", error),
+						),
+					),
 			)
 			const plugins = [
 				...Match.value(config).pipe(

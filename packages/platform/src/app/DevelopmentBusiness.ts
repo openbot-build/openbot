@@ -50,6 +50,15 @@ export const layer = Layer.effect(
 		const inputs = yield* Ref.make(
 			HashMap.empty<string, { readonly owner: string; readonly id: string }>(),
 		)
+		const executionCount = (
+			values: HashMap.HashMap<string, number>,
+			owner: string,
+		) => Option.getOrElse(HashMap.get(values, owner), () => 0)
+		const countExecution = (owner: string) =>
+			Ref.modify(calls, (values) => {
+				const count = executionCount(values, owner) + 1
+				return [count, HashMap.set(values, owner, count)] as const
+			})
 		return Business.of({
 			write: (owner, input) =>
 				Effect.gen(function* () {
@@ -59,11 +68,7 @@ export const layer = Layer.effect(
 					yield* Ref.update(documents, (values) =>
 						HashMap.set(values, JSON.stringify([owner, id]), text),
 					)
-					const count = yield* Ref.modify(calls, (values) => {
-						const count =
-							Option.getOrElse(HashMap.get(values, owner), () => 0) + 1
-						return [count, HashMap.set(values, owner, count)] as const
-					})
+					const count = yield* countExecution(owner)
 					return {
 						content: [{ type: "text", text: "Saved document " + id }],
 						structuredContent: { id, text, handlerExecutions: count },
@@ -71,9 +76,7 @@ export const layer = Layer.effect(
 				}),
 			executions: (owner) =>
 				Ref.get(calls).pipe(
-					Effect.map((values) =>
-						Option.getOrElse(HashMap.get(values, owner), () => 0),
-					),
+					Effect.map((values) => executionCount(values, owner)),
 				),
 			read: (owner, input, continuation) =>
 				Effect.gen(function* () {
@@ -114,9 +117,10 @@ export const layer = Layer.effect(
 								] as const,
 						)
 						if (
-							Option.isNone(pending) ||
-							pending.value.owner !== owner ||
-							pending.value.id !== id
+							!Option.exists(
+								pending,
+								(pending) => pending.owner === owner && pending.id === id,
+							)
 						)
 							return yield* Schema.decodeUnknownEffect(Schema.Never)(null)
 						const accepted = Schema.decodeUnknownOption(
@@ -138,11 +142,7 @@ export const layer = Layer.effect(
 								],
 							}
 					}
-					const count = yield* Ref.modify(calls, (values) => {
-						const count =
-							Option.getOrElse(HashMap.get(values, owner), () => 0) + 1
-						return [count, HashMap.set(values, owner, count)] as const
-					})
+					const count = yield* countExecution(owner)
 					return {
 						content: [{ type: "text", text: "Simulated document: " + id }],
 						structuredContent: {

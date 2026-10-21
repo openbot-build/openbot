@@ -26,12 +26,9 @@ export const decode =
 					}),
 			),
 		)
-export const responseSummary = (response: SessionResponse | null) =>
-	response === null
-		? null
-		: {
-				id: response.id,
-				created_at: response.created_at,
-				status: response.status,
-				version: response.version,
-			}
+export const responseSummary = (response: SessionResponse) => ({
+	id: response.id,
+	created_at: response.created_at,
+	status: response.status,
+	version: response.version,
+})

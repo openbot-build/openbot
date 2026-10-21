@@ -23,15 +23,12 @@ export const ReturnTo = Schema.String.check(
 			/[\\\r\n]/.test(value)
 		)
 			return false
-		try {
-			const url = new URL(value, "https://return.invalid")
-			return (
-				url.origin === "https://return.invalid" &&
-				!/^\/(?:auth|v1|development)(?:\/|$)/.test(url.pathname)
-			)
-		} catch {
-			return false
-		}
+		const url = URL.parse(value, "https://return.invalid")
+		return (
+			url !== null &&
+			url.origin === "https://return.invalid" &&
+			!/^\/(?:auth|v1|development)(?:\/|$)/.test(url.pathname)
+		)
 	}),
 )
 export class AuthenticationRequired extends Schema.TaggedError<AuthenticationRequired>()(

@@ -86,7 +86,7 @@ test(
 											versions: [],
 											messages: [],
 										},
-										response: null,
+										response: Option.none(),
 									})
 									.pipe(Effect.exit),
 							{ concurrency: 2 },

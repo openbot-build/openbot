@@ -66,7 +66,10 @@ export const layerHttp = HttpRouter.middleware(
 					operation: "http.request",
 					requestId,
 					method: request.method,
-					route: Option.isSome(route) ? route.value.route.path : "/unknown",
+					route: Option.match(route, {
+						onNone: () => "/unknown",
+						onSome: ({ route }) => route.path,
+					}),
 					status,
 					...(cause === undefined ? { errorType: `Http${status}` } : { cause }),
 				})

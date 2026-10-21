@@ -58,50 +58,50 @@ export const layer = <
 			return Backend.of({
 				get: (namespace, owner) =>
 					SynchronizedRef.modifyEffect(instances, (map) =>
-						Effect.gen(function* () {
-							const existing = Option.getOrUndefined(
-								HashMap.get(map, namespace),
-							)
-							if (existing !== undefined) {
-								if (
-									owner !== undefined &&
-									(existing.owner === undefined ||
-										ownerKey(owner) !== ownerKey(existing.owner))
-								)
-									return yield* new Session.SessionError({
-										reason: "unavailable",
-										message: "This Session runtime belongs to another account.",
-									})
-								return [existing.sessions, map] as const
-							}
-							const runtimeScope = yield* Scope.fork(scope)
-							const instance = yield* ManagedSessions.make({
-								...options,
-								namespace,
-								...(owner === undefined ? {} : { owner }),
-							}).pipe(
-								Effect.mapError((error) =>
-									error instanceof Session.SessionError ||
-									error instanceof SessionStore.SessionStoreError
-										? error
-										: new Session.SessionError({
+						Option.match(HashMap.get(map, namespace), {
+							onSome: (existing) =>
+								owner !== undefined &&
+								(existing.owner === undefined ||
+									ownerKey(owner) !== ownerKey(existing.owner))
+									? Effect.fail(
+											new Session.SessionError({
 												reason: "unavailable",
-												message: String(error),
+												message:
+													"This Session runtime belongs to another account.",
 											}),
-								),
-								Effect.provideContext(
-									Context.add(context, Scope.Scope, runtimeScope),
-								),
-								Effect.onExit((exit) =>
-									Exit.isFailure(exit)
-										? Scope.close(runtimeScope, exit)
-										: Effect.void,
-								),
-							)
-							return [
-								instance,
-								HashMap.set(map, namespace, { owner, sessions: instance }),
-							] as const
+										)
+									: Effect.succeed([existing.sessions, map] as const),
+							onNone: () =>
+								Effect.gen(function* () {
+									const runtimeScope = yield* Scope.fork(scope)
+									const instance = yield* ManagedSessions.make({
+										...options,
+										namespace,
+										...(owner === undefined ? {} : { owner }),
+									}).pipe(
+										Effect.mapError((error) =>
+											error instanceof Session.SessionError ||
+											error instanceof SessionStore.SessionStoreError
+												? error
+												: new Session.SessionError({
+														reason: "unavailable",
+														message: String(error),
+													}),
+										),
+										Effect.provideContext(
+											Context.add(context, Scope.Scope, runtimeScope),
+										),
+										Effect.onExit((exit) =>
+											Exit.isFailure(exit)
+												? Scope.close(runtimeScope, exit)
+												: Effect.void,
+										),
+									)
+									return [
+										instance,
+										HashMap.set(map, namespace, { owner, sessions: instance }),
+									] as const
+								}),
 						}),
 					),
 			})

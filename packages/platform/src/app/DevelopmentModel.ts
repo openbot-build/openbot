@@ -1,7 +1,15 @@
 import { Item, Config, Model, Provider } from "@openbot-build/core"
 import { AppExecution } from "@openbot-build/platform-api"
 import { Memory } from "@openbot-build/plugin-memory"
-import { Context, Effect, HashMap, Layer, Match, Schema, Stream } from "effect"
+import {
+	Context,
+	Effect,
+	Layer,
+	Match,
+	Record as EffectRecord,
+	Schema,
+	Stream,
+} from "effect"
 import {
 	AiError,
 	LanguageModel,
@@ -433,15 +441,10 @@ export const layer = (scenario: Scenario): Model.Model =>
 
 /** Build one immutable directory for each application. No scenario has a response cursor. */
 export const make = Effect.gen(function* () {
-	const models = HashMap.fromIterable(
-		yield* Effect.forEach(Scenario.literals, (scenario) =>
-			Effect.map(
-				Layer.build(layer(scenario)),
-				(context) =>
-					[
-						scenario,
-						Context.get(context, LanguageModel.LanguageModel),
-					] as const,
+	const models = yield* Effect.all(
+		EffectRecord.map(descriptions, (_, scenario) =>
+			Effect.map(Layer.build(layer(scenario)), (context) =>
+				Context.get(context, LanguageModel.LanguageModel),
 			),
 		),
 	)
@@ -473,15 +476,7 @@ export const make = Effect.gen(function* () {
 						}),
 				),
 			)
-			return yield* Effect.fromOption(HashMap.get(models, scenario)).pipe(
-				Effect.mapError(
-					() =>
-						new Config.ModelConfigurationError({
-							reason: "unavailable",
-							message: "The development model was not built",
-						}),
-				),
-			)
+			return models[scenario]
 		})
 	return {
 		modelCatalog: catalog,

@@ -2,13 +2,12 @@ import { DateTime, Effect, Option, Schema } from "effect"
 
 export const Timestamp = Schema.String.check(
 	Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/),
-	Schema.makeFilter((value) => {
-		const date = DateTime.make(value)
-		return (
-			Option.isSome(date) &&
-			DateTime.formatIso(date.value).slice(0, 19) === value.slice(0, 19)
-		)
-	}),
+	Schema.makeFilter((value) =>
+		Option.exists(
+			DateTime.make(value),
+			(date) => DateTime.formatIso(date).slice(0, 19) === value.slice(0, 19),
+		),
+	),
 )
 
 export const Credential = Schema.Redacted(Schema.NonEmptyString)

@@ -22,13 +22,14 @@ export const layer = (config: { readonly publicOrigin: string }) => {
 							),
 						)
 					}).pipe(
-						Effect.catchTag("AuthRequestInvalid", () =>
-							Effect.fail(AuthApi.InvalidAccountRequest.make({})),
-						),
 						Effect.mapError((error) =>
 							Match.value(error).pipe(
-								Match.tag("InvalidAccountRequest", (error) => error),
-								Match.orElse(() => AuthApi.AuthenticationUnavailable.make({})),
+								Match.tagsExhaustive({
+									AuthRequestInvalid: () =>
+										AuthApi.InvalidAccountRequest.make({}),
+									AuthUnavailable: () =>
+										AuthApi.AuthenticationUnavailable.make({}),
+								}),
 							),
 						),
 					),

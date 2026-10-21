@@ -1,10 +1,15 @@
-import { Memory as CoreMemory, Item } from "@openbot-build/core"
-import { MemorySnapshots, DeltaValidation } from "@openbot-build/core"
-import { Session, SessionStore } from "@openbot-build/core"
-import { SessionResponse, SessionSummary } from "@openbot-build/platform-api"
+import {
+	DeltaValidation,
+	Item,
+	Memory as CoreMemory,
+	MemorySnapshots,
+	Session,
+	SessionStore,
+} from "@openbot-build/core"
+import { SessionSummary } from "@openbot-build/platform-api"
 import { Repository } from "./Repository.ts"
 import * as RepositoryEncoding from "./RepositoryEncoding.ts"
-import { Match, Effect, Equal, Layer, Schema, Option } from "effect"
+import { Array, Match, Effect, Equal, Layer, Schema, Option } from "effect"
 import { and, eq, inArray } from "drizzle-orm"
 import {
 	make as makeDatabase,
@@ -18,8 +23,6 @@ const json = <S extends Schema.ConstraintDecoder<unknown>>(
 	schema: S,
 	value: string,
 ) => decode(Schema.fromJsonString(schema))(value)
-const nullableResponse = (value: string | null) =>
-	value === null ? Effect.succeed(null) : json(SessionResponse, value)
 export const make = Effect.gen(function* () {
 	const logger = Option.getOrElse(
 		yield* Effect.serviceOption(EffectLogger),
@@ -37,14 +40,15 @@ export const make = Effect.gen(function* () {
 				.select()
 				.from(refs)
 				.where(and(eq(refs.namespace, namespace), eq(refs.id, id)))
-				.pipe(Effect.map((rows) => rows[0]))
+				.pipe(Effect.map(Array.head))
 		const storage: SessionStore.Persistence = {
 			getRef: (id) =>
 				refRow(id).pipe(
-					Effect.flatMap((row) =>
-						row === undefined
-							? Effect.succeed(null)
-							: json(Session.Ref, row.body),
+					Effect.flatMap(
+						Option.match({
+							onNone: () => Effect.succeed(null),
+							onSome: (row) => json(Session.Ref, row.body),
+						}),
 					),
 					Effect.mapError(databaseError),
 				),
@@ -170,19 +174,12 @@ export const make = Effect.gen(function* () {
 								),
 								Effect.mapError(databaseError),
 							),
-			save: (delta) => save(namespace, { delta, response: null }),
+			save: (delta) => save(namespace, { delta, response: Option.none() }),
 			remove: (ref) => remove(namespace, ref),
 		}
 		return { storage, refRow }
 	}
 	const store = (namespace: string) => readers(namespace, db).storage
-	const response: typeof Repository.Service.response = (namespace, id) =>
-		readers(namespace, db)
-			.refRow(id)
-			.pipe(
-				Effect.flatMap((row) => nullableResponse(row?.response ?? null)),
-				Effect.mapError(databaseError),
-			)
 	const save: typeof Repository.Service.save = (namespace, input) =>
 		db
 			.transaction((tx) =>
@@ -260,32 +257,38 @@ export const make = Effect.gen(function* () {
 						archived: Number(session.metadata.archived),
 						status: Session.status(session)._tag,
 						turn: Session.currentTurn(session)?.id ?? null,
-						response:
-							input.response === null ? null : JSON.stringify(input.response),
-						responseSummary:
-							input.response === null
-								? null
-								: JSON.stringify(responseSummary(input.response)),
+						response: Option.getOrNull(
+							Option.map(input.response, (response) =>
+								JSON.stringify(response),
+							),
+						),
+						responseSummary: Option.getOrNull(
+							Option.map(input.response, (response) =>
+								JSON.stringify(responseSummary(response)),
+							),
+						),
 						revision: session.revision,
 					}
-					const written =
-						previous === undefined
-							? yield* tx
-									.insert(refs)
-									.values({ namespace, id: session.id, ...values })
-									.onConflictDoNothing()
-									.returning({ id: refs.id })
-							: yield* tx
-									.update(refs)
-									.set(values)
-									.where(
-										and(
-											eq(refs.namespace, namespace),
-											eq(refs.id, session.id),
-											eq(refs.revision, previous.revision),
-										),
-									)
-									.returning({ id: refs.id })
+					const written = yield* Option.match(previous, {
+						onNone: () =>
+							tx
+								.insert(refs)
+								.values({ namespace, id: session.id, ...values })
+								.onConflictDoNothing()
+								.returning({ id: refs.id }),
+						onSome: (previous) =>
+							tx
+								.update(refs)
+								.set(values)
+								.where(
+									and(
+										eq(refs.namespace, namespace),
+										eq(refs.id, session.id),
+										eq(refs.revision, previous.revision),
+									),
+								)
+								.returning({ id: refs.id }),
+					})
 					if (written.length !== 1) return yield* conflict()
 				}),
 			)
@@ -294,11 +297,10 @@ export const make = Effect.gen(function* () {
 		db
 			.transaction((tx) =>
 				Effect.gen(function* () {
-					const row = yield* readers(namespace, tx).refRow(ref.id)
-					if (
-						row === undefined ||
-						!Equal.equals(yield* json(Session.Ref, row.body), ref)
-					)
+					const found = yield* readers(namespace, tx).refRow(ref.id)
+					if (Option.isNone(found)) return yield* conflict()
+					const row = found.value
+					if (!Equal.equals(yield* json(Session.Ref, row.body), ref))
 						return yield* conflict()
 					const result = yield* tx
 						.delete(refs)
@@ -357,6 +359,6 @@ export const make = Effect.gen(function* () {
 				),
 				Effect.mapError(databaseError),
 			)
-	return Repository.of({ store, response, save, remove, list })
+	return Repository.of({ store, save, remove, list })
 })
 export const layer = Layer.effect(Repository, make)
