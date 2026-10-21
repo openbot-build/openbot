@@ -9,7 +9,6 @@ import {
 	Scope,
 	SynchronizedRef,
 } from "effect"
-import * as Approvals from "../approvals/Approvals.ts"
 import * as ManagedSessions from "../sessions/ManagedSessions.ts"
 
 import { type LanguageModel, type Tool, type Toolkit } from "effect/ai"
@@ -38,7 +37,6 @@ export const layer = <
 			const scope = yield* Scope.Scope
 			const context = yield* Effect.context<
 				| Repository
-				| Approvals.Approvals
 				| R
 				| BuildR
 				| Tool.HandlersFor<Tools>

@@ -1,7 +1,8 @@
 export { Health, HealthApi, Service, service } from "./HealthApi.ts"
 export { PlatformApi } from "./PlatformApi.ts"
 export { Caller, Identity } from "./Identity.ts"
-export { SessionApprovalsApi, ToolApproval } from "./SessionApprovalsApi.ts"
+export * as AgentsApi from "./AgentsApi.ts"
+export * as RequestsApi from "./RequestsApi.ts"
 export * as AuthApi from "./AuthApi.ts"
 export * as UserTokensApi from "./UserTokensApi.ts"
 export * as OrganizationApi from "./OrganizationApi.ts"
@@ -27,6 +28,8 @@ export {
 	SessionModelInvalid,
 	SessionView,
 	SessionSummary,
+	SessionKind,
+	SessionParent,
 	CreateSessionRequest,
 	StartTurnRequest,
 	SessionResponse,

@@ -251,3 +251,26 @@ export const auditLogs = table(
 		),
 	],
 )
+
+/**
+ * Records of Agents, their memory, delegations, Grants, Rules and requests.
+ * `owner` and `scope` are the two keys that lists filter by. `status` helps recovery find open work.
+ */
+export const agentRecords = table(
+	"openbot_agent_records",
+	{
+		kind: text().notNull(),
+		organizationId: text("organization_id").notNull(),
+		id: text().notNull(),
+		owner: text().notNull(),
+		scope: text().notNull(),
+		status: text().notNull(),
+		body: text().notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.kind, t.organizationId, t.id] }),
+		index("openbot_agent_records_owner").on(t.kind, t.organizationId, t.owner),
+		index("openbot_agent_records_scope").on(t.kind, t.organizationId, t.scope),
+		index("openbot_agent_records_status").on(t.kind, t.status),
+	],
+)

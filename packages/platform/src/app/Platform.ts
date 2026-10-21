@@ -36,14 +36,17 @@ import * as Governance from "../apps/Governance.ts"
 import type { AppIndexApi } from "@openbot-build/platform-api"
 import * as IndexRepositoryPostgres from "../apps/IndexRepositoryPostgres.ts"
 import { ResolvedConfiguration } from "../auth/Configuration.js"
-import * as Approvals from "../approvals/Approvals.ts"
 import * as BackendLayers from "./BackendLayers.ts"
+import * as AgentLayers from "../agents/AgentLayers.ts"
+import * as Coordinator from "../agents/Coordinator.ts"
+import * as Judge from "../capabilities/Judge.ts"
+import type { Config } from "@openbot-build/core"
 import * as Sessions from "../sessions/Sessions.ts"
 import * as Backend from "./Backend.ts"
 import { Repository } from "../sessions/Repository.ts"
 import { NodeServices, NodeCrypto } from "@effect/platform-node"
 import { Effect, Layer, type Redacted, Schema, SchemaIssue } from "effect"
-import { type Tool } from "effect/ai"
+import { LanguageModel, type Tool } from "effect/ai"
 import { FetchHttpClient } from "effect/http"
 import * as RepositoryPostgres from "../sessions/RepositoryPostgres.ts"
 import * as DatabasePostgres from "../database/DatabasePostgres.ts"
@@ -78,6 +81,19 @@ export interface Options<
 		Sessions.Options<Tools, E, R, BuildE, BuildR>,
 		"namespace"
 	>
+	readonly agents?: AgentOptions
+}
+
+export interface AgentOptions {
+	/**
+	 * The model that Platform uses for its own work: the judge of Rules and Agent memory.
+	 * Without it, Platform uses the default model of Sessions.
+	 */
+	readonly helperModel?: Config.Selection
+	/** How long a request waits for a decision before it is denied, in milliseconds. */
+	readonly requestTimeout?: number
+	/** Learn Agent memory after each Turn. It is on by default. */
+	readonly memory?: boolean
 }
 
 /** Scoped database resources, with a separate stored runtime for each member. */
@@ -97,7 +113,35 @@ export const layer = <
 		Backend.Backend,
 		never,
 		Repository | Sessions.ExecutionServices<Tools, R> | BuildR
-	> = BackendLayers.layer(options.sessions).pipe(Layer.provide(Approvals.layer))
+	> = BackendLayers.layer(options.sessions)
+
+	// The helper model comes from the Session models, or from the model of the host.
+	const helper = Layer.effect(
+		Judge.HelperModel,
+		Effect.gen(function* () {
+			const ambient = yield* Effect.serviceOption(LanguageModel.LanguageModel)
+			const resolve = options.sessions?.resolveModel
+			return Judge.HelperModel.of({
+				model: Effect.mapError(
+					resolve === undefined
+						? Effect.fromOption(ambient).pipe(Effect.mapError(String))
+						: resolve(options.agents?.helperModel).pipe(
+								Effect.mapError(String),
+							),
+					() =>
+						new Judge.HelperModelUnavailable({
+							message: "No helper model is configured.",
+						}),
+				),
+			})
+		}),
+	)
+	const agents = AgentLayers.layer({
+		helper,
+		...(options.agents?.requestTimeout === undefined
+			? {}
+			: { requestTimeout: options.agents.requestTimeout }),
+	})
 
 	const indexNamespace = options.indexNamespace ?? "public"
 	const indexStorage = IndexRepositoryPostgres.layerFor(indexNamespace)
@@ -202,6 +246,7 @@ export const layer = <
 		),
 	).pipe(
 		Layer.provideMerge(apps),
+		Layer.provideMerge(agents),
 		Layer.provideMerge(index),
 		Layer.provideMerge(Governance.layer(options.appRestrictions)),
 		Layer.provideMerge(TokensPostgres.layer),
@@ -211,7 +256,14 @@ export const layer = <
 		Layer.provideMerge(checked),
 		Layer.provideMerge(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
 	)
-	return Layer.mergeAll(Views.layer, AppExperience.layer, developer).pipe(
-		Layer.provideMerge(base),
-	)
+	return Layer.mergeAll(
+		Views.layer,
+		AppExperience.layer,
+		developer,
+		Coordinator.layer(
+			options.agents?.memory === undefined
+				? {}
+				: { memory: options.agents.memory },
+		),
+	).pipe(Layer.provideMerge(base))
 }

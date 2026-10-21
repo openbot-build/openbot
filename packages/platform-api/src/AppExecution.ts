@@ -48,7 +48,6 @@ export const Invocation = Schema.Struct({
 	source: Source,
 	arguments: Schema.JsonObject,
 	readOnly: Schema.Boolean,
-	grantReads: Schema.Boolean,
 	round: Schema.Natural,
 	status: Schema.Literals([
 		"PendingApproval",

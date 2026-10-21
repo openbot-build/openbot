@@ -1,3 +1,4 @@
+import { AgentAuth } from "./AuthApi.ts"
 import {
 	Config,
 	Item,
@@ -7,7 +8,8 @@ import {
 	Turn,
 } from "@openbot-build/core"
 import { Memory } from "@openbot-build/plugin-memory"
-import { Required, requires } from "./Permissions.ts"
+import { Authorize, GroupRequired, Required, requires } from "./Permissions.ts"
+import { AgentErrors, AgentId, Delegation } from "./AgentsApi.ts"
 import { Schema } from "effect"
 import { Sse } from "effect/encoding"
 import {
@@ -36,6 +38,8 @@ export const SettingsPatch = Schema.Struct({
 	model: Schema.optionalKey(Config.Selection),
 })
 export const CreateSessionRequest = Schema.Struct({
+	/** The Agent that works in the Session. Without it, the Main Agent of the caller works. */
+	agent: Schema.optionalKey(AgentId),
 	title: Schema.optionalKey(Schema.String),
 	settings: Schema.optionalKey(SettingsPatch),
 })
@@ -172,7 +176,7 @@ export const SessionResponseEvent = Schema.Union([
 export type SessionResponseEvent = typeof SessionResponseEvent.Type
 
 /** Codec for the native SSE envelope. data is a JSON event, not an already encoded string. */
-export const SessionResponseSseEvent = Schema.Struct({
+const SseEventSchema = Schema.Struct({
 	...Sse.EventEncoded.fields,
 	event: Schema.Literals([
 		"response.created",
@@ -195,11 +199,36 @@ export const SessionResponseSseEvent = Schema.Struct({
 			event === data.type || "SSE event must match data.type",
 	),
 )
-export type SessionResponseSseEvent = typeof SessionResponseSseEvent.Type
+export type SessionResponseSseEvent = typeof SseEventSchema.Type
+/**
+ * The explicit type keeps the declared type of the whole contract small enough
+ * for the TypeScript declaration emitter. It refers to the alias above by name.
+ */
+export const SessionResponseSseEvent: Schema.Codec<
+	SessionResponseSseEvent,
+	typeof SseEventSchema.Encoded
+> = SseEventSchema
+
+/**
+ * Why a Session exists. A direct Session is work that a client started.
+ * A delegated Session is work that another Agent gave. A review Session decides one request.
+ */
+export const SessionKind = Schema.Literals(["direct", "delegated", "review"])
+export type SessionKind = typeof SessionKind.Type
+/** The tool call in another Session that started this Session. */
+export const SessionParent = Schema.Struct({
+	session: Session.Id,
+	turn: Turn.Id,
+	toolCallId: Schema.String,
+})
+export type SessionParent = typeof SessionParent.Type
 
 /** The current core view, plus the latest message in the Responses format. */
 export const SessionView = Schema.Struct({
 	...Session.View({}).fields,
+	agent: AgentId,
+	kind: SessionKind,
+	parent: Schema.NullOr(SessionParent),
 	response: Schema.NullOr(SessionResponse),
 	activity: Schema.optionalKey(
 		Schema.Literals(["active", "inactive", "historical"]),
@@ -210,11 +239,13 @@ export type SessionView = typeof SessionView.Type
 /** The list view. It leaves out state, message content and response output. */
 export const SessionSummary = Schema.Struct({
 	session: Session.Ref,
+	agent: AgentId,
+	kind: SessionKind,
+	parent: Schema.NullOr(SessionParent),
 	status: Schema.Literals([
 		"Idle",
-
 		"Running",
-		"WaitingApproval",
+		"Waiting",
 		"Completed",
 		"Failed",
 		"Interrupted",
@@ -350,7 +381,7 @@ export type RestoreSessionRequest = typeof RestoreSessionRequest.Type
 /** Work that calls a model needs its own permission. */
 const run = [requires("responses.run").on("session", "sessionId")]
 
-export const SessionsApi = HttpApiGroup.make("sessions")
+export class SessionsApi extends HttpApiGroup.make("sessions")
 	.add(
 		HttpApiEndpoint.get("sessionVersions", "/v1/sessions/:sessionId/versions", {
 			params: { sessionId: Session.Id.check(Schema.isMinLength(1)) },
@@ -360,10 +391,10 @@ export const SessionsApi = HttpApiGroup.make("sessions")
 		HttpApiEndpoint.post("createSession", "/v1/sessions", {
 			payload: CreateSessionRequest,
 			success: SessionView.pipe(HttpApiSchema.status(201)),
-			error: SessionOperationErrors,
+			error: [...SessionOperationErrors, ...AgentErrors],
 		}).annotate(
 			OpenApi.Description,
-			"Creates an idle Session without calling a model. The latest response is null.",
+			"Creates an idle Session for an Agent without calling a model. Without `agent`, the Main Agent of the caller works in it. The latest response is null.",
 		),
 		HttpApiEndpoint.post("startTurn", "/v1/sessions/:sessionId/turns", {
 			params: { sessionId: Session.Id.check(Schema.isMinLength(1)) },
@@ -443,6 +474,8 @@ export const SessionsApi = HttpApiGroup.make("sessions")
 		HttpApiEndpoint.get("listSessions", "/v1/sessions", {
 			query: {
 				archived: Schema.optionalKey(Schema.Literals(["true", "false"])),
+				agent: Schema.optionalKey(AgentId),
+				kind: Schema.optionalKey(SessionKind),
 			},
 			success: Schema.Array(SessionSummary),
 			error: SessionOperationErrors,
@@ -578,6 +611,18 @@ export const SessionsApi = HttpApiGroup.make("sessions")
 			}).pipe(HttpApiSchema.status(202)),
 			error: SessionOperationErrors,
 		}).annotate(Required, run),
+		HttpApiEndpoint.get(
+			"sessionDelegations",
+			"/v1/sessions/:sessionId/delegations",
+			{
+				params: sessionParams,
+				success: Schema.Array(Delegation),
+				error: SessionOperationErrors,
+			},
+		).annotate(
+			OpenApi.Description,
+			"Lists the work that this Session gave to other Agents, with its status and result.",
+		),
 		HttpApiEndpoint.post(
 			"interruptTurn",
 			"/v1/sessions/:sessionId/turns/:turnId/interrupt",
@@ -590,3 +635,9 @@ export const SessionsApi = HttpApiGroup.make("sessions")
 		),
 	)
 	.annotate(HttpApi.PayloadParseOptions, { onExcessProperty: "error" })
+	.annotate(GroupRequired, {
+		read: [requires("sessions.read").on("session", "sessionId")],
+		write: [requires("sessions.write").on("session", "sessionId")],
+	})
+	.middleware(Authorize)
+	.middleware(AgentAuth) {}

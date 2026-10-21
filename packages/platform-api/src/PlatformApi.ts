@@ -13,14 +13,12 @@ import {
 	AppAuthorizationApi,
 	AppAuthorizationPublicApi,
 } from "./AppAuthorizationApi.ts"
-import { SessionApprovalsApi } from "./SessionApprovalsApi.ts"
+import { AgentsApi } from "./AgentsApi.ts"
+import { RequestsApi } from "./RequestsApi.ts"
 import { AppOperationsApi } from "./AppOperationsApi.ts"
 import { AppViewsApi } from "./AppViewsApi.ts"
 import { Authorize, GroupRequired, requires } from "./Permissions.ts"
 
-const session = (permission: Parameters<typeof requires>[0]) => [
-	requires(permission).on("session", "sessionId"),
-]
 const connection = (permission: Parameters<typeof requires>[0]) => [
 	requires(permission).on("connection", "connectionId"),
 ]
@@ -51,18 +49,9 @@ export class PlatformApi extends HttpApi.make("openbot-platform-api")
 		AppsApi.annotate(GroupRequired, { read: apps, write: apps })
 			.middleware(Authorize)
 			.middleware(AgentAuth),
-		SessionsApi.annotate(GroupRequired, {
-			read: session("sessions.read"),
-			write: session("sessions.write"),
-		})
-			.middleware(Authorize)
-			.middleware(AgentAuth),
-		SessionApprovalsApi.annotate(GroupRequired, {
-			read: session("sessions.read"),
-			write: session("approvals.resolve"),
-		})
-			.middleware(Authorize)
-			.middleware(AgentAuth),
+		SessionsApi,
+		AgentsApi,
+		RequestsApi,
 		AppOperationsApi.annotate(GroupRequired, { read: apps, write: apps })
 			.middleware(Authorize)
 			.middleware(AgentAuth),

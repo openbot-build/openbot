@@ -27,7 +27,6 @@ import * as RepositoryPostgres from "../src/sessions/RepositoryPostgres.ts"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 import * as ManagedSessions from "../src/sessions/ManagedSessions.ts"
-import * as Approvals from "../src/approvals/Approvals.ts"
 import * as BackendLayers from "../src/app/BackendLayers.ts"
 import { Backend } from "../src/app/Backend.ts"
 
@@ -193,6 +192,7 @@ test(
 						.map((row) => row.tablename)
 						.sort()
 					assert.deepEqual(tables, [
+						"openbot_agent_records",
 						"openbot_app_authorizations",
 						"openbot_app_connections",
 						"openbot_app_drafts",
@@ -250,7 +250,7 @@ test(
 			}),
 		)
 		const runtime = ManagedRuntime.make(
-			Layer.merge(RepositoryPostgres.layer, Approvals.layer).pipe(
+			RepositoryPostgres.layer.pipe(
 				Layer.provideMerge(
 					DatabasePostgres.layer({
 						databaseUrl: Redacted.make(database.url),

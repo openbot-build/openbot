@@ -9,6 +9,8 @@ This page shows how learned memory works and how to change it with the API.
 
 Learned memory belongs to one Session. It is part of the Session's history, so a [Fork](/docs/sessions#fork-from-a-version) takes a copy of it. Other Sessions do not see it.
 
+Each [Agent](/docs/agents) also has a long-term memory over all its Sessions. See [Agent memory](#agent-memory).
+
 ---
 
 ## Read memory
@@ -180,3 +182,70 @@ Learn from the history now:
 </Callout>
 
 See all fields in the [Sessions reference](/docs/api/operations/tags/sessions/).
+
+---
+
+## Agent memory
+
+**Agent memory** is what one Agent learns over many Sessions. It keeps only lasting experience:
+
+| Kind         | Example                                              |
+| ------------ | ---------------------------------------------------- |
+| `procedure`  | "Run the tests before you report that work is done." |
+| `preference` | "Ana likes short answers with a list of changes."    |
+| `decision`   | "The team uses Effect for all new services."         |
+
+Facts that matter for one task only stay in Session memory.
+
+### How it learns
+
+When a Turn of the Agent completes and its queue is empty, Platform asks the [helper model](/docs/server#agents) which lasting experience to keep. Review Sessions do not teach anything. A Session whose `generate` switch is off does not teach its Agent either.
+
+- Each entry names its sources: Session and Item IDs.
+- Tool results from Apps are outside data. An entry that only App results support is never kept.
+- The Agent always knows which person it works with. The memory model also knows it, so entries can say who said what.
+- Retracted entries stay retracted. Only a person can bring one back.
+
+Agent memory does not follow a Timeline. A Fork never changes it, and going back to an old Version does not undo it. To remove an entry, forget it.
+
+Platform adds the active entries to the instructions of every Turn of the Agent, newest first, up to 8000 characters. The text says that current instructions win over memory.
+
+### Shared Agents
+
+A shared Agent has one memory for every member who uses it. The Agent decides what to share: it gets fixed rules about privacy in every Turn. What it learned from one person may be private, so it tells another person only what is clearly shared work.
+
+### Read and change it
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/agents/$AGENT/memory
+```
+
+```json
+{
+	"entries": {
+		"tests-first": {
+			"key": "tests-first",
+			"content": "Run the tests before you report that work is done.",
+			"kind": "procedure",
+			"sources": [{ "session": "c81d…", "item": "i-12" }],
+			"updatedAt": 1792486800000,
+			"status": "active"
+		}
+	},
+	"version": 4
+}
+```
+
+Change it with a `Remember` or `Forget` command. `expected` is the current `version`:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expected":4,"command":{"_tag":"Forget","key":"tests-first"}}' \
+  https://api.example.com/v1/agents/$AGENT/memory
+```
+
+`GET /v1/agents/:agentId/memory/log` lists each change with its `version`, the time, what made it (`consolidation`, `person` or `promotion`), and the changed keys.
+
+When you [promote](/docs/agents#promote-a-subagent) a subagent, the lasting entries of its Session memory become its Agent memory.

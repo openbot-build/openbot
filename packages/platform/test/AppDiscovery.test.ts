@@ -1,4 +1,5 @@
 import * as IndexWorkRepository from "../src/apps/IndexWorkRepositoryPostgres.ts"
+import * as AgentFixture from "./AgentFixture.ts"
 import * as DeveloperLayers from "../src/apps/DeveloperLayers.ts"
 import * as AppExperience from "../src/apps/Experience.ts"
 import * as Views from "../src/apps/Views.ts"
@@ -468,6 +469,10 @@ const startApi = async (
 				TokensPostgres.layer,
 				OrganizationFixture.layerEveryoneAdministrator,
 				OrganizationFixture.layerNoAudit,
+				AgentFixture.layerAgentServices.pipe(
+					Layer.provide(TokensPostgres.layer),
+					Layer.provide(OrganizationFixture.layerEveryoneAdministrator),
+				),
 				Layer.succeed(Auth.Auth, auth),
 				Layer.succeed(Backend, { get: unused, forCaller: unused }),
 			]),

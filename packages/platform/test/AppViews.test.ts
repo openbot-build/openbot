@@ -128,18 +128,33 @@ test("App views bind to the real history and account, accept each exact host act
 				)
 			return current
 		}
+		/** Answers the one pending request of the Session, then waits until the Turn goes on. */
 		const approve = async (accepted = true) => {
-			const approvals = await (
-				await request("/v1/sessions/" + id + "/approvals")
-			).json()
-			assert.equal(approvals.length, 1)
-			const a = approvals[0]
-			const current = await get()
-			const response = await post(
-				`/v1/sessions/${id}/turns/${a.turn}/approvals/${a.approvalId}`,
-				{ expected: current.session.revision, approved: accepted },
-			)
-			assert.equal(response.status, 202, await response.clone().text())
+			let pending: ReadonlyArray<{
+				readonly id: string
+				readonly revision: number
+				readonly session: string
+			}> = []
+			for (let tries = 0; tries < 200 && pending.length === 0; tries++) {
+				pending = (
+					(await (
+						await request("/v1/requests?status=pending")
+					).json()) as typeof pending
+				).filter((entry) => entry.session === id)
+				if (pending.length === 0)
+					await new Promise((resolve) => setTimeout(resolve, 25))
+			}
+			assert.equal(pending.length, 1)
+			const response = await post("/v1/requests/" + pending[0]!.id, {
+				expected: pending[0]!.revision,
+				decision: accepted ? "allow" : "deny",
+			})
+			assert.equal(response.status, 200, await response.clone().text())
+			for (let tries = 0; tries < 200; tries++) {
+				const view = await wait()
+				if (view.session.turns.at(-1)?.status._tag !== "Waiting") return view
+				await new Promise((resolve) => setTimeout(resolve, 25))
+			}
 			return wait()
 		}
 		assert.equal(

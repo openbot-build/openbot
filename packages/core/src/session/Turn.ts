@@ -26,7 +26,8 @@ export const Output = Schema.Struct({
 export type Output = typeof Output.Type
 export const StatusSchema = Schema.TaggedUnion({
 	Running: {},
-	WaitingApproval: { result: Output },
+	/** The Turn waits for answers to tool approval requests. They are in the history. */
+	Waiting: { result: Output },
 	Completed: { result: Output },
 	Failed: {
 		message: Schema.String,
@@ -61,4 +62,4 @@ export class Conflict extends Data.TaggedError("TurnConflict")<{
 	readonly message: string
 }> {}
 export const isTerminal = (status: Status) =>
-	status._tag !== "Running" && status._tag !== "WaitingApproval"
+	status._tag !== "Running" && status._tag !== "Waiting"

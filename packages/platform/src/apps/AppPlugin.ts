@@ -30,6 +30,7 @@ import { Connections } from "./Connections.ts"
 import { Capabilities, type Opened } from "./Capabilities.ts"
 import { Invocations, type Position } from "./Invocations.ts"
 import { ActionPolicy } from "./ActionPolicy.ts"
+import { Gate } from "../capabilities/Gate.ts"
 import { Repository, ownerKey } from "./Repository.ts"
 
 export const pluginId = Plugin.Id.make("@openbot-build/platform/k-apps")
@@ -60,7 +61,43 @@ interface Services {
 	readonly capabilities: typeof Capabilities.Service
 	readonly invocations: typeof Invocations.Service
 	readonly policy: typeof ActionPolicy.Service
+	readonly gate: typeof Gate.Service
 }
+
+/** The name of the parameter that every App tool call gets for the reason of the Agent. */
+const reasonKey = "openbot_reason"
+/** Adds the reason parameter to the parameters of an App tool. */
+const withReason = (schema: JsonSchema.JsonSchema): JsonSchema.JsonSchema => {
+	const declared = schema["properties"]
+	const properties =
+		typeof declared === "object" && declared !== null ? declared : {}
+	return {
+		...schema,
+		type: "object",
+		properties: {
+			...properties,
+			[reasonKey]: {
+				type: "string",
+				description:
+					"Why you call this tool. A decider reads it when the call needs a decision.",
+			},
+		},
+	}
+}
+/** Takes the reason out of the arguments, so the App never sees it. */
+const split = (input: unknown) =>
+	Schema.decodeUnknownEffect(Schema.JsonObject)(input).pipe(
+		Effect.map((all) => {
+			const { [reasonKey]: reason, ...args } = all
+			return {
+				args,
+				reason:
+					typeof reason === "string" && reason.length > 0
+						? reason
+						: "The Agent gave no reason.",
+			}
+		}),
+	)
 interface Permits {
 	readonly check: (
 		connectionId: string,
@@ -200,25 +237,42 @@ const entriesFor = (
 			entries = Arr.append(entries, {
 				tool: Tool.dynamic(name, {
 					description: `${origin.appName} / ${origin.connectionName} / ${origin.name}. ${description}`,
-					parameters: schema,
+					parameters: needsApproval ? withReason(schema) : schema,
 					success: AppExecution.ToolResult,
 					needsApproval: needsApproval
 						? (input, context) =>
-								Schema.decodeUnknownEffect(Schema.JsonObject)(input).pipe(
-									Effect.flatMap((args) =>
-										services.invocations.propose({
-											...position,
-											source: origin,
-											toolName: name,
-											callId: context.toolCallId,
-											arguments: args,
-										}),
-									),
-									Effect.map((value) => value.status === "PendingApproval"),
-									// When the proposal cannot be saved, ask the user to approve.
+								Effect.gen(function* () {
+									const { args, reason } = yield* split(input)
+									const invocation = yield* services.invocations.propose({
+										...position,
+										source: origin,
+										toolName: name,
+										callId: context.toolCallId,
+										arguments: args,
+									})
+									const answer = yield* services.gate.check({
+										capability: {
+											action: "apps.call",
+											target: origin.connectionId + "/" + origin.name,
+										},
+										reason,
+										toolCallId: context.toolCallId,
+										app: invocation,
+										// The deployment owner says which tools only read.
+										implicit: services.policy.isRead(origin),
+									})
+									if (answer === "allow")
+										yield* services.invocations.approve(
+											position,
+											context.toolCallId,
+											true,
+										)
+									return answer === "pause"
+								}).pipe(
+									// When anything fails, the call waits and never runs without a decision.
 									Effect.catch((error) =>
 										Effect.logWarning(
-											"Could not record an App action proposal.",
+											"Could not check an App action.",
 											error,
 										).pipe(Effect.as(true)),
 									),
@@ -229,16 +283,14 @@ const entriesFor = (
 					Effect.gen(function* () {
 						if (context.toolCallId === undefined)
 							return yield* denied("invoke", origin.name)
-						const args = yield* Schema.decodeUnknownEffect(Schema.JsonObject)(
-							input,
-						)
+						const { args } = yield* split(input)
 						const operation = Effect.gen(function* () {
 							const current = yield* services.repository
 								.get(owner, origin.connectionId)
 								.pipe(Effect.mapError(() => denied("invoke", origin.name)))
 							if (current.revision !== origin.revision)
 								return yield* denied("invoke", origin.name)
-							return yield* Match.value(yield* perform(input)).pipe(
+							return yield* Match.value(yield* perform(args)).pipe(
 								Match.tag("Completed", ({ result }) =>
 									json(result).pipe(
 										Effect.map(
@@ -543,6 +595,7 @@ export const make: Effect.Effect<
 	| Connections
 	| ViewRepository
 	| InvocationRepository
+	| Gate
 > = Effect.gen(function* () {
 	const index = yield* PublicIndex
 	const connections = yield* Connections
@@ -553,6 +606,7 @@ export const make: Effect.Effect<
 		repository: yield* Repository,
 		invocations: yield* Invocations,
 		policy: yield* ActionPolicy,
+		gate: yield* Gate,
 	}
 	return AppPlugin.of({
 		forOwner: (identity) =>

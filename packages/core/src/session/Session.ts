@@ -12,6 +12,7 @@ import { Id, Revision } from "./SessionIdentity.ts"
 import * as Turn from "./Turn.ts"
 import * as Item from "../timeline/Item.ts"
 import * as Timeline from "../timeline/Timeline.ts"
+import * as TimelineState from "../timeline/TimelineState.ts"
 import { PromptJson } from "../store/PromptCodec.ts"
 import type * as SessionStore from "../store/SessionStore.ts"
 import type * as Agent from "../agent/Agent.ts"
@@ -113,13 +114,27 @@ export interface ActionInput extends Omit<Input, "input" | "action"> {
 export interface ActionReceipt extends Receipt {
 	readonly callId: string
 }
-export interface ApprovalInput {
+/** How the host answers one approval request of a waiting Turn. */
+export type Outcome = Data.TaggedEnum<{
+	/** The tool runs with its own handler. */
+	Approved: {}
+	/** The tool does not run. The model sees the reason. */
+	Denied: { readonly reason?: string }
+	/** The tool does not run. The host gives its result instead. */
+	Result: { readonly result: unknown; readonly isFailure: boolean }
+}>
+export const Outcome = Data.taggedEnum<Outcome>()
+export interface ResolveInput {
 	readonly session: Id
 	readonly turn: Turn.Id
 	readonly approval: string
-	readonly approved: boolean
+	readonly outcome: Outcome
 	readonly expectedRevision: Revision
 }
+export type Wait = TimelineState.Wait
+/** The approval requests of a Session that still wait for an answer. */
+export const waits = <P>(view: View<P>): ReadonlyArray<Wait> =>
+	TimelineState.waits(view.state.value)
 export interface Receipt {
 	readonly session: Id
 	readonly turn: Turn.Id
@@ -147,10 +162,6 @@ export interface Runtime<
 	HostTools extends Record<string, Tool.Any> = {},
 > {
 	readonly isActive: (session: Id) => Effect.Effect<boolean>
-	readonly canApprove: (input: {
-		readonly session: Id
-		readonly turn: Turn.Id
-	}) => Effect.Effect<boolean>
 	readonly execute: (
 		input: Input,
 	) => Effect.Effect<
@@ -178,8 +189,9 @@ export interface Runtime<
 		RuntimeError,
 		Agent.ActionServices<Tools, R>
 	>
-	readonly approveAction: (
-		input: ApprovalInput,
+	/** Like resolve, for a Turn that runs a host-selected action. */
+	readonly resolveAction: (
+		input: ResolveInput,
 	) => Effect.Effect<Receipt, RuntimeError, Agent.ActionServices<Tools, R>>
 	readonly runQueued: (
 		session: Id,
@@ -209,8 +221,12 @@ export interface Runtime<
 		readonly session: Id
 		readonly turn: Turn.Id
 	}) => Effect.Effect<View<P>, RuntimeError>
-	readonly approve: (
-		input: ApprovalInput,
+	/**
+	 * Answers one approval request of a waiting Turn. The answer is stored in the history,
+	 * so it works after a restart. The Turn runs again when no request waits any more.
+	 */
+	readonly resolve: (
+		input: ResolveInput,
 	) => Effect.Effect<Receipt, RuntimeError, Agent.RuntimeServices<Tools, R>>
 	readonly resume: (session: Id) => Effect.Effect<View<P>, RuntimeError>
 	readonly status: (session: Id) => Effect.Effect<View<P>, RuntimeError>

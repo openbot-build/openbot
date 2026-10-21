@@ -2,7 +2,12 @@ import { mock } from "node:test"
 import { AuthApi } from "@openbot-build/platform-api"
 import { NodeServices } from "@effect/platform-node"
 import { Config, Model, Provider } from "@openbot-build/core"
-import { Auth, Server, DatabasePostgres } from "@openbot-build/platform"
+import {
+	Auth,
+	Server,
+	DatabasePostgres,
+	type Platform,
+} from "@openbot-build/platform"
 import {
 	Match,
 	Effect,
@@ -43,6 +48,7 @@ export async function start(options: {
 		readonly intervalMs?: number
 		readonly retryMs?: number
 	}
+	readonly agents?: Platform.AgentOptions
 }) {
 	const database = await PostgresTest.start()
 	const issuer = "https://id.example.com"
@@ -244,6 +250,7 @@ export async function start(options: {
 			? {}
 			: { discovery: options.discovery }),
 		...(options.appProbe === undefined ? {} : { appProbe: options.appProbe }),
+		...(options.agents === undefined ? {} : { agents: options.agents }),
 		// Test accounts have verified emails at example.com, so they all join one organization.
 		organization: options.organization ?? {
 			allowedEmailDomains: ["example.com"],

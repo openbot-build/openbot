@@ -3,7 +3,7 @@ title: Sessions
 description: Create Sessions, run Turns, and read the results.
 ---
 
-A **Session** is one conversation and line of work. You give it work in **Turns**. A Turn is one request and all the Agent work that follows it.
+A **Session** is one conversation and line of work. You give it work in **Turns**. A Turn is one request and all the Agent work that follows it. Every Session belongs to one [Agent](/docs/agents).
 This page shows the Session and Turn routes. Every route is under `/v1/sessions` and accepts a user token or the session cookie. See [Authentication](/docs/authentication).
 
 | Term          | Meaning                                                                                         |
@@ -27,7 +27,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions
 ```
 
-Both fields are optional. `settings` can hold `mode` and `model`. To set the memory switches, see [Memory](/docs/memory#switches). Creating a Session does not call a model.
+All fields are optional. `agent` is the ID of the Agent that works in the Session. Without it, your [Main Agent](/docs/agents) works in it. You need `agents.delegate` on the Agent. `settings` can hold `mode` and `model`. Without a model, the Session uses the model of the Agent, then the server default. To set the memory switches, see [Memory](/docs/memory#switches). Creating a Session does not call a model.
 Platform returns `201` with the Session view. Here is a short form of it:
 
 ```json
@@ -46,10 +46,15 @@ Platform returns `201` with the Session view. Here is a short form of it:
 		"version": { "id": "v-7d21" },
 		"value": { "conversation": { "history": [] } }
 	},
+	"agent": "agt_3f9a…",
+	"kind": "direct",
+	"parent": null,
 	"response": null,
 	"activity": "inactive"
 }
 ```
+
+`agent` is the Agent of the Session. `kind` is `direct` for work that a client started, `delegated` for work that another Agent gave, and `review` for a Session where an Agent decides one [request](/docs/requests). `parent` names the Session, Turn and tool call that started delegated work. See [Delegation](/docs/delegation).
 
 `response` is the latest Turn's answer. `activity` is `active` while a Turn runs on this server, `inactive` when nothing runs, and `historical` when a saved Turn says it runs but no server runs it.
 
@@ -60,7 +65,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   "https://api.example.com/v1/sessions?archived=false"
 ```
 
-The list is an array of summaries. Each summary has `session`, `status` (`Idle`, `Running`, `WaitingApproval`, `Completed`, `Failed` or `Interrupted`), `turn`, a short `response` and `activity`. Leave out `archived` to get all Sessions.
+The list is an array of summaries. Each summary has `session`, `agent`, `kind`, `parent`, `status` (`Idle`, `Running`, `Waiting`, `Completed`, `Failed` or `Interrupted`), `turn`, a short `response` and `activity`. Leave out `archived` to get all Sessions. Add `agent=<id>` to list the Sessions of one Agent. Review Sessions are left out unless you add `kind=review`.
 
 `GET /v1/sessions/:sessionId` returns the full view. Reading never starts work.
 
@@ -80,7 +85,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions/$SESSION
 ```
 
-`DELETE /v1/sessions/:sessionId` removes the Session and returns `204`. If a Turn runs, Platform returns `409` with `SessionBusy`.
+`DELETE /v1/sessions/:sessionId` removes the Session and returns `204`. Its [subagents](/docs/agents#three-kinds-of-agents) are archived. If a Turn runs, Platform returns `409` with `SessionBusy`.
 
 ---
 
@@ -175,7 +180,7 @@ The stream only watches the Turn. If you close it, the Turn goes on.
 | `503`  | `SessionExecutionUnavailable` | Platform has no model to run the Turn.          |
 | `503`  | `SessionStorageUnavailable`   | Platform cannot reach its database.             |
 
-A Turn can also stop and wait for a person. See [Approvals](/docs/approvals).
+A Turn can also stop and wait: for a decision about a capability, or for work that it gave to another Agent. Its status is then `Waiting`. The wait survives a server restart. See [Requests](/docs/requests) and [Delegation](/docs/delegation).
 
 ---
 
@@ -204,7 +209,7 @@ Platform returns `202` with `session`, `turn`, `item`, `revision` and `version`.
 
 **Interrupt** stops a Turn: `POST /v1/sessions/:sessionId/turns/:turnId/interrupt` with the body `{}`. The Turn status becomes `Interrupted` and the response status becomes `cancelled`. A Turn that has already ended returns `409`.
 
-**Resume** cleans up after a restart: `POST /v1/sessions/:sessionId/resume`. If a saved Turn still says it runs but no server runs it (`activity: "historical"`), Platform marks it `Interrupted`. It does not run the Turn again.
+**Resume** cleans up after a restart: `POST /v1/sessions/:sessionId/resume`. If a saved Turn still says it runs but no server runs it (`activity: "historical"`), Platform marks it `Interrupted`. It does not run the Turn again. A `Waiting` Turn is not touched, because its wait is saved.
 
 ---
 

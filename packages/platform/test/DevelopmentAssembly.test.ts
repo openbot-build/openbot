@@ -1,4 +1,5 @@
 // @effect-diagnostics strictEffectProvide:off
+import * as AgentFixture from "./AgentFixture.ts"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { NodeServices } from "@effect/platform-node"
@@ -358,7 +359,7 @@ test(
 			const create = () =>
 				runtime.runPromise(
 					Effect.gen(function* () {
-						const view = yield* sessions.create({})
+						const view = yield* sessions.create(AgentFixture.direct())
 						return yield* sessions.selectModel(view.session.id, {
 							expected: view.session.revision,
 							selection: Config.Selection.make({
@@ -388,22 +389,23 @@ test(
 			)
 			assert.ok(
 				waiting.every(
-					(view) => Session.status(view.session)._tag === "WaitingApproval",
+					(view) => Session.status(view.session)._tag === "Waiting",
 				),
 			)
 			assert.equal(HashMap.size(calls), 0)
 			const approve = async (view: SessionView, approved: boolean) => {
 				const pending = await runtime.runPromise(
-					sessions.pendingApprovals(view.session.id),
+					sessions.waits(view.session.id),
 				)
 				assert.equal(pending.length, 1)
 				await runtime.runPromise(
-					sessions.approve(view.session.id, {
-						approvalId: pending[0]!.approvalId,
-						turn: pending[0]!.turn,
-						expected: view.session.revision,
-						approved,
-					}),
+					sessions.resolveCall(
+						view.session.id,
+						pending[0]!.toolCallId,
+						approved
+							? Session.Outcome.Approved()
+							: Session.Outcome.Denied({ reason: "rejected" }),
+					),
 				)
 				return runtime.runPromise(wait(sessions, view.session.id))
 			}
@@ -423,7 +425,7 @@ test(
 				/rejected.*execution-denied/,
 			)
 			assert.deepEqual(
-				await runtime.runPromise(sessions.pendingApprovals(first.session.id)),
+				await runtime.runPromise(sessions.waits(first.session.id)),
 				[],
 			)
 			assert.equal(HashMap.size(calls), 1)

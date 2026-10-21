@@ -2,40 +2,196 @@ import { Context, Schema } from "effect"
 import { HttpApiMiddleware, HttpApiSchema } from "effect/http-api"
 import { Identity } from "./Identity.ts"
 
-/**
- * A permission group is a named set of actions on one kind of resource.
- * Policies grant or deny permission groups on resources.
- */
-export const PermissionGroupId = Schema.Literals([
-	"responses.run",
-	"sessions.read",
-	"sessions.write",
-	"approvals.resolve",
-	"connections.read",
-	"connections.write",
-	"apps.use",
-	"apps.publish",
-	"models.use",
-	"tokens.read",
-	"tokens.write",
-	"organization.read",
-	"organization.write",
-	"members.read",
-	"members.write",
-	"audit_logs.read",
-])
-export type PermissionGroupId = typeof PermissionGroupId.Type
-
 /** The kind of resource that a permission group acts on. */
 export const ResourceKind = Schema.Literals([
 	"organization",
 	"user",
 	"session",
+	"agent",
+	"request",
 	"connection",
 	"apps",
 	"model",
 ])
 export type ResourceKind = typeof ResourceKind.Type
+
+/**
+ * A permission group is a named set of actions on one kind of resource.
+ * Policies grant or deny permission groups on resources.
+ * This tree is the only source of permission groups. Each id joins a resource
+ * and an action with a dot, such as `sessions.read`.
+ */
+const permissionTree = {
+	responses: {
+		scope: "session",
+		actions: {
+			run: {
+				name: "Responses Run",
+				description: "Start, steer, queue and resume work in a Session.",
+			},
+		},
+	},
+	sessions: {
+		scope: "session",
+		actions: {
+			read: {
+				name: "Sessions Read",
+				description: "Read Sessions, their history, memory and delegations.",
+			},
+			write: {
+				name: "Sessions Write",
+				description:
+					"Create, change, fork, restore, interrupt and delete Sessions.",
+			},
+		},
+	},
+	requests: {
+		scope: "request",
+		actions: {
+			resolve: {
+				name: "Requests Resolve",
+				description:
+					"Answer the requests of your Agents for new capabilities, such as App tool calls.",
+			},
+		},
+	},
+	agents: {
+		scope: "agent",
+		actions: {
+			read: {
+				name: "Agents Read",
+				description: "Read Agents, their memory, Rules and Grants.",
+			},
+			write: {
+				name: "Agents Write",
+				description:
+					"Create and change Agents, their memory, Rules and Grants.",
+			},
+			delegate: {
+				name: "Agents Delegate",
+				description:
+					"Give work to an Agent, from a client or from another Agent.",
+			},
+		},
+	},
+	connections: {
+		scope: "connection",
+		actions: {
+			read: {
+				name: "Connections Read",
+				description: "Read App connections and App accounts.",
+			},
+			write: {
+				name: "Connections Write",
+				description:
+					"Create, change and delete App connections, and sign in to App accounts.",
+			},
+		},
+	},
+	apps: {
+		scope: "apps",
+		actions: {
+			use: {
+				name: "Apps Use",
+				description: "Find Apps, and use App operations and App views.",
+			},
+			publish: {
+				name: "Apps Publish",
+				description: "Use the developer tools for Apps that you publish.",
+			},
+		},
+	},
+	models: {
+		scope: "model",
+		actions: {
+			use: {
+				name: "Models Use",
+				description: "Choose a model for a Session.",
+			},
+		},
+	},
+	tokens: {
+		scope: "user",
+		actions: {
+			read: {
+				name: "Tokens Read",
+				description: "List API tokens.",
+			},
+			write: {
+				name: "Tokens Write",
+				description: "Create and revoke API tokens.",
+			},
+		},
+	},
+	organization: {
+		scope: "organization",
+		actions: {
+			read: {
+				name: "Organization Read",
+				description: "Read the organization settings.",
+			},
+			write: {
+				name: "Organization Write",
+				description: "Change the organization settings.",
+			},
+		},
+	},
+	members: {
+		scope: "organization",
+		actions: {
+			read: {
+				name: "Members Read",
+				description: "List members, their roles and their policies.",
+			},
+			write: {
+				name: "Members Write",
+				description:
+					"Change the roles, policies and status of members, and remove members.",
+			},
+		},
+	},
+	audit_logs: {
+		scope: "organization",
+		actions: {
+			read: {
+				name: "Audit Logs Read",
+				description: "Read the audit log.",
+			},
+		},
+	},
+} as const satisfies Record<
+	string,
+	{
+		readonly scope: ResourceKind
+		readonly actions: Record<
+			string,
+			{ readonly name: string; readonly description: string }
+		>
+	}
+>
+type PermissionTree = typeof permissionTree
+
+type PermissionGroupIds = {
+	readonly [
+		Resource in keyof PermissionTree
+	]: `${Resource}.${keyof PermissionTree[Resource]["actions"] & string}`
+}[keyof PermissionTree]
+
+const permissionGroupList = Object.entries(permissionTree).flatMap(
+	([resource, { scope, actions }]) =>
+		Object.entries(actions).map(([action, group]) => ({
+			// `Object.entries` gives plain strings. The type above gives the same ids.
+			id: `${resource}.${action}` as PermissionGroupIds,
+			name: group.name,
+			scope,
+			description: group.description,
+		})),
+)
+
+export const PermissionGroupId = Schema.Literals(
+	permissionGroupList.map((group) => group.id),
+)
+export type PermissionGroupId = typeof PermissionGroupId.Type
 
 export const PermissionGroup = Schema.Struct({
 	id: PermissionGroupId,
@@ -45,108 +201,8 @@ export const PermissionGroup = Schema.Struct({
 })
 export type PermissionGroup = typeof PermissionGroup.Type
 
-export const permissionGroups: ReadonlyArray<PermissionGroup> = [
-	{
-		id: "responses.run",
-		name: "Responses Run",
-		scope: "session",
-		description: "Start, steer, queue and resume work in a Session.",
-	},
-	{
-		id: "sessions.read",
-		name: "Sessions Read",
-		scope: "session",
-		description: "Read Sessions, their history, memory and approvals.",
-	},
-	{
-		id: "sessions.write",
-		name: "Sessions Write",
-		scope: "session",
-		description:
-			"Create, change, fork, restore, interrupt and delete Sessions.",
-	},
-	{
-		id: "approvals.resolve",
-		name: "Approvals Resolve",
-		scope: "session",
-		description: "Answer approvals for tool calls.",
-	},
-	{
-		id: "connections.read",
-		name: "Connections Read",
-		scope: "connection",
-		description: "Read App connections and App accounts.",
-	},
-	{
-		id: "connections.write",
-		name: "Connections Write",
-		scope: "connection",
-		description:
-			"Create, change and delete App connections, and sign in to App accounts.",
-	},
-	{
-		id: "apps.use",
-		name: "Apps Use",
-		scope: "apps",
-		description: "Find Apps, and use App operations and App views.",
-	},
-	{
-		id: "apps.publish",
-		name: "Apps Publish",
-		scope: "apps",
-		description: "Use the developer tools for Apps that you publish.",
-	},
-	{
-		id: "models.use",
-		name: "Models Use",
-		scope: "model",
-		description: "Choose a model for a Session.",
-	},
-	{
-		id: "tokens.read",
-		name: "Tokens Read",
-		scope: "user",
-		description: "List API tokens.",
-	},
-	{
-		id: "tokens.write",
-		name: "Tokens Write",
-		scope: "user",
-		description: "Create and revoke API tokens.",
-	},
-	{
-		id: "organization.read",
-		name: "Organization Read",
-		scope: "organization",
-		description: "Read the organization settings.",
-	},
-	{
-		id: "organization.write",
-		name: "Organization Write",
-		scope: "organization",
-		description: "Change the organization settings.",
-	},
-	{
-		id: "members.read",
-		name: "Members Read",
-		scope: "organization",
-		description: "List members, their roles and their policies.",
-	},
-	{
-		id: "members.write",
-		name: "Members Write",
-		scope: "organization",
-		description:
-			"Change the roles, policies and status of members, and remove members.",
-	},
-	{
-		id: "audit_logs.read",
-		name: "Audit Logs Read",
-		scope: "organization",
-		description: "Read the audit log.",
-	},
-]
-
+export const permissionGroups: ReadonlyArray<PermissionGroup> =
+	permissionGroupList
 /**
  * A resource key names one resource, such as
  * `openbot.org.<org>.user.<user>.session.<session>`.
@@ -169,30 +225,18 @@ export const Policy = Schema.Struct({
 export type Policy = typeof Policy.Type
 export const Policies = Schema.Array(Policy).check(Schema.isMaxLength(50))
 
-export const RoleId = Schema.Literals([
-	"super_administrator",
-	"administrator",
-	"administrator_read_only",
-	"member",
-	"auditor",
-])
-export type RoleId = typeof RoleId.Type
-
-export const Role = Schema.Struct({
-	id: RoleId,
-	name: Schema.String,
-	description: Schema.String,
-	policies: Schema.Array(Policy),
-})
-export type Role = typeof Role.Type
-
 const organization = "openbot.org.{org}"
 const self = "openbot.org.{org}.user.{self}"
+/** The shared Agents of the organization. */
+const sharedAgents = "openbot.org.{org}.agent"
 const own: ReadonlyArray<PermissionGroupId> = [
 	"responses.run",
 	"sessions.read",
 	"sessions.write",
-	"approvals.resolve",
+	"requests.resolve",
+	"agents.read",
+	"agents.write",
+	"agents.delegate",
 	"connections.read",
 	"connections.write",
 	"apps.use",
@@ -205,9 +249,17 @@ const ownWork: Policy = {
 	permissionGroups: own,
 	resources: [self],
 }
+const useSharedAgents: Policy = {
+	effect: "allow",
+	permissionGroups: ["agents.read", "agents.delegate"],
+	resources: [sharedAgents],
+}
 
-/** Built-in roles. Their policies cannot change. */
-export const roles: ReadonlyArray<Role> = [
+/**
+ * Built-in roles. Their policies cannot change.
+ * This list is the only source of roles. `RoleId` comes from it.
+ */
+export const roles = [
 	{
 		id: "super_administrator",
 		name: "Super Administrator",
@@ -225,9 +277,15 @@ export const roles: ReadonlyArray<Role> = [
 		id: "administrator",
 		name: "Administrator",
 		description:
-			"Manage the organization and its members. Work only with your own Sessions and connections.",
+			"Manage the organization, its members and its shared Agents. Work only with your own Sessions and connections.",
 		policies: [
 			ownWork,
+			useSharedAgents,
+			{
+				effect: "allow",
+				permissionGroups: ["agents.write"],
+				resources: [sharedAgents],
+			},
 			{
 				effect: "allow",
 				permissionGroups: [
@@ -249,6 +307,7 @@ export const roles: ReadonlyArray<Role> = [
 			"Read the organization, its members and the audit log. Work only with your own Sessions and connections.",
 		policies: [
 			ownWork,
+			useSharedAgents,
 			{
 				effect: "allow",
 				permissionGroups: [
@@ -265,9 +324,10 @@ export const roles: ReadonlyArray<Role> = [
 		id: "member",
 		name: "Member",
 		description:
-			"Work with your own Sessions, connections and tokens, and use the models of the organization.",
+			"Work with your own Agents, Sessions, connections and tokens, and use the shared Agents and the models of the organization.",
 		policies: [
 			ownWork,
+			useSharedAgents,
 			{
 				effect: "allow",
 				permissionGroups: ["models.use", "organization.read"],
@@ -291,7 +351,23 @@ export const roles: ReadonlyArray<Role> = [
 			},
 		],
 	},
-]
+] as const satisfies ReadonlyArray<{
+	readonly id: string
+	readonly name: string
+	readonly description: string
+	readonly policies: ReadonlyArray<Policy>
+}>
+
+export const RoleId = Schema.Literals(roles.map((role) => role.id))
+export type RoleId = typeof RoleId.Type
+
+export const Role = Schema.Struct({
+	id: RoleId,
+	name: Schema.String,
+	description: Schema.String,
+	policies: Schema.Array(Policy),
+})
+export type Role = typeof Role.Type
 
 export class PermissionDenied extends Schema.TaggedError<PermissionDenied>()(
 	"PermissionDenied",

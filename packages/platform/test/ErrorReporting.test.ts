@@ -1,4 +1,5 @@
 // @effect-diagnostics strictEffectProvide:off
+import * as AgentFixture from "./AgentFixture.ts"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { NodeServices } from "@effect/platform-node"
@@ -19,7 +20,6 @@ import { HttpRouter, HttpServerResponse } from "effect/http"
 import * as ErrorReporting from "../src/app/ErrorReporting.ts"
 import * as EnvironmentConfiguration from "../src/configuration/EnvironmentConfiguration.ts"
 import * as ManagedSessions from "../src/sessions/ManagedSessions.ts"
-import * as Approvals from "../src/approvals/Approvals.ts"
 import * as RepositoryPostgres from "../src/sessions/RepositoryPostgres.ts"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
@@ -127,10 +127,7 @@ test(
 	async () => {
 		const database = await PostgresTest.start()
 		let logs: ReadonlyArray<Readonly<Record<string, unknown>>> = []
-		const layer = Layer.mergeAll(
-			RepositoryPostgres.layer,
-			Approvals.layer,
-		).pipe(
+		const layer = Layer.mergeAll(RepositoryPostgres.layer).pipe(
 			Layer.provideMerge(
 				DatabasePostgres.layer({ databaseUrl: Redacted.make(database.url) }),
 			),
@@ -163,7 +160,7 @@ test(
 							generateText: () => Effect.never,
 							streamText: () => Stream.never,
 						})
-						const created = yield* sessions.create({})
+						const created = yield* sessions.create(AgentFixture.direct())
 						const receipt = yield* sessions
 							.send(created.session.id, {
 								input: "Private input",
@@ -192,7 +189,7 @@ test(
 							title: "Renamed",
 						})
 						assert.equal(logs.length, 1)
-						const other = yield* sessions.create({})
+						const other = yield* sessions.create(AgentFixture.direct())
 						const pending = yield* sessions
 							.send(other.session.id, {
 								input: "Cancel",

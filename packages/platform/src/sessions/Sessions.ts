@@ -27,8 +27,10 @@ import {
 	type SessionSummary,
 	type CreateSessionRequest,
 	type StartTurnRequest,
-	type ToolApproval,
 	type MemoryCommand,
+	type AgentsApi,
+	type SessionKind,
+	type SessionParent,
 	type SessionMemory,
 } from "@openbot-build/platform-api"
 import { Context, Effect, Layer, Scope, Stream } from "effect"
@@ -36,6 +38,17 @@ import { LanguageModel, type Tool, type Toolkit } from "effect/ai"
 import { type Memory } from "@openbot-build/plugin-memory"
 import type { Tools as AppTools } from "../apps/AppPlugin.ts"
 import type * as SessionHost from "./SessionHost.ts"
+
+/** What a new Session needs: the Agent that works in it and where the work came from. */
+export interface CreateInput {
+	readonly agent: AgentsApi.Agent
+	readonly kind: SessionKind
+	readonly chain: SessionHost.Chain
+	readonly parent?: SessionParent
+	readonly review?: string
+	readonly title?: string
+	readonly settings?: CreateSessionRequest["settings"]
+}
 
 export type ServiceError =
 	| SessionNotFound
@@ -102,9 +115,10 @@ export class Sessions extends Context.Service<
 		readonly versions: (
 			id: Session.Id,
 		) => Effect.Effect<ReadonlyArray<Timeline.Version>, ServiceError>
-		readonly pendingApprovals: (
+		/** The tool calls of the current Turn that wait for an answer. */
+		readonly waits: (
 			id: Session.Id,
-		) => Effect.Effect<ReadonlyArray<ToolApproval>, ServiceError>
+		) => Effect.Effect<ReadonlyArray<Session.Wait>, ServiceError>
 		readonly models: (
 			id: Session.Id,
 		) => Effect.Effect<SessionModels, ServiceError>
@@ -128,6 +142,8 @@ export class Sessions extends Context.Service<
 		) => Effect.Effect<SessionView, ServiceError>
 		readonly list: (input?: {
 			readonly archived?: boolean
+			readonly agent?: string
+			readonly kind?: SessionKind
 		}) => Effect.Effect<ReadonlyArray<SessionSummary>, ServiceError>
 		readonly update: (
 			id: Session.Id,
@@ -160,7 +176,7 @@ export class Sessions extends Context.Service<
 			turn: Turn.Id,
 		) => Effect.Effect<SessionView, ServiceError>
 		readonly create: (
-			input: CreateSessionRequest,
+			input: CreateInput,
 		) => Effect.Effect<SessionView, ServiceError>
 		readonly get: (id: Session.Id) => Effect.Effect<SessionView, ServiceError>
 		readonly send: (
@@ -178,20 +194,15 @@ export class Sessions extends Context.Service<
 				readonly turn?: Turn.Id
 			},
 		) => Effect.Effect<Session.ActionReceipt, ServiceError>
-		readonly approve: (
+		/**
+		 * Answers a waiting tool call of the current Turn. It does nothing when the call
+		 * does not wait any more, so a second answer is safe.
+		 */
+		readonly resolveCall: (
 			id: Session.Id,
-			input: {
-				readonly approvalId: string
-				readonly approved: boolean
-				readonly grantReads?: boolean
-				readonly reason?: string
-				readonly expected: Session.Revision
-				readonly turn: Turn.Id
-			},
-		) => Effect.Effect<
-			SessionResponse,
-			ServiceError | SessionExecutionUnavailable
-		>
+			toolCallId: string,
+			outcome: Session.Outcome,
+		) => Effect.Effect<void, ServiceError | SessionExecutionUnavailable>
 		readonly resume: (
 			id: Session.Id,
 		) => Effect.Effect<SessionView, ServiceError>

@@ -9,6 +9,7 @@ import {
 import { SessionSummary } from "@openbot-build/platform-api"
 import { Repository } from "./Repository.ts"
 import * as RepositoryEncoding from "./RepositoryEncoding.ts"
+import { agentFields } from "./SessionHost.ts"
 import { Array, Match, Effect, Equal, Layer, Schema, Option } from "effect"
 import { and, eq, inArray } from "drizzle-orm"
 import {
@@ -343,8 +344,10 @@ export const make = Effect.gen(function* () {
 				Effect.flatMap((rows) =>
 					Effect.forEach(rows, (row) =>
 						Effect.gen(function* () {
+							const session = yield* json(Session.Ref, row.body)
 							return yield* decode(SessionSummary)({
-								session: yield* json(Session.Ref, row.body),
+								session,
+								...agentFields(session),
 								status: row.status,
 								turn: row.turn,
 								response:

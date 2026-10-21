@@ -5,7 +5,8 @@ import {
 	SessionMemory,
 	SessionView,
 	SessionResponseEvent,
-	ToolApproval,
+	RequestsApi,
+	AgentsApi,
 } from "@openbot-build/platform-api"
 import { AiError, LanguageModel, Response } from "effect/ai"
 import { Timeline, Session } from "@openbot-build/core"
@@ -61,7 +62,7 @@ test(
 				await (await request(alice.session, path + "/versions")).json(),
 			)
 			assert.deepEqual(versions, [initial.state.version])
-			for (const suffix of ["", "/versions", "/approvals", "/turns"])
+			for (const suffix of ["", "/versions", "/delegations", "/turns"])
 				assert.equal((await request(bob.session, path + suffix)).status, 404)
 			assert.equal(
 				(
@@ -102,27 +103,53 @@ test(
 				202,
 			)
 			const waiting = await wait()
-			assert.equal(Session.status(waiting.session)._tag, "WaitingApproval")
-			const pending = Schema.decodeUnknownSync(Schema.Array(ToolApproval))(
-				await (await request(alice.session, path + "/approvals")).json(),
-			)
+			assert.equal(Session.status(waiting.session)._tag, "Waiting")
+			const requests = async (
+				credential = alice.session,
+			): Promise<ReadonlyArray<RequestsApi.CapabilityRequest>> =>
+				Schema.decodeUnknownSync(Schema.Array(RequestsApi.CapabilityRequest))(
+					await (
+						await request(credential, "/v1/requests?status=pending")
+					).json(),
+				)
+			// The request appears when Platform has seen that the Turn waits.
+			const nextRequest = async () => {
+				for (let tries = 0; tries < 200; tries++) {
+					const list = await requests()
+					if (list.length > 0) return list
+					await new Promise((resolve) => setTimeout(resolve, 25))
+				}
+				return requests()
+			}
+			/** Waits until the Turn no longer waits for a decision. */
+			const settled = async () => {
+				for (let tries = 0; tries < 200; tries++) {
+					const view = await wait()
+					if (Session.status(view.session)._tag !== "Waiting") return view
+					await new Promise((resolve) => setTimeout(resolve, 25))
+				}
+				return wait()
+			}
+			const pending = await nextRequest()
 			assert.equal(pending.length, 1)
-			const control = path + "/turns/" + pending[0]!.turn,
-				approval = control + "/approvals/" + pending[0]!.approvalId
+			assert.equal(pending[0]!.capability.action, "tools.call")
+			assert.equal(pending[0]!.session, initial.session.id)
+			assert.deepEqual(await requests(bob.session), [])
+			const decide = "/v1/requests/" + pending[0]!.id
 			assert.equal(
 				(
-					await request(alice.session, approval, "POST", {
-						expected: initial.session.revision,
-						approved: true,
+					await request(alice.session, decide, "POST", {
+						expected: pending[0]!.revision + 1,
+						decision: "allow",
 					})
 				).status,
 				409,
 			)
 			assert.equal(
 				(
-					await request(bob.session, approval, "POST", {
-						expected: waiting.session.revision,
-						approved: true,
+					await request(bob.session, decide, "POST", {
+						expected: pending[0]!.revision,
+						decision: "allow",
 					})
 				).status,
 				404,
@@ -140,40 +167,28 @@ test(
 			)
 			assert.equal(fork.session.head, initial.session.head)
 			assert.deepEqual(fork.session.turns, [])
-			assert.deepEqual(fork.session.business, {})
+			assert.equal(fork.agent, initial.agent)
+			assert.equal(fork.kind, "direct")
+			assert.equal(fork.parent, null)
 			assert.deepEqual(fork.session.pending, [])
 			assert.equal(
 				(
-					await request(
-						alice.session,
-						"/v1/sessions/" +
-							fork.session.id +
-							"/turns/" +
-							pending[0]!.turn +
-							"/approvals/" +
-							pending[0]!.approvalId,
-						"POST",
-						{ expected: fork.session.revision, approved: true },
-					)
-				).status,
-				409,
-			)
-			assert.equal(
-				(
-					await request(alice.session, approval, "POST", {
-						expected: waiting.session.revision,
-						approved: false,
+					await request(alice.session, decide, "POST", {
+						expected: pending[0]!.revision,
+						decision: "deny",
+						reason: "Not now",
 					})
 				).status,
-				202,
+				200,
 			)
-			const denied = await wait()
+			const denied = await settled()
+			assert.notEqual(Session.status(denied.session)._tag, "Waiting")
 			assert.equal(host.toolCalls(), 0)
 			assert.equal(
 				(
-					await request(alice.session, approval, "POST", {
-						expected: denied.session.revision,
-						approved: true,
+					await request(alice.session, decide, "POST", {
+						expected: pending[0]!.revision + 1,
+						decision: "allow",
 					})
 				).status,
 				409,
@@ -187,27 +202,27 @@ test(
 				).status,
 				202,
 			)
-			const secondWaiting = await wait(),
-				second = Schema.decodeUnknownSync(Schema.Array(ToolApproval))(
-					await (await request(alice.session, path + "/approvals")).json(),
-				)
+			await wait()
+			const second = await nextRequest()
+			assert.equal(second.length, 1)
 			assert.equal(
 				(
 					await request(
 						alice.session,
-						path +
-							"/turns/" +
-							second[0]!.turn +
-							"/approvals/" +
-							second[0]!.approvalId,
+						"/v1/requests/" + second[0]!.id,
 						"POST",
-						{ expected: secondWaiting.session.revision, approved: true },
+						{
+							expected: second[0]!.revision,
+							decision: "allow",
+						},
 					)
 				).status,
-				202,
+				200,
 			)
-			const completed = await wait()
+			const completed = await settled()
 			assert.equal(host.toolCalls(), 1)
+			const control =
+				path + "/turns/" + Session.currentTurn(completed.session)!.id
 			assert.equal(
 				(await request(alice.session, control + "/interrupt", "POST", {}))
 					.status,
@@ -360,13 +375,25 @@ test(
 				202,
 			)
 			await wait()
-			assert.equal(host.consolidations(), beforeConsolidations + 1)
+			// One model call learns Session memory. One more learns Agent memory after the Turn.
+			for (
+				let tries = 0;
+				tries < 200 && host.consolidations() < beforeConsolidations + 2;
+				tries++
+			)
+				await new Promise((resolve) => setTimeout(resolve, 25))
+			assert.equal(host.consolidations(), beforeConsolidations + 2)
 			const old = await (
 				await request(alice.session, path + "/turns/" + completed.response!.id)
 			).json()
 			assert.equal(old.response.id, completed.response!.id)
 			assert.equal(old.response.version, completed.response!.version)
-			assert.equal((await request(alice.session, "/v1/agents")).status, 404)
+			// Sessions without an Agent belong to the Main Agent of the member.
+			const agents = Schema.decodeUnknownSync(Schema.Array(AgentsApi.Agent))(
+				await (await request(alice.session, "/v1/agents")).json(),
+			)
+			assert.equal(agents[0]?.kind, "main")
+			assert.equal(agents[0]?.id, initial.agent)
 			assert.equal(
 				(await request(alice.session, path + "/merge", "POST", {})).status,
 				404,

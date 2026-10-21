@@ -44,8 +44,33 @@ export const resourceKey = (target: {
 			return child(userKey(subject), "connection")
 		case "model":
 			return child(organizationKey(subject.organizationId), "model")
+		// The key of one Agent depends on its owner. Use agentKey when the Agent is known.
+		case "agent":
+			return child(organizationKey(subject.organizationId), "agent")
+		case "request":
+			return child(userKey(subject), "request")
 	}
 }
+
+/**
+ * The key of one Agent. Shared Agents are below the organization.
+ * The Agents of a member, and the subagents in their Sessions, are below that member.
+ */
+export const agentKey = (agent: {
+	readonly organizationId: string
+	readonly id: string
+	readonly owner:
+		| { readonly _tag: "Organization" }
+		| { readonly _tag: "Member" | "Session"; readonly userId: string }
+}) =>
+	agent.owner._tag === "Organization"
+		? organizationKey(agent.organizationId) + ".agent." + segment(agent.id)
+		: userKey({
+				organizationId: agent.organizationId,
+				userId: agent.owner.userId,
+			}) +
+			".agent." +
+			segment(agent.id)
 
 /** Put the organization and the user of the caller into a resource pattern. */
 const expand = (pattern: string, subject: Subject) =>
