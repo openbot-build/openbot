@@ -1,4 +1,4 @@
-import { Context, Data, Effect, Scope } from "effect"
+import { Context, Data, Effect, Option, Scope } from "effect"
 import * as Discovery from "../discovery/Discovery.ts"
 import * as Store from "./Store.ts"
 
@@ -27,10 +27,10 @@ export interface RevalidationOptions {
 	readonly candidate: Discovery.Candidate
 	readonly remoteIndex?: number
 	readonly values?: Readonly<Record<string, string>>
-	/** The latest requirements that the trusted host got. null means the endpoint is not protected. */
-	readonly authorization: {
+	/** The latest requirements that the trusted host got. None means the endpoint is not protected. */
+	readonly authorization: Option.Option<{
 		readonly issuer: string
 		readonly scopes: ReadonlyArray<string>
-	} | null
+	}>
 	readonly confirmed: boolean
 }

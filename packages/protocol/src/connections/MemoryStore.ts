@@ -21,6 +21,15 @@ const bindingOf = (binding: CredentialBinding) =>
 		binding.issuer,
 	])
 
+const found = <A>(
+	value: Option.Option<A>,
+	operation: string,
+): Effect.Effect<A, StoreError> =>
+	Effect.fromOption(
+		value,
+		() => new StoreError({ reason: "Missing", operation }),
+	)
+
 /** Storage inside this process only. save writes the App record and owned user connection in one atomic step. */
 export const layer = Layer.effect(
 	AppStore,
@@ -62,80 +71,54 @@ export const layer = Layer.effect(
 					})
 				return connection
 			}),
-			get: (key) =>
-				Ref.get(state).pipe(
-					Effect.flatMap((s) => {
-						const value = Option.getOrUndefined(
-							HashMap.get(s.connections, keyOf(key)),
-						)
-						return value === undefined
-							? Effect.fail(
-									new StoreError({
-										reason: "Missing",
-										operation: "get",
-									}),
-								)
-							: Effect.succeed(value)
-					}),
-				),
-			getApp: (cardUrl) =>
-				Ref.get(state).pipe(
-					Effect.flatMap((s) => {
-						const value = Option.getOrUndefined(HashMap.get(s.apps, cardUrl))
-						return value === undefined
-							? Effect.fail(
-									new StoreError({
-										reason: "Missing",
-										operation: "getApp",
-									}),
-								)
-							: Effect.succeed(value)
-					}),
-				),
-			update: (input) =>
-				Ref.modify(state, (old) => {
-					const previous = Option.getOrUndefined(
-						HashMap.get(old.connections, keyOf(input.key)),
-					)
-					if (previous === undefined) return [undefined, old] as const
-					const current = input.change(previous)
-					if (
-						keyOf(current) !== keyOf(previous) ||
-						current.cardUrl !== previous.cardUrl
-					)
-						return [undefined, old] as const
-					return [
-						current,
-						{
-							...old,
-							connections: HashMap.set(
-								old.connections,
-								keyOf(input.key),
-								current,
-							),
-						},
-					] as const
-				}).pipe(
-					Effect.filterOrFail(
-						(value): value is UserConnection => value !== undefined,
-						() =>
-							new StoreError({
-								reason: "Missing",
-								operation: "update",
-							}),
+			get: Effect.fn("AppStore.get")(function* (key) {
+				const { connections } = yield* Ref.get(state)
+				return yield* found(HashMap.get(connections, keyOf(key)), "get")
+			}),
+			getApp: Effect.fn("AppStore.getApp")(function* (cardUrl) {
+				const { apps } = yield* Ref.get(state)
+				return yield* found(HashMap.get(apps, cardUrl), "getApp")
+			}),
+			update: Effect.fn("AppStore.update")(function* (input) {
+				const id = keyOf(input.key)
+				const updated = yield* Ref.modify(state, (old) =>
+					HashMap.get(old.connections, id).pipe(
+						Option.map((previous) => ({
+							previous,
+							current: input.change(previous),
+						})),
+						Option.filter(
+							({ previous, current }) =>
+								keyOf(current) === keyOf(previous) &&
+								current.cardUrl === previous.cardUrl,
+						),
+						Option.match({
+							onNone: () => [Option.none<UserConnection>(), old] as const,
+							onSome: ({ current }) =>
+								[
+									Option.some(current),
+									{
+										...old,
+										connections: HashMap.set(old.connections, id, current),
+									},
+								] as const,
+						}),
 					),
-				),
-			updateApp: (app) =>
-				Ref.update(state, (old) => ({
+				)
+				return yield* found(updated, "update")
+			}),
+			updateApp: Effect.fn("AppStore.updateApp")(function* (app) {
+				yield* Ref.update(state, (old) => ({
 					...old,
 					apps: HashMap.set(old.apps, app.cardUrl, app),
-				})),
-			delete: (key) =>
-				Ref.update(state, (old) => {
-					let connections = old.connections
-					connections = HashMap.remove(connections, keyOf(key))
-					return { ...old, connections }
-				}),
+				}))
+			}),
+			delete: Effect.fn("AppStore.delete")(function* (key) {
+				yield* Ref.update(state, (old) => ({
+					...old,
+					connections: HashMap.remove(old.connections, keyOf(key)),
+				}))
+			}),
 		})
 	}),
 )
@@ -154,27 +137,28 @@ export const layerCredentials = Layer.effect(
 				)
 				return reference
 			}),
-			get: (input) =>
-				Ref.get(state).pipe(
-					Effect.flatMap((s) => {
-						const value = Option.getOrUndefined(HashMap.get(s, input.reference))
-						return value === undefined ||
-							bindingOf(value.binding) !== bindingOf(input.binding)
-							? Effect.fail(
-									new StoreError({
-										reason: "Missing",
-										operation: "credential.get",
-									}),
-								)
-							: Effect.succeed(value)
-					}),
-				),
-			deleteConnection: (key) =>
-				Ref.update(state, (old) =>
-					HashMap.fromIterable(
-						[...old].filter(([, value]) => keyOf(value.binding) !== keyOf(key)),
+			get: Effect.fn("CredentialStore.get")(function* (input) {
+				const credentials = yield* Ref.get(state)
+				return yield* found(
+					HashMap.get(credentials, input.reference).pipe(
+						Option.filter(
+							(credential) =>
+								bindingOf(credential.binding) === bindingOf(input.binding),
+						),
 					),
-				),
+					"credential.get",
+				)
+			}),
+			deleteConnection: Effect.fn("CredentialStore.deleteConnection")(
+				function* (key) {
+					yield* Ref.update(
+						state,
+						HashMap.filter(
+							(credential) => keyOf(credential.binding) !== keyOf(key),
+						),
+					)
+				},
+			),
 		})
 	}),
 )

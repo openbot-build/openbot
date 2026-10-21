@@ -16,6 +16,7 @@ import {
 	Effect,
 	Layer,
 	Match,
+	Option,
 	Redacted,
 	Record,
 	Schema,
@@ -487,8 +488,8 @@ export const make: Effect.Effect<
 								: attested.resource.authorization_servers[0]
 							: ""
 					const authorization = protection.requiresAuthorization
-						? { issuer: trustedIssuer, scopes: protection.scopes }
-						: null
+						? Option.some({ issuer: trustedIssuer, scopes: protection.scopes })
+						: Option.none()
 					yield* app
 						.revalidate({
 							key: owned,

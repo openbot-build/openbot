@@ -31,6 +31,12 @@ import {
 	FlowStore,
 } from "./Authorization.ts"
 
+const alreadyConsumed = () =>
+	new AuthorizationError({
+		reason: "AlreadyConsumed",
+		issue: "Callback has already been consumed",
+	})
+
 export const layerMemoryFlows = Layer.effect(
 	FlowStore,
 	Effect.gen(function* () {
@@ -74,73 +80,64 @@ export const layerMemoryFlows = Layer.effect(
 						operation: "FlowStore.save",
 					})
 			}),
-			get: (input) =>
-				Ref.get(state).pipe(
-					Effect.flatMap((old) => {
-						const stored = Option.getOrUndefined(HashMap.get(old, input.flowId))
-						if (stored === undefined || !matches(stored.flow, input.key))
-							return Effect.fail(
+			get: Effect.fn("FlowStore.get")(function* (input) {
+				return yield* HashMap.get(yield* Ref.get(state), input.flowId).pipe(
+					Option.filter((stored) => matches(stored.flow, input.key)),
+					Option.match({
+						onNone: () =>
+							Effect.fail(
 								new AuthorizationError({
 									reason: "CallbackMismatch",
 									issue: "Flow does not belong to this connection",
 								}),
-							)
-						return stored.consumed
-							? Effect.fail(
-									new AuthorizationError({
-										reason: "AlreadyConsumed",
-										issue: "Callback has already been consumed",
-									}),
-								)
-							: Effect.succeed(stored.flow)
+							),
+						onSome: (stored) =>
+							stored.consumed
+								? Effect.fail(alreadyConsumed())
+								: Effect.succeed(stored.flow),
 					}),
-				),
-			consume: (input) =>
-				Ref.modify(state, (old) => {
-					const stored = Option.getOrUndefined(HashMap.get(old, input.flowId))
-					if (
-						stored === undefined ||
-						stored.consumed ||
-						!matches(stored.flow, input.key)
-					)
-						return [false, old] as const
-					return [
-						true,
-						HashMap.set(old, input.flowId, {
-							...stored,
-							consumed: true,
+				)
+			}),
+			consume: Effect.fn("FlowStore.consume")(function* (input) {
+				const claimed = yield* Ref.modify(state, (old) =>
+					HashMap.get(old, input.flowId).pipe(
+						Option.filter(
+							(stored) => !stored.consumed && matches(stored.flow, input.key),
+						),
+						Option.match({
+							onNone: () => [false, old] as const,
+							onSome: (stored) =>
+								[
+									true,
+									HashMap.set(old, input.flowId, {
+										...stored,
+										consumed: true,
+									}),
+								] as const,
 						}),
-					] as const
-				}).pipe(
-					Effect.filterOrFail(
-						(claimed) => claimed,
-						() =>
-							new AuthorizationError({
-								reason: "AlreadyConsumed",
-								issue: "Callback has already been consumed",
-							}),
 					),
-					Effect.asVoid,
-				),
+				)
+				if (!claimed) return yield* alreadyConsumed()
+			}),
 		})
 	}),
 )
 
 const https = (url: string) =>
 	Schema.decodeEffect(Document.Link)(url).pipe(
+		Effect.mapError(
+			() =>
+				new AuthorizationError({
+					reason: "Metadata",
+					issue: "Expected an absolute HTTPS URL without credentials",
+				}),
+		),
 		Effect.filterOrFail(
 			() => new URL(url).hash === "",
 			() =>
 				new AuthorizationError({
 					reason: "Metadata",
 					issue: "OAuth URL must not contain a fragment",
-				}),
-		),
-		Effect.mapError(
-			() =>
-				new AuthorizationError({
-					reason: "Metadata",
-					issue: "Expected an absolute HTTPS URL without credentials",
 				}),
 		),
 	)
@@ -179,8 +176,8 @@ export const readClientMetadata = Effect.fn("Authorization.readClientMetadata")(
 				reason: "ClientMetadata",
 				issue: "Client metadata document is unavailable",
 			})
-		const input = yield* Schema.decodeEffect(
-			Schema.fromJsonString(Schema.Unknown),
+		const metadata = yield* Schema.decodeEffect(
+			Schema.fromJsonString(ClientMetadata),
 		)(response.text).pipe(
 			Effect.mapError(
 				(error) =>
@@ -190,7 +187,6 @@ export const readClientMetadata = Effect.fn("Authorization.readClientMetadata")(
 					}),
 			),
 		)
-		const metadata = yield* ClientMetadata.decode(input)
 		if (
 			metadata.client_id !== options.clientId ||
 			!metadata.redirect_uris.includes(options.redirectUri) ||
@@ -282,24 +278,19 @@ export const discover = Effect.fn("Authorization.discover")(
 		readonly issuer: string
 		readonly resourceMetadataUrl?: string
 	}) {
-		yield* https(options.resource)
 		yield* https(options.issuer)
-		if (options.resourceMetadataUrl !== undefined)
-			yield* https(options.resourceMetadataUrl)
+		// discoverResource checks the resource URLs and the resource match.
+		const resource = yield* discoverResource(options)
+		if (!resource.authorization_servers.includes(options.issuer))
+			return yield* new AuthorizationError({
+				reason: "Metadata",
+				issue: "Resource or trusted issuer does not match the connection",
+			})
 		return yield* Effect.scoped(
 			Effect.gen(function* () {
 				const fetch = yield* Sdk.fetch({
 					documents: true,
 				})
-				const resource = yield* discoverResource(options)
-				if (
-					resource.resource !== options.resource ||
-					!resource.authorization_servers.includes(options.issuer)
-				)
-					return yield* new AuthorizationError({
-						reason: "Metadata",
-						issue: "Resource or trusted issuer does not match the connection",
-					})
 				let metadataDocument: unknown
 				const fetchMetadata: Mcp.FetchLike = async (input, init) => {
 					const response = await fetch(input, init)
@@ -472,9 +463,8 @@ const saveTokens = Effect.fn("Authorization.saveTokens")(function* (options: {
 			reason: "GrantRejected",
 			issue: "Expected bearer resource credentials",
 		})
-	const scopes = options.tokens.scope?.split(/\s+/).filter(Boolean) ?? [
-		...options.scopes,
-	]
+	const scopes =
+		options.tokens.scope?.split(/\s+/).filter(Boolean) ?? options.scopes
 	if (scopes.some((scope) => !options.scopes.includes(scope)))
 		return yield* new AuthorizationError({
 			reason: "ScopeRequired",
@@ -749,8 +739,8 @@ export const revokeRemote = Effect.fn("Authorization.revokeRemote")(function* (
 	const apps = yield* Store.AppStore
 	const connection = yield* apps.get(key)
 	const credentials = yield* Store.CredentialStore
-	let remote = false
-	yield* Match.value(connection.authorization).pipe(
+	const local = { _tag: "LocalOnly" } as const
+	return yield* Match.value(connection.authorization).pipe(
 		Match.tag("Authorized", (auth) =>
 			Effect.gen(function* () {
 				const credential = yield* credentials.get({
@@ -764,54 +754,49 @@ export const revokeRemote = Effect.fn("Authorization.revokeRemote")(function* (
 						? {}
 						: { resourceMetadataUrl: auth.resourceMetadataUrl }),
 				})
+				const endpoint = metadata.revocation_endpoint
 				const clientId = credential.clientId
-				if (
-					metadata.revocation_endpoint !== undefined &&
-					clientId !== undefined
-				) {
-					const endpoint = metadata.revocation_endpoint
-					const network = yield* Network.Network
-					yield* Effect.scoped(
-						Effect.gen(function* () {
-							const response = yield* network.execute(
-								HttpClientRequest.post(endpoint).pipe(
-									HttpClientRequest.bodyUrlParams({
-										token: Redacted.value(
-											credential.refreshToken ?? credential.accessToken,
-										),
-										token_type_hint:
-											credential.refreshToken === undefined
-												? "access_token"
-												: "refresh_token",
-										client_id: clientId,
-									}),
-								),
-							)
-							if (response.status !== 200)
-								return yield* new AuthorizationError({
+				if (endpoint === undefined || clientId === undefined) return local
+				const network = yield* Network.Network
+				yield* Effect.scoped(
+					Effect.gen(function* () {
+						const response = yield* network.execute(
+							HttpClientRequest.post(endpoint).pipe(
+								HttpClientRequest.bodyUrlParams({
+									token: Redacted.value(
+										credential.refreshToken ?? credential.accessToken,
+									),
+									token_type_hint:
+										credential.refreshToken === undefined
+											? "access_token"
+											: "refresh_token",
+									client_id: clientId,
+								}),
+							),
+						)
+						if (response.status !== 200)
+							return yield* new AuthorizationError({
+								reason: "RevocationFailed",
+								issue: "Authorization server did not confirm revocation",
+							})
+					}),
+				).pipe(
+					Effect.timeoutOrElse({
+						duration: 10_000,
+						orElse: () =>
+							Effect.fail(
+								new AuthorizationError({
 									reason: "RevocationFailed",
-									issue: "Authorization server did not confirm revocation",
-								})
-						}),
-					).pipe(
-						Effect.timeoutOrElse({
-							duration: 10_000,
-							orElse: () =>
-								Effect.fail(
-									new AuthorizationError({
-										reason: "RevocationFailed",
-										issue: "Authorization revocation timed out",
-									}),
-								),
-						}),
-					)
-					remote = true
-				}
+									issue: "Authorization revocation timed out",
+								}),
+							),
+					}),
+				)
+				return { _tag: "Revoked" } as const
 			}),
 		),
-		Match.orElse(() => Effect.void),
+		Match.orElse(() => Effect.succeed(local)),
 	)
-	return { _tag: remote ? ("Revoked" as const) : ("LocalOnly" as const) }
 })
 
 export const revoke = Effect.fn("Authorization.revoke")(function* (
