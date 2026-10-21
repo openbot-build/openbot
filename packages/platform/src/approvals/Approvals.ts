@@ -1,12 +1,11 @@
-import { Chunk } from "effect"
-import { Option, HashMap, HashSet, Match, Context, Layer } from "effect"
+import { Array, Context, HashMap, HashSet, Layer, Option } from "effect"
 import { type Session } from "@openbot-build/core"
 import { type Prompt } from "effect/ai"
 
 export interface Pending {
 	readonly approvalId: string
 	readonly toolCallId: string
-	readonly toolCall: Prompt.ToolCallPart | undefined
+	readonly toolCall: Prompt.ToolCallPart
 }
 export class Approvals extends Context.Service<
 	Approvals,
@@ -16,66 +15,48 @@ export class Approvals extends Context.Service<
 >()("@openbot-build/platform/approvals/Approvals") {}
 
 /** Reads native pending approvals from the committed conversation window. */
-export const pending = (view: Session.View<{}>) => {
-	let calls = HashMap.empty<string, Prompt.ToolCallPart>()
-	let requests = HashMap.empty<string, string>()
-	let requestOrder = Chunk.empty<string>()
-	let resolved = HashSet.empty<string>()
-	for (const message of view.state.value.memory.context.prompt.content) {
-		Match.value(message).pipe(
-			Match.when({ role: "assistant" }, (message) => {
-				for (const part of message.content) {
-					Match.value(part).pipe(
-						Match.when({ type: "tool-call" as const }, (part) => {
-							calls = HashMap.set(calls, part.id, part)
-						}),
-						Match.orElse(() => {}),
+export const pending = (view: Session.View<{}>): ReadonlyArray<Pending> => {
+	const messages = view.state.value.memory.context.prompt.content
+	const assistantParts = messages.flatMap((message) =>
+		message.role === "assistant" ? message.content : [],
+	)
+	const toolParts = messages.flatMap((message) =>
+		message.role === "tool" ? message.content : [],
+	)
+	const calls = HashMap.fromIterable(
+		assistantParts.flatMap((part) =>
+			part.type === "tool-call" ? [[part.id, part] as const] : [],
+		),
+	)
+	const requests = assistantParts.flatMap((part) =>
+		part.type === "tool-approval-request" ? [part] : [],
+	)
+	// A later request with the same approval ID replaces the earlier tool call ID.
+	const requested = HashMap.fromIterable(
+		requests.map((part) => [part.approvalId, part.toolCallId] as const),
+	)
+	const resolved = HashSet.fromIterable(
+		toolParts.flatMap((part) =>
+			part.type === "tool-result"
+				? [part.id]
+				: part.type === "tool-approval-response"
+					? Option.toArray(HashMap.get(requested, part.approvalId))
+					: [],
+		),
+	)
+	return Array.dedupe(requests.map((part) => part.approvalId)).flatMap(
+		(approvalId) => {
+			const toolCallId = HashMap.getUnsafe(requested, approvalId)
+			return HashSet.has(resolved, toolCallId)
+				? []
+				: Option.toArray(
+						Option.map(HashMap.get(calls, toolCallId), (toolCall) => ({
+							approvalId,
+							toolCallId,
+							toolCall,
+						})),
 					)
-					Match.value(part).pipe(
-						Match.when({ type: "tool-approval-request" as const }, (part) => {
-							if (!HashMap.has(requests, part.approvalId))
-								requestOrder = Chunk.append(requestOrder, part.approvalId)
-							requests = HashMap.set(requests, part.approvalId, part.toolCallId)
-						}),
-						Match.orElse(() => {}),
-					)
-				}
-			}),
-			Match.orElse(() => {}),
-		)
-		Match.value(message).pipe(
-			Match.when({ role: "tool" }, (message) => {
-				for (const part of message.content) {
-					Match.value(part).pipe(
-						Match.when({ type: "tool-result" as const }, (part) => {
-							resolved = HashSet.add(resolved, part.id)
-						}),
-						Match.orElse(() => {}),
-					)
-					Match.value(part).pipe(
-						Match.when({ type: "tool-approval-response" as const }, (part) => {
-							const id = Option.getOrUndefined(
-								HashMap.get(requests, part.approvalId),
-							)
-							if (id !== undefined) resolved = HashSet.add(resolved, id)
-						}),
-						Match.orElse(() => {}),
-					)
-				}
-			}),
-			Match.orElse(() => {}),
-		)
-	}
-	return Array.from(requestOrder, (approvalId) => {
-		const toolCallId = HashMap.getUnsafe(requests, approvalId)
-		return {
-			approvalId,
-			toolCallId,
-			toolCall: Option.getOrUndefined(HashMap.get(calls, toolCallId)),
-		}
-	}).filter(
-		(item) =>
-			!HashSet.has(resolved, item.toolCallId) && item.toolCall !== undefined,
+		},
 	)
 }
 

@@ -1,6 +1,6 @@
 import { Session, SessionStore } from "@openbot-build/core"
 import { SessionResponse, SessionSummary } from "@openbot-build/platform-api"
-import { Context, type Effect } from "effect"
+import { Context, type Effect, type Option } from "effect"
 
 export class Repository extends Context.Service<
 	Repository,
@@ -13,15 +13,12 @@ export class Repository extends Context.Service<
 			ReadonlyArray<SessionSummary>,
 			SessionStore.SessionStoreError
 		>
-		readonly response: (
-			namespace: string,
-			session: Session.Id,
-		) => Effect.Effect<SessionResponse | null, SessionStore.SessionStoreError>
 		readonly save: (
 			namespace: string,
 			input: {
 				readonly delta: SessionStore.Delta
-				readonly response: SessionResponse | null
+				/** The response of the current Turn, when the Session has one. */
+				readonly response: Option.Option<SessionResponse>
 			},
 		) => Effect.Effect<void, SessionStore.SessionStoreError>
 		readonly remove: (

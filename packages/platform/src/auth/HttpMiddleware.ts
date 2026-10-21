@@ -9,6 +9,16 @@ import {
 } from "effect/http"
 import { ApiKeys } from "./ApiKeys.ts"
 import { Auth } from "./Auth.js"
+import type { AuthUnavailable, CredentialRejected } from "./Model.ts"
+
+/** The public error for a credential that failed to resolve. */
+const publicError = (error: AuthUnavailable | CredentialRejected) =>
+	Match.value(error).pipe(
+		Match.tagsExhaustive({
+			AuthUnavailable: () => AuthApi.AuthenticationUnavailable.make({}),
+			CredentialRejected: () => AuthApi.AuthenticationRequired.make({}),
+		}),
+	)
 
 export const setSessionCookies = (setCookies: ReadonlyArray<string>) =>
 	HttpEffect.appendPreResponseHandler((_, response) =>
@@ -47,16 +57,7 @@ export const layerSessionAuth = Layer.effect(
 		return {
 			session: (httpEffect, { credential }) =>
 				auth.resolveSession(credential).pipe(
-					Effect.mapError((error) =>
-						Match.value(error).pipe(
-							Match.tagsExhaustive({
-								AuthUnavailable: () =>
-									AuthApi.AuthenticationUnavailable.make({}),
-								CredentialRejected: () =>
-									AuthApi.AuthenticationRequired.make({}),
-							}),
-						),
-					),
+					Effect.mapError(publicError),
 					Effect.flatMap(({ setCookies, ...session }) =>
 						Effect.andThen(
 							setSessionCookies(setCookies),
@@ -84,16 +85,7 @@ export const layerAgentAuth = (config: { readonly publicOrigin: string }) =>
 			return {
 				apiKey: (httpEffect, { credential }) =>
 					apiKeys.authenticate(credential).pipe(
-						Effect.mapError((error) =>
-							Match.value(error).pipe(
-								Match.tagsExhaustive({
-									AuthUnavailable: () =>
-										AuthApi.AuthenticationUnavailable.make({}),
-									CredentialRejected: () =>
-										AuthApi.AuthenticationRequired.make({}),
-								}),
-							),
-						),
+						Effect.mapError(publicError),
 						Effect.flatMap((identity) =>
 							Effect.provideService(httpEffect, Identity, identity),
 						),
@@ -108,18 +100,7 @@ export const layerAgentAuth = (config: { readonly publicOrigin: string }) =>
 							.resolveSession(credential, {
 								refresh: !forbiddenOrigin,
 							})
-							.pipe(
-								Effect.mapError((error) =>
-									Match.value(error).pipe(
-										Match.tagsExhaustive({
-											AuthUnavailable: () =>
-												AuthApi.AuthenticationUnavailable.make({}),
-											CredentialRejected: () =>
-												AuthApi.AuthenticationRequired.make({}),
-										}),
-									),
-								),
-							)
+							.pipe(Effect.mapError(publicError))
 						if (forbiddenOrigin) return yield* AuthApi.ForbiddenOrigin.make({})
 						yield* setSessionCookies(session.setCookies)
 						return yield* Effect.provideService(

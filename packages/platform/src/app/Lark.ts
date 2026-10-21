@@ -60,39 +60,40 @@ const identifier = (value: unknown, fallback: string): string =>
 		? value
 		: fallback
 
-const eventFrom = (options: Logger.Options<unknown>): Event | undefined => {
+const eventFrom = (options: Logger.Options<unknown>): Option.Option<Event> => {
 	const annotations = options.fiber.getRef(References.CurrentLogAnnotations)
 	if (
 		annotations["lark.exclude"] === true ||
 		(options.logLevel !== "Error" && options.logLevel !== "Fatal") ||
 		Cause.hasInterruptsOnly(options.cause)
 	)
-		return undefined
+		return Option.none()
 	const error = Cause.squash(options.cause)
 	const errorType = identifier(
 		annotations["errorType"],
 		identifier(
 			Predicate.hasProperty(error, "_tag") ? error._tag : undefined,
-			error instanceof Error ? identifier(error.name, "Error") : "UnknownError",
+			Predicate.isError(error)
+				? identifier(error.name, "Error")
+				: "UnknownError",
 		),
 	)
 	// Keep only a filename and line/column. Never keep the error message or URL.
-	const location =
-		error instanceof Error
-			? (error.stack
-					?.split("\n")
-					.slice(1)
-					.map((line) =>
-						/\b([A-Za-z0-9_.-]+\.[cm]?[jt]s):([0-9]+):([0-9]+)\)?$/.exec(
-							line.trim(),
-						),
-					)
-					.find(Predicate.isNotNull)
-					?.slice(1)
-					.join(":")
-					.slice(-160) ?? "unknown")
-			: "unknown"
-	return {
+	const location = Predicate.isError(error)
+		? (error.stack
+				?.split("\n")
+				.slice(1)
+				.map((line) =>
+					/\b([A-Za-z0-9_.-]+\.[cm]?[jt]s):([0-9]+):([0-9]+)\)?$/.exec(
+						line.trim(),
+					),
+				)
+				.find(Predicate.isNotNull)
+				?.slice(1)
+				.join(":")
+				.slice(-160) ?? "unknown")
+		: "unknown"
+	return Option.some({
 		id: randomUUID(),
 		time: options.date.toISOString(),
 		level: options.logLevel,
@@ -120,7 +121,7 @@ const eventFrom = (options: Logger.Options<unknown>): Event | undefined => {
 			)
 			return safe === "" ? [] : [`${key}: ${safe}`]
 		}),
-	}
+	})
 }
 
 /** Adds best-effort Lark delivery and keeps the host's existing loggers. */
@@ -134,6 +135,13 @@ export const layer = (settings: Options) =>
 				const aggregationCapacity = settings.aggregationCapacity ?? 128
 				const windowMs = settings.windowMs ?? 60_000
 				const intervalMs = settings.intervalMs ?? 1000
+				const requestTimeoutMs = settings.requestTimeoutMs ?? 2000
+				const shutdownTimeoutMs = settings.shutdownTimeoutMs ?? 5000
+				const header = [
+					`environment: ${identifier(settings.environment, "unknown")}`,
+					`version: ${identifier(settings.version, "unknown")}`,
+					`instance: ${identifier(settings.instance, "unknown")}`,
+				]
 				const queue = yield* Queue.dropping<Notification, Cause.Done>(capacity)
 				let aggregates = HashMap.empty<string, Aggregate>()
 				let accepting = true
@@ -177,9 +185,7 @@ export const layer = (settings: Options) =>
 					const event = notification.event
 					const text = [
 						`Platform ${event.level}: ${notification.repeats > 0 ? "Repeated failure" : "Operation failed"}`,
-						`environment: ${identifier(settings.environment, "unknown")}`,
-						`version: ${identifier(settings.version, "unknown")}`,
-						`instance: ${identifier(settings.instance, "unknown")}`,
+						...header,
 						`time: ${event.time}`,
 						`eventId: ${event.id}`,
 						`source: ${event.source}`,
@@ -239,7 +245,7 @@ export const layer = (settings: Options) =>
 							})
 					}).pipe(
 						Effect.timeoutOrElse({
-							duration: settings.requestTimeoutMs ?? 2000,
+							duration: requestTimeoutMs,
 							orElse: () =>
 								Effect.fail(
 									new DeliveryError({ retryable: true, reason: "timeout" }),
@@ -259,9 +265,11 @@ export const layer = (settings: Options) =>
 									eventId: notification.event.id,
 								}),
 							),
-							Effect.catchCauseIf(
-								(cause) => !Cause.hasInterruptsOnly(cause),
-								() => local("Lark notification worker failed", {}),
+							// Delivery failures are typed and handled above. Only defects reach here.
+							Effect.catchDefect((defect) =>
+								local("Lark notification worker failed", {}).pipe(
+									Effect.annotateLogs({ defect }),
+								),
 							),
 						)
 						inFlight = 0
@@ -285,7 +293,7 @@ export const layer = (settings: Options) =>
 						expire(Infinity)
 						yield* Queue.end(queue)
 						const flushed = yield* Fiber.join(worker).pipe(
-							Effect.timeoutOption(settings.shutdownTimeoutMs ?? 5000),
+							Effect.timeoutOption(shutdownTimeoutMs),
 							Effect.interruptible,
 						)
 						if (Option.isNone(flushed)) {
@@ -298,8 +306,9 @@ export const layer = (settings: Options) =>
 				)
 				return Logger.make((log) => {
 					if (!accepting) return
-					const event = eventFrom(log)
-					if (event === undefined) return
+					const found = eventFrom(log)
+					if (Option.isNone(found)) return
+					const event = found.value
 					const now = clock.currentTimeMillisUnsafe()
 					expire(now)
 					const key = JSON.stringify([
@@ -308,12 +317,11 @@ export const layer = (settings: Options) =>
 						event.errorType,
 						event.location,
 					])
-					const existing = HashMap.get(aggregates, key)
-					if (Option.isSome(existing)) {
-						aggregates = HashMap.set(aggregates, key, {
-							...existing.value,
-							repeats: existing.value.repeats + 1,
-						})
+					if (HashMap.has(aggregates, key)) {
+						aggregates = HashMap.modify(aggregates, key, (existing) => ({
+							...existing,
+							repeats: existing.repeats + 1,
+						}))
 						return
 					}
 					if (HashMap.size(aggregates) >= aggregationCapacity) {

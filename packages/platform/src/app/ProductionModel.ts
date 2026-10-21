@@ -5,6 +5,7 @@ import {
 	Context,
 	Effect,
 	Layer,
+	Option,
 	Redacted,
 	Schema,
 	type Scope,
@@ -33,7 +34,8 @@ const Endpoint = Schema.NonEmptyString.check(
 	}),
 )
 
-export const load: Config.Config<Settings | undefined> = Config.all({
+/** No model settings at all means the host has no production model. */
+export const load: Config.Config<Option.Option<Settings>> = Config.all({
 	endpoint: Config.String("OPENBOT_MODEL_ENDPOINT").pipe(
 		Config.withDefault(""),
 	),
@@ -46,14 +48,14 @@ export const load: Config.Config<Settings | undefined> = Config.all({
 		settings.endpoint === "" &&
 		Redacted.value(settings.apiKey) === "" &&
 		settings.model === ""
-			? Config.succeed(undefined)
+			? Config.succeed(Option.none())
 			: Config.all({
 					endpoint: Config.schema(Endpoint, "OPENBOT_MODEL_ENDPOINT"),
 					apiKey: Config.NonEmptyString("OPENBOT_MODEL_API_KEY").pipe(
 						Config.map(Redacted.make),
 					),
 					model: Config.NonEmptyString("OPENBOT_MODEL_ID"),
-				}),
+				}).pipe(Config.map(Option.some)),
 	),
 )
 

@@ -1,4 +1,4 @@
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Option } from "effect"
 import * as EnvironmentConfiguration from "../configuration/EnvironmentConfiguration.ts"
 import { NodeRuntime } from "@effect/platform-node"
 
@@ -14,14 +14,13 @@ NodeRuntime.runMain(
 			const model = yield* ProductionModel.load
 			return yield* Layer.launch(
 				Layer.unwrap(
-					Effect.map(
-						model === undefined ? Effect.void : ProductionModel.make(model),
-						(sessions) =>
-							Server.layer({
-								...settings,
-								...(sessions === undefined ? {} : { sessions }),
-							}),
-					),
+					Option.match(model, {
+						onNone: () => Effect.succeed(Server.layer(settings)),
+						onSome: (model) =>
+							Effect.map(ProductionModel.make(model), (sessions) =>
+								Server.layer({ ...settings, sessions }),
+							),
+					}),
 				).pipe(Layer.provide(FetchHttpClient.layer)),
 			)
 		}),

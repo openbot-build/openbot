@@ -1,5 +1,4 @@
-import { Record as EffectRecord } from "effect"
-import { Match, Schema, Predicate } from "effect"
+import { Match, Predicate, Record as EffectRecord, Schema } from "effect"
 import { dual } from "effect/Function"
 import { Session, Turn } from "@openbot-build/core"
 import type { Memory } from "@openbot-build/plugin-memory"

@@ -181,28 +181,22 @@ const network = (
 	Layer.succeed(Network.Network, {
 		identity: { scope: "user", owner },
 		readDocument: ({ url }) =>
-			authorization === undefined
-				? Effect.fail(unavailable())
-				: authorization.document(url).pipe(
-						Effect.map((text) => ({
-							url,
-							status: 200,
-							headers: { "content-type": "application/json" },
-							text,
-						})),
-					),
+			authorization.document(url).pipe(
+				Effect.map((text) => ({
+					url,
+					status: 200,
+					headers: { "content-type": "application/json" },
+					text,
+				})),
+			),
 		execute: (request) =>
 			Effect.gen(function* () {
-				const mode =
-					authorization === undefined
-						? "available"
-						: yield* authorization.scenario
+				const mode = yield* authorization.scenario
 				if (
 					request.url === "https://app.development.test/protected" &&
-					(authorization === undefined ||
-						!(yield* authorization.validToken(
-							request.headers["authorization"]?.replace(/^Bearer /, "") ?? "",
-						)))
+					!(yield* authorization.validToken(
+						request.headers["authorization"]?.replace(/^Bearer /, "") ?? "",
+					))
 				)
 					return {
 						url: request.url,
@@ -241,7 +235,6 @@ const network = (
 					Match.orElse(() => Effect.fail(unavailable())),
 				)
 				if (request.url.endsWith("/token") || request.url.endsWith("/revoke")) {
-					if (authorization === undefined) return yield* unavailable()
 					const text = yield* authorization.grant(
 						body,
 						request.url.endsWith("/revoke"),

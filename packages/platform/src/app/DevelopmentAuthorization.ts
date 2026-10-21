@@ -3,7 +3,7 @@ import { Context, Effect, HashMap, HashSet, Layer, Option, Ref } from "effect"
 import { createHash, randomUUID } from "node:crypto"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import * as ClientMetadata from "../apps/ClientMetadata.ts"
-import { Scenarios } from "./DevelopmentScenarios.ts"
+import { Scenarios, type Mode } from "./DevelopmentScenarios.ts"
 
 const origin = "https://app.development.test"
 const resource = origin + "/protected"
@@ -15,7 +15,7 @@ const invalid = () =>
 export class Authorization extends Context.Service<
 	Authorization,
 	{
-		readonly scenario: Effect.Effect<import("./DevelopmentScenarios.ts").Mode>
+		readonly scenario: Effect.Effect<Mode>
 		readonly document: (
 			url: string,
 		) => Effect.Effect<string, Network.NetworkError>
@@ -129,24 +129,23 @@ export const layer = (publicOrigin: string) =>
 						if (form.get("resource") !== resource) return yield* invalid()
 						if (form.get("grant_type") === "authorization_code") {
 							const code = form.get("code") ?? ""
-							const params = Option.getOrUndefined(
-								yield* Ref.modify(
-									codes,
-									(values) =>
-										[
-											HashMap.get(values, code),
-											HashMap.remove(values, code),
-										] as const,
-								),
+							const params = yield* Ref.modify(
+								codes,
+								(values) =>
+									[
+										HashMap.get(values, code),
+										HashMap.remove(values, code),
+									] as const,
 							)
-							if (
-								params === undefined ||
-								form.get("redirect_uri") !== params.get("redirect_uri") ||
-								createHash("sha256")
-									.update(form.get("code_verifier") ?? "")
-									.digest("base64url") !== params.get("code_challenge")
+							const matches = Option.exists(
+								params,
+								(params) =>
+									form.get("redirect_uri") === params.get("redirect_uri") &&
+									createHash("sha256")
+										.update(form.get("code_verifier") ?? "")
+										.digest("base64url") === params.get("code_challenge"),
 							)
-								return yield* invalid()
+							if (!matches) return yield* invalid()
 						} else if (
 							form.get("grant_type") !== "refresh_token" ||
 							!(yield* Ref.get(refreshes).pipe(
@@ -179,6 +178,12 @@ const escape = (value: string) =>
 		.replaceAll("&", "&amp;")
 		.replaceAll('"', "&quot;")
 		.replaceAll("<", "&lt;")
+const invalidResponse = () =>
+	Effect.succeed(
+		HttpServerResponse.text("The simulated authorization request is invalid.", {
+			status: 400,
+		}),
+	)
 export const layerRoutes = Layer.unwrap(
 	Effect.map(Authorization, (authorization) =>
 		Layer.merge(
@@ -209,12 +214,10 @@ export const layerRoutes = Layer.unwrap(
 						headers: { location, "cache-control": "no-store" },
 					})
 				}).pipe(
-					Effect.orElseSucceed(() =>
-						HttpServerResponse.text(
-							"The simulated authorization request is invalid.",
-							{ status: 400 },
-						),
-					),
+					Effect.catchTags({
+						NetworkError: invalidResponse,
+						HttpServerError: invalidResponse,
+					}),
 				),
 			),
 		),

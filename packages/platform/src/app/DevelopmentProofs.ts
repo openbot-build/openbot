@@ -1,11 +1,18 @@
-import { Context, Effect, HashMap, Layer, Option, Ref, Schema } from "effect"
-import { DeveloperApi as Api } from "@openbot-build/platform-api"
+import {
+	Context,
+	Effect,
+	HashMap,
+	Layer,
+	Option,
+	Redacted,
+	Ref,
+	Schema,
+} from "effect"
+import { AuthApi, DeveloperApi as Api } from "@openbot-build/platform-api"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { DomainControl } from "../apps/DomainControl.ts"
 import { scopeKey } from "../apps/DeveloperAccess.ts"
 import { Auth } from "../auth/Auth.ts"
-import { AuthApi } from "@openbot-build/platform-api"
-import { Redacted } from "effect"
 
 export class Proofs extends Context.Service<
 	Proofs,
@@ -79,7 +86,16 @@ export const layerRoutes = (publicOrigin: string) =>
 					yield* proofs.publish(value.scope, value.tokens)
 					return HttpServerResponse.empty({ status: 204 })
 				}).pipe(
-					Effect.orElseSucceed(() => HttpServerResponse.empty({ status: 400 })),
+					Effect.catchTags({
+						CredentialRejected: () =>
+							Effect.succeed(HttpServerResponse.empty({ status: 401 })),
+						AuthUnavailable: () =>
+							Effect.succeed(HttpServerResponse.empty({ status: 503 })),
+						SchemaError: () =>
+							Effect.succeed(HttpServerResponse.empty({ status: 400 })),
+						HttpServerError: () =>
+							Effect.succeed(HttpServerResponse.empty({ status: 400 })),
+					}),
 				),
 			)
 		}),

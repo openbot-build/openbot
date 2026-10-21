@@ -14,15 +14,24 @@ type Request<K extends keyof typeof SessionsApi.endpoints> = Omit<
 	HttpApiEndpoint.Request<(typeof SessionsApi.endpoints)[K]>,
 	"endpoint" | "group" | "request"
 >
-const implementations = Effect.gen(function* () {
-	const backend = yield* Backend
-	const model = yield* Effect.serviceOption(LanguageModel.LanguageModel)
-	const current = Effect.gen(function* () {
-		const caller = yield* Identity
-		return yield* backend
+/** The Sessions of the calling tenant. */
+const currentSessions = Effect.map(Backend, (backend) =>
+	Effect.flatMap(Identity, (caller) =>
+		backend
 			.get(caller.tenantId, caller)
-			.pipe(Effect.mapError(() => SessionStorageUnavailable.make({})))
-	})
+			.pipe(Effect.mapError(() => SessionStorageUnavailable.make({}))),
+	),
+)
+const implementations = Effect.gen(function* () {
+	const current = yield* currentSessions
+	const model = yield* Effect.serviceOption(LanguageModel.LanguageModel)
+	/** Give the host model to operations that may run one. */
+	const withModel = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+		Option.match(model, {
+			onNone: () => effect,
+			onSome: (model) =>
+				Effect.provideService(effect, LanguageModel.LanguageModel, model),
+		})
 	return {
 		selectSessionMode: ({ params, payload }: Request<"selectSessionMode">) =>
 			Effect.flatMap(current, (sessions) =>
@@ -44,14 +53,9 @@ const implementations = Effect.gen(function* () {
 			params,
 			payload,
 		}: Request<"updateSessionMemory">) =>
-			Effect.flatMap(current, (sessions) => {
-				const operation = sessions.updateMemory(params.sessionId, payload)
-				return Option.isSome(model)
-					? operation.pipe(
-							Effect.provideService(LanguageModel.LanguageModel, model.value),
-						)
-					: operation
-			}),
+			Effect.flatMap(current, (sessions) =>
+				withModel(sessions.updateMemory(params.sessionId, payload)),
+			),
 		createSession: ({ payload }: Request<"createSession">) =>
 			Effect.flatMap(current, (sessions) => sessions.create(payload)),
 		getSession: ({ params }: Request<"getSession">) =>
@@ -129,19 +133,15 @@ const implementations = Effect.gen(function* () {
 				sessions.enqueue(params.sessionId, payload),
 			),
 
-		startTurn: ({ params, payload }: Request<"startTurn">) => {
-			const send = Effect.gen(function* () {
-				const sessions = yield* current
-				if (payload.stream === true)
-					return yield* sessions.sendStream(params.sessionId, payload)
-				return yield* sessions.send(params.sessionId, payload)
-			})
-			return Option.isSome(model)
-				? send.pipe(
-						Effect.provideService(LanguageModel.LanguageModel, model.value),
-					)
-				: send
-		},
+		startTurn: ({ params, payload }: Request<"startTurn">) =>
+			withModel(
+				Effect.gen(function* () {
+					const sessions = yield* current
+					if (payload.stream === true)
+						return yield* sessions.sendStream(params.sessionId, payload)
+					return yield* sessions.send(params.sessionId, payload)
+				}),
+			),
 	}
 })
 export const layerPlatform = HttpApiBuilder.group(
@@ -156,13 +156,7 @@ export const layerPlatformApprovals = HttpApiBuilder.group(
 	"approvals",
 	(handlers) =>
 		Effect.gen(function* () {
-			const backend = yield* Backend
-			const current = Effect.gen(function* () {
-				const caller = yield* Identity
-				return yield* backend
-					.get(caller.tenantId, caller)
-					.pipe(Effect.mapError(() => SessionStorageUnavailable.make({})))
-			})
+			const current = yield* currentSessions
 			return handlers
 				.handle("list", ({ params }) =>
 					Effect.flatMap(current, (sessions) =>

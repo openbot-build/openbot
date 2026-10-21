@@ -40,17 +40,20 @@ export const load: Configuration.Load = Config.all({
 		certFile: Config.option(Config.NonEmptyString("OPENBOT_TLS_CERT")),
 		keyFile: Config.option(Config.NonEmptyString("OPENBOT_TLS_KEY")),
 	}).pipe(
-		Config.flatMap(({ certFile, keyFile }) =>
-			Option.isSome(certFile) && Option.isSome(keyFile)
-				? Config.succeed({ certFile: certFile.value, keyFile: keyFile.value })
-				: Option.isNone(certFile) && Option.isNone(keyFile)
-					? Config.succeed(undefined)
-					: Config.fail(
-							new ConfigProvider.SourceError({
-								message:
-									"Set both OPENBOT_TLS_CERT and OPENBOT_TLS_KEY to serve HTTPS.",
-							}),
-						),
+		Config.flatMap((files) =>
+			Option.match(Option.all(files), {
+				onSome: (tls): Config.Config<Configuration.Settings["tls"]> =>
+					Config.succeed(tls),
+				onNone: () =>
+					Option.isNone(files.certFile) && Option.isNone(files.keyFile)
+						? Config.succeed(undefined)
+						: Config.fail(
+								new ConfigProvider.SourceError({
+									message:
+										"Set both OPENBOT_TLS_CERT and OPENBOT_TLS_KEY to serve HTTPS.",
+								}),
+							),
+			}),
 		),
 	),
 })

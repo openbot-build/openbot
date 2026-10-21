@@ -17,6 +17,7 @@ import {
 	MemoryOperations,
 } from "@openbot-build/plugin-memory"
 import {
+	Array,
 	Cause,
 	Context,
 	Deferred,
@@ -63,6 +64,38 @@ import * as ErrorReporting from "../app/ErrorReporting.ts"
 import { Invocations } from "../apps/Invocations.ts"
 import { ownerKey } from "../apps/Repository.ts"
 import { AppPlugin, empty as emptyAppPlugin } from "../apps/AppPlugin.ts"
+
+/** The response of the current Turn, when the Session has one. */
+const currentResponse = (view: Session.View) =>
+	Option.map(Option.fromNullishOr(Session.currentTurn(view.session)), (turn) =>
+		response(view, turn),
+	)
+
+/** One page of records after an optional cursor. The cursor must be a known record. */
+const page = <A extends { readonly id: unknown }>(
+	all: ReadonlyArray<A>,
+	input: { readonly after?: A["id"]; readonly limit?: number },
+	unknownCursor: string,
+): Effect.Effect<
+	{ readonly items: ReadonlyArray<A>; readonly next: A["id"] | null },
+	SessionConflict
+> => {
+	const offset =
+		input.after === undefined
+			? 0
+			: all.findIndex((entry) => entry.id === input.after) + 1
+	if (input.after !== undefined && offset === 0)
+		return Effect.fail(SessionConflict.make({ message: unknownCursor }))
+	const limit = Math.max(1, Math.min(100, Math.floor(input.limit ?? 50)))
+	const items = all.slice(offset, offset + limit)
+	return Effect.succeed({
+		items,
+		next:
+			offset + limit < all.length
+				? Option.getOrNull(Option.map(Array.last(items), (entry) => entry.id))
+				: null,
+	})
+}
 
 export const make = <
 	Tools extends Record<string, Tool.Any> = {},
@@ -121,11 +154,10 @@ export const make = <
 				repository
 					.save(namespace, {
 						delta,
-						response:
-							view === undefined ||
-							Session.currentTurn(view.session) === undefined
-								? null
-								: response(view, Session.currentTurn(view.session)!),
+						response: Option.flatMap(
+							Option.fromNullishOr(view),
+							currentResponse,
+						),
 					})
 					.pipe(
 						Effect.tap(() => {
@@ -260,10 +292,7 @@ export const make = <
 							})
 				return {
 					...view,
-					response:
-						Session.currentTurn(view.session) === undefined
-							? null
-							: response(view, Session.currentTurn(view.session)!),
+					response: Option.getOrNull(currentResponse(view)),
 					activity: active
 						? ("active" as const)
 						: Match.value(Session.status(view.session)).pipe(
@@ -508,7 +537,7 @@ export const make = <
 					Effect.gen(function* () {
 						const arguments_ = yield* Schema.decodeUnknownEffect(
 							Schema.JsonObject,
-						)(entry.toolCall!.params).pipe(Effect.mapError(publicError))
+						)(entry.toolCall.params).pipe(Effect.mapError(publicError))
 						const app =
 							options.owner === undefined || Option.isNone(appInvocations)
 								? Option.none()
@@ -532,7 +561,7 @@ export const make = <
 							turn: current.id,
 							approvalId: entry.approvalId,
 							toolCallId: entry.toolCallId,
-							toolName: entry.toolCall!.name,
+							toolName: entry.toolCall.name,
 							arguments: arguments_,
 							...Option.match(app, {
 								onNone: () => ({}),
@@ -543,24 +572,13 @@ export const make = <
 				)
 			})
 		const turns: typeof Sessions.Service.turns = (id, input) =>
-			Effect.gen(function* () {
-				const view = yield* read(id),
-					all = [...view.session.inheritedTurns, ...view.session.turns]
-				const offset =
-					input.after === undefined
-						? 0
-						: all.findIndex((turn) => turn.id === input.after) + 1
-				if (input.after !== undefined && offset === 0)
-					return yield* SessionConflict.make({
-						message: "The Turn cursor does not belong to this Session",
-					})
-				const limit = Math.max(1, Math.min(100, Math.floor(input.limit ?? 50))),
-					items = all.slice(offset, offset + limit)
-				return {
-					items,
-					next: offset + limit < all.length ? items.at(-1)!.id : null,
-				}
-			})
+			Effect.flatMap(read(id), (view) =>
+				page(
+					[...view.session.inheritedTurns, ...view.session.turns],
+					input,
+					"The Turn cursor does not belong to this Session",
+				),
+			)
 		const turn: typeof Sessions.Service.turn = (id, turn) =>
 			Effect.gen(function* () {
 				const view = yield* read(id),
@@ -578,23 +596,13 @@ export const make = <
 			Effect.gen(function* () {
 				const view = yield* read(id)
 				yield* turn(id, turnId)
-				const all = view.state.value.memory.history.filter(
-					(entry) => entry.origin?.turn === turnId,
+				return yield* page(
+					view.state.value.memory.history.filter(
+						(entry) => entry.origin?.turn === turnId,
+					),
+					input,
+					"The Item cursor does not belong to this Turn",
 				)
-				const offset =
-					input.after === undefined
-						? 0
-						: all.findIndex((entry) => entry.id === input.after) + 1
-				if (input.after !== undefined && offset === 0)
-					return yield* SessionConflict.make({
-						message: "The Item cursor does not belong to this Turn",
-					})
-				const limit = Math.max(1, Math.min(100, Math.floor(input.limit ?? 50))),
-					items = all.slice(offset, offset + limit)
-				return {
-					items,
-					next: offset + limit < all.length ? items.at(-1)!.id : null,
-				}
 			})
 		const start = (
 			id: Session.Id,
@@ -703,41 +711,48 @@ export const make = <
 									Effect.gen(function* () {
 										step = event.step
 										if (sink === undefined) return
-										let entry = Option.getOrUndefined(
+										const output = yield* Option.match(
 											HashMap.get(outputs, event.item),
-										)
-										if (entry === undefined) {
-											entry = { index: HashMap.size(outputs), text: "" }
-											outputs = HashMap.set(outputs, event.item, entry)
-											yield* emit({
-												type: "response.output_item.added",
-												output_index: entry.index,
-												item: {
-													id: event.item,
-													type: "message",
-													role: "assistant",
-													status: "in_progress",
-													content: [],
-												},
-											})
-											yield* emit({
-												type: "response.content_part.added",
-												item_id: event.item,
-												output_index: entry.index,
-												content_index: 0,
-												part: {
-													type: "output_text",
-													text: "",
-													annotations: [] as const,
-												},
-											})
-										}
-										const indices = {
-												item_id: event.item,
-												output_index: entry.index,
-												content_index: 0,
+											{
+												onSome: (entry) => Effect.succeed(entry),
+												onNone: () =>
+													Effect.gen(function* () {
+														const entry = {
+															index: HashMap.size(outputs),
+															text: "",
+														}
+														outputs = HashMap.set(outputs, event.item, entry)
+														yield* emit({
+															type: "response.output_item.added",
+															output_index: entry.index,
+															item: {
+																id: event.item,
+																type: "message",
+																role: "assistant",
+																status: "in_progress",
+																content: [],
+															},
+														})
+														yield* emit({
+															type: "response.content_part.added",
+															item_id: event.item,
+															output_index: entry.index,
+															content_index: 0,
+															part: {
+																type: "output_text",
+																text: "",
+																annotations: [] as const,
+															},
+														})
+														return entry
+													}),
 											},
-											output = entry
+										)
+										const indices = {
+											item_id: event.item,
+											output_index: output.index,
+											content_index: 0,
+										}
 										yield* Match.value<
 											Response.StreamPart<Record<string, Tool.Any>>
 										>(event.part).pipe(
@@ -757,10 +772,13 @@ export const make = <
 											),
 											Match.discriminator("type")("finish", (part) =>
 												Effect.gen(function* () {
-													const text =
-															Option.getOrUndefined(
-																HashMap.get(outputs, event.item),
-															)?.text ?? "",
+													const text = Option.match(
+															HashMap.get(outputs, event.item),
+															{
+																onNone: () => output.text,
+																onSome: (entry) => entry.text,
+															},
+														),
 														content = {
 															type: "output_text" as const,
 															text,
@@ -854,12 +872,20 @@ export const make = <
 										})
 									yield* Deferred.fail(
 										accepted,
-										Option.isSome(failed) &&
-											failed.value instanceof SessionStore.SessionStoreError
-											? publicError(failed.value)
-											: SessionConflict.make({
-													message: "The Turn could not be accepted",
-												}),
+										Option.match(
+											Option.filter(
+												failed,
+												(error) =>
+													error instanceof SessionStore.SessionStoreError,
+											),
+											{
+												onSome: publicError,
+												onNone: () =>
+													SessionConflict.make({
+														message: "The Turn could not be accepted",
+													}),
+											},
+										),
 									)
 									if (sink !== undefined) yield* sink.finish([])
 									return
