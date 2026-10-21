@@ -1,7 +1,7 @@
 import {
 	Config,
 	Item,
-	Memory as CoreMemory,
+	Timeline,
 	Session,
 	SessionStore,
 	Turn,
@@ -88,7 +88,7 @@ export const SessionResponse = Schema.Struct({
 	object: Schema.Literal("response"),
 	created_at: Schema.Natural,
 	session: Session.Id,
-	version: CoreMemory.VersionId,
+	version: Timeline.VersionId,
 	background: Schema.Literal(true),
 	status: Schema.Literals([
 		"in_progress",
@@ -227,7 +227,7 @@ export const SessionSummary = Schema.Struct({
 			id: Turn.Id,
 			created_at: Schema.Natural,
 			status: SessionResponse.fields.status,
-			version: CoreMemory.VersionId,
+			version: Timeline.VersionId,
 		}),
 	),
 	activity: Schema.Literals(["active", "inactive", "historical"]),
@@ -301,7 +301,7 @@ export const UpdateSessionRequest = Schema.Struct({
 	archived: Schema.optionalKey(Schema.Boolean),
 })
 export const ForkSessionRequest = Schema.Struct({
-	version: Schema.optionalKey(CoreMemory.VersionId),
+	version: Schema.optionalKey(Timeline.VersionId),
 	title: Schema.optionalKey(Schema.String),
 	settings: Schema.optionalKey(SettingsPatch),
 })
@@ -310,7 +310,7 @@ export const RestoreSessionRequest = Schema.Struct({
 	expected: Schema.NullOr(Session.Ref),
 })
 export const UpdateMemoryRequest = Schema.Struct({
-	expected: CoreMemory.VersionId,
+	expected: Timeline.VersionId,
 	revision: Session.Revision,
 	command: Memory.Command,
 })
@@ -329,7 +329,7 @@ export const SessionsApi = HttpApiGroup.make("sessions")
 	.add(
 		HttpApiEndpoint.get("sessionVersions", "/v1/sessions/:sessionId/versions", {
 			params: { sessionId: Session.Id.check(Schema.isMinLength(1)) },
-			success: Schema.Array(CoreMemory.Version),
+			success: Schema.Array(Timeline.Version),
 			error: SessionOperationErrors,
 		}),
 		HttpApiEndpoint.post("createSession", "/v1/sessions", {
@@ -441,8 +441,8 @@ export const SessionsApi = HttpApiGroup.make("sessions")
 		}),
 		HttpApiEndpoint.get("sessionHistory", "/v1/sessions/:sessionId/history", {
 			params: sessionParams,
-			query: { version: Schema.optionalKey(CoreMemory.VersionId) },
-			success: CoreMemory.State({}),
+			query: { version: Schema.optionalKey(Timeline.VersionId) },
+			success: Timeline.State({}),
 			error: SessionOperationErrors,
 		}),
 		HttpApiEndpoint.get("exportSession", "/v1/sessions/:sessionId/record", {
@@ -535,7 +535,7 @@ export const SessionsApi = HttpApiGroup.make("sessions")
 					turn: Turn.Id,
 					item: Item.Id,
 					revision: Session.Revision,
-					version: CoreMemory.VersionId,
+					version: Timeline.VersionId,
 				}).pipe(HttpApiSchema.status(202)),
 				error: SessionOperationErrors,
 			},

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { Item, Memory, Session } from "@openbot-build/core"
+import { Item, Timeline, Session } from "@openbot-build/core"
 import {
 	AppViewsApi as Api,
 	ExperienceNotFound,
@@ -98,7 +98,7 @@ export const make = Effect.gen(function* () {
 		operationId: string,
 		sessionId: Session.Id,
 		itemId?: Item.Id,
-		version?: Memory.VersionId,
+		version?: Timeline.VersionId,
 	) =>
 		Effect.gen(function* () {
 			const operation = yield* records.get(ownerKey(identity), operationId)
@@ -106,7 +106,7 @@ export const make = Effect.gen(function* () {
 			const history = yield* service
 				.history(sessionId, version)
 				.pipe(Effect.mapError(conflict))
-			const item = history.value.memory.history.find(
+			const item = history.value.conversation.history.find(
 				(item) =>
 					(itemId === undefined || item.id === itemId) &&
 					item.content.content.some(
@@ -146,7 +146,7 @@ export const make = Effect.gen(function* () {
 			operationId: string,
 			sessionId: Session.Id,
 			itemId: Item.Id,
-			version?: Memory.VersionId,
+			version?: Timeline.VersionId,
 		) =>
 			Effect.scoped(
 				Effect.gen(function* () {

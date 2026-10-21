@@ -1,7 +1,7 @@
 import { Effect, Option, Record as EffectRecord } from "effect"
 import * as Session from "../session/Session.ts"
 import * as Agent from "../agent/Agent.ts"
-import type * as Memory from "../memory/Memory.ts"
+import type * as Timeline from "../timeline/Timeline.ts"
 import type * as Plugin from "./Plugin.ts"
 import type * as SessionStore from "../store/SessionStore.ts"
 
@@ -20,7 +20,7 @@ export const make = <P, D extends Plugin.StateDeclaration>(input: {
 		>
 		const key = input.plugin.id
 		const scoped = (view: Session.View<P>) =>
-			input.plugin.store.definition.scope === "memory"
+			input.plugin.store.definition.scope === "timeline"
 				? view.state.value
 				: view.session.business
 		const read = (view: Session.View<P>): Option.Option<A> =>
@@ -33,8 +33,8 @@ export const make = <P, D extends Plugin.StateDeclaration>(input: {
 				onNone: () => EffectRecord.remove(scoped(view), key),
 				onSome: (data) => ({ ...scoped(view), [key]: data }),
 			})
-			return input.plugin.store.definition.scope === "memory"
-				? { value: value as Memory.Value<P> }
+			return input.plugin.store.definition.scope === "timeline"
+				? { value: value as Timeline.Value<P> }
 				: { session: { business: value } }
 		}
 		const snapshot: Operations["snapshot"] = Effect.gen(function* () {

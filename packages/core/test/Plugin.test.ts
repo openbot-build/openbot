@@ -1,4 +1,4 @@
-import { Memory } from "@openbot-build/core"
+import { Timeline } from "@openbot-build/core"
 import { Turn } from "@openbot-build/core"
 import { Agent } from "@openbot-build/core"
 import { SessionStoreRepository } from "@openbot-build/core"
@@ -21,7 +21,7 @@ import {
 	Predicate,
 } from "effect"
 import * as MemoryPersistence from "../src/store/MemoryPersistence.ts"
-import { MemoryState, Store } from "@openbot-build/core"
+import { TimelineState, Store } from "@openbot-build/core"
 // @effect-diagnostics strictEffectProvide:off
 import assert from "node:assert/strict"
 import { test } from "node:test"
@@ -44,7 +44,7 @@ const pluginId = <Name extends "a" | "b">(name: Name) =>
 const declaration = () => {
 	const schema = Schema.Struct({ value: Schema.Natural })
 	return {
-		scope: "memory" as const,
+		scope: "timeline" as const,
 		schema,
 	}
 }
@@ -75,7 +75,7 @@ test("host-provided stores are isolated and keep their exact definitions and ope
 			return {
 				at: {
 					session: Session.Id.make("test"),
-					version: Memory.VersionId.make("version"),
+					version: Timeline.VersionId.make("version"),
 					revision: Session.Revision.make(0),
 				},
 				value: Option.some({ value: n }),
@@ -166,7 +166,7 @@ test("host-provided stores are isolated and keep their exact definitions and ope
 			Effect.gen(function* () {
 				const definition = yield* Store.define({
 					stores: combined.stores,
-					schemaVersion: "memory/1",
+					schemaVersion: "timeline/1",
 				})
 				const runtimeStore = yield* SessionStoreRepository.make({
 					definition: definition,
@@ -178,7 +178,7 @@ test("host-provided stores are isolated and keep their exact definitions and ope
 				})
 				const view = yield* runtimeStore.create({
 					metadata: {},
-					value: MemoryState.initial({}),
+					value: TimelineState.initial({}),
 				})
 				const task = runtime.execute({
 					base: { session: view.session.id, revision: view.session.revision },
@@ -235,7 +235,7 @@ test("one plugin builds its runtime and store in order, reads state in middlewar
 				let encodes = 0
 				const domain = Schema.Struct({ value: Schema.Natural })
 				const a = {
-						scope: "memory" as const,
+						scope: "timeline" as const,
 						schema: domain.pipe(
 							Schema.decodeTo(
 								domain,
@@ -270,7 +270,7 @@ test("one plugin builds its runtime and store in order, reads state in middlewar
 				)
 				const definition = yield* Store.define({
 					stores: { ...plugin.stores, b },
-					schemaVersion: "memory/1",
+					schemaVersion: "timeline/1",
 				})
 				const runtimeStore = yield* SessionStoreRepository.make({
 					definition: definition,
@@ -284,7 +284,7 @@ test("one plugin builds its runtime and store in order, reads state in middlewar
 					.create({
 						metadata: {},
 						value: {
-							...MemoryState.initial({ a: { value: 1 }, b: { value: 2 } }),
+							...TimelineState.initial({ a: { value: 1 }, b: { value: 2 } }),
 							future: { x: 1 },
 						},
 					})
@@ -344,7 +344,10 @@ test("one plugin builds its runtime and store in order, reads state in middlewar
 					assert.deepEqual(value.a, { value: 3 })
 					assert.deepEqual(value.b, { value: 2 })
 					assert.deepEqual(value["future"], { x: 1 })
-					assert.deepEqual(value.memory, completed.state.value.memory)
+					assert.deepEqual(
+						value.conversation,
+						completed.state.value.conversation,
+					)
 					assert.ok(
 						Option.isNone(
 							yield* store
@@ -381,7 +384,10 @@ test("one plugin builds its runtime and store in order, reads state in middlewar
 					assert.equal(Object.hasOwn(removed, "a"), false)
 					assert.deepEqual(removed.b, { value: 2 })
 					assert.deepEqual(removed["future"], { x: 1 })
-					assert.deepEqual(removed.memory, completed.state.value.memory)
+					assert.deepEqual(
+						removed.conversation,
+						completed.state.value.conversation,
+					)
 				})
 				yield* program.pipe(Effect.provideService(Agent.Context, context))
 			}),
@@ -400,7 +406,7 @@ const counterStore = (
 		)
 		const definition = yield* Store.define({
 			stores: plugin.stores,
-			schemaVersion: "memory/1",
+			schemaVersion: "timeline/1",
 		})
 		const storage = yield* MemoryPersistence.make
 		const runtimeStore = yield* SessionStoreRepository.make({
@@ -416,7 +422,7 @@ const counterStore = (
 		const initial = yield* runtimeStore.create({
 			metadata: {},
 			value: {
-				...MemoryState.initial({ a: { value: 0 } }),
+				...TimelineState.initial({ a: { value: 0 } }),
 				other: { keep: true },
 			},
 		})
@@ -464,8 +470,8 @@ test("Store safe methods match SynchronizedRef return values and commit only sel
 						const view = yield* runtimeStore.read(initial.session.id)
 						assert.deepEqual(view.state.value["other"], { keep: true }, name)
 						assert.deepEqual(
-							view.state.value.memory,
-							initial.state.value.memory,
+							view.state.value.conversation,
+							initial.state.value.conversation,
 							name,
 						)
 						const record = yield* runtimeStore.export(initial.session.id)

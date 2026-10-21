@@ -2,7 +2,7 @@ import {
 	Agent,
 	Config,
 	Item,
-	Memory as CoreMemory,
+	Timeline,
 	Session,
 	SessionStore,
 	Turn,
@@ -92,7 +92,7 @@ export class Sessions extends Context.Service<
 		) => Effect.Effect<SessionView, ServiceError>
 		readonly versions: (
 			id: Session.Id,
-		) => Effect.Effect<ReadonlyArray<CoreMemory.Version>, ServiceError>
+		) => Effect.Effect<ReadonlyArray<Timeline.Version>, ServiceError>
 		readonly pendingApprovals: (
 			id: Session.Id,
 		) => Effect.Effect<ReadonlyArray<ToolApproval>, ServiceError>
@@ -112,7 +112,7 @@ export class Sessions extends Context.Service<
 		readonly updateMemory: (
 			id: Session.Id,
 			input: {
-				readonly expected: CoreMemory.VersionId
+				readonly expected: Timeline.VersionId
 				readonly revision: Session.Revision
 				readonly command: Memory.Command
 			},
@@ -131,8 +131,8 @@ export class Sessions extends Context.Service<
 		) => Effect.Effect<SessionView, ServiceError>
 		readonly history: (
 			id: Session.Id,
-			version?: CoreMemory.VersionId,
-		) => Effect.Effect<CoreMemory.State, ServiceError>
+			version?: Timeline.VersionId,
+		) => Effect.Effect<Timeline.State, ServiceError>
 		readonly exportRecord: (
 			id: Session.Id,
 		) => Effect.Effect<SessionStore.Record, ServiceError>

@@ -1,7 +1,7 @@
 {
 	"version": "8",
 	"dialect": "postgres",
-	"id": "aaefa462-9d9f-462e-b79a-04be73e65768",
+	"id": "1d11340e-e1ea-442b-87c3-754cd94efaca",
 	"prevIds": ["00000000-0000-0000-0000-000000000000"],
 	"ddl": [
 		{
@@ -66,7 +66,7 @@
 		},
 		{
 			"isRlsEnabled": false,
-			"name": "openbot_memory_contents",
+			"name": "openbot_timeline_contents",
 			"entityType": "tables",
 			"schema": "public"
 		},
@@ -102,7 +102,7 @@
 		},
 		{
 			"isRlsEnabled": false,
-			"name": "openbot_memory_versions",
+			"name": "openbot_timeline_versions",
 			"entityType": "tables",
 			"schema": "public"
 		},
@@ -947,7 +947,7 @@
 			"name": "namespace",
 			"entityType": "columns",
 			"schema": "public",
-			"table": "openbot_memory_contents"
+			"table": "openbot_timeline_contents"
 		},
 		{
 			"type": "text",
@@ -960,7 +960,7 @@
 			"name": "id",
 			"entityType": "columns",
 			"schema": "public",
-			"table": "openbot_memory_contents"
+			"table": "openbot_timeline_contents"
 		},
 		{
 			"type": "text",
@@ -973,7 +973,7 @@
 			"name": "message",
 			"entityType": "columns",
 			"schema": "public",
-			"table": "openbot_memory_contents"
+			"table": "openbot_timeline_contents"
 		},
 		{
 			"type": "text",
@@ -986,7 +986,7 @@
 			"name": "content",
 			"entityType": "columns",
 			"schema": "public",
-			"table": "openbot_memory_contents"
+			"table": "openbot_timeline_contents"
 		},
 		{
 			"type": "text",
@@ -1493,7 +1493,7 @@
 			"name": "namespace",
 			"entityType": "columns",
 			"schema": "public",
-			"table": "openbot_memory_versions"
+			"table": "openbot_timeline_versions"
 		},
 		{
 			"type": "text",
@@ -1506,7 +1506,7 @@
 			"name": "id",
 			"entityType": "columns",
 			"schema": "public",
-			"table": "openbot_memory_versions"
+			"table": "openbot_timeline_versions"
 		},
 		{
 			"type": "text",
@@ -1519,7 +1519,7 @@
 			"name": "schema_version",
 			"entityType": "columns",
 			"schema": "public",
-			"table": "openbot_memory_versions"
+			"table": "openbot_timeline_versions"
 		},
 		{
 			"type": "text",
@@ -1532,7 +1532,7 @@
 			"name": "parents",
 			"entityType": "columns",
 			"schema": "public",
-			"table": "openbot_memory_versions"
+			"table": "openbot_timeline_versions"
 		},
 		{
 			"type": "integer",
@@ -1545,7 +1545,7 @@
 			"name": "snapshot_format",
 			"entityType": "columns",
 			"schema": "public",
-			"table": "openbot_memory_versions"
+			"table": "openbot_timeline_versions"
 		},
 		{
 			"type": "text",
@@ -1558,7 +1558,7 @@
 			"name": "value",
 			"entityType": "columns",
 			"schema": "public",
-			"table": "openbot_memory_versions"
+			"table": "openbot_timeline_versions"
 		},
 		{
 			"type": "text",
@@ -1571,7 +1571,7 @@
 			"name": "history",
 			"entityType": "columns",
 			"schema": "public",
-			"table": "openbot_memory_versions"
+			"table": "openbot_timeline_versions"
 		},
 		{
 			"type": "text",
@@ -2433,10 +2433,10 @@
 		{
 			"columns": ["namespace", "id"],
 			"nameExplicit": false,
-			"name": "openbot_memory_contents_pkey",
+			"name": "openbot_timeline_contents_pkey",
 			"entityType": "pks",
 			"schema": "public",
-			"table": "openbot_memory_contents"
+			"table": "openbot_timeline_contents"
 		},
 		{
 			"columns": ["kind", "id"],
@@ -2465,10 +2465,10 @@
 		{
 			"columns": ["namespace", "id"],
 			"nameExplicit": false,
-			"name": "openbot_memory_versions_pkey",
+			"name": "openbot_timeline_versions_pkey",
 			"entityType": "pks",
 			"schema": "public",
-			"table": "openbot_memory_versions"
+			"table": "openbot_timeline_versions"
 		},
 		{
 			"columns": ["id"],

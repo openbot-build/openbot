@@ -60,7 +60,7 @@ const wait = (
 			if (
 				view.activity !== "active" &&
 				(memory === undefined ||
-					view.state.value.memory.history.every((entry) =>
+					view.state.value.conversation.history.every((entry) =>
 						memory.processed.includes(entry.id),
 					))
 			)
@@ -158,7 +158,7 @@ test(
 			assert.deepEqual(memory.entries, {})
 			assert.deepEqual(
 				memory.processed,
-				saved.state.value.memory.history.map((entry) => entry.id),
+				saved.state.value.conversation.history.map((entry) => entry.id),
 			)
 			assert.ok(memory.processed.length >= 2)
 			await runtime.dispose()
@@ -189,8 +189,8 @@ test(
 				await (await fetch(address + path, { headers })).json(),
 			)
 			assert.equal(
-				continued.state.value.memory.history.length,
-				saved.state.value.memory.history.length + 2,
+				continued.state.value.conversation.history.length,
+				saved.state.value.conversation.history.length + 2,
 			)
 			const restartedSessions = await runtime.runPromise(
 				Effect.flatMap(Backend.Backend, (backend) =>
@@ -278,7 +278,7 @@ test(
 			assert.equal(Session.status(failed.session)._tag, "Failed")
 			assert.equal(failed.response?.status, "failed")
 			assert.match(
-				JSON.stringify(failed.state.value.memory.history),
+				JSON.stringify(failed.state.value.conversation.history),
 				/Save this failed input/,
 			)
 			await runtime.runPromise(

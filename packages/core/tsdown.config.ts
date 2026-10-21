@@ -6,8 +6,8 @@ export default defineConfig({
 	entry: {
 		"agent/Agent": "src/agent/Agent.ts",
 		"session/Turn": "src/session/Turn.ts",
-		"memory/Memory": "src/memory/Memory.ts",
-		"memory/Item": "src/memory/Item.ts",
+		"timeline/Timeline": "src/timeline/Timeline.ts",
+		"timeline/Item": "src/timeline/Item.ts",
 		"store/SessionStoreRepository": "src/store/SessionStoreRepository.ts",
 		"store/Snapshots": "src/store/Snapshots.ts",
 		"store/Store": "src/store/Store.ts",
@@ -15,7 +15,7 @@ export default defineConfig({
 		"store/MemoryPersistence": "src/store/MemoryPersistence.ts",
 		"store/VersionGraph": "src/store/VersionGraph.ts",
 		"store/DeltaValidation": "src/store/DeltaValidation.ts",
-		"memory/MemoryState": "src/memory/MemoryState.ts",
+		"timeline/TimelineState": "src/timeline/TimelineState.ts",
 
 		index: "src/index.ts",
 		"session/Session": "src/session/Session.ts",
@@ -47,7 +47,7 @@ export default defineConfig({
 					return [
 						key === "."
 							? key
-							: `./${name === "Snapshots" ? "MemorySnapshots" : name}`,
+							: `./${name === "Snapshots" ? "TimelineSnapshots" : name}`,
 						value,
 					]
 				}),

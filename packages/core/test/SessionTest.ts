@@ -21,7 +21,7 @@ export const SessionTest = <
 	Effect.gen(function* () {
 		const definition = yield* Store.define({
 			stores: {},
-			schemaVersion: "memory/1",
+			schemaVersion: "timeline/1",
 		})
 		const runtimeStore = yield* SessionStoreRepository.make({
 			definition,

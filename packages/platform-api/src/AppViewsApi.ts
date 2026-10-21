@@ -1,4 +1,4 @@
-import { Item, Memory, Session, Turn } from "@openbot-build/core"
+import { Item, Timeline, Session, Turn } from "@openbot-build/core"
 import { Ui } from "@openbot-build/protocol"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
@@ -46,7 +46,7 @@ export const ActionTicket = Schema.Struct({
 	item: Item.Id,
 	callId: Schema.String,
 	revision: Session.Revision,
-	version: Memory.VersionId,
+	version: Timeline.VersionId,
 })
 export type ActionTicket = typeof ActionTicket.Type
 export const ActionRequest = Schema.Union([
@@ -104,7 +104,7 @@ export const AppViewsApi = HttpApiGroup.make("appViews").add(
 		payload: Schema.Struct({
 			sessionId: Session.Id,
 			itemId: Item.Id,
-			version: Schema.optionalKey(Memory.VersionId),
+			version: Schema.optionalKey(Timeline.VersionId),
 		}),
 		success: Opened,
 		error: errors,

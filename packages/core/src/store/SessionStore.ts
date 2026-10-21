@@ -9,8 +9,8 @@ import {
 	type JsonPatch,
 } from "effect"
 import * as Session from "../session/Session.ts"
-import * as Memory from "../memory/Memory.ts"
-import * as Item from "../memory/Item.ts"
+import * as Timeline from "../timeline/Timeline.ts"
+import * as Item from "../timeline/Item.ts"
 import type * as Turn from "../session/Turn.ts"
 import type * as Plugin from "../plugins/Plugin.ts"
 
@@ -21,7 +21,7 @@ export const Content = Schema.Struct({
 })
 export type Content = typeof Content.Type
 export const Snapshot = Schema.Struct({
-	...Memory.Version.fields,
+	...Timeline.Version.fields,
 	snapshotFormatVersion: Schema.Literal(2),
 	value: Schema.JsonObject,
 	history: Schema.Array(
@@ -50,10 +50,10 @@ export interface Persistence {
 		readonly archived?: boolean
 	}) => Effect.Effect<ReadonlyArray<Session.Ref>, SessionStoreError>
 	readonly headers: (
-		ids: ReadonlyArray<Memory.VersionId>,
-	) => Effect.Effect<ReadonlyArray<Memory.Version>, SessionStoreError>
+		ids: ReadonlyArray<Timeline.VersionId>,
+	) => Effect.Effect<ReadonlyArray<Timeline.Version>, SessionStoreError>
 	readonly snapshot: (
-		id: Memory.VersionId,
+		id: Timeline.VersionId,
 	) => Effect.Effect<Option.Option<Snapshot>, SessionStoreError>
 	readonly contentHeaders: (
 		ids: ReadonlyArray<string>,
@@ -93,7 +93,7 @@ export class SessionStoreError extends Data.TaggedError("SessionStoreError")<{
 	readonly message: string
 	readonly issue?: SchemaIssue.Issue
 	readonly session?: Session.Id
-	readonly version?: Memory.VersionId
+	readonly version?: Timeline.VersionId
 }> {}
 export interface Definition<
 	S extends Plugin.Stores,
@@ -102,7 +102,7 @@ export interface Definition<
 	readonly schemaVersion: V
 	readonly stores: S
 	readonly schema: Schema.Codec<
-		Memory.Value<Plugins<S>>,
+		Timeline.Value<Plugins<S>>,
 		Schema.Json,
 		DecodingServices<S>,
 		EncodingServices<S>
@@ -120,7 +120,7 @@ export interface DefinitionFactory {
 		const V extends string,
 	>(input: {
 		readonly stores: S & {
-			readonly memory?: never
+			readonly conversation?: never
 			readonly session?: never
 		}
 		readonly schemaVersion: V & (string extends V ? never : unknown)
@@ -146,17 +146,17 @@ export interface Serialization<S extends Plugin.Stores> {
 	readonly materialize: (input: {
 		readonly definition: Definition<S>
 		readonly record: Record
-		readonly version?: Memory.VersionId
+		readonly version?: Timeline.VersionId
 	}) => Effect.Effect<
-		Memory.State<Plugins<S>>,
+		Timeline.State<Plugins<S>>,
 		SessionStoreError,
 		DecodingServices<S> | EncodingServices<S>
 	>
 	readonly compare: (input: {
 		readonly definition: Definition<S>
 		readonly record: Record
-		readonly base: Memory.VersionId
-		readonly target: Memory.Value<Plugins<S>>
+		readonly base: Timeline.VersionId
+		readonly target: Timeline.Value<Plugins<S>>
 	}) => Effect.Effect<
 		JsonPatch.JsonPatch,
 		SessionStoreError,
@@ -175,7 +175,7 @@ export type Change<P = {}> = Data.TaggedEnum<{
 	RefRemoved: { readonly ref: Session.Ref }
 }>
 export interface Mutation<P> {
-	readonly value?: Memory.Value<P>
+	readonly value?: Timeline.Value<P>
 	readonly session?: Partial<
 		Pick<
 			Session.Ref,
@@ -204,27 +204,30 @@ export interface Store<P = {}> {
 		>
 		(
 			session: Session.Id,
-			version: Memory.VersionId,
+			version: Timeline.VersionId,
 		): Effect.Effect<
-			Memory.State<P>,
-			Session.SessionNotFound | Memory.VersionError | SessionStoreError
+			Timeline.State<P>,
+			Session.SessionNotFound | Timeline.VersionError | SessionStoreError
 		>
 	}
 	readonly getVersion: (
-		version: Memory.VersionId,
-	) => Effect.Effect<Option.Option<Memory.Version>, SessionStoreError>
+		version: Timeline.VersionId,
+	) => Effect.Effect<Option.Option<Timeline.Version>, SessionStoreError>
 	readonly readVersion: (
-		version: Memory.VersionId,
-	) => Effect.Effect<Memory.State<P>, Memory.VersionError | SessionStoreError>
+		version: Timeline.VersionId,
+	) => Effect.Effect<
+		Timeline.State<P>,
+		Timeline.VersionError | SessionStoreError
+	>
 	readonly create: (input: {
 		readonly metadata: Session.MetadataInput
-		readonly value?: Memory.Value<P>
+		readonly value?: Timeline.Value<P>
 		readonly settings?: Partial<Turn.Settings>
 		readonly business?: Session.Ref["business"]
 	}) => Effect.Effect<Session.View<P>, SessionStoreError>
 	readonly commit: (input: {
 		readonly expected: Session.Ref
-		readonly value: Memory.Value<P>
+		readonly value: Timeline.Value<P>
 	}) => Effect.Effect<
 		Session.View<P>,
 		Session.SessionNotFound | SessionStoreError
@@ -232,7 +235,7 @@ export interface Store<P = {}> {
 	readonly modifyEffect: <A, E, R>(input: {
 		readonly session: Session.Id
 		readonly expectedRevision?: Session.Revision
-		readonly expectedHead?: Memory.VersionId
+		readonly expectedHead?: Timeline.VersionId
 		readonly update: (
 			current: Session.View<P>,
 		) => Effect.Effect<readonly [A, Option.Option<Mutation<P>>], E, R>
@@ -243,25 +246,25 @@ export interface Store<P = {}> {
 	>
 	readonly fork: (input: {
 		readonly source: Session.Id
-		readonly version?: Memory.VersionId
+		readonly version?: Timeline.VersionId
 		readonly metadata?: Session.MetadataInput
 		readonly settings?: Partial<Turn.Settings>
 	}) => Effect.Effect<
 		Session.View<P>,
-		Session.SessionNotFound | Memory.VersionError | SessionStoreError
+		Session.SessionNotFound | Timeline.VersionError | SessionStoreError
 	>
 	readonly log: (input: {
-		readonly from: Memory.VersionId
+		readonly from: Timeline.VersionId
 	}) => Effect.Effect<
-		ReadonlyArray<Memory.Version>,
-		Memory.VersionError | SessionStoreError
+		ReadonlyArray<Timeline.Version>,
+		Timeline.VersionError | SessionStoreError
 	>
 	readonly diff: (input: {
-		readonly base: Memory.VersionId | null
-		readonly target: Memory.VersionId
+		readonly base: Timeline.VersionId | null
+		readonly target: Timeline.VersionId
 	}) => Effect.Effect<
 		JsonPatch.JsonPatch,
-		Memory.VersionError | SessionStoreError
+		Timeline.VersionError | SessionStoreError
 	>
 	readonly updateMetadata: (input: {
 		readonly expected: Session.Ref

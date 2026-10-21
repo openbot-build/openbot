@@ -18,8 +18,8 @@ import { dual } from "effect/Function"
 import { IdGenerator } from "effect/ai"
 import * as Session from "../session/Session.ts"
 import * as Turn from "../session/Turn.ts"
-import * as Memory from "../memory/Memory.ts"
-import { initial, fullHistory, coherent } from "../memory/MemoryState.ts"
+import * as Timeline from "../timeline/Timeline.ts"
+import { initial, fullHistory, coherent } from "../timeline/TimelineState.ts"
 import * as ContextWindow from "../context/ContextWindow.ts"
 import * as SessionStore from "./SessionStore.ts"
 import type * as Plugin from "../plugins/Plugin.ts"
@@ -45,7 +45,7 @@ export const make = <S extends Plugin.Stores>(
 			readonly snapshot: SessionStore.Snapshot
 			readonly messages: ReadonlyArray<SessionStore.Content>
 			readonly raw: Schema.JsonObject
-			readonly state: Memory.State<P>
+			readonly state: Timeline.State<P>
 		}
 		const services = yield* Effect.context<CodecServices<S>>()
 		const provide = <A, E, R>(program: Effect.Effect<A, E, R>) =>
@@ -92,7 +92,7 @@ export const make = <S extends Plugin.Stores>(
 				Effect.flatMap(decodeRef),
 			)
 		const cache = yield* Cache.makeWith(
-			(version: Memory.VersionId) =>
+			(version: Timeline.VersionId) =>
 				provide(
 					Effect.gen(function* () {
 						const loaded = yield* Snapshots.readRaw(storage, version)
@@ -111,7 +111,7 @@ export const make = <S extends Plugin.Stores>(
 				timeToLive: (exit) => (Exit.isSuccess(exit) ? "Infinity" : 0),
 			},
 		)
-		const load = (version: Memory.VersionId) => Cache.get(cache, version)
+		const load = (version: Timeline.VersionId) => Cache.get(cache, version)
 		const readCurrent = (session: Session.Id) =>
 			Effect.gen(function* () {
 				const ref = yield* getRef(session)
@@ -135,13 +135,13 @@ export const make = <S extends Plugin.Stores>(
 		const save = (
 			delta: SessionStore.Delta,
 			view: Session.View<P>,
-			memoryChanged: boolean,
+			timelineChanged: boolean,
 		) =>
 			Effect.uninterruptibleMask((restore) =>
 				restore(persist(delta, view)).pipe(
 					Effect.andThen(
 						publish(
-							memoryChanged
+							timelineChanged
 								? { _tag: "VersionCommitted", previous: delta.expected, view }
 								: {
 										_tag: "RefUpdated",
@@ -152,23 +152,23 @@ export const make = <S extends Plugin.Stores>(
 					),
 				),
 			)
-		const encode = (value: Memory.Value<P>) =>
+		const encode = (value: Timeline.Value<P>) =>
 			provide(
 				Schema.encodeEffect(options.definition.schema)(value).pipe(
 					Effect.mapError(
 						(e) =>
 							new SessionStore.SessionStoreError({
 								reason: "encode-failed",
-								message: "Failed to encode Memory",
+								message: "Failed to encode the Timeline",
 								issue: e.issue,
 							}),
 					),
 				),
 			)
-		/** The rows that a new Memory version adds to the delta. */
+		/** The rows that a new Timeline version adds to the delta. */
 		const packVersion = (
-			version: Memory.Version,
-			value: Memory.Value<P>,
+			version: Timeline.Version,
+			value: Timeline.Value<P>,
 			reusable: ReadonlyArray<Loaded>,
 		) =>
 			encode(value).pipe(
@@ -195,7 +195,7 @@ export const make = <S extends Plugin.Stores>(
 						input.expectedHead !== before.session.head
 					)
 						return yield* error("reference-conflict", {
-							message: "The Memory head is out of date",
+							message: "The Timeline head is out of date",
 						})
 					const [result, next] = yield* input.update(before)
 					if (Option.isNone(next)) return { result, view: before }
@@ -205,9 +205,9 @@ export const make = <S extends Plugin.Stores>(
 						!Equal.equals(mutation.value, before.state.value)
 					if (!changed && mutation.session === undefined)
 						return { result, view: before }
-					const version: Memory.Version = changed
+					const version: Timeline.Version = changed
 						? {
-								id: Memory.VersionId.make(yield* id()),
+								id: Timeline.VersionId.make(yield* id()),
 								schemaVersion: options.definition.schemaVersion,
 								parents: [before.session.head],
 							}
@@ -246,7 +246,7 @@ export const make = <S extends Plugin.Stores>(
 				}),
 			)
 		const newRef = (
-			head: Memory.VersionId,
+			head: Timeline.VersionId,
 			metadata: Session.MetadataInput,
 			settings?: Partial<Turn.Settings>,
 			business: Session.Ref["business"] = {},
@@ -266,8 +266,8 @@ export const make = <S extends Plugin.Stores>(
 			atomic(
 				Effect.gen(function* () {
 					const value = input.value ?? initial({} as P)
-					const version: Memory.Version = {
-						id: Memory.VersionId.make(yield* id()),
+					const version: Timeline.Version = {
+						id: Timeline.VersionId.make(yield* id()),
 						schemaVersion: options.definition.schemaVersion,
 						parents: [],
 					}
@@ -285,17 +285,17 @@ export const make = <S extends Plugin.Stores>(
 			)
 		const read: SessionStore.Store<P>["read"] = ((
 			session: Session.Id,
-			version?: Memory.VersionId,
+			version?: Timeline.VersionId,
 		) =>
 			Effect.gen(function* () {
 				const view = yield* readCurrent(session)
 				if (version === undefined) return view
 				const log = yield* VersionGraph.log(storage, view.session.head)
 				if (!log.some((entry) => entry.id === version))
-					return yield* new Memory.VersionError({
+					return yield* new Timeline.VersionError({
 						reason: "version-unreachable",
 						version,
-						message: "The Memory version is not reachable from this Session",
+						message: "The Timeline version is not reachable from this Session",
 					})
 				return (yield* load(version)).state
 			})) as SessionStore.Store<P>["read"]
@@ -306,16 +306,16 @@ export const make = <S extends Plugin.Stores>(
 					const log = yield* VersionGraph.log(storage, source.session.head)
 					const requested = input.version ?? source.session.head
 					if (!log.some((version) => version.id === requested))
-						return yield* new Memory.VersionError({
+						return yield* new Timeline.VersionError({
 							reason: "version-unreachable",
 							version: requested,
-							message: "The selected Memory is not reachable",
+							message: "The selected Timeline version is not reachable",
 						})
-					// Without an explicit version, walk back first parents to the last coherent Memory.
+					// Without an explicit version, walk back first parents to the last coherent Timeline version.
 					const select = (
-						candidate: Memory.VersionId,
+						candidate: Timeline.VersionId,
 					): Effect.Effect<
-						{ readonly id: Memory.VersionId; readonly loaded: Loaded },
+						{ readonly id: Timeline.VersionId; readonly loaded: Loaded },
 						SessionStore.SessionStoreError
 					> =>
 						load(candidate).pipe(
@@ -334,11 +334,11 @@ export const make = <S extends Plugin.Stores>(
 									: select(parent)
 							}),
 						)
-					const { id: selected, loaded: selectedMemory } =
+					const { id: selected, loaded: selectedLoaded } =
 						yield* select(requested)
 					const settings = { ...source.session.settings, ...input.settings }
-					const selectedValue = selectedMemory.state.value
-					const context = Match.value(selectedValue.memory.context).pipe(
+					const selectedValue = selectedLoaded.state.value
+					const context = Match.value(selectedValue.conversation.context).pipe(
 						Match.tag("Native", (window) =>
 							settings.model?.provider !== window.provider ||
 							settings.model?.model !== window.model
@@ -348,23 +348,23 @@ export const make = <S extends Plugin.Stores>(
 						Match.tag("Prompt", (window) => window),
 						Match.exhaustive,
 					)
-					const value: Memory.Value<P> =
-						context === selectedValue.memory.context
+					const value: Timeline.Value<P> =
+						context === selectedValue.conversation.context
 							? selectedValue
 							: {
 									...selectedValue,
-									memory: { ...selectedValue.memory, context },
+									conversation: { ...selectedValue.conversation, context },
 								}
-					const adapted = !Equal.equals(value, selectedMemory.state.value)
-					const version: Memory.Version = adapted
+					const adapted = !Equal.equals(value, selectedLoaded.state.value)
+					const version: Timeline.Version = adapted
 						? {
-								id: Memory.VersionId.make(yield* id()),
+								id: Timeline.VersionId.make(yield* id()),
 								schemaVersion: options.definition.schemaVersion,
 								parents: [selected],
 							}
-						: selectedMemory.state.version
+						: selectedLoaded.state.version
 					const originTurns = HashSet.fromIterable(
-						value.memory.history.flatMap((item) =>
+						value.conversation.history.flatMap((item) =>
 							item.origin === undefined ? [] : [item.origin.turn],
 						),
 					)
@@ -386,7 +386,7 @@ export const make = <S extends Plugin.Stores>(
 					}
 					const view = { session: ref, state: { version, value } }
 					const packed = adapted
-						? yield* packVersion(version, value, [selectedMemory])
+						? yield* packVersion(version, value, [selectedLoaded])
 						: unchanged
 					yield* save(
 						{ session: ref, expected: null, ...packed },

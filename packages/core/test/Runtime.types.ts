@@ -1,7 +1,7 @@
 import {
 	Agent,
 	Item,
-	Memory,
+	Timeline,
 	Plugin,
 	PluginState,
 	PluginComposition,
@@ -33,17 +33,17 @@ export const checkLiveChannels = (input: {
 	readonly persistence: SessionStore.Persistence
 	readonly session: Session.Id
 	readonly ref: Session.Ref
-	readonly version: Memory.VersionId
+	readonly version: Timeline.VersionId
 	readonly record: SessionStore.Record
 }) =>
 	Effect.gen(function* () {
 		const declaration = {
-			scope: "memory" as const,
+			scope: "timeline" as const,
 			schema: input.schema,
 		}
 		const definition = yield* Store.define({
 			stores: { counter: declaration },
-			schemaVersion: "memory/1",
+			schemaVersion: "timeline/1",
 		})
 		const construction = SessionStoreRepository.make({
 			definition,
@@ -141,18 +141,18 @@ export const checkIdentities = ({
 	readonly session: Session.Id
 	readonly turn: Turn.Id
 	readonly item: Item.Id
-	readonly version: Memory.VersionId
+	readonly version: Timeline.VersionId
 	readonly revision: Session.Revision
 }) => {
 	// @ts-expect-error A Turn cannot identify a Session.
 	const wrongSession: Session.Id = turn
-	// @ts-expect-error A Memory version cannot identify a Turn.
+	// @ts-expect-error A Timeline version cannot identify a Turn.
 	const wrongTurn: Turn.Id = version
-	// @ts-expect-error An Item cannot identify a Memory version.
-	const wrongMemory: Memory.VersionId = item
+	// @ts-expect-error An Item cannot identify a Timeline version.
+	const wrongVersion: Timeline.VersionId = item
 	// @ts-expect-error A model step cannot identify a Turn.
 	const wrongStep: Turn.Id = 1
-	// @ts-expect-error A Memory head is not a Session revision.
+	// @ts-expect-error A Timeline head is not a Session revision.
 	const wrongRevision: Session.Expected = { session, revision: version }
 	const expected: Session.Expected = { session, revision }
 	const control: { readonly session: Session.Id; readonly turn: Turn.Id } = {
@@ -162,7 +162,7 @@ export const checkIdentities = ({
 	return {
 		wrongSession,
 		wrongTurn,
-		wrongMemory,
+		wrongVersion,
 		wrongStep,
 		wrongRevision,
 		expected,

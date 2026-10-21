@@ -1,8 +1,8 @@
 import {
 	DeltaValidation,
 	Item,
-	Memory as CoreMemory,
-	MemorySnapshots,
+	Timeline,
+	TimelineSnapshots,
 	Session,
 	SessionStore,
 } from "@openbot-build/core"
@@ -91,9 +91,9 @@ export const make = Effect.gen(function* () {
 								Effect.flatMap((rows) =>
 									Effect.forEach(rows, (row) =>
 										Effect.gen(function* () {
-											return yield* decode(CoreMemory.Version)({
+											return yield* decode(Timeline.Version)({
 												...row,
-												parents: yield* json(CoreMemory.Parents, row.parents),
+												parents: yield* json(Timeline.Parents, row.parents),
 											})
 										}),
 									),
@@ -113,7 +113,7 @@ export const make = Effect.gen(function* () {
 						yield* decode(SessionStore.Snapshot)({
 							...row,
 							snapshotFormatVersion: row.format,
-							parents: yield* json(CoreMemory.Parents, row.parents),
+							parents: yield* json(Timeline.Parents, row.parents),
 							value: yield* json(Schema.JsonObject, row.value),
 							history: yield* json(
 								SessionStore.Snapshot.fields.history,
@@ -223,8 +223,11 @@ export const make = Effect.gen(function* () {
 							.onConflictDoNothing()
 							.returning({ id: versions.id })
 						if (inserted.length === 0) {
-							const saved = yield* MemorySnapshots.readRaw(storage, version.id)
-							const raw = yield* MemorySnapshots.unpack(version, [
+							const saved = yield* TimelineSnapshots.readRaw(
+								storage,
+								version.id,
+							)
+							const raw = yield* TimelineSnapshots.unpack(version, [
 								...(yield* storage.contents(
 									version.history.map((ref) => ref.content),
 								)),
@@ -243,7 +246,7 @@ export const make = Effect.gen(function* () {
 										parents: version.parents,
 									},
 								) ||
-								!MemorySnapshots.same(saved.raw, raw)
+								!TimelineSnapshots.same(saved.raw, raw)
 							)
 								return yield* new SessionStore.SessionStoreError({
 									reason: "version-conflict",

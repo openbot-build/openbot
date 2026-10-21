@@ -59,8 +59,8 @@ const selected = (
 					Option.some({
 						value: {
 							...current.state.value,
-							memory: {
-								...current.state.value.memory,
+							conversation: {
+								...current.state.value.conversation,
 								history: [
 									{
 										id: Item.Id.make("history"),
@@ -100,11 +100,11 @@ test("explicit compaction keeps complete opaque items and full history after a r
 				assert.equal(test.compactions, 1)
 				const compacted = yield* runtimeStore.read(view.session.id)
 				assert.deepEqual(
-					compacted.state.value.memory.history,
-					before.state.value.memory.history,
+					compacted.state.value.conversation.history,
+					before.state.value.conversation.history,
 				)
 				assert.deepEqual(compacted.state.version.parents, [before.session.head])
-				assert.equal(compacted.state.value.memory.context._tag, "Native")
+				assert.equal(compacted.state.value.conversation.context._tag, "Native")
 				const freshStore = yield* SessionStoreRepository.make({
 					definition: definition,
 					persistence: yield* MemoryPersistence.make,
@@ -123,8 +123,8 @@ test("explicit compaction keeps complete opaque items and full history after a r
 					expected: null,
 				})
 				assert.deepEqual(
-					restored.state.value.memory.context,
-					compacted.state.value.memory.context,
+					restored.state.value.conversation.context,
+					compacted.state.value.conversation.context,
 				)
 				const continued = yield* fresh.execute({
 					base: {
@@ -133,9 +133,9 @@ test("explicit compaction keeps complete opaque items and full history after a r
 					},
 					input: "continue",
 				})
-				assert.equal(continued.state.value.memory.context._tag, "Native")
+				assert.equal(continued.state.value.conversation.context._tag, "Native")
 				assert.match(
-					JSON.stringify(continued.state.value.memory.history),
+					JSON.stringify(continued.state.value.conversation.history),
 					/whole history|continue/,
 				)
 				const load = yield* service.load({ additional: "tail" })
@@ -254,11 +254,11 @@ test("compaction uses compare-and-set on the head after network work and rejects
 									Option.some({
 										value: ((v: typeof current.state.value) => ({
 											...v,
-											memory: {
-												...v.memory,
+											conversation: {
+												...v.conversation,
 												context: ContextWindow.append(
-													v.memory.context,
-													"competing memory edit",
+													v.conversation.context,
+													"competing Timeline edit",
 												),
 											},
 										}))(current.state.value),
@@ -349,13 +349,13 @@ for (const strategy of [
 						),
 					)
 					assert.equal(
-						result.state.value.memory.context._tag,
+						result.state.value.conversation.context._tag,
 						Match.value(strategy).pipe(
 							Match.tag("Native", () => "Native" as const),
 							Match.orElse(() => "Prompt" as const),
 						),
 					)
-					assert.equal(result.state.value.memory.history.length, 3)
+					assert.equal(result.state.value.conversation.history.length, 3)
 					assert.match(
 						JSON.stringify(test.requests[0]?.instructions),
 						/instructions|content/,
@@ -411,8 +411,8 @@ test("Fork keeps compatible native context and rebuilds input for an incompatibl
 				})).view
 				const same = yield* runtimeStore.fork({ source: source.session.id })
 				assert.deepEqual(
-					same.state.value.memory.context,
-					compacted.state.value.memory.context,
+					same.state.value.conversation.context,
+					compacted.state.value.conversation.context,
 				)
 				const other = yield* runtimeStore.fork({
 					source: source.session.id,
@@ -423,9 +423,9 @@ test("Fork keeps compatible native context and rebuilds input for an incompatibl
 						}),
 					},
 				})
-				assert.equal(other.state.value.memory.context._tag, "Prompt")
+				assert.equal(other.state.value.conversation.context._tag, "Prompt")
 				assert.match(
-					JSON.stringify(other.state.value.memory.context),
+					JSON.stringify(other.state.value.conversation.context),
 					/whole history/,
 				)
 				assert.deepEqual(

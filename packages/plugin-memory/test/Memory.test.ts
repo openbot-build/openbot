@@ -6,7 +6,7 @@ import { LanguageModel, Prompt } from "effect/ai"
 import {
 	Item,
 	MemoryPersistence,
-	MemoryState,
+	TimelineState,
 	RecordSerialization,
 	Session,
 	SessionStoreRepository,
@@ -26,7 +26,7 @@ const unusedModel = Layer.effect(
 )
 const setup = Effect.gen(function* () {
 	const definition = yield* Store.define({
-		schemaVersion: "memory/1",
+		schemaVersion: "timeline/1",
 		stores: Memory.stores,
 	})
 	const store = yield* SessionStoreRepository.make({
@@ -148,8 +148,8 @@ test("extraction of new history checks source IDs, and failures keep progress un
 							Option.some({
 								value: {
 									...current.state.value,
-									memory: {
-										...current.state.value.memory,
+									conversation: {
+										...current.state.value.conversation,
 										history: [
 											{ id: evidence, content: Prompt.make("a durable fact") },
 										],
@@ -200,7 +200,7 @@ test("extraction of new history checks source IDs, and failures keep progress un
 				})
 				const retried = yield* MemoryRules.policy.apply({
 					state: yield* memory.read(view.session.id),
-					history: supplied.state.value.memory.history,
+					history: supplied.state.value.conversation.history,
 					changes: [
 						{
 							key: "fact",
@@ -221,10 +221,10 @@ test("extraction of new history checks source IDs, and failures keep progress un
 							Option.some({
 								value: {
 									...current.state.value,
-									memory: {
-										...current.state.value.memory,
+									conversation: {
+										...current.state.value.conversation,
 										history: [
-											...current.state.value.memory.history,
+											...current.state.value.conversation.history,
 											{
 												id: Item.Id.make("new"),
 												content: Prompt.make("new input"),
@@ -303,7 +303,7 @@ test("disabling generation only changes Session settings and never runs extracti
 				)
 				const fork = yield* store.fork({ source: view.session.id })
 				assert.equal(fork.session.settings.memoryGenerationEnabled, false)
-				assert.deepEqual(fork.state.value, MemoryState.initial({}))
+				assert.deepEqual(fork.state.value, TimelineState.initial({}))
 			}),
 		).pipe(Effect.provide(unusedModel)),
 	)

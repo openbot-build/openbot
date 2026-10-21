@@ -145,7 +145,7 @@ export const make = <
 						)
 		const definition = yield* Store.define({
 			stores: Memory.stores,
-			schemaVersion: "memory/1",
+			schemaVersion: "timeline/1",
 		})
 		const store = yield* SessionStoreRepository.make({
 			definition,
@@ -597,7 +597,7 @@ export const make = <
 				const view = yield* read(id)
 				yield* turn(id, turnId)
 				return yield* page(
-					view.state.value.memory.history.filter(
+					view.state.value.conversation.history.filter(
 						(entry) => entry.origin?.turn === turnId,
 					),
 					input,

@@ -1,4 +1,4 @@
-import { Memory } from "@openbot-build/core"
+import { Timeline } from "@openbot-build/core"
 import { Item } from "@openbot-build/core"
 import { Option } from "effect"
 import { SessionStoreRepository } from "@openbot-build/core"
@@ -12,7 +12,7 @@ import {
 	Fiber,
 	Stream,
 } from "effect"
-import * as MemoryState from "../src/memory/MemoryState.ts"
+import * as TimelineState from "../src/timeline/TimelineState.ts"
 import * as MemoryPersistence from "../src/store/MemoryPersistence.ts"
 import * as RecordSerialization from "../src/store/RecordSerialization.ts"
 import * as Store from "../src/store/Store.ts"
@@ -25,13 +25,13 @@ import { test } from "node:test"
 import { Prompt, LanguageModel } from "effect/ai"
 import { Session, SessionRuntime, SessionStore } from "../src/index.ts"
 
-test("host commits happen before memory changes, and hydration has no side effects", async () => {
+test("host commits happen before Timeline changes, and hydration has no side effects", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
 				const definition = yield* Store.define({
 					stores: {},
-					schemaVersion: "memory/1",
+					schemaVersion: "timeline/1",
 				})
 				let fail = true
 				let saved = 0
@@ -59,7 +59,7 @@ test("host commits happen before memory changes, and hydration has no side effec
 
 				const input = {
 					metadata: {},
-					value: MemoryState.initial({}),
+					value: TimelineState.initial({}),
 				}
 				assert.ok(
 					Exit.isFailure(yield* Effect.exit(runtimeStore.create(input))),
@@ -103,8 +103,8 @@ test("host commits happen before memory changes, and hydration has no side effec
 										Option.some({
 											value: ((value: typeof current.state.value) => ({
 												...value,
-												memory: {
-													...value.memory,
+												conversation: {
+													...value.conversation,
 													mode: "plan",
 												},
 											}))(current.state.value),
@@ -122,7 +122,7 @@ test("host commits happen before memory changes, and hydration has no side effec
 					Effect.Effect<
 						unknown,
 						| Session.SessionNotFound
-						| Memory.VersionError
+						| Timeline.VersionError
 						| SessionStore.SessionStoreError
 					>
 				>)
@@ -131,7 +131,7 @@ test("host commits happen before memory changes, and hydration has no side effec
 							yield* Effect.exit<
 								unknown,
 								| Session.SessionNotFound
-								| Memory.VersionError
+								| Timeline.VersionError
 								| SessionStore.SessionStoreError,
 								never
 							>(operation),
@@ -177,10 +177,10 @@ test("construction and listing read no snapshots, commits save only changes, and
 			Effect.gen(function* () {
 				const definition = yield* Store.define({
 					stores: {},
-					schemaVersion: "memory/1",
+					schemaVersion: "timeline/1",
 				})
 				const base = yield* MemoryPersistence.make
-				let reads: ReadonlyArray<Memory.VersionId> = [],
+				let reads: ReadonlyArray<Timeline.VersionId> = [],
 					saves: ReadonlyArray<SessionStore.Delta> = []
 				let reject = false
 				const storage: SessionStore.Persistence = {
@@ -209,7 +209,7 @@ test("construction and listing read no snapshots, commits save only changes, and
 				assert.deepEqual(reads, [])
 				const initial = yield* runtimeStore.create({
 					metadata: {},
-					value: MemoryState.initial({}),
+					value: TimelineState.initial({}),
 				})
 				let refs = [initial.session]
 				for (let index = 0; index < 70; index++)
@@ -217,7 +217,7 @@ test("construction and listing read no snapshots, commits save only changes, and
 						refs,
 						(yield* runtimeStore.create({
 							metadata: initial.session.metadata,
-							value: MemoryState.initial({}),
+							value: TimelineState.initial({}),
 						})).session,
 					)
 				assert.equal((yield* runtimeStore.list()).length, 71)
@@ -240,8 +240,8 @@ test("construction and listing read no snapshots, commits save only changes, and
 									Option.some({
 										value: ((value: typeof current.state.value) => ({
 											...value,
-											memory: {
-												...value.memory,
+											conversation: {
+												...value.conversation,
 												mode: "plan",
 											},
 										}))(current.state.value),
@@ -275,7 +275,7 @@ test("construction and listing read no snapshots, commits save only changes, and
 				reads = []
 				assert.equal(
 					(yield* freshStore.read(initial.session.id, initial.session.head))
-						.value.memory.closed,
+						.value.conversation.closed,
 					true,
 				)
 				assert.deepEqual(reads, [initial.session.head])
@@ -290,7 +290,7 @@ test("content revisions share identity and keep old bodies, without merging dist
 			Effect.gen(function* () {
 				const definition = yield* Store.define({
 					stores: {},
-					schemaVersion: "memory/1",
+					schemaVersion: "timeline/1",
 				})
 				const storage = yield* MemoryPersistence.make
 				const runtimeStore = yield* SessionStoreRepository.make({
@@ -304,9 +304,9 @@ test("content revisions share identity and keep old bodies, without merging dist
 				const created = yield* runtimeStore.create({
 					metadata: {},
 					value: {
-						...MemoryState.initial({}),
-						memory: {
-							...MemoryState.initial({}).memory,
+						...TimelineState.initial({}),
+						conversation: {
+							...TimelineState.initial({}).conversation,
 							history: [{ id: firstId, content }],
 						},
 					},
@@ -322,8 +322,8 @@ test("content revisions share identity and keep old bodies, without merging dist
 									Option.some({
 										value: ((value: typeof current.state.value) => ({
 											...value,
-											memory: {
-												...value.memory,
+											conversation: {
+												...value.conversation,
 												mode: "plan",
 											},
 										}))(current.state.value),
@@ -346,10 +346,10 @@ test("content revisions share identity and keep old bodies, without merging dist
 									Option.some({
 										value: ((value: typeof current.state.value) => ({
 											...value,
-											memory: {
-												...value.memory,
+											conversation: {
+												...value.conversation,
 												history: [
-													...value.memory.history,
+													...value.conversation.history,
 													{ id: secondId, content },
 												],
 											},
@@ -372,9 +372,9 @@ test("content revisions share identity and keep old bodies, without merging dist
 									Option.some({
 										value: ((value: typeof current.state.value) => ({
 											...value,
-											memory: {
-												...value.memory,
-												history: value.memory.history.map((entry) =>
+											conversation: {
+												...value.conversation,
+												history: value.conversation.history.map((entry) =>
 													entry.id === firstId
 														? {
 																...entry,
@@ -398,7 +398,7 @@ test("content revisions share identity and keep old bodies, without merging dist
 				assert.equal(revised.messages.length, 3)
 				assert.deepEqual(
 					(yield* runtimeStore.read(created.session.id, created.session.head))
-						.value.memory.history[0]!.content,
+						.value.conversation.history[0]!.content,
 					content,
 				)
 				assert.deepEqual(
@@ -427,9 +427,9 @@ test("content revisions share identity and keep old bodies, without merging dist
 				const foreign = yield* runtimeStore.create({
 					metadata: created.session.metadata,
 					value: {
-						...MemoryState.initial({}),
-						memory: {
-							...MemoryState.initial({}).memory,
+						...TimelineState.initial({}),
+						conversation: {
+							...TimelineState.initial({}).conversation,
 							history: [
 								{
 									id: Item.Id.make("foreign"),
@@ -487,7 +487,7 @@ test("interruption before durable commit does not publish a reference or snapsho
 			Effect.gen(function* () {
 				const definition = yield* Store.define({
 					stores: {},
-					schemaVersion: "memory/1",
+					schemaVersion: "timeline/1",
 				})
 				const storage = yield* MemoryPersistence.make
 				const entered = yield* Deferred.make<void>(),
@@ -505,7 +505,7 @@ test("interruption before durable commit does not publish a reference or snapsho
 				const fiber = yield* Effect.forkChild(
 					runtimeStore.create({
 						metadata: {},
-						value: MemoryState.initial({}),
+						value: TimelineState.initial({}),
 					}),
 				)
 				yield* Deferred.await(entered)
@@ -522,7 +522,7 @@ test("cache eviction keeps active execution and scoped interruption working", as
 			Effect.gen(function* () {
 				const definition = yield* Store.define({
 					stores: {},
-					schemaVersion: "memory/1",
+					schemaVersion: "timeline/1",
 				})
 				const storage = yield* MemoryPersistence.make
 				const runtimeStore = yield* SessionStoreRepository.make({
@@ -543,7 +543,7 @@ test("cache eviction keeps active execution and scoped interruption working", as
 				})
 				const first = yield* runtimeStore.create({
 					metadata: {},
-					value: MemoryState.initial({}),
+					value: TimelineState.initial({}),
 				})
 				const fiber = yield* Effect.forkChild(
 					runtime
@@ -563,7 +563,7 @@ test("cache eviction keeps active execution and scoped interruption working", as
 				for (let index = 0; index < 70; index++) {
 					const other = yield* runtimeStore.create({
 						metadata: first.session.metadata,
-						value: MemoryState.initial({}),
+						value: TimelineState.initial({}),
 					})
 					yield* runtimeStore.read(other.session.id)
 				}
@@ -611,22 +611,22 @@ test("recursive storage reads keep batch boundaries and walk deep ancestry", asy
 				headers: (ids) =>
 					Effect.sync(() => {
 						reads++
-						return ids.map((id): Memory.Version => ({
+						return ids.map((id): Timeline.Version => ({
 							id,
-							schemaVersion: "memory/1",
+							schemaVersion: "timeline/1",
 							parents:
 								Number(id) === 0
 									? []
-									: [Memory.VersionId.make(String(Number(id) - 1))],
+									: [Timeline.VersionId.make(String(Number(id) - 1))],
 						}))
 					}),
 			}
-			const head = Memory.VersionId.make(String(depth - 1))
+			const head = Timeline.VersionId.make(String(depth - 1))
 			const graph = yield* VersionGraph.graph(storage, head)
 			assert.equal(HashMap.size(graph), depth)
 			assert.equal(reads, depth)
 			assert.deepEqual(
-				HashMap.getUnsafe(graph, Memory.VersionId.make("0")).parents,
+				HashMap.getUnsafe(graph, Timeline.VersionId.make("0")).parents,
 				[],
 			)
 		}),

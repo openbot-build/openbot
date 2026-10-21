@@ -16,7 +16,7 @@ export class Approvals extends Context.Service<
 
 /** Reads native pending approvals from the committed conversation window. */
 export const pending = (view: Session.View<{}>): ReadonlyArray<Pending> => {
-	const messages = view.state.value.memory.context.prompt.content
+	const messages = view.state.value.conversation.context.prompt.content
 	const assistantParts = messages.flatMap((message) =>
 		message.role === "assistant" ? message.content : [],
 	)

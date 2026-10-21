@@ -98,7 +98,7 @@ export const addUsage: {
 	}
 })
 
-/** Later Session and Memory updates keep the Turn identity and its final Memory version. */
+/** Later Session and Timeline updates keep the Turn identity and its final Timeline version. */
 export const response: {
 	(turn: Turn.Record): (view: Session.View) => SessionResponse
 	(view: Session.View, turn: Turn.Record): SessionResponse
@@ -124,7 +124,7 @@ export const response: {
 		),
 		Match.orElse(() => "unknown" as const),
 	)
-	const output = view.state.value.memory.history
+	const output = view.state.value.conversation.history
 		.filter((entry) => entry.origin?.turn === turn.id)
 		.flatMap((entry) => {
 			const messages = entry.content.content.filter(

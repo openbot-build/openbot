@@ -10,7 +10,7 @@ import {
 } from "effect"
 import { dual } from "effect/Function"
 
-import * as Memory from "../memory/Memory.ts"
+import * as Timeline from "../timeline/Timeline.ts"
 import * as Session from "../session/Session.ts"
 import * as SessionStore from "./SessionStore.ts"
 import type * as Plugin from "../plugins/Plugin.ts"
@@ -23,7 +23,7 @@ import { omitOptional } from "./PromptCodec.ts"
 /** Find the version in the record and check that the current head reaches it. */
 const reachable = (
 	record: SessionStore.Record,
-	version: Memory.VersionId,
+	version: Timeline.VersionId,
 ): Effect.Effect<SessionStore.Snapshot, SessionStore.SessionStoreError> =>
 	Effect.gen(function* () {
 		const node = record.versions.find((v) => v.id === version)
@@ -36,10 +36,10 @@ const reachable = (
 			record.versions.map((v) => [v.id, v] as const),
 		)
 		const visit = (
-			pending: ReadonlyArray<Memory.VersionId>,
-			seen: HashSet.HashSet<Memory.VersionId>,
+			pending: ReadonlyArray<Timeline.VersionId>,
+			seen: HashSet.HashSet<Timeline.VersionId>,
 		): Effect.Effect<
-			HashSet.HashSet<Memory.VersionId>,
+			HashSet.HashSet<Timeline.VersionId>,
 			SessionStore.SessionStoreError
 		> =>
 			// suspend keeps long histories off the JavaScript call stack.
@@ -73,13 +73,13 @@ const reachable = (
 
 export const original: {
 	(
-		version?: Memory.VersionId,
+		version?: Timeline.VersionId,
 	): (
 		record: SessionStore.Record,
 	) => Effect.Effect<Schema.JsonObject, SessionStore.SessionStoreError>
 	(
 		record: SessionStore.Record,
-		version?: Memory.VersionId,
+		version?: Timeline.VersionId,
 	): Effect.Effect<Schema.JsonObject, SessionStore.SessionStoreError>
 } = dual(
 	(args) => Predicate.isObjectOrArray(args[0]),
@@ -132,7 +132,7 @@ export const make = <
 				)
 			)
 				return yield* error("reference-invalid", {
-					message: "A Turn refers to a missing Memory version",
+					message: "A Turn refers to a missing Timeline version",
 				})
 			if (
 				record.session.turns.some((turn) => turn.session !== record.session.id)

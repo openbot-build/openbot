@@ -136,7 +136,7 @@ export const appIndexEntries = table(
 )
 
 export const versions = table(
-	"openbot_memory_versions",
+	"openbot_timeline_versions",
 	{
 		namespace: text().notNull(),
 		id: text().notNull(),
@@ -149,7 +149,7 @@ export const versions = table(
 	(t) => [primaryKey({ columns: [t.namespace, t.id] })],
 )
 export const contents = table(
-	"openbot_memory_contents",
+	"openbot_timeline_contents",
 	{
 		namespace: text().notNull(),
 		id: text().notNull(),

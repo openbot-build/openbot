@@ -9,7 +9,7 @@ import {
 } from "effect"
 import { dual } from "effect/Function"
 
-import * as Memory from "../memory/Memory.ts"
+import * as Timeline from "../timeline/Timeline.ts"
 import type * as SessionStore from "./SessionStore.ts"
 import { batches } from "./GraphTraversal.ts"
 import { acyclic, reaches } from "./VersionGraph.ts"
@@ -63,7 +63,7 @@ export const validateDelta: {
 				return yield* error("message-conflict", {
 					message: "Duplicate message content ID",
 				})
-			const needed = HashSet.fromIterable<Memory.VersionId>([
+			const needed = HashSet.fromIterable<Timeline.VersionId>([
 				input.session.head,
 				...input.versions.flatMap((version) => [
 					version.id,

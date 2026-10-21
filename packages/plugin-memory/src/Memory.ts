@@ -28,7 +28,7 @@ export const pluginId = Schema.Literal("@openbot-build/plugin-memory")
 	.pipe(Schema.brand("@openbot-build/core/PluginId"))
 	.make("@openbot-build/plugin-memory")
 export const store = {
-	scope: "memory",
+	scope: "timeline",
 	schema: Schema.toCodecJson(State),
 } satisfies Plugin.StoreDefinition<
 	ReturnType<typeof Schema.toCodecJson<typeof State>>

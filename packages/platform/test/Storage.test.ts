@@ -32,7 +32,7 @@ import * as BackendLayers from "../src/app/BackendLayers.ts"
 import { Backend } from "../src/app/Backend.ts"
 
 test(
-	"PostgreSQL saves independent Session revisions and immutable Memory in one step within each namespace",
+	"PostgreSQL saves independent Session revisions and immutable Timeline versions in one step within each namespace",
 	{ timeout: 30000 },
 	async () => {
 		const database = await PostgresTest.start(),
@@ -50,7 +50,7 @@ test(
 						const repository = yield* RepositoryPostgres.make,
 							definition = yield* Store.define({
 								stores: {},
-								schemaVersion: "memory/1",
+								schemaVersion: "timeline/1",
 							})
 						const store = yield* SessionStoreRepository.make({
 							definition,
@@ -103,8 +103,8 @@ test(
 									Option.some({
 										value: {
 											...view.state.value,
-											memory: {
-												...view.state.value.memory,
+											conversation: {
+												...view.state.value.conversation,
 												history: [
 													{
 														id: Item.Id.make("input"),
@@ -123,17 +123,17 @@ test(
 						assert.notEqual(changed.session.head, current.session.head)
 						const sql = yield* SqlClient.SqlClient
 						assert.equal(
-							(yield* sql`SELECT id FROM openbot_memory_versions`).length,
+							(yield* sql`SELECT id FROM openbot_timeline_versions`).length,
 							2,
 						)
 						assert.equal(
-							(yield* sql`SELECT id FROM openbot_memory_contents`).length,
+							(yield* sql`SELECT id FROM openbot_timeline_contents`).length,
 							1,
 						)
 						const fork = yield* store.fork({ source: changed.session.id })
 						assert.equal(fork.session.head, changed.session.head)
 						assert.equal(
-							(yield* sql`SELECT id FROM openbot_memory_versions`).length,
+							(yield* sql`SELECT id FROM openbot_timeline_versions`).length,
 							2,
 						)
 						const stale = yield* Effect.exit(
@@ -209,10 +209,10 @@ test(
 						"openbot_auth_verification",
 						"openbot_developer_records",
 						"openbot_members",
-						"openbot_memory_contents",
-						"openbot_memory_versions",
 						"openbot_organizations",
 						"openbot_session_references",
+						"openbot_timeline_contents",
+						"openbot_timeline_versions",
 						"openbot_tokens",
 					])
 				}),

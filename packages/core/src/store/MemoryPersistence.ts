@@ -1,6 +1,6 @@
 import { Chunk, Option, HashMap, Effect, Equal, SynchronizedRef } from "effect"
 import type * as Session from "../session/Session.ts"
-import * as Memory from "../memory/Memory.ts"
+import * as Timeline from "../timeline/Timeline.ts"
 import type * as SessionStore from "./SessionStore.ts"
 import { validateDelta } from "./DeltaValidation.ts"
 import { error } from "./StoreErrors.ts"
@@ -14,7 +14,7 @@ export const make: Effect.Effect<SessionStore.Persistence> = Effect.gen(
 		const state = yield* SynchronizedRef.make({
 			refs: HashMap.empty<Session.Id, Session.Ref>(),
 			order: Chunk.empty<Session.Id>(),
-			versions: HashMap.empty<Memory.VersionId, SessionStore.Snapshot>(),
+			versions: HashMap.empty<Timeline.VersionId, SessionStore.Snapshot>(),
 			messages: HashMap.empty<string, SessionStore.Content>(),
 		})
 		const storage: SessionStore.Persistence = {

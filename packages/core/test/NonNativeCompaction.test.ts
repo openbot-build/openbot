@@ -69,8 +69,8 @@ const populate = (
 					Option.some({
 						value: {
 							...current.state.value,
-							memory: {
-								...current.state.value.memory,
+							conversation: {
+								...current.state.value.conversation,
 								history: conversation.content.map((message, index) => ({
 									id: Item.Id.make(`message-${index}`),
 									content: Prompt.fromMessages([message]),
@@ -313,15 +313,15 @@ test("the configured summary provider is chosen separately, and committed window
 				assert.deepEqual(selections, [summarySelection])
 				assert.equal(result.afterTokens, 20)
 				assert.deepEqual(
-					result.view.state.value.memory.history,
-					before.state.value.memory.history,
+					result.view.state.value.conversation.history,
+					before.state.value.conversation.history,
 				)
 				assert.deepEqual(
 					result.view.session.settings.model,
 					before.session.settings.model,
 				)
 				assert.deepEqual(
-					result.view.state.value.memory.context.prompt.content.slice(1),
+					result.view.state.value.conversation.context.prompt.content.slice(1),
 					conversation.content.slice(-1),
 				)
 				for (const counted of counts) {
@@ -340,8 +340,8 @@ test("the configured summary provider is chosen separately, and committed window
 					expected: null,
 				})
 				assert.deepEqual(
-					restoredView.state.value.memory.context,
-					result.view.state.value.memory.context,
+					restoredView.state.value.conversation.context,
+					result.view.state.value.conversation.context,
 				)
 			}),
 		),
@@ -440,8 +440,8 @@ for (const scenario of [
 										Option.some({
 											value: ((value: typeof current.state.value) => ({
 												...value,
-												memory: {
-													...value.memory,
+												conversation: {
+													...value.conversation,
 													model: Config.Selection.make({
 														provider: providerId,
 														model: modelId,
@@ -471,8 +471,8 @@ for (const scenario of [
 											Option.some({
 												value: ((value: typeof current.state.value) => ({
 													...value,
-													memory: {
-														...value.memory,
+													conversation: {
+														...value.conversation,
 														mode: "plan",
 													},
 												}))(current.state.value),
@@ -503,12 +503,12 @@ for (const scenario of [
 					}
 					const after = yield* runtimeStore.read(view.session.id)
 					assert.deepEqual(
-						after.state.value.memory.context,
-						before.state.value.memory.context,
+						after.state.value.conversation.context,
+						before.state.value.conversation.context,
 					)
 					assert.deepEqual(
-						after.state.value.memory.history,
-						before.state.value.memory.history,
+						after.state.value.conversation.history,
+						before.state.value.conversation.history,
 					)
 					if (scenario !== "head-conflict")
 						assert.equal(after.session.head, before.session.head)

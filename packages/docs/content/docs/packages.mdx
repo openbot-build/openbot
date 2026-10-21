@@ -16,7 +16,7 @@ All packages are named `@openbot-build/<name>`, have version `0.1.0`, and use `e
 | `platform`               | The server. See [Run from code](/docs/server).                                        |
 | `platform-api`           | The typed HTTP contract. The server, the client, and the API reference use it.        |
 | `client`                 | The TypeScript client. See [Client](/docs/client).                                    |
-| `core`                   | The Agent core: Agents, Sessions, Turns, Memory, storage, plugins, and skills.        |
+| `core`                   | The Agent core: Agents, Sessions, Turns, Timelines, storage, plugins, and skills.     |
 | `plugin-goal`            | Tools that let the Agent keep a goal for a Session.                                   |
 | `plugin-memory`          | Learned memory that the Agent keeps across Turns.                                     |
 | `plugin-turn-limiter`    | A limit on the number of model steps in one Turn.                                     |
@@ -40,14 +40,14 @@ The examples below leave out the model. To run them, provide a `LanguageModel` L
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `Agent`                                      | An Agent definition: tools, plugins, providers, and compaction. One definition can serve many Sessions. |
 | `SessionRuntime`                             | Runs Turns: `execute`, `stream`, `start`, `steer`, `approve`, `interrupt`, and more.                    |
-| `SessionStore`, `Store`                      | Saves Sessions and their Memory.                                                                        |
+| `SessionStore`, `Store`                      | Saves Sessions and their Timelines.                                                                     |
 | `SessionStoreMemory`                         | A store that keeps everything in memory, for tests and scripts.                                         |
-| `Memory`, `Item`, `Turn`, `Session`          | The data types.                                                                                         |
+| `Timeline`, `Item`, `Turn`, `Session`        | The data types.                                                                                         |
 | `Plugin`, `PluginComposition`, `PluginState` | Make and combine plugins, and give them saved state.                                                    |
 | `Skill`, `SkillMap`                          | Describe skills and keep a list of them.                                                                |
 
 A **Session** is one line of work. Each input starts a **Turn**. A Turn can have many model steps and tool calls.
-**Memory** is the saved history. Every change makes a new Memory version, so you can read or fork from an earlier point.
+The **Timeline** is the saved history of a Session. Every change makes a new Timeline version, so you can read or fork from an earlier point.
 
 ```ts
 import { SessionRuntime, SessionStoreMemory, Store } from "@openbot-build/core"
@@ -58,7 +58,7 @@ const program = Effect.scoped(
 	Effect.gen(function* () {
 		const definition = yield* Store.define({
 			stores: {},
-			schemaVersion: "memory/1",
+			schemaVersion: "timeline/1",
 		})
 		const store = yield* SessionStoreMemory.make(definition)
 		const runtime = yield* SessionRuntime.make({
@@ -111,7 +111,7 @@ const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
 ```
 
 `PluginComposition.merge(a, b)` combines two plugins. `a` runs outside `b`.
-A plugin can also save its own data in the Session or in Memory. Pass `plugin.stores` to `Store.define`, then use `PluginState.make`.
+A plugin can also save its own data in the Session or in the Timeline. Pass `plugin.stores` to `Store.define`, then use `PluginState.make`.
 
 ### Skills
 
@@ -140,7 +140,7 @@ const program = Effect.scoped(
 		const plugin = GoalPlugin.make()
 		const definition = yield* Store.define({
 			stores: plugin.stores,
-			schemaVersion: "memory/1",
+			schemaVersion: "timeline/1",
 		})
 		const store = yield* SessionStoreMemory.make(definition)
 		const state = yield* PluginState.make({ store, plugin })
@@ -183,7 +183,7 @@ const program = Effect.scoped(
 	Effect.gen(function* () {
 		const definition = yield* Store.define({
 			stores: Memory.stores,
-			schemaVersion: "memory/1",
+			schemaVersion: "timeline/1",
 		})
 		const store = yield* SessionStoreMemory.make(definition)
 		const memory = MemoryOperations.make({

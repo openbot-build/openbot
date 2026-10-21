@@ -14,14 +14,15 @@ import {
 	type Event,
 	type Options as AgentOptions,
 } from "../agent/Agent.ts"
-import type * as Memory from "../memory/Memory.ts"
+import type * as Timeline from "../timeline/Timeline.ts"
 import type * as Session from "../session/Session.ts"
 import type * as SessionStore from "../store/SessionStore.ts"
 
 export const Id = Schema.String.check(
 	Schema.makeFilter(
 		(id) =>
-			(id !== "session" && id !== "memory") || "Core namespaces are reserved",
+			(id !== "session" && id !== "conversation") ||
+			"Core namespaces are reserved",
 	),
 ).pipe(Schema.brand("@openbot-build/core/PluginId"))
 export type Id<Key extends string = string> = Key & typeof Id.Type
@@ -33,7 +34,7 @@ export interface Definition<I extends Id = Id> {
 
 /** Persistent plugin data with an explicit owner and its current Codec. */
 export interface StateDeclaration {
-	readonly scope: "session" | "memory"
+	readonly scope: "session" | "timeline"
 	readonly schema: Schema.ConstraintCodec<
 		unknown,
 		Schema.Json,
@@ -59,7 +60,7 @@ export interface StoreState<A> {
 export type StoreEffect<A, E, R> = Effect.Effect<
 	A,
 	| Session.SessionNotFound
-	| Memory.VersionError
+	| Timeline.VersionError
 	| Session.SessionError
 	| SessionStore.SessionStoreError
 	| E,
