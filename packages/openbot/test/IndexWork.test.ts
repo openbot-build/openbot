@@ -30,6 +30,7 @@ import * as Work from "../src/apps/IndexWork.ts"
 import { IndexWorkRepository } from "../src/apps/IndexWorkRepository.ts"
 import * as WorkStorage from "../src/apps/IndexWorkRepositoryPostgres.ts"
 import * as Governance from "../src/apps/Governance.ts"
+import * as OrganizationFixture from "./OrganizationFixture.ts"
 import * as Database from "../src/database/DatabasePostgres.ts"
 import * as Fixture from "./AppFixture.ts"
 import * as Postgres from "./PostgresTest.ts"
@@ -37,7 +38,7 @@ import * as BrowserHost from "./BrowserHost.ts"
 import { AppHost } from "../src/apps/AppHost.ts"
 import { Repository, ownerKey } from "../src/apps/Repository.ts"
 import * as AppStorage from "../src/apps/RepositoryPostgres.ts"
-import * as Secrets from "../src/apps/Secrets.ts"
+import * as Secrets from "../src/secrets/Secrets.ts"
 
 test("stored public verification updates and withdraws with a test clock and recovers interrupted claims", async () => {
 	const database = await Postgres.start()
@@ -58,7 +59,11 @@ test("stored public verification updates and withdraws with a test clock and rec
 	).pipe(
 		Layer.provideMerge(indexStorage),
 		Layer.provideMerge(WorkStorage.layer),
-		Layer.provide(Governance.layer()),
+		Layer.provide(
+			Governance.layer.pipe(
+				Layer.provide(OrganizationFixture.layerDefaultSettings),
+			),
+		),
 		Layer.provideMerge(
 			Database.layer({ databaseUrl: Redacted.make(database.url) }),
 		),
@@ -271,7 +276,7 @@ test("public restrictions show appeals and block existing App clients and new co
 	})
 	const storage = ManagedRuntime.make(
 		AppStorage.layer.pipe(
-			Layer.provide(Secrets.layer(Redacted.make("11".repeat(32)))),
+			Layer.provide(Secrets.layer(Redacted.make("test:" + "11".repeat(32)))),
 			Layer.provide(
 				Database.layer({ databaseUrl: Redacted.make(host.databaseUrl) }),
 			),

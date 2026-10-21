@@ -15,6 +15,7 @@ import {
 	Effect,
 	Layer,
 	ManagedRuntime,
+	Option,
 	Predicate,
 	Result,
 	Redacted,
@@ -51,7 +52,7 @@ import * as Lifecycle from "../src/apps/Lifecycle.ts"
 import * as ConnectionLocks from "../src/apps/ConnectionLocks.ts"
 import * as Capabilities from "../src/apps/Capabilities.ts"
 import * as AppRepository from "../src/apps/RepositoryPostgres.ts"
-import * as Secrets from "../src/apps/Secrets.ts"
+import * as Secrets from "../src/secrets/Secrets.ts"
 import * as Probe from "../src/apps/Probe.ts"
 import * as TokensPostgres from "../src/auth/TokensPostgres.ts"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
@@ -396,6 +397,8 @@ const startApi = async (
 	const auth = Auth.Auth.of({
 		handler: () =>
 			Promise.reject(new Error("Discovery must not call Better Auth routes")),
+		signInProvider: () => Option.none(),
+		startSignIn: () => Effect.die("Discovery must not start a sign-in"),
 		resolveSession: (credential) =>
 			Effect.gen(function* () {
 				authCalls = EffectArray.append(authCalls, "session")
@@ -406,8 +409,17 @@ const startApi = async (
 				if (Redacted.value(credential) !== "local-session")
 					return yield* Auth.Model.CredentialRejected.make({ kind: "session" })
 				return {
-					identity,
+					userId: identity.userId,
 					profile: {},
+					memberships: [
+						{
+							organizationId: identity.organizationId,
+							name: "Local",
+							status: "active" as const,
+							roles: ["super_administrator"],
+						},
+					],
+					platformAdmin: false,
 					expiresAt: "2099-01-01T00:00:00.000Z",
 					setCookies: [],
 				}
@@ -420,9 +432,15 @@ const startApi = async (
 				DeveloperLayers.layer({
 					...(publicNetwork === undefined ? {} : { publicNetwork }),
 				}).pipe(
-					Layer.provide(Governance.layer()),
+					Layer.provide(
+						Governance.layer.pipe(
+							Layer.provide(OrganizationFixture.layerDefaultSettings),
+						),
+					),
 					Layer.provide(IndexWorkRepository.layer),
-					Layer.provide(Secrets.layer(Redacted.make("11".repeat(32)))),
+					Layer.provide(
+						Secrets.layer(Redacted.make("test:" + "11".repeat(32))),
+					),
 					Layer.provide(discovery),
 					Layer.provide(IndexRepository.layer),
 				),
@@ -438,14 +456,22 @@ const startApi = async (
 					),
 				).pipe(
 					Layer.provideMerge(Invocations.layer),
-					Layer.provide(ActionPolicy.layer()),
+					Layer.provide(
+						ActionPolicy.layer.pipe(
+							Layer.provide(OrganizationFixture.layerDefaultSettings),
+						),
+					),
 					Layer.provideMerge(Connections.layer),
 					Layer.provideMerge(Capabilities.layer),
 					Layer.provide(AppHost.layer),
 					Layer.provide(discovery),
 					Layer.provide(CatalogDiscovery.layerRules),
 					Layer.provide(Probe.layer),
-					Layer.provide(Governance.layer()),
+					Layer.provide(
+						Governance.layer.pipe(
+							Layer.provide(OrganizationFixture.layerDefaultSettings),
+						),
+					),
 					Layer.provide(AppHost.layerNetwork),
 					Layer.provideMerge(AppConnections.layerConnectionScopes),
 					Layer.provide(ConnectionLocks.layer),
@@ -458,20 +484,28 @@ const startApi = async (
 							AuthorizationRepository.layer,
 						).pipe(
 							Layer.provideMerge(AppRepository.layer),
-							Layer.provide(Secrets.layer(Redacted.make("11".repeat(32)))),
+							Layer.provide(
+								Secrets.layer(Redacted.make("test:" + "11".repeat(32))),
+							),
 						),
 					),
 				),
 				PublicIndex.layer({ publicOrigin }).pipe(
-					Layer.provide(Governance.layer()),
+					Layer.provide(
+						Governance.layer.pipe(
+							Layer.provide(OrganizationFixture.layerDefaultSettings),
+						),
+					),
 					Layer.provide(IndexRepository.layer),
 				),
 				TokensPostgres.layer,
 				OrganizationFixture.layerEveryoneAdministrator,
 				OrganizationFixture.layerNoAudit,
+				OrganizationFixture.layerUnusedPlatform,
+				Secrets.layer(Redacted.make("test:" + "11".repeat(32))),
 				AgentFixture.layerAgentServices.pipe(
 					Layer.provide(TokensPostgres.layer),
-					Layer.provide(OrganizationFixture.layerEveryoneAdministrator),
+					Layer.provide(OrganizationFixture.layerAuthorization),
 				),
 				Layer.succeed(Auth.Auth, auth),
 				Layer.succeed(Backend, { get: unused, forCaller: unused }),

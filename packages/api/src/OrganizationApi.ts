@@ -6,7 +6,9 @@ import {
 	OpenApi,
 } from "effect/http-api"
 import { Caller } from "./Identity.ts"
+import { AccountAuth, NoStore } from "./AuthApi.ts"
 import {
+	CreateRoleRequest,
 	PermissionErrors,
 	PermissionGroup,
 	Policies,
@@ -14,34 +16,38 @@ import {
 	requires,
 	Role,
 	RoleId,
+	UpdateRoleRequest,
 } from "./Permissions.ts"
+import {
+	OrganizationSettings,
+	SettingsErrors,
+	UpdateOrganizationSettingsRequest,
+} from "./Settings.ts"
 
-const EmailDomain = Schema.String.check(
-	Schema.isPattern(/^(?=.{1,253}$)[a-z0-9-]+(?:\.[a-z0-9-]+)+$/),
-)
 /** A member always has at least one role. */
 export const Roles = Schema.Array(RoleId).check(Schema.isMinLength(1))
 
+export const OrganizationName = Schema.String.check(
+	Schema.isMinLength(1),
+	Schema.isMaxLength(120),
+)
+export const OrganizationStatus = Schema.Literals(["active", "suspended"])
 export const Organization = Schema.Struct({
 	id: Schema.String,
 	name: Schema.String,
-	/** People with a verified email in one of these domains join as members when they first sign in. */
-	allowedEmailDomains: Schema.Array(EmailDomain),
-	/** The roles that new members get. */
-	defaultRoles: Roles,
+	/** A platform admin can suspend an organization. Then nobody can use it. */
+	status: OrganizationStatus,
 	createdAt: Schema.String,
 })
 export type Organization = typeof Organization.Type
 export const UpdateOrganizationRequest = Schema.Struct({
-	name: Schema.optionalKey(
-		Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(120)),
-	),
-	allowedEmailDomains: Schema.optionalKey(
-		Schema.Array(EmailDomain).check(Schema.isMaxLength(50)),
-	),
-	defaultRoles: Schema.optionalKey(Roles),
+	name: Schema.optionalKey(OrganizationName),
 })
 export type UpdateOrganizationRequest = typeof UpdateOrganizationRequest.Type
+export const CreateOrganizationRequest = Schema.Struct({
+	name: OrganizationName,
+})
+export type CreateOrganizationRequest = typeof CreateOrganizationRequest.Type
 
 export const MemberStatus = Schema.Literals(["active", "suspended"])
 export const Member = Schema.Struct({
@@ -68,7 +74,12 @@ export type UpdateMemberRequest = typeof UpdateMemberRequest.Type
  */
 const auditActionTree = {
 	member: ["joined", "updated", "removed"],
-	organization: ["updated"],
+	organization: ["created", "updated"],
+	settings: ["updated"],
+	role: ["created", "updated", "deleted"],
+	model_provider: ["created", "updated", "deleted"],
+	domain: ["added", "verified", "removed"],
+	sso_connection: ["created", "updated", "deleted"],
 	token: ["created", "revoked"],
 	agent: ["created", "updated", "promoted", "memory.updated"],
 	delegation: ["started", "completed"],
@@ -119,6 +130,24 @@ export class PolicyInvalid extends Schema.TaggedError<PolicyInvalid>()(
 	"PolicyInvalid",
 	{ message: Schema.String },
 ) {}
+export class RoleNotFound extends Schema.TaggedError<RoleNotFound>()(
+	"RoleNotFound",
+	{ roleId: Schema.String },
+) {}
+/** Members or the settings still use the role. Give them another role first. */
+export class RoleInUse extends Schema.TaggedError<RoleInUse>()("RoleInUse", {
+	roleId: Schema.String,
+}) {}
+/** Built-in roles cannot change. */
+export class RoleReadOnly extends Schema.TaggedError<RoleReadOnly>()(
+	"RoleReadOnly",
+	{ roleId: Schema.String },
+) {}
+/** Only platform admins can create organizations on this platform. */
+export class OrganizationCreationDisabled extends Schema.TaggedError<OrganizationCreationDisabled>()(
+	"OrganizationCreationDisabled",
+	{},
+) {}
 export class OrganizationStorageUnavailable extends Schema.TaggedError<OrganizationStorageUnavailable>()(
 	"OrganizationStorageUnavailable",
 	{},
@@ -137,6 +166,16 @@ const memberErrors = [
 
 const readMembers = [requires("members.read").on("organization")]
 const writeMembers = [requires("members.write").on("organization")]
+const writeRoles = [requires("roles.write").on("organization")]
+/** A role cannot give more than the person who writes it has, so these endpoints can deny on their own. */
+const roleErrors = [
+	...errors,
+	...PermissionErrors,
+	RoleNotFound.pipe(HttpApiSchema.status(404)),
+	RoleInUse.pipe(HttpApiSchema.status(409)),
+	RoleReadOnly.pipe(HttpApiSchema.status(409)),
+	PolicyInvalid.pipe(HttpApiSchema.status(400)),
+] as const
 
 export const OrganizationApi = HttpApiGroup.make("organization").add(
 	HttpApiEndpoint.get("getOrganization", "/v1/organization", {
@@ -190,10 +229,61 @@ export const OrganizationApi = HttpApiGroup.make("organization").add(
 		"/v1/organization/permission_groups",
 		{ success: Schema.Array(PermissionGroup), error: errors },
 	),
+	HttpApiEndpoint.get("getSettings", "/v1/organization/settings", {
+		success: OrganizationSettings,
+		error: [...errors, ...SettingsErrors],
+	}),
+	HttpApiEndpoint.patch("updateSettings", "/v1/organization/settings", {
+		payload: UpdateOrganizationSettingsRequest,
+		success: OrganizationSettings,
+		error: [...errors, ...SettingsErrors, ...PermissionErrors],
+	}).annotate(
+		OpenApi.Description,
+		"Changes the settings. Send the `version` that you read as `expectedVersion`. If someone changed the settings since then, the change fails with SettingsConflict. Every instance uses the new settings right away.",
+	),
 	HttpApiEndpoint.get("listRoles", "/v1/organization/roles", {
 		success: Schema.Array(Role),
 		error: errors,
+	}).annotate(
+		OpenApi.Description,
+		"Lists the built-in roles and the custom roles of the organization.",
+	),
+	HttpApiEndpoint.get("getRole", "/v1/organization/roles/:roleId", {
+		params: { roleId: Schema.String },
+		success: Role,
+		error: roleErrors,
 	}),
+	HttpApiEndpoint.post("createRole", "/v1/organization/roles", {
+		payload: CreateRoleRequest,
+		success: Role,
+		error: roleErrors,
+	})
+		.annotate(Required, writeRoles)
+		.annotate(
+			OpenApi.Description,
+			"Creates a custom role. Its policies cannot allow anything that you cannot do yourself.",
+		),
+	HttpApiEndpoint.patch("updateRole", "/v1/organization/roles/:roleId", {
+		params: { roleId: Schema.String },
+		payload: UpdateRoleRequest,
+		success: Role,
+		error: roleErrors,
+	})
+		.annotate(Required, writeRoles)
+		.annotate(
+			OpenApi.Description,
+			"Changes a custom role. Every member with the role gets the new policies at once.",
+		),
+	HttpApiEndpoint.delete("deleteRole", "/v1/organization/roles/:roleId", {
+		params: { roleId: Schema.String },
+		success: HttpApiSchema.NoContent,
+		error: roleErrors,
+	})
+		.annotate(Required, writeRoles)
+		.annotate(
+			OpenApi.Description,
+			"Deletes a custom role. It fails with RoleInUse while a member or the default roles use it.",
+		),
 	HttpApiEndpoint.get("listAuditLogs", "/v1/organization/audit_logs", {
 		query: {
 			after: Schema.optionalKey(Schema.String),
@@ -213,3 +303,28 @@ export const OrganizationApi = HttpApiGroup.make("organization").add(
 			"Lists audit log entries, newest first. `actor` filters by user ID.",
 		),
 )
+
+/** The organizations of the caller. Any signed-in account can use these endpoints. */
+export const OrganizationsApi = HttpApiGroup.make("organizations")
+	.add(
+		HttpApiEndpoint.get("listOrganizations", "/v1/organizations", {
+			success: Schema.Struct({ items: Schema.Array(Organization) }),
+			error: errors,
+		}).annotate(
+			OpenApi.Description,
+			"Lists the organizations where you are a member. A user token sees only its own organization.",
+		),
+		HttpApiEndpoint.post("createOrganization", "/v1/organizations", {
+			payload: CreateOrganizationRequest,
+			success: Organization,
+			error: [
+				...errors,
+				OrganizationCreationDisabled.pipe(HttpApiSchema.status(403)),
+			],
+		}).annotate(
+			OpenApi.Description,
+			"Creates an organization. You become its Super Administrator. The platform settings say who can do this.",
+		),
+	)
+	.middleware(AccountAuth)
+	.middleware(NoStore)

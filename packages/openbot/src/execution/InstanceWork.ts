@@ -24,6 +24,8 @@ export class InstanceWork extends Context.Service<
 		) => Effect.Effect<A, E | InstancePaused, R>
 		readonly reserve: Effect.Effect<Reservation, InstancePaused>
 		readonly admitted: Effect.Effect<boolean>
+		/** Temporarily pause admission without clearing an operator pause on release. */
+		readonly pause: Effect.Effect<Effect.Effect<void>>
 		readonly quiesce: Effect.Effect<void>
 		readonly resume: Effect.Effect<void>
 		readonly status: Effect.Effect<{
@@ -35,13 +37,17 @@ export class InstanceWork extends Context.Service<
 
 export const make = Effect.sync(() => {
 	let quiesced = false
+	const pauses = new Set<symbol>()
 	const active = new Set<symbol>()
 	const reserve: Effect.Effect<Reservation, InstancePaused> = Effect.flatMap(
 		CurrentTask,
 		(parent) =>
 			Effect.suspend(() => {
 				// A counted parent can enqueue its final work after admission has paused.
-				if (quiesced && (parent === undefined || !active.has(parent)))
+				if (
+					(quiesced || pauses.size > 0) &&
+					(parent === undefined || !active.has(parent))
+				)
 					return Effect.fail(new InstancePaused())
 				const token = Symbol()
 				active.add(token)
@@ -55,7 +61,6 @@ export const make = Effect.sync(() => {
 						Effect.suspend<A, E | InstancePaused, R>(() =>
 							active.has(token)
 								? effect.pipe(
-										Effect.uninterruptible,
 										Effect.provideService(CurrentTask, token),
 										Effect.ensuring(release),
 									)
@@ -76,13 +81,23 @@ export const make = Effect.sync(() => {
 				(task) => task.run(effect),
 				(task) => task.release,
 			),
+		pause: Effect.sync(() => {
+			const token = Symbol()
+			pauses.add(token)
+			return Effect.sync(() => {
+				pauses.delete(token)
+			})
+		}),
 		quiesce: Effect.sync(() => {
 			quiesced = true
 		}),
 		resume: Effect.sync(() => {
 			quiesced = false
 		}),
-		status: Effect.sync(() => ({ quiesced, activeTasks: active.size })),
+		status: Effect.sync(() => ({
+			quiesced: quiesced || pauses.size > 0,
+			activeTasks: active.size,
+		})),
 	})
 })
 export const layer = Layer.effect(InstanceWork, make)

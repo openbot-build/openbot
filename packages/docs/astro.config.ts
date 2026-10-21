@@ -46,6 +46,7 @@ export default defineConfig({
 					label: "Usage",
 					items: [
 						"docs/authentication",
+						"docs/sso",
 						"docs/organization",
 						"docs/permissions",
 						"docs/agents",
@@ -63,6 +64,7 @@ export default defineConfig({
 					label: "Configure",
 					items: [
 						"docs/configuration",
+						"docs/platform",
 						"docs/models",
 						"docs/error-logs",
 						"docs/deploy",

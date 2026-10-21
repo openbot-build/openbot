@@ -40,6 +40,7 @@ Provide it outside the server, so that it stays open until the server has closed
 import { NodeRuntime } from "@effect/platform-node"
 import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
 import { Effect, Layer, Logger, References } from "effect"
+import { FetchHttpClient } from "effect/http"
 
 const alerts = Logger.layer(
 	[
@@ -56,7 +57,9 @@ const alerts = Logger.layer(
 NodeRuntime.runMain(
 	Effect.gen(function* () {
 		const settings = yield* EnvironmentConfiguration.load
-		return yield* Layer.launch(Server.layer(settings))
+		return yield* Layer.launch(
+			Server.layer(settings).pipe(Layer.provide(FetchHttpClient.layer)),
+		)
 	}).pipe(Effect.provide(alerts)),
 )
 ```

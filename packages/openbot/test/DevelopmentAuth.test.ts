@@ -1,22 +1,9 @@
 import assert from "node:assert/strict"
 import { mock, test } from "node:test"
 import { NodeServices } from "@effect/platform-node"
-import {
-	Auth,
-	DatabasePostgres,
-	EnvironmentConfiguration,
-	Server,
-} from "@openbot-build/openbot"
+import { Auth, DatabasePostgres, Server } from "@openbot-build/openbot"
 import { AuthApi, Caller, Identity, OpenBotApi } from "@openbot-build/api"
-import {
-	ConfigProvider,
-	Effect,
-	Layer,
-	ManagedRuntime,
-	Redacted,
-	Result,
-	Schema,
-} from "effect"
+import { Effect, Layer, ManagedRuntime, Option, Redacted, Schema } from "effect"
 import { HttpRouter, HttpServer } from "effect/http"
 import {
 	HttpApi,
@@ -26,63 +13,24 @@ import {
 	OpenApi,
 } from "effect/http-api"
 import * as PostgresTest from "./PostgresTest.ts"
+import * as Development from "../dist/Development.js"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
 
-const environment = {
-	OPENBOT_DATABASE_URL: "postgres://localhost/development",
-	OPENBOT_APP_ENCRYPTION_KEY:
-		"1111111111111111111111111111111111111111111111111111111111111111",
-	OPENBOT_PUBLIC_ORIGIN: "https://localhost:8443",
-	BETTER_AUTH_SECRET: "DevelopmentIntegrationSecretMustStayStable123456",
-}
-const load = (values: Record<string, string>) =>
-	Effect.runPromise(
-		EnvironmentConfiguration.load.pipe(
-			Effect.provideService(
-				ConfigProvider.ConfigProvider,
-				ConfigProvider.fromUnknown(values),
-			),
-			Effect.result,
-		),
-	)
+const publicOrigin = "https://localhost:8443"
+const authSecret = "DevelopmentIntegrationSecretMustStayStable123456"
 
-test("development authentication must be turned on explicitly and needs no OIDC credentials", async () => {
-	assert.equal((await load(environment))._tag, "Failure")
-	assert.equal(
-		(await load({ ...environment, OPENBOT_DEV_MODE: "0" }))._tag,
-		"Failure",
+test("the development sign-in secret comes from the first secret key and stays the same", () => {
+	const keys = Redacted.make(
+		"dev:" + "11".repeat(32) + ",old:" + "22".repeat(32),
 	)
-	assert.equal(
-		(await load({ ...environment, OPENBOT_DEV_MODE: "invalid" }))._tag,
-		"Failure",
-	)
-	assert.equal(
-		(await load({ ...environment, OPENBOT_DEV_MODE: "" }))._tag,
-		"Failure",
-	)
-	const development = await load({
-		...environment,
-		OPENBOT_DEV_MODE: "1",
-		OPENBOT_OIDC_ISSUER: "https://id.example.com",
-		OPENBOT_OIDC_CLIENT_ID: "",
-		OPENBOT_OIDC_CLIENT_SECRET: "",
-	})
-	assert.ok(Result.isSuccess(development))
-	assert.equal(development.success.auth.mode, "development")
-	assert.equal("clientId" in development.success.auth, false)
-	const oidc = await load({
-		...environment,
-		OPENBOT_DEV_MODE: "0",
-		OPENBOT_OIDC_ISSUER: "https://id.example.com",
-		OPENBOT_OIDC_CLIENT_ID: "client",
-		OPENBOT_OIDC_CLIENT_SECRET: "secret",
-	})
-	assert.ok(Result.isSuccess(oidc))
-	assert.equal(oidc.success.auth.mode, "oidc")
-	const { BETTER_AUTH_SECRET: _, ...withoutSecret } = environment
-	assert.equal(
-		(await load({ ...withoutSecret, OPENBOT_DEV_MODE: "1" }))._tag,
-		"Failure",
+	const first = Redacted.value(Development.developmentSecret(keys))
+	assert.equal(first, Redacted.value(Development.developmentSecret(keys)))
+	assert.ok(first.length >= 32)
+	assert.notEqual(
+		first,
+		Redacted.value(
+			Development.developmentSecret(Redacted.make("dev:" + "33".repeat(32))),
+		),
 	)
 })
 
@@ -92,7 +40,7 @@ test("development authentication accepts only loopback HTTPS origins in standard
 			Schema.decodeEffect(Auth.Model.Configuration)({
 				mode: "development",
 				publicOrigin,
-				secret: Redacted.make(environment.BETTER_AUTH_SECRET),
+				secret: Redacted.make(authSecret),
 			}).pipe(Effect.result),
 		)
 	assert.equal((await decode("https://localhost:8443"))._tag, "Success")
@@ -109,7 +57,6 @@ test(
 	{ timeout: 60000 },
 	async (t) => {
 		const database = await PostgresTest.start()
-		const publicOrigin = environment.OPENBOT_PUBLIC_ORIGIN
 		const actualFetch = globalThis.fetch
 		const network = mock.method(
 			globalThis,
@@ -131,16 +78,17 @@ test(
 			host: "127.0.0.1",
 			port: 0,
 			databaseUrl: Redacted.make(database.url),
-			appEncryptionKey: Redacted.make(
-				"1111111111111111111111111111111111111111111111111111111111111111",
+			secretKeys: Redacted.make(
+				"test:" +
+					"1111111111111111111111111111111111111111111111111111111111111111",
 			),
 			auth: {
 				mode: "development" as const,
 				publicOrigin,
-				secret: Redacted.make(environment.BETTER_AUTH_SECRET),
+				secret: Redacted.make(authSecret),
 			},
 		}
-		const server = () => ManagedRuntime.make(Server.layer(options))
+		const server = () => ManagedRuntime.make(Server.layerFixed(options))
 		let runtime: ReturnType<typeof server> | undefined
 		try {
 			await using migration = ManagedRuntime.make(
@@ -204,7 +152,8 @@ test(
 			const same: typeof AuthApi.SessionInfo.Type = await (
 				await request("/auth/session", { headers: { cookie: secondSession } })
 			).json()
-			assert.deepEqual(same.identity, info.identity)
+			assert.equal(same.userId, info.userId)
+			assert.deepEqual(same.memberships, info.memberships)
 			assert.notEqual(secondSession, session)
 			for (const origin of [undefined, "https://foreign.example"]) {
 				const blocked = await request("/v1/sessions", {
@@ -293,7 +242,8 @@ test(
 			assert.equal(renewed.status, 200)
 			accountHeaders.cookie = renewalCookie(renewed)
 			const renewedInfo: typeof AuthApi.SessionInfo.Type = await renewed.json()
-			assert.deepEqual(renewedInfo.identity, info.identity)
+			assert.equal(renewedInfo.userId, info.userId)
+			assert.deepEqual(renewedInfo.memberships, info.memberships)
 			assert.ok(Date.parse(renewedInfo.expiresAt) > originalExpiration)
 			const unchanged = await request("/auth/session", {
 				headers: accountHeaders,
@@ -357,7 +307,8 @@ test(
 					headers: { cookie: restartedSession },
 				})
 			).json()
-			assert.deepEqual(restarted.identity, info.identity)
+			assert.equal(restarted.userId, info.userId)
+			assert.deepEqual(restarted.memberships, info.memberships)
 			assert.equal(
 				(
 					await request("/auth/sign-out", {
@@ -413,23 +364,30 @@ test(
 )
 
 test("business authentication keeps session Origin checks and typed failures", async () => {
-	const publicOrigin = environment.OPENBOT_PUBLIC_ORIGIN
 	let unavailable = true
 	const failure = Effect.fail(
 		Auth.Model.AuthUnavailable.make({ dependency: "storage" }),
 	)
 	const auth = Layer.succeed(Auth.Auth, {
 		handler: () => Promise.resolve(new Response(null, { status: 503 })),
+		signInProvider: () => Option.none(),
+		startSignIn: () => Effect.die("unused"),
 		resolveSession: (credential) =>
 			Redacted.value(credential) !== "signed-session"
 				? Effect.fail(Auth.Model.CredentialRejected.make({ kind: "session" }))
 				: unavailable
 					? failure
 					: Effect.succeed({
-							identity: {
-								userId: "session-user",
-								organizationId: "session-user",
-							},
+							userId: "session-user",
+							memberships: [
+								{
+									organizationId: "session-user",
+									name: "Session",
+									status: "active" as const,
+									roles: ["super_administrator"],
+								},
+							],
+							platformAdmin: false,
 							profile: {},
 							expiresAt: "2099-01-01T00:00:00.000Z",
 							setCookies: [],
@@ -471,6 +429,7 @@ test("business authentication keeps session Origin checks and typed failures", a
 			Layer.provide(auth),
 			Layer.provide(tokens),
 			Layer.provide(OrganizationFixture.layerEveryoneAdministrator),
+			Layer.provide(OrganizationFixture.layerUnusedPlatform),
 			Layer.provide(OrganizationFixture.layerNoAudit),
 			Layer.provide(HttpServer.layerServices),
 		),

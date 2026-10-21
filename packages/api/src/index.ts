@@ -1,6 +1,6 @@
 export { Health, HealthApi, Service, service } from "./HealthApi.ts"
 export { OpenBotApi } from "./OpenBotApi.ts"
-export { Caller, Identity } from "./Identity.ts"
+export { Account, AccountCaller, Caller, Identity } from "./Identity.ts"
 export * as AgentsApi from "./AgentsApi.ts"
 export * as Memory from "./Memory.ts"
 export * as AgentMemory from "./AgentMemory.ts"
@@ -8,14 +8,29 @@ export * as RequestsApi from "./RequestsApi.ts"
 export * as AuthApi from "./AuthApi.ts"
 export * as UserTokensApi from "./UserTokensApi.ts"
 export * as OrganizationApi from "./OrganizationApi.ts"
+export * as Settings from "./Settings.ts"
+export * as PlatformApi from "./PlatformApi.ts"
+export * as ModelProvidersApi from "./ModelProvidersApi.ts"
+export * as SsoApi from "./SsoApi.ts"
 export * as Permissions from "./Permissions.ts"
 export {
 	Authorize,
 	AuthorizationUnavailable,
 	PermissionDenied,
 } from "./Permissions.ts"
+export { PlatformAuthorize } from "./PlatformApi.ts"
 export {
+	SettingsConflict,
+	SettingsInvalid,
+	SettingsUnavailable,
+	SetupRequired,
+} from "./Settings.ts"
+export {
+	AccountAuth,
 	AgentAuth,
+	NoStore,
+	OriginCheck,
+	OrganizationRequired,
 	ForbiddenOrigin,
 	SessionAuth,
 	AuthSession,

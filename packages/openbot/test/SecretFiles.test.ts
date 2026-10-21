@@ -10,16 +10,16 @@ import * as SecretFiles from "../src/configuration/SecretFiles.ts"
 test("settings come from secret files when the environment does not set them", async () => {
 	const folder = await mkdtemp(join(tmpdir(), "openbot-secrets-"))
 	try {
-		await writeFile(join(folder, "BETTER_AUTH_SECRET"), "from-file\n")
+		await writeFile(join(folder, "OPENBOT_SECRET_KEYS"), "from-file\n")
 		await writeFile(join(folder, "OPENBOT_DATABASE_URL"), "postgres://file")
-		await writeFile(join(folder, "OPENBOT_OIDC_CLIENT_SECRET"), "")
+		await writeFile(join(folder, "OPENBOT_SETUP_OIDC_CLIENT_SECRET"), "")
 		const load = Config.all({
-			secret: Config.Redacted("BETTER_AUTH_SECRET"),
+			secret: Config.Redacted("OPENBOT_SECRET_KEYS"),
 			databaseUrl: Config.Redacted("OPENBOT_DATABASE_URL"),
-			clientSecret: Config.Redacted("OPENBOT_OIDC_CLIENT_SECRET").pipe(
+			clientSecret: Config.Redacted("OPENBOT_SETUP_OIDC_CLIENT_SECRET").pipe(
 				Config.withDefault(undefined),
 			),
-			missing: Config.String("OPENBOT_MODEL_API_KEY").pipe(
+			missing: Config.String("OPENBOT_TLS_CERT").pipe(
 				Config.withDefault("default"),
 			),
 		})
@@ -47,7 +47,7 @@ test("settings come from secret files when the environment does not set them", a
 test("a missing secrets folder leaves settings unset", async () => {
 	await Effect.runPromise(
 		Effect.gen(function* () {
-			const value = yield* Config.String("BETTER_AUTH_SECRET").pipe(
+			const value = yield* Config.String("OPENBOT_SECRET_KEYS").pipe(
 				Config.withDefault("unset"),
 			)
 			assert.equal(value, "unset")

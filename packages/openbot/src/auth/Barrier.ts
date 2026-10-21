@@ -137,7 +137,7 @@ export const layer = (options?: Options) =>
 				}
 			})
 			const tracked = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-				InstanceWork.wrap(effect).pipe(
+				InstanceWork.wrap(Effect.uninterruptible(effect)).pipe(
 					Effect.catchTag("InstancePaused", unavailable),
 				)
 			return Barrier.of({
@@ -212,4 +212,16 @@ export const layer = (options?: Options) =>
 					}),
 			})
 		}),
+	)
+
+/** Shared identity and configuration writes participate in the same migration and instance gates. */
+export const protect = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+	Effect.flatMap(Effect.serviceOption(Barrier), (barrier) =>
+		Option.isSome(barrier)
+			? barrier.value.wrap(effect)
+			: InstanceWork.wrap(Effect.uninterruptible(effect)).pipe(
+					Effect.catchTag("InstancePaused", () =>
+						AuthUnavailable.make({ dependency: "storage" }),
+					),
+				),
 	)

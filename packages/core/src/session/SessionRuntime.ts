@@ -1281,6 +1281,8 @@ export const make = <
 								),
 							),
 							Stream.runDrain,
+							// Registration is masked; the child execution must remain cancellable.
+							Effect.interruptible,
 							Effect.ensuring(Deferred.succeed(started, undefined)),
 							Effect.onExit((exit) =>
 								Exit.isSuccess(exit)

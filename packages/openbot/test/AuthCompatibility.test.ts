@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { Effect, Option, Redacted } from "effect"
 import { Pool } from "pg"
+import { Settings } from "../src/settings/Settings.ts"
+import { PlatformAdmins } from "../src/platform/PlatformAdmins.ts"
 import { Organization } from "../src/organization/Organization.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 import * as BrowserRoutes from "../src/auth/BrowserRoutes.ts"
@@ -113,10 +115,7 @@ test(
 				sessionCookie: "__Host-e-session",
 				loginCookie: "__Host-e-login",
 			},
-			organization: {
-				ownerEmails: ["alice@example.com"],
-				allowFirstLoginAdmin: false,
-			},
+			sharedDomain: false,
 		})
 		try {
 			const login = await fetch(
@@ -144,10 +143,7 @@ test(
 				{ headers },
 			)
 			assert.equal(session.status, 200)
-			assert.equal(
-				(await session.json()).identity.userId,
-				alice.identity.userId,
-			)
+			assert.equal((await session.json()).userId, alice.identity.userId)
 			assert.equal(session.headers.getSetCookie().length, 0)
 			assert.equal(
 				(await fetch(host.address + "/v1/sessions", { headers })).status,
@@ -172,6 +168,18 @@ test(
 					})
 				).status,
 				401,
+			)
+			await host.runtime.runPromise(
+				Effect.gen(function* () {
+					const settings = yield* Settings
+					const current = Option.getOrThrow(yield* settings.platform)
+					yield* settings.updatePlatform(current.version, (document) =>
+						Effect.succeed({
+							...document,
+							organizationCreation: "platform_admins",
+						}),
+					)
+				}),
 			)
 			await assert.rejects(host.login("bob"))
 			const logout = await fetch(host.address + "/auth/logout", {
@@ -198,64 +206,91 @@ test(
 )
 
 test(
-	"explicit bootstrap disables first-login ownership",
+	"native bootstrap binds stable IDs without first-login ownership or email takeover",
 	{ timeout: 60000 },
 	async () => {
-		const host = await BrowserHost.start({
-			publicOrigin,
-			organization: {
-				allowFirstLoginAdmin: false,
-				ownerUserIds: ["KnownOwner"],
-				memberUserIds: ["KnownMember"],
-			},
-		})
-		try {
-			await assert.rejects(host.login("unknown"))
-		} finally {
-			await host.close()
-		}
-	},
-)
-
-test(
-	"bootstrap user IDs preserve case and assign only their configured roles",
-	{ timeout: 60000 },
-	async () => {
-		const host = await BrowserHost.start({
-			publicOrigin,
-			organization: {
-				allowFirstLoginAdmin: false,
-				ownerUserIds: ["KnownOwner"],
-				memberUserIds: ["KnownMember"],
-			},
-		})
+		const host = await BrowserHost.start({ publicOrigin, sharedDomain: false })
 		const pool = new Pool({ connectionString: host.databaseUrl })
 		try {
+			await host.runtime.runPromise(
+				Effect.gen(function* () {
+					const settings = yield* Settings
+					const current = Option.getOrThrow(yield* settings.platform)
+					yield* settings.updatePlatform(current.version, (document) =>
+						Effect.succeed({
+							...document,
+							organizationCreation: "platform_admins",
+							memberSignupOrganizationId: null,
+						}),
+					)
+				}),
+			)
+			await assert.rejects(host.login("unknown"))
 			for (const id of ["KnownOwner", "KnownMember", "knownowner"])
 				await pool.query(
-					"INSERT INTO openbot_auth_user (id,name,email,email_verified,created_at,updated_at) VALUES ($1,$1,$2,false,now(),now())",
+					"INSERT INTO openbot_auth_user(id,name,email,email_verified,created_at,updated_at) VALUES($1,$1,$2,false,now(),now())",
 					[id, id + "@bootstrap.example"],
 				)
+			const organization = await host.runtime.runPromise(
+				Effect.flatMap(Organization, (service) =>
+					service.create({
+						name: "Explicit organization",
+						owner: { id: "KnownOwner" },
+					}),
+				),
+			)
+			await pool.query(
+				"INSERT INTO openbot_members(organization_id,user_id,email,name,status,roles,policies,joined_at) VALUES($1,$2,NULL,NULL,'active',$3,'[]',0)",
+				[organization.id, "KnownMember", '["member"]'],
+			)
 			const admit = (id: string) =>
 				host.runtime.runPromise(
-					Effect.flatMap(Organization, (organization) =>
-						organization.admit({ id }),
-					),
+					Effect.flatMap(Organization, (service) => service.admit({ id })),
 				)
-			await assert.rejects(admit("knownowner"))
-			const owner = await admit("KnownOwner")
-			await admit("KnownMember")
+			assert.deepEqual(await admit("knownowner"), [])
 			for (const [id, roles] of [
 				["KnownOwner", ["super_administrator"]],
 				["KnownMember", ["member"]],
 			] as const) {
-				const member = await host.runtime.runPromise(
-					Effect.flatMap(Organization, (organization) =>
-						organization.member(owner.organizationId, id),
+				const memberships = await admit(id)
+				assert.deepEqual(
+					memberships.map((member) => ({
+						id: member.organizationId,
+						roles: member.roles,
+					})),
+					[{ id: organization.id, roles }],
+				)
+			}
+			await host.runtime.runPromise(
+				Effect.flatMap(PlatformAdmins, (admins) =>
+					admins.bind({
+						userId: "KnownOwner",
+						email: "owner@bootstrap.example",
+					}),
+				),
+			)
+			const check = (id: string) =>
+				host.runtime.runPromise(
+					Effect.flatMap(PlatformAdmins, (admins) =>
+						admins.check({
+							id,
+							email: "owner@bootstrap.example",
+							emailVerified: true,
+						}),
 					),
 				)
-				assert.deepEqual(Option.getOrThrow(member).roles, roles)
-			}
+			assert.equal(await check("KnownOwner"), true)
+			assert.equal(await check("knownowner"), false)
+			await assert.rejects(
+				host.runtime.runPromise(
+					Effect.flatMap(PlatformAdmins, (admins) =>
+						admins.bind({
+							userId: "knownowner",
+							email: "owner@bootstrap.example",
+						}),
+					),
+				),
+			)
 		} finally {
 			await pool.end()
 			await host.close()

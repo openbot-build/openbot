@@ -37,7 +37,8 @@ devenv shell -- pnpm dev:setup
 devenv shell -- mkcert -install
 ```
 
-The first command makes `.env.development` with new secrets, and a certificate for `localhost`.
+The first command makes `.env.development` with a new secret key, and a certificate for `localhost`.
+If you have an `.env.development` from an older version, delete it first.
 The second command makes your computer trust that certificate. It can ask for your password.
 
 </Step>
@@ -51,6 +52,7 @@ devenv shell -- pnpm dev
 ```
 
 This starts PostgreSQL, builds OpenBot, updates the database, and starts OpenBot at `https://localhost:8443`.
+The development server sets up the platform by itself, so you do not run the setup program.
 The first start can take a few minutes. Press **Ctrl+C** to stop. Your data stays in the database.
 
 </Step>
@@ -66,7 +68,8 @@ curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
   -d '{}'
 ```
 
-In development, this signs you in to a local test account at once. The sign-in cookie goes to `cookies.txt`.
+In development, this signs you in to the local test account `developer@localhost.test` at once. The sign-in cookie goes to `cookies.txt`.
+This account is a platform admin. It also gets its own organization named "Personal".
 
 </Step>
 
@@ -82,7 +85,7 @@ curl -b cookies.txt \
   https://localhost:8443/v1/user/tokens
 ```
 
-You are the first account, so you are the Super Administrator of the organization. The answer has a `secret` that starts with `obut_`. You see it only once, so keep it:
+You are the Super Administrator of your "Personal" organization, and the token belongs to it. The answer has a `secret` that starts with `obut_`. You see it only once, so keep it:
 
 ```sh
 export OPENBOT_TOKEN=obut_...
@@ -126,6 +129,6 @@ See [Models](/docs/models) for the other test models.
 ## Next steps
 
 - Read how [Sessions](/docs/sessions) and Turns work.
-- Use a real identity provider: [Authentication](/docs/authentication).
+- Use a real identity provider: [Authentication](/docs/authentication) and [Platform](/docs/platform).
 - Add a real model: [Models](/docs/models).
 - Run OpenBot on a server: [Deploy](/docs/deploy).

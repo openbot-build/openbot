@@ -3,40 +3,58 @@ import { Context, Effect, Layer, Option } from "effect"
 import { HttpRouter } from "effect/http"
 import { Tokens } from "../auth/Tokens.ts"
 import { Organization } from "../organization/Organization.ts"
+import { Settings } from "../settings/Settings.ts"
 import { allowed, memberPolicies, resourceKey } from "./Policy.ts"
+import { Roles } from "./Roles.ts"
+
+export type Services = Organization | Tokens | Roles | Settings
 
 /**
  * The policy sets of a caller. A request must pass every set.
  * A member has one set. A user token adds its own set, so it never does more than its member.
+ * The ceiling holds the deny policies of the platform. They apply to everyone.
  */
 export const policySets = (
 	caller: Caller,
 ): Effect.Effect<
-	ReadonlyArray<ReadonlyArray<Permissions.Policy>>,
+	{
+		readonly sets: ReadonlyArray<ReadonlyArray<Permissions.Policy>>
+		readonly ceiling: ReadonlyArray<Permissions.Policy>
+	},
 	Permissions.AuthorizationUnavailable,
-	Organization | Tokens
+	Services
 > =>
 	Effect.gen(function* () {
 		const organization = yield* Organization
 		const tokens = yield* Tokens
-		const member = yield* organization.member(
+		const roles = yield* Roles
+		const settings = yield* Settings
+		const ceiling = Option.match(yield* settings.platform, {
+			onNone: () => [],
+			onSome: (platform) => platform.document.policyCeiling,
+		})
+		const member = yield* organization.activeMember(
 			caller.organizationId,
 			caller.userId,
 		)
-		if (Option.isNone(member) || member.value.status !== "active") return []
-		const own = memberPolicies(member.value)
-		if (caller.kind === "member" || caller.tokenId === undefined) return [own]
+		if (Option.isNone(member)) return { sets: [], ceiling }
+		const own = memberPolicies({
+			member: member.value,
+			roles: yield* roles.list(caller.organizationId),
+		})
+		if (caller.kind === "member" || caller.tokenId === undefined)
+			return { sets: [own], ceiling }
 		const token = yield* tokens.find(caller, caller.tokenId)
 		return Option.match(token, {
-			onNone: () => [],
-			onSome: (token) => [own, token.policies],
+			onNone: () => ({ sets: [], ceiling }),
+			onSome: (token) => ({ sets: [own, token.policies], ceiling }),
 		})
 	}).pipe(Effect.mapError(() => Permissions.AuthorizationUnavailable.make({})))
 
 export const layer = Layer.effect(
 	Permissions.Authorize,
 	Effect.gen(function* () {
-		const services = yield* Effect.context<Organization | Tokens>()
+		const services = yield* Effect.context<Services>()
 		return (httpEffect, { endpoint, group }) =>
 			Effect.gen(function* () {
 				const requirements = Option.orElse(
@@ -56,7 +74,7 @@ export const layer = Layer.effect(
 				if (requirements.value.length === 0) return yield* httpEffect
 				const caller = yield* Identity
 				const params = yield* HttpRouter.params
-				const sets = yield* policySets(caller).pipe(
+				const { sets, ceiling } = yield* policySets(caller).pipe(
 					Effect.provideContext(services),
 				)
 				const subject = {
@@ -74,7 +92,7 @@ export const layer = Layer.effect(
 						),
 					})
 					const permission = requirement.permission
-					if (!allowed({ sets, permission, key, subject }))
+					if (!allowed({ sets, ceiling, permission, key, subject }))
 						return yield* Permissions.PermissionDenied.make({
 							permission: requirement.permission,
 							resource: key,

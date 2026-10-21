@@ -7,7 +7,9 @@ import {
 	boolean,
 	bigint,
 	bigserial,
+	uniqueIndex,
 } from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm"
 import { openbot_auth_user } from "./AuthSchema.ts"
 const table = pgTable
 export const developerRecords = table(
@@ -178,14 +180,122 @@ export const refs = table(
 	],
 )
 
-/** One deployment has one organization. Lists are JSON text. */
+/** One platform has many organizations. Their settings are in `openbot_settings`. */
 export const organizations = table("openbot_organizations", {
 	id: text().primaryKey(),
 	name: text().notNull(),
-	allowedEmailDomains: text("allowed_email_domains").notNull(),
-	defaultRoles: text("default_roles").notNull(),
+	status: text().notNull(),
 	createdAt: bigint("created_at", { mode: "number" }).notNull(),
 })
+
+/**
+ * The settings that every instance shares. One row for the platform
+ * (`platform`, `platform`) and one row for each organization.
+ * The document is JSON text. Secrets in it are sealed with the secret keys.
+ */
+export const settings = table(
+	"openbot_settings",
+	{
+		scopeKind: text("scope_kind").notNull(),
+		scopeId: text("scope_id").notNull(),
+		document: text().notNull(),
+		version: integer().notNull(),
+		updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+	},
+	(t) => [primaryKey({ columns: [t.scopeKind, t.scopeId] })],
+)
+
+/** A platform admin is known by a verified email. The user ID is set at the first sign-in. */
+export const platformAdmins = table("openbot_platform_admins", {
+	email: text().primaryKey(),
+	userId: text("user_id")
+		.unique()
+		.references(() => openbot_auth_user.id, { onDelete: "set null" }),
+	addedAt: bigint("added_at", { mode: "number" }).notNull(),
+})
+
+/** Custom roles. Built-in roles live in the API contract. Policies are JSON text. */
+export const roles = table(
+	"openbot_roles",
+	{
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
+		id: text().notNull(),
+		name: text().notNull(),
+		description: text().notNull(),
+		policies: text().notNull(),
+		createdAt: bigint("created_at", { mode: "number" }).notNull(),
+		updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+	},
+	(t) => [primaryKey({ columns: [t.organizationId, t.id] })],
+)
+
+/**
+ * Model providers of the platform (`owner_kind` is `platform`) and of organizations.
+ * The API key is sealed. Models and availability are JSON text.
+ */
+export const modelProviders = table(
+	"openbot_model_providers",
+	{
+		id: text().primaryKey(),
+		ownerKind: text("owner_kind").notNull(),
+		ownerId: text("owner_id").notNull(),
+		kind: text().notNull(),
+		name: text().notNull(),
+		endpoint: text(),
+		apiKey: text("api_key").notNull(),
+		apiKeyHint: text("api_key_hint"),
+		models: text().notNull(),
+		availability: text(),
+		version: integer().notNull(),
+		createdAt: bigint("created_at", { mode: "number" }).notNull(),
+		updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+	},
+	(t) => [index("openbot_model_providers_owner").on(t.ownerKind, t.ownerId)],
+)
+
+/** Email domains of organizations. Only one organization can verify a domain. */
+export const organizationDomains = table(
+	"openbot_organization_domains",
+	{
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
+		domain: text().notNull(),
+		token: text().notNull(),
+		verifiedAt: bigint("verified_at", { mode: "number" }),
+		createdAt: bigint("created_at", { mode: "number" }).notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.organizationId, t.domain] }),
+		uniqueIndex("openbot_organization_domains_verified")
+			.on(t.domain)
+			.where(sql`${t.verifiedAt} IS NOT NULL`),
+	],
+)
+
+/** OpenID Connect providers of organizations. The client secret is sealed. Domains are JSON text. */
+export const ssoConnections = table(
+	"openbot_sso_connections",
+	{
+		id: text().primaryKey(),
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
+		name: text().notNull(),
+		issuer: text().notNull(),
+		clientId: text("client_id").notNull(),
+		clientSecret: text("client_secret"),
+		clientSecretHint: text("client_secret_hint"),
+		domains: text().notNull(),
+		enforce: boolean().notNull(),
+		version: integer().notNull(),
+		createdAt: bigint("created_at", { mode: "number" }).notNull(),
+		updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+	},
+	(t) => [index("openbot_sso_connections_organization").on(t.organizationId)],
+)
 
 /** Roles and policies are JSON text. */
 export const members = table(

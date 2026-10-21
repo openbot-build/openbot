@@ -11,10 +11,7 @@ x-server: &server
   # OpenBot reads each secret from the file /run/secrets/<NAME>.
   secrets:
     - OPENBOT_DATABASE_URL
-    - BETTER_AUTH_SECRET
-    - OPENBOT_APP_ENCRYPTION_KEY
-    - OPENBOT_OIDC_CLIENT_SECRET
-    - OPENBOT_MODEL_API_KEY
+    - OPENBOT_SECRET_KEYS
 
 services:
   postgres:
@@ -45,14 +42,10 @@ services:
       postgres:
         condition: service_healthy
 
+  # Every other setting lives in the database. Write the first platform
+  # settings once with the setup program. See the Deploy page in the docs.
   openbot:
     <<: *server
-    environment:
-      OPENBOT_PUBLIC_ORIGIN: ${OPENBOT_PUBLIC_ORIGIN:?Set OPENBOT_PUBLIC_ORIGIN}
-      OPENBOT_OIDC_ISSUER: ${OPENBOT_OIDC_ISSUER:?Set OPENBOT_OIDC_ISSUER}
-      OPENBOT_OIDC_CLIENT_ID: ${OPENBOT_OIDC_CLIENT_ID:?Set OPENBOT_OIDC_CLIENT_ID}
-      OPENBOT_MODEL_ENDPOINT: ${OPENBOT_MODEL_ENDPOINT:-}
-      OPENBOT_MODEL_ID: ${OPENBOT_MODEL_ID:-}
     ports:
       - "127.0.0.1:${OPENBOT_PUBLISHED_PORT:-8080}:3000"
     depends_on:
@@ -75,14 +68,8 @@ secrets:
     environment: POSTGRES_PASSWORD
   OPENBOT_DATABASE_URL:
     environment: OPENBOT_DATABASE_URL
-  BETTER_AUTH_SECRET:
-    environment: BETTER_AUTH_SECRET
-  OPENBOT_APP_ENCRYPTION_KEY:
-    environment: OPENBOT_APP_ENCRYPTION_KEY
-  OPENBOT_OIDC_CLIENT_SECRET:
-    environment: OPENBOT_OIDC_CLIENT_SECRET
-  OPENBOT_MODEL_API_KEY:
-    environment: OPENBOT_MODEL_API_KEY
+  OPENBOT_SECRET_KEYS:
+    environment: OPENBOT_SECRET_KEYS
 
 volumes:
   postgres:

@@ -1,5 +1,9 @@
 import { Option, Schema } from "effect"
-import { DevelopmentConfiguration, OidcConfiguration } from "./Model.js"
+import {
+	DevelopmentConfiguration,
+	NoProviderConfiguration,
+	OidcConfiguration,
+} from "./Model.js"
 
 export const ResolvedConfiguration = Schema.Union([
 	OidcConfiguration.pipe(
@@ -12,6 +16,7 @@ export const ResolvedConfiguration = Schema.Union([
 		),
 	),
 	DevelopmentConfiguration,
+	NoProviderConfiguration,
 ]).check(
 	Schema.makeFilter((config) => config.sessionCookie !== config.loginCookie, {
 		message: "Session and login cookies must have different names",

@@ -4,6 +4,7 @@ import { Identity } from "./Identity.ts"
 
 /** The kind of resource that a permission group acts on. */
 export const ResourceKind = Schema.Literals([
+	"platform",
 	"organization",
 	"user",
 	"session",
@@ -128,11 +129,65 @@ const permissionTree = {
 		actions: {
 			read: {
 				name: "Organization Read",
-				description: "Read the organization settings.",
+				description: "Read the name and settings of the organization.",
 			},
 			write: {
 				name: "Organization Write",
-				description: "Change the organization settings.",
+				description: "Change the name and settings of the organization.",
+			},
+		},
+	},
+	roles: {
+		scope: "organization",
+		actions: {
+			write: {
+				name: "Roles Write",
+				description:
+					"Create, change and delete the custom roles of the organization.",
+			},
+		},
+	},
+	model_providers: {
+		scope: "organization",
+		actions: {
+			read: {
+				name: "Model Providers Read",
+				description:
+					"Read the model providers of the organization. Keys are never shown.",
+			},
+			write: {
+				name: "Model Providers Write",
+				description:
+					"Add, change and remove the model providers and keys of the organization.",
+			},
+		},
+	},
+	sso: {
+		scope: "organization",
+		actions: {
+			read: {
+				name: "SSO Read",
+				description: "Read the email domains and SSO connections.",
+			},
+			write: {
+				name: "SSO Write",
+				description:
+					"Add and verify email domains, and change SSO connections.",
+			},
+		},
+	},
+	platform: {
+		scope: "platform",
+		actions: {
+			read: {
+				name: "Platform Read",
+				description:
+					"Read the platform settings, organizations, admins and shared model providers. Only platform admins can use it.",
+			},
+			write: {
+				name: "Platform Write",
+				description:
+					"Change the platform settings, organizations, admins and shared model providers. Only platform admins can use it.",
 			},
 		},
 	},
@@ -218,10 +273,13 @@ export const permissionGroups: ReadonlyArray<PermissionGroup> =
  * `openbot.org.<org>.user.<user>.session.<session>`.
  * A key covers itself and every key below it. Policies can use `{org}` for the
  * current organization and `{self}` for the user of the caller.
+ * `openbot.platform` is the whole deployment. Only the policies of tokens can name it.
  */
 export const ResourceKey = Schema.String.check(
 	Schema.isMaxLength(512),
-	Schema.isPattern(/^openbot\.org\.[^.\s]+(?:\.[^.\s]+)*$/),
+	Schema.isPattern(
+		/^(?:openbot\.platform|openbot\.org\.[^.\s]+(?:\.[^.\s]+)*)$/,
+	),
 )
 export type ResourceKey = typeof ResourceKey.Type
 
@@ -239,6 +297,8 @@ export const Policy = Schema.Struct({
 export type Policy = typeof Policy.Type
 export const Policies = Schema.Array(Policy).check(Schema.isMaxLength(50))
 
+/** The resource key of the whole deployment. */
+export const platformResource = "openbot.platform"
 /** The resource pattern of the current organization. */
 export const organizationResource = "openbot.org.{org}"
 /** The resource pattern of the user of the caller. */
@@ -274,10 +334,10 @@ const useSharedAgents: Policy = {
 }
 
 /**
- * Built-in roles. Their policies cannot change.
- * This list is the only source of roles. `RoleId` comes from it.
+ * Built-in roles. Every organization has them, and their policies cannot change.
+ * An organization can add custom roles. Their IDs start with `role_`.
  */
-export const roles = [
+export const builtinRoles = [
 	{
 		id: "super_administrator",
 		name: "Super Administrator",
@@ -286,7 +346,9 @@ export const roles = [
 		policies: [
 			{
 				effect: "allow",
-				permissionGroups: PermissionGroupId.literals,
+				permissionGroups: PermissionGroupId.literals.filter(
+					(id) => !id.startsWith("platform."),
+				),
 				resources: [organization],
 			},
 		],
@@ -312,6 +374,11 @@ export const roles = [
 					"organization.write",
 					"members.read",
 					"members.write",
+					"roles.write",
+					"model_providers.read",
+					"model_providers.write",
+					"sso.read",
+					"sso.write",
 					"audit_logs.read",
 				],
 				resources: [organization],
@@ -332,6 +399,8 @@ export const roles = [
 					"models.use",
 					"organization.read",
 					"members.read",
+					"model_providers.read",
+					"sso.read",
 					"audit_logs.read",
 				],
 				resources: [organization],
@@ -376,16 +445,44 @@ export const roles = [
 	readonly policies: ReadonlyArray<Policy>
 }>
 
-export const RoleId = Schema.Literals(roles.map((role) => role.id))
+export const BuiltinRoleId = Schema.Literals(
+	builtinRoles.map((role) => role.id),
+)
+export type BuiltinRoleId = typeof BuiltinRoleId.Type
+/** The ID of a custom role. */
+export const CustomRoleId = Schema.String.check(
+	Schema.isPattern(/^role_[a-z0-9]{32}$/),
+)
+export const RoleId = Schema.Union([BuiltinRoleId, CustomRoleId])
 export type RoleId = typeof RoleId.Type
+export const isBuiltinRole = Schema.is(BuiltinRoleId)
 
+export const RoleName = Schema.String.check(
+	Schema.isMinLength(1),
+	Schema.isMaxLength(120),
+)
 export const Role = Schema.Struct({
 	id: RoleId,
 	name: Schema.String,
 	description: Schema.String,
+	builtin: Schema.Boolean,
 	policies: Schema.Array(Policy),
 })
 export type Role = typeof Role.Type
+export const CreateRoleRequest = Schema.Struct({
+	name: RoleName,
+	description: Schema.String.check(Schema.isMaxLength(1000)),
+	policies: Policies,
+})
+export type CreateRoleRequest = typeof CreateRoleRequest.Type
+export const UpdateRoleRequest = Schema.Struct({
+	name: Schema.optionalKey(RoleName),
+	description: Schema.optionalKey(
+		Schema.String.check(Schema.isMaxLength(1000)),
+	),
+	policies: Schema.optionalKey(Policies),
+})
+export type UpdateRoleRequest = typeof UpdateRoleRequest.Type
 
 export class PermissionDenied extends Schema.TaggedError<PermissionDenied>()(
 	"PermissionDenied",

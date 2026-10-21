@@ -3,7 +3,7 @@ import { AppExecution, SessionConflict } from "@openbot-build/api"
 import { Context, Effect, Layer, Match, Option } from "effect"
 import { ActionPolicy } from "./ActionPolicy.ts"
 import { InvocationRepository, type Error } from "./InvocationRepository.ts"
-import { Repository } from "./Repository.ts"
+import { organizationOf, Repository } from "./Repository.ts"
 
 export interface Position {
 	readonly owner: string
@@ -90,7 +90,10 @@ export const make: Effect.Effect<
 		})
 	const propose = (input: Proposal) =>
 		Effect.gen(function* () {
-			const readOnly = policy.isRead(input.source)
+			const readOnly = yield* policy.isRead({
+				organizationId: organizationOf(input.owner),
+				source: input.source,
+			})
 			const prior = readOnly
 				? yield* records.list(input.owner, input.session)
 				: []
@@ -221,6 +224,13 @@ export const make: Effect.Effect<
 				const value = yield* records.get(input.owner, id(input, callId))
 				yield* valid(input.owner, value)
 				if (value.status === (approved ? "Approved" : "Rejected")) return
+				const allowReads =
+					approved && grantReads && value.readOnly
+						? yield* policy.isRead({
+								organizationId: organizationOf(input.owner),
+								source: value.source,
+							})
+						: false
 				yield* records.change(
 					input.owner,
 					value.id,
@@ -228,11 +238,7 @@ export const make: Effect.Effect<
 					(value) => ({
 						...value,
 						status: approved ? "Approved" : "Rejected",
-						grantReads:
-							approved &&
-							grantReads &&
-							value.readOnly &&
-							policy.isRead(value.source),
+						grantReads: allowReads,
 					}),
 				)
 			}),

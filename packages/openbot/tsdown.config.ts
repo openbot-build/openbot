@@ -11,10 +11,11 @@ export default defineConfig({
 		Development: "src/app/Development.ts",
 		DevelopmentMain: "src/app/DevelopmentMain.ts",
 		Migrate: "src/app/Migrate.ts",
+		Setup: "src/app/Setup.ts",
 	},
 	exports: {
 		...config.exports,
-		exclude: ["Main", "Migrate", "Development", "DevelopmentMain"],
+		exclude: ["Main", "Migrate", "Setup", "Development", "DevelopmentMain"],
 		customExports(exports) {
 			return Object.fromEntries(
 				Object.entries(exports).map(([key, value]) => {
@@ -31,6 +32,7 @@ export default defineConfig({
 		bin: {
 			openbot: "./src/app/Main.ts",
 			"openbot-migrate": "./src/app/Migrate.ts",
+			"openbot-setup": "./src/app/Setup.ts",
 		},
 	},
 })

@@ -100,7 +100,7 @@ export const layer = (options: Options = {}) =>
 								onNone: () => Effect.succeed(false),
 								onSome: verify,
 							})
-						}),
+						}).pipe(Effect.uninterruptible),
 					).pipe(
 						Effect.catchTag("InstancePaused", () => Effect.succeed(false)),
 					),
@@ -115,7 +115,7 @@ export const layerWorker = (options: Options = {}) =>
 			const repository = yield* IndexWorkRepository
 			const work = yield* IndexWork
 			const { retryMs } = settings(options)
-			yield* InstanceWork.wrap(repository.restart)
+			yield* InstanceWork.wrap(Effect.uninterruptible(repository.restart))
 			const drain: Effect.Effect<void, Index.IndexError> = Effect.suspend(() =>
 				work
 					.runOne()

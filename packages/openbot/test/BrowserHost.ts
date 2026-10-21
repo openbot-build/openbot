@@ -2,13 +2,10 @@ import { mock } from "node:test"
 import { AuthApi } from "@openbot-build/api"
 import { NodeServices } from "@effect/platform-node"
 import { Config, Model, Provider } from "@openbot-build/core"
+import { Auth, Server, DatabasePostgres } from "@openbot-build/openbot"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import {
-	Auth,
-	Server,
-	DatabasePostgres,
-	type OpenBot,
-} from "@openbot-build/openbot"
-import {
+	Option,
 	Match,
 	Effect,
 	Layer,
@@ -25,6 +22,9 @@ import type { Discovery, Network } from "@openbot-build/protocol"
 import type { AppIndexApi } from "@openbot-build/api"
 import type { Probe } from "../src/apps/Probe.ts"
 import type { AppNetwork } from "../src/apps/AppHost.ts"
+import type { DomainControl } from "../src/apps/DomainControl.ts"
+import { organizationDomains } from "../src/database/Schema.ts"
+import { Settings } from "../src/settings/Settings.ts"
 
 /** A disposable OpenBot host with real PostgreSQL and signed OIDC test identities. */
 export async function start(options: {
@@ -36,6 +36,8 @@ export async function start(options: {
 	readonly publicOrigin: string
 	readonly port?: number
 	readonly model?: typeof LanguageModel.LanguageModel.Service
+	readonly modelFetch?: typeof fetch
+	readonly nativeModels?: true
 	readonly discovery?: Layer.Layer<Discovery.Discovery>
 	readonly appProbe?: Layer.Layer<Probe>
 	readonly appNetwork?: Layer.Layer<AppNetwork>
@@ -51,19 +53,26 @@ export async function start(options: {
 		readonly providerId?: string
 		readonly callbackPath?: string
 	}
-	readonly organization?: {
-		readonly ownerUserIds?: ReadonlyArray<string>
-		readonly memberUserIds?: ReadonlyArray<string>
-		readonly allowFirstLoginAdmin?: boolean
-		readonly allowMemberSignup?: boolean
-		readonly ownerEmails?: ReadonlyArray<string>
-		readonly allowedEmailDomains?: ReadonlyArray<string>
-	}
+	/**
+	 * Test accounts have verified emails at example.com. By default the
+	 * organization of the first account verifies that domain, so every later
+	 * account joins it. Set false to give each account its own organization.
+	 */
+	readonly sharedDomain?: boolean
+	/** Select a known organization when a test account has more than one. */
+	readonly organizationId?: string
+	readonly domainControl?: Layer.Layer<DomainControl>
+	/** People with these emails are platform admins. */
+	readonly platformAdmins?: ReadonlyArray<string>
 	readonly indexWork?: {
 		readonly intervalMs?: number
 		readonly retryMs?: number
 	}
-	readonly agents?: OpenBot.AgentOptions
+	/** Organization settings for the Agents of each new organization. */
+	readonly agents?: {
+		readonly memory?: boolean
+		readonly requestTimeoutMs?: number
+	}
 }) {
 	const database = await PostgresTest.start()
 	const issuer = "https://id.example.com"
@@ -79,8 +88,11 @@ export async function start(options: {
 		})
 	const providerFetch: typeof fetch = async (input, init) => {
 		const url = new URL(input instanceof Request ? input.url : String(input))
-		if (url.origin !== issuer)
+		if (url.origin !== issuer) {
+			if (options.modelFetch !== undefined)
+				return options.modelFetch(input, init)
 			throw new Error("Unexpected fixture provider origin")
+		}
 		if (url.pathname === "/.well-known/openid-configuration")
 			return json({
 				issuer,
@@ -249,9 +261,12 @@ export async function start(options: {
 		...(options.execution === undefined
 			? {}
 			: { execution: options.execution }),
-		...(options.appReadRules === undefined
+		...(options.platformAdmins === undefined
 			? {}
-			: { appReadRules: options.appReadRules }),
+			: { platformAdmins: options.platformAdmins }),
+		...(options.domainControl === undefined
+			? {}
+			: { domainControl: options.domainControl }),
 		...(options.appNetwork === undefined
 			? {}
 			: { appNetwork: options.appNetwork }),
@@ -261,23 +276,16 @@ export async function start(options: {
 		...(options.indexWork === undefined
 			? {}
 			: { indexWork: options.indexWork }),
-		...(options.appRestrictions === undefined
-			? {}
-			: { appRestrictions: options.appRestrictions }),
 		...(options.discovery === undefined
 			? {}
 			: { discovery: options.discovery }),
 		...(options.appProbe === undefined ? {} : { appProbe: options.appProbe }),
-		...(options.agents === undefined ? {} : { agents: options.agents }),
-		// Test accounts have verified emails at example.com, so they all join one organization.
-		organization: options.organization ?? {
-			allowedEmailDomains: ["example.com"],
-		},
 		host: "127.0.0.1",
 		port: options.port ?? 0,
 		databaseUrl: Redacted.make(database.url),
-		appEncryptionKey: Redacted.make(
-			"1111111111111111111111111111111111111111111111111111111111111111",
+		secretKeys: Redacted.make(
+			"test:" +
+				"1111111111111111111111111111111111111111111111111111111111111111",
 		),
 		auth: {
 			...options.authCompatibility,
@@ -292,11 +300,15 @@ export async function start(options: {
 		sessions: {
 			runtime: { toolkit },
 			layerExecution: () => handlers,
-			modelCatalog: Effect.succeed(catalog),
-			defaults: Effect.succeed({
-				model: Config.Selection.make({ provider, model: modelId }),
-			}),
-			resolveModel: () => Effect.succeed(options.model ?? model),
+			...(options.nativeModels === true
+				? {}
+				: {
+						modelCatalog: Effect.succeed(catalog),
+						defaults: Effect.succeed({
+							model: Config.Selection.make({ provider, model: modelId }),
+						}),
+						resolveModel: () => Effect.succeed(options.model ?? model),
+					}),
 		},
 	}
 	const migration = ManagedRuntime.make(
@@ -308,7 +320,7 @@ export async function start(options: {
 		await migration.runPromise(DatabasePostgres.migrate)
 		const makeRuntime = () =>
 			ManagedRuntime.make(
-				Server.layer(configuration).pipe(
+				Server.layerFixed(configuration).pipe(
 					Layer.provide(
 						Layer.mergeAll(
 							handlers,
@@ -324,6 +336,57 @@ export async function start(options: {
 				HttpServer.formatAddress(server.address),
 			),
 		)
+		if (options.appRestrictions !== undefined) {
+			const restrictions = options.appRestrictions
+			await runtime.runPromise(
+				Effect.gen(function* () {
+					const settings = yield* Settings
+					const current = yield* settings.platform
+					if (Option.isNone(current)) return
+					yield* settings.updatePlatform(current.value.version, (document) =>
+						Effect.succeed({ ...document, appRestrictions: restrictions }),
+					)
+				}),
+			)
+		}
+		/** Organizations that already have the test settings. */
+		const prepared = new Set<string>()
+		/** Give a new organization the test settings, and the shared domain. */
+		const prepare = (organizationId: string) =>
+			runtime.runPromise(
+				Effect.gen(function* () {
+					if (prepared.has(organizationId)) return
+					prepared.add(organizationId)
+					const settings = yield* Settings
+					const current = yield* settings.organization(organizationId)
+					yield* settings.updateOrganization(
+						organizationId,
+						current.version,
+						(document) =>
+							Effect.succeed({
+								...document,
+								...(options.appReadRules === undefined
+									? {}
+									: { appReadRules: options.appReadRules }),
+								...(options.agents?.memory === undefined
+									? {}
+									: { agentMemory: options.agents.memory }),
+								...(options.agents?.requestTimeoutMs === undefined
+									? {}
+									: { requestTimeoutMs: options.agents.requestTimeoutMs }),
+							}),
+					)
+					if (options.sharedDomain === false || prepared.size > 1) return
+					const db = yield* makeWithDefaults()
+					yield* db.insert(organizationDomains).values({
+						organizationId,
+						domain: "example.com",
+						token: "openbot-verification=test",
+						verifiedAt: 0,
+						createdAt: 0,
+					})
+				}),
+			)
 		const login = async (subject: string, returnTo?: string) => {
 			const start = await fetch(address + "/auth/sign-in/social", {
 				method: "POST",
@@ -372,17 +435,33 @@ export async function start(options: {
 			const session = Redacted.make(
 				decodeURIComponent(cookie.slice(cookie.indexOf("=") + 1)),
 			)
-			return runtime.runPromise(
-				Effect.gen(function* () {
-					const auth = yield* Auth.Auth
-					const info = yield* auth.resolveSession(session)
-					return {
-						session,
-						identity: { kind: "member" as const, ...info.identity },
-						returnLocation: callback.headers.get("location"),
-					}
-				}),
+			const info = await runtime.runPromise(
+				Effect.flatMap(Auth.Auth, (auth) => auth.resolveSession(session)),
 			)
+			const active = info.memberships.filter(
+				(entry) => entry.status === "active",
+			)
+			const organizationId =
+				options.organizationId === undefined
+					? active.length === 1
+						? active[0]?.organizationId
+						: undefined
+					: active.find(
+							(entry) => entry.organizationId === options.organizationId,
+						)?.organizationId
+			if (organizationId === undefined)
+				throw new Error("The test account has no organization")
+			await prepare(organizationId)
+			return {
+				session,
+				identity: {
+					kind: "member" as const,
+					userId: info.userId,
+					organizationId,
+				},
+				memberships: info.memberships,
+				returnLocation: callback.headers.get("location"),
+			}
 		}
 		return {
 			databaseUrl: database.url,

@@ -26,13 +26,13 @@ test(
 		const env = {
 			...inherited,
 			OPENBOT_DATABASE_URL: database.url,
-			OPENBOT_APP_ENCRYPTION_KEY:
-				"1111111111111111111111111111111111111111111111111111111111111111",
+			OPENBOT_SECRET_KEYS:
+				"test:1111111111111111111111111111111111111111111111111111111111111111",
 			OPENBOT_HOST: "127.0.0.1",
 			OPENBOT_PORT: "0",
-			OPENBOT_PUBLIC_ORIGIN: publicOrigin,
-			BETTER_AUTH_SECRET: "DevelopmentEntrySecretMustStayStable1234567890",
-			OPENBOT_DEV_MODE: "1",
+			// Only the development entry reads this. It writes the platform settings,
+			// so the production entry later serves the same origin and sign-in secret.
+			OPENBOT_DEV_PUBLIC_ORIGIN: publicOrigin,
 		}
 		const start = async (
 			entry: "DevelopmentMain" | "Main",

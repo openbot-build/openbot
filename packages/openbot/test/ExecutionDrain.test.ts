@@ -4,6 +4,7 @@ import { setTimeout } from "node:timers/promises"
 import { Effect, Redacted } from "effect"
 import { SqlClient } from "effect/sql"
 import * as BrowserHost from "./BrowserHost.ts"
+import * as InstanceWork from "../src/execution/InstanceWork.ts"
 
 test(
 	"drain waits for background execution and rejects new writes",
@@ -11,6 +12,7 @@ test(
 	async (t) => {
 		let phase = "OPENBOT_ACTIVE",
 			serial = 0
+		let pauseBeforeRuntimeRegistration = false
 		const leases = new Set<string>()
 		const actualFetch = globalThis.fetch
 		const authority = t.mock.method(
@@ -51,6 +53,22 @@ test(
 						body.intent !== "admit")
 				const leaseId = String(++serial)
 				if (path === "acquire" && allowed) leases.add(leaseId)
+				if (
+					path === "acquire" &&
+					body.intent === "admit" &&
+					pauseBeforeRuntimeRegistration
+				) {
+					pauseBeforeRuntimeRegistration = false
+					const status = await host.runtime.runPromise(
+						Effect.flatMap(InstanceWork.InstanceWork, (work) =>
+							work.quiesce.pipe(Effect.andThen(work.status)),
+						),
+					)
+					assert.ok(
+						status.activeTasks > 0,
+						"HTTP admission is counted before a runtime fiber can be registered",
+					)
+				}
 				return Response.json({ allowed, epoch: 4, phase, leaseId })
 			},
 		)
@@ -113,6 +131,7 @@ test(
 			})
 			assert.equal(created.status, 201, await created.clone().text())
 			const saved = await created.json()
+			pauseBeforeRuntimeRegistration = true
 			const started = await fetch(
 				host.address + "/v1/sessions/" + saved.session.id + "/turns",
 				{
@@ -125,6 +144,7 @@ test(
 				},
 			)
 			assert.equal(started.status, 202, await started.clone().text())
+			assert.equal(pauseBeforeRuntimeRegistration, false)
 			const control = (action: string, token = "test-only") =>
 				fetch(host.address + "/internal/execution/" + action, {
 					method: "POST",

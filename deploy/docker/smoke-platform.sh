@@ -24,13 +24,16 @@ for attempt in $(seq 1 60); do
 done
 database="postgres://openbot:fixture-only@$postgres:5432/openbot"
 docker run --rm --platform linux/amd64 --network "$network"   -e OPENBOT_DATABASE_URL="$database" "$image" /app/dist/app/Migrate.mjs
+keys=fixture:0000000000000000000000000000000000000000000000000000000000000000
 common=(--detach --platform linux/amd64 --name "$platform" --network "$network"
   -e "OPENBOT_DATABASE_URL=$database"
-  -e OPENBOT_PUBLIC_ORIGIN=https://localhost:8443
-  -e OPENBOT_AUTH_SESSION_COOKIE=__Host-e-session
-  -e OPENBOT_AUTH_LOGIN_COOKIE=__Host-e-login
-  -e BETTER_AUTH_SECRET=fixture-smoke-secret-at-least-thirty-two-bytes
-  -e OPENBOT_APP_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000)
+  -e "OPENBOT_SECRET_KEYS=$keys")
+docker run --rm --platform linux/amd64 --network "$network" \
+  -e "OPENBOT_DATABASE_URL=$database" -e "OPENBOT_SECRET_KEYS=$keys" \
+  "$image" /app/dist/app/Setup.mjs --public-origin https://localhost:8443 \
+  --oidc-issuer https://identity.example.invalid --oidc-client-id ci-fixture \
+  --admin-email fixture-admin@example.invalid
+
 healthy() {
   for attempt in $(seq 1 60); do
     if docker exec "$platform" /usr/local/bin/node --input-type=module -e '
@@ -43,10 +46,10 @@ healthy() {
   done
 }
 # Start the production OIDC configuration without contacting an external provider.
-docker run "${common[@]}" -e OPENBOT_OIDC_ISSUER=https://identity.example.invalid   -e OPENBOT_OIDC_CLIENT_ID=ci-fixture -e OPENBOT_ALLOW_FIRST_LOGIN_ADMIN=false   -e OPENBOT_OWNER_USER_IDS=fixture-admin "$image" >/dev/null
+docker run "${common[@]}" "$image" >/dev/null
 healthy
 docker exec "$platform" /usr/local/bin/node --input-type=module -e '
-  for(const headers of [{},{"x-user-id":"forged","x-organization-id":"forged"},{cookie:"__Host-e-session=forged"}]){
+  for(const headers of [{},{"x-user-id":"forged","x-organization-id":"forged"},{cookie:"__Host-openbot-session=forged"}]){
     const response=await fetch("http://127.0.0.1:3000/auth/session",{headers})
     if(response.status!==401)throw new Error("Unsigned requests must not authenticate")
   }
@@ -54,16 +57,16 @@ docker exec "$platform" /usr/local/bin/node --input-type=module -e '
 docker rm --force "$platform" >/dev/null
 # A separate explicit development fixture checks real SDK cookie issue/read/revoke
 # in the packaged image. The production OIDC flow is covered by the SDK tests.
-docker run "${common[@]}" -e OPENBOT_DEV_MODE=true -e OPENBOT_ALLOW_FIRST_LOGIN_ADMIN=true "$image" >/dev/null
+docker run "${common[@]}" -e OPENBOT_DEV_PUBLIC_ORIGIN=https://localhost:8443 "$image" /app/dist/app/DevelopmentMain.mjs >/dev/null
 healthy
 docker exec "$platform" /usr/local/bin/node --input-type=module -e '
   const base="http://127.0.0.1:3000",origin="https://localhost:8443"
   const login=await fetch(base+"/auth/login",{redirect:"manual"})
   if(login.status!==303)throw new Error("Development fixture login failed")
-  const cookie=login.headers.getSetCookie().find(value=>value.startsWith("__Host-e-session="))?.split(";")[0]
+  const cookie=login.headers.getSetCookie().find(value=>value.startsWith("__Host-openbot-session="))?.split(";")[0]
   if(!cookie)throw new Error("SDK session cookie missing")
   const session=await fetch(base+"/auth/session?refresh=false",{headers:{cookie}})
-  if(session.status!==200||!(await session.json()).identity.userId)throw new Error("Signed cookie lookup failed")
+  if(session.status!==200||!(await session.json()).userId)throw new Error("Signed cookie lookup failed")
   const logout=await fetch(base+"/auth/logout",{method:"POST",headers:{cookie,origin}})
   if(logout.status!==204)throw new Error("SDK logout failed")
   if((await fetch(base+"/auth/session",{headers:{cookie}})).status!==401)throw new Error("Revoked cookie was accepted")

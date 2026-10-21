@@ -1,21 +1,21 @@
 {
   "repository": "https://github.com/openbot-build/openbot",
-  "commit": "157034cb65ef698ec5fada04c372bd52899cef8c",
+  "commit": "31495f9c91f96ae5d6b2114ceaaf5f35b87de46f",
   "license": "AGPL-3.0-only",
   "licenseGitBlob": "be3f7b28e564e7dd05eaf59d64adba1a4065ac0e",
   "derivativeRepository": "https://gitlab.kai.com/KAI/Kay/OpenBot",
   "scope": "Generic platform extensions. Kay UI and business policy stay in a separate repository.",
   "upstreamReview": {
-    "observedHead": "157034cb65ef698ec5fada04c372bd52899cef8c",
-    "decision": "Adopt the current OpenBot Agent, Requests, plugin and provider model. Keep Kay compatibility in its API and migration job. Regression is required before publishing this revision."
+    "observedHead": "31495f9c91f96ae5d6b2114ceaaf5f35b87de46f",
+    "decision": "Adopt native Agents, Requests, shared settings, model providers, organization SSO and membership. Keep Kay compatibility in its API and controlled migration job. Regression is required before publishing this revision."
   },
   "localExtensions": [
     {
       "name": "Optional member signup",
-      "configuration": "OPENBOT_ALLOW_MEMBER_SIGNUP",
-      "default": false,
+      "configuration": "platform.memberSignupOrganizationId",
+      "default": null,
       "source": "packages/openbot/src/organization/OrganizationPostgres.ts",
-      "behavior": "Authenticated accounts may join an existing organization as ordinary members only while an active Super Administrator exists. Suspended and removed accounts stay denied. Account IDs remain distinct."
+      "behavior": "Authenticated accounts may join the explicitly configured organization as ordinary members only while an active Super Administrator exists. Suspended and removed accounts stay denied. Account IDs remain distinct."
     }
   ],
   "selectedFixes": [

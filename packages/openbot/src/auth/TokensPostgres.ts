@@ -19,6 +19,7 @@ import {
 } from "../authorization/Policy.ts"
 import { Tokens } from "./Tokens.ts"
 import { AuthUnavailable, CredentialRejected } from "./Model.ts"
+import { protect } from "./Barrier.ts"
 
 const day = 24 * 60 * 60 * 1000
 /** Do not write on every request, but keep the usage information useful. */
@@ -55,11 +56,18 @@ export const make: Effect.Effect<
 			eq(tokens.organizationId, owner.organizationId),
 			eq(tokens.userId, owner.userId),
 		)
-	return Tokens.of({
+	const service = Tokens.of({
 		create: (owner, input) =>
 			Effect.gen(function* () {
 				const policies = input.policies ?? defaultTokenPolicies
-				if (!inOrganization({ policies, organizationId: owner.organizationId }))
+				if (
+					!inOrganization({
+						policies,
+						organizationId: owner.organizationId,
+						// A platform admin can make a token for the platform API.
+						platform: true,
+					})
+				)
 					return yield* UserTokensApi.TokenPolicyInvalid.make({
 						message:
 							"A token policy can only name resources in your own organization.",
@@ -180,6 +188,19 @@ export const make: Effect.Effect<
 					tokenId: row.id,
 				}
 			}),
+	})
+	return Tokens.of({
+		...service,
+		create: (...args) =>
+			protect(service.create(...args)).pipe(
+				Effect.catchTag("AuthUnavailable", unavailable),
+			),
+		revoke: (...args) =>
+			protect(service.revoke(...args)).pipe(
+				Effect.catchTag("AuthUnavailable", unavailable),
+			),
+		// Authentication may refresh lastUsedAt before the business handler starts.
+		authenticate: (...args) => protect(service.authenticate(...args)),
 	})
 })
 export const layer = Layer.effect(Tokens, make)

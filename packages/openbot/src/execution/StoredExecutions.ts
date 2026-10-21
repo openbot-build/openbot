@@ -3,7 +3,7 @@ import { Session, Turn } from "@openbot-build/core"
 import { Data, Effect, Redacted, Schema } from "effect"
 import type { Options } from "./ExecutionFence.ts"
 
-class StoredOwnerMismatch extends Data.TaggedError("StoredOwnerMismatch")<{}> {}
+export class StoredOwnerMismatch extends Data.TaggedError("StoredOwnerMismatch")<{}> {}
 
 /** Inspect durable state without opening a runtime or replaying any model or tool. */
 const stored = Effect.gen(function* () {
@@ -94,9 +94,13 @@ export const forNamespace = (namespace: string) =>
 	stored.pipe(Effect.map(({ counts }) => counts.get(namespace) ?? 0))
 
 /** Count unfinished work still assigned here, including after restart. */
-export const pending = (options: Options) =>
+export const pending = (options?: Options) =>
 	Effect.gen(function* () {
 		const { counts, publicWork } = yield* stored
+		if (options === undefined)
+			return (
+				publicWork + [...counts.values()].reduce((sum, value) => sum + value, 0)
+			)
 		let count = publicWork
 		for (const [namespace, total] of counts) {
 			const assigned = yield* Effect.tryPromise(async (signal) => {

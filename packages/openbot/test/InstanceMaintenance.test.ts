@@ -80,11 +80,15 @@ test("paused instance allows admitted nested work to finish and retains counts t
 						return yield* gate.wrap(
 							fence.admit(
 								"nested-account",
-								Effect.gen(function* () {
-									yield* Effect.sync(childEntered.release)
-									yield* Effect.promise(() => childFinish.promise)
-									return "committed"
-								}),
+								fence.guard(
+									"nested-account",
+									"write",
+									Effect.gen(function* () {
+										yield* Effect.sync(childEntered.release)
+										yield* Effect.promise(() => childFinish.promise)
+										return "committed"
+									}),
+								),
 							),
 						)
 					}),

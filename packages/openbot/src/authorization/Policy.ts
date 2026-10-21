@@ -3,7 +3,6 @@ import { Option } from "effect"
 
 type PermissionGroupId = Permissions.PermissionGroupId
 type Policy = Permissions.Policy
-type RoleId = Permissions.RoleId
 
 /** IDs go into dotted keys, so a dot in an ID must not look like a new part. */
 export const segment = (id: string) =>
@@ -33,6 +32,8 @@ export const resourceKey = (target: {
 			onSome: (id) => parent + "." + kind + "." + segment(id),
 		})
 	switch (kind) {
+		case "platform":
+			return Permissions.platformResource
 		case "organization":
 			return organizationKey(subject.organizationId)
 		case "user":
@@ -69,7 +70,13 @@ export const agentKey = (agent: {
 			segment(agent.id)
 
 /** Put the organization and the user of the caller into a resource pattern. */
-const expand = (pattern: string, subject: Subject) =>
+export const expand = ({
+	pattern,
+	subject,
+}: {
+	readonly pattern: string
+	readonly subject: Subject
+}) =>
 	pattern
 		.replaceAll("{org}", segment(subject.organizationId))
 		.replaceAll("{self}", segment(subject.userId))
@@ -96,7 +103,10 @@ export const decide = (
 		(policy) =>
 			policy.permissionGroups.includes(check.permission) &&
 			policy.resources.some((resource) =>
-				covers(expand(resource, check.subject), check.key),
+				covers(
+					expand({ pattern: resource, subject: check.subject }),
+					check.key,
+				),
 			),
 	)
 	if (matching.some((policy) => policy.effect === "deny")) return "deny"
@@ -106,45 +116,75 @@ export const decide = (
 /**
  * Each set of policies must allow the request on its own.
  * A user token has two sets: the policies of its member and its own policies.
+ * The platform ceiling can only deny, and it comes first.
  */
 export const allowed = (
 	check: Check & {
 		readonly sets: ReadonlyArray<ReadonlyArray<Policy>>
+		readonly ceiling?: ReadonlyArray<Policy>
 	},
 ) =>
 	check.sets.length > 0 &&
+	(check.ceiling === undefined ||
+		decide({ ...check, policies: check.ceiling }) !== "deny") &&
 	check.sets.every((policies) => decide({ ...check, policies }) === "allow")
 
 /** The policies of a member: the policies of each role, then the extra policies. */
-export const memberPolicies = (member: {
-	readonly roles: ReadonlyArray<RoleId>
-	readonly policies: ReadonlyArray<Policy>
+export const memberPolicies = ({
+	member,
+	roles,
+}: {
+	readonly member: {
+		readonly roles: ReadonlyArray<Permissions.RoleId>
+		readonly policies: ReadonlyArray<Policy>
+	}
+	readonly roles: ReadonlyArray<Permissions.Role>
 }): ReadonlyArray<Policy> => [
-	...Permissions.roles
+	...roles
 		.filter((role) => member.roles.includes(role.id))
 		.flatMap((role) => role.policies),
 	...member.policies,
 ]
 
-/** A policy may only name resources in its own organization. */
+/**
+ * A policy may only name resources in its own organization.
+ * The policies of a token may also name the platform, for platform admins.
+ */
 export const inOrganization = (input: {
 	readonly policies: ReadonlyArray<Policy>
 	readonly organizationId: string
+	readonly platform?: boolean
 }) =>
-	input.policies.every((policy) =>
-		policy.resources.every(
-			(resource) =>
-				covers(Permissions.organizationResource, resource) ||
-				covers(organizationKey(input.organizationId), resource),
-		),
+	input.policies.every(
+		(policy) =>
+			policy.resources.every(
+				(resource) =>
+					covers(Permissions.organizationResource, resource) ||
+					covers(organizationKey(input.organizationId), resource) ||
+					(input.platform === true &&
+						resource === Permissions.platformResource),
+			) &&
+			// Platform permission groups only work on the platform.
+			policy.permissionGroups.every(
+				(group) =>
+					!group.startsWith("platform.") ||
+					policy.resources.every(
+						(resource) => resource === Permissions.platformResource,
+					),
+			),
 	)
 
-/** Tokens get this when the request leaves out policies: everything except managing tokens. */
+/**
+ * Tokens get this when the request leaves out policies: everything in the
+ * organization except managing tokens. A token for the platform must say so.
+ */
 export const defaultTokenPolicies: ReadonlyArray<Policy> = [
 	{
 		effect: "allow",
 		permissionGroups: Permissions.PermissionGroupId.literals.filter(
-			(id) => !Permissions.permissionGroupsOf("tokens").includes(id),
+			(id) =>
+				!Permissions.permissionGroupsOf("tokens").includes(id) &&
+				!Permissions.permissionGroupsOf("platform").includes(id),
 		),
 		resources: [Permissions.organizationResource],
 	},

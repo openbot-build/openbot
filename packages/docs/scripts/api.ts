@@ -8,12 +8,29 @@ import { OpenApi } from "effect/http-api"
 // The sidebar uses this order. A group with a description gets its own page.
 const groups = [
 	["login", "Browser login", "Start and complete browser login, and sign out."],
-	["account", "Account", "Read the signed-in user."],
+	["account", "Account", "Read the signed-in user and their organizations."],
+	["signIn", "Sign-in", "Start a browser sign-in."],
+	[
+		"organizations",
+		"Organizations",
+		"List your organizations and make a new one.",
+	],
 	["userTokens", "User tokens", "Make, list, check, and revoke user tokens."],
 	[
 		"organization",
 		"Organization",
-		"Manage members, roles, policies, and the audit log.",
+		"Manage settings, members, roles, policies, and the audit log.",
+	],
+	[
+		"modelProviders",
+		"Model providers",
+		"Add model providers with your own keys, and list the models you can use.",
+	],
+	["sso", "SSO", "Verify email domains and add SSO connections."],
+	[
+		"platform",
+		"Platform",
+		"Manage the whole platform. Only platform admins can use it.",
 	],
 	[
 		"agents",

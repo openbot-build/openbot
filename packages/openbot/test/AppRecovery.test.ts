@@ -6,12 +6,7 @@ import { Signal, Signals } from "../src/agents/Signals.ts"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { request as requestHttp } from "node:http"
-import {
-	AppExecution,
-	AuthApi,
-	RequestsApi,
-	SessionView,
-} from "@openbot-build/api"
+import { AppExecution, RequestsApi, SessionView } from "@openbot-build/api"
 import { Client } from "@openbot-build/protocol"
 import { AppHost } from "../src/apps/AppHost.ts"
 import { ownerKey } from "../src/apps/Repository.ts"
@@ -147,7 +142,9 @@ const start = async (
 				}),
 		}),
 	)
+	const sessionCookie = "__Host-app-fixture-session"
 	const host = await BrowserHost.start({
+		authCompatibility: { sessionCookie },
 		publicOrigin: proxy.ipOrigin,
 		model,
 		discovery: publisher.discovery,
@@ -171,9 +168,7 @@ const start = async (
 		const user = await host.login("app-recovery-user")
 		const headers = {
 			cookie:
-				AuthApi.SessionCookie +
-				"=" +
-				encodeURIComponent(Redacted.value(user.session)),
+				sessionCookie + "=" + encodeURIComponent(Redacted.value(user.session)),
 			origin: proxy.ipOrigin,
 			"content-type": "application/json",
 		}
@@ -1537,106 +1532,109 @@ test("cancel does not overwrite a decision committed while it waited for the req
 	}
 })
 
-test("an early automated answer is saved once and applied after the exact wait is durable", async () => {
-	const fixture = await start({ write: true })
-	const sql = new PgConnection({ connectionString: fixture.host.databaseUrl })
-	await sql.connect()
-	try {
-		const initial = await fixture.view()
-		await fixture.post(`/v1/sessions/${fixture.session}/turns`, {
-			input: "Confirm one write",
-			expected: initial.session.revision,
-		})
-		const [request] = await fixture.requests()
-		assert.ok(request)
-		const held = await fixture.view(),
-			namespace = ownerKey(fixture.user.identity)
-		const pending = {
-			...held.session,
-			revision: held.session.revision + 1,
-			turns: held.session.turns.map((turn) =>
-				turn.id === request.turn
-					? { ...turn, status: { _tag: "Running" } }
-					: turn,
-			),
-		}
-		await sql.query(
-			"UPDATE openbot_session_references SET body=$3,revision=$4,status='Running' WHERE namespace=$1 AND id=$2",
-			[namespace, fixture.session, JSON.stringify(pending), pending.revision],
-		)
-		await sql.query(
-			"UPDATE openbot_agent_records SET owner=$3,body=jsonb_set(body::jsonb,'{request,approver}',$4::jsonb)::text WHERE kind='request' AND organization_id=$1 AND id=$2",
-			[
-				fixture.user.identity.organizationId,
-				request.id,
-				"agent:" + request.agent,
-				JSON.stringify({ _tag: "Agent", agent: request.agent }),
-			],
-		)
-		const outcome = await fixture.host.runtime.runPromise(
-			Effect.flatMap(Requests, (requests) =>
-				requests.decide(fixture.user.identity.organizationId, request.id, {
-					by: { _tag: "Agent", agent: request.agent },
-					allow: true,
-					holds: true,
-					scope: "once",
-				}),
-			),
-		)
-		assert.equal(outcome._tag, "Deferred")
-		assert.equal(outcome.stored.request.status, "pending")
-		assert.equal(
-			(
-				await sql.query(
-					"SELECT 1 FROM openbot_agent_records WHERE kind='grant'",
-				)
-			).rowCount,
-			0,
-		)
-		assert.equal(fixture.publisher.writes().length, 0)
-		const waiting = { ...held.session, revision: pending.revision + 1 }
-		await sql.query(
-			"UPDATE openbot_session_references SET body=$3,revision=$4,status='Waiting' WHERE namespace=$1 AND id=$2",
-			[namespace, fixture.session, JSON.stringify(waiting), waiting.revision],
-		)
-		await fixture.host.runtime.runPromise(
-			Effect.flatMap(Signals, (signals) =>
-				signals.publish(
-					Signal.TurnChanged({
-						...fixture.user.identity,
-						session: fixture.session,
-						turn: request.turn,
-						status: "Waiting",
+for (const recovery of ["signal", "restart"] as const)
+	test(`an early automated answer is saved once and applied after the exact wait is durable (${recovery})`, async () => {
+		const fixture = await start({ write: true })
+		const sql = new PgConnection({ connectionString: fixture.host.databaseUrl })
+		await sql.connect()
+		try {
+			const initial = await fixture.view()
+			await fixture.post(`/v1/sessions/${fixture.session}/turns`, {
+				input: "Confirm one write",
+				expected: initial.session.revision,
+			})
+			const [request] = await fixture.requests()
+			assert.ok(request)
+			const held = await fixture.view(),
+				namespace = ownerKey(fixture.user.identity)
+			const pending = {
+				...held.session,
+				revision: held.session.revision + 1,
+				turns: held.session.turns.map((turn) =>
+					turn.id === request.turn
+						? { ...turn, status: { _tag: "Running" } }
+						: turn,
+				),
+			}
+			await sql.query(
+				"UPDATE openbot_session_references SET body=$3,revision=$4,status='Running' WHERE namespace=$1 AND id=$2",
+				[namespace, fixture.session, JSON.stringify(pending), pending.revision],
+			)
+			await sql.query(
+				"UPDATE openbot_agent_records SET owner=$3,body=jsonb_set(body::jsonb,'{request,approver}',$4::jsonb)::text WHERE kind='request' AND organization_id=$1 AND id=$2",
+				[
+					fixture.user.identity.organizationId,
+					request.id,
+					"agent:" + request.agent,
+					JSON.stringify({ _tag: "Agent", agent: request.agent }),
+				],
+			)
+			const outcome = await fixture.host.runtime.runPromise(
+				Effect.flatMap(Requests, (requests) =>
+					requests.decide(fixture.user.identity.organizationId, request.id, {
+						by: { _tag: "Agent", agent: request.agent },
+						allow: true,
+						holds: true,
+						scope: "once",
 					}),
 				),
-			),
-		)
-		let completed = await fixture.view()
-		for (
-			let attempt = 0;
-			attempt < 200 && Session.status(completed.session)._tag !== "Completed";
-			attempt++
-		) {
-			await new Promise((resolve) => setTimeout(resolve, 10))
-			completed = await fixture.view()
-		}
-		assert.equal(Session.status(completed.session)._tag, "Completed")
-		assert.equal(fixture.publisher.writes().length, 1)
-		const stored = await fixture.get(`/v1/requests/${request.id}`)
-		assert.equal(stored.status, "allowed")
-		assert.equal(
-			(
-				await sql.query(
-					"SELECT 1 FROM openbot_agent_records WHERE kind='grant'",
+			)
+			assert.equal(outcome._tag, "Deferred")
+			assert.equal(outcome.stored.request.status, "pending")
+			assert.equal(
+				(
+					await sql.query(
+						"SELECT 1 FROM openbot_agent_records WHERE kind='grant'",
+					)
+				).rowCount,
+				0,
+			)
+			assert.equal(fixture.publisher.writes().length, 0)
+			const waiting = { ...held.session, revision: pending.revision + 1 }
+			await sql.query(
+				"UPDATE openbot_session_references SET body=$3,revision=$4,status='Waiting' WHERE namespace=$1 AND id=$2",
+				[namespace, fixture.session, JSON.stringify(waiting), waiting.revision],
+			)
+			if (recovery === "restart") await fixture.restart()
+			else
+				await fixture.host.runtime.runPromise(
+					Effect.flatMap(Signals, (signals) =>
+						signals.publish(
+							Signal.TurnChanged({
+								...fixture.user.identity,
+								session: fixture.session,
+								turn: request.turn,
+								status: "Waiting",
+							}),
+						),
+					),
 				)
-			).rowCount,
-			1,
-		)
-	} finally {
-		await sql.end()
-		await fixture.close()
-	}
-})
+			let completed = await fixture.view()
+			for (
+				let attempt = 0;
+				attempt < 200 && Session.status(completed.session)._tag !== "Completed";
+				attempt++
+			) {
+				await new Promise((resolve) => setTimeout(resolve, 10))
+				completed = await fixture.view()
+			}
+			assert.equal(Session.status(completed.session)._tag, "Completed")
+			assert.equal(fixture.publisher.writes().length, 1)
+			const stored = await fixture.get(`/v1/requests/${request.id}`)
+			assert.equal(stored.status, "allowed")
+			assert.equal(
+				(
+					await sql.query(
+						"SELECT 1 FROM openbot_agent_records WHERE kind='grant'",
+					)
+				).rowCount,
+				1,
+			)
+		} finally {
+			await sql.end()
+			await fixture.close()
+		}
+	})
 
 test("native decisions without a displayed revision cannot grant a stopped call", async () => {
 	const fixture = await start({ write: true })

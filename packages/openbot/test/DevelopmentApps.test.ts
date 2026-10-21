@@ -1,3 +1,4 @@
+import { memberOf } from "./Caller.ts"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { NodeServices } from "@effect/platform-node"
@@ -17,7 +18,7 @@ test("development Apps show protocol, requirement, expiry and cleanup failures t
 		host: "127.0.0.1",
 		port: 0,
 		databaseUrl: Redacted.make(database.url),
-		appEncryptionKey: Redacted.make("11".repeat(32)),
+		secretKeys: Redacted.make("test:" + "11".repeat(32)),
 		auth: {
 			mode: "development" as const,
 			publicOrigin: "https://localhost:8443",
@@ -112,7 +113,7 @@ test("development Apps show protocol, requirement, expiry and cleanup failures t
 		const executions = () =>
 			runtime.runPromise(
 				Effect.flatMap(Business, (business) =>
-					business.executions(ownerKey(account.identity)),
+					business.executions(ownerKey(memberOf(account))),
 				),
 			)
 		const created = await post("/v1/sessions", {

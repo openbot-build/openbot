@@ -1,30 +1,42 @@
 import {
+	Account,
 	type Caller,
 	Identity,
 	OrganizationApi,
 	Permissions,
 	OpenBotApi,
+	Settings as SettingsApi,
 } from "@openbot-build/api"
-import { Effect, Option } from "effect"
+import { Effect, Layer, Option } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { AuditLog } from "../audit/AuditLog.ts"
+import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
+import { can } from "../authorization/Check.ts"
 import {
+	expand,
 	inOrganization,
 	organizationKey,
 	userKey,
 } from "../authorization/Policy.ts"
+import { Roles } from "../authorization/Roles.ts"
+import { Settings } from "../settings/Settings.ts"
+import * as Views from "../settings/Views.ts"
+import { PlatformAdmins } from "../platform/PlatformAdmins.ts"
 import { Organization, type OrganizationUnavailable } from "./Organization.ts"
 
 const superAdministrator = "super_administrator"
 const unavailable = () =>
 	OrganizationApi.OrganizationStorageUnavailable.make({})
 
-export const layer = HttpApiBuilder.group(
+const organizationGroup = HttpApiBuilder.group(
 	OpenBotApi,
 	"organization",
 	(handlers) =>
 		Effect.gen(function* () {
 			const organization = yield* Organization
+			const roles = yield* Roles
+			const settings = yield* Settings
+			const services = yield* Effect.context<AuthorizationServices>()
 			const audit = yield* AuditLog
 			const record = (
 				caller: Caller,
@@ -103,22 +115,126 @@ export const layer = HttpApiBuilder.group(
 					| OrganizationUnavailable,
 			) => (error._tag === "OrganizationUnavailable" ? unavailable() : error)
 
+			const roleError = (
+				error:
+					| OrganizationApi.RoleNotFound
+					| OrganizationApi.RoleReadOnly
+					| { readonly _tag: "RolesUnavailable" },
+			) => (error._tag === "RolesUnavailable" ? unavailable() : error)
+			const findRole = (caller: Caller, roleId: string) =>
+				roles.get(caller.organizationId, roleId).pipe(
+					Effect.mapError(unavailable),
+					Effect.flatMap(
+						Option.match({
+							onNone: () =>
+								Effect.fail(OrganizationApi.RoleNotFound.make({ roleId })),
+							onSome: Effect.succeed,
+						}),
+					),
+				)
+			/**
+			 * A role may only name resources in the organization, and its `allow`
+			 * policies cannot give more than the caller has. Otherwise anyone who
+			 * can write roles could give themselves every permission.
+			 */
+			const checkRolePolicies = (
+				caller: Caller,
+				policies: ReadonlyArray<Permissions.Policy>,
+			) =>
+				Effect.gen(function* () {
+					if (
+						!inOrganization({ policies, organizationId: caller.organizationId })
+					)
+						return yield* OrganizationApi.PolicyInvalid.make({
+							message:
+								"A role can only name resources in your own organization.",
+						})
+					const subject = {
+						organizationId: caller.organizationId,
+						userId: caller.userId,
+					}
+					for (const policy of policies) {
+						if (policy.effect !== "allow") continue
+						for (const permission of policy.permissionGroups)
+							for (const resource of policy.resources) {
+								const key = expand({ pattern: resource, subject })
+								if (
+									!(yield* can({ caller, permission, key }).pipe(
+										Effect.provideContext(services),
+									))
+								)
+									return yield* Permissions.PermissionDenied.make({
+										permission,
+										resource: key,
+									})
+							}
+					}
+				})
+
 			return handlers
 				.handle("getOrganization", () =>
 					Effect.flatMap(Identity, (caller) =>
 						organization.get(caller.organizationId),
-					).pipe(Effect.mapError(unavailable)),
+					).pipe(
+						Effect.mapError(unavailable),
+						Effect.flatMap(
+							Option.match({
+								onNone: () => Effect.fail(unavailable()),
+								onSome: Effect.succeed,
+							}),
+						),
+					),
+				)
+				.handle("getSettings", () =>
+					Effect.flatMap(Identity, (caller) =>
+						settings.organization(caller.organizationId),
+					).pipe(Effect.map(Views.organization)),
+				)
+				.handle("updateSettings", ({ payload }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						const { expectedVersion, ...changes } = payload
+						if (changes.defaultRoles !== undefined) {
+							// New members must not join as Super Administrators unless one says so.
+							if (changes.defaultRoles.includes(superAdministrator))
+								yield* requireSuperAdministrator(
+									caller,
+									"organization.write",
+									organizationKey(caller.organizationId),
+								)
+							for (const roleId of changes.defaultRoles)
+								if (
+									Option.isNone(
+										yield* roles
+											.get(caller.organizationId, roleId)
+											.pipe(
+												Effect.mapError(() =>
+													SettingsApi.SettingsUnavailable.make({}),
+												),
+											),
+									)
+								)
+									return yield* SettingsApi.SettingsInvalid.make({
+										message: `The role ${roleId} does not exist.`,
+									})
+						}
+						const updated = yield* settings.updateOrganization(
+							caller.organizationId,
+							expectedVersion,
+							(current) => Effect.succeed({ ...current, ...changes }),
+						)
+						yield* record(
+							caller,
+							"settings.updated",
+							organizationKey(caller.organizationId),
+							{ changes: Object.keys(changes), version: updated.version },
+						)
+						return Views.organization(updated)
+					}),
 				)
 				.handle("updateOrganization", ({ payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						// New members must not join as Super Administrators unless one says so.
-						if (payload.defaultRoles?.includes(superAdministrator) === true)
-							yield* requireSuperAdministrator(
-								caller,
-								"organization.write",
-								organizationKey(caller.organizationId),
-							)
 						const updated = yield* organization
 							.update(caller.organizationId, payload)
 							.pipe(Effect.mapError(unavailable))
@@ -206,7 +322,76 @@ export const layer = HttpApiBuilder.group(
 				.handle("listPermissionGroups", () =>
 					Effect.succeed(Permissions.permissionGroups),
 				)
-				.handle("listRoles", () => Effect.succeed(Permissions.roles))
+				.handle("listRoles", () =>
+					Effect.flatMap(Identity, (caller) =>
+						roles.list(caller.organizationId),
+					).pipe(Effect.mapError(unavailable)),
+				)
+				.handle("getRole", ({ params }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						return yield* findRole(caller, params.roleId)
+					}),
+				)
+				.handle("createRole", ({ payload }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						yield* checkRolePolicies(caller, payload.policies)
+						const role = yield* roles
+							.create(caller.organizationId, payload)
+							.pipe(Effect.mapError(unavailable))
+						yield* record(
+							caller,
+							"role.created",
+							organizationKey(caller.organizationId),
+							{ roleId: role.id, name: role.name },
+						)
+						return role
+					}),
+				)
+				.handle("updateRole", ({ params, payload }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						yield* findRole(caller, params.roleId)
+						if (payload.policies !== undefined)
+							yield* checkRolePolicies(caller, payload.policies)
+						const role = yield* roles
+							.update(caller.organizationId, params.roleId, payload)
+							.pipe(Effect.mapError(roleError))
+						yield* record(
+							caller,
+							"role.updated",
+							organizationKey(caller.organizationId),
+							{ roleId: role.id, changes: Object.keys(payload) },
+						)
+						return role
+					}),
+				)
+				.handle("deleteRole", ({ params }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						const role = yield* findRole(caller, params.roleId)
+						if (role.builtin)
+							return yield* OrganizationApi.RoleReadOnly.make({
+								roleId: role.id,
+							})
+						if (
+							yield* organization
+								.roleInUse(caller.organizationId, role.id)
+								.pipe(Effect.mapError(unavailable))
+						)
+							return yield* OrganizationApi.RoleInUse.make({ roleId: role.id })
+						yield* roles
+							.delete(caller.organizationId, role.id)
+							.pipe(Effect.mapError(roleError))
+						yield* record(
+							caller,
+							"role.deleted",
+							organizationKey(caller.organizationId),
+							{ roleId: role.id, name: role.name },
+						)
+					}),
+				)
 				.handle("listAuditLogs", ({ query }) =>
 					Effect.flatMap(Identity, (caller) =>
 						audit.list(caller.organizationId, {
@@ -219,3 +404,62 @@ export const layer = HttpApiBuilder.group(
 				)
 		}),
 )
+
+/** The organizations of the caller, and new organizations. */
+const organizationsGroup = HttpApiBuilder.group(
+	OpenBotApi,
+	"organizations",
+	(handlers) =>
+		Effect.gen(function* () {
+			const organization = yield* Organization
+			const settings = yield* Settings
+			const admins = yield* PlatformAdmins
+			return handlers
+				.handle("listOrganizations", () =>
+					Effect.gen(function* () {
+						const account = yield* Account
+						const memberships = yield* organization.memberships(account.userId)
+						const ids = memberships
+							// A token sees only its own organization.
+							.filter(
+								(membership) =>
+									account.organizationId === undefined ||
+									membership.organizationId === account.organizationId,
+							)
+							.map((membership) => membership.organizationId)
+						const items: Array<OrganizationApi.Organization> = []
+						for (const id of ids) {
+							const found = yield* organization.get(id)
+							if (Option.isSome(found)) items.push(found.value)
+						}
+						return { items }
+					}).pipe(Effect.mapError(unavailable)),
+				)
+				.handle("createOrganization", ({ payload }) =>
+					Effect.gen(function* () {
+						const account = yield* Account
+						const platform = yield* settings.platform.pipe(
+							Effect.mapError(unavailable),
+						)
+						const anyone = Option.exists(
+							platform,
+							(platform) => platform.document.organizationCreation === "anyone",
+						)
+						if (
+							!anyone &&
+							!(yield* admins
+								.check({ id: account.userId })
+								.pipe(Effect.mapError(unavailable)))
+						)
+							return yield* OrganizationApi.OrganizationCreationDisabled.make(
+								{},
+							)
+						return yield* organization
+							.create({ name: payload.name, owner: { id: account.userId } })
+							.pipe(Effect.mapError(unavailable))
+					}),
+				)
+		}),
+)
+
+export const layer = Layer.merge(organizationGroup, organizationsGroup)

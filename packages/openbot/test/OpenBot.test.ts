@@ -1,3 +1,4 @@
+import { memberOf } from "./Caller.ts"
 import {
 	Option,
 	HashMap,
@@ -21,7 +22,7 @@ import {
 	DatabasePostgres,
 } from "@openbot-build/openbot"
 import * as Backend from "../dist/app/Backend.js"
-import { Session } from "@openbot-build/core"
+import { Config, Model, Provider, Session } from "@openbot-build/core"
 import { AuthApi } from "@openbot-build/api"
 
 import { LanguageModel, Response } from "effect/ai"
@@ -29,6 +30,7 @@ import { FetchHttpClient, HttpServer } from "effect/http"
 import { SqlClient } from "effect/sql"
 import { exportJWK, generateKeyPair, SignJWT } from "jose"
 import * as PostgresTest from "./PostgresTest.ts"
+import * as Secrets from "../src/secrets/Secrets.ts"
 
 test(
 	"signed OIDC login, session lifecycle, member isolation and PostgreSQL restart",
@@ -142,22 +144,33 @@ test(
 			},
 		)
 		t.after(() => providerNetwork.mock.restore())
-		const model = Layer.effect(
-			LanguageModel.LanguageModel,
-			LanguageModel.make({
-				generateText: () =>
-					Effect.succeed([Response.makePart("text", { text: "answer" })]),
-				streamText: () => importStream(),
-			}),
-		)
+		const languageModel = LanguageModel.make({
+			generateText: () =>
+				Effect.succeed([Response.makePart("text", { text: "answer" })]),
+			streamText: () => importStream(),
+		})
+		const testProvider = Provider.Id.make("test")
 		const options = {
 			host: "127.0.0.1",
 			port: 0,
-			// Every test account has a verified email at example.com.
-			organization: { allowedEmailDomains: ["example.com"] },
+			// Every organization can use this model, so each test account can run a Turn.
+			builtinModels: {
+				providers: [{ id: testProvider, name: "Test" }],
+				models: [
+					Config.Model.make({
+						provider: testProvider,
+						id: Model.Id.make("answer"),
+						name: "Answer",
+						reasoningEfforts: [],
+						serviceTiers: [],
+					}),
+				],
+				resolve: () => languageModel,
+			},
 			databaseUrl: Redacted.make(database.url),
-			appEncryptionKey: Redacted.make(
-				"1111111111111111111111111111111111111111111111111111111111111111",
+			secretKeys: Redacted.make(
+				"test:" +
+					"1111111111111111111111111111111111111111111111111111111111111111",
 			),
 			auth: {
 				publicOrigin,
@@ -171,7 +184,7 @@ test(
 		}
 		const server = () =>
 			ManagedRuntime.make(
-				Server.layer({
+				Server.layerFixed({
 					...options,
 					auth: publicClient
 						? {
@@ -182,12 +195,7 @@ test(
 							}
 						: options.auth,
 				}).pipe(
-					Layer.provide(
-						Layer.merge(
-							model,
-							Layer.succeed(FetchHttpClient.Fetch, providerFetch),
-						),
-					),
+					Layer.provide(Layer.succeed(FetchHttpClient.Fetch, providerFetch)),
 				),
 			)
 		let runtime: ReturnType<typeof server> | undefined
@@ -515,7 +523,7 @@ test(
 					const backend = yield* Backend.Backend
 					const service = yield* backend.forCaller({
 						kind: "member",
-						...identity.identity,
+						...memberOf(identity),
 					})
 					const wait = (
 						view: Effect.Success<ReturnType<typeof service.get>>,
@@ -555,7 +563,8 @@ test(
 					headers: { cookie: nextAlice.session },
 				})
 			).json()
-			assert.deepEqual(sessionA.identity, sessionB.identity)
+			assert.equal(sessionA.userId, sessionB.userId)
+			assert.deepEqual(sessionA.memberships, sessionB.memberships)
 			await migration.runPromise(
 				Effect.flatMap(
 					SqlClient.SqlClient,
@@ -632,62 +641,33 @@ const importStream = () =>
 		}),
 	)
 
-test("cloud startup rejects missing credentials and invalid ports", async () => {
-	const missing = await Effect.runPromise(
-		EnvironmentConfiguration.load.pipe(
-			Effect.provideService(
-				ConfigProvider.ConfigProvider,
-				ConfigProvider.fromUnknown({}),
-			),
-			Effect.result,
-		),
-	)
-	assert.equal(missing._tag, "Failure")
-	const invalid = await Effect.runPromise(
-		EnvironmentConfiguration.load.pipe(
-			Effect.provideService(
-				ConfigProvider.ConfigProvider,
-				ConfigProvider.fromUnknown({
-					OPENBOT_DATABASE_URL: "postgres://localhost/db",
-					OPENBOT_APP_ENCRYPTION_KEY:
-						"1111111111111111111111111111111111111111111111111111111111111111",
-					OPENBOT_PUBLIC_ORIGIN: "https://e.example.com",
-					OPENBOT_OIDC_ISSUER: "https://id.example.com",
-					OPENBOT_OIDC_CLIENT_ID: "client",
-					OPENBOT_OIDC_CLIENT_SECRET: "secret",
-					BETTER_AUTH_SECRET:
-						"IntegrationSecretForBetterAuthMustStayStable123456",
-					OPENBOT_PORT: "invalid",
-				}),
-			),
-			Effect.result,
-		),
-	)
-	assert.equal(invalid._tag, "Failure")
-	const tls = (files: Record<string, string>) =>
+test("an instance reads only its own settings and the secret keys", async () => {
+	const load = (values: Record<string, string>) =>
 		Effect.runPromise(
 			EnvironmentConfiguration.load.pipe(
 				Effect.provideService(
 					ConfigProvider.ConfigProvider,
-					ConfigProvider.fromUnknown({
-						OPENBOT_DATABASE_URL: "postgres://localhost/db",
-						OPENBOT_APP_ENCRYPTION_KEY:
-							"1111111111111111111111111111111111111111111111111111111111111111",
-						OPENBOT_PUBLIC_ORIGIN: "https://e.example.com",
-						OPENBOT_OIDC_ISSUER: "https://id.example.com",
-						OPENBOT_OIDC_CLIENT_ID: "client",
-						BETTER_AUTH_SECRET:
-							"IntegrationSecretForBetterAuthMustStayStable123456",
-						...files,
-					}),
+					ConfigProvider.fromUnknown(values),
 				),
 				Effect.result,
 			),
 		)
-	const plain = await tls({})
+	const required = {
+		OPENBOT_DATABASE_URL: "postgres://localhost/db",
+		OPENBOT_SECRET_KEYS:
+			"k1:1111111111111111111111111111111111111111111111111111111111111111",
+	}
+	assert.equal((await load({}))._tag, "Failure")
+	assert.equal(
+		(await load({ ...required, OPENBOT_PORT: "invalid" }))._tag,
+		"Failure",
+	)
+	const plain = await load(required)
 	assert.ok(Result.isSuccess(plain))
 	assert.equal(plain.success.tls, undefined)
-	const secure = await tls({
+	assert.equal(plain.success.port, 3000)
+	const secure = await load({
+		...required,
 		OPENBOT_TLS_CERT: "/certs/cert.pem",
 		OPENBOT_TLS_KEY: "/certs/key.pem",
 	})
@@ -697,40 +677,42 @@ test("cloud startup rejects missing credentials and invalid ports", async () => 
 		keyFile: "/certs/key.pem",
 	})
 	assert.equal(
-		(await tls({ OPENBOT_TLS_CERT: "/certs/cert.pem" }))._tag,
+		(await load({ ...required, OPENBOT_TLS_CERT: "/certs/cert.pem" }))._tag,
 		"Failure",
 	)
 })
 
-test("cloud startup accepts public PKCE clients with a missing or empty secret", async () => {
-	const load = (clientSecret: string | undefined) =>
-		Effect.runPromise(
-			EnvironmentConfiguration.load.pipe(
-				Effect.provideService(
-					ConfigProvider.ConfigProvider,
-					ConfigProvider.fromUnknown({
-						OPENBOT_DATABASE_URL: "postgres://localhost/db",
-						OPENBOT_APP_ENCRYPTION_KEY:
-							"1111111111111111111111111111111111111111111111111111111111111111",
-						OPENBOT_PUBLIC_ORIGIN: "https://e.example.com",
-						OPENBOT_OIDC_ISSUER: "https://id.example.com",
-						OPENBOT_OIDC_CLIENT_ID: "client",
-						...(clientSecret === undefined
-							? {}
-							: { OPENBOT_OIDC_CLIENT_SECRET: clientSecret }),
-						BETTER_AUTH_SECRET:
-							"IntegrationSecretForBetterAuthMustStayStable123456",
-					}),
-				),
-			),
+test("secret keys change one at a time and old secrets still open", async () => {
+	const oldKey = "k1:" + "11".repeat(32)
+	const newKey = "k2:" + "22".repeat(32)
+	const sealed = await Effect.runPromise(
+		Effect.flatMap(Secrets.make(Redacted.make(oldKey)), (secrets) =>
+			secrets.seal("provider key", "place"),
+		),
+	)
+	const rotated = await Effect.runPromise(
+		Secrets.make(Redacted.make(newKey + "," + oldKey)),
+	)
+	assert.equal(
+		await Effect.runPromise(rotated.open(sealed, "place")),
+		"provider key",
+	)
+	assert.ok(
+		(await Effect.runPromise(rotated.seal("next", "place"))).startsWith("k2."),
+	)
+	// A secret only opens in its own place.
+	assert.equal(
+		(await Effect.runPromise(Effect.result(rotated.open(sealed, "other"))))
+			._tag,
+		"Failure",
+	)
+	for (const invalid of [
+		"",
+		"k1:short",
+		"k1:" + "11".repeat(32) + ",k1:" + "22".repeat(32),
+	])
+		assert.equal(
+			(await Effect.runPromise(Effect.result(Secrets.parseKeys(invalid))))._tag,
+			"Failure",
 		)
-	const absent = (await load(undefined)).auth
-	const empty = (await load("")).auth
-	const configured = (await load("secret")).auth
-	assert.ok(absent.mode !== "development")
-	assert.ok(empty.mode !== "development")
-	assert.ok(configured.mode !== "development")
-	assert.equal(absent.clientSecret, undefined)
-	assert.equal(empty.clientSecret, undefined)
-	assert.equal(Redacted.value(configured.clientSecret!), "secret")
 })

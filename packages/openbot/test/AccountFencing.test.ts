@@ -24,7 +24,7 @@ import * as Developer from "../src/apps/DeveloperRepositoryPostgres.ts"
 import { DeveloperRepository } from "../src/apps/DeveloperRepository.ts"
 import * as Invocations from "../src/apps/InvocationRepositoryPostgres.ts"
 import { InvocationRepository } from "../src/apps/InvocationRepository.ts"
-import * as Secrets from "../src/apps/Secrets.ts"
+import * as Secrets from "../src/secrets/Secrets.ts"
 import * as Database from "../src/database/DatabasePostgres.ts"
 import * as Postgres from "./PostgresTest.ts"
 import * as AgentRecords from "../src/agents/AgentRecords.ts"
@@ -94,7 +94,7 @@ test("account persistence, background recovery and MCP sends retain routing leas
 				backend: "openbot",
 			}),
 		).pipe(
-			Layer.provide(Secrets.layer(Redacted.make("11".repeat(32)))),
+			Layer.provide(Secrets.layer(Redacted.make("test:" + "11".repeat(32)))),
 			Layer.provideMerge(
 				Database.layer({ databaseUrl: Redacted.make(database.url) }),
 			),

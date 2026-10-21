@@ -45,8 +45,17 @@ test(
 						yield* DatabasePostgres.migrate
 						const options = yield* DevelopmentModel.make
 						const sessions = yield* ManagedSessions.make({
-							...options,
+							...options.sessions,
+							modelCatalog: Effect.succeed({
+								providers: options.builtinModels.providers,
+								models: options.builtinModels.models,
+							}),
+							defaults: Effect.succeed({ model: DevelopmentModel.selection }),
 							namespace: "turn-memory-owner",
+							resolveModel: (selection) =>
+								options.builtinModels.resolve(
+									selection ?? DevelopmentModel.selection,
+								),
 						})
 						const created = yield* sessions.create({
 							...AgentFixture.direct(),
@@ -164,7 +173,12 @@ test(
 						const options = yield* DevelopmentModel.make
 						let beforeResolve = Effect.void
 						const sessions = yield* ManagedSessions.make({
-							...options,
+							...options.sessions,
+							modelCatalog: Effect.succeed({
+								providers: options.builtinModels.providers,
+								models: options.builtinModels.models,
+							}),
+							defaults: Effect.succeed({ model: DevelopmentModel.selection }),
 							namespace: "resolve-race",
 							layerExecution: () =>
 								DevelopmentModel.toolkit.toLayer({
@@ -178,7 +192,11 @@ test(
 								}),
 							resolveModel: (selection) =>
 								beforeResolve.pipe(
-									Effect.andThen(options.resolveModel(selection)),
+									Effect.andThen(
+										options.builtinModels.resolve(
+											selection ?? DevelopmentModel.selection,
+										),
+									),
 								),
 						})
 						const created = yield* sessions.create({
@@ -308,8 +326,17 @@ test(
 						yield* DatabasePostgres.migrate
 						const options = yield* DevelopmentModel.make
 						const sessions = yield* ManagedSessions.make({
-							...options,
+							...options.sessions,
+							modelCatalog: Effect.succeed({
+								providers: options.builtinModels.providers,
+								models: options.builtinModels.models,
+							}),
+							defaults: Effect.succeed({ model: DevelopmentModel.selection }),
 							namespace: "memory-release",
+							resolveModel: (selection) =>
+								options.builtinModels.resolve(
+									selection ?? DevelopmentModel.selection,
+								),
 							memory: {
 								model: {
 									extract: () =>

@@ -616,9 +616,12 @@ const exerciseAppPlugin = async (mode: "published" | "manual" | "legacy") => {
 					decision: "allow",
 				})
 			).status,
-			200,
+			409,
 		)
-		await settled(work.session.id, alice.session)
+		assert.equal(
+			Session.status((await get(work.session.id)).session)._tag,
+			"Waiting",
+		)
 		assert.equal(publisher.businessCalls(), 8)
 		assert.equal(
 			(

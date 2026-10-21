@@ -1,3 +1,4 @@
+import type { Services as AuthorizationServices } from "../../authorization/Authorize.ts"
 import { Agent, Plugin, Session, type SessionStore } from "@openbot-build/core"
 import { AgentsApi, type Identity } from "@openbot-build/api"
 import * as AgentMemory from "../memory/AgentMemory.ts"
@@ -13,7 +14,6 @@ import {
 	Stream,
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
-import { Tokens } from "../../auth/Tokens.ts"
 import { Gate } from "../../capabilities/Gate.ts"
 import { Requests } from "../../capabilities/Requests.ts"
 import { Rules } from "../../capabilities/Rules.ts"
@@ -131,8 +131,7 @@ type Services =
 	| Requests
 	| Rules
 	| Signals
-	| Organization
-	| Tokens
+	| AuthorizationServices
 
 /** Builds the Agent plugin for the Sessions of one member. */
 export class AgentPlugin extends Context.Service<

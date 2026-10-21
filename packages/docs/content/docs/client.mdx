@@ -51,11 +51,12 @@ const id = await Effect.runPromise(
 )
 ```
 
-| Option           | Required | What it does                                                                                            |
-| ---------------- | -------- | ------------------------------------------------------------------------------------------------------- |
-| `baseUrl`        | Yes      | The origin of OpenBot, such as `https://api.example.com`.                                               |
-| `token`          | No       | A user token, as a string or an Effect `Redacted` value. It is sent as `Authorization: Bearer <token>`. |
-| `onUnauthorized` | No       | A function that runs when a protected request returns `401`.                                            |
+| Option           | Required | What it does                                                                                                      |
+| ---------------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
+| `baseUrl`        | Yes      | The origin of OpenBot, such as `https://api.example.com`.                                                         |
+| `token`          | No       | A user token, as a string or an Effect `Redacted` value. It is sent as `Authorization: Bearer <token>`.           |
+| `organization`   | No       | An organization ID. With the session cookie, it is sent as the `OpenBot-Organization` header. A token ignores it. |
+| `onUnauthorized` | No       | A function that runs when a protected request returns `401`.                                                      |
 
 To make a user token, see [Authentication](/docs/authentication).
 
@@ -90,17 +91,21 @@ const archived =
 
 Some groups and their pages:
 
-| Group          | Use it to                                     | Reference                                                 |
-| -------------- | --------------------------------------------- | --------------------------------------------------------- |
-| `sessions`     | Make Sessions, start Turns, and read results. | [Sessions](/docs/api/operations/tags/sessions/)           |
-| `agents`       | Make and manage Agents.                       | [Agents](/docs/api/operations/tags/agents/)               |
-| `requests`     | Answer the requests of your Agents.           | [Requests](/docs/api/operations/tags/requests/)           |
-| `apps`         | Find an App at an address.                    | [App discovery](/docs/api/operations/tags/app-discovery/) |
-| `connections`  | Add and manage App connections.               | [Connections](/docs/api/operations/tags/connections/)     |
-| `appIndex`     | Search the public App Index.                  | [App Index](/docs/api/operations/tags/app-index/)         |
-| `userTokens`   | List, make, revoke and check user tokens.     | [User tokens](/docs/api/operations/tags/user-tokens/)     |
-| `organization` | Manage the organization and its members.      | [Organization](/docs/api/operations/tags/organization/)   |
-| `health`       | Read the service document and health.         | [Health](/docs/api/operations/tags/service-and-health/)   |
+| Group            | Use it to                                                 | Reference                                                     |
+| ---------------- | --------------------------------------------------------- | ------------------------------------------------------------- |
+| `sessions`       | Make Sessions, start Turns, and read results.             | [Sessions](/docs/api/operations/tags/sessions/)               |
+| `agents`         | Make and manage Agents.                                   | [Agents](/docs/api/operations/tags/agents/)                   |
+| `requests`       | Answer the requests of your Agents.                       | [Requests](/docs/api/operations/tags/requests/)               |
+| `apps`           | Find an App at an address.                                | [App discovery](/docs/api/operations/tags/app-discovery/)     |
+| `connections`    | Add and manage App connections.                           | [Connections](/docs/api/operations/tags/connections/)         |
+| `appIndex`       | Search the public App Index.                              | [App Index](/docs/api/operations/tags/app-index/)             |
+| `userTokens`     | List, make, revoke and check user tokens.                 | [User tokens](/docs/api/operations/tags/user-tokens/)         |
+| `organizations`  | List and create your organizations.                       | [Organizations](/docs/api/operations/tags/organizations/)     |
+| `organization`   | Manage the organization, its members, roles and settings. | [Organization](/docs/api/operations/tags/organization/)       |
+| `modelProviders` | Manage model providers and list models.                   | [Model providers](/docs/api/operations/tags/model-providers/) |
+| `sso`            | Verify email domains and manage SSO connections.          | [SSO](/docs/api/operations/tags/sso/)                         |
+| `platform`       | Manage the platform. Only for platform admins.            | [Platform](/docs/api/operations/tags/platform/)               |
+| `health`         | Read the service document and health.                     | [Health](/docs/api/operations/tags/service-and-health/)       |
 
 Every operation needs a permission. A call without it fails with `PermissionDenied`. See [Permissions](/docs/permissions).
 
@@ -124,11 +129,13 @@ const view =
 
 Common sign-in errors:
 
-| Tag                         | Status | Meaning                                                    |
-| --------------------------- | ------ | ---------------------------------------------------------- |
-| `AuthenticationRequired`    | `401`  | No key or cookie, or the key is revoked or expired.        |
-| `ForbiddenOrigin`           | `403`  | A cookie request that changes data has the wrong `Origin`. |
-| `AuthenticationUnavailable` | `503`  | OpenBot cannot check credentials right now.                |
+| Tag                         | Status | Meaning                                                                                        |
+| --------------------------- | ------ | ---------------------------------------------------------------------------------------------- |
+| `AuthenticationRequired`    | `401`  | No key or cookie, or the key is revoked or expired.                                            |
+| `OrganizationRequired`      | `400`  | A cookie request without `organization`, and the person belongs to more than one organization. |
+| `MembershipRequired`        | `403`  | The account is not an active member of the organization.                                       |
+| `ForbiddenOrigin`           | `403`  | A cookie request that changes data has the wrong `Origin`.                                     |
+| `AuthenticationUnavailable` | `503`  | OpenBot cannot check credentials right now.                                                    |
 
 All error schemas are exported from `@openbot-build/api`.
 
@@ -143,12 +150,14 @@ import { layer } from "@openbot-build/client"
 
 const ClientLive = layer({
 	baseUrl: window.location.origin,
+	// Needed when the person belongs to more than one organization.
+	organization: "org_8f3a",
 	onUnauthorized: async () => {
-		// Better Auth starts the sign-in and answers with the provider address.
-		const response = await fetch("/auth/sign-in/social", {
+		// OpenBot picks the provider and answers with its address.
+		const response = await fetch("/auth/sign-in", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ provider: "oidc", callbackURL: "/" }),
+			body: JSON.stringify({ returnTo: "/" }),
 		})
 		const { url } = await response.json()
 		window.location.assign(url)
@@ -157,7 +166,8 @@ const ClientLive = layer({
 ```
 
 The client sends requests with `credentials: "same-origin"`, so the browser adds the cookie.
-The browser also adds the `Origin` header. For requests that change data, OpenBot checks that it is exactly `OPENBOT_PUBLIC_ORIGIN`.
+The browser also adds the `Origin` header. For requests that change data, OpenBot checks that it is exactly `publicOrigin` in the platform settings.
+Read the organizations of the person with `GET /auth/session`. See [Authentication](/docs/authentication#read-and-end-the-sign-in).
 
 To serve your web app on the same origin, see [Deploy](/docs/deploy#your-own-client-on-the-same-origin).
 
@@ -172,6 +182,7 @@ To serve your web app on the same origin, see [Deploy](/docs/deploy#your-own-cli
 
 - an `HttpClient` service,
 - client middleware for `AgentAuth`, used by token routes,
+- client middleware for `AccountAuth`, used by routes that do not act in one organization, such as `/v1/organizations` and `/v1/platform`,
 - client middleware for `SessionAuth`, used by cookie-only routes.
 
 Use this when you need your own HTTP client, logging, or headers. See `packages/client/src/Client.ts` for how `layer` does it.

@@ -32,7 +32,8 @@ devenv shell -- pnpm dev:setup
 devenv shell -- mkcert -install
 ```
 
-`dev:setup` makes `.env.development` with new random secrets. It also makes a local TLS certificate in `.devenv/dev/`.
+`dev:setup` makes `.env.development` with a new random secret key in `OPENBOT_SECRET_KEYS`. It also makes a local TLS certificate in `.devenv/dev/`.
+If your `.env.development` is from an older version, delete it and run `dev:setup` again. You can also reset the development database. See [Configuration](/docs/configuration#development).
 `mkcert -install` makes your computer trust that certificate.
 
 </Step>
@@ -50,7 +51,7 @@ devenv shell -- pnpm dev
 2. It installs the packages with `pnpm install --frozen-lockfile`.
 3. It builds OpenBot and the packages it needs.
 4. It runs the database migrations.
-5. It starts the development server at `https://localhost:8443`.
+5. It starts the development server at `https://localhost:8443`. The server writes the platform settings for this origin itself, so there is no setup step.
 
 When you change a file in `packages/*/src`, devenv starts OpenBot again.
 

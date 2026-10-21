@@ -3,8 +3,30 @@
 name: openbot-check
 
 services:
+  # Writes test platform settings, so the check sees a platform that is set up.
+  setup:
+    image: openbot:${OPENBOT_RELEASE}
+    platform: linux/amd64
+    command:
+      - /app/dist/app/Setup.mjs
+      - --public-origin=https://openbot.example.com
+      - --oidc-issuer=https://id.example.com
+      - --oidc-client-id=check
+      - --admin-email=admin@example.com
+    secrets:
+      - OPENBOT_DATABASE_URL
+      - OPENBOT_SECRET_KEYS
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
   openbot:
     ports: !reset []
+    depends_on:
+      setup:
+        condition: service_completed_successfully
 
   protocol-test:
     ports: !reset []

@@ -1,3 +1,4 @@
+import { Settings } from "../settings/Settings.ts"
 import * as ExecutionFence from "../execution/ExecutionFence.ts"
 import { createHash } from "node:crypto"
 import {
@@ -202,596 +203,591 @@ export class Requests extends Context.Service<
 /** How long a request waits before it is denied. */
 export const defaultTimeout = 24 * 60 * 60 * 1000
 
-export const make = (
-	options: { readonly timeout?: number } = {},
-): Effect.Effect<
+export const make: Effect.Effect<
 	typeof Requests.Service,
 	never,
-	AgentRecords | Grants | Rules | PgClient.PgClient
-> =>
-	Effect.gen(function* () {
-		const records = yield* AgentRecords
-		const sql = yield* PgClient.PgClient
-		const sessions = yield* SessionRepository.make
-		const grants = yield* Grants
-		const rules = yield* Rules
-		const requests = records.collection(
-			"request",
-			Stored,
-			Schema.Literals([...RequestsApi.RequestStatus.literals, "resolved"]),
+	AgentRecords | Grants | Rules | PgClient.PgClient | Settings
+> = Effect.gen(function* () {
+	const settings = yield* Settings
+	const records = yield* AgentRecords
+	const sql = yield* PgClient.PgClient
+	const sessions = yield* SessionRepository.make
+	const grants = yield* Grants
+	const rules = yield* Rules
+	const requests = records.collection(
+		"request",
+		Stored,
+		Schema.Literals([...RequestsApi.RequestStatus.literals, "resolved"]),
+	)
+	const timeoutOf = (organizationId: string) =>
+		settings.organization(organizationId).pipe(
+			Effect.map((current) => current.document.requestTimeoutMs),
+			Effect.orElseSucceed(() => defaultTimeout),
 		)
-		const timeout = options.timeout ?? defaultTimeout
-		const put = (organizationId: string, stored: Stored) =>
-			requests
-				.put(
-					{
-						organizationId,
-						id: stored.request.id,
-						owner: approverKey(stored.request.approver),
-						scope: stored.request.session,
-						status: stored.settled ? "resolved" : stored.request.status,
-					},
-					stored,
-				)
-				.pipe(Effect.as(stored))
-		/** Gives the Grants down the chain, from the top decider to the requesting Agent. */
-		const giveGrants = (
-			organizationId: string,
-			stored: Stored,
-			final: Decision,
-		) =>
-			Effect.gen(function* () {
-				const request = stored.request
-				// Givers from the bottom: each endorsing Agent, then the final decider.
-				const givers: ReadonlyArray<{
-					readonly by: AgentsApi.Decider
-					readonly scope: AgentsApi.GrantScope
-					readonly reason?: string
-				}> = [
-					...request.endorsements.map((entry) => ({
-						by: { _tag: "Agent" as const, agent: entry.agent },
-						scope: entry.scope,
-						...(entry.reason === undefined ? {} : { reason: entry.reason }),
-					})),
-					{
-						by: final.by,
-						scope: final.scope ?? "once",
-						...(final.reason === undefined ? {} : { reason: final.reason }),
-					},
-				]
-				const receivers = [
-					request.agent,
-					...request.endorsements.map((entry) => entry.agent),
-				]
-				let parent: string | undefined = undefined
-				for (let index = receivers.length - 1; index >= 0; index--) {
-					const agent = receivers[index]!
-					const giver = givers[index]!
-					const grant: AgentsApi.Grant = yield* grants.create(
-						organizationId,
-						{
-							agent,
-							capability: request.capability,
-							effect: "allow",
-							scope: giver.scope,
-							...(giver.scope === "session"
-								? {
-										session: sessionOf(stored.chain, agent, request.session),
-									}
-								: {}),
-							grantedBy: giver.by,
-							...(giver.reason === undefined ? {} : { reason: giver.reason }),
-							...(parent === undefined ? {} : { parent }),
-						},
-						// The waiting call uses a `once` decision now.
-						true,
-					)
-					parent = grant.id
-				}
-			})
-		/** Check the waiting chain while its Session rows cannot be changed or stopped. */
-		const checkSession = (
-			organizationId: string,
-			stored: Stored,
-			expected: number | undefined,
-			displayed: Session.Id = stored.request.session,
-			allowEarly = false,
-		) =>
-			Effect.gen(function* () {
-				const stale = () =>
-					RequestsApi.RequestConflict.make({
-						message:
-							"The Session or waiting call changed. Read it again and retry.",
-					})
-				const namespace = ownerKey({
+	const put = (organizationId: string, stored: Stored) =>
+		requests
+			.put(
+				{
 					organizationId,
-					userId: stored.chain.userId,
-				})
-				const chain = [...stored.chain.sessions, stored.request.session]
-				if (
-					!chain.includes(displayed) ||
-					new Set(chain).size !== chain.length ||
-					stored.chain.organizationId !== organizationId
-				)
-					return yield* stale()
-				const locked = new Map<Session.Id, Session.Ref>()
-				// A stable lock order also covers decisions shown in a parent Session.
-				for (const id of [...chain].sort()) {
-					const rows = yield* sql<{
-						body: string
-					}>`SELECT body FROM openbot_session_references WHERE namespace = ${namespace} AND id = ${id} FOR UPDATE`
-					if (rows[0] === undefined) return yield* stale()
-					const ref = yield* Schema.decodeEffect(
-						Schema.fromJsonString(Session.Ref),
-					)(rows[0].body)
-					const identity = hostState(ref)
-					if (
-						identity?.chain.organizationId !== organizationId ||
-						identity.chain.userId !== stored.chain.userId ||
-						(Session.status(ref)._tag !== "Waiting" &&
-							!(
-								allowEarly &&
-								id === stored.request.session &&
-								Session.status(ref)._tag === "Running"
-							))
-					)
-						return yield* stale()
-					locked.set(id, ref)
-				}
-				if (
-					expected !== undefined &&
-					locked.get(displayed)?.revision !== expected
-				)
-					return yield* stale()
-				const waits = (session: Session.Ref) =>
-					Effect.gen(function* () {
-						const state = yield* TimelineSnapshots.readRaw(
-							sessions.store(namespace),
-							session.head,
-						)
-						const value = yield* Schema.decodeUnknownEffect(Timeline.Value({}))(
-							state.raw,
-						)
-						return Session.waits({
-							session,
-							state: { version: state.snapshot, value },
-						})
-					})
-				const target = locked.get(stored.request.session)!
-				if (Session.currentTurn(target)?.id !== stored.request.turn)
-					return yield* stale()
-				// This keeps only the answer. No Grant or App operation changes until
-				// the normal Waiting signal validates the exact call and delegation links.
-				if (allowEarly && Session.status(target)._tag === "Running")
-					return false
-				if (
-					Session.currentTurn(target)?.id !== stored.request.turn ||
-					!(yield* waits(target)).some(
-						(wait) =>
-							wait.toolCallId === stored.request.toolCallId &&
-							wait.occurrence === stored.request.callOccurrence,
-					)
-				)
-					return yield* stale()
-				const delegations = records.collection(
-					"delegation",
-					StoredDelegation,
-					AgentsApi.DelegationStatus,
-				)
-				for (let index = chain.length - 1; index > 0; index--) {
-					const child = locked.get(chain[index]!)!,
-						parent = locked.get(chain[index - 1]!)!
-					const current = Session.currentTurn(child),
-						parentTurn = Session.currentTurn(parent)
-					const links = yield* delegations.list(organizationId, {
-						owner: stored.chain.userId,
-						scope: parent.id,
-						status: "running",
-					})
-					const link = links.find(
-						({ delegation }) =>
-							delegation.child?.session === child.id &&
-							delegation.child.turn === current?.id &&
-							delegation.parent.turn === parentTurn?.id,
-					)
-					if (
-						link === undefined ||
-						!(yield* waits(parent)).some(
-							(wait) =>
-								wait.toolCallId === link.delegation.parent.toolCallId &&
-								wait.occurrence === link.delegation.parent.callOccurrence,
-						)
-					)
-						return yield* stale()
-				}
-				return true
-			}).pipe(
-				Effect.mapError((error) =>
-					error instanceof RequestsApi.RequestConflict
-						? error
-						: AgentsApi.AgentStorageUnavailable.make({}),
-				),
+					id: stored.request.id,
+					owner: approverKey(stored.request.approver),
+					scope: stored.request.session,
+					status: stored.settled ? "resolved" : stored.request.status,
+				},
+				stored,
 			)
-
-		const decide: typeof Requests.Service.decide = (
-			organizationId,
-			id,
-			decision,
-		) =>
-			records.transaction(
-				"request:" + organizationId + ":" + id,
+			.pipe(Effect.as(stored))
+	/** Gives the Grants down the chain, from the top decider to the requesting Agent. */
+	const giveGrants = (
+		organizationId: string,
+		stored: Stored,
+		final: Decision,
+	) =>
+		Effect.gen(function* () {
+			const request = stored.request
+			// Givers from the bottom: each endorsing Agent, then the final decider.
+			const givers: ReadonlyArray<{
+				readonly by: AgentsApi.Decider
+				readonly scope: AgentsApi.GrantScope
+				readonly reason?: string
+			}> = [
+				...request.endorsements.map((entry) => ({
+					by: { _tag: "Agent" as const, agent: entry.agent },
+					scope: entry.scope,
+					...(entry.reason === undefined ? {} : { reason: entry.reason }),
+				})),
+				{
+					by: final.by,
+					scope: final.scope ?? "once",
+					...(final.reason === undefined ? {} : { reason: final.reason }),
+				},
+			]
+			const receivers = [
+				request.agent,
+				...request.endorsements.map((entry) => entry.agent),
+			]
+			let parent: string | undefined = undefined
+			for (let index = receivers.length - 1; index >= 0; index--) {
+				const agent = receivers[index]!
+				const giver = givers[index]!
+				const grant: AgentsApi.Grant = yield* grants.create(
+					organizationId,
+					{
+						agent,
+						capability: request.capability,
+						effect: "allow",
+						scope: giver.scope,
+						...(giver.scope === "session"
+							? {
+									session: sessionOf(stored.chain, agent, request.session),
+								}
+							: {}),
+						grantedBy: giver.by,
+						...(giver.reason === undefined ? {} : { reason: giver.reason }),
+						...(parent === undefined ? {} : { parent }),
+					},
+					// The waiting call uses a `once` decision now.
+					true,
+				)
+				parent = grant.id
+			}
+		})
+	/** Check the waiting chain while its Session rows cannot be changed or stopped. */
+	const checkSession = (
+		organizationId: string,
+		stored: Stored,
+		expected: number | undefined,
+		displayed: Session.Id = stored.request.session,
+		allowEarly = false,
+	) =>
+		Effect.gen(function* () {
+			const stale = () =>
+				RequestsApi.RequestConflict.make({
+					message:
+						"The Session or waiting call changed. Read it again and retry.",
+				})
+			const namespace = ownerKey({
+				organizationId,
+				userId: stored.chain.userId,
+			})
+			const chain = [...stored.chain.sessions, stored.request.session]
+			if (
+				!chain.includes(displayed) ||
+				new Set(chain).size !== chain.length ||
+				stored.chain.organizationId !== organizationId
+			)
+				return yield* stale()
+			const locked = new Map<Session.Id, Session.Ref>()
+			// A stable lock order also covers decisions shown in a parent Session.
+			for (const id of [...chain].sort()) {
+				const rows = yield* sql<{
+					body: string
+				}>`SELECT body FROM openbot_session_references WHERE namespace = ${namespace} AND id = ${id} FOR UPDATE`
+				if (rows[0] === undefined) return yield* stale()
+				const ref = yield* Schema.decodeEffect(
+					Schema.fromJsonString(Session.Ref),
+				)(rows[0].body)
+				const identity = hostState(ref)
+				if (
+					identity?.chain.organizationId !== organizationId ||
+					identity.chain.userId !== stored.chain.userId ||
+					(Session.status(ref)._tag !== "Waiting" &&
+						!(
+							allowEarly &&
+							id === stored.request.session &&
+							Session.status(ref)._tag === "Running"
+						))
+				)
+					return yield* stale()
+				locked.set(id, ref)
+			}
+			if (
+				expected !== undefined &&
+				locked.get(displayed)?.revision !== expected
+			)
+				return yield* stale()
+			const waits = (session: Session.Ref) =>
 				Effect.gen(function* () {
-					const found = yield* requests.find(organizationId, id)
-					if (Option.isNone(found))
-						return yield* RequestsApi.RequestNotFound.make({ request: id })
-					const stored = found.value
-					const request = stored.request
-					if (request.status !== "pending")
-						return yield* RequestsApi.RequestConflict.make({
-							message: "The request is already closed.",
-						})
-					if (
-						decision.expected !== undefined &&
-						decision.expected !== request.revision
+					const state = yield* TimelineSnapshots.readRaw(
+						sessions.store(namespace),
+						session.head,
 					)
-						return yield* RequestsApi.RequestConflict.make({
-							message: "The request changed. Read it again and retry.",
-						})
-					if (deciderKey(decision.by) !== approverKey(request.approver))
-						return yield* RequestsApi.RequestConflict.make({
-							message: "The request waits for another decider.",
-						})
-					if (stored.deferred !== undefined)
-						return yield* RequestsApi.RequestConflict.make({
-							message:
-								"This request already has an answer waiting for its call.",
-						})
-					const ready = yield* checkSession(
-						organizationId,
-						stored,
-						decision.expectedSessionRevision,
-						decision.expectedSessionId,
-						decision.by._tag === "Agent",
+					const value = yield* Schema.decodeUnknownEffect(Timeline.Value({}))(
+						state.raw,
 					)
-					if (!ready)
-						return {
-							_tag: "Deferred" as const,
-							stored: yield* put(organizationId, {
-								...stored,
-								deferred: yield* Schema.decodeEffect(DeferredDecision)(
-									decision,
-								).pipe(
-									Effect.mapError(() =>
-										AgentsApi.AgentStorageUnavailable.make({}),
-									),
-								),
-								request: { ...request, revision: request.revision + 1 },
-							}),
-						}
-					const now = yield* Clock.currentTimeMillis
-					if (decision.rule !== undefined)
-						yield* rules.create(organizationId, {
-							agent: request.agent,
-							author: decision.by,
-							text: decision.rule,
-							status: decision.by._tag === "Person" ? "active" : "proposed",
-						})
-					// An Agent that agrees but does not hold the capability passes the request up.
-					if (
-						decision.allow &&
-						decision.by._tag === "Agent" &&
-						decision.holds !== true
-					) {
-						const agent = decision.by.agent
-						return {
-							_tag: "Escalated" as const,
-							stored: yield* put(organizationId, {
-								...stored,
-								request: {
-									...request,
-									endorsements: [
-										...request.endorsements,
-										{
-											agent,
-											scope: decision.scope ?? "once",
-											...(decision.reason === undefined
-												? {}
-												: { reason: decision.reason }),
-										},
-									],
-									approver: superior({ chain: stored.chain, agent }),
-									revision: request.revision + 1,
-								},
-							}),
-						}
-					}
-					// The App operation and the Request share this transaction. A changed
-					// connection is rejected before a decision or lasting grant is saved.
-					if (request.app !== undefined) {
-						const invocations = yield* Effect.serviceOption(Invocations)
-						if (Option.isNone(invocations))
-							return yield* AgentsApi.AgentStorageUnavailable.make({})
-						yield* invocations.value
-							.approve(
-								{
-									owner: ownerKey({
-										organizationId,
-										userId: stored.chain.userId,
-									}),
-									session: request.session,
-									turn: request.turn,
-									callOccurrence: request.callOccurrence,
-								},
-								request.toolCallId,
-								decision.allow,
-								decision.grantReads ?? false,
-							)
-							.pipe(
-								Effect.mapError((error) =>
-									error._tag === "SessionConflict"
-										? RequestsApi.RequestConflict.make({
-												message: error.message,
-											})
-										: AgentsApi.AgentStorageUnavailable.make({}),
-								),
-							)
-					}
-					if (decision.allow)
-						yield* giveGrants(organizationId, stored, decision)
-					else if (decision.scope !== undefined && decision.scope !== "once")
-						yield* grants.create(organizationId, {
-							agent: request.agent,
-							capability: request.capability,
-							effect: "deny",
-							scope: decision.scope,
-							...(decision.scope === "session"
-								? { session: request.session }
-								: {}),
-							grantedBy: decision.by,
-							...(decision.reason === undefined
-								? {}
-								: { reason: decision.reason }),
-						})
+					return Session.waits({
+						session,
+						state: { version: state.snapshot, value },
+					})
+				})
+			const target = locked.get(stored.request.session)!
+			if (Session.currentTurn(target)?.id !== stored.request.turn)
+				return yield* stale()
+			// This keeps only the answer. No Grant or App operation changes until
+			// the normal Waiting signal validates the exact call and delegation links.
+			if (allowEarly && Session.status(target)._tag === "Running") return false
+			if (
+				Session.currentTurn(target)?.id !== stored.request.turn ||
+				!(yield* waits(target)).some(
+					(wait) =>
+						wait.toolCallId === stored.request.toolCallId &&
+						wait.occurrence === stored.request.callOccurrence,
+				)
+			)
+				return yield* stale()
+			const delegations = records.collection(
+				"delegation",
+				StoredDelegation,
+				AgentsApi.DelegationStatus,
+			)
+			for (let index = chain.length - 1; index > 0; index--) {
+				const child = locked.get(chain[index]!)!,
+					parent = locked.get(chain[index - 1]!)!
+				const current = Session.currentTurn(child),
+					parentTurn = Session.currentTurn(parent)
+				const links = yield* delegations.list(organizationId, {
+					owner: stored.chain.userId,
+					scope: parent.id,
+					status: "running",
+				})
+				const link = links.find(
+					({ delegation }) =>
+						delegation.child?.session === child.id &&
+						delegation.child.turn === current?.id &&
+						delegation.parent.turn === parentTurn?.id,
+				)
+				if (
+					link === undefined ||
+					!(yield* waits(parent)).some(
+						(wait) =>
+							wait.toolCallId === link.delegation.parent.toolCallId &&
+							wait.occurrence === link.delegation.parent.callOccurrence,
+					)
+				)
+					return yield* stale()
+			}
+			return true
+		}).pipe(
+			Effect.mapError((error) =>
+				error instanceof RequestsApi.RequestConflict
+					? error
+					: AgentsApi.AgentStorageUnavailable.make({}),
+			),
+		)
+
+	const decide: typeof Requests.Service.decide = (
+		organizationId,
+		id,
+		decision,
+	) =>
+		records.transaction(
+			"request:" + organizationId + ":" + id,
+			Effect.gen(function* () {
+				const found = yield* requests.find(organizationId, id)
+				if (Option.isNone(found))
+					return yield* RequestsApi.RequestNotFound.make({ request: id })
+				const stored = found.value
+				const request = stored.request
+				if (request.status !== "pending")
+					return yield* RequestsApi.RequestConflict.make({
+						message: "The request is already closed.",
+					})
+				if (
+					decision.expected !== undefined &&
+					decision.expected !== request.revision
+				)
+					return yield* RequestsApi.RequestConflict.make({
+						message: "The request changed. Read it again and retry.",
+					})
+				if (deciderKey(decision.by) !== approverKey(request.approver))
+					return yield* RequestsApi.RequestConflict.make({
+						message: "The request waits for another decider.",
+					})
+				if (stored.deferred !== undefined)
+					return yield* RequestsApi.RequestConflict.make({
+						message: "This request already has an answer waiting for its call.",
+					})
+				const ready = yield* checkSession(
+					organizationId,
+					stored,
+					decision.expectedSessionRevision,
+					decision.expectedSessionId,
+					decision.by._tag === "Agent",
+				)
+				if (!ready)
 					return {
-						_tag: "Final" as const,
+						_tag: "Deferred" as const,
+						stored: yield* put(organizationId, {
+							...stored,
+							deferred: yield* Schema.decodeEffect(DeferredDecision)(
+								decision,
+							).pipe(
+								Effect.mapError(() =>
+									AgentsApi.AgentStorageUnavailable.make({}),
+								),
+							),
+							request: { ...request, revision: request.revision + 1 },
+						}),
+					}
+				const now = yield* Clock.currentTimeMillis
+				if (decision.rule !== undefined)
+					yield* rules.create(organizationId, {
+						agent: request.agent,
+						author: decision.by,
+						text: decision.rule,
+						status: decision.by._tag === "Person" ? "active" : "proposed",
+					})
+				// An Agent that agrees but does not hold the capability passes the request up.
+				if (
+					decision.allow &&
+					decision.by._tag === "Agent" &&
+					decision.holds !== true
+				) {
+					const agent = decision.by.agent
+					return {
+						_tag: "Escalated" as const,
 						stored: yield* put(organizationId, {
 							...stored,
 							request: {
 								...request,
-								status: decision.allow ? "allowed" : "denied",
-								decision: {
-									by: decision.by,
-									...(decision.grantReads === undefined
-										? {}
-										: { grantReads: decision.grantReads }),
-									...(decision.scope === undefined
-										? {}
-										: { scope: decision.scope }),
-									...(decision.reason === undefined
-										? {}
-										: { reason: decision.reason }),
-									...(decision.question === undefined
-										? {}
-										: { question: decision.question }),
-									at: now,
-								},
+								endorsements: [
+									...request.endorsements,
+									{
+										agent,
+										scope: decision.scope ?? "once",
+										...(decision.reason === undefined
+											? {}
+											: { reason: decision.reason }),
+									},
+								],
+								approver: superior({ chain: stored.chain, agent }),
 								revision: request.revision + 1,
 							},
 						}),
 					}
-				}),
-			)
-		const close = (
-			organizationId: string,
-			stored: Stored,
-			status: "expired" | "cancelled",
-			now: number,
-		) =>
+				}
+				// The App operation and the Request share this transaction. A changed
+				// connection is rejected before a decision or lasting grant is saved.
+				if (request.app !== undefined) {
+					const invocations = yield* Effect.serviceOption(Invocations)
+					if (Option.isNone(invocations))
+						return yield* AgentsApi.AgentStorageUnavailable.make({})
+					yield* invocations.value
+						.approve(
+							{
+								owner: ownerKey({
+									organizationId,
+									userId: stored.chain.userId,
+								}),
+								session: request.session,
+								turn: request.turn,
+								callOccurrence: request.callOccurrence,
+							},
+							request.toolCallId,
+							decision.allow,
+							decision.grantReads ?? false,
+						)
+						.pipe(
+							Effect.mapError((error) =>
+								error._tag === "SessionConflict"
+									? RequestsApi.RequestConflict.make({
+											message: error.message,
+										})
+									: AgentsApi.AgentStorageUnavailable.make({}),
+							),
+						)
+				}
+				if (decision.allow) yield* giveGrants(organizationId, stored, decision)
+				else if (decision.scope !== undefined && decision.scope !== "once")
+					yield* grants.create(organizationId, {
+						agent: request.agent,
+						capability: request.capability,
+						effect: "deny",
+						scope: decision.scope,
+						...(decision.scope === "session"
+							? { session: request.session }
+							: {}),
+						grantedBy: decision.by,
+						...(decision.reason === undefined
+							? {}
+							: { reason: decision.reason }),
+					})
+				return {
+					_tag: "Final" as const,
+					stored: yield* put(organizationId, {
+						...stored,
+						request: {
+							...request,
+							status: decision.allow ? "allowed" : "denied",
+							decision: {
+								by: decision.by,
+								...(decision.grantReads === undefined
+									? {}
+									: { grantReads: decision.grantReads }),
+								...(decision.scope === undefined
+									? {}
+									: { scope: decision.scope }),
+								...(decision.reason === undefined
+									? {}
+									: { reason: decision.reason }),
+								...(decision.question === undefined
+									? {}
+									: { question: decision.question }),
+								at: now,
+							},
+							revision: request.revision + 1,
+						},
+					}),
+				}
+			}),
+		)
+	const close = (
+		organizationId: string,
+		stored: Stored,
+		status: "expired" | "cancelled",
+		now: number,
+	) =>
+		records.transaction(
+			"request:" + organizationId + ":" + stored.request.id,
+			Effect.gen(function* () {
+				const found = yield* requests.find(organizationId, stored.request.id)
+				if (Option.isNone(found) || found.value.request.status !== "pending")
+					return Option.none<Stored>()
+				const current = found.value
+				if (status === "expired" && current.request.expiresAt > now)
+					return Option.none<Stored>()
+				return Option.some(
+					yield* put(organizationId, {
+						...current,
+						request: {
+							...current.request,
+							status,
+							decision: {
+								by: { _tag: "Person", userId: current.chain.userId },
+								reason:
+									status === "expired"
+										? "Nobody answered the request in time."
+										: "The work stopped before the request was answered.",
+								at: now,
+							},
+							revision: current.request.revision + 1,
+						},
+					}),
+				)
+			}),
+		)
+
+	return Requests.of({
+		create: (organizationId, input) =>
 			records.transaction(
-				"request:" + organizationId + ":" + stored.request.id,
+				"request-call:" + organizationId + ":" + input.session,
 				Effect.gen(function* () {
-					const found = yield* requests.find(organizationId, stored.request.id)
-					if (Option.isNone(found) || found.value.request.status !== "pending")
-						return Option.none<Stored>()
-					const current = found.value
-					if (status === "expired" && current.request.expiresAt > now)
-						return Option.none<Stored>()
+					const id =
+						"req_" +
+						createHash("sha256")
+							.update(
+								JSON.stringify([
+									input.session,
+									input.turn,
+									input.toolCallId,
+									input.callOccurrence,
+								]),
+							)
+							.digest("hex")
+					const existing = yield* requests.find(organizationId, id)
+					if (Option.isSome(existing)) return existing.value
+					const now = yield* Clock.currentTimeMillis
+					const timeout = yield* timeoutOf(organizationId)
+					const status: Request["status"] =
+						input.decided === undefined
+							? "pending"
+							: input.decided.allow
+								? "allowed"
+								: "denied"
+					return yield* put(organizationId, {
+						chain: input.chain,
+						settled: false,
+						request: {
+							id,
+							agent: input.agent,
+							capability: input.capability,
+							reason: input.reason,
+							approver: superior({ chain: input.chain, agent: input.agent }),
+							chain: input.chain.agents,
+							session: input.session,
+							turn: input.turn,
+							toolCallId: input.toolCallId,
+							callOccurrence: input.callOccurrence,
+							...(input.app === undefined ? {} : { app: input.app }),
+							endorsements: [],
+							status,
+							decision:
+								input.decided === undefined
+									? null
+									: {
+											by: input.decided.by,
+											...(input.decided.reason === undefined
+												? {}
+												: { reason: input.decided.reason }),
+											at: now,
+										},
+							revision: 0,
+							createdAt: now,
+							expiresAt: now + timeout,
+						},
+					})
+				}),
+			),
+		recoverable: Effect.forEach(
+			["allowed", "denied", "expired", "cancelled"] as const,
+			(status) => requests.withStatus(status),
+		).pipe(Effect.map((groups) => groups.flat())),
+		markSettled: (organizationId, id) =>
+			records.transaction(
+				"request:" + organizationId + ":" + id,
+				Effect.gen(function* () {
+					const found = yield* requests.find(organizationId, id)
+					if (Option.isSome(found) && found.value.request.status !== "pending")
+						yield* put(organizationId, { ...found.value, settled: true })
+				}),
+			),
+		find: (organizationId, id) => requests.find(organizationId, id),
+		forPerson: (organizationId, userId, status) =>
+			requests
+				.list(organizationId, { owner: "person:" + userId })
+				.pipe(
+					Effect.map((list) =>
+						list
+							.map((stored) => stored.request)
+							.filter(
+								(request) => status === undefined || request.status === status,
+							),
+					),
+				),
+		forSession: (organizationId, session) =>
+			requests.list(organizationId, { scope: session }),
+		pending: requests.withStatus("pending"),
+		decide,
+		applyDeferred: (organizationId, id) =>
+			records.transaction(
+				"request:" + organizationId + ":" + id,
+				Effect.gen(function* () {
+					const found = yield* requests.find(organizationId, id)
+					if (
+						Option.isNone(found) ||
+						found.value.request.status !== "pending" ||
+						found.value.deferred === undefined
+					)
+						return false
+					const { deferred, ...stored } = found.value
+					yield* put(organizationId, stored)
+					const outcome = yield* decide(organizationId, id, {
+						...deferred,
+						expected: stored.request.revision,
+					})
+					return outcome._tag !== "Deferred"
+				}),
+			),
+		pass: (organizationId, id, from) =>
+			records.transaction(
+				"request:" + organizationId + ":" + id,
+				Effect.gen(function* () {
+					const found = yield* requests.find(organizationId, id)
+					if (
+						Option.isNone(found) ||
+						found.value.request.status !== "pending" ||
+						found.value.deferred !== undefined ||
+						approverKey(found.value.request.approver) !== "agent:" + from
+					)
+						return Option.none()
+					const stored = found.value
 					return Option.some(
 						yield* put(organizationId, {
-							...current,
+							...stored,
 							request: {
-								...current.request,
-								status,
-								decision: {
-									by: { _tag: "Person", userId: current.chain.userId },
-									reason:
-										status === "expired"
-											? "Nobody answered the request in time."
-											: "The work stopped before the request was answered.",
-									at: now,
-								},
-								revision: current.request.revision + 1,
+								...stored.request,
+								approver: superior({ chain: stored.chain, agent: from }),
+								revision: stored.request.revision + 1,
 							},
 						}),
 					)
 				}),
-			)
-
-		return Requests.of({
-			create: (organizationId, input) =>
-				records.transaction(
-					"request-call:" + organizationId + ":" + input.session,
-					Effect.gen(function* () {
-						const id =
-							"req_" +
-							createHash("sha256")
-								.update(
-									JSON.stringify([
-										input.session,
-										input.turn,
-										input.toolCallId,
-										input.callOccurrence,
-									]),
-								)
-								.digest("hex")
-						const existing = yield* requests.find(organizationId, id)
-						if (Option.isSome(existing)) return existing.value
-						const now = yield* Clock.currentTimeMillis
-						const status: Request["status"] =
-							input.decided === undefined
-								? "pending"
-								: input.decided.allow
-									? "allowed"
-									: "denied"
-						return yield* put(organizationId, {
-							chain: input.chain,
-							settled: false,
-							request: {
-								id,
-								agent: input.agent,
-								capability: input.capability,
-								reason: input.reason,
-								approver: superior({ chain: input.chain, agent: input.agent }),
-								chain: input.chain.agents,
-								session: input.session,
-								turn: input.turn,
-								toolCallId: input.toolCallId,
-								callOccurrence: input.callOccurrence,
-								...(input.app === undefined ? {} : { app: input.app }),
-								endorsements: [],
-								status,
-								decision:
-									input.decided === undefined
-										? null
-										: {
-												by: input.decided.by,
-												...(input.decided.reason === undefined
-													? {}
-													: { reason: input.decided.reason }),
-												at: now,
-											},
-								revision: 0,
-								createdAt: now,
-								expiresAt: now + timeout,
-							},
-						})
-					}),
-				),
-			recoverable: Effect.forEach(
-				["allowed", "denied", "expired", "cancelled"] as const,
-				(status) => requests.withStatus(status),
-			).pipe(Effect.map((groups) => groups.flat())),
-			markSettled: (organizationId, id) =>
-				records.transaction(
-					"request:" + organizationId + ":" + id,
-					Effect.gen(function* () {
-						const found = yield* requests.find(organizationId, id)
-						if (
-							Option.isSome(found) &&
-							found.value.request.status !== "pending"
-						)
-							yield* put(organizationId, { ...found.value, settled: true })
-					}),
-				),
-			find: (organizationId, id) => requests.find(organizationId, id),
-			forPerson: (organizationId, userId, status) =>
-				requests
-					.list(organizationId, { owner: "person:" + userId })
-					.pipe(
-						Effect.map((list) =>
-							list
-								.map((stored) => stored.request)
-								.filter(
-									(request) =>
-										status === undefined || request.status === status,
-								),
+			),
+		expire: Effect.gen(function* () {
+			const now = yield* Clock.currentTimeMillis
+			const pending = yield* requests.withStatus("pending")
+			const closed = yield* Effect.forEach(
+				pending.filter((entry) => entry.value.request.expiresAt <= now),
+				(entry) =>
+					ExecutionFence.admit(
+						entry.value.chain.userId,
+						close(entry.organizationId, entry.value, "expired", now),
+					).pipe(
+						Effect.map((value) =>
+							Option.map(value, (value) => ({
+								organizationId: entry.organizationId,
+								value,
+							})),
 						),
+						// One frozen account must not stop expiry for other accounts.
+						Effect.orElseSucceed(() => Option.none()),
 					),
-			forSession: (organizationId, session) =>
-				requests.list(organizationId, { scope: session }),
-			pending: requests.withStatus("pending"),
-			decide,
-			applyDeferred: (organizationId, id) =>
-				records.transaction(
-					"request:" + organizationId + ":" + id,
-					Effect.gen(function* () {
-						const found = yield* requests.find(organizationId, id)
-						if (
-							Option.isNone(found) ||
-							found.value.request.status !== "pending" ||
-							found.value.deferred === undefined
-						)
-							return false
-						const { deferred, ...stored } = found.value
-						yield* put(organizationId, stored)
-						const outcome = yield* decide(organizationId, id, {
-							...deferred,
-							expected: stored.request.revision,
-						})
-						return outcome._tag !== "Deferred"
-					}),
-				),
-			pass: (organizationId, id, from) =>
-				records.transaction(
-					"request:" + organizationId + ":" + id,
-					Effect.gen(function* () {
-						const found = yield* requests.find(organizationId, id)
-						if (
-							Option.isNone(found) ||
-							found.value.request.status !== "pending" ||
-							found.value.deferred !== undefined ||
-							approverKey(found.value.request.approver) !== "agent:" + from
-						)
-							return Option.none()
-						const stored = found.value
-						return Option.some(
-							yield* put(organizationId, {
-								...stored,
-								request: {
-									...stored.request,
-									approver: superior({ chain: stored.chain, agent: from }),
-									revision: stored.request.revision + 1,
-								},
-							}),
-						)
-					}),
-				),
-			expire: Effect.gen(function* () {
+			)
+			return closed.flatMap((entry) =>
+				Option.isSome(entry) ? [entry.value] : [],
+			)
+		}),
+		cancel: (organizationId, session) =>
+			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				const pending = yield* requests.withStatus("pending")
-				const closed = yield* Effect.forEach(
-					pending.filter((entry) => entry.value.request.expiresAt <= now),
-					(entry) =>
-						ExecutionFence.admit(
-							entry.value.chain.userId,
-							close(entry.organizationId, entry.value, "expired", now),
-						).pipe(
-							Effect.map((value) =>
-								Option.map(value, (value) => ({
-									organizationId: entry.organizationId,
-									value,
-								})),
-							),
-							// One frozen account must not stop expiry for other accounts.
-							Effect.orElseSucceed(() => Option.none()),
-						),
-				)
-				return closed.flatMap((entry) =>
-					Option.isSome(entry) ? [entry.value] : [],
+				const list = yield* requests.list(organizationId, {
+					scope: session,
+					status: "pending",
+				})
+				yield* Effect.forEach(list, (stored) =>
+					close(organizationId, stored, "cancelled", now),
 				)
 			}),
-			cancel: (organizationId, session) =>
-				Effect.gen(function* () {
-					const now = yield* Clock.currentTimeMillis
-					const list = yield* requests.list(organizationId, {
-						scope: session,
-						status: "pending",
-					})
-					yield* Effect.forEach(list, (stored) =>
-						close(organizationId, stored, "cancelled", now),
-					)
-				}),
-		})
 	})
-export const layer = (options: { readonly timeout?: number } = {}) =>
-	Layer.effect(Requests, make(options))
+})
+export const layer = Layer.effect(Requests, make)

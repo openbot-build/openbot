@@ -33,19 +33,17 @@ test("the default directory runs, rejects unknown choices and labels synthetic u
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
-				const options = yield* DevelopmentModel.make
-				const catalog = yield* options.modelCatalog
+				const { builtinModels: models } = yield* DevelopmentModel.make
 				assert.deepEqual(
-					catalog.models.map((model) => model.id),
-					DevelopmentModel.Scenario.literals,
+					[...models.models.map((model) => model.id)].sort(),
+					[...DevelopmentModel.Scenario.literals].sort(),
 				)
 				assert.ok(
-					catalog.models.every((model) => model.name.includes("simulated")),
+					models.models.every((model) => model.name.includes("simulated")),
 				)
-				assert.deepEqual(yield* options.defaults, {
-					model: DevelopmentModel.selection,
-				})
-				const model = yield* options.resolveModel(undefined)
+				// The first model is the default of a new Session.
+				assert.equal(models.models[0]?.id, DevelopmentModel.selection.model)
+				const model = yield* models.resolve(DevelopmentModel.selection)
 				const response = yield* model.generateText({ prompt: "Hello" })
 				assert.equal(response.text, "Development response: Hello")
 				assert.equal(response.finishReason, "stop")
@@ -75,7 +73,7 @@ test("the default directory runs, rejects unknown choices and labels synthetic u
 							serviceTier: "priority",
 						}),
 					],
-					(selection) => options.resolveModel(selection).pipe(Effect.flip),
+					(selection) => models.resolve(selection).pipe(Effect.flip),
 				)
 				assert.deepEqual(
 					errors.map((error) => error.reason),

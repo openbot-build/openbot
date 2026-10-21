@@ -4,7 +4,7 @@ description: Source history and release rules for the internal OpenBot build.
 ---
 
 This repository is a derived build of [OpenBot](https://github.com/openbot-build/openbot).
-Its current upstream base is [157034cb65ef698ec5fada04c372bd52899cef8c](https://github.com/openbot-build/openbot/tree/157034cb65ef698ec5fada04c372bd52899cef8c).
+Its current upstream base is [31495f9c91f96ae5d6b2114ceaaf5f35b87de46f](https://github.com/openbot-build/openbot/tree/31495f9c91f96ae5d6b2114ceaaf5f35b87de46f).
 The machine-readable record is `upstream.json`. Keep it when updating the source.
 
 The `upstream` Git remote points to the original project. The `origin` remote
@@ -23,6 +23,15 @@ member bootstrap, standard hosted MCP support, per-Turn memory switches, and
 private execution controls. The public package names remain
 `@openbot-build/*`. Data conversion from another package namespace is a separate
 migration, not a direct shared-database mode.
+
+Shared settings, model provider credentials, SSO, organization membership,
+Agents and Requests use the native OpenBot services and tables. Browser cookie
+names and the callback path are shared settings too. A platform setting change
+waits until active work and durable waits are clear before replacing the app.
+The old executor stops before the next one starts.
+
+The build and runtime use Node.js 26.12.1, the October 2026 security release.
+CI verifies the actual version in its shell and in the built container.
 
 ## License and source
 

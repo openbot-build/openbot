@@ -7,6 +7,7 @@ import { Effect, Layer, ManagedRuntime, Redacted, Schema } from "effect"
 import { NodeServices } from "@effect/platform-node"
 import { OpenApi } from "effect/http-api"
 import * as Governance from "../src/apps/Governance.ts"
+import * as OrganizationFixture from "./OrganizationFixture.ts"
 import * as PublicIndex from "../src/apps/Index.ts"
 import { IndexRepository } from "../src/apps/IndexRepository.ts"
 import * as Repository from "../src/apps/IndexRepositoryPostgres.ts"
@@ -90,7 +91,14 @@ test("the stored public Index searches, merges sources and pages results without
 		PublicIndex.layer({
 			publicOrigin: "https://openbot.test",
 			providers: sources,
-		}).pipe(Layer.provideMerge(repository), Layer.provide(Governance.layer())),
+		}).pipe(
+			Layer.provideMerge(repository),
+			Layer.provide(
+				Governance.layer.pipe(
+					Layer.provide(OrganizationFixture.layerDefaultSettings),
+				),
+			),
+		),
 	)
 	try {
 		await runtime.runPromise(
@@ -157,8 +165,9 @@ test("the stored public Index searches, merges sources and pages results without
 			host: "127.0.0.1",
 			port: 0,
 			databaseUrl: Redacted.make(database.url),
-			appEncryptionKey: Redacted.make(
-				"1111111111111111111111111111111111111111111111111111111111111111",
+			secretKeys: Redacted.make(
+				"test:" +
+					"1111111111111111111111111111111111111111111111111111111111111111",
 			),
 			auth: {
 				publicOrigin: "https://openbot.test",
@@ -168,7 +177,7 @@ test("the stored public Index searches, merges sources and pages results without
 				secret: Redacted.make("StableAppIndexTestSecretLongEnough123456789"),
 			},
 		}
-		const server = ManagedRuntime.make(Server.layer(configuration))
+		const server = ManagedRuntime.make(Server.layerFixed(configuration))
 		try {
 			const address = await server.runPromise(
 				Effect.map(HttpServer.HttpServer, (http) =>

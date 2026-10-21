@@ -228,7 +228,7 @@ export const make: Effect.Effect<
 						}),
 					)
 				}
-			}),
+			}).pipe(Effect.uninterruptible),
 		).pipe(Effect.catchTag("InstancePaused", () => Effect.void)),
 	})
 })

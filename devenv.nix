@@ -1,10 +1,13 @@
 {
   config,
   pkgs,
-  multiverse,
   ...
 }:
 
+let
+  securityNode = pkgs.callPackage ./deploy/nodejs.nix { };
+  securityCorepack = pkgs.corepack.override { nodejs-slim = securityNode; };
+in
 {
   devenv.warnOnNewVersion = false;
 
@@ -18,8 +21,7 @@
     umask 077
     mkdir -p .devenv/dev
     if [ ! -f .env.development ]; then
-      sed -e "s/^BETTER_AUTH_SECRET=$/BETTER_AUTH_SECRET=$(openssl rand -hex 32)/" \
-        -e "s/^OPENBOT_APP_ENCRYPTION_KEY=$/OPENBOT_APP_ENCRYPTION_KEY=$(openssl rand -hex 32)/" \
+      sed -e "s/^OPENBOT_SECRET_KEYS=$/OPENBOT_SECRET_KEYS=dev:$(openssl rand -hex 32)/" \
         .env.development.example > .env.development
     fi
     if [ ! -f .devenv/dev/cert.pem ] || [ ! -f .devenv/dev/key.pem ]; then
@@ -53,7 +55,7 @@
       ];
       exec = ''
         set -eu
-        : "''${BETTER_AUTH_SECRET:?Run pnpm dev:setup first}"
+        : "''${OPENBOT_SECRET_KEYS:?Run pnpm dev:setup first}"
         pnpm --filter-prod @openbot-build/openbot... build
         pnpm --filter @openbot-build/openbot migrate
         exec pnpm --filter @openbot-build/openbot start:development
@@ -72,7 +74,7 @@
   packages = with pkgs; [
     git
     gh
-    corepack
+    securityCorepack
     docker-client
     # Checks for the Docker images. See the Deploy page in the docs.
     hadolint
@@ -90,7 +92,7 @@
       }/${config.dotenv.resolved.OPENBOT_DEV_DATABASE_NAME or "openbot"}";
     OPENBOT_HOST = "127.0.0.1";
     OPENBOT_PORT = config.dotenv.resolved.OPENBOT_DEV_HTTPS_PORT or "8443";
-    OPENBOT_PUBLIC_ORIGIN = "https://localhost:${
+    OPENBOT_DEV_PUBLIC_ORIGIN = "https://localhost:${
       config.dotenv.resolved.OPENBOT_DEV_HTTPS_PORT or "8443"
     }";
     OPENBOT_TLS_CERT = "${config.devenv.root}/.devenv/dev/cert.pem";
@@ -101,7 +103,7 @@
     javascript = {
       enable = true;
       lsp.enable = false;
-      package = multiverse.nodejs_26."26.6.0";
+      package = securityNode;
     };
   };
 
@@ -109,7 +111,19 @@
     dotenv.enable = lib.mkForce false;
     treefmt.enable = lib.mkForce false;
     # mkForce also replaces the Node.js entry added by the language module.
-    packages = lib.mkForce ([ config.languages.javascript.package ] ++ (with pkgs; [ git corepack docker-client openssl ripgrep postgresql_18 ]));
+    packages = lib.mkForce (
+      [
+        config.languages.javascript.package
+        securityCorepack
+      ]
+      ++ (with pkgs; [
+        git
+        docker-client
+        openssl
+        ripgrep
+        postgresql_18
+      ])
+    );
   };
 
   treefmt = {

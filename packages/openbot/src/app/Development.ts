@@ -1,8 +1,9 @@
 import { CatalogDiscovery, Discovery } from "@openbot-build/protocol"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Redacted } from "effect"
 import type * as Configuration from "../configuration/Configuration.ts"
+import type { Configuration as AuthConfiguration } from "../auth/Model.ts"
+import { createHmac } from "node:crypto"
 import * as Server from "./Server.ts"
-import type * as OpenBot from "./OpenBot.ts"
 import { IndexWorkRepository } from "../apps/IndexWorkRepository.ts"
 import { IndexWork } from "../apps/IndexWork.ts"
 import * as DevelopmentModel from "./DevelopmentModel.ts"
@@ -68,13 +69,24 @@ const layerDiscovery = (
 	})
 }
 
+/**
+ * The sign-in secret of the development entry. It comes from the first
+ * secret key, so it stays the same across restarts without its own setting.
+ */
+export const developmentSecret = (secretKeys: Redacted.Redacted<string>) =>
+	Redacted.make(
+		createHmac("sha256", Redacted.value(secretKeys).split(",")[0] ?? "")
+			.update("openbot-development-auth")
+			.digest("hex"),
+	)
+
 /** Assemble simulated discovery and models with the normal configured identity and storage. */
 export const layer = (
-	settings: Configuration.Settings & Pick<OpenBot.Options, "appRestrictions">,
+	settings: Configuration.Settings & { readonly auth: AuthConfiguration },
 ) =>
 	Layer.unwrap(
 		Effect.gen(function* () {
-			const sessions = yield* DevelopmentModel.make
+			const { sessions, builtinModels } = yield* DevelopmentModel.make
 			const publication = yield* DevelopmentApps.Publication
 			const authorization = yield* DevelopmentAuthorization.Authorization
 			const scenarios = yield* DevelopmentScenarios.Scenarios
@@ -85,9 +97,12 @@ export const layer = (
 				Layer.succeed(DevelopmentBusiness.Business, business),
 				Layer.succeed(DevelopmentAuthorization.Authorization, authorization),
 			)
-			const server = Server.layer({
+			const server = Server.layerFixed({
 				...settings,
+				// The development entry owns its platform, so a new port just replaces the origin.
+				force: true,
 				sessions,
+				builtinModels,
 				discovery: layerDiscovery(scenarios),
 				appNetwork: DevelopmentApps.layerNetwork.pipe(
 					Layer.provide(authorizationLayer),
@@ -95,16 +110,31 @@ export const layer = (
 				appProbe: DevelopmentApps.layerProbe.pipe(
 					Layer.provide(authorizationLayer),
 				),
-				routes: Layer.merge(
-					DevelopmentAuthorization.layerRoutes.pipe(
-						Layer.provide(authorizationLayer),
+				routes: (auth) =>
+					Layer.merge(
+						DevelopmentAuthorization.layerRoutes.pipe(
+							Layer.provide(authorizationLayer),
+						),
+						DevelopmentProofs.layerRoutes(auth.publicOrigin).pipe(
+							Layer.provide(proofLayer),
+						),
 					),
-					DevelopmentProofs.layerRoutes(settings.auth.publicOrigin).pipe(
-						Layer.provide(proofLayer),
-					),
-				),
 				domainControl: DevelopmentProofs.layerDomainControl.pipe(
 					Layer.provide(proofLayer),
+				),
+				// Index the simulated App in the background, so the server listens at once.
+				startup: Layer.effectDiscard(
+					Effect.gen(function* () {
+						const jobs = yield* IndexWorkRepository
+						const work = yield* IndexWork
+						yield* jobs.enqueue(cardUrl, [])
+						yield* work.runOne(cardUrl)
+					}).pipe(
+						Effect.catchCause((cause) =>
+							Effect.logWarning("The development App was not indexed", cause),
+						),
+						Effect.forkScoped,
+					),
 				),
 				indexNamespace: "development",
 				indexPublicNetwork: DevelopmentApps.layerPublicNetwork.pipe(
@@ -117,14 +147,7 @@ export const layer = (
 					),
 				),
 			}).pipe(Layer.provide(DevelopmentModel.layerTools))
-			return Layer.effectDiscard(
-				Effect.gen(function* () {
-					const jobs = yield* IndexWorkRepository
-					const work = yield* IndexWork
-					yield* jobs.enqueue(cardUrl, [])
-					yield* work.runOne(cardUrl)
-				}),
-			).pipe(Layer.provideMerge(server))
+			return server
 		}),
 	).pipe(
 		Layer.provideMerge(DevelopmentProofs.layer),
