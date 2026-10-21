@@ -5,7 +5,7 @@ import {
 } from "@openbot-build/platform-api"
 import { Store } from "@openbot-build/protocol"
 import type { PgClient } from "@effect/sql-pg"
-import { Clock, Effect, Layer, Match, Schema } from "effect"
+import { Clock, Effect, Layer, Schema } from "effect"
 import { and, eq, inArray, sql } from "drizzle-orm"
 import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import {
@@ -19,16 +19,11 @@ import { Repository, StoredConnection } from "./Repository.ts"
 import { Secrets } from "./Secrets.ts"
 
 const unavailable = () => ExperienceStorageUnavailable.make({})
-const failure = (error: { readonly _tag: string }) =>
-	Match.value(error).pipe(
-		Match.when({ _tag: "ExperienceNotFound" }, () =>
-			Schema.decodeUnknownSync(ExperienceNotFound)(error),
-		),
-		Match.when({ _tag: "ConnectionConflict" }, () =>
-			Schema.decodeUnknownSync(Api.ConnectionConflict)(error),
-		),
-		Match.orElse(unavailable),
-	)
+/** Keep the errors that callers handle. Every other storage failure becomes one error. */
+const failure = (error: unknown) =>
+	error instanceof ExperienceNotFound || error instanceof Api.ConnectionConflict
+		? error
+		: unavailable()
 const connectionCodec = Schema.fromJsonString(
 	Schema.toCodecJson(StoredConnection),
 )

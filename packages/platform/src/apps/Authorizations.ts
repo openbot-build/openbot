@@ -1,7 +1,6 @@
 import {
 	AppAuthorizationApi as Api,
 	ConnectionsApi,
-	ExperienceInputInvalid,
 	ExperienceNotFound,
 	ExperienceStorageUnavailable,
 	Identity,
@@ -20,6 +19,7 @@ import {
 	Effect,
 	Layer,
 	Match,
+	Option,
 	Schema,
 } from "effect"
 import { AppHost } from "./AppHost.ts"
@@ -31,7 +31,6 @@ import * as ClientMetadata from "./ClientMetadata.ts"
 import { ConnectionLocks } from "./ConnectionLocks.ts"
 
 export type Error =
-	| ExperienceInputInvalid
 	| ExperienceNotFound
 	| ExperienceStorageUnavailable
 	| ConnectionsApi.ConnectionConflict
@@ -60,7 +59,7 @@ export class Authorizations extends Context.Service<
 		) => Effect.Effect<Api.Revocation, Error, Identity>
 		readonly receive: (
 			url: string,
-			owner?: string,
+			owner: Option.Option<string>,
 		) => Effect.Effect<Receipt, Error>
 	}
 >()("@openbot-build/platform/apps/Authorizations") {}
@@ -221,24 +220,19 @@ export const make = (
 			)
 			return yield* read(owner, id)
 		})
-		const complete = (owner: string, id: string) =>
-			Effect.gen(function* () {
-				const pending = yield* owned(owner, id)
-				return yield* locks.withConnection(
-					{ owner, connectionId: pending.state.connectionId },
-					completeUnlocked(owner, id),
-				)
-			})
+		const complete = Effect.fn("AppAuthorizations.completeLocked")(function* (
+			owner: string,
+			id: string,
+		) {
+			const pending = yield* owned(owner, id)
+			return yield* locks.withConnection(
+				{ owner, connectionId: pending.state.connectionId },
+				completeUnlocked(owner, id),
+			)
+		})
 		return Authorizations.of({
 			metadata,
-			begin: Effect.fn("AppAuthorizations.begin")(function* (id, request) {
-				const input = yield* Schema.decodeEffect(Api.Request)(request).pipe(
-					Effect.mapError(() =>
-						ExperienceInputInvalid.make({
-							message: "Review the authorization request and return location.",
-						}),
-					),
-				)
+			begin: Effect.fn("AppAuthorizations.begin")(function* (id, input) {
 				const owner = ownerKey(yield* Identity)
 				const stored = yield* repository.get(owner, id)
 				if (stored.revision !== input.revision)
@@ -337,14 +331,13 @@ export const make = (
 				Effect.flatMap(Identity, (identity) =>
 					complete(ownerKey(identity), id),
 				),
-			revoke: (id) =>
-				Effect.gen(function* () {
-					const owner = ownerKey(yield* Identity)
-					return yield* factory
-						.bind(owner, policy)
-						.revokeAuthorization({ owner, connectionId: id })
-						.pipe(Effect.mapError(sdkFailure))
-				}),
+			revoke: Effect.fn("AppAuthorizations.revoke")(function* (id) {
+				const owner = ownerKey(yield* Identity)
+				return yield* factory
+					.bind(owner, policy)
+					.revokeAuthorization({ owner, connectionId: id })
+					.pipe(Effect.mapError(sdkFailure))
+			}),
 			receive: Effect.fn("AppAuthorizations.receive")(function* (input, owner) {
 				const url = yield* Effect.try({
 					try: () => new URL(input, publicOrigin),
@@ -361,7 +354,7 @@ export const make = (
 				const id = url.searchParams.get("state")
 				if (id === null) return yield* authorizationFailure("CallbackMismatch")
 				const record = yield* intents.get(id)
-				if (owner !== undefined && record.owner !== owner)
+				if (Option.exists(owner, (owner) => owner !== record.owner))
 					return yield* ExperienceNotFound.make({ id })
 				if (record.state.status !== "Waiting")
 					return yield* authorizationFailure("AlreadyConsumed")
@@ -400,15 +393,20 @@ export const make = (
 						status: "Received",
 						reason: null,
 					})
-					if (owner !== undefined)
-						yield* complete(owner, id).pipe(
-							Effect.catchTag("AppAuthorizationFailed", () => Effect.void),
-						)
+					// A failed completion is already saved on the flow. The caller reads
+					// that state after the redirect, so the redirect still happens.
+					yield* Option.match(owner, {
+						onNone: () => Effect.void,
+						onSome: (owner) =>
+							complete(owner, id).pipe(
+								Effect.catchTag("AppAuthorizationFailed", () => Effect.void),
+							),
+					})
 				}
 				return {
 					flowId: id,
 					returnTo: record.state.returnTo,
-					requiresLogin: owner === undefined,
+					requiresLogin: Option.isNone(owner),
 				}
 			}),
 		})

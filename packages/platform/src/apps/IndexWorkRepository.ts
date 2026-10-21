@@ -1,6 +1,6 @@
 import { AppIndexApi } from "@openbot-build/platform-api"
 import { Discovery, Index } from "@openbot-build/protocol"
-import { Context, Effect, Schema } from "effect"
+import { Context, Effect, Option, Schema } from "effect"
 
 export const Claim = Schema.Struct({
 	cardUrl: Schema.NonEmptyString,
@@ -28,10 +28,10 @@ export class IndexWorkRepository extends Context.Service<
 		readonly get: (
 			cardUrl: string,
 			generation?: string,
-		) => Effect.Effect<Job | null, Index.IndexError>
+		) => Effect.Effect<Option.Option<Job>, Index.IndexError>
 		readonly claim: (
 			cardUrl?: string,
-		) => Effect.Effect<Claim | null, Index.IndexError>
+		) => Effect.Effect<Option.Option<Claim>, Index.IndexError>
 		readonly finish: (
 			claim: Claim,
 			check: AppIndexApi.Check,

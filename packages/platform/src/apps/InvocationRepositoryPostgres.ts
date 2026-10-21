@@ -7,7 +7,7 @@ import {
 } from "@openbot-build/platform-api"
 import { and, eq, inArray } from "drizzle-orm"
 import { makeWithDefaults } from "drizzle-orm/effect-postgres"
-import { Effect, Layer, Match, Schema } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { appInvocations } from "../database/Schema.ts"
 import { InvocationRepository } from "./InvocationRepository.ts"
 import { Secrets } from "./Secrets.ts"
@@ -18,14 +18,11 @@ const conflict = () =>
 		message:
 			"This App operation changed or was already submitted. Review its recorded result.",
 	})
-const mapError = (error: { readonly _tag: string }) =>
-	Match.value(error).pipe(
-		Match.when({ _tag: "SessionConflict" }, () => conflict()),
-		Match.when({ _tag: "ExperienceNotFound" }, () =>
-			ExperienceNotFound.make({ id: "App operation" }),
-		),
-		Match.orElse(unavailable),
-	)
+/** Keep the errors that callers handle. Every other storage failure becomes one error. */
+const mapError = (error: unknown) =>
+	error instanceof SessionConflict || error instanceof ExperienceNotFound
+		? error
+		: unavailable()
 const codec = Schema.fromJsonString(AppExecution.Invocation)
 export const make: Effect.Effect<
 	typeof InvocationRepository.Service,
@@ -136,12 +133,13 @@ export const make: Effect.Effect<
 							.for("update"))[0]
 						if (row === undefined)
 							return yield* ExperienceNotFound.make({ id: "App operation" })
+						const current = yield* decode(row)
 						if (
-							!expected.includes((yield* decode(row)).status) ||
-							(round !== undefined && (yield* decode(row)).round !== round)
+							!expected.includes(current.status) ||
+							(round !== undefined && current.round !== round)
 						)
 							return yield* conflict()
-						const value = change(yield* decode(row))
+						const value = change(current)
 						const body = yield* encode(owner, value)
 						const changed = yield* tx
 							.update(appInvocations)

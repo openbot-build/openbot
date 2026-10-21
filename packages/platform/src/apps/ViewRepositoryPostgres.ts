@@ -7,7 +7,7 @@ import {
 } from "@openbot-build/platform-api"
 import { and, eq, like } from "drizzle-orm"
 import { makeWithDefaults } from "drizzle-orm/effect-postgres"
-import { Array as Arr, Effect, Layer, Match, Schema } from "effect"
+import { Array as Arr, Effect, Layer, Option, Schema } from "effect"
 import { appSecrets } from "../database/Schema.ts"
 import { Secrets } from "./Secrets.ts"
 import { Action, View, ViewRepository } from "./ViewRepository.ts"
@@ -19,12 +19,11 @@ const conflict = () =>
 			"The App view or confirmed interaction changed. Read its current state before continuing.",
 	})
 const missing = () => ExperienceNotFound.make({ id: "App view" })
-const error = (value: { readonly _tag: string }) =>
-	Match.value(value).pipe(
-		Match.when({ _tag: "ExperienceNotFound" }, missing),
-		Match.when({ _tag: "SessionConflict" }, conflict),
-		Match.orElse(unavailable),
-	)
+/** Keep the errors that callers handle. Every other storage failure becomes one error. */
+const error = (value: unknown) =>
+	value instanceof ExperienceNotFound || value instanceof SessionConflict
+		? value
+		: unavailable()
 const initial: Api.Interaction = { revision: 0, context: null }
 const key = (session: string, operationId: string) =>
 	JSON.stringify([session, operationId])
@@ -75,17 +74,15 @@ export const make: Effect.Effect<
 			.select()
 			.from(appSecrets)
 			.where(where(owner, kind, id))
-			.pipe(Effect.map((rows) => rows[0]))
+			.pipe(Effect.map(Arr.head))
+	const required = <A>(found: Option.Option<A>) =>
+		Effect.fromOption(found).pipe(Effect.mapError(missing))
 	const action = (owner: string, viewId: string, requestId: string) =>
-		Effect.gen(function* () {
-			const row = yield* read(
-				owner,
-				"app-view-action",
-				actionKey(viewId, requestId),
-			)
-			if (row === undefined) return yield* missing()
-			return yield* decode(Action, row)
-		}).pipe(Effect.mapError(error))
+		read(owner, "app-view-action", actionKey(viewId, requestId)).pipe(
+			Effect.flatMap(required),
+			Effect.flatMap((row) => decode(Action, row)),
+			Effect.mapError(error),
+		)
 	return ViewRepository.of({
 		recover: db
 			.update(appSecrets)
@@ -104,11 +101,12 @@ export const make: Effect.Effect<
 				})
 			}).pipe(Effect.mapError(error)),
 		get: (owner, id) =>
-			Effect.gen(function* () {
-				const row = yield* read(owner, "app-view", id)
-				if (row === undefined || row.consumed) return yield* missing()
-				return yield* decode(View, row)
-			}).pipe(Effect.mapError(error)),
+			read(owner, "app-view", id).pipe(
+				Effect.map(Option.filter((row) => !row.consumed)),
+				Effect.flatMap(required),
+				Effect.flatMap((row) => decode(View, row)),
+				Effect.mapError(error),
+			),
 		close: (owner, id) =>
 			db
 				.update(appSecrets)
@@ -123,12 +121,15 @@ export const make: Effect.Effect<
 				),
 		interaction: (owner, session, operationId) =>
 			Effect.gen(function* () {
-				const row = yield* read(
+				const found = yield* read(
 					owner,
 					"app-ui-state",
 					key(session, operationId),
 				)
-				return row === undefined ? initial : yield* decode(Api.Interaction, row)
+				return yield* Option.match(found, {
+					onNone: () => Effect.succeed(initial),
+					onSome: (row) => decode(Api.Interaction, row),
+				})
 			}).pipe(Effect.mapError(error)),
 		confirm: (owner, view, revision, context) =>
 			Effect.gen(function* () {
@@ -250,19 +251,20 @@ export const make: Effect.Effect<
 							like(appSecrets.id, prefix),
 						),
 					)
-				let values: ReadonlyArray<{
-					readonly operationId: string
-					readonly context: Schema.JsonObject
-				}> = []
-				for (const row of rows) {
-					const [boundSession, operationId] = yield* Schema.decodeEffect(
-						Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
-					)(row.id)
-					const state = yield* decode(Api.Interaction, row)
-					if (boundSession === session && state.context !== null)
-						values = Arr.append(values, { operationId, context: state.context })
-				}
-				return values
+				const values = yield* Effect.forEach(rows, (row) =>
+					Effect.gen(function* () {
+						const [boundSession, operationId] = yield* Schema.decodeEffect(
+							Schema.fromJsonString(
+								Schema.Tuple([Schema.String, Schema.String]),
+							),
+						)(row.id)
+						const state = yield* decode(Api.Interaction, row)
+						return boundSession === session && state.context !== null
+							? Option.some({ operationId, context: state.context })
+							: Option.none()
+					}),
+				)
+				return Arr.getSomes(values)
 			}).pipe(Effect.mapError(error)),
 	})
 })

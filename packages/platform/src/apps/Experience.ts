@@ -5,7 +5,7 @@ import {
 	ExperienceStorageUnavailable,
 	Identity,
 } from "@openbot-build/platform-api"
-import { Array as Arr, Context, Effect, Layer, Match } from "effect"
+import { Array as Arr, Context, Effect, Layer } from "effect"
 import { Connections } from "./Connections.ts"
 import { Lifecycle } from "./Lifecycle.ts"
 export const make = Effect.gen(function* () {
@@ -54,29 +54,22 @@ export const make = Effect.gen(function* () {
 					Effect.provideService(Identity, identity),
 					Effect.mapError(() => ExperienceStorageUnavailable.make({})),
 				)
-				let removed: ReadonlyArray<string> = []
-				let pending: Api.Reset["pending"] = []
-				for (const row of rows) {
-					const result = yield* lifecycle
-						.remove(row.id)
-						.pipe(Effect.provideService(Identity, identity), Effect.result)
-					Match.value(result).pipe(
-						Match.tag("Success", () => {
-							removed = Arr.append(removed, row.id)
-						}),
-						Match.tag("Failure", ({ failure }) => {
-							pending = Arr.append(pending, {
-								id: row.id,
-								name: row.name,
-								stage:
-									failure._tag === "ConnectionCleanupPending"
-										? failure.stage
-										: "Connection cleanup",
-							})
-						}),
-						Match.exhaustive,
-					)
-				}
+				const results = yield* Effect.forEach(rows, (row) =>
+					lifecycle.remove(row.id).pipe(
+						Effect.provideService(Identity, identity),
+						Effect.as(row.id),
+						Effect.mapError((failure): Api.Reset["pending"][number] => ({
+							id: row.id,
+							name: row.name,
+							stage:
+								failure._tag === "ConnectionCleanupPending"
+									? failure.stage
+									: "Connection cleanup",
+						})),
+						Effect.result,
+					),
+				)
+				const [removed, pending] = Arr.separate(results)
 				yield* repository.clearDrafts(ownerKey(identity))
 				return { removed, pending }
 			}),
