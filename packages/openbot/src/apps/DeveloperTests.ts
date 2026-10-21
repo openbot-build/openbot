@@ -15,7 +15,13 @@ import {
 	Scope,
 } from "effect"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
-import { DeveloperRepository, type TestRecord } from "./DeveloperRepository.ts"
+import { PgClient } from "@effect/sql-pg"
+import { and, asc, eq, isNotNull, lte, ne, or } from "drizzle-orm"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { developerTestFlows, developerTests } from "../database/Schema.ts"
+import * as Rows from "./DeveloperRows.ts"
+import type { TestRecord } from "./DeveloperRows.ts"
+import { IndexNamespace } from "./IndexNamespace.ts"
 import { DeveloperTestStores } from "./DeveloperTestStores.ts"
 import { DeveloperTestRuntime } from "./DeveloperTestRuntime.ts"
 import { Secrets } from "../secrets/Secrets.ts"
@@ -105,7 +111,7 @@ export const make = (
 ): Effect.Effect<
 	typeof DeveloperTests.Service,
 	DeveloperFailure,
-	| DeveloperRepository
+	| PgClient.PgClient
 	| DeveloperAccess
 	| DeveloperTestStores
 	| DeveloperTestRuntime
@@ -115,7 +121,32 @@ export const make = (
 	| Scope.Scope
 > =>
 	Effect.gen(function* () {
-		const records = yield* DeveloperRepository
+		const db = yield* makeWithDefaults()
+		const inTransaction = Rows.transaction(yield* PgClient.PgClient)
+		const namespace = yield* IndexNamespace
+		/**
+		 * Run the change in one transaction while the row of the test is locked.
+		 * A test that does not exist yet has no row to lock.
+		 */
+		const testTransaction = <A, E, R>(
+			id: string,
+			effect: Effect.Effect<A, E, R>,
+		) =>
+			inTransaction(
+				Rows.findTest(db, namespace, id, true).pipe(Effect.andThen(effect)),
+			)
+		/** The tests whose cleanup is not done. */
+		const openTests = Rows.stored(
+			db
+				.select()
+				.from(developerTests)
+				.where(
+					and(
+						eq(developerTests.namespace, namespace),
+						ne(developerTests.cleanup, "Complete"),
+					),
+				),
+		).pipe(Effect.flatMap((rows) => Effect.forEach(rows, Rows.decodeTest)))
 		const access = yield* DeveloperAccess
 		const stores = yield* DeveloperTestStores
 		const runtime = yield* DeveloperTestRuntime
@@ -127,17 +158,11 @@ export const make = (
 			owner: string,
 			id: string,
 		) {
-			const record = yield* records.tests.get(id)
+			const record = yield* Rows.getTest(db, namespace, id)
 			if (record.owner !== owner) return yield* Api.DeveloperNotFound.make({})
 			return record
 		})
-		const put = (record: TestRecord) =>
-			records.tests.put(
-				record.value.id,
-				record.owner,
-				record.value.cardUrl,
-				record,
-			)
+		const put = (record: TestRecord) => Rows.putTest(db, namespace, record)
 		const editable = Effect.fn("DeveloperTests.editable")(function* (
 			owner: string,
 			id: string,
@@ -198,8 +223,8 @@ export const make = (
 			id: string,
 			values: Readonly<Record<string, string>>,
 		) =>
-			records.transaction(
-				"test:" + id,
+			testTransaction(
+				id,
 				Effect.gen(function* () {
 					const record = yield* editable(owner, id)
 					if (working(record.value)) return yield* conflict("TestBusy")
@@ -282,14 +307,14 @@ export const make = (
 			owner: string,
 			id: string,
 		) {
-			const claimed = yield* records.transaction(
-				"test:" + id,
+			const claimed = yield* testTransaction(
+				id,
 				Effect.gen(function* () {
 					const record = yield* owned(owner, id)
 					const now = yield* Clock.currentTimeMillis
 					if (
 						record.value.cleanup === "Complete" ||
-						(record.cleanupLeaseUntil ?? 0) > now
+						record.cleanupLeaseUntil > now
 					)
 						return { record, claimed: false }
 					const token = yield* Effect.sync(randomUUID)
@@ -320,8 +345,8 @@ export const make = (
 				const current = yield* owned(owner, id)
 				if (!remoteCleanupDone.includes(current.value.cleanupRemote)) {
 					const remote = yield* runtime.revoke(owner, id)
-					yield* records.transaction(
-						"test:" + id,
+					yield* testTransaction(
+						id,
 						Effect.gen(function* () {
 							const latest = yield* owned(owner, id)
 							if (latest.cleanupToken !== token)
@@ -343,8 +368,8 @@ export const make = (
 				}
 				yield* runtime.clear(owner, id)
 			}).pipe(Effect.result)
-			return yield* records.transaction(
-				"test:" + id,
+			return yield* testTransaction(
+				id,
 				Effect.gen(function* () {
 					const current = yield* owned(owner, id)
 					if (current.cleanupToken !== token) return current.value
@@ -373,7 +398,7 @@ export const make = (
 				}),
 			)
 		})
-		for (const record of yield* records.tests.list()) {
+		for (const record of yield* openTests) {
 			if (working(record.value))
 				yield* put({
 					...record,
@@ -390,29 +415,41 @@ export const make = (
 		}
 		const sweep = Effect.gen(function* () {
 			const now = yield* Clock.currentTimeMillis
-			for (const flow of yield* records.flows.list()) {
-				if (
-					flow.value.expiresAt > now ||
-					(flow.body === "" && flow.callback === null)
-				)
-					continue
-				yield* records.transaction(
-					"flow:" + flow.value.flowId,
+			const expired = yield* Rows.stored(
+				db
+					.select()
+					.from(developerTestFlows)
+					.where(
+						and(
+							eq(developerTestFlows.namespace, namespace),
+							lte(developerTestFlows.expiresAt, now),
+							or(
+								isNotNull(developerTestFlows.body),
+								isNotNull(developerTestFlows.callback),
+							),
+						),
+					)
+					.orderBy(asc(developerTestFlows.expiresAt)),
+			)
+			for (const flow of expired) {
+				yield* testTransaction(
+					flow.testId,
 					Effect.gen(function* () {
-						const current = yield* records.flows.get(flow.value.flowId)
+						const current = yield* Rows.getFlow(db, namespace, flow.flowId)
 						const value: Api.TestAuthorization = [
 							"Waiting",
 							"Received",
 						].includes(current.value.status)
 							? { ...current.value, status: "Expired" }
 							: current.value
-						yield* records.flows.put(
-							value.flowId,
-							current.owner,
-							current.testId,
-							{ ...current, consumed: true, body: "", callback: null, value },
-						)
-						const test = yield* records.tests.find(current.testId)
+						yield* Rows.putFlow(db, namespace, {
+							...current,
+							consumed: true,
+							body: null,
+							callback: null,
+							value,
+						})
+						const test = yield* Rows.findTest(db, namespace, current.testId)
 						if (
 							Option.isSome(test) &&
 							test.value.value.authorization?.flowId === value.flowId
@@ -425,8 +462,7 @@ export const make = (
 				)
 			}
 
-			for (const record of yield* records.tests.list()) {
-				if (record.value.cleanup === "Complete") continue
+			for (const record of yield* openTests) {
 				const allowed = yield* access.allows(
 					record.owner,
 					record.value.cardUrl,
@@ -447,12 +483,24 @@ export const make = (
 			cancel: cleanup,
 			sweep,
 			list: (owner) =>
-				records.tests
-					.list({ owner })
-					.pipe(Effect.flatMap((values) => Effect.forEach(values, view))),
+				Rows.stored(
+					db
+						.select()
+						.from(developerTests)
+						.where(
+							and(
+								eq(developerTests.namespace, namespace),
+								eq(developerTests.owner, owner),
+							),
+						)
+						.orderBy(developerTests.id),
+				).pipe(
+					Effect.flatMap((rows) => Effect.forEach(rows, Rows.decodeTest)),
+					Effect.flatMap((values) => Effect.forEach(values, view)),
+				),
 			create: Effect.fn("DeveloperTests.create")(function* (owner, input) {
 				yield* access.authorize(owner, input.cardUrl, true)
-				const current = yield* records.tests.find(input.id)
+				const current = yield* Rows.findTest(db, namespace, input.id)
 				if (Option.isSome(current))
 					return yield* same(current.value, owner, input)
 				const candidate = yield* discovery
@@ -466,10 +514,10 @@ export const make = (
 					return yield* Api.DeveloperInputInvalid.make({
 						message: "Select a declared endpoint.",
 					})
-				return yield* records.transaction(
-					"test:" + input.id,
+				return yield* testTransaction(
+					input.id,
 					Effect.gen(function* () {
-						const previous = yield* records.tests.find(input.id)
+						const previous = yield* Rows.findTest(db, namespace, input.id)
 						if (Option.isSome(previous))
 							return yield* same(previous.value, owner, input)
 						yield* access.authorize(owner, input.cardUrl, true)
@@ -494,7 +542,13 @@ export const make = (
 							stages: [],
 							reason: null,
 						}
-						yield* put({ owner, value })
+						yield* put({
+							owner,
+							value,
+							resourceMetadataUrl: null,
+							cleanupToken: null,
+							cleanupLeaseUntil: 0,
+						})
 						return yield* configure(owner, input.id, {}).pipe(
 							Effect.catchTag("DeveloperInputInvalid", () =>
 								Effect.succeed(value),
@@ -504,8 +558,8 @@ export const make = (
 				)
 			}),
 			run: Effect.fn("DeveloperTests.run")(function* (owner, id) {
-				const record = yield* records.transaction(
-					"test:" + id,
+				const record = yield* testTransaction(
+					id,
 					Effect.gen(function* () {
 						const previous = yield* editable(owner, id)
 						if (working(previous.value)) return previous
@@ -543,8 +597,8 @@ export const make = (
 					id,
 					runtime.execute(owner, id).pipe(
 						Effect.flatMap((result) =>
-							records.transaction(
-								"test:" + id,
+							testTransaction(
+								id,
 								Effect.gen(function* () {
 									const current = yield* owned(owner, id)
 									if (current.value.status !== "Running") return
@@ -607,32 +661,30 @@ export const make = (
 							),
 						),
 						Effect.onInterrupt(() =>
-							records
-								.transaction(
-									"test:" + id,
-									Effect.gen(function* () {
-										const current = yield* owned(owner, id)
-										if (current.value.status === "Running")
-											yield* put({
-												...current,
-												value: {
-													...current.value,
-													status: "Interrupted",
-													reason: "ExecutionInterrupted",
-												},
-											})
-									}),
-								)
-								.pipe(
-									// The run stops here, so a failure has no caller to reach.
-									// The next restart marks a stuck test as interrupted.
-									Effect.catch((error) =>
-										Effect.logWarning(
-											"Could not mark an interrupted developer test.",
-											error,
-										),
+							testTransaction(
+								id,
+								Effect.gen(function* () {
+									const current = yield* owned(owner, id)
+									if (current.value.status === "Running")
+										yield* put({
+											...current,
+											value: {
+												...current.value,
+												status: "Interrupted",
+												reason: "ExecutionInterrupted",
+											},
+										})
+								}),
+							).pipe(
+								// The run stops here, so a failure has no caller to reach.
+								// The next restart marks a stuck test as interrupted.
+								Effect.catch((error) =>
+									Effect.logWarning(
+										"Could not mark an interrupted developer test.",
+										error,
 									),
 								),
+							),
 						),
 					),
 					{ onlyIfMissing: true },
@@ -643,11 +695,21 @@ export const make = (
 				const value = yield* cleanup(owner, id)
 				if (value.cleanup !== "Complete")
 					return yield* conflict("TestCleanupPending")
-				yield* records.tests.remove(id)
+				// The flows of the test go with it.
+				yield* Rows.stored(
+					db
+						.delete(developerTests)
+						.where(
+							and(
+								eq(developerTests.namespace, namespace),
+								eq(developerTests.id, id),
+							),
+						),
+				)
 			}),
 			authorize: (owner, id, input) =>
-				records.transaction(
-					"test:" + id,
+				testTransaction(
+					id,
 					Effect.gen(function* () {
 						const record = yield* editable(owner, id)
 						if (working(record.value)) return yield* conflict("TestBusy")
@@ -667,13 +729,15 @@ export const make = (
 					}),
 				),
 			complete: Effect.fn("DeveloperTests.complete")(function* (owner, id) {
-				const record = yield* records.transaction(
-					"test:" + id,
+				const record = yield* testTransaction(
+					id,
 					Effect.gen(function* () {
 						const record = yield* editable(owner, id)
 						if (record.value.authorization?.status !== "Received")
 							return yield* conflict("AuthorizationNotReceived")
-						const flow = yield* records.flows.get(
+						const flow = yield* Rows.getFlow(
+							db,
+							namespace,
 							record.value.authorization.flowId,
 						)
 						const sealed = flow.callback
@@ -734,11 +798,11 @@ export const make = (
 					...record.flow.value,
 					status: outcome.authorization,
 				}
-				yield* records.flows.put(authorization.flowId, owner, id, {
+				yield* Rows.putFlow(db, namespace, {
 					...record.flow,
 					consumed: true,
 					callback: null,
-					body: "",
+					body: null,
 					value: authorization,
 				})
 				if (current.value.status === "Cancelled") return current.value
@@ -768,10 +832,11 @@ export const make = (
 					return yield* conflict("CallbackMismatch")
 				const id = url.searchParams.get("state")
 				if (id === null) return yield* conflict("CallbackMismatch")
-				return yield* records.transaction(
-					"flow:" + id,
+				const found = yield* Rows.getFlow(db, namespace, id)
+				return yield* testTransaction(
+					found.testId,
 					Effect.gen(function* () {
-						const flow = yield* records.flows.get(id)
+						const flow = yield* Rows.getFlow(db, namespace, id)
 						if (Option.exists(owners, (owners) => !owners.includes(flow.owner)))
 							return yield* Api.DeveloperNotFound.make({})
 						const test = yield* owned(flow.owner, flow.testId)
@@ -828,7 +893,7 @@ export const make = (
 										)
 								: null
 						const value: Api.TestAuthorization = { ...flow.value, status }
-						yield* records.flows.put(id, flow.owner, flow.testId, {
+						yield* Rows.putFlow(db, namespace, {
 							...flow,
 							value,
 							callback,

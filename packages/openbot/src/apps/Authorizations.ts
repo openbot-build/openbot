@@ -23,9 +23,18 @@ import {
 	Schema,
 } from "effect"
 import { AppHost } from "./AppHost.ts"
-import { AuthorizationRepository } from "./AuthorizationRepository.ts"
+import type { PgClient } from "@effect/sql-pg"
+import { and, eq } from "drizzle-orm"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import {
+	appAuthorizations,
+	appConnections,
+	appSecrets,
+} from "../database/Schema.ts"
+import { Secrets } from "../secrets/Secrets.ts"
 import { ProtocolStores } from "./ProtocolStores.ts"
-import { Repository, ownerKey } from "./Repository.ts"
+import * as StoredConnections from "./StoredConnections.ts"
+import { ownerKey } from "./StoredConnections.ts"
 import { Governance } from "./Governance.ts"
 import * as ClientMetadata from "./ClientMetadata.ts"
 import { ConnectionLocks } from "./ConnectionLocks.ts"
@@ -142,32 +151,251 @@ const policy = Client.InvocationPolicy.of({
 		),
 })
 
+/** An authorization flow as it is kept in the database. */
+const FlowRecord = Schema.Struct({
+	state: Api.State,
+	owner: Schema.NonEmptyString,
+	revision: Schema.Natural,
+	callback: Schema.NullOr(Schema.String),
+})
+const unavailable = () => ExperienceStorageUnavailable.make({})
+const revisionChanged = () =>
+	ConnectionsApi.ConnectionConflict.make({
+		reason: "RevisionChanged",
+		message: "This connection changed. Review it before authorizing.",
+	})
+const consumed = () =>
+	Api.AppAuthorizationFailed.make({
+		reason: "AlreadyConsumed",
+		message:
+			"This authorization has already been handled. Open My Apps to view the current connection.",
+	})
+/** Keep the errors that callers handle. Every other storage failure becomes one error. */
+const storageFailure = (error: unknown) =>
+	error instanceof ExperienceNotFound ||
+	error instanceof ConnectionsApi.ConnectionConflict ||
+	error instanceof Api.AppAuthorizationFailed
+		? error
+		: unavailable()
+const flowCodec = Schema.fromJsonString(Schema.toCodecJson(Authorization.Flow))
+
 export const make = (
 	publicOrigin: string,
 ): Effect.Effect<
 	typeof Authorizations.Service,
 	ExperienceStorageUnavailable | Authorization.AuthorizationError,
 	| AppHost
-	| AuthorizationRepository
+	| PgClient.PgClient
+	| Secrets
 	| ProtocolStores
-	| Repository
 	| Governance
 	| ConnectionLocks
 > =>
 	Effect.gen(function* () {
 		const factory = yield* AppHost
-		const intents = yield* AuthorizationRepository
 		const protocols = yield* ProtocolStores
-		const repository = yield* Repository
 		const governance = yield* Governance
 		const locks = yield* ConnectionLocks
 		const metadata = yield* ClientMetadata.metadata(publicOrigin)
-		yield* intents.recover
+		const db = yield* makeWithDefaults()
+		const secrets = yield* Secrets
+		const callbackBinding = (owner: string, id: string) =>
+			JSON.stringify(["app-authorization", owner, id])
+		const decodeFlow = Effect.fn("AppAuthorizations.decode")(function* (
+			row: typeof appAuthorizations.$inferSelect,
+		) {
+			const scopes = yield* Schema.decodeEffect(
+				Schema.fromJsonString(Schema.Array(Schema.String)),
+			)(row.scopes)
+			const callback =
+				row.callback === null
+					? null
+					: yield* secrets.open(
+							row.callback,
+							callbackBinding(row.owner, row.id),
+						)
+			return yield* Schema.decodeUnknownEffect(FlowRecord)({
+				owner: row.owner,
+				revision: row.revision,
+				callback,
+				state: {
+					flowId: row.id,
+					connectionId: row.connectionId,
+					returnTo: row.returnTo,
+					expiresAt: row.expiresAt,
+					status: row.status,
+					reason: row.reason,
+					issuer: row.issuer,
+					resource: row.resource,
+					scopes,
+				},
+			})
+		})
+		const getFlow = Effect.fn("AppAuthorizations.get")(function* (id: string) {
+			const row = (yield* db
+				.select()
+				.from(appAuthorizations)
+				.where(eq(appAuthorizations.id, id))
+				.pipe(Effect.mapError(unavailable)))[0]
+			if (row === undefined) return yield* ExperienceNotFound.make({ id })
+			return yield* decodeFlow(row).pipe(Effect.mapError(unavailable))
+		})
+		const beginFlow = (
+			flow: Authorization.Flow,
+			input: {
+				readonly revision: number
+				readonly returnTo: string
+				readonly resource: string
+			},
+		) =>
+			db
+				.transaction((tx) =>
+					Effect.gen(function* () {
+						const connection = (yield* tx
+							.select({ revision: appConnections.revision })
+							.from(appConnections)
+							.where(
+								StoredConnections.connectionWhere(
+									flow.binding.owner,
+									flow.binding.connectionId,
+								),
+							)
+							.for("update"))[0]
+						if (connection === undefined)
+							return yield* ExperienceNotFound.make({
+								id: flow.binding.connectionId,
+							})
+						if (connection.revision !== input.revision)
+							return yield* revisionChanged()
+						const encoded = yield* Schema.encodeEffect(flowCodec)(flow)
+						const body = yield* secrets.seal(
+							encoded,
+							JSON.stringify(["flow", flow.binding.owner, flow.flowId]),
+						)
+						yield* tx.insert(appSecrets).values({
+							owner: flow.binding.owner,
+							kind: "flow",
+							id: flow.flowId,
+							connectionId: flow.binding.connectionId,
+							body,
+						})
+						yield* tx.insert(appAuthorizations).values({
+							id: flow.flowId,
+							owner: flow.binding.owner,
+							connectionId: flow.binding.connectionId,
+							revision: input.revision,
+							expiresAt: flow.expiresAt,
+							returnTo: input.returnTo,
+							status: "Waiting",
+							issuer: flow.binding.issuer,
+							resource: input.resource,
+							scopes: JSON.stringify(flow.scopes),
+						})
+					}),
+				)
+				.pipe(Effect.mapError(storageFailure))
+		const receiveFlow = Effect.fn("AppAuthorizations.receive")(function* (
+			id: string,
+			input: {
+				readonly callback: string | null
+				readonly status: "Received" | "Cancelled" | "Failed"
+				readonly reason: string | null
+			},
+		) {
+			const record = yield* getFlow(id)
+			const callback =
+				input.callback === null
+					? null
+					: yield* secrets
+							.seal(input.callback, callbackBinding(record.owner, id))
+							.pipe(Effect.mapError(unavailable))
+			const rows = yield* db
+				.update(appAuthorizations)
+				.set({ ...input, callback })
+				.where(
+					and(
+						eq(appAuthorizations.id, id),
+						eq(appAuthorizations.status, "Waiting"),
+					),
+				)
+				.returning({ id: appAuthorizations.id })
+				.pipe(Effect.mapError(unavailable))
+			if (rows.length === 0) return yield* consumed()
+		})
+		const claimFlow = (owner: string, id: string) =>
+			db
+				.transaction((tx) =>
+					Effect.gen(function* () {
+						const row = (yield* tx
+							.select()
+							.from(appAuthorizations)
+							.where(
+								and(
+									eq(appAuthorizations.id, id),
+									eq(appAuthorizations.owner, owner),
+								),
+							)
+							.for("update"))[0]
+						if (row === undefined) return yield* ExperienceNotFound.make({ id })
+						if (row.status !== "Received") return yield* consumed()
+						if (row.expiresAt <= (yield* Clock.currentTimeMillis))
+							return yield* Api.AppAuthorizationFailed.make({
+								reason: "FlowExpired",
+								message:
+									"This authorization expired. Start a new authorization from My Apps.",
+							})
+						const connection = (yield* tx
+							.select({ revision: appConnections.revision })
+							.from(appConnections)
+							.where(StoredConnections.connectionWhere(owner, row.connectionId))
+							.for("update"))[0]
+						if (
+							connection === undefined ||
+							connection.revision !== row.revision
+						)
+							return yield* revisionChanged()
+						yield* tx
+							.update(appAuthorizations)
+							.set({ status: "Processing" })
+							.where(eq(appAuthorizations.id, id))
+						return yield* decodeFlow({ ...row, status: "Processing" })
+					}),
+				)
+				.pipe(Effect.mapError(storageFailure))
+		const finishFlow = (
+			owner: string,
+			id: string,
+			status: "Succeeded" | "Failed",
+			reason: string | null,
+		) =>
+			db
+				.update(appAuthorizations)
+				.set({ status, reason, callback: null })
+				.where(
+					and(
+						eq(appAuthorizations.owner, owner),
+						eq(appAuthorizations.id, id),
+						eq(appAuthorizations.status, "Processing"),
+					),
+				)
+				.returning({ id: appAuthorizations.id })
+				.pipe(
+					Effect.mapError(unavailable),
+					Effect.flatMap((rows) =>
+						rows.length === 1 ? Effect.void : Effect.fail(consumed()),
+					),
+				)
+		// A flow that was processing when the host stopped can never finish.
+		yield* db
+			.update(appAuthorizations)
+			.set({ status: "Failed", reason: "Interrupted", callback: null })
+			.where(eq(appAuthorizations.status, "Processing"))
+			.pipe(Effect.mapError(unavailable))
 		const owned = Effect.fn("AppAuthorizations.owned")(function* (
 			owner: string,
 			id: string,
 		) {
-			const record = yield* intents.get(id)
+			const record = yield* getFlow(id)
 			if (record.owner !== owner) return yield* ExperienceNotFound.make({ id })
 			return record
 		})
@@ -188,12 +416,14 @@ export const make = (
 			id: string,
 		) {
 			const pending = yield* owned(owner, id)
-			const connection = yield* repository.get(
+			const connection = yield* StoredConnections.get(
+				db,
+				secrets,
 				owner,
 				pending.state.connectionId,
 			)
 			yield* governance.check(connection.connection.cardUrl)
-			const record = yield* intents.claim(owner, id)
+			const record = yield* claimFlow(owner, id)
 			if (record.callback === null)
 				return yield* authorizationFailure("CallbackMismatch")
 			const result = yield* factory
@@ -205,20 +435,16 @@ export const make = (
 				})
 				.pipe(Effect.mapError(sdkFailure), Effect.result)
 			yield* Match.value(result).pipe(
-				Match.tag("Success", () =>
-					intents.finish(owner, id, "Succeeded", null),
-				),
+				Match.tag("Success", () => finishFlow(owner, id, "Succeeded", null)),
 				Match.tag("Failure", ({ failure }) =>
-					intents
-						.finish(
-							owner,
-							id,
-							"Failed",
-							failure._tag === "AppAuthorizationFailed"
-								? failure.reason
-								: "Unavailable",
-						)
-						.pipe(Effect.andThen(Effect.fail(failure))),
+					finishFlow(
+						owner,
+						id,
+						"Failed",
+						failure._tag === "AppAuthorizationFailed"
+							? failure.reason
+							: "Unavailable",
+					).pipe(Effect.andThen(Effect.fail(failure))),
 				),
 				Match.exhaustive,
 			)
@@ -238,7 +464,7 @@ export const make = (
 			metadata,
 			begin: Effect.fn("AppAuthorizations.begin")(function* (id, input) {
 				const owner = ownerKey(yield* Identity)
-				const stored = yield* repository.get(owner, id)
+				const stored = yield* StoredConnections.get(db, secrets, owner, id)
 				if (stored.revision !== input.revision)
 					return yield* ConnectionsApi.ConnectionConflict.make({
 						reason: "RevisionChanged",
@@ -272,7 +498,8 @@ export const make = (
 							const issuer = input.issuer ?? issuers[0]
 							if (!issuers.includes(issuer))
 								return yield* authorizationFailure("Metadata")
-							const record = yield* repository.getApp(
+							const record = yield* StoredConnections.getApp(
+								db,
 								owner,
 								stored.connection.cardUrl,
 							)
@@ -282,27 +509,25 @@ export const make = (
 							const flowStore: typeof Authorization.FlowStore.Service = {
 								...defaults,
 								save: (flow) =>
-									intents
-										.begin(flow, {
-											revision: stored.revision,
-											returnTo: input.returnTo ?? "/",
-											resource,
-										})
-										.pipe(
-											Effect.mapError(
-												(error) =>
-													new Store.StoreError({
-														reason:
-															error._tag === "ConnectionConflict"
-																? "Invalid"
-																: "Unavailable",
-														operation:
-															error._tag === "ConnectionConflict"
-																? "AuthorizationRevisionChanged"
-																: "Save App authorization",
-													}),
-											),
+									beginFlow(flow, {
+										revision: stored.revision,
+										returnTo: input.returnTo ?? "/",
+										resource,
+									}).pipe(
+										Effect.mapError(
+											(error) =>
+												new Store.StoreError({
+													reason:
+														error._tag === "ConnectionConflict"
+															? "Invalid"
+															: "Unavailable",
+													operation:
+														error._tag === "ConnectionConflict"
+															? "AuthorizationRevisionChanged"
+															: "Save App authorization",
+												}),
 										),
+									),
 							}
 							const pending = yield* factory
 								.bind(owner, policy, flowStore)
@@ -359,7 +584,7 @@ export const make = (
 					const id = url.searchParams.get("state")
 					if (id === null)
 						return yield* authorizationFailure("CallbackMismatch")
-					const record = yield* intents.get(id)
+					const record = yield* getFlow(id)
 					if (Option.exists(owners, (owners) => !owners.includes(record.owner)))
 						return yield* ExperienceNotFound.make({ id })
 					if (record.state.status !== "Waiting")
@@ -386,7 +611,7 @@ export const make = (
 						return yield* authorizationFailure("CallbackMismatch")
 					const error = url.searchParams.get("error")
 					if (error !== null)
-						yield* intents.receive(id, {
+						yield* receiveFlow(id, {
 							callback: null,
 							status: error === "access_denied" ? "Cancelled" : "Failed",
 							reason: error === "access_denied" ? null : "GrantRejected",
@@ -394,7 +619,7 @@ export const make = (
 					else {
 						if (url.searchParams.get("code") === null)
 							return yield* authorizationFailure("CallbackMismatch")
-						yield* intents.receive(id, {
+						yield* receiveFlow(id, {
 							callback: url.href,
 							status: "Received",
 							reason: null,

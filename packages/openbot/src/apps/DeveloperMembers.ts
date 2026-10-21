@@ -1,12 +1,18 @@
 import { randomBytes, randomUUID } from "node:crypto"
 import { DeveloperApi as Api } from "@openbot-build/api"
-import { Clock, Context, Effect, Layer } from "effect"
+import { PgClient } from "@effect/sql-pg"
+import { and, eq } from "drizzle-orm"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { Clock, Context, Effect, Layer, Schema } from "effect"
 import {
-	DeveloperRepository,
-	type InvitationRecord,
-} from "./DeveloperRepository.ts"
+	developerInvitations,
+	developerMembers,
+	developerProofs,
+} from "../database/Schema.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
-import { ownerKey } from "./Repository.ts"
+import * as Rows from "./DeveloperRows.ts"
+import { IndexNamespace } from "./IndexNamespace.ts"
+import { ownerKey } from "./StoredConnections.ts"
 
 export class DeveloperMembers extends Context.Service<
 	DeveloperMembers,
@@ -47,12 +53,24 @@ export class DeveloperMembers extends Context.Service<
 	}
 >()("@openbot-build/openbot/apps/DeveloperMembers") {}
 
+const InvitationRow = Schema.Struct({
+	...Api.Invitation.fields,
+	scope: Rows.Json(Api.ManagementScope),
+})
+const MemberRow = Schema.Struct({
+	id: Schema.String,
+	proofId: Schema.String,
+	role: Api.MemberRole,
+})
+
 export const make: Effect.Effect<
 	typeof DeveloperMembers.Service,
 	never,
-	DeveloperRepository | DeveloperAccess
+	PgClient.PgClient | DeveloperAccess
 > = Effect.gen(function* () {
-	const records = yield* DeveloperRepository
+	const db = yield* makeWithDefaults()
+	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
+	const namespace = yield* IndexNamespace
 	const access = yield* DeveloperAccess
 	const conflict = (reason: string) => Api.DeveloperConflict.make({ reason })
 	const admin = Effect.fn("DeveloperMembers.admin")(function* (
@@ -68,9 +86,74 @@ export const make: Effect.Effect<
 			return yield* Api.DeveloperForbidden.make({})
 		return proof
 	})
+	const invitationWhere = (id: string) =>
+		and(
+			eq(developerInvitations.namespace, namespace),
+			eq(developerInvitations.id, id),
+		)
+	/** Read an invitation with the scope of its proof. With `lock`, keep the row locked. */
+	const readInvitation = Effect.fn("DeveloperMembers.readInvitation")(
+		function* (id: string, lock = false) {
+			const query = db
+				.select({
+					invitation: developerInvitations,
+					scope: developerProofs.scope,
+				})
+				.from(developerInvitations)
+				.innerJoin(
+					developerProofs,
+					and(
+						eq(developerProofs.namespace, developerInvitations.namespace),
+						eq(developerProofs.id, developerInvitations.proofId),
+					),
+				)
+				.where(invitationWhere(id))
+			const row = (yield* Rows.stored(
+				lock ? query.for("update", { of: developerInvitations }) : query,
+			))[0]
+			if (row === undefined) return yield* Api.DeveloperNotFound.make({})
+			const value = yield* Schema.decodeUnknownEffect(InvitationRow)({
+				...row.invitation,
+				scope: row.scope,
+			}).pipe(Effect.mapError(Rows.unavailable))
+			return { owner: row.invitation.owner, value }
+		},
+	)
+	const setInvitation = (
+		id: string,
+		change: {
+			readonly status: Api.Invitation["status"]
+			readonly acceptedBy?: string
+		},
+	) =>
+		Rows.stored(
+			db.update(developerInvitations).set(change).where(invitationWhere(id)),
+		)
+	const memberWhere = (id: string) =>
+		and(eq(developerMembers.namespace, namespace), eq(developerMembers.id, id))
+	const toMember = (row: typeof developerMembers.$inferSelect) =>
+		Effect.gen(function* () {
+			const member = yield* Schema.decodeUnknownEffect(MemberRow)(row).pipe(
+				Effect.mapError(Rows.unavailable),
+			)
+			return {
+				...member,
+				identity: yield* Rows.identityOf(row.owner),
+			} satisfies Api.Member
+		})
+	/** Read a member and lock its row until the transaction ends. */
+	const lockMember = Effect.fn("DeveloperMembers.lockMember")(function* (
+		id: string,
+	) {
+		const row = (yield* Rows.stored(
+			db.select().from(developerMembers).where(memberWhere(id)).for("update"),
+		))[0]
+		if (row === undefined) return yield* Api.DeveloperNotFound.make({})
+		return { owner: row.owner, value: yield* toMember(row) }
+	})
 	const activeInvitation = Effect.fn("DeveloperMembers.activeInvitation")(
-		function* (id: string) {
-			const record = yield* records.invitations.get(id)
+		function* (id: string, lock = false) {
+			const record = yield* readInvitation(id, lock)
 			if (record.value.status !== "Pending")
 				return yield* conflict("InvitationInactive")
 			if (record.value.expiresAt <= (yield* Clock.currentTimeMillis))
@@ -88,137 +171,139 @@ export const make: Effect.Effect<
 	)
 	return DeveloperMembers.of({
 		list: Effect.fn("DeveloperMembers.list")(function* (owner, proofId) {
-			yield* admin(owner, proofId)
+			const proof = yield* admin(owner, proofId)
+			const members = yield* Rows.stored(
+				db
+					.select()
+					.from(developerMembers)
+					.where(
+						and(
+							eq(developerMembers.namespace, namespace),
+							eq(developerMembers.proofId, proofId),
+						),
+					)
+					.orderBy(developerMembers.id),
+			)
+			const invitations = yield* Rows.stored(
+				db
+					.select()
+					.from(developerInvitations)
+					.where(
+						and(
+							eq(developerInvitations.namespace, namespace),
+							eq(developerInvitations.proofId, proofId),
+						),
+					)
+					.orderBy(developerInvitations.id),
+			)
 			return {
-				members: (yield* records.members.list({ scope: proofId })).map(
-					(record) => record.value,
+				members: yield* Effect.forEach(members, toMember),
+				invitations: yield* Effect.forEach(invitations, (row) =>
+					Schema.decodeUnknownEffect(Api.Invitation)({
+						...row,
+						scope: proof.value.scope,
+					}).pipe(Effect.mapError(Rows.unavailable)),
 				),
-				invitations: (yield* records.invitations.list({
-					scope: proofId,
-				})).map((record) => record.value),
 			}
 		}),
-		invite: (owner, proofId, role) =>
-			records.transaction(
-				"proof:" + proofId,
-				Effect.gen(function* () {
-					const proof = yield* admin(owner, proofId)
-					const value: Api.Invitation = {
-						id: yield* Effect.sync(() => randomBytes(32).toString("base64url")),
+		invite: Effect.fn("DeveloperMembers.invite")(
+			function* (owner, proofId, role) {
+				const proof = yield* admin(owner, proofId)
+				const value: Api.Invitation = {
+					id: yield* Effect.sync(() => randomBytes(32).toString("base64url")),
+					proofId,
+					scope: proof.value.scope,
+					role,
+					expiresAt: (yield* Clock.currentTimeMillis) + 7 * 86400000,
+					status: "Pending",
+				}
+				yield* Rows.stored(
+					db.insert(developerInvitations).values({
+						namespace,
+						id: value.id,
 						proofId,
-						scope: proof.value.scope,
-						role,
-						expiresAt: (yield* Clock.currentTimeMillis) + 7 * 86400000,
-						status: "Pending",
-					}
-					yield* records.invitations.put(value.id, owner, proofId, {
 						owner,
-						acceptedBy: null,
-						value,
-					})
-					return value
-				}),
-			),
+						role,
+						expiresAt: value.expiresAt,
+						status: value.status,
+					}),
+				)
+				return value
+			},
+		),
 		preview: (id) => Effect.map(activeInvitation(id), (record) => record.value),
 		accept: (identity, id) =>
-			records.transaction(
-				"invitation:" + id,
+			inTransaction(
 				Effect.gen(function* () {
-					const record = yield* activeInvitation(id)
+					const record = yield* activeInvitation(id, true)
 					const owner = ownerKey(identity)
-					return yield* records.transaction(
-						"membership:" + JSON.stringify([record.value.proofId, owner]),
-						Effect.gen(function* () {
-							if (
-								(yield* records.members.list({
-									owner,
-									scope: record.value.proofId,
-								})).length > 0
-							)
-								return yield* conflict("AlreadyMember")
-							const member: Api.Member = {
-								id: yield* Effect.sync(randomUUID),
-								proofId: record.value.proofId,
-								identity,
-								role: record.value.role,
-							}
-							const accepted: InvitationRecord = {
-								...record,
-								acceptedBy: owner,
-								value: { ...record.value, status: "Accepted" },
-							}
-							yield* records.members.put(member.id, owner, member.proofId, {
-								owner,
-								value: member,
-							})
-							yield* records.invitations.put(
-								id,
-								record.owner,
-								record.value.proofId,
-								accepted,
-							)
-							return {
+					const member: Api.Member = {
+						id: yield* Effect.sync(randomUUID),
+						proofId: record.value.proofId,
+						identity,
+						role: record.value.role,
+					}
+					// The table allows one membership for each proof and account.
+					const inserted = yield* Rows.stored(
+						db
+							.insert(developerMembers)
+							.values({
+								namespace,
+								id: member.id,
 								proofId: member.proofId,
-								memberId: member.id,
-								scope: record.value.scope,
+								owner,
 								role: member.role,
-							}
-						}),
+							})
+							.onConflictDoNothing()
+							.returning({ id: developerMembers.id }),
 					)
+					if (inserted.length === 0) return yield* conflict("AlreadyMember")
+					yield* setInvitation(id, { status: "Accepted", acceptedBy: owner })
+					return {
+						proofId: member.proofId,
+						memberId: member.id,
+						scope: record.value.scope,
+						role: member.role,
+					}
 				}),
 			),
 		revoke: (owner, id) =>
-			records.transaction(
-				"invitation:" + id,
+			inTransaction(
 				Effect.gen(function* () {
-					const record = yield* records.invitations.get(id)
+					const record = yield* readInvitation(id, true)
 					yield* admin(owner, record.value.proofId)
 					if (record.value.status === "Accepted")
 						return yield* conflict("InvitationAlreadyAccepted")
-					const value: Api.Invitation = { ...record.value, status: "Revoked" }
-					yield* records.invitations.put(
-						id,
-						record.owner,
-						record.value.proofId,
-						{ ...record, value },
-					)
-					return value
+					yield* setInvitation(id, { status: "Revoked" })
+					return { ...record.value, status: "Revoked" } satisfies Api.Invitation
 				}),
 			),
 		change: (owner, id, role) =>
-			records.transaction(
-				"member:" + id,
+			inTransaction(
 				Effect.gen(function* () {
-					const record = yield* records.members.get(id)
-					const proof = yield* admin(owner, record.value.proofId)
-					const value: Api.Member = { ...record.value, role }
-					yield* records.members.put(id, record.owner, proof.value.id, {
-						...record,
-						value,
-					})
-					return value
+					const record = yield* lockMember(id)
+					yield* admin(owner, record.value.proofId)
+					yield* Rows.stored(
+						db.update(developerMembers).set({ role }).where(memberWhere(id)),
+					)
+					return { ...record.value, role } satisfies Api.Member
 				}),
 			),
 		remove: (owner, id) =>
-			records.transaction(
-				"member:" + id,
+			inTransaction(
 				Effect.gen(function* () {
-					const record = yield* records.members.get(id)
+					const record = yield* lockMember(id)
 					if (record.owner !== owner) yield* admin(owner, record.value.proofId)
-					yield* records.members.remove(id)
-					const noticeId = yield* Effect.sync(randomUUID)
-					yield* records.notices.put(noticeId, record.owner, "", {
-						owner: record.owner,
-						value: {
-							id: noticeId,
-							cardUrl: null,
-							kind: "AccessChanged",
-							issue: null,
-							reason: "MembershipRemoved",
-							reportId: null,
-							createdAt: yield* Clock.currentTimeMillis,
-							readAt: null,
-						},
+					yield* Rows.stored(db.delete(developerMembers).where(memberWhere(id)))
+					yield* Rows.postNotice(db, namespace, record.owner, {
+						id: yield* Effect.sync(randomUUID),
+						cardUrl: null,
+						kind: "AccessChanged",
+						issue: null,
+						reason: "MembershipRemoved",
+						reportId: null,
+						createdAt: yield* Clock.currentTimeMillis,
+						readAt: null,
 					})
 				}),
 			),

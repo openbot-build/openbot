@@ -1,5 +1,8 @@
 import { createHash, randomUUID } from "node:crypto"
 import { DeveloperApi as Api } from "@openbot-build/api"
+import { PgClient } from "@effect/sql-pg"
+import { and, eq, lte, ne } from "drizzle-orm"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import {
 	Clock,
 	Context,
@@ -9,40 +12,18 @@ import {
 	Option,
 	Schedule,
 } from "effect"
-import { DeveloperRepository } from "./DeveloperRepository.ts"
+import {
+	developerApps,
+	developerMembers,
+	developerProofs,
+	developerSubscriptions,
+} from "../database/Schema.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import { AppInspections } from "./AppInspections.ts"
 import { issueKey } from "./DeveloperReports.ts"
-import { subscriptionId } from "./DeveloperNotifications.ts"
+import * as Rows from "./DeveloperRows.ts"
+import { IndexNamespace } from "./IndexNamespace.ts"
 
-/** This worker's storage access does not include test records, flows or encrypted secrets. */
-export class PublicDeveloperRecords extends Context.Service<
-	PublicDeveloperRecords,
-	Pick<
-		typeof DeveloperRepository.Service,
-		| "proofs"
-		| "members"
-		| "apps"
-		| "reports"
-		| "subscriptions"
-		| "notices"
-		| "monitors"
-		| "transaction"
-	>
->()("@openbot-build/openbot/apps/DeveloperMonitor/PublicDeveloperRecords") {}
-export const layerRecords = Layer.effect(
-	PublicDeveloperRecords,
-	Effect.map(DeveloperRepository, (records) => ({
-		proofs: records.proofs,
-		members: records.members,
-		apps: records.apps,
-		reports: records.reports,
-		subscriptions: records.subscriptions,
-		notices: records.notices,
-		monitors: records.monitors,
-		transaction: records.transaction,
-	})),
-)
 export class DeveloperMonitor extends Context.Service<
 	DeveloperMonitor,
 	{ readonly run: Effect.Effect<void, Api.Failure> }
@@ -51,114 +32,176 @@ export class DeveloperMonitor extends Context.Service<
 export const make: Effect.Effect<
 	typeof DeveloperMonitor.Service,
 	never,
-	PublicDeveloperRecords | DeveloperAccess | AppInspections
+	PgClient.PgClient | DeveloperAccess | AppInspections
 > = Effect.gen(function* () {
-	const records = yield* PublicDeveloperRecords
+	const db = yield* makeWithDefaults()
+	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
+	const namespace = yield* IndexNamespace
 	const access = yield* DeveloperAccess
 	const inspections = yield* AppInspections
+	/** Post a notice once. The same owner and identity always give the same notice ID. */
 	const emit = (
 		owner: string,
 		identity: ReadonlyArray<string | number>,
 		value: Omit<Api.Notice, "id" | "readAt">,
 	) =>
-		Effect.gen(function* () {
-			const id = createHash("sha256")
+		Rows.postNotice(db, namespace, owner, {
+			...value,
+			id: createHash("sha256")
 				.update(JSON.stringify([owner, ...identity]))
-				.digest("hex")
-			if (Option.isNone(yield* records.notices.find(id)))
-				yield* records.notices.put(id, owner, value.cardUrl ?? "", {
-					owner,
-					value: { ...value, id, readAt: null },
-				})
+				.digest("hex"),
+			readAt: null,
 		})
+	/** Every account that holds a proof or is a member of one. */
+	const possibleOwners = Effect.gen(function* () {
+		const proofs = yield* Rows.stored(
+			db
+				.selectDistinct({ owner: developerProofs.owner })
+				.from(developerProofs)
+				.where(eq(developerProofs.namespace, namespace)),
+		)
+		const members = yield* Rows.stored(
+			db
+				.selectDistinct({ owner: developerMembers.owner })
+				.from(developerMembers)
+				.where(eq(developerMembers.namespace, namespace)),
+		)
+		return HashSet.fromIterable([...proofs, ...members].map((row) => row.owner))
+	})
+	/** Take the App for one check, unless another worker holds it. */
+	const claim = (cardUrl: string, now: number) =>
+		inTransaction(
+			Effect.gen(function* () {
+				const due = yield* Rows.stored(
+					db
+						.select({ cardUrl: developerApps.cardUrl })
+						.from(developerApps)
+						.where(
+							and(
+								eq(developerApps.namespace, namespace),
+								eq(developerApps.cardUrl, cardUrl),
+								lte(developerApps.nextCheckAt, now),
+								lte(developerApps.leaseUntil, now),
+							),
+						)
+						.for("update", { skipLocked: true }),
+				)
+				if (due.length === 0) return Option.none<string>()
+				const token = yield* Effect.sync(randomUUID)
+				yield* Rows.stored(
+					db
+						.update(developerApps)
+						.set({ leaseUntil: now + 300000, monitorToken: token })
+						.where(
+							and(
+								eq(developerApps.namespace, namespace),
+								eq(developerApps.cardUrl, cardUrl),
+							),
+						),
+				)
+				return Option.some(token)
+			}),
+		)
 	return DeveloperMonitor.of({
 		run: Effect.gen(function* () {
 			const now = yield* Clock.currentTimeMillis
-			for (const proof of yield* records.proofs.list()) {
-				if (
-					proof.value.status === "Relinquished" ||
-					proof.value.nextVerificationAt > now
-				)
-					continue
-				const next = yield* access.recheck(proof.value.id)
-				if (next.status !== proof.value.status) {
-					yield* records.transaction(
-						"proof-notice:" + proof.value.id,
-						Effect.forEach(
-							HashSet.fromIterable([
-								proof.owner,
-								...(yield* records.members.list({ scope: proof.value.id })).map(
-									(member) => member.owner,
-								),
-							]),
-							(owner) =>
-								emit(owner, ["proof", next.id, next.status, next.transition], {
-									cardUrl: null,
-									kind: "AccessChanged",
-									issue: null,
-									reason: next.reason ?? next.status,
-									reportId: null,
-									createdAt: now,
-								}),
-							{ discard: true },
+			const dueProofs = yield* Rows.stored(
+				db
+					.select()
+					.from(developerProofs)
+					.where(
+						and(
+							eq(developerProofs.namespace, namespace),
+							ne(developerProofs.status, "Relinquished"),
+							lte(developerProofs.nextVerificationAt, now),
 						),
-					)
-				}
+					),
+			)
+			for (const row of dueProofs) {
+				const proof = yield* Rows.decodeProof(row)
+				const next = yield* access.recheck(proof.value.id)
+				if (next.status === proof.value.status) continue
+				const members = yield* Rows.stored(
+					db
+						.select({ owner: developerMembers.owner })
+						.from(developerMembers)
+						.where(
+							and(
+								eq(developerMembers.namespace, namespace),
+								eq(developerMembers.proofId, proof.value.id),
+							),
+						),
+				)
+				yield* Effect.forEach(
+					HashSet.fromIterable([
+						proof.owner,
+						...members.map((member) => member.owner),
+					]),
+					(owner) =>
+						emit(owner, ["proof", next.id, next.status, next.transition], {
+							cardUrl: null,
+							kind: "AccessChanged",
+							issue: null,
+							reason: next.reason ?? next.status,
+							reportId: null,
+							createdAt: now,
+						}),
+					{ discard: true },
+				)
 			}
-			for (const listed of yield* records.apps.list()) {
-				const cardUrl = listed.candidate.cardUrl
-				if (listed.nextCheckAt > now || (listed.leaseUntil ?? 0) > now) continue
-				const possibleOwners = HashSet.fromIterable([
-					...(yield* records.proofs.list()).map((proof) => proof.owner),
-					...(yield* records.members.list()).map((member) => member.owner),
-				])
-				const interested = yield* Effect.filter(possibleOwners, (owner) =>
+			const dueApps = yield* Rows.stored(
+				db
+					.select({ cardUrl: developerApps.cardUrl })
+					.from(developerApps)
+					.where(
+						and(
+							eq(developerApps.namespace, namespace),
+							lte(developerApps.nextCheckAt, now),
+							lte(developerApps.leaseUntil, now),
+						),
+					),
+			)
+			if (dueApps.length === 0) return
+			const owners = yield* possibleOwners
+			for (const { cardUrl } of dueApps) {
+				const interested = yield* Effect.filter(owners, (owner) =>
 					access.allows(owner, cardUrl),
 				)
 				if (interested.length === 0) continue
-				const claimed = yield* records.transaction(
-					"monitor:" + cardUrl,
-					Effect.gen(function* () {
-						const app = yield* records.apps.get(cardUrl)
-						if (app.nextCheckAt > now || (app.leaseUntil ?? 0) > now)
-							return Option.none<string>()
-						const token = yield* Effect.sync(randomUUID)
-						yield* records.apps.put(cardUrl, "", cardUrl, {
-							...app,
-							leaseUntil: now + 300000,
-							monitorToken: token,
-						})
-						return Option.some(token)
-					}),
-				)
+				const claimed = yield* claim(cardUrl, now)
 				if (Option.isNone(claimed)) continue
 				const report = yield* inspections.inspect(cardUrl)
-				yield* records.transaction(
-					"monitor:" + cardUrl,
+				const disabled = yield* Rows.stored(
+					db
+						.select({ owner: developerSubscriptions.owner })
+						.from(developerSubscriptions)
+						.where(
+							and(
+								eq(developerSubscriptions.namespace, namespace),
+								eq(developerSubscriptions.cardUrl, cardUrl),
+								eq(developerSubscriptions.enabled, false),
+							),
+						),
+				)
+				yield* inTransaction(
 					Effect.gen(function* () {
-						const app = yield* records.apps.get(cardUrl)
+						const app = yield* Rows.getApp(db, namespace, cardUrl, true)
+						// Another worker took over after the lease ended.
 						if (app.monitorToken !== claimed.value) return
-						const previous = yield* records.monitors
-							.get(cardUrl)
-							.pipe(
-								Effect.catchTag("DeveloperNotFound", () =>
-									Effect.succeed({ cardUrl, revision: 0, issues: [] }),
-								),
-							)
 						const issues = report.issues.filter(
 							(issue) => issue.severity === "blocking",
 						)
-						const revision = previous.revision + 1
+						const revision = app.monitorRevision + 1
 						const changes = [
 							...issues
 								.filter(
 									(issue) =>
-										!previous.issues.some(
+										!app.monitorIssues.some(
 											(value) => issueKey(value) === issueKey(issue),
 										),
 								)
 								.map((issue) => ({ issue, kind: "IssueAppeared" as const })),
-							...previous.issues
+							...app.monitorIssues
 								.filter(
 									(issue) =>
 										!issues.some(
@@ -168,21 +211,14 @@ export const make: Effect.Effect<
 								.map((issue) => ({ issue, kind: "IssueResolved" as const })),
 						]
 						const reportId = yield* Effect.sync(randomUUID)
-						yield* records.reports.put(reportId, "monitor", cardUrl, {
-							owner: "monitor",
-							value: { id: reportId, cardUrl, createdBy: "monitor", report },
+						yield* Rows.saveReport(db, namespace, null, {
+							id: reportId,
+							cardUrl,
+							createdBy: Rows.monitorOwner,
+							report,
 						})
-						const owners = HashSet.fromIterable([
-							...(yield* records.proofs.list()).map((proof) => proof.owner),
-							...(yield* records.members.list()).map((member) => member.owner),
-						])
-						for (const owner of owners) {
-							if (!(yield* access.allows(owner, cardUrl))) continue
-							const subscription = yield* records.subscriptions.find(
-								subscriptionId(owner, cardUrl),
-							)
-							if (Option.exists(subscription, (saved) => !saved.value.enabled))
-								continue
+						for (const owner of interested) {
+							if (disabled.some((row) => row.owner === owner)) continue
 							for (const change of changes)
 								yield* emit(
 									owner,
@@ -197,15 +233,10 @@ export const make: Effect.Effect<
 									},
 								)
 						}
-						yield* records.monitors.put(cardUrl, "", cardUrl, {
-							cardUrl,
-							revision,
-							issues,
-						})
 						const observed = report.apps.find(
 							(value) => value.candidate.cardUrl === cardUrl,
 						)
-						yield* records.apps.put(cardUrl, "", cardUrl, {
+						yield* Rows.putApp(db, namespace, {
 							...app,
 							candidate:
 								observed === undefined
@@ -213,6 +244,9 @@ export const make: Effect.Effect<
 									: { ...observed.candidate, sources: app.candidate.sources },
 							nextCheckAt: now + 3600000,
 							leaseUntil: 0,
+							monitorToken: null,
+							monitorRevision: revision,
+							monitorIssues: issues,
 						})
 					}),
 				)

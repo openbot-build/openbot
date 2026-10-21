@@ -1,15 +1,14 @@
 import { DeveloperApi as Api } from "@openbot-build/api"
+import { PgClient } from "@effect/sql-pg"
+import { and, desc, eq, lt, or } from "drizzle-orm"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { Clock, Context, Effect, Layer } from "effect"
-import { DeveloperRepository } from "./DeveloperRepository.ts"
+import { developerNotices, developerSubscriptions } from "../database/Schema.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
-import { dual } from "effect/Function"
+import * as Rows from "./DeveloperRows.ts"
+import { IndexNamespace } from "./IndexNamespace.ts"
 
-export const subscriptionId: {
-	(cardUrl: string): (owner: string) => string
-	(owner: string, cardUrl: string): string
-} = dual(2, (owner: string, cardUrl: string): string =>
-	JSON.stringify([owner, cardUrl]),
-)
+const pageSize = 50
 export class DeveloperNotifications extends Context.Service<
 	DeveloperNotifications,
 	{
@@ -33,72 +32,145 @@ export class DeveloperNotifications extends Context.Service<
 export const make: Effect.Effect<
 	typeof DeveloperNotifications.Service,
 	never,
-	DeveloperRepository | DeveloperAccess
+	PgClient.PgClient | DeveloperAccess
 > = Effect.gen(function* () {
-	const records = yield* DeveloperRepository
+	const db = yield* makeWithDefaults()
+	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
+	const namespace = yield* IndexNamespace
 	const access = yield* DeveloperAccess
 	const visible = (owner: string, notice: Api.Notice) =>
 		notice.cardUrl === null
 			? Effect.succeed(true)
 			: access.allows(owner, notice.cardUrl)
+	const noticeWhere = (owner: string, id: string) =>
+		and(
+			eq(developerNotices.namespace, namespace),
+			eq(developerNotices.owner, owner),
+			eq(developerNotices.id, id),
+		)
+	/** The notices of the owner after the position, newest first. */
+	const page = (
+		owner: string,
+		after: { readonly createdAt: number; readonly id: string } | undefined,
+	) =>
+		Rows.stored(
+			db
+				.select()
+				.from(developerNotices)
+				.where(
+					and(
+						eq(developerNotices.namespace, namespace),
+						eq(developerNotices.owner, owner),
+						after === undefined
+							? undefined
+							: or(
+									lt(developerNotices.createdAt, after.createdAt),
+									and(
+										eq(developerNotices.createdAt, after.createdAt),
+										lt(developerNotices.id, after.id),
+									),
+								),
+					),
+				)
+				.orderBy(desc(developerNotices.createdAt), desc(developerNotices.id))
+				.limit(pageSize),
+		).pipe(Effect.flatMap((rows) => Effect.forEach(rows, Rows.decodeNotice)))
 	return DeveloperNotifications.of({
 		list: (owner, before) =>
 			Effect.gen(function* () {
-				const all = (yield* records.notices.list({ owner }))
-					.map((record) => record.value)
-					.toSorted(
-						(a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id),
-					)
-				const start =
-					before === undefined
-						? 0
-						: all.findIndex((value) => value.id === before) + 1
-				if (before !== undefined && start === 0)
-					return yield* Api.DeveloperInputInvalid.make({
-						message:
-							"This notification cursor is no longer available. Reload the notifications.",
-					})
-				const allowed = yield* Effect.filter(all.slice(start), (value) =>
-					visible(owner, value),
-				)
-				return allowed.slice(0, 50)
+				let position:
+					{ readonly createdAt: number; readonly id: string } | undefined
+				if (before !== undefined) {
+					const cursor = (yield* Rows.stored(
+						db
+							.select({
+								createdAt: developerNotices.createdAt,
+								id: developerNotices.id,
+							})
+							.from(developerNotices)
+							.where(noticeWhere(owner, before)),
+					))[0]
+					if (cursor === undefined)
+						return yield* Api.DeveloperInputInvalid.make({
+							message:
+								"This notification cursor is no longer available. Reload the notifications.",
+						})
+					position = cursor
+				}
+				// Some notices are about Apps that the owner can no longer see. Read on until a page is full.
+				let allowed: ReadonlyArray<Api.Notice> = []
+				while (allowed.length < pageSize) {
+					const rows = yield* page(owner, position)
+					allowed = [
+						...allowed,
+						...(yield* Effect.filter(rows, (value) => visible(owner, value))),
+					]
+					const last = rows.at(-1)
+					if (last === undefined || rows.length < pageSize) break
+					position = last
+				}
+				return allowed.slice(0, pageSize)
 			}),
 		read: (owner, id) =>
-			records.transaction(
-				"notice:" + id,
+			inTransaction(
 				Effect.gen(function* () {
-					const record = yield* records.notices.get(id)
-					if (record.owner !== owner || !(yield* visible(owner, record.value)))
+					const row = (yield* Rows.stored(
+						db
+							.select()
+							.from(developerNotices)
+							.where(noticeWhere(owner, id))
+							.for("update"),
+					))[0]
+					if (row === undefined) return yield* Api.DeveloperNotFound.make({})
+					const notice = yield* Rows.decodeNotice(row)
+					if (!(yield* visible(owner, notice)))
 						return yield* Api.DeveloperNotFound.make({})
-					const value: Api.Notice = {
-						...record.value,
-						readAt: record.value.readAt ?? (yield* Clock.currentTimeMillis),
-					}
-					yield* records.notices.put(id, owner, record.value.cardUrl ?? "", {
-						owner,
-						value,
-					})
-					return value
+					if (notice.readAt !== null) return notice
+					const readAt = yield* Clock.currentTimeMillis
+					yield* Rows.stored(
+						db
+							.update(developerNotices)
+							.set({ readAt })
+							.where(noticeWhere(owner, id)),
+					)
+					return { ...notice, readAt } satisfies Api.Notice
 				}),
 			),
 		subscriptions: (owner) =>
 			Effect.gen(function* () {
 				const overview = yield* access.overview(owner)
-				const saved = yield* records.subscriptions.list({ owner })
-				return overview.apps.map(
-					(app) =>
-						saved.find((record) => record.value.cardUrl === app.cardUrl)
-							?.value ?? { cardUrl: app.cardUrl, enabled: true },
+				const saved = yield* Rows.stored(
+					db
+						.select()
+						.from(developerSubscriptions)
+						.where(
+							and(
+								eq(developerSubscriptions.namespace, namespace),
+								eq(developerSubscriptions.owner, owner),
+							),
+						),
 				)
+				return overview.apps.map((app) => ({
+					cardUrl: app.cardUrl,
+					enabled:
+						saved.find((row) => row.cardUrl === app.cardUrl)?.enabled ?? true,
+				}))
 			}),
 		subscribe: (owner, value) =>
 			Effect.gen(function* () {
 				yield* access.authorize(owner, value.cardUrl)
-				yield* records.subscriptions.put(
-					subscriptionId(owner, value.cardUrl),
-					owner,
-					value.cardUrl,
-					{ owner, value },
+				yield* Rows.stored(
+					db
+						.insert(developerSubscriptions)
+						.values({ namespace, owner, ...value })
+						.onConflictDoUpdate({
+							target: [
+								developerSubscriptions.namespace,
+								developerSubscriptions.owner,
+								developerSubscriptions.cardUrl,
+							],
+							set: { enabled: value.enabled },
+						}),
 				)
 				return value
 			}),

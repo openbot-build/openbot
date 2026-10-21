@@ -1,7 +1,7 @@
 {
 	"version": "8",
 	"dialect": "postgres",
-	"id": "bf1997f9-c1ae-4c28-b306-5217dfb97a7d",
+	"id": "740c160f-a200-4d83-befc-489eccfa493a",
 	"prevIds": ["00000000-0000-0000-0000-000000000000"],
 	"ddl": [
 		{
@@ -78,7 +78,67 @@
 		},
 		{
 			"isRlsEnabled": false,
-			"name": "openbot_developer_records",
+			"name": "openbot_developer_apps",
+			"entityType": "tables",
+			"schema": "public"
+		},
+		{
+			"isRlsEnabled": false,
+			"name": "openbot_developer_claims",
+			"entityType": "tables",
+			"schema": "public"
+		},
+		{
+			"isRlsEnabled": false,
+			"name": "openbot_developer_index_requests",
+			"entityType": "tables",
+			"schema": "public"
+		},
+		{
+			"isRlsEnabled": false,
+			"name": "openbot_developer_invitations",
+			"entityType": "tables",
+			"schema": "public"
+		},
+		{
+			"isRlsEnabled": false,
+			"name": "openbot_developer_members",
+			"entityType": "tables",
+			"schema": "public"
+		},
+		{
+			"isRlsEnabled": false,
+			"name": "openbot_developer_notices",
+			"entityType": "tables",
+			"schema": "public"
+		},
+		{
+			"isRlsEnabled": false,
+			"name": "openbot_developer_proofs",
+			"entityType": "tables",
+			"schema": "public"
+		},
+		{
+			"isRlsEnabled": false,
+			"name": "openbot_developer_reports",
+			"entityType": "tables",
+			"schema": "public"
+		},
+		{
+			"isRlsEnabled": false,
+			"name": "openbot_developer_subscriptions",
+			"entityType": "tables",
+			"schema": "public"
+		},
+		{
+			"isRlsEnabled": false,
+			"name": "openbot_developer_test_flows",
+			"entityType": "tables",
+			"schema": "public"
+		},
+		{
+			"isRlsEnabled": false,
+			"name": "openbot_developer_tests",
 			"entityType": "tables",
 			"schema": "public"
 		},
@@ -1126,13 +1186,117 @@
 			"typeSchema": null,
 			"notNull": true,
 			"dimensions": 0,
+			"default": "'public'",
+			"generated": null,
+			"identity": null,
+			"name": "namespace",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_apps"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
 			"default": null,
 			"generated": null,
 			"identity": null,
-			"name": "kind",
+			"name": "card_url",
 			"entityType": "columns",
 			"schema": "public",
-			"table": "openbot_developer_records"
+			"table": "openbot_developer_apps"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "candidate",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_apps"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "next_check_at",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_apps"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": "0",
+			"generated": null,
+			"identity": null,
+			"name": "lease_until",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_apps"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "monitor_token",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_apps"
+		},
+		{
+			"type": "integer",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": "0",
+			"generated": null,
+			"identity": null,
+			"name": "monitor_revision",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_apps"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": "'[]'",
+			"generated": null,
+			"identity": null,
+			"name": "monitor_issues",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_apps"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": "'public'",
+			"generated": null,
+			"identity": null,
+			"name": "namespace",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_claims"
 		},
 		{
 			"type": "text",
@@ -1145,7 +1309,7 @@
 			"name": "id",
 			"entityType": "columns",
 			"schema": "public",
-			"table": "openbot_developer_records"
+			"table": "openbot_developer_claims"
 		},
 		{
 			"type": "text",
@@ -1158,7 +1322,20 @@
 			"name": "owner",
 			"entityType": "columns",
 			"schema": "public",
-			"table": "openbot_developer_records"
+			"table": "openbot_developer_claims"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "scope_key",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_claims"
 		},
 		{
 			"type": "text",
@@ -1171,7 +1348,7 @@
 			"name": "scope",
 			"entityType": "columns",
 			"schema": "public",
-			"table": "openbot_developer_records"
+			"table": "openbot_developer_claims"
 		},
 		{
 			"type": "text",
@@ -1181,10 +1358,998 @@
 			"default": null,
 			"generated": null,
 			"identity": null,
+			"name": "token",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_claims"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "status",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_claims"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "created_at",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_claims"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "expires_at",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_claims"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": "'public'",
+			"generated": null,
+			"identity": null,
+			"name": "namespace",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_index_requests"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_index_requests"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "owner",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_index_requests"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "card_url",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_index_requests"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "generation",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_index_requests"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "accepted_at",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_index_requests"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": "'public'",
+			"generated": null,
+			"identity": null,
+			"name": "namespace",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_invitations"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_invitations"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "proof_id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_invitations"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "owner",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_invitations"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "role",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_invitations"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "expires_at",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_invitations"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "status",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_invitations"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "accepted_by",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_invitations"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": "'public'",
+			"generated": null,
+			"identity": null,
+			"name": "namespace",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_members"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_members"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "proof_id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_members"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "owner",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_members"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "role",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_members"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": "'public'",
+			"generated": null,
+			"identity": null,
+			"name": "namespace",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_notices"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_notices"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "owner",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_notices"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "card_url",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_notices"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "kind",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_notices"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "issue",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_notices"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "reason",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_notices"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "report_id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_notices"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "created_at",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_notices"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "read_at",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_notices"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": "'public'",
+			"generated": null,
+			"identity": null,
+			"name": "namespace",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_proofs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_proofs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "owner",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_proofs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "scope_key",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_proofs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "scope",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_proofs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "token",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_proofs"
+		},
+		{
+			"type": "integer",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "transition",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_proofs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "status",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_proofs"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "confirmed_at",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_proofs"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "valid_until",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_proofs"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "next_verification_at",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_proofs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "reason",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_proofs"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": "'public'",
+			"generated": null,
+			"identity": null,
+			"name": "namespace",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_reports"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_reports"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "owner",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_reports"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "card_url",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_reports"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "checked_at",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_reports"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "report",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_reports"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": "'public'",
+			"generated": null,
+			"identity": null,
+			"name": "namespace",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_subscriptions"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "owner",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_subscriptions"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "card_url",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_subscriptions"
+		},
+		{
+			"type": "boolean",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "enabled",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_subscriptions"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": "'public'",
+			"generated": null,
+			"identity": null,
+			"name": "namespace",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_test_flows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "flow_id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_test_flows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "test_id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_test_flows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "owner",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_test_flows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "status",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_test_flows"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "expires_at",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_test_flows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "value",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_test_flows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
 			"name": "body",
 			"entityType": "columns",
 			"schema": "public",
-			"table": "openbot_developer_records"
+			"table": "openbot_developer_test_flows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "callback",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_test_flows"
+		},
+		{
+			"type": "boolean",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": "false",
+			"generated": null,
+			"identity": null,
+			"name": "consumed",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_test_flows"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": "'public'",
+			"generated": null,
+			"identity": null,
+			"name": "namespace",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_tests"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "id",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_tests"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "owner",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_tests"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "card_url",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_tests"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "status",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_tests"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "cleanup",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_tests"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "expires_at",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_tests"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "value",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_tests"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "resource_metadata_url",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_tests"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "cleanup_token",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_tests"
+		},
+		{
+			"type": "bigint",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": "0",
+			"generated": null,
+			"identity": null,
+			"name": "cleanup_lease_until",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_tests"
+		},
+		{
+			"type": "text",
+			"typeSchema": null,
+			"notNull": false,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"name": "private_state",
+			"entityType": "columns",
+			"schema": "public",
+			"table": "openbot_developer_tests"
 		},
 		{
 			"type": "text",
@@ -2913,7 +4078,42 @@
 			"nameExplicit": true,
 			"columns": [
 				{
-					"value": "kind",
+					"value": "namespace",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "next_check_at",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "lease_until",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_developer_apps_due",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_developer_apps"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "namespace",
 					"isExpression": false,
 					"asc": true,
 					"nullsFirst": false,
@@ -2932,23 +4132,65 @@
 			"with": "",
 			"method": "btree",
 			"concurrently": false,
-			"name": "openbot_developer_records_owner",
+			"name": "openbot_developer_claims_owner",
 			"entityType": "indexes",
 			"schema": "public",
-			"table": "openbot_developer_records"
+			"table": "openbot_developer_claims"
 		},
 		{
 			"nameExplicit": true,
 			"columns": [
 				{
-					"value": "kind",
+					"value": "namespace",
 					"isExpression": false,
 					"asc": true,
 					"nullsFirst": false,
 					"opclass": null
 				},
 				{
-					"value": "scope",
+					"value": "owner",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "card_url",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "generation",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": true,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_developer_index_requests_generation",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_developer_index_requests"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "namespace",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "proof_id",
 					"isExpression": false,
 					"asc": true,
 					"nullsFirst": false,
@@ -2960,10 +4202,374 @@
 			"with": "",
 			"method": "btree",
 			"concurrently": false,
-			"name": "openbot_developer_records_scope",
+			"name": "openbot_developer_invitations_proof",
 			"entityType": "indexes",
 			"schema": "public",
-			"table": "openbot_developer_records"
+			"table": "openbot_developer_invitations"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "namespace",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "proof_id",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "owner",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": true,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_developer_members_proof_owner",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_developer_members"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "namespace",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "owner",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_developer_members_owner",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_developer_members"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "namespace",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "owner",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "created_at",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "id",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_developer_notices_owner",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_developer_notices"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "namespace",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "owner",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_developer_proofs_owner",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_developer_proofs"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "namespace",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "status",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "next_verification_at",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_developer_proofs_due",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_developer_proofs"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "namespace",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "owner",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "checked_at",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "id",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_developer_reports_owner",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_developer_reports"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "namespace",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "card_url",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "checked_at",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "id",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_developer_reports_app",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_developer_reports"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "namespace",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "test_id",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_developer_test_flows_test",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_developer_test_flows"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "namespace",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "expires_at",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": "\"body\" IS NOT NULL OR \"callback\" IS NOT NULL",
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_developer_test_flows_open",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_developer_test_flows"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "namespace",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "owner",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_developer_tests_owner",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_developer_tests"
+		},
+		{
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "namespace",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				},
+				{
+					"value": "expires_at",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": "\"cleanup\" <> 'Complete'",
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"name": "openbot_developer_tests_open",
+			"entityType": "indexes",
+			"schema": "public",
+			"table": "openbot_developer_tests"
 		},
 		{
 			"nameExplicit": true,
@@ -3160,6 +4766,58 @@
 			"entityType": "indexes",
 			"schema": "public",
 			"table": "openbot_auth_verification"
+		},
+		{
+			"nameExplicit": false,
+			"columns": ["namespace", "proof_id"],
+			"schemaTo": "public",
+			"tableTo": "openbot_developer_proofs",
+			"columnsTo": ["namespace", "id"],
+			"onUpdate": "NO ACTION",
+			"onDelete": "CASCADE",
+			"name": "openbot_developer_invitations_syY7e9iPktkd_fkey",
+			"entityType": "fks",
+			"schema": "public",
+			"table": "openbot_developer_invitations"
+		},
+		{
+			"nameExplicit": false,
+			"columns": ["namespace", "proof_id"],
+			"schemaTo": "public",
+			"tableTo": "openbot_developer_proofs",
+			"columnsTo": ["namespace", "id"],
+			"onUpdate": "NO ACTION",
+			"onDelete": "CASCADE",
+			"name": "openbot_developer_members_xpS4GhBwzZLS_fkey",
+			"entityType": "fks",
+			"schema": "public",
+			"table": "openbot_developer_members"
+		},
+		{
+			"nameExplicit": false,
+			"columns": ["namespace", "id"],
+			"schemaTo": "public",
+			"tableTo": "openbot_developer_claims",
+			"columnsTo": ["namespace", "id"],
+			"onUpdate": "NO ACTION",
+			"onDelete": "CASCADE",
+			"name": "openbot_developer_proofs_PQq5YDEc675j_fkey",
+			"entityType": "fks",
+			"schema": "public",
+			"table": "openbot_developer_proofs"
+		},
+		{
+			"nameExplicit": false,
+			"columns": ["namespace", "test_id"],
+			"schemaTo": "public",
+			"tableTo": "openbot_developer_tests",
+			"columnsTo": ["namespace", "id"],
+			"onUpdate": "NO ACTION",
+			"onDelete": "CASCADE",
+			"name": "openbot_developer_test_flows_fJym73jTZXuD_fkey",
+			"entityType": "fks",
+			"schema": "public",
+			"table": "openbot_developer_test_flows"
 		},
 		{
 			"nameExplicit": false,
@@ -3372,12 +5030,92 @@
 			"table": "openbot_timeline_contents"
 		},
 		{
-			"columns": ["kind", "id"],
+			"columns": ["namespace", "card_url"],
 			"nameExplicit": false,
-			"name": "openbot_developer_records_pkey",
+			"name": "openbot_developer_apps_pkey",
 			"entityType": "pks",
 			"schema": "public",
-			"table": "openbot_developer_records"
+			"table": "openbot_developer_apps"
+		},
+		{
+			"columns": ["namespace", "id"],
+			"nameExplicit": false,
+			"name": "openbot_developer_claims_pkey",
+			"entityType": "pks",
+			"schema": "public",
+			"table": "openbot_developer_claims"
+		},
+		{
+			"columns": ["namespace", "id"],
+			"nameExplicit": false,
+			"name": "openbot_developer_index_requests_pkey",
+			"entityType": "pks",
+			"schema": "public",
+			"table": "openbot_developer_index_requests"
+		},
+		{
+			"columns": ["namespace", "id"],
+			"nameExplicit": false,
+			"name": "openbot_developer_invitations_pkey",
+			"entityType": "pks",
+			"schema": "public",
+			"table": "openbot_developer_invitations"
+		},
+		{
+			"columns": ["namespace", "id"],
+			"nameExplicit": false,
+			"name": "openbot_developer_members_pkey",
+			"entityType": "pks",
+			"schema": "public",
+			"table": "openbot_developer_members"
+		},
+		{
+			"columns": ["namespace", "id"],
+			"nameExplicit": false,
+			"name": "openbot_developer_notices_pkey",
+			"entityType": "pks",
+			"schema": "public",
+			"table": "openbot_developer_notices"
+		},
+		{
+			"columns": ["namespace", "id"],
+			"nameExplicit": false,
+			"name": "openbot_developer_proofs_pkey",
+			"entityType": "pks",
+			"schema": "public",
+			"table": "openbot_developer_proofs"
+		},
+		{
+			"columns": ["namespace", "id"],
+			"nameExplicit": false,
+			"name": "openbot_developer_reports_pkey",
+			"entityType": "pks",
+			"schema": "public",
+			"table": "openbot_developer_reports"
+		},
+		{
+			"columns": ["namespace", "owner", "card_url"],
+			"nameExplicit": false,
+			"name": "openbot_developer_subscriptions_pkey",
+			"entityType": "pks",
+			"schema": "public",
+			"table": "openbot_developer_subscriptions"
+		},
+		{
+			"columns": ["namespace", "flow_id"],
+			"nameExplicit": false,
+			"name": "openbot_developer_test_flows_pkey",
+			"entityType": "pks",
+			"schema": "public",
+			"table": "openbot_developer_test_flows"
+		},
+		{
+			"columns": ["namespace", "id"],
+			"nameExplicit": false,
+			"name": "openbot_developer_tests_pkey",
+			"entityType": "pks",
+			"schema": "public",
+			"table": "openbot_developer_tests"
 		},
 		{
 			"columns": ["organization_id", "user_id"],

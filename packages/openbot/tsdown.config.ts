@@ -6,7 +6,6 @@ export default defineConfig({
 	entry: {
 		index: "src/index.ts",
 		"database/Migrations": "src/database/Migrations.ts",
-		"sessions/RepositoryPostgres": "src/sessions/RepositoryPostgres.ts",
 		Main: "src/app/Main.ts",
 		Development: "src/app/Development.ts",
 		DevelopmentMain: "src/app/DevelopmentMain.ts",

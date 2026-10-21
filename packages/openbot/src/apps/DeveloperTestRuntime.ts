@@ -23,7 +23,10 @@ import {
 	Scope,
 } from "effect"
 import { AppNetwork } from "./AppHost.ts"
-import { DeveloperRepository } from "./DeveloperRepository.ts"
+import { PgClient } from "@effect/sql-pg"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import * as Rows from "./DeveloperRows.ts"
+import { IndexNamespace } from "./IndexNamespace.ts"
 import { DeveloperTestStores } from "./DeveloperTestStores.ts"
 import { pages } from "./Capabilities.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
@@ -98,7 +101,7 @@ export const make = (
 	typeof DeveloperTestRuntime.Service,
 	never,
 	| DeveloperTestStores
-	| DeveloperRepository
+	| PgClient.PgClient
 	| AppNetwork
 	| Crypto.Crypto
 	| App.ConnectionScopes
@@ -106,7 +109,9 @@ export const make = (
 > =>
 	Effect.gen(function* () {
 		const stores = yield* DeveloperTestStores
-		const records = yield* DeveloperRepository
+		const db = yield* makeWithDefaults()
+		const inTransaction = Rows.transaction(yield* PgClient.PgClient)
+		const namespace = yield* IndexNamespace
 		const network = yield* AppNetwork
 		const crypto = yield* Crypto.Crypto
 		const active = yield* App.ConnectionScopes
@@ -174,7 +179,7 @@ export const make = (
 								Client.InvocationPolicy.of({
 									check: (invocation) =>
 										Effect.gen(function* () {
-											const test = yield* records.tests.get(id)
+											const test = yield* Rows.getTest(db, namespace, id)
 											if (
 												test.owner !== owner ||
 												test.value.status !== "Running" ||
@@ -246,16 +251,15 @@ export const make = (
 									),
 								)
 							const progress = (stages: ReadonlyArray<Api.TestStage>) =>
-								records.transaction(
-									"test:" + id,
+								inTransaction(
 									Effect.gen(function* () {
-										const record = yield* records.tests.get(id)
+										const record = yield* Rows.getTest(db, namespace, id, true)
 										if (
 											record.owner !== owner ||
 											record.value.status !== "Running"
 										)
 											return
-										yield* records.tests.put(id, owner, record.value.cardUrl, {
+										yield* Rows.putTest(db, namespace, {
 											...record,
 											value: {
 												...record.value,
@@ -473,7 +477,7 @@ export const make = (
 				),
 			begin: (owner, id, input) =>
 				Effect.gen(function* () {
-					const test = yield* records.tests.get(id)
+					const test = yield* Rows.getTest(db, namespace, id)
 					if (test.owner !== owner) return yield* Api.DeveloperNotFound.make({})
 					const issuer = yield* Option.fromNullishOr(input.issuer).pipe(
 						Option.orElse(() =>
@@ -496,7 +500,7 @@ export const make = (
 							[
 								issuer,
 								publicOrigin,
-								...(test.resourceMetadataUrl === undefined
+								...(test.resourceMetadataUrl === null
 									? []
 									: [test.resourceMetadataUrl]),
 							],
@@ -506,18 +510,18 @@ export const make = (
 								clientId: publicOrigin + "/v1/apps/client-metadata",
 								redirectUri: publicOrigin + "/auth/developer/apps/callback",
 								scopes,
-								...(test.resourceMetadataUrl === undefined
+								...(test.resourceMetadataUrl === null
 									? {}
 									: { resourceMetadataUrl: test.resourceMetadataUrl }),
 							}),
 						),
 					).pipe(Effect.mapError(() => failure("AuthorizationCouldNotStart")))
-					const flow = yield* records.flows.get(pending.flowId)
+					const flow = yield* Rows.getFlow(db, namespace, pending.flowId)
 					const value: Api.TestAuthorization = {
 						...flow.value,
 						authorizationUrl: pending.authorizationUrl,
 					}
-					yield* records.flows.put(value.flowId, owner, id, { ...flow, value })
+					yield* Rows.putFlow(db, namespace, { ...flow, value })
 					return value
 				}),
 			complete: (owner, id, flowId, callback) =>

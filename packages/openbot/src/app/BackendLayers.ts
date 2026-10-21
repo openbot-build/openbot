@@ -13,10 +13,10 @@ import * as ManagedSessions from "../sessions/ManagedSessions.ts"
 
 import { type LanguageModel, type Tool, type Toolkit } from "effect/ai"
 import * as Sessions from "../sessions/Sessions.ts"
-import { Repository } from "../sessions/Repository.ts"
+import type { PgClient } from "@effect/sql-pg"
 import { Backend } from "./Backend.ts"
 import type { Identity } from "@openbot-build/api"
-import { ownerKey } from "../apps/Repository.ts"
+import { ownerKey } from "../apps/StoredConnections.ts"
 
 /** Each namespace owns one runtime graph. All graphs and fibers belong to the application. */
 export const layer = <
@@ -36,7 +36,7 @@ export const layer = <
 		Effect.gen(function* () {
 			const scope = yield* Scope.Scope
 			const context = yield* Effect.context<
-				| Repository
+				| PgClient.PgClient
 				| R
 				| BuildR
 				| Tool.HandlersFor<Tools>

@@ -10,12 +10,14 @@ import {
 	Option,
 } from "effect"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
-import {
-	DeveloperRepository,
-	type IndexRequestRecord,
-} from "./DeveloperRepository.ts"
 import { AppInspections } from "./AppInspections.ts"
-import { IndexWorkRepository } from "./IndexWorkRepository.ts"
+import { PgClient } from "@effect/sql-pg"
+import { and, eq } from "drizzle-orm"
+import { developerIndexRequests } from "../database/Schema.ts"
+import * as Rows from "./DeveloperRows.ts"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { IndexNamespace } from "./IndexNamespace.ts"
+import * as IndexWork from "./IndexWork.ts"
 import { Governance } from "./Governance.ts"
 
 export class DeveloperIndexing extends Context.Service<
@@ -38,25 +40,36 @@ export class DeveloperIndexing extends Context.Service<
 export const make: Effect.Effect<
 	typeof DeveloperIndexing.Service,
 	never,
-	| DeveloperAccess
-	| DeveloperRepository
-	| AppInspections
-	| IndexWorkRepository
-	| Governance
+	DeveloperAccess | AppInspections | PgClient.PgClient | Governance
 > = Effect.gen(function* () {
-	const records = yield* DeveloperRepository
 	const access = yield* DeveloperAccess
 	const inspections = yield* AppInspections
-	const jobs = yield* IndexWorkRepository
+	const db = yield* makeWithDefaults()
+	const namespace = yield* IndexNamespace
+	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
+	const requestWhere = (owner: string, cardUrl?: string) =>
+		and(
+			eq(developerIndexRequests.namespace, namespace),
+			eq(developerIndexRequests.owner, owner),
+			cardUrl === undefined
+				? undefined
+				: eq(developerIndexRequests.cardUrl, cardUrl),
+		)
 	const governance = yield* Governance
-	const read = (record: IndexRequestRecord) =>
+	const read = (record: typeof developerIndexRequests.$inferSelect) =>
 		Effect.gen(function* () {
-			yield* access.authorize(record.owner, record.value.cardUrl)
-			const job = yield* jobs
-				.get(record.value.cardUrl, record.value.generation)
-				.pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
+			yield* access.authorize(record.owner, record.cardUrl)
+			const job = yield* IndexWork.job(
+				db,
+				namespace,
+				record.cardUrl,
+				record.generation,
+			).pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
 			return {
-				...record.value,
+				id: record.id,
+				cardUrl: record.cardUrl,
+				generation: record.generation,
+				acceptedAt: record.acceptedAt,
 				status: Option.match(job, {
 					onNone: () => "Accepted" as const,
 					onSome: (job) => job.status,
@@ -64,23 +77,31 @@ export const make: Effect.Effect<
 				check: Option.getOrNull(
 					Option.flatMapNullishOr(job, (job) => job.check),
 				),
-				restriction: Option.getOrNull(governance.find(record.value.cardUrl)),
+				restriction: Option.getOrNull(governance.find(record.cardUrl)),
 			} satisfies Api.IndexRequest
 		})
 	return DeveloperIndexing.of({
 		get: (owner, id) =>
 			Effect.gen(function* () {
-				const record = yield* records.indexing.get(id)
-				if (record.owner !== owner) return yield* Api.DeveloperNotFound.make({})
+				const record = (yield* Rows.stored(
+					db
+						.select()
+						.from(developerIndexRequests)
+						.where(and(requestWhere(owner), eq(developerIndexRequests.id, id))),
+				))[0]
+				if (record === undefined) return yield* Api.DeveloperNotFound.make({})
 				return yield* read(record)
 			}),
 		list: (owner, cardUrl) =>
 			Effect.gen(function* () {
 				if (cardUrl !== undefined) yield* access.authorize(owner, cardUrl)
-				const requests = yield* records.indexing.list({
-					owner,
-					...(cardUrl === undefined ? {} : { scope: cardUrl }),
-				})
+				const requests = yield* Rows.stored(
+					db
+						.select()
+						.from(developerIndexRequests)
+						.where(requestWhere(owner, cardUrl))
+						.orderBy(developerIndexRequests.id),
+				)
 				// Hide requests for Apps that the owner can no longer see.
 				return yield* Effect.forEach(requests, (record) =>
 					read(record).pipe(
@@ -116,18 +137,15 @@ export const make: Effect.Effect<
 							Effect.fail(Api.DeveloperConflict.make({ reason: value.reason })),
 					}),
 				)
-				return yield* records.transaction(
-					"indexing:" + cardUrl,
+				return yield* inTransaction(
 					Effect.gen(function* () {
 						yield* access.authorize(owner, cardUrl, true)
-						const job = yield* jobs
-							.enqueue(cardUrl, app.candidate.sources)
-							.pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
-						const previous = (yield* records.indexing.list({
-							owner,
-							scope: cardUrl,
-						})).find((record) => record.value.generation === job.generation)
-						if (previous !== undefined) return yield* read(previous)
+						const job = yield* IndexWork.enqueue(
+							db,
+							namespace,
+							cardUrl,
+							app.candidate.sources,
+						).pipe(Effect.mapError(Rows.unavailable))
 						const value: Api.IndexRequest = {
 							id: yield* Effect.sync(randomUUID),
 							cardUrl,
@@ -137,11 +155,35 @@ export const make: Effect.Effect<
 							check: null,
 							restriction: null,
 						}
-						yield* records.indexing.put(value.id, owner, cardUrl, {
-							owner,
-							value,
-						})
-						return value
+						// A job that still waits keeps its generation. Then the owner has asked already.
+						const inserted = yield* Rows.stored(
+							db
+								.insert(developerIndexRequests)
+								.values({
+									namespace,
+									owner,
+									id: value.id,
+									cardUrl,
+									generation: value.generation,
+									acceptedAt: value.acceptedAt,
+								})
+								.onConflictDoNothing()
+								.returning({ id: developerIndexRequests.id }),
+						)
+						if (inserted.length === 1) return value
+						const previous = (yield* Rows.stored(
+							db
+								.select()
+								.from(developerIndexRequests)
+								.where(
+									and(
+										requestWhere(owner, cardUrl),
+										eq(developerIndexRequests.generation, job.generation),
+									),
+								),
+						))[0]
+						if (previous === undefined) return yield* Rows.unavailable()
+						return yield* read(previous)
 					}),
 				)
 			}),

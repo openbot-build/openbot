@@ -20,7 +20,6 @@ import { HttpRouter, HttpServerResponse } from "effect/http"
 import * as ErrorReporting from "../src/app/ErrorReporting.ts"
 import * as EnvironmentConfiguration from "../src/configuration/EnvironmentConfiguration.ts"
 import * as ManagedSessions from "../src/sessions/ManagedSessions.ts"
-import * as RepositoryPostgres from "../src/sessions/RepositoryPostgres.ts"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
@@ -127,10 +126,9 @@ test(
 	async () => {
 		const database = await PostgresTest.start()
 		let logs: ReadonlyArray<Readonly<Record<string, unknown>>> = []
-		const layer = Layer.mergeAll(RepositoryPostgres.layer).pipe(
-			Layer.provideMerge(
-				DatabasePostgres.layer({ databaseUrl: Redacted.make(database.url) }),
-			),
+		const layer = DatabasePostgres.layer({
+			databaseUrl: Redacted.make(database.url),
+		}).pipe(
 			Layer.provideMerge(
 				Logger.layer([
 					Logger.make((log) => {
