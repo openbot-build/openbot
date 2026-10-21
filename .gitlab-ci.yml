@@ -29,6 +29,7 @@ stages: [check, build]
   before_script:
     - >-
       devenv --profile ci shell -- bash -euo pipefail -c '
+      test "$(node --version)" = v26.12.1;
       nix copy --to "file://$CI_PROJECT_DIR/.cache/nix?compression=zstd" "$DEVENV_PROFILE";
       pnpm install --frozen-lockfile --store-dir .cache/pnpm'
   interruptible: true

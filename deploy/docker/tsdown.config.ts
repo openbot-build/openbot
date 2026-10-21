@@ -5,11 +5,11 @@ const path = (relative: string) =>
 	fileURLToPath(new URL(relative, import.meta.url))
 
 export default defineConfig(
-	["Main", "Migrate"].map((name) =>
+	["Main", "Migrate", "Setup", "DevelopmentMain"].map((name) =>
 		defineConfig({
-			cwd: path("../../packages/platform"),
+			cwd: path("../../packages/openbot"),
 			entry: { [name]: `src/app/${name}.ts` },
-			outDir: path("../../.devenv/platform/dist/app"),
+			outDir: path("../../.devenv/openbot/dist/app"),
 			clean: false,
 			format: "esm",
 			fixedExtension: true,

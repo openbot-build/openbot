@@ -1,4 +1,4 @@
-import { Context, Data, Effect, Option, Scope } from "effect"
+import { Context, Data, Effect, Option, Schema, Scope } from "effect"
 import * as Discovery from "../discovery/Discovery.ts"
 import * as Store from "./Store.ts"
 
@@ -6,9 +6,13 @@ export class AppError extends Data.TaggedError("AppError")<{
 	readonly reason: "ConfirmationRequired" | "CandidateChanged" | "Unavailable"
 }> {}
 
+/** The part of a connection that still waits for cleanup. */
+export const CleanupStage = Schema.Literals(["Credentials", "Connection"])
+export type CleanupStage = typeof CleanupStage.Type
+
 export class CleanupPending extends Data.TaggedError("CleanupPending")<{
 	readonly key: Store.ConnectionKey
-	readonly stage: "Credentials" | "Connection"
+	readonly stage: CleanupStage
 }> {}
 
 export class ConnectionScopes extends Context.Service<

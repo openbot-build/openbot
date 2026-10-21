@@ -1,0 +1,192 @@
+---
+title: SSO and domains
+description: Verify email domains and sign people in with the OpenID Connect provider of your organization.
+---
+
+SSO (single sign-on) lets people sign in with the account provider of their own company.
+An organization can add its own OpenID Connect provider for the email domains that it owns. OpenID Connect (OIDC) is a standard way to let another service check who a person is.
+
+This page shows how to verify a domain, how to add an SSO connection, and how sign-in picks a provider.
+All routes are under `/v1/organization`. Reading needs `sso.read`. Changes need `sso.write`. See [Permissions](/docs/permissions).
+
+---
+
+## Verified domains
+
+An email domain is the part of an email address after `@`, such as `example.com`. Before a domain does anything, the organization must prove that it owns it. It does this with a DNS TXT record.
+
+<Steps>
+<Step>
+
+### Add the domain
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"domain":"example.com"}' \
+  https://api.example.com/v1/organization/domains
+```
+
+```json
+{
+	"domain": "example.com",
+	"recordName": "_openbot-verification.example.com",
+	"recordValue": "openbot-verification=4f7d...",
+	"verifiedAt": null,
+	"createdAt": "2026-10-21T09:00:00.000Z"
+}
+```
+
+</Step>
+<Step>
+
+### Add the TXT record
+
+At your DNS provider, add a TXT record. Use `recordName` as the name and `recordValue` as the value.
+
+</Step>
+<Step>
+
+### Verify the domain
+
+```sh
+curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/organization/domains/example.com/verify
+```
+
+OpenBot looks up the TXT record. When it is right, the answer has a `verifiedAt` time.
+If OpenBot does not find the record, it returns `409` with `DomainNotVerified`. DNS changes can take some time, so try again later.
+
+</Step>
+</Steps>
+
+Only one organization can verify a domain. If another organization verified it first, OpenBot returns `409` with `DomainTaken`.
+
+`GET /v1/organization/domains` lists the domains. `DELETE /v1/organization/domains/:domain` removes one. While an SSO connection uses the domain, removing it returns `409` with `DomainInUse`.
+
+### Join by domain
+
+A verified domain also decides who joins the organization. When `joinByDomain` is `true` in the [organization settings](/docs/organization#settings), a person with a verified email in the domain joins when they sign in. They get the `defaultRoles` of the organization. `joinByDomain` is `true` by default.
+
+---
+
+## SSO connections
+
+An SSO connection is an OpenID Connect provider of the organization. It signs in people with an email in its domains.
+
+### Register a client
+
+Register OpenBot as a client at your provider first. OpenBot asks for the scopes `openid profile email`.
+After you create the connection, add its `redirectUri` to the allowed redirect URIs of the client.
+
+### Create a connection
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Example SSO",
+    "issuer": "https://login.example.com",
+    "clientId": "openbot",
+    "clientSecret": "your-client-secret",
+    "domains": ["example.com"],
+    "enforce": true
+  }' \
+  https://api.example.com/v1/organization/sso_connections
+```
+
+| Field          | Rules                                                                                                       |
+| -------------- | ----------------------------------------------------------------------------------------------------------- |
+| `name`         | Required. 1 to 120 characters.                                                                              |
+| `issuer`       | Required. The HTTPS address of the provider, with no trailing slash.                                        |
+| `clientId`     | Required. The client ID from the provider.                                                                  |
+| `clientSecret` | Optional. Leave it out for a public client. OpenBot then uses PKCE, a check that protects the sign-in code. |
+| `domains`      | Required. 1 to 50 verified domains of the organization. Another connection must not use them.               |
+| `enforce`      | Required. See [Enforce SSO](#enforce-sso).                                                                  |
+
+```json
+{
+	"id": "sso_2b9c...",
+	"name": "Example SSO",
+	"issuer": "https://login.example.com",
+	"clientId": "openbot",
+	"clientSecret": { "set": true, "hint": "…cret" },
+	"domains": ["example.com"],
+	"enforce": true,
+	"redirectUri": "https://api.example.com/auth/callback/sso_2b9c...",
+	"version": 0,
+	"createdAt": "2026-10-21T09:00:00.000Z",
+	"updatedAt": "2026-10-21T09:00:00.000Z"
+}
+```
+
+The `redirectUri` is `<publicOrigin>/auth/callback/<connectionId>`. Register it at the provider.
+The client secret never comes back. The answer shows `{ set, hint }` instead. See [Platform](/docs/platform#secrets-never-come-back).
+
+### Change or remove a connection
+
+| Route                                                   | What it does           |
+| ------------------------------------------------------- | ---------------------- |
+| `GET /v1/organization/sso_connections`                  | Lists the connections. |
+| `GET /v1/organization/sso_connections/:connectionId`    | Reads one connection.  |
+| `PATCH /v1/organization/sso_connections/:connectionId`  | Changes a connection.  |
+| `DELETE /v1/organization/sso_connections/:connectionId` | Removes a connection.  |
+
+The body of `PATCH` needs `expectedVersion`, the `version` that you read. If someone changed the connection after you read it, OpenBot returns `409` with `SsoConnectionConflict`.
+For `clientSecret`, leave it out to keep the current secret. Send `null` to make it a public client.
+
+Every instance uses a new or changed connection at once. If an instance misses the change notice, it still picks it up within 30 seconds.
+
+### Enforce SSO
+
+With `enforce: true`, people with an email in the domains of the connection must sign in with it. They cannot use the platform provider.
+With `enforce: false`, they can also sign in with the platform provider.
+
+### Rules
+
+- A connection signs in only people with an email in its own domains.
+- A person who signs in through a connection joins its organization. This works even when `joinByDomain` is `false`.
+- OpenBot never links accounts. Each account has exactly one sign-in provider. So a person who signs in with the platform provider and then with an SSO connection gets two different accounts.
+
+---
+
+## Sign in with the right provider
+
+`POST /auth/sign-in` starts a browser sign-in. It needs no credential. It checks the `Origin` header, like every cookie write. See [Authentication](/docs/authentication#the-origin-rule).
+
+```sh
+curl -X POST https://api.example.com/auth/sign-in \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"ada@example.com","returnTo":"/"}'
+```
+
+```json
+{ "url": "https://login.example.com/authorize?..." }
+```
+
+Both fields are optional. OpenBot picks the provider like this:
+
+1. When the domain of `email` has an SSO connection, the `url` goes to that connection.
+2. Otherwise, the `url` goes to the platform provider.
+3. When there is neither, OpenBot returns `503` with `SignInUnavailable`.
+
+Send the browser to `url`. The answer also sets the login state cookie, which Better Auth needs to finish the sign-in. After the sign-in, the browser goes to `returnTo`. See [Return paths](/docs/authentication#return-paths).
+
+---
+
+## Errors
+
+| Status | Error                   | When                                                                         |
+| ------ | ----------------------- | ---------------------------------------------------------------------------- |
+| `400`  | `SsoConnectionInvalid`  | A value is not valid, such as a domain that is not verified or already used. |
+| `403`  | `PermissionDenied`      | The caller does not have `sso.read` or `sso.write`.                          |
+| `404`  | `DomainNotFound`        | The organization has no such domain.                                         |
+| `404`  | `SsoConnectionNotFound` | The organization has no connection with this ID.                             |
+| `409`  | `DomainNotVerified`     | OpenBot did not find the TXT record.                                         |
+| `409`  | `DomainTaken`           | Another organization verified the domain first.                              |
+| `409`  | `DomainInUse`           | An SSO connection still uses the domain.                                     |
+| `409`  | `SsoConnectionConflict` | Someone changed the connection after you read it.                            |
+| `503`  | `SsoUnavailable`        | OpenBot cannot reach its database.                                           |
+
+See the full shapes in the [SSO reference](/docs/api/operations/tags/sso/).

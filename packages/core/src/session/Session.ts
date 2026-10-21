@@ -1,14 +1,12 @@
 import {
 	Context,
-	Chunk,
-	HashMap,
-	HashSet,
 	Match,
-	Option,
+	type Option,
 	Data,
 	Schema,
 	type Duration,
 	type Effect,
+	type Scope,
 	type Stream,
 } from "effect"
 import { dual } from "effect/Function"
@@ -17,6 +15,7 @@ import { Id, Revision } from "./SessionIdentity.ts"
 import * as Turn from "./Turn.ts"
 import * as Item from "../timeline/Item.ts"
 import * as Timeline from "../timeline/Timeline.ts"
+import * as TimelineState from "../timeline/TimelineState.ts"
 import { PromptJson } from "../store/PromptCodec.ts"
 import type * as SessionStore from "../store/SessionStore.ts"
 import type * as Agent from "../agent/Agent.ts"
@@ -24,7 +23,8 @@ import type * as ContextCompaction from "../context/ContextCompaction.ts"
 export { Id, Revision } from "./SessionIdentity.ts"
 
 export const Metadata = Schema.Struct({
-	title: Schema.String,
+	/** A Session without a title has no `title`. */
+	title: Schema.optionalKey(Schema.String),
 	archived: Schema.Boolean,
 })
 export type Metadata = typeof Metadata.Type
@@ -80,12 +80,6 @@ export const currentTurn = (session: Ref): Turn.Record | undefined =>
 	session.turns.at(-1)
 export const status = (session: Ref): Turn.Status | { readonly _tag: "Idle" } =>
 	currentTurn(session)?.status ?? { _tag: "Idle" }
-export interface PendingApproval {
-	readonly approvalId: string
-	readonly toolCallId: string
-	readonly toolCall: Prompt.ToolCallPart
-	readonly occurrence: number
-}
 const currentItems = <P>(view: View<P>): ReadonlyArray<Item.Record> => {
 	const turn = currentTurn(view.session)
 	return turn === undefined
@@ -122,89 +116,6 @@ export const toolCallCount: {
 		0,
 	),
 )
-/** Only Items produced by the current Session and Turn can authorize its tools. */
-export const pendingApprovals = <P>(
-	view: View<P>,
-): ReadonlyArray<PendingApproval> => {
-	const turn = currentTurn(view.session)
-	if (turn === undefined || Turn.isTerminal(turn.status)) return []
-	interface Call {
-		readonly toolCall: Prompt.ToolCallPart
-		readonly occurrence: number
-		readonly ordinal: number
-	}
-	let calls = HashMap.empty<string, Call>()
-	let requests = HashMap.empty<string, Call>()
-	let order = Chunk.empty<string>()
-	let resolved = HashSet.empty<number>()
-	let ordinal = 0
-	for (const entry of currentItems(view)) {
-		for (const message of entry.content.content)
-			Match.value(message).pipe(
-				Match.when({ role: "assistant" }, (message) => {
-					for (const part of message.content)
-						Match.value(part).pipe(
-							Match.when({ type: "tool-call" }, (part) => {
-								const prior = Option.getOrUndefined(HashMap.get(calls, part.id))
-								calls = HashMap.set(calls, part.id, {
-									toolCall: part,
-									occurrence: prior === undefined ? 0 : prior.occurrence + 1,
-									ordinal: ordinal++,
-								})
-							}),
-							Match.when({ type: "tool-approval-request" }, (part) => {
-								const call = Option.getOrUndefined(
-									HashMap.get(calls, part.toolCallId),
-								)
-								if (
-									call === undefined ||
-									HashMap.has(requests, part.approvalId)
-								)
-									return
-								order = Chunk.append(order, part.approvalId)
-								requests = HashMap.set(requests, part.approvalId, call)
-							}),
-							Match.orElse(() => {}),
-						)
-				}),
-				Match.when({ role: "tool" }, (message) => {
-					for (const part of message.content)
-						Match.value(part).pipe(
-							Match.when({ type: "tool-result" }, (part) => {
-								const call = Option.getOrUndefined(HashMap.get(calls, part.id))
-								if (call !== undefined)
-									resolved = HashSet.add(resolved, call.ordinal)
-							}),
-							Match.when({ type: "tool-approval-response" }, (part) => {
-								const call = Option.getOrUndefined(
-									HashMap.get(requests, part.approvalId),
-								)
-								if (call !== undefined)
-									resolved = HashSet.add(resolved, call.ordinal)
-							}),
-							Match.orElse(() => {}),
-						)
-				}),
-				Match.orElse(() => {}),
-			)
-	}
-	return Array.from(order).flatMap((approvalId) => {
-		const call = HashMap.getUnsafe(requests, approvalId)
-		const latest = HashMap.getUnsafe(calls, call.toolCall.id)
-		return call.toolCall.providerExecuted === true ||
-			HashSet.has(resolved, call.ordinal) ||
-			latest.ordinal !== call.ordinal
-			? []
-			: [
-					{
-						approvalId,
-						toolCallId: call.toolCall.id,
-						toolCall: call.toolCall,
-						occurrence: call.occurrence,
-					},
-				]
-	})
-}
 export const position = (session: Ref): Position => ({
 	session: session.id,
 	version: session.head,
@@ -243,12 +154,35 @@ export interface ActionInput extends Omit<Input, "input" | "action"> {
 export interface ActionReceipt extends Receipt {
 	readonly callId: string
 }
-export interface ApprovalInput {
+/** How the host answers one approval request of a waiting Turn. */
+export type Outcome = Data.TaggedEnum<{
+	/** The tool runs with its own handler. */
+	Approved: {}
+	/** The tool does not run. The model sees the reason. */
+	Denied: { readonly reason?: string }
+	/** The tool does not run. The host gives its result instead. */
+	Result: { readonly result: unknown; readonly isFailure: boolean }
+}>
+export const Outcome = Data.taggedEnum<Outcome>()
+export interface ResolveInput {
 	readonly session: Id
 	readonly turn: Turn.Id
 	readonly approval: string
-	readonly approved: boolean
+	readonly outcome: Outcome
 	readonly expectedRevision: Revision
+}
+export type Wait = TimelineState.Wait
+/** The approval requests of a Session that still wait for an answer. */
+export const waits = <P>(view: View<P>): ReadonlyArray<Wait> => {
+	const turn = currentTurn(view.session)
+	if (turn === undefined || Turn.isTerminal(turn.status)) return []
+	return TimelineState.waits({
+		...view.state.value,
+		conversation: {
+			...view.state.value.conversation,
+			history: currentItems(view),
+		},
+	})
 }
 export interface Receipt {
 	readonly session: Id
@@ -268,6 +202,12 @@ export interface RuntimeOptions<
 > {
 	readonly store: SessionStore.Store<P>
 	readonly agent: Agent.Definition<Tools, E, R, BuildE, BuildR, HostTools>
+	/** The host may hold resources until a streamed or background run fully ends. */
+	readonly execution?: Effect.Effect<
+		Context.Context<never>,
+		RuntimeError,
+		Scope.Scope
+	>
 }
 export interface Runtime<
 	P = {},
@@ -277,10 +217,6 @@ export interface Runtime<
 	HostTools extends Record<string, Tool.Any> = {},
 > {
 	readonly isActive: (session: Id) => Effect.Effect<boolean>
-	readonly canApprove: (input: {
-		readonly session: Id
-		readonly turn: Turn.Id
-	}) => Effect.Effect<boolean>
 	readonly execute: (
 		input: Input,
 	) => Effect.Effect<
@@ -308,8 +244,9 @@ export interface Runtime<
 		RuntimeError,
 		Agent.ActionServices<Tools, R>
 	>
-	readonly approveAction: (
-		input: ApprovalInput,
+	/** Like resolve, for a Turn that runs a host-selected action. */
+	readonly resolveAction: (
+		input: ResolveInput,
 	) => Effect.Effect<Receipt, RuntimeError, Agent.ActionServices<Tools, R>>
 	readonly runQueued: (
 		session: Id,
@@ -339,8 +276,12 @@ export interface Runtime<
 		readonly session: Id
 		readonly turn: Turn.Id
 	}) => Effect.Effect<View<P>, RuntimeError>
-	readonly approve: (
-		input: ApprovalInput,
+	/**
+	 * Answers one approval request of a waiting Turn. The answer is stored in the history,
+	 * so it works after a restart. The Turn runs again when no request waits any more.
+	 */
+	readonly resolve: (
+		input: ResolveInput,
 	) => Effect.Effect<Receipt, RuntimeError, Agent.RuntimeServices<Tools, R>>
 	readonly resume: (session: Id) => Effect.Effect<View<P>, RuntimeError>
 	readonly status: (session: Id) => Effect.Effect<View<P>, RuntimeError>

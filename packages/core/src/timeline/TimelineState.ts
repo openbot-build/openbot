@@ -1,4 +1,4 @@
-import { HashMap, HashSet, Match, Option, Schema } from "effect"
+import { Chunk, HashMap, HashSet, Match, Option, Schema } from "effect"
 import { Prompt } from "effect/ai"
 import type * as Item from "./Item.ts"
 import type * as Timeline from "./Timeline.ts"
@@ -190,3 +190,89 @@ export const finishToolCalls =
 			},
 		}
 	}
+
+export interface Wait {
+	readonly approvalId: string
+	readonly toolCallId: string
+	readonly toolCall: Prompt.ToolCallPart
+	readonly occurrence: number
+}
+/** Requests bind to a tool occurrence, not every call with the same provider ID. */
+export const waits = <P>(value: Timeline.Value<P>): ReadonlyArray<Wait> => {
+	interface Call {
+		readonly toolCall: Prompt.ToolCallPart
+		readonly occurrence: number
+		readonly ordinal: number
+	}
+	let calls = HashMap.empty<string, Call>()
+	let requests = HashMap.empty<string, Call>()
+	let order = Chunk.empty<string>()
+	let resolved = HashSet.empty<number>()
+	let ordinal = 0
+	for (const entry of value.conversation.history) {
+		for (const message of entry.content.content)
+			Match.value(message).pipe(
+				Match.when({ role: "assistant" }, (message) => {
+					for (const part of message.content)
+						Match.value(part).pipe(
+							Match.when({ type: "tool-call" }, (part) => {
+								const prior = Option.getOrUndefined(HashMap.get(calls, part.id))
+								calls = HashMap.set(calls, part.id, {
+									toolCall: part,
+									occurrence: prior === undefined ? 0 : prior.occurrence + 1,
+									ordinal: ordinal++,
+								})
+							}),
+							Match.when({ type: "tool-approval-request" }, (part) => {
+								const call = Option.getOrUndefined(
+									HashMap.get(calls, part.toolCallId),
+								)
+								if (
+									call === undefined ||
+									HashMap.has(requests, part.approvalId)
+								)
+									return
+								order = Chunk.append(order, part.approvalId)
+								requests = HashMap.set(requests, part.approvalId, call)
+							}),
+							Match.orElse(() => {}),
+						)
+				}),
+				Match.when({ role: "tool" }, (message) => {
+					for (const part of message.content)
+						Match.value(part).pipe(
+							Match.when({ type: "tool-result" }, (part) => {
+								const call = Option.getOrUndefined(HashMap.get(calls, part.id))
+								if (call !== undefined)
+									resolved = HashSet.add(resolved, call.ordinal)
+							}),
+							Match.when({ type: "tool-approval-response" }, (part) => {
+								const call = Option.getOrUndefined(
+									HashMap.get(requests, part.approvalId),
+								)
+								if (call !== undefined)
+									resolved = HashSet.add(resolved, call.ordinal)
+							}),
+							Match.orElse(() => {}),
+						)
+				}),
+				Match.orElse(() => {}),
+			)
+	}
+	return Array.from(order).flatMap((approvalId) => {
+		const call = HashMap.getUnsafe(requests, approvalId)
+		const latest = HashMap.getUnsafe(calls, call.toolCall.id)
+		return call.toolCall.providerExecuted === true ||
+			HashSet.has(resolved, call.ordinal) ||
+			latest.ordinal !== call.ordinal
+			? []
+			: [
+					{
+						approvalId,
+						toolCallId: call.toolCall.id,
+						toolCall: call.toolCall,
+						occurrence: call.occurrence,
+					},
+				]
+	})
+}

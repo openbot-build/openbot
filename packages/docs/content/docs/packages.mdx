@@ -3,7 +3,7 @@ title: Packages
 description: The workspace packages and what each one is for.
 ---
 
-OpenBot is a pnpm workspace. Each package has one job. You can use the libraries on their own, without Platform.
+OpenBot is a pnpm workspace. Each package has one job. `openbot` puts the parts together into the server. You can use the other libraries on their own.
 
 All packages are named `@openbot-build/<name>`, have version `0.1.0`, and use `effect@4.0.5`. They are not on npm yet. Use them from the workspace with `"workspace:*"`.
 
@@ -11,24 +11,17 @@ All packages are named `@openbot-build/<name>`, have version `0.1.0`, and use `e
 
 ## Overview
 
-| Package                  | What it is for                                                                        |
-| ------------------------ | ------------------------------------------------------------------------------------- |
-| `platform`               | The server. See [Run from code](/docs/server).                                        |
-| `platform-api`           | The typed HTTP contract. The server, the client, and the API reference use it.        |
-| `client`                 | The TypeScript client. See [Client](/docs/client).                                    |
-| `core`                   | The Agent core: Agents, Sessions, Turns, Timelines, storage, plugins, and skills.     |
-| `plugin-goal`            | Tools that let the Agent keep a goal for a Session.                                   |
-| `plugin-memory`          | Learned memory that the Agent keeps across Turns.                                     |
-| `plugin-turn-limiter`    | A limit on the number of model steps in one Turn.                                     |
-| `provider-openai`        | Models from the OpenAI Responses API, with native context compaction.                 |
-| `provider-openai-compat` | Models from the OpenAI Chat Completions API and services that copy it.                |
-| `provider-anthropic`     | Models from the Anthropic Messages API.                                               |
-| `protocol`               | The OpenBot App Protocol: publish, find, connect, and index Apps.                     |
-| `app-host`               | Service contracts for programs that host Apps and an App Index.                       |
-| `protocol-test`          | A public test service for the App Protocol. See [Protocol test](/docs/protocol-test). |
-| `docs`                   | This docs site.                                                                       |
+| Package         | What it is for                                                                        |
+| --------------- | ------------------------------------------------------------------------------------- |
+| `openbot`       | The server, its plugins, and its model providers. See [Run from code](/docs/server).  |
+| `api`           | The typed HTTP contract. The server, the client, and the API reference use it.        |
+| `client`        | The TypeScript client. See [Client](/docs/client).                                    |
+| `core`          | The Agent core: Agents, Sessions, Turns, Timelines, storage, plugins, and skills.     |
+| `protocol`      | The OpenBot App Protocol: publish, find, connect, and index Apps.                     |
+| `protocol-test` | A public test service for the App Protocol. See [Protocol test](/docs/protocol-test). |
+| `docs`          | This docs site.                                                                       |
 
-The examples below leave out the model. To run them, provide a `LanguageModel` Layer, for example from a provider package.
+The examples below leave out the model. To run them, provide a `LanguageModel` Layer, for example from a [model provider](#model-providers) in `openbot`.
 
 ---
 
@@ -120,9 +113,13 @@ Your program finds, loads, and runs the skills.
 
 ---
 
-## plugin-goal
+## Plugins in openbot
 
-`@openbot-build/plugin-goal` gives the Agent six tools: `SetGoal`, `GetGoal`, `UpdateGoal`, `PauseGoal`, `ResumeGoal`, and `ClearGoal`.
+`@openbot-build/openbot` has all plugins of OpenBot. The server uses the Agent, App, and memory plugins in every Turn. You can also use the goal, memory, and Turn limit plugins with your own `SessionRuntime`.
+
+### Goals
+
+`GoalPlugin` gives the Agent six tools: `SetGoal`, `GetGoal`, `UpdateGoal`, `PauseGoal`, `ResumeGoal`, and `ClearGoal`.
 The goal belongs to one Session. A fork starts with no goal.
 
 ```ts
@@ -132,7 +129,7 @@ import {
 	SessionStoreMemory,
 	Store,
 } from "@openbot-build/core"
-import { GoalPlugin } from "@openbot-build/plugin-goal"
+import { GoalPlugin } from "@openbot-build/openbot"
 import { Effect, Layer } from "effect"
 
 const program = Effect.scoped(
@@ -164,10 +161,10 @@ const program = Effect.scoped(
 
 A goal has an `objective` and an optional `tokenBudget`. The plugin saves the budget, but it does not stop work when the budget is used up.
 
-## plugin-memory
+### Memory
 
-`@openbot-build/plugin-memory` keeps learned memory: short facts that the Agent learns in a Session and uses in later Turns.
-Platform uses it for the memory API. See [Memory](/docs/memory).
+The memory plugin keeps learned memory: short facts that the Agent learns in a Session and uses in later Turns.
+The server uses it for the memory API. See [Memory](/docs/memory). The schemas of the memory API are in `api`, as `Memory` and `AgentMemory`.
 
 ```ts
 import { SessionStoreMemory, Store } from "@openbot-build/core"
@@ -176,7 +173,7 @@ import {
 	Memory,
 	MemoryOperations,
 	MemoryRules,
-} from "@openbot-build/plugin-memory"
+} from "@openbot-build/openbot"
 import { Effect } from "effect"
 
 const program = Effect.scoped(
@@ -216,12 +213,12 @@ const plugin = MemoryPlugin.make({
 })
 ```
 
-## plugin-turn-limiter
+### Turn limits
 
-`@openbot-build/plugin-turn-limiter` stops a Turn after a set number of model steps. The first model request counts as one step.
+`TurnLimiter` stops a Turn after a set number of model steps. The first model request counts as one step.
 
 ```ts
-import { TurnLimiter } from "@openbot-build/plugin-turn-limiter"
+import { TurnLimiter } from "@openbot-build/openbot"
 
 const runtime =
 	yield *
@@ -240,15 +237,15 @@ It fails with one of two errors:
 
 ---
 
-## Provider packages
+## Model providers
 
-Each provider package turns a model selection into a `LanguageModel` Layer. You give the API key. See [Models](/docs/models) for how Platform uses them.
+`@openbot-build/openbot` has three model providers. Each one turns a model selection into a `LanguageModel` Layer. You give the API key. See [Models](/docs/models) for how OpenBot uses them.
 
-### provider-openai-compat
+### OpenAiCompatProvider
 
 ```ts
 import { Config, Model, Provider } from "@openbot-build/core"
-import { OpenAiCompatProvider } from "@openbot-build/provider-openai-compat"
+import { OpenAiCompatProvider } from "@openbot-build/openbot"
 import { Effect, Layer, Redacted } from "effect"
 import { LanguageModel } from "effect/ai"
 import { FetchHttpClient } from "effect/http"
@@ -276,16 +273,13 @@ const program = LanguageModel.generateText({ prompt: "Hello" }).pipe(
 
 Leave out `apiUrl` to use `https://api.openai.com/v1`. A selection's `reasoningEffort` and `serviceTier` replace `reasoning_effort` and `service_tier` in the defaults.
 
-### provider-openai
+### OpenAiProvider
 
 The same pattern, with `OpenAiProvider` and the provider ID `openai`. It uses the Responses API.
 It also has `ResponsesCompaction.layer()`, which makes long histories shorter with the native compaction of the Responses API.
 
 ```ts
-import {
-	OpenAiProvider,
-	ResponsesCompaction,
-} from "@openbot-build/provider-openai"
+import { OpenAiProvider, ResponsesCompaction } from "@openbot-build/openbot"
 
 const services = Layer.merge(
 	Layer.unwrap(OpenAiProvider.make().model(selection)),
@@ -296,12 +290,12 @@ const services = Layer.merge(
 )
 ```
 
-### provider-anthropic
+### AnthropicProvider
 
 The same pattern, with `AnthropicProvider` and the provider ID `anthropic`. It uses the Messages API.
 
 ```ts
-import { AnthropicProvider } from "@openbot-build/provider-anthropic"
+import { AnthropicProvider } from "@openbot-build/openbot"
 
 const provider = AnthropicProvider.make({ max_tokens: 1024 })
 ```
@@ -355,24 +349,3 @@ const publisher = McpPublisher.layer({
 ```
 
 Serve `publisher` with `HttpRouter.serve` and an HTTP server Layer. See [Protocol](/docs/protocol) for the full guide.
-
-## app-host
-
-`@openbot-build/app-host` has only contracts, with no default code. It defines two services:
-
-- `App.App` finds Apps, adds them, manages connections, and handles App sign-in.
-- `Index.Index` manages App Index sources, searches them, and syncs public entries.
-
-```ts
-import { App, Index } from "@openbot-build/app-host"
-import { Effect } from "effect"
-
-const found = Effect.flatMap(App.App, (apps) =>
-	apps.discover("https://apps.example.com"),
-)
-const results = Effect.flatMap(Index.Index, (index) =>
-	index.search({ query: "calendar" }),
-)
-```
-
-Your program provides the Layers that implement these services. Platform has its own implementation.

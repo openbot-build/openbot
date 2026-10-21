@@ -4,7 +4,7 @@ description: Source history and release rules for the internal OpenBot build.
 ---
 
 This repository is a derived build of [OpenBot](https://github.com/openbot-build/openbot).
-Its starting commit is [c7e606dd18d23328fc1d18a29bd483569ae4fc5c](https://github.com/openbot-build/openbot/tree/c7e606dd18d23328fc1d18a29bd483569ae4fc5c).
+Its current upstream base is [14935861ca8cc4db8baccee88c4bc8b6a628c5f6](https://github.com/openbot-build/openbot/tree/14935861ca8cc4db8baccee88c4bc8b6a628c5f6).
 The machine-readable record is `upstream.json`. Keep it when updating the source.
 
 The `upstream` Git remote points to the original project. The `origin` remote
@@ -23,6 +23,15 @@ member bootstrap, standard hosted MCP support, per-Turn memory switches, and
 private execution controls. The public package names remain
 `@openbot-build/*`. Data conversion from another package namespace is a separate
 migration, not a direct shared-database mode.
+
+Shared settings, model provider credentials, SSO, organization membership,
+Agents and Requests use the native OpenBot services and tables. Browser cookie
+names and the callback path are shared settings too. A platform setting change
+waits until active work and durable waits are clear before replacing the app.
+The old executor stops before the next one starts.
+
+The build and runtime use Node.js 26.12.1, the October 2026 security release.
+CI verifies the actual version in its shell and in the built container.
 
 ## License and source
 
@@ -90,9 +99,10 @@ user ID for OpenBot. A pending approval, queued input, running Turn, or unsettle
 lease prevents a successful drain.
 
 The private `POST /internal/apps/authorization-owner` route accepts
-`{ "flowId": "..." }` and returns only `{ "accountId": "..." }` from the saved
-authorization flow. It uses the same internal token. It returns `404` when
-the flow does not exist. A gateway may use this to route a callback during a
+`{ "flowId": "...", "kind": "app" }` and returns only `{ "accountId": "..." }`
+from the saved authorization flow. The default kind is `app`. The `developer`
+kind reads a Developer test flow in the public namespace. It uses the same
+internal token. It returns `404` when the flow does not exist. A gateway may use this to route a callback during a
 mixed-backend migration. It must not trust a browser-supplied account ID.
 
 Keep every `/internal/*` route off public ingress. Use a private service network.
@@ -136,12 +146,37 @@ and its built JavaScript are patched. `upstream.json` records the source range,
 full commit IDs, adaptations, and patch path. These selected fixes do not change
 the OpenBot base commit.
 
-## New upstream changes
+## Current upstream model
 
-The comparison from the pinned base to upstream
-[`4a5b95a`](https://github.com/openbot-build/openbot/compare/c7e606dd18d23328fc1d18a29bd483569ae4fc5c...4a5b95aec37ea39937711ef7613792a4cd173574)
-contains two additional commits. They introduce lasting Agents and delegation,
-replace approvals with requests, and recreate the database baseline with an
-explicit empty-database prerequisite. These changes are excluded from this Kay
-migration. Adopting them requires a separate data converter, contract comparison
-and regression run. `upstream.json` records the compared head and this decision.
+This build adopts the native Agent, delegation, capability Grant and Request model.
+The API package is `@openbot-build/api`; the server, plugins and providers live in
+`@openbot-build/openbot`. There is no second approval service or legacy Agent model.
+Kay's old HTTP contracts are translated by Kay API, outside this repository.
+
+Agents can own other Agents. The owner chain chooses who decides a Request;
+the execution chain records where delegated work runs. These are separate chains.
+Short-lived helpers are Session Agents. Sessions may have no title, and names
+use the shared trimmed 1–100 character rule.
+
+Account data uses the native Drizzle queries. There is no second Repository
+service. Developer claims, proofs, members, invitations, Apps, reports, tests,
+test flows, index requests, subscriptions and notices have typed tables.
+Each account write keeps its route lease through the database commit or rollback,
+including transactions that change more than one owner's records.
+
+Requests retain the Session, Turn and tool-call occurrence. A persisted decision
+is marked settled only after it has been applied to the Turn. Restart recovery
+checks the saved operation before sending: `Sending` and `OutcomeUnknown` never
+cause an automatic external write retry. Agent records, queued coordinator work,
+helper model calls and delegated work use the same account epoch and drain controls
+as direct Sessions.
+
+A proposal for a Turn that has already ended is retained as history and does
+not block drain. Its body is decrypted before the originating Turn is checked.
+An operation in `Sending` or `OutcomeUnknown` still blocks drain regardless of
+the Turn state. Neither a drain scan nor a restart resends it.
+
+The new baseline requires an empty database. Do not replay it over a previously
+initialized OpenBot database. The separate account migration job converts e data
+into this schema and supplies native Main Agent and Session host bindings; it
+must verify IDs, references and content before activation.

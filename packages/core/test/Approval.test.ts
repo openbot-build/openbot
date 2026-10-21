@@ -188,11 +188,11 @@ for (const origin of ["earlier Turn", "other Session", "missing provenance"]) {
 							]),
 					})
 					const rejected = yield* Effect.exit(
-						runtime.approve({
+						runtime.resolve({
 							session: base.session,
 							turn: current.id,
 							approval: "historical-approval",
-							approved: true,
+							outcome: { _tag: true ? "Approved" : "Denied" },
 							expectedRevision: injected.view.session.revision,
 						}),
 					)
@@ -473,7 +473,7 @@ for (const location of ["context", "history"] as const) {
 	})
 }
 
-test("restoring an orphaned waiting Turn closes context-only approvals without reviving handlers", async () => {
+test("restoring a waiting Turn preserves its durable approval and interruption closes orphan context", async () => {
 	let writes = 0
 	await Effect.runPromise(
 		Effect.scoped(
@@ -510,7 +510,17 @@ test("restoring an orphaned waiting Turn closes context-only approvals without r
 					store: restoredStore,
 					agent: { toolkit },
 				})
-				const resumed = yield* restored.resume(base.session)
+				const waiting = yield* restored.resume(base.session)
+				assert.equal(Session.status(waiting.session)._tag, "Waiting")
+				assert.deepEqual(
+					Session.waits(waiting).map((wait) => wait.toolCallId),
+					["current-write"],
+				)
+				assert.equal(writes, 0)
+				const resumed = yield* restored.interrupt({
+					session: base.session,
+					turn: Session.currentTurn(waiting.session)!.id,
+				})
 				assert.equal(Session.status(resumed.session)._tag, "Interrupted")
 				assert.equal(
 					results(resumed.state.value.conversation.context.prompt).find(
@@ -518,7 +528,7 @@ test("restoring an orphaned waiting Turn closes context-only approvals without r
 					)?.isFailure,
 					true,
 				)
-				assert.deepEqual(Session.pendingApprovals(resumed), [])
+				assert.deepEqual(Session.waits(resumed), [])
 				assert.equal(writes, 0)
 			}),
 		).pipe(
@@ -560,13 +570,13 @@ for (const decision of [true, false]) {
 					})
 					const waiting = yield* runtime.execute({ base, input: "write" })
 					const current = Session.currentTurn(waiting.session)!
-					const [request] = Session.pendingApprovals(waiting)
+					const [request] = Session.waits(waiting)
 					assert.ok(request)
-					yield* runtime.approve({
+					yield* runtime.resolve({
 						session: base.session,
 						turn: current.id,
 						approval: request.approvalId,
-						approved: decision,
+						outcome: { _tag: decision ? "Approved" : "Denied" },
 						expectedRevision: waiting.session.revision,
 					})
 					const settled = (): Effect.Effect<
@@ -583,7 +593,7 @@ for (const decision of [true, false]) {
 					const ended = yield* settled()
 					assert.equal(Session.status(ended.session)._tag, "Completed")
 					assert.equal(writes, decision ? 1 : 0)
-					assert.deepEqual(Session.pendingApprovals(ended), [])
+					assert.deepEqual(Session.waits(ended), [])
 				}),
 			).pipe(
 				Effect.provide(
@@ -719,14 +729,14 @@ for (const firstApproved of [true, false]) {
 								input: String(sequence),
 							})
 							const turn = Session.currentTurn(waiting.session)!
-							const pending = Session.pendingApprovals(waiting)
+							const pending = Session.waits(waiting)
 							assert.equal(pending.length, 1)
 							assert.deepEqual(pending[0]?.toolCall.params, { sequence })
-							yield* runtime.approve({
+							yield* runtime.resolve({
 								session: base.session,
 								turn: turn.id,
 								approval: pending[0]!.approvalId,
-								approved,
+								outcome: { _tag: approved ? "Approved" : "Denied" },
 								expectedRevision: waiting.session.revision,
 							})
 							const settled = (): Effect.Effect<
@@ -1044,7 +1054,7 @@ for (const secondApproved of [true, false]) {
 							input: "Perform two separately approved writes",
 						})
 						const turn = Session.currentTurn(first.session)!
-						const old = Session.pendingApprovals(first)[0]!
+						const old = Session.waits(first)[0]!
 						const settled = (): Effect.Effect<
 							Session.View,
 							Session.RuntimeError
@@ -1056,17 +1066,17 @@ for (const secondApproved of [true, false]) {
 								}
 								return yield* runtimeStore.read(base.session)
 							})
-						yield* runtime.approve({
+						yield* runtime.resolve({
 							session: base.session,
 							turn: turn.id,
 							approval: old.approvalId,
-							approved: true,
+							outcome: { _tag: true ? "Approved" : "Denied" },
 							expectedRevision: first.session.revision,
 						})
 						const second = yield* settled()
-						assert.equal(Session.status(second.session)._tag, "WaitingApproval")
+						assert.equal(Session.status(second.session)._tag, "Waiting")
 						assert.equal(Session.currentTurn(second.session)?.id, turn.id)
-						const requests = Session.pendingApprovals(second)
+						const requests = Session.waits(second)
 						assert.equal(
 							requests.length,
 							1,
@@ -1079,11 +1089,11 @@ for (const secondApproved of [true, false]) {
 							sequence: sameArguments ? 1 : 2,
 						})
 						const rejected = yield* Effect.exit(
-							runtime.approve({
+							runtime.resolve({
 								session: base.session,
 								turn: turn.id,
 								approval: old.approvalId,
-								approved: true,
+								outcome: { _tag: true ? "Approved" : "Denied" },
 								expectedRevision: second.session.revision,
 							}),
 						)
@@ -1093,11 +1103,11 @@ for (const secondApproved of [true, false]) {
 							second.session.revision,
 						)
 						assert.deepEqual(writes, [1])
-						yield* runtime.approve({
+						yield* runtime.resolve({
 							session: base.session,
 							turn: turn.id,
 							approval: current.approvalId,
-							approved: secondApproved,
+							outcome: { _tag: secondApproved ? "Approved" : "Denied" },
 							expectedRevision: second.session.revision,
 						})
 						const ended = yield* settled()

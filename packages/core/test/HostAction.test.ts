@@ -78,7 +78,7 @@ test("host-selected actions check and approve the exact parameters without the m
 				assert.equal(calls.length, 0)
 				assert.equal(
 					Session.currentTurn(pending.session)?.status._tag,
-					"WaitingApproval",
+					"Waiting",
 				)
 				assert.deepEqual(
 					Session.currentTurn(pending.session)?.action?.arguments,
@@ -114,22 +114,12 @@ test("host-selected actions check and approve the exact parameters without the m
 					store,
 					agent: { toolkit },
 				})
-				const historical = yield* Effect.result(
-					restored.approveAction({
-						session: session.session.id,
-						turn: receipt.turn,
-						approval: request.approvalId,
-						approved: true,
-						expectedRevision: pending.session.revision,
-					}),
-				)
-				assert.equal(historical._tag, "Failure")
-				assert.equal(calls.length, 0)
-				yield* runtime.approveAction({
+				// A new runtime over the same store can answer, as after a restart.
+				yield* restored.resolveAction({
 					session: session.session.id,
 					turn: receipt.turn,
 					approval: request.approvalId,
-					approved: true,
+					outcome: Session.Outcome.Approved(),
 					expectedRevision: pending.session.revision,
 				})
 				const completed = yield* settled()
@@ -337,8 +327,7 @@ test("a related host action waits in the active Turn and keeps its own approval 
 					const active = yield* runtime.isActive(view.session.id)
 					if (
 						!active &&
-						Session.currentTurn(pending.session)?.status._tag ===
-							"WaitingApproval"
+						Session.currentTurn(pending.session)?.status._tag === "Waiting"
 					)
 						break
 					pending = yield* runtime.wait({
@@ -350,7 +339,7 @@ test("a related host action waits in the active Turn and keeps its own approval 
 				}
 				assert.equal(
 					Session.currentTurn(pending.session)?.status._tag,
-					"WaitingApproval",
+					"Waiting",
 				)
 				assert.equal(
 					Session.currentTurn(pending.session)?.activeAction?.item,
@@ -371,11 +360,11 @@ test("a related host action waits in the active Turn and keeps its own approval 
 				assert.ok(request)
 				assert.equal(request.toolCallId, related.callId)
 				yield* runtime
-					.approveAction({
+					.resolveAction({
 						session: view.session.id,
 						turn: related.turn,
 						approval: request.approvalId,
-						approved: true,
+						outcome: Session.Outcome.Approved(),
 						expectedRevision: pending.session.revision,
 					})
 					.pipe(Effect.provideContext(handlers))

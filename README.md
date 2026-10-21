@@ -10,7 +10,8 @@ You give work to an Agent in plain language. OpenBot runs the work on a server, 
 - **User tokens.** Sign in once in a browser, make a token, and call the API from any program.
 - **Organization and permissions.** Many people can share one OpenBot. Roles and policies decide what each person and each token may do.
 - **Sessions and Timelines.** Work happens in Sessions and Turns. The Timeline keeps versions, so you can go back and try again.
-- **Approvals.** Risky tool calls wait until a person says yes.
+- **Agent for Agents.** A Main Agent acts for you and gives work to a team of lasting Agents and their Session Agents. Each Agent has its own context and memory.
+- **Lazy capabilities.** Agents have no preset limits. When an Agent tries something new, the decider above it answers, and Grants and Rules keep the answer.
 - **Open Apps.** Agents find and use Apps that publishers put on the open web with the OpenBot App Protocol.
 
 ## Quick start
@@ -53,14 +54,11 @@ Then open `http://localhost:4321`. Start with the Intro and the Quick start.
 
 | Package                        | What it is                                           |
 | ------------------------------ | ---------------------------------------------------- |
-| `@openbot-build/platform`      | The server                                           |
-| `@openbot-build/platform-api`  | The typed HTTP contract                              |
+| `@openbot-build/openbot`       | The server, all its plugins, and its model providers |
+| `@openbot-build/api`           | The typed HTTP contract                              |
 | `@openbot-build/client`        | The TypeScript client                                |
 | `@openbot-build/core`          | The Agent core                                       |
 | `@openbot-build/protocol`      | The OpenBot App Protocol library                     |
-| `@openbot-build/app-host`      | Contracts for hosts that use Apps                    |
-| `@openbot-build/plugin-*`      | Plugins for goals, memory, and Turn limits           |
-| `@openbot-build/provider-*`    | Model providers: OpenAI, Chat Completions, Anthropic |
 | `@openbot-build/protocol-test` | A public test service for the App Protocol           |
 | `@openbot-build/docs`          | The docs site                                        |
 

@@ -26,17 +26,27 @@ export const Output = Schema.Struct({
 	finishReason: Response.FinishReason,
 })
 export type Output = typeof Output.Type
+/** Why a Turn failed. */
+export const FailureCode = Schema.Literals(["model_error", "internal_error"])
+export type FailureCode = typeof FailureCode.Type
 export const StatusSchema = Schema.TaggedUnion({
 	Running: {},
-	WaitingApproval: { result: Output },
+	/** The Turn waits for answers to tool approval requests. They are in the history. */
+	Waiting: { result: Output },
 	Completed: { result: Output },
 	Failed: {
 		message: Schema.String,
-		code: Schema.Literals(["model_error", "internal_error"]),
+		code: FailureCode,
 	},
 	Interrupted: {},
 })
 export type Status = typeof StatusSchema.Type
+/** The tags of `StatusSchema`, such as `Running` and `Failed`. */
+export const StatusTag = Schema.Literals(
+	// `Object.keys` gives plain strings. The keys of `cases` are the tags.
+	Object.keys(StatusSchema.cases) as ReadonlyArray<Status["_tag"]>,
+)
+export type StatusTag = typeof StatusTag.Type
 export const Status = Data.taggedEnum<Status>()
 export const Record = Schema.Struct({
 	id: Id,
@@ -63,4 +73,4 @@ export class Conflict extends Data.TaggedError("TurnConflict")<{
 	readonly message: string
 }> {}
 export const isTerminal = (status: Status) =>
-	status._tag !== "Running" && status._tag !== "WaitingApproval"
+	status._tag !== "Running" && status._tag !== "Waiting"

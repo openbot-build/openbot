@@ -1,21 +1,21 @@
 // Checks the running images from inside the Compose network.
-// compose.check.yaml starts this script after Platform and Protocol Test are healthy.
+// compose.check.yaml starts this script after OpenBot and Protocol Test are healthy.
 import assert from "node:assert/strict"
 
 const request = (url, init = {}) =>
 	fetch(url, { ...init, signal: AbortSignal.timeout(5000) })
 
-const platform = "http://platform:3000"
+const openbot = "http://openbot:3000"
 
-const anonymous = await request(`${platform}/v1/sessions`)
+const anonymous = await request(`${openbot}/v1/sessions`)
 assert.equal(anonymous.status, 401, "The API does not require authentication")
 
-const keyed = await request(`${platform}/v1/sessions`, {
+const keyed = await request(`${openbot}/v1/sessions`, {
 	headers: { authorization: "Bearer ob_invalid" },
 })
 assert.equal(keyed.status, 401, "The API does not reject invalid API keys")
 
-const schema = await request(`${platform}/openapi.json`)
+const schema = await request(`${openbot}/openapi.json`)
 assert.equal(schema.status, 200, "The OpenAPI document is not available")
 assert.ok((await schema.json()).openapi, "The OpenAPI document has no version")
 

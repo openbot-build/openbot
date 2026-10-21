@@ -3,6 +3,41 @@ import { Context, Data, Effect, Scope, Stream, Schema } from "effect"
 import * as App from "./App.ts"
 import * as Store from "./Store.ts"
 
+/** The MCP methods that list what an App offers. */
+export const ListAction = Schema.Literals([
+	"tools/list",
+	"resources/list",
+	"resources/templates/list",
+	"prompts/list",
+])
+export type ListAction = typeof ListAction.Type
+
+/** The MCP methods that run one operation. They can ask for more input. */
+export const OperationAction = Schema.Literals([
+	"tools/call",
+	"resources/read",
+	"prompts/get",
+])
+export type OperationAction = typeof OperationAction.Type
+
+/** Every action that a Client asks its `InvocationPolicy` about. */
+export const Action = Schema.Literals([
+	"connect",
+	...ListAction.literals,
+	...OperationAction.literals,
+	"subscriptions/listen",
+])
+export type Action = typeof Action.Type
+
+/** Who may see a tool, as the `ui.visibility` list of the tool says. */
+export const ToolVisibility = Schema.Literals(["model", "app"])
+export type ToolVisibility = typeof ToolVisibility.Type
+
+/** Who starts a call: the model, an App view, or the host itself. */
+export const CallSource = Schema.Literals([...ToolVisibility.literals, "host"])
+export type CallSource = typeof CallSource.Type
+
+/** The host may deny its own actions too, so `action` is not only an MCP `Action`. */
 export class PermissionDenied extends Data.TaggedError("PermissionDenied")<{
 	readonly action: string
 	readonly target: string
@@ -40,10 +75,10 @@ export class ToolFailure extends Data.TaggedError("ToolFailure")<{
 
 export interface Invocation {
 	readonly connection: Store.UserConnection
-	readonly action: string
+	readonly action: Action
 	readonly target: string
 	readonly arguments: unknown
-	readonly source: "model" | "app" | "host"
+	readonly source: CallSource
 }
 
 export class InvocationPolicy extends Context.Service<
@@ -65,7 +100,7 @@ export type Error =
 	| App.AppError
 
 export interface CallOptions {
-	readonly source: "model" | "app" | "host"
+	readonly source: CallSource
 	/** A business guarantee from the host, not an untrusted tool hint. By default, the call may write. */
 	readonly readOnly?: boolean
 	readonly timeoutMs?: number
@@ -92,7 +127,7 @@ export type OperationResult<A> =
 
 /** A serializable link to an MRTR (multi-round-trip request) operation. Hosts must store it with the original operation. */
 export const Continuation = Schema.Struct({
-	method: Schema.Literals(["tools/call", "resources/read", "prompts/get"]),
+	method: OperationAction,
 	params: Schema.JsonObject,
 	request: Schema.JsonObject,
 })
