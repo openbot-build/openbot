@@ -3,11 +3,14 @@ import {
 	Config,
 	Item,
 	Plugin,
+	PluginComposition,
+	PluginState,
 	Session,
 	SessionRuntime,
 	SessionStore,
 	SessionStoreRepository,
 	Store,
+	Timeline,
 	Turn,
 } from "@openbot-build/core"
 import {
@@ -15,6 +18,7 @@ import {
 	MemoryRules,
 	LanguageModelMemory,
 	MemoryOperations,
+	MemoryPlugin,
 } from "@openbot-build/plugin-memory"
 import {
 	Array,
@@ -32,13 +36,7 @@ import {
 	Schema,
 	Stream,
 } from "effect"
-import {
-	LanguageModel,
-	Prompt,
-	Toolkit,
-	type Response,
-	type Tool,
-} from "effect/ai"
+import { LanguageModel, Toolkit, type Response, type Tool } from "effect/ai"
 import {
 	SessionBusy,
 	SessionConflict,
@@ -64,6 +62,9 @@ import * as ErrorReporting from "../app/ErrorReporting.ts"
 import { Invocations } from "../apps/Invocations.ts"
 import { ownerKey } from "../apps/Repository.ts"
 import { AppPlugin, empty as emptyAppPlugin } from "../apps/AppPlugin.ts"
+
+/** The plugin that adds the host toolkit, the user plugin and the execution services. */
+const sessionHostId = Plugin.Id.make("@openbot-build/platform/session-host")
 
 /** The response of the current Turn, when the Session has one. */
 const currentResponse = (view: Session.View) =>
@@ -143,50 +144,42 @@ export const make = <
 								SessionExecutionUnavailable.make({ session: view.session.id }),
 							),
 						)
-		const definition = yield* Store.define({
-			stores: Memory.stores,
-			schemaVersion: "timeline/1",
-		})
-		const store = yield* SessionStoreRepository.make({
-			definition,
-			persistence: repository.store(namespace),
-			onCommit: ({ delta, view }) =>
-				repository
-					.save(namespace, {
-						delta,
-						response: Option.flatMap(
-							Option.fromNullishOr(view),
-							currentResponse,
-						),
-					})
-					.pipe(
-						Effect.tap(() => {
-							if (view === undefined) return Effect.void
-							const turn = Session.currentTurn(view.session)
-							const previous = delta.expected?.turns.find(
-								(entry) => entry.id === turn?.id,
-							)
-							return turn === undefined ||
-								previous === undefined ||
-								previous.status._tag === "Failed"
-								? Effect.void
-								: ErrorReporting.failedTurn(turn)
-						}),
-					),
-			onRemove: (ref) => repository.remove(namespace, ref),
-		})
-		const memoryPolicy = options.memory?.policy ?? MemoryRules.policy
-		const memories = MemoryOperations.make({
-			store,
+		const memoryPolicy = options.memory?.policy ?? MemoryRules.policy,
+			memoryModel = options.memory?.model ?? LanguageModelMemory.model
+		const memoryPlugin = MemoryPlugin.make({
 			policy: memoryPolicy,
-			model: options.memory?.model ?? LanguageModelMemory.model,
+			model: memoryModel,
+			settings: Effect.gen(function* (): Effect.fn.Return<
+				Memory.Settings,
+				Session.SessionNotFound | SessionStore.SessionStoreError,
+				Agent.Context
+			> {
+				const context = yield* Agent.Context,
+					at = yield* context.at,
+					view = yield* store.read(at.session)
+				const settings =
+					Session.currentTurn(view.session)?.settings ?? view.session.settings
+				return {
+					use: settings.memoryEnabled,
+					generate: settings.memoryGenerationEnabled ?? true,
+				}
+			}),
+			languageModel: Effect.gen(function* (): Effect.fn.Return<
+				LanguageModel.LanguageModel,
+				| Session.SessionNotFound
+				| SessionStore.SessionStoreError
+				| SessionExecutionUnavailable,
+				Agent.Context
+			> {
+				const context = yield* Agent.Context,
+					at = yield* context.at,
+					view = yield* store.read(at.session)
+				return yield* modelFor(view, Session.currentTurn(view.session))
+			}),
 		})
-		const plugin = Plugin.make({ id: Memory.pluginId })<
+		const host = Plugin.make({ id: sessionHostId })<
 			Tools,
-			| E
-			| Session.SessionNotFound
-			| Session.SessionError
-			| SessionStore.SessionStoreError,
+			E | Session.SessionNotFound | SessionStore.SessionStoreError,
 			R,
 			BuildE,
 			BuildR
@@ -202,32 +195,9 @@ export const make = <
 							const context = yield* Agent.Context,
 								at = yield* context.at,
 								view = yield* store.read(at.session)
-							const memory =
-								view.state.value["@openbot-build/plugin-memory"] ??
-								Memory.empty()
-							const text = (
-								Session.currentTurn(view.session)?.settings ??
-								view.session.settings
-							).memoryEnabled
-								? memoryPolicy.project(memory)
-								: ""
 							const configured = options.runtime?.toolkit
 							const supplied = {
 								...input,
-								instructions:
-									text === ""
-										? input.instructions
-										: Prompt.concat(
-												input.instructions,
-												Prompt.make([
-													{
-														role: "system",
-														content:
-															"Historical memory is evidence with a limited scope. Follow the current instructions.\n" +
-															text,
-													},
-												]),
-											),
 								toolkit:
 									configured === undefined
 										? input.toolkit
@@ -263,6 +233,77 @@ export const make = <
 						}),
 					)
 			}),
+		)
+		// Memory runs outside the host plugin, so the user plugin sees the memory instructions.
+		const composed = yield* PluginComposition.mergeState(
+			sessionHostId,
+			memoryPlugin,
+			{ ...host, stores: {} },
+		).pipe(
+			// Only the memory plugin has a store here, so the stores cannot conflict.
+			Effect.orDie,
+		)
+		const definition = yield* Store.define({
+			stores: composed.stores,
+			schemaVersion: "timeline/1",
+		})
+		const store: SessionStore.Store<Memory.Values> =
+			yield* SessionStoreRepository.make({
+				definition,
+				persistence: repository.store(namespace),
+				onCommit: ({ delta, view }) =>
+					repository
+						.save(namespace, {
+							delta,
+							response: Option.flatMap(
+								Option.fromNullishOr(view),
+								currentResponse,
+							),
+						})
+						.pipe(
+							Effect.tap(() => {
+								if (view === undefined) return Effect.void
+								const turn = Session.currentTurn(view.session)
+								const previous = delta.expected?.turns.find(
+									(entry) => entry.id === turn?.id,
+								)
+								return turn === undefined ||
+									previous === undefined ||
+									previous.status._tag === "Failed"
+									? Effect.void
+									: ErrorReporting.failedTurn(turn)
+							}),
+						),
+				onRemove: (ref) => repository.remove(namespace, ref),
+			})
+		const memories = MemoryOperations.make({
+			store,
+			policy: memoryPolicy,
+			model: memoryModel,
+		})
+		const memoryStore = yield* PluginState.make({ store, plugin: memoryPlugin })
+		// The root plugin gives the memory plugin its store for each Turn.
+		const plugin = Plugin.make({ id: sessionHostId })<
+			Tools,
+			| E
+			| Timeline.VersionError
+			| Session.SessionNotFound
+			| Session.SessionError
+			| SessionStore.SessionStoreError,
+			R,
+			BuildE,
+			BuildR
+		>(() =>
+			Effect.map(
+				composed.middleware,
+				(middleware) => (next, input) =>
+					middleware(next, input).pipe(
+						Stream.provideService(memoryPlugin.store, memoryStore),
+						// The memory plugin adds no tools, so the merged tools are Tools.
+						// TypeScript cannot reduce MergedTools<[{}, Tools]> to Tools for a generic Tools.
+						Stream.map((event) => event as Agent.Event<Tools>),
+					),
+			),
 		)
 		const runtime = yield* SessionRuntime.make({
 			store,
@@ -821,33 +862,6 @@ export const make = <
 										terminal = true
 										reportedFailure = event.turn.status._tag === "Failed"
 										yield* finish(response(event.view, event.turn))
-										if (
-											Match.value(event.turn.status).pipe(
-												Match.tag("Completed", () => true),
-												Match.orElse(() => false),
-											)
-										)
-											yield* memories
-												.consolidate(id, {
-													enabled:
-														event.turn.settings.memoryGenerationEnabled ?? true,
-												})
-												.pipe(
-													Effect.provideService(
-														LanguageModel.LanguageModel,
-														model,
-													),
-													Effect.catchTag("MemoryError", (error) =>
-														ErrorReporting.record({
-															source: "turn",
-															operation: "memory.consolidate",
-															sessionId: id,
-															turnId: event.turn.id,
-															cause: Cause.fail(error),
-														}).pipe(Effect.andThen(store.read(id))),
-													),
-													Effect.asVoid,
-												)
 									}),
 								),
 								Match.orElse(() => Effect.void),

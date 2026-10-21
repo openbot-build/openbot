@@ -199,6 +199,22 @@ const program = Effect.scoped(
 `read` returns the learned entries. `update` runs a `Remember`, `Forget`, or `Configure` command. `consolidate` asks the model to learn new entries from new history.
 `MemoryRules` and `LanguageModelMemory` are the default rules and model. You can replace them.
 
+`MemoryPlugin.make` gives the plugin that uses memory in each Turn. It adds the active entries to the instructions. After a completed Turn, it learns new entries. You give it two Effects that run in each Turn:
+
+- `settings` returns `{ use, generate }`. `use` turns on the instructions. `generate` turns on learning.
+- `languageModel` returns the model that learns the entries.
+
+The host decides where these values come from. Pass `plugin.stores` to `Store.define`, and provide `plugin.store` with `PluginState.make`.
+
+Here `learner` is a `LanguageModel` service that you built before:
+
+```ts
+const plugin = MemoryPlugin.make({
+	settings: Effect.succeed({ use: true, generate: true }),
+	languageModel: Effect.succeed(learner),
+})
+```
+
 ## plugin-turn-limiter
 
 `@openbot-build/plugin-turn-limiter` stops a Turn after a set number of model steps. The first model request counts as one step.

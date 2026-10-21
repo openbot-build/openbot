@@ -261,6 +261,7 @@ export type Instance<
 		Memory.Values,
 		Tools,
 		| E
+		| Timeline.VersionError
 		| Session.SessionNotFound
 		| Session.SessionError
 		| SessionStore.SessionStoreError,
