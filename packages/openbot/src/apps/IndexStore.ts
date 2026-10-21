@@ -1,3 +1,5 @@
+// These are plain query functions that take the database first. A pipeable form does not help here.
+// @effect-diagnostics missingPipeableSignature:off
 import { AppIndexApi } from "@openbot-build/api"
 import { Index } from "@openbot-build/protocol"
 import { Effect, HashMap, Layer, Schema } from "effect"

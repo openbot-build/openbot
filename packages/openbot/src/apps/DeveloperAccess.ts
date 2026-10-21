@@ -159,7 +159,7 @@ export const make: Effect.Effect<
 	/** Read the proof. With `lock`, keep the row locked until the transaction ends. */
 	const readProof = Effect.fn("DeveloperAccess.readProof")(function* (
 		id: string,
-		lock = false,
+		lock: boolean = false,
 	) {
 		const query = db.select().from(developerProofs).where(proofWhere(id))
 		const row = (yield* Rows.stored(lock ? query.for("update") : query))[0]
@@ -180,7 +180,7 @@ export const make: Effect.Effect<
 	const ownProof = Effect.fn("DeveloperAccess.ownProof")(function* (
 		owner: string,
 		id: string,
-		lock = false,
+		lock: boolean = false,
 	) {
 		const proof = yield* readProof(id, lock)
 		if (proof.owner !== owner) {
@@ -207,7 +207,7 @@ export const make: Effect.Effect<
 	const claim = Effect.fn("DeveloperAccess.claim")(function* (
 		owner: string,
 		id: string,
-		lock = false,
+		lock: boolean = false,
 	) {
 		const query = db.select().from(developerClaims).where(claimWhere(id))
 		const row = (yield* Rows.stored(lock ? query.for("update") : query))[0]

@@ -1,3 +1,5 @@
+// These are plain query functions that take the database first. A pipeable form does not help here.
+// @effect-diagnostics missingPipeableSignature:off
 import {
 	AppViewsApi as Api,
 	ExperienceNotFound,

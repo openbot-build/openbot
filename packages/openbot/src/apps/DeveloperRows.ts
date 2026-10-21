@@ -1,3 +1,5 @@
+// These are plain query functions that take the database first. A pipeable form does not help here.
+// @effect-diagnostics missingPipeableSignature:off
 import type { PgClient } from "@effect/sql-pg"
 import { DeveloperApi as Api } from "@openbot-build/api"
 import { Discovery } from "@openbot-build/protocol"
@@ -124,7 +126,7 @@ export const findApp = (
 	db: Database,
 	namespace: string,
 	cardUrl: string,
-	lock = false,
+	lock: boolean = false,
 ) => {
 	const query = db
 		.select()
@@ -140,7 +142,7 @@ export const getApp = (
 	db: Database,
 	namespace: string,
 	cardUrl: string,
-	lock = false,
+	lock: boolean = false,
 ) =>
 	findApp(db, namespace, cardUrl, lock).pipe(
 		Effect.flatMap(
@@ -205,7 +207,7 @@ export const findTest = (
 	db: Database,
 	namespace: string,
 	id: string,
-	lock = false,
+	lock: boolean = false,
 ) => {
 	const query = db.select().from(developerTests).where(testWhere(namespace, id))
 	return stored(lock ? query.for("update") : query).pipe(
@@ -218,7 +220,7 @@ export const getTest = (
 	db: Database,
 	namespace: string,
 	id: string,
-	lock = false,
+	lock: boolean = false,
 ) =>
 	findTest(db, namespace, id, lock).pipe(
 		Effect.flatMap(
@@ -277,7 +279,7 @@ export const getFlow = Effect.fn("DeveloperRows.getFlow")(function* (
 	db: Database,
 	namespace: string,
 	flowId: string,
-	lock = false,
+	lock: boolean = false,
 ) {
 	const query = db
 		.select()

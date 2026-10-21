@@ -93,7 +93,7 @@ export const make: Effect.Effect<
 		)
 	/** Read an invitation with the scope of its proof. With `lock`, keep the row locked. */
 	const readInvitation = Effect.fn("DeveloperMembers.readInvitation")(
-		function* (id: string, lock = false) {
+		function* (id: string, lock: boolean = false) {
 			const query = db
 				.select({
 					invitation: developerInvitations,
@@ -152,7 +152,7 @@ export const make: Effect.Effect<
 		return { owner: row.owner, value: yield* toMember(row) }
 	})
 	const activeInvitation = Effect.fn("DeveloperMembers.activeInvitation")(
-		function* (id: string, lock = false) {
+		function* (id: string, lock: boolean = false) {
 			const record = yield* readInvitation(id, lock)
 			if (record.value.status !== "Pending")
 				return yield* conflict("InvitationInactive")
