@@ -7,7 +7,16 @@ import {
 	SessionConflict,
 } from "@openbot-build/platform-api"
 import { AppUi, Client } from "@openbot-build/protocol"
-import { Context, Effect, Layer, Match, Schema } from "effect"
+import {
+	Array as Arr,
+	Clock,
+	Context,
+	Effect,
+	Layer,
+	Match,
+	Option,
+	Schema,
+} from "effect"
 import { Backend } from "../app/Backend.ts"
 import { Capabilities } from "./Capabilities.ts"
 import { ConnectionLocks } from "./ConnectionLocks.ts"
@@ -39,7 +48,8 @@ export const make = Effect.gen(function* () {
 	const bound = (identity: typeof Identity.Service, id: string) =>
 		Effect.gen(function* () {
 			const view = yield* views.get(ownerKey(identity), id)
-			if (view.expiresAt < Date.now()) return yield* unavailable("Closed")
+			if (view.expiresAt < (yield* Clock.currentTimeMillis))
+				return yield* unavailable("Closed")
 			const stored = yield* connections
 				.get(ownerKey(identity), view.connectionId)
 				.pipe(Effect.mapError(() => unavailable("ConnectionChanged")))
@@ -187,7 +197,7 @@ export const make = Effect.gen(function* () {
 						item: item.id,
 						connectionId: operation.source.connectionId,
 						revision: operation.source.revision,
-						expiresAt: Date.now() + 7_200_000,
+						expiresAt: (yield* Clock.currentTimeMillis) + 7_200_000,
 					}
 					yield* views.open(ownerKey(identity), view)
 					const result =
@@ -262,8 +272,11 @@ export const make = Effect.gen(function* () {
 						if (view.readOnly) return yield* conflict()
 						const existing = yield* views
 							.action(ownerKey(identity), id, request.requestId)
-							.pipe(Effect.catchTag("ExperienceNotFound", () => Effect.void))
-						if (existing !== undefined) {
+							.pipe(
+								Effect.asSome,
+								Effect.catchTag("ExperienceNotFound", () => Effect.succeedNone),
+							)
+						if (Option.isSome(existing)) {
 							yield* views.claim(ownerKey(identity), view, {
 								requestId: request.requestId,
 								kind: request.kind,
@@ -271,8 +284,8 @@ export const make = Effect.gen(function* () {
 								arguments: request.kind === "tool" ? request.arguments : {},
 								ticket: null,
 							})
-							if (existing.ticket === null) return yield* conflict()
-							return existing.ticket
+							if (existing.value.ticket === null) return yield* conflict()
+							return existing.value.ticket
 						}
 
 						const service = yield* sessions(identity)
@@ -353,14 +366,18 @@ export const make = Effect.gen(function* () {
 				const saved = yield* views.action(ownerKey(identity), id, requestId)
 				if (saved.ticket === null) return yield* conflict()
 				const ticket = saved.ticket
-				const operation =
-					(yield* records.list(ownerKey(identity), ticket.session)).find(
-						(operation) =>
-							operation.turn === ticket.turn &&
-							operation.callId === ticket.callId,
-					) ?? null
-				if (operation !== null)
-					return { ticket, status: operation.status, operation }
+				const recorded = Arr.findFirst(
+					yield* records.list(ownerKey(identity), ticket.session),
+					(operation) =>
+						operation.turn === ticket.turn &&
+						operation.callId === ticket.callId,
+				)
+				if (Option.isSome(recorded))
+					return {
+						ticket,
+						status: recorded.value.status,
+						operation: recorded.value,
+					}
 				const service = yield* sessions(identity)
 				const current = yield* service
 					.get(ticket.session)

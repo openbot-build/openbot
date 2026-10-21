@@ -1,7 +1,7 @@
 import { AppIndexApi } from "@openbot-build/platform-api"
 import { Discovery, Index } from "@openbot-build/protocol"
 import type { PgClient } from "@effect/sql-pg"
-import { Clock, Effect, Layer, Schema } from "effect"
+import { Clock, Effect, Layer, Option, Schema } from "effect"
 import { and, asc, eq, lte } from "drizzle-orm"
 import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { appIndexJobs, appIndexResults } from "../database/Schema.ts"
@@ -121,16 +121,18 @@ export const makeFor = (
 									eq(appIndexResults.generation, generation),
 								),
 							))[0]
-						if (result === undefined) return null
-						return {
+						if (result === undefined) return Option.none()
+						return Option.some<Job>({
 							cardUrl,
 							generation,
-							status: "Completed" as const,
+							status: "Completed",
 							requestedAt: result.finishedAt,
 							check: yield* Schema.decodeEffect(checkCodec)(result.check),
-						}
+						})
 					}
-					return row === undefined ? null : yield* job(row)
+					return row === undefined
+						? Option.none()
+						: Option.some(yield* job(row))
 				}).pipe(Effect.mapError(unavailable)),
 			claim: (cardUrl) =>
 				Effect.gen(function* () {
@@ -157,7 +159,7 @@ export const makeFor = (
 								)
 								.limit(1)
 								.for("update", { skipLocked: true }))[0]
-							if (row === undefined) return null
+							if (row === undefined) return Option.none()
 							const generation =
 								row.generation === "" ||
 								row.generation === row.completedGeneration
@@ -174,12 +176,12 @@ export const makeFor = (
 										generation === row.generation ? row.requestedAt : now,
 								})
 								.where(where(row.cardUrl))
-							return {
+							return Option.some({
 								cardUrl: row.cardUrl,
 								token,
 								generation,
 								sources: yield* Schema.decodeEffect(sourcesCodec)(row.sources),
-							}
+							})
 						}),
 					)
 				}).pipe(Effect.mapError(unavailable)),
@@ -204,13 +206,15 @@ export const makeFor = (
 									),
 								)
 								.returning({ generation: appIndexJobs.generation })
-							if (rows.length !== 1) return yield* unavailable()
+							const [finished] = rows
+							if (rows.length !== 1 || finished === undefined)
+								return yield* unavailable()
 							yield* tx
 								.insert(appIndexResults)
 								.values({
 									namespace,
 									cardUrl: claim.cardUrl,
-									generation: rows[0]!.generation,
+									generation: finished.generation,
 									check: encoded,
 									finishedAt: yield* Clock.currentTimeMillis,
 								})

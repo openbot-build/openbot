@@ -25,7 +25,7 @@ export class Invocations extends Context.Service<
 		readonly pending: (
 			input: Position,
 			callId: string,
-		) => Effect.Effect<AppExecution.Invocation | undefined, Error>
+		) => Effect.Effect<Option.Option<AppExecution.Invocation>, Error>
 		readonly approve: (
 			input: Position,
 			callId: string,
@@ -177,7 +177,18 @@ export const make: Effect.Effect<
 									}
 								: null,
 						}))
-						.pipe(Effect.ignore),
+						.pipe(
+							// After a normal finish the status is no longer "Sending", so this
+							// change fails with a conflict. That is expected and safe to skip.
+							Effect.catchTag("SessionConflict", () => Effect.void),
+							Effect.catch((error) =>
+								Effect.logWarning("App operation status could not be closed", {
+									source: "apps",
+									operation: value.id,
+									error: error._tag,
+								}),
+							),
+						),
 				),
 			)
 		})
@@ -186,10 +197,7 @@ export const make: Effect.Effect<
 		pending: (input, callId) =>
 			records.get(input.owner, id(input, callId)).pipe(
 				Effect.asSome,
-				Effect.catchTag("ExperienceNotFound", () =>
-					Effect.succeed(Option.none<AppExecution.Invocation>()),
-				),
-				Effect.map(Option.getOrUndefined),
+				Effect.catchTag("ExperienceNotFound", () => Effect.succeedNone),
 			),
 		approve: (input, callId, approved, grantReads) =>
 			Effect.gen(function* () {

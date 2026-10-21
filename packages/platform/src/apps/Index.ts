@@ -155,14 +155,14 @@ export const make = (
 					}).pipe(
 						Effect.map(({ entries, checks }) => ({
 							source: provider.source,
-							entries,
+							entries: Option.some(entries),
 							checks,
 							issues: [],
 						})),
 						Effect.catchTag("IndexUnavailable", (error) =>
 							Effect.succeed({
 								source: provider.source,
-								entries: undefined,
+								entries: Option.none<ReadonlyArray<ProtocolIndex.Entry>>(),
 								checks: HashMap.empty<string, Api.Check>(),
 								issues: error.issues,
 							}),
@@ -171,60 +171,61 @@ export const make = (
 				{ concurrency: 4 },
 			)
 			const issues = outcomes.flatMap((outcome) => outcome.issues)
-			if (outcomes.every((outcome) => outcome.entries === undefined))
+			if (outcomes.every((outcome) => Option.isNone(outcome.entries)))
 				return yield* Api.IndexUnavailable.make({ issues })
-			let apps = HashMap.empty<string, Api.App>()
-			for (const outcome of outcomes) {
-				for (const raw of outcome.entries ?? []) {
+			const listed = outcomes.flatMap((outcome) =>
+				Option.getOrElse(outcome.entries, () => []).map((raw) => {
 					const entry = { ...raw, cardUrl: new URL(raw.cardUrl).href }
-					const check = Option.getOrUndefined(
+					const indexed = {
+						_tag: "Indexed",
+						attemptedAt: entry.checkedAt,
+					} as const
+					const check: Api.Check = Option.match(
 						HashMap.get(outcome.checks, entry.cardUrl),
-					)
-					const currentCheck =
-						check === undefined
-							? ({ _tag: "Indexed", attemptedAt: entry.checkedAt } as const)
-							: Match.value(check).pipe(
-									Match.tag("Pending", () => check),
+						{
+							onNone: () => indexed,
+							onSome: (check) =>
+								Match.value(check).pipe(
+									Match.tag("Pending", (check) => check),
 									Match.orElse((check) =>
-										check.attemptedAt < entry.checkedAt
-											? ({
-													_tag: "Indexed",
-													attemptedAt: entry.checkedAt,
-												} as const)
-											: check,
+										check.attemptedAt < entry.checkedAt ? indexed : check,
 									),
-								)
-					if (
-						currentCheck._tag === "Excluded" ||
-						currentCheck._tag === "Withdrawn"
-					)
-						continue
-					const restriction = Option.getOrUndefined(
-						governance.find(entry.cardUrl),
-					)
-					const previous = HashMap.get(apps, entry.cardUrl)
-					apps = HashMap.set(
-						apps,
-						entry.cardUrl,
-						Option.match(previous, {
-							onNone: () => ({
-								entry,
-								sources: [outcome.source],
-								matches: [],
-								check: currentCheck,
-								...(restriction === undefined ? {} : { restriction }),
-							}),
-							onSome: (app) => ({
-								...app,
-								sources: Arr.dedupeWith(
-									[...app.sources, outcome.source],
-									(a: Api.Source, b: Api.Source) => a.id === b.id,
 								),
-							}),
-						}),
+						},
 					)
-				}
-			}
+					return { source: outcome.source, entry, check }
+				}),
+			)
+			const apps = Arr.reduce(
+				listed,
+				HashMap.empty<string, Api.App>(),
+				(apps, { source, entry, check }) =>
+					check._tag === "Excluded" || check._tag === "Withdrawn"
+						? apps
+						: HashMap.set(
+								apps,
+								entry.cardUrl,
+								Option.match(HashMap.get(apps, entry.cardUrl), {
+									onNone: (): Api.App => ({
+										entry,
+										sources: [source],
+										matches: [],
+										check,
+										...Option.match(governance.find(entry.cardUrl), {
+											onNone: () => ({}),
+											onSome: (restriction) => ({ restriction }),
+										}),
+									}),
+									onSome: (app): Api.App => ({
+										...app,
+										sources: Arr.dedupeWith(
+											[...app.sources, source],
+											(a, b) => a.id === b.id,
+										),
+									}),
+								}),
+							),
+			)
 			return {
 				apps: Arr.sort(
 					Arr.fromIterable(HashMap.values(apps)),
@@ -233,7 +234,7 @@ export const make = (
 				issues,
 				sources: chosen.map((provider) => provider.source.id),
 				unavailable: outcomes
-					.filter((outcome) => outcome.entries === undefined)
+					.filter((outcome) => Option.isNone(outcome.entries))
 					.map((outcome) => outcome.source.id),
 			}
 		})
@@ -280,20 +281,22 @@ export const make = (
 					)
 				const limit = Number(input.limit ?? "20")
 				const page = filtered.slice(0, limit)
-				const last = Arr.last(page)
 				return {
 					apps: page,
 					issues: collected.issues,
-					nextCursor:
-						filtered.length <= limit || Option.isNone(last)
-							? null
-							: JSON.stringify({
-									query,
-									sources: collected.sources,
-									unavailable: collected.unavailable,
-									name: last.value.entry.card.name,
-									cardUrl: last.value.entry.cardUrl,
-								}),
+					nextCursor: Arr.last(page).pipe(
+						Option.filter(() => filtered.length > limit),
+						Option.map((last) =>
+							JSON.stringify({
+								query,
+								sources: collected.sources,
+								unavailable: collected.unavailable,
+								name: last.entry.card.name,
+								cardUrl: last.entry.cardUrl,
+							}),
+						),
+						Option.getOrNull,
+					),
 				}
 			}),
 			get: Effect.fn("PublicIndex.get")(function* (cardUrl, source) {

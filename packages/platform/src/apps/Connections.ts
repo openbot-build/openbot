@@ -16,7 +16,6 @@ import {
 	Match,
 	Option,
 	Redacted,
-	Schema,
 } from "effect"
 import * as DiscoveryService from "./Discovery.ts"
 import * as ManualConnection from "./ManualConnection.ts"
@@ -172,30 +171,20 @@ export const make: Effect.Effect<
 		createManualConnection: Effect.fn("Apps.createManualConnection")(
 			function* (input) {
 				const key = yield* owner
-				const valid = yield* Schema.decodeEffect(Api.ManualConnectionRequest)(
-					input,
-				).pipe(
-					Effect.mapError(() =>
-						Api.ConnectionConfigurationInvalid.make({
-							keys: [],
-							message: "The manual MCP configuration is invalid.",
-						}),
-					),
-				)
-				const existing = yield* repository.get(key, valid.id).pipe(
+				const existing = yield* repository.get(key, input.id).pipe(
 					Effect.asSome,
 					Effect.catchTag("ExperienceNotFound", () => Effect.succeedNone),
 				)
 				if (Option.isSome(existing)) return yield* project(key, existing.value)
-				yield* governance.check(valid.url)
-				const configured = yield* ManualConnection.configure(key)(valid)
+				yield* governance.check(input.url)
+				const configured = yield* ManualConnection.configure(key)(input)
 				const protection = yield* probe.check(configured)
 				const connection = {
 					...configured.connection,
 					authorization: protection.requiresAuthorization
 						? {
 								_tag: "PendingAuthorization" as const,
-								resource: valid.url,
+								resource: input.url,
 								scopes: protection.scopes,
 							}
 						: { _tag: "Unprotected" as const },
@@ -205,21 +194,13 @@ export const make: Effect.Effect<
 					yield* repository.save(key, {
 						app: configured.app,
 						connection,
-						name: valid.name,
+						name: input.name,
 					}),
 				)
 			},
 		),
 		getConnectionDraft: getDraft,
-		createConnection: Effect.fn("Apps.confirmConnection")(function* (raw) {
-			const input = yield* Schema.decodeEffect(Api.ConnectionRequest)(raw).pipe(
-				Effect.mapError(() =>
-					ExperienceInputInvalid.make({
-						message:
-							"Review the App, choose its endpoint and confirm its configuration.",
-					}),
-				),
-			)
+		createConnection: Effect.fn("Apps.confirmConnection")(function* (input) {
 			const key = yield* owner
 			yield* governance.check(input.cardUrl)
 			const existing = yield* repository.get(key, input.draftId).pipe(

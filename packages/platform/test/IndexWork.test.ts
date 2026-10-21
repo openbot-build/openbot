@@ -133,7 +133,7 @@ test("stored public verification updates and withdraws with a test clock and rec
 					"Website",
 				)
 				yield* jobs.enqueue(cardUrl, [])
-				assert.ok(yield* jobs.claim())
+				assert.ok(Option.isSome(yield* jobs.claim()))
 				assert.equal(yield* work.runOne(), false)
 			}),
 		)

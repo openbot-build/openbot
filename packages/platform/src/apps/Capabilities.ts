@@ -65,26 +65,29 @@ export const pages = <A>(
 		},
 		Client.Error
 	>,
-) =>
-	Effect.gen(function* () {
-		let all: ReadonlyArray<A> = []
-		let cursor: string | undefined
-		let seen = HashSet.empty<string>()
-		do {
-			const page = yield* read(cursor)
-			all = Arr.appendAll(all, page.values)
-			cursor = page.nextCursor
-			if (cursor !== undefined) {
-				if (HashSet.has(seen, cursor))
-					return yield* new Client.ClientError({
-						reason: "Protocol",
-						issue: "The App repeated a capability cursor.",
-					})
-				seen = HashSet.add(seen, cursor)
-			}
-		} while (cursor !== undefined)
-		return all
-	})
+) => {
+	const from = (
+		cursor: string | undefined,
+		seen: HashSet.HashSet<string>,
+	): Effect.Effect<ReadonlyArray<A>, Client.Error> =>
+		read(cursor).pipe(
+			Effect.flatMap((page) => {
+				const next = page.nextCursor
+				if (next === undefined) return Effect.succeed(page.values)
+				if (HashSet.has(seen, next))
+					return Effect.fail(
+						new Client.ClientError({
+							reason: "Protocol",
+							issue: "The App repeated a capability cursor.",
+						}),
+					)
+				return from(next, HashSet.add(seen, next)).pipe(
+					Effect.map((rest) => Arr.appendAll(page.values, rest)),
+				)
+			}),
+		)
+	return from(undefined, HashSet.empty())
+}
 export const make: Effect.Effect<
 	typeof Capabilities.Service,
 	never,

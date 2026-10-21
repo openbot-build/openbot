@@ -6,7 +6,7 @@ import {
 } from "@openbot-build/platform-api"
 import { Authorization } from "@openbot-build/protocol"
 import type { PgClient } from "@effect/sql-pg"
-import { Clock, Effect, Layer, Match, Schema } from "effect"
+import { Clock, Effect, Layer, Schema } from "effect"
 import { and, eq } from "drizzle-orm"
 import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import {
@@ -29,19 +29,13 @@ const consumed = () =>
 		message:
 			"This authorization has already been handled. Open My Apps to view the current connection.",
 	})
-const fail = (error: { readonly _tag: string }) =>
-	Match.value(error).pipe(
-		Match.when({ _tag: "ExperienceNotFound" }, () =>
-			Schema.decodeUnknownSync(ExperienceNotFound)(error),
-		),
-		Match.when({ _tag: "ConnectionConflict" }, () =>
-			Schema.decodeUnknownSync(ConnectionsApi.ConnectionConflict)(error),
-		),
-		Match.when({ _tag: "AppAuthorizationFailed" }, () =>
-			Schema.decodeUnknownSync(Api.AppAuthorizationFailed)(error),
-		),
-		Match.orElse(unavailable),
-	)
+/** Keep the errors that callers handle. Every other storage failure becomes one error. */
+const fail = (error: unknown) =>
+	error instanceof ExperienceNotFound ||
+	error instanceof ConnectionsApi.ConnectionConflict ||
+	error instanceof Api.AppAuthorizationFailed
+		? error
+		: unavailable()
 const flowCodec = Schema.fromJsonString(Schema.toCodecJson(Authorization.Flow))
 
 export const make: Effect.Effect<

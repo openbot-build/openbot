@@ -49,8 +49,13 @@ export const make: Effect.Effect<
 				.pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
 			return {
 				...record.value,
-				status: job?.status ?? "Accepted",
-				check: job?.check ?? null,
+				status: Option.match(job, {
+					onNone: () => "Accepted" as const,
+					onSome: (job) => job.status,
+				}),
+				check: Option.getOrNull(
+					Option.flatMapNullishOr(job, (job) => job.check),
+				),
 				restriction: Option.getOrNull(governance.find(record.value.cardUrl)),
 			} satisfies Api.IndexRequest
 		})

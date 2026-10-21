@@ -511,7 +511,7 @@ export const make = <
 						)(entry.toolCall!.params).pipe(Effect.mapError(publicError))
 						const app =
 							options.owner === undefined || Option.isNone(appInvocations)
-								? undefined
+								? Option.none()
 								: yield* appInvocations.value
 										.pending(
 											{
@@ -534,7 +534,10 @@ export const make = <
 							toolCallId: entry.toolCallId,
 							toolName: entry.toolCall!.name,
 							arguments: arguments_,
-							...(app === undefined ? {} : { app }),
+							...Option.match(app, {
+								onNone: () => ({}),
+								onSome: (app) => ({ app }),
+							}),
 						}
 					}),
 				)
