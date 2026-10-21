@@ -31,8 +31,11 @@ importers:
         specifier: "7"
         version: 7.0.2
 
-  packages/app-host:
+  packages/api:
     dependencies:
+      "@openbot-build/core":
+        specifier: workspace:*
+        version: link:../core
       "@openbot-build/protocol":
         specifier: workspace:*
         version: link:../protocol
@@ -110,15 +113,12 @@ importers:
       "@effect/sql-pg":
         specifier: 4.0.5
         version: 4.0.5(effect@4.0.5)
-      "@openbot-build/app-host":
-        specifier: workspace:^
-        version: link:../app-host
-      "@openbot-build/core":
-        specifier: workspace:*
-        version: link:../core
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
+      "@openbot-build/core":
+        specifier: workspace:*
+        version: link:../core
       "@openbot-build/protocol":
         specifier: workspace:*
         version: link:../protocol
@@ -147,19 +147,6 @@ importers:
       "@types/pg":
         specifier: 8.23.1
         version: 8.23.1
-
-  packages/api:
-    dependencies:
-      "@openbot-build/core":
-        specifier: workspace:*
-        version: link:../core
-      "@openbot-build/protocol":
-        specifier: workspace:*
-        version: link:../protocol
-    devDependencies:
-      effect:
-        specifier: 4.0.5
-        version: 4.0.5
 
   packages/protocol:
     dependencies:

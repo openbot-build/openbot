@@ -1,4 +1,3 @@
-import { App as HostApp } from "@openbot-build/app-host"
 import {
 	App,
 	AppConnections,
@@ -42,7 +41,7 @@ export type Protection =
 			readonly scopes: ReadonlyArray<string>
 			readonly resourceMetadataUrl?: string
 	  }
-export type BoundApp = typeof HostApp.App.Service & {
+export type BoundApp = HostApp.Service & {
 	readonly inspectAuthorization: (
 		key: Store.ConnectionKey,
 	) => Effect.Effect<
@@ -59,6 +58,7 @@ export type BoundApp = typeof HostApp.App.Service & {
 		AuthorizationError | App.CleanupPending
 	>
 }
+import * as HostApp from "./HostApp.ts"
 import { Probe } from "./Probe.ts"
 
 export class AppNetwork extends Context.Service<
@@ -267,164 +267,160 @@ export const make: Effect.Effect<
 					}),
 				)
 			const host: BoundApp = {
-				...HostApp.App.of({
-					discover: discovery.resolve,
-					list: repository.listApps(owner).pipe(Effect.mapError(appError)),
-					get: stores.apps.getApp,
-					listConnections: repository.list(owner).pipe(
-						Effect.map((rows) => rows.map((row) => row.connection)),
-						Effect.mapError(appError),
-					),
-					getConnection: stores.apps.get,
-					add: Effect.fn("AppHost.add")(function* (input) {
-						yield* keyChecked(input.key)
-						yield* governance
-							.check(input.candidate.cardUrl)
-							.pipe(
-								Effect.mapError(
-									() => new App.AppError({ reason: "Unavailable" }),
-								),
-							)
-						if (!input.confirmed)
-							return yield* new App.AppError({ reason: "ConfirmationRequired" })
-						const current = yield* discovery.refreshCard(
-							input.candidate.cardUrl,
-						)
-						yield* Match.value(
-							rules.compare({ previous: input.candidate, current }),
-						).pipe(
-							Match.tag("NeedsRevalidation", () =>
-								Effect.fail(new App.AppError({ reason: "CandidateChanged" })),
+				discover: discovery.resolve,
+				list: repository.listApps(owner).pipe(Effect.mapError(appError)),
+				get: stores.apps.getApp,
+				listConnections: repository.list(owner).pipe(
+					Effect.map((rows) => rows.map((row) => row.connection)),
+					Effect.mapError(appError),
+				),
+				getConnection: stores.apps.get,
+				add: Effect.fn("AppHost.add")(function* (input) {
+					yield* keyChecked(input.key)
+					yield* governance
+						.check(input.candidate.cardUrl)
+						.pipe(
+							Effect.mapError(
+								() => new App.AppError({ reason: "Unavailable" }),
 							),
-							Match.orElse(() => Effect.void),
 						)
-						const configured = yield* rules.configureEndpoint({
-							candidate: current,
-							index: input.remoteIndex,
-							values: input.values,
+					if (!input.confirmed)
+						return yield* new App.AppError({ reason: "ConfirmationRequired" })
+					const current = yield* discovery.refreshCard(input.candidate.cardUrl)
+					yield* Match.value(
+						rules.compare({ previous: input.candidate, current }),
+					).pipe(
+						Match.tag("NeedsRevalidation", () =>
+							Effect.fail(new App.AppError({ reason: "CandidateChanged" })),
+						),
+						Match.orElse(() => Effect.void),
+					)
+					const configured = yield* rules.configureEndpoint({
+						candidate: current,
+						index: input.remoteIndex,
+						values: input.values,
+					})
+					const connection: Store.UserConnection = {
+						...input.key,
+						cardUrl: current.cardUrl,
+						endpoint: configured.url,
+						remoteIndex: configured.remoteIndex,
+						configuration: Redacted.make(input.values),
+						headers: Redacted.make(configured.headers),
+						state: "Enabled",
+						authorization: { _tag: "Unprotected" },
+					}
+					const protection = yield* probe
+						.check({
+							app: {
+								cardUrl: current.cardUrl,
+								card: current.card,
+								sources: current.sources,
+							},
+							connection,
 						})
-						const connection: Store.UserConnection = {
-							...input.key,
-							cardUrl: current.cardUrl,
-							endpoint: configured.url,
-							remoteIndex: configured.remoteIndex,
-							configuration: Redacted.make(input.values),
-							headers: Redacted.make(configured.headers),
-							state: "Enabled",
-							authorization: { _tag: "Unprotected" },
-						}
-						const protection = yield* probe
-							.check({
-								app: {
-									cardUrl: current.cardUrl,
-									card: current.card,
-									sources: current.sources,
-								},
-								connection,
-							})
-							.pipe(
-								Effect.mapError(
-									() => new App.AppError({ reason: "Unavailable" }),
-								),
-							)
-						return yield* AppConnections.add({
-							...input,
-							candidate: current,
-							requiresAuthorization: protection.requiresAuthorization,
-						}).pipe(Effect.provideContext(services))
-					}),
-					beginAuthorization: (input) =>
-						Effect.scoped(
-							withNetwork(
-								input.key,
-								[
-									input.issuer,
-									input.clientId,
-									...(input.resourceMetadataUrl === undefined
-										? []
-										: [input.resourceMetadataUrl]),
-								],
-								OAuthAuthorization.begin(input).pipe(
-									Effect.provideContext(services),
-								),
+						.pipe(
+							Effect.mapError(
+								() => new App.AppError({ reason: "Unavailable" }),
+							),
+						)
+					return yield* AppConnections.add({
+						...input,
+						candidate: current,
+						requiresAuthorization: protection.requiresAuthorization,
+					}).pipe(Effect.provideContext(services))
+				}),
+				beginAuthorization: (input) =>
+					Effect.scoped(
+						withNetwork(
+							input.key,
+							[
+								input.issuer,
+								input.clientId,
+								...(input.resourceMetadataUrl === undefined
+									? []
+									: [input.resourceMetadataUrl]),
+							],
+							OAuthAuthorization.begin(input).pipe(
+								Effect.provideContext(services),
 							),
 						),
-					completeAuthorization: (input) =>
-						Effect.scoped(
-							Effect.gen(function* () {
-								const flow = yield* flows.get(input)
-								return yield* withNetwork(
-									input.key,
-									[flow.metadata.issuer, flow.metadata.token_endpoint],
-									OAuthAuthorization.complete(input).pipe(
-										Effect.provideContext(services),
-									),
-								)
-							}),
-						),
-					open: (input) =>
+					),
+				completeAuthorization: (input) =>
+					Effect.scoped(
 						Effect.gen(function* () {
-							const connection = yield* stores.apps.get(input.key)
-							yield* governance.check(connection.cardUrl).pipe(
-								Effect.mapError(
-									() =>
-										new Client.PermissionDenied({
-											action: "connect",
-											target: connection.cardUrl,
-										}),
-								),
-							)
+							const flow = yield* flows.get(input)
 							return yield* withNetwork(
 								input.key,
-								[],
-								McpClient.open({ ...input, eagerLists: false }).pipe(
+								[flow.metadata.issuer, flow.metadata.token_endpoint],
+								OAuthAuthorization.complete(input).pipe(
 									Effect.provideContext(services),
 								),
 							)
 						}),
-					setEnabled: ({ key, enabled }) =>
-						keyChecked(key).pipe(
-							Effect.andThen(
-								repository.update(owner, key.connectionId, (stored) => ({
-									...stored,
-									verification: null,
-									connection: {
-										...stored.connection,
-										state: enabled
-											? stored.connection.state === "Disabled"
-												? "Enabled"
-												: stored.connection.state
-											: "Disabled",
-									},
-								})),
-							),
-							Effect.tap(() => active.close(key)),
-							Effect.map((row) => row.connection),
+					),
+				open: (input) =>
+					Effect.gen(function* () {
+						const connection = yield* stores.apps.get(input.key)
+						yield* governance.check(connection.cardUrl).pipe(
 							Effect.mapError(
 								() =>
-									new Store.StoreError({
-										reason: "Unavailable",
-										operation: "Update owned App state",
+									new Client.PermissionDenied({
+										action: "connect",
+										target: connection.cardUrl,
 									}),
 							),
+						)
+						return yield* withNetwork(
+							input.key,
+							[],
+							McpClient.open({ ...input, eagerLists: false }).pipe(
+								Effect.provideContext(services),
+							),
+						)
+					}),
+				setEnabled: ({ key, enabled }) =>
+					keyChecked(key).pipe(
+						Effect.andThen(
+							repository.update(owner, key.connectionId, (stored) => ({
+								...stored,
+								verification: null,
+								connection: {
+									...stored.connection,
+									state: enabled
+										? stored.connection.state === "Disabled"
+											? "Enabled"
+											: stored.connection.state
+										: "Disabled",
+								},
+							})),
 						),
-					remove: (key) =>
-						Effect.gen(function* () {
-							yield* revoke(key)
-							yield* stores.apps
-								.delete(key)
-								.pipe(Effect.catch(() => pending(key, "Connection")))
-							return { _tag: "Removed", key } as const
-						}),
-					revalidate: (input) =>
-						keyChecked(input.key).pipe(
-							Effect.andThen(
-								AppConnections.revalidate(input).pipe(
-									Effect.provideContext(services),
-								),
+						Effect.tap(() => active.close(key)),
+						Effect.map((row) => row.connection),
+						Effect.mapError(
+							() =>
+								new Store.StoreError({
+									reason: "Unavailable",
+									operation: "Update owned App state",
+								}),
+						),
+					),
+				remove: (key) =>
+					Effect.gen(function* () {
+						yield* revoke(key)
+						yield* stores.apps
+							.delete(key)
+							.pipe(Effect.catch(() => pending(key, "Connection")))
+						return { _tag: "Removed", key } as const
+					}),
+				revalidate: (input) =>
+					keyChecked(input.key).pipe(
+						Effect.andThen(
+							AppConnections.revalidate(input).pipe(
+								Effect.provideContext(services),
 							),
 						),
-				}),
+					),
 				inspectAuthorization: (key) =>
 					Effect.scoped(
 						Effect.gen(function* () {

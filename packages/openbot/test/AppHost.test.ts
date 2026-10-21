@@ -11,7 +11,7 @@ import * as Postgres from "./PostgresTest.ts"
 import * as Server from "../dist/app/Server.js"
 import { PublicIndex } from "../src/apps/Index.ts"
 
-test("the development host serves a saved, owner-bound app-host App service through the real MCP client", async () => {
+test("the development host serves a saved, owner-bound App service through the real MCP client", async () => {
 	const database = await Postgres.start()
 	const configuration = {
 		host: "127.0.0.1",

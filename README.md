@@ -59,7 +59,6 @@ Then open `http://localhost:4321`. Start with the Intro and the Quick start.
 | `@openbot-build/client`        | The TypeScript client                                |
 | `@openbot-build/core`          | The Agent core                                       |
 | `@openbot-build/protocol`      | The OpenBot App Protocol library                     |
-| `@openbot-build/app-host`      | Contracts for hosts that use Apps                    |
 | `@openbot-build/provider-*`    | Model providers: OpenAI, Chat Completions, Anthropic |
 | `@openbot-build/protocol-test` | A public test service for the App Protocol           |
 | `@openbot-build/docs`          | The docs site                                        |
