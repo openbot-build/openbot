@@ -1,4 +1,4 @@
-import { Chunk, Effect } from "effect"
+import { Array as Arr, Effect } from "effect"
 import { dual } from "effect/Function"
 
 import type * as SessionStore from "./SessionStore.ts"
@@ -25,19 +25,7 @@ export const batches: {
 			ids: ReadonlyArray<K>,
 		) => Effect.Effect<ReadonlyArray<A>, SessionStore.SessionStoreError>,
 	) =>
-		Effect.gen(function* () {
-			let rows = Chunk.empty<A>()
-			const next = (
-				offset: number,
-			): Effect.Effect<Array<A>, SessionStore.SessionStoreError> =>
-				offset >= ids.length
-					? Effect.succeed(Array.from(rows))
-					: read(ids.slice(offset, offset + 200)).pipe(
-							Effect.flatMap((batch) => {
-								rows = Chunk.appendAll(rows, Chunk.fromIterable(batch))
-								return next(offset + 200)
-							}),
-						)
-			return yield* next(0)
-		}),
+		Effect.forEach(Arr.chunksOf(ids, 200), read).pipe(
+			Effect.map((batches) => batches.flat()),
+		),
 )

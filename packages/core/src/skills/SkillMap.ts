@@ -1,4 +1,4 @@
-import { Chunk, HashMap, Option, Context, Layer } from "effect"
+import { Array as Arr, Chunk, Context, HashMap, Layer, Option } from "effect"
 import type * as Skill from "./Skill.ts"
 
 export type Catalog = Chunk.Chunk<Skill.Descriptor>
@@ -12,20 +12,17 @@ export class SkillMap extends Context.Service<
 	}
 >()("@openbot-build/core/skills/SkillMap") {}
 
+/** A skill keeps the position of its first definition and the value of its last one. */
 const merge = (...maps: ReadonlyArray<Catalog>): Catalog => {
-	let positions = HashMap.empty<Skill.Id, number>()
-	let catalog = Chunk.empty<Skill.Descriptor>()
-	for (const map of maps)
-		for (const skill of map) {
-			const index = HashMap.get(positions, skill.id)
-			if (Option.isSome(index))
-				catalog = Option.getOrThrow(Chunk.replace(catalog, index.value, skill))
-			else {
-				positions = HashMap.set(positions, skill.id, catalog.length)
-				catalog = Chunk.append(catalog, skill)
-			}
-		}
-	return catalog
+	const skills = maps.flatMap(Chunk.toReadonlyArray)
+	const latest = HashMap.fromIterable(
+		skills.map((skill) => [skill.id, skill] as const),
+	)
+	return Chunk.fromIterable(
+		Arr.dedupeWith(skills, (left, right) => left.id === right.id).map((skill) =>
+			Option.getOrElse(HashMap.get(latest, skill.id), () => skill),
+		),
+	)
 }
 
 export const make = (

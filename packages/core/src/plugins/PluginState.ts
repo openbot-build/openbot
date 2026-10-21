@@ -29,9 +29,10 @@ export const make = <P, D extends Plugin.StateDeclaration>(input: {
 			view: Session.View<P>,
 			data: Option.Option<A>,
 		): SessionStore.Mutation<P> => {
-			const value = Option.isSome(data)
-				? { ...scoped(view), [key]: data.value }
-				: EffectRecord.remove(scoped(view), key)
+			const value = Option.match(data, {
+				onNone: () => EffectRecord.remove(scoped(view), key),
+				onSome: (data) => ({ ...scoped(view), [key]: data }),
+			})
 			return input.plugin.store.definition.scope === "memory"
 				? { value: value as Memory.Value<P> }
 				: { session: { business: value } }

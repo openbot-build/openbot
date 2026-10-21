@@ -5,6 +5,10 @@ import type * as SessionStore from "./SessionStore.ts"
 import { validateDelta } from "./DeltaValidation.ts"
 import { error } from "./StoreErrors.ts"
 
+/** Rows whose ID is in the map, in the order of the IDs. Missing IDs are left out. */
+const pick = <K, V>(rows: HashMap.HashMap<K, V>, ids: ReadonlyArray<K>) =>
+	ids.flatMap((id) => Option.toArray(HashMap.get(rows, id)))
+
 export const make: Effect.Effect<SessionStore.Persistence> = Effect.gen(
 	function* () {
 		const state = yield* SynchronizedRef.make({
@@ -16,126 +20,111 @@ export const make: Effect.Effect<SessionStore.Persistence> = Effect.gen(
 		const storage: SessionStore.Persistence = {
 			getRef: (id) =>
 				SynchronizedRef.get(state).pipe(
-					Effect.map(
-						(s) => Option.getOrUndefined(HashMap.get(s.refs, id)) ?? null,
-					),
+					Effect.map((s) => HashMap.get(s.refs, id)),
 				),
 			listRefs: (input) =>
 				SynchronizedRef.get(state).pipe(
 					Effect.map((s) =>
-						Array.from(s.order)
-							.flatMap((id) => Option.toArray(HashMap.get(s.refs, id)))
-							.filter(
-								(ref) =>
-									input?.archived === undefined ||
-									ref.metadata.archived === input.archived,
-							),
+						pick(s.refs, Chunk.toReadonlyArray(s.order)).filter(
+							(ref) =>
+								input?.archived === undefined ||
+								ref.metadata.archived === input.archived,
+						),
 					),
 				),
 			headers: (ids) =>
 				SynchronizedRef.get(state).pipe(
 					Effect.map((s) =>
-						ids.flatMap((id) => {
-							const v = Option.getOrUndefined(HashMap.get(s.versions, id))
-							return v === undefined
-								? []
-								: [
-										{
-											id: v.id,
-											schemaVersion: v.schemaVersion,
-											parents: v.parents,
-										},
-									]
-						}),
+						pick(s.versions, ids).map((v) => ({
+							id: v.id,
+							schemaVersion: v.schemaVersion,
+							parents: v.parents,
+						})),
 					),
 				),
 			snapshot: (id) =>
 				SynchronizedRef.get(state).pipe(
-					Effect.map(
-						(s) => Option.getOrUndefined(HashMap.get(s.versions, id)) ?? null,
-					),
+					Effect.map((s) => HashMap.get(s.versions, id)),
 				),
 			contentHeaders: (ids) =>
 				SynchronizedRef.get(state).pipe(
 					Effect.map((s) =>
-						ids.flatMap((id) => {
-							const message = Option.getOrUndefined(HashMap.get(s.messages, id))
-							return message === undefined
-								? []
-								: [{ id: message.id, message: message.message }]
-						}),
+						pick(s.messages, ids).map((message) => ({
+							id: message.id,
+							message: message.message,
+						})),
 					),
 				),
 			contents: (ids) =>
 				SynchronizedRef.get(state).pipe(
-					Effect.map((s) =>
-						ids.flatMap((id) => {
-							const m = Option.getOrUndefined(HashMap.get(s.messages, id))
-							return m === undefined ? [] : [m]
-						}),
-					),
+					Effect.map((s) => pick(s.messages, ids)),
 				),
 			save: (input) =>
 				Effect.gen(function* () {
 					const delta = yield* validateDelta(storage, input)
-					yield* SynchronizedRef.modifyEffect(state, (s) =>
+					yield* SynchronizedRef.updateEffect(state, (s) =>
 						Effect.gen(function* () {
 							if (
 								!Equal.equals(
-									Option.getOrUndefined(
-										HashMap.get(s.refs, input.session.id),
-									) ?? null,
+									Option.getOrNull(HashMap.get(s.refs, input.session.id)),
 									input.expected,
 								)
 							)
 								return yield* error("reference-conflict", {
 									message: "The full expected reference is stale",
 								})
-							let refs = s.refs,
-								versions = s.versions,
-								messages = s.messages
-							for (const v of delta.versions) {
-								const prior = Option.getOrUndefined(HashMap.get(versions, v.id))
-								if (prior !== undefined && !Equal.equals(prior, v))
-									return yield* error("version-conflict", {
-										message: "Immutable version conflict",
-										version: v.id,
-									})
-								versions = HashMap.set(versions, v.id, v)
+							// validateDelta rejects duplicate IDs, so each row only needs a check against stored rows.
+							const version = delta.versions.find((v) =>
+								Option.exists(
+									HashMap.get(s.versions, v.id),
+									(prior) => !Equal.equals(prior, v),
+								),
+							)
+							if (version !== undefined)
+								return yield* error("version-conflict", {
+									message: "Immutable version conflict",
+									version: version.id,
+								})
+							if (
+								delta.messages.some((m) =>
+									Option.exists(
+										HashMap.get(s.messages, m.id),
+										(prior) => !Equal.equals(prior, m),
+									),
+								)
+							)
+								return yield* error("message-conflict", {
+									message: "Immutable message content conflict",
+								})
+							return {
+								refs: HashMap.set(s.refs, delta.session.id, delta.session),
+								versions: delta.versions.reduce(
+									(versions, v) => HashMap.set(versions, v.id, v),
+									s.versions,
+								),
+								messages: delta.messages.reduce(
+									(messages, m) => HashMap.set(messages, m.id, m),
+									s.messages,
+								),
+								order: HashMap.has(s.refs, delta.session.id)
+									? s.order
+									: Chunk.append(s.order, delta.session.id),
 							}
-							for (const m of delta.messages) {
-								const prior = Option.getOrUndefined(HashMap.get(messages, m.id))
-								if (prior !== undefined && !Equal.equals(prior, m))
-									return yield* error("message-conflict", {
-										message: "Immutable message content conflict",
-									})
-								messages = HashMap.set(messages, m.id, m)
-							}
-							refs = HashMap.set(refs, delta.session.id, delta.session)
-							return [
-								undefined,
-								{
-									refs,
-									versions,
-									messages,
-									order: HashMap.has(s.refs, delta.session.id)
-										? s.order
-										: Chunk.append(s.order, delta.session.id),
-								},
-							] as const
 						}),
 					)
 				}),
 			remove: (ref) =>
 				SynchronizedRef.updateEffect(state, (s) =>
-					Effect.gen(function* () {
-						const current = Option.getOrUndefined(HashMap.get(s.refs, ref.id))
-						if (current === undefined) return s
-						if (!Equal.equals(current, ref))
-							return yield* error("reference-conflict", {
-								message: "The full expected reference is stale",
-							})
-						return { ...s, refs: HashMap.remove(s.refs, ref.id) }
+					Option.match(HashMap.get(s.refs, ref.id), {
+						onNone: () => Effect.succeed(s),
+						onSome: (current) =>
+							Equal.equals(current, ref)
+								? Effect.succeed({ ...s, refs: HashMap.remove(s.refs, ref.id) })
+								: Effect.fail(
+										error("reference-conflict", {
+											message: "The full expected reference is stale",
+										}),
+									),
 					}),
 				),
 		}

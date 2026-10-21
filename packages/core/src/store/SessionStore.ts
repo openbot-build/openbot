@@ -45,7 +45,7 @@ export interface Delta {
 export interface Persistence {
 	readonly getRef: (
 		session: Session.Id,
-	) => Effect.Effect<Session.Ref | null, SessionStoreError>
+	) => Effect.Effect<Option.Option<Session.Ref>, SessionStoreError>
 	readonly listRefs: (input?: {
 		readonly archived?: boolean
 	}) => Effect.Effect<ReadonlyArray<Session.Ref>, SessionStoreError>
@@ -54,7 +54,7 @@ export interface Persistence {
 	) => Effect.Effect<ReadonlyArray<Memory.Version>, SessionStoreError>
 	readonly snapshot: (
 		id: Memory.VersionId,
-	) => Effect.Effect<Snapshot | null, SessionStoreError>
+	) => Effect.Effect<Option.Option<Snapshot>, SessionStoreError>
 	readonly contentHeaders: (
 		ids: ReadonlyArray<string>,
 	) => Effect.Effect<

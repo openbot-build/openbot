@@ -127,9 +127,12 @@ export const layerModelConfiguration: {
 	) => Layer.succeed(tag, modelConfiguration(input)),
 )
 
-export const layerExecutionMode = <P>(input: Config.ExecutionModeOptions<P>) =>
-	Layer.succeed(Config.ExecutionMode, {
-		get: executionMode(input).get.pipe(
+export const layerExecutionMode = <P>(
+	input: Config.ExecutionModeOptions<P>,
+) => {
+	const operations = executionMode(input)
+	return Layer.succeed(Config.ExecutionMode, {
+		get: operations.get.pipe(
 			Effect.mapError(
 				(error) =>
 					new Config.ExecutionModeError({
@@ -139,15 +142,14 @@ export const layerExecutionMode = <P>(input: Config.ExecutionModeOptions<P>) =>
 			),
 		),
 		set: (mode) =>
-			executionMode(input)
-				.set(mode)
-				.pipe(
-					Effect.mapError(
-						(error) =>
-							new Config.ExecutionModeError({
-								reason: "unavailable",
-								message: error.toString(),
-							}),
-					),
+			operations.set(mode).pipe(
+				Effect.mapError(
+					(error) =>
+						new Config.ExecutionModeError({
+							reason: "unavailable",
+							message: error.toString(),
+						}),
 				),
+			),
 	})
+}

@@ -52,7 +52,10 @@ export const layer = toolkit.toLayer(
 		const currentSession = Effect.flatMap(
 			Agent.Context,
 			(context) => context.at,
-		).pipe(Effect.map((at) => at.session))
+		).pipe(
+			Effect.map((at) => at.session),
+			Effect.mapError(failure),
+		)
 		const definition = (input: {
 			readonly objective: string
 			readonly tokenBudget?: number | undefined

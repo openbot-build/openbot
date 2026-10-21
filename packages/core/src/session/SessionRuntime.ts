@@ -1,13 +1,13 @@
 import {
 	Array as A,
 	Cause,
+	Clock,
 	Context,
 	Deferred,
 	Effect,
 	Exit,
 	Fiber,
 	HashMap,
-	HashSet,
 	Layer,
 	Match,
 	Option,
@@ -18,6 +18,7 @@ import {
 	Stream,
 	Struct,
 	SynchronizedRef,
+	type Scope,
 } from "effect"
 import { dual } from "effect/Function"
 import {
@@ -35,7 +36,8 @@ import * as Turn from "./Turn.ts"
 import * as Agent from "../agent/Agent.ts"
 import * as Memory from "../memory/Memory.ts"
 import * as Item from "../memory/Item.ts"
-import { fullHistory } from "../memory/MemoryState.ts"
+import { fullHistory, unansweredCalls } from "../memory/MemoryState.ts"
+import type * as Config from "../models/Config.ts"
 import * as ConfigurationOperations from "../models/ConfigurationOperations.ts"
 import * as ContextWindow from "../context/ContextWindow.ts"
 import * as ContextCompaction from "../context/ContextCompaction.ts"
@@ -57,7 +59,7 @@ export const make = <
 ): Effect.Effect<
 	Session.Runtime<P, Tools, E, R, HostTools>,
 	BuildE,
-	BuildR | import("effect").Scope.Scope
+	BuildR | Scope.Scope
 > =>
 	Effect.gen(function* () {
 		type Event = Agent.Event<
@@ -98,6 +100,21 @@ export const make = <
 			() => IdGenerator.defaultIdGenerator,
 		)
 		const id = () => generator.generateId()
+		// The agent compaction service comes first. Otherwise the host may provide one.
+		const compactionService =
+			agent.compaction === undefined
+				? Effect.serviceOption(ContextCompaction.ContextCompaction)
+				: Effect.succeedSome(agent.compaction)
+		const findModel = (selection: Config.Selection | undefined) =>
+			(agent.modelCatalog ?? Effect.succeed([])).pipe(
+				Effect.map((models) =>
+					models.find(
+						(model) =>
+							model.provider === selection?.provider &&
+							model.id === selection?.model,
+					),
+				),
+			)
 		const active = yield* SynchronizedRef.make(
 			HashMap.empty<
 				Session.Id,
@@ -116,27 +133,25 @@ export const make = <
 			readonly turn: Turn.Id
 		}) =>
 			SynchronizedRef.get(continuations).pipe(
-				Effect.map(
-					(entries) =>
-						Option.getOrUndefined(HashMap.get(entries, input.session)) ===
-						input.turn,
+				Effect.map((entries) =>
+					Option.contains(HashMap.get(entries, input.session), input.turn),
 				),
 			)
 		const clearContinuation = (session: Session.Id, turn: Turn.Id) =>
 			SynchronizedRef.update(continuations, (entries) =>
-				Option.getOrUndefined(HashMap.get(entries, session)) === turn
+				Option.contains(HashMap.get(entries, session), turn)
 					? HashMap.remove(entries, session)
 					: entries,
 			)
 		const activity = yield* PubSub.unbounded<Session.Id>()
 		yield* Effect.addFinalizer(() => PubSub.shutdown(bus))
 		yield* Effect.addFinalizer(() => PubSub.shutdown(activity))
-		let retained: ReadonlyArray<Event> = []
+		// The latest events, so a new subscriber can catch up with recent revisions.
+		const retained = yield* Ref.make<ReadonlyArray<Event>>([])
 		const publish = (event: Event) =>
-			Effect.sync(() => {
-				retained = A.takeRight(A.append(retained, event), 64)
-				PubSub.publishUnsafe(bus, event)
-			})
+			Ref.update(retained, (events) =>
+				A.takeRight(A.append(events, event), 64),
+			).pipe(Effect.andThen(PubSub.publish(bus, event)), Effect.asVoid)
 		const versionEvent = (view: Session.View<P>): Event => ({
 			_tag: "VersionCreated",
 			view,
@@ -260,7 +275,7 @@ export const make = <
 								input: [item],
 								items: [item],
 								start: view.session.head,
-								startedAt: Date.now(),
+								startedAt: yield* Clock.currentTimeMillis,
 							}
 							return [
 								undefined,
@@ -303,31 +318,8 @@ export const make = <
 							if (Turn.isTerminal(current.status))
 								return [false, Option.none()] as const
 							// Record an unavailable result for each unanswered tool call before later input uses this history.
-							let calls = HashMap.empty<string, Prompt.ToolCallPart>()
-							for (const entry of view.state.value.memory.history)
-								for (const message of entry.content.content)
-									Match.value(message).pipe(
-										Match.when({ role: "assistant" }, (message) => {
-											for (const part of message.content)
-												Match.value(part).pipe(
-													Match.when({ type: "tool-call" }, (part) => {
-														if (part.providerExecuted !== true)
-															calls = HashMap.set(calls, part.id, part)
-													}),
-													Match.orElse(() => {}),
-												)
-										}),
-										Match.when({ role: "tool" }, (message) => {
-											for (const part of message.content)
-												Match.value(part).pipe(
-													Match.when({ type: "tool-result" }, (part) => {
-														calls = HashMap.remove(calls, part.id)
-													}),
-													Match.orElse(() => {}),
-												)
-										}),
-										Match.orElse(() => {}),
-									)
+							const calls = unansweredCalls(view.state.value.memory.history)
+							const completedAt = yield* Clock.currentTimeMillis
 							const item = Item.Id.make(yield* id())
 							const prompt = Prompt.make(
 								HashMap.size(calls) === 0
@@ -384,7 +376,7 @@ export const make = <
 											return {
 												...entry,
 												status,
-												completedAt: Date.now(),
+												completedAt,
 												...(prompt.content.length === 0
 													? {}
 													: { items: A.append(entry.items, item) }),
@@ -415,7 +407,7 @@ export const make = <
 			targetTokens: number
 			request: Omit<ContextCompaction.Request, "window" | "selection">
 			expected?: Memory.VersionId
-			selection?: import("../models/Config.ts").Selection
+			selection?: Config.Selection
 		}) =>
 			Effect.gen(function* () {
 				if (
@@ -429,19 +421,14 @@ export const make = <
 				const view = yield* options.store.read(input.session)
 				yield* check(view.session, input.expected)
 				const selection = input.selection ?? view.session.settings.model
-				const compaction =
-					agent.compaction ??
-					Option.getOrUndefined(
-						yield* Effect.serviceOption(ContextCompaction.ContextCompaction),
-					)
-				if (selection === undefined || compaction === undefined)
+				const service = yield* compactionService
+				if (selection === undefined || Option.isNone(service))
 					return yield* new ContextCompaction.ContextCompactionError({
 						reason: "unsupported",
 						message: "The current model has no compaction service or selection",
 					})
-				const model = (yield* agent.modelCatalog ?? Effect.succeed([])).find(
-					(m) => m.provider === selection.provider && m.id === selection.model,
-				)
+				const compaction = service.value
+				const model = yield* findModel(selection)
 				const request = {
 						...input.request,
 						window: Match.value(view.state.value.memory.context).pipe(
@@ -580,17 +567,15 @@ export const make = <
 				Effect.gen(function* () {
 					const session = accepted.view.session.id
 					const turn = accepted.turn
-					const turnRecord = accepted.view.session.turns.find(
-						(entry) => entry.id === turn,
-					)
-					const action = turnRecord?.activeAction?.action ?? turnRecord?.action
+					const turnRecord = yield* requireTurn(accepted.view, turn)
+					const action = turnRecord.activeAction?.action ?? turnRecord.action
 					const actionModel =
 						action === undefined
 							? undefined
 							: yield* HostActionDriver.make({
 									action,
 									callId:
-										"host-action-" + (turnRecord?.activeAction?.item ?? turn),
+										"host-action-" + (turnRecord.activeAction?.item ?? turn),
 								})
 
 					const step = yield* Ref.make(0),
@@ -611,10 +596,9 @@ export const make = <
 								Predicate.isNotUndefined,
 							),
 						},
-						at: options.store.read(session).pipe(
-							Effect.map((view) => Session.position(view.session)),
-							Effect.orDie,
-						),
+						at: options.store
+							.read(session)
+							.pipe(Effect.map((view) => Session.position(view.session))),
 						turn: Effect.succeed(turn),
 						step: Ref.get(step),
 						history: Ref.get(chatRef).pipe(
@@ -719,15 +703,10 @@ export const make = <
 												})).view
 											record = yield* requireTurn(view, turn)
 											const selection = record.settings.model
-											const model = (
+											const model =
 												action === undefined
-													? yield* agent.modelCatalog ?? Effect.succeed([])
-													: []
-											).find(
-												(model) =>
-													model.provider === selection?.provider &&
-													model.id === selection?.model,
-											)
+													? yield* findModel(selection)
+													: undefined
 											const instructions =
 												model?.instructionsTemplate === undefined
 													? inner.instructions
@@ -740,18 +719,12 @@ export const make = <
 															]),
 															inner.instructions,
 														)
-											const compaction =
-												agent.compaction ??
-												Option.getOrUndefined(
-													yield* Effect.serviceOption(
-														ContextCompaction.ContextCompaction,
-													),
-												)
+											const compaction = yield* compactionService
 											if (
 												action === undefined &&
 												selection !== undefined &&
 												model?.contextWindow !== undefined &&
-												compaction !== undefined
+												Option.isSome(compaction)
 											) {
 												const request = {
 													selection,
@@ -763,8 +736,9 @@ export const make = <
 														Predicate.isNotUndefined,
 													),
 												}
-												const tokens = yield* compaction.count(request),
-													limits = ConfigurationOperations.contextLimits(model)
+												const tokens = yield* compaction.value.count(request),
+													limits = ConfigurationOperations.contextLimits(model),
+													autoCompactTokens = limits.autoCompactTokens
 												if (tokens > (limits.inputTokens ?? Infinity))
 													return yield* new ContextCompaction.ContextCompactionError(
 														{
@@ -775,12 +749,13 @@ export const make = <
 													)
 												if (
 													model.compaction !== undefined &&
-													tokens >= (limits.autoCompactTokens ?? Infinity)
+													autoCompactTokens !== undefined &&
+													tokens >= autoCompactTokens
 												)
 													view = (yield* compact({
 														session,
 														expected: view.session.head,
-														targetTokens: limits.autoCompactTokens!,
+														targetTokens: autoCompactTokens,
 														selection,
 														request,
 													})).view
@@ -885,10 +860,12 @@ export const make = <
 													Effect.gen(function* () {
 														if (Exit.isSuccess(exit) || received.length === 0)
 															return
-														const failure = Cause.findErrorOption(exit.cause)
 														if (
-															Option.isSome(failure) &&
-															failure.value instanceof SessionStoreError
+															Option.exists(
+																Cause.findErrorOption(exit.cause),
+																(failure) =>
+																	failure instanceof SessionStoreError,
+															)
 														)
 															return
 														const added = Prompt.fromResponseParts(received)
@@ -960,7 +937,15 @@ export const make = <
 																		] as const
 																	}),
 															})
-															.pipe(Effect.exit)
+															.pipe(
+																// Best effort: the step has already failed, and that failure must reach the caller.
+																Effect.catchCause((cause) =>
+																	Effect.logWarning(
+																		"The partial model response could not be saved",
+																		cause,
+																	),
+																),
+															)
 													}),
 												),
 											)
@@ -1012,6 +997,7 @@ export const make = <
 																	)
 																const terminal =
 																	stop && !approval && !moreActions
+																const now = yield* Clock.currentTimeMillis
 																const status: Turn.Status = approval
 																	? { _tag: "WaitingApproval", result: output }
 																	: terminal
@@ -1072,7 +1058,7 @@ export const make = <
 																												usage,
 																											],
 																								...(terminal
-																									? { completedAt: Date.now() }
+																									? { completedAt: now }
 																									: {}),
 																							}
 																						: entry,
@@ -1123,9 +1109,7 @@ export const make = <
 											)
 										}),
 									)
-								return loop(
-									(Session.currentTurn(accepted.view.session)?.steps ?? 0) + 1,
-								).pipe(
+								return loop(turnRecord.steps + 1).pipe(
 									Stream.map(
 										(event) => event as Agent.Event<Toolkit.MergedTools<[TK]>>,
 									),
@@ -1133,22 +1117,11 @@ export const make = <
 							}),
 						)
 					const body = Stream.suspend(() =>
-						middleware === undefined
-							? next<Toolkit.Any, E, R>({
-									...context.options,
-									toolkit:
-										agent.toolkit === undefined
-											? Effect.succeed(Toolkit.empty)
-											: Predicate.hasProperty(agent.toolkit, "toHandlers")
-												? Effect.succeed(agent.toolkit)
-												: agent.toolkit,
-									instructions: Prompt.empty,
-								}).pipe(Stream.map((event) => event as Event))
-							: middleware(next, {
-									...context.options,
-									toolkit: Effect.succeed(Toolkit.empty),
-									instructions: Prompt.empty,
-								}).pipe(Stream.map((event) => event as Event)),
+						middleware(next, {
+							...context.options,
+							toolkit: Effect.succeed(Toolkit.empty),
+							instructions: Prompt.empty,
+						}).pipe(Stream.map((event) => event as Event)),
 					)
 					return Agent.Context.provide(
 						Stream.concat(
@@ -1169,42 +1142,41 @@ export const make = <
 						),
 						Stream.onExit((exit) =>
 							Effect.gen(function* () {
-								const latest = yield* Effect.exit(options.store.read(session))
-								if (Exit.isFailure(latest)) return
-								const current = Session.currentTurn(latest.value.session)
+								const latest = yield* options.store.read(session)
+								const current = Session.currentTurn(latest.session)
 								if (current?.id === turn && !Turn.isTerminal(current.status)) {
 									const shouldClose =
 										Exit.isFailure(exit) ||
-										Match.value(current.status).pipe(
-											Match.tag(
-												"Running",
-												() =>
-													!latest.value.session.pending.some(
-														(entry) =>
-															entry.kind === "action" && entry.turn === turn,
-													),
-											),
-											Match.orElse(() => false),
-										)
+										(current.status._tag === "Running" &&
+											!latest.session.pending.some(
+												(entry) =>
+													entry.kind === "action" && entry.turn === turn,
+											))
 									if (shouldClose)
-										yield* Effect.exit(
-											close(
-												session,
-												turn,
-												Exit.isSuccess(exit) ||
-													Cause.hasInterruptsOnly(exit.cause)
-													? { _tag: "Interrupted" }
-													: {
-															_tag: "Failed",
-															code: Cause.hasDies(exit.cause)
-																? "internal_error"
-																: "model_error",
-															message: Cause.pretty(exit.cause),
-														},
-											),
+										yield* close(
+											session,
+											turn,
+											Exit.isSuccess(exit) ||
+												Cause.hasInterruptsOnly(exit.cause)
+												? { _tag: "Interrupted" }
+												: {
+														_tag: "Failed",
+														code: Cause.hasDies(exit.cause)
+															? "internal_error"
+															: "model_error",
+														message: Cause.pretty(exit.cause),
+													},
 										)
 								}
-							}),
+							}).pipe(
+								// Best effort: resume closes the Turn later if this cleanup cannot.
+								Effect.catchCause((cause) =>
+									Effect.logWarning(
+										"The ended Turn could not be closed",
+										cause,
+									),
+								),
+							),
 						),
 					)
 				}),
@@ -1238,21 +1210,26 @@ export const make = <
 								update: (view) =>
 									Effect.gen(function* () {
 										const turn = yield* requireTurn(view, phase.turn)
-										const pending = view.session.pending.find(
+										const selected = A.findFirst(
+											view.session.pending,
 											(entry) =>
 												entry.kind === "action" &&
 												entry.turn === phase.turn &&
-												entry.action !== undefined,
+												entry.action !== undefined
+													? Option.some({
+															pending: entry,
+															action: entry.action,
+														})
+													: Option.none(),
 										)
 										if (
-											pending === undefined ||
-											pending.action === undefined ||
+											Option.isNone(selected) ||
 											turn.status._tag !== "Running"
 										)
-											return [undefined, Option.none()] as const
-										const action = pending.action
+											return [Option.none(), Option.none()] as const
+										const { pending, action } = selected.value
 										return [
-											pending,
+											Option.some(pending),
 											Option.some({
 												value: {
 													...view.state.value,
@@ -1295,14 +1272,16 @@ export const make = <
 										] as const
 									}),
 							})
-							return changed.result === undefined
-								? Stream.empty
-								: next({
+							return Option.match(changed.result, {
+								onNone: () => Stream.empty,
+								onSome: (pending) =>
+									next({
 										view: changed.view,
 										turn: phase.turn,
-										item: changed.result.id,
-										prompt: changed.result.content,
-									})
+										item: pending.id,
+										prompt: pending.content,
+									}),
+							})
 						}),
 					),
 				)
@@ -1356,12 +1335,9 @@ export const make = <
 				if (
 					queued === undefined ||
 					current === undefined ||
-					!Match.value(current.status).pipe(
-						Match.tag("Completed", () => true),
-						Match.orElse(() => false),
-					)
+					current.status._tag !== "Completed"
 				)
-					return undefined
+					return Option.none()
 				const accepted = yield* accept(
 					{
 						base: { session, revision: view.session.revision },
@@ -1370,7 +1346,7 @@ export const make = <
 					queued,
 				)
 				yield* launch(accepted)
-				return receipt(accepted.view, accepted.turn, accepted.item)
+				return Option.some(receipt(accepted.view, accepted.turn, accepted.item))
 			})
 		const drain = (session: Session.Id) =>
 			runQueued(session).pipe(
@@ -1403,12 +1379,7 @@ export const make = <
 					update: (view) =>
 						Effect.gen(function* () {
 							const turn = yield* requireTurn(view, input.turn)
-							if (
-								!Match.value(turn.status).pipe(
-									Match.tag("Running", () => true),
-									Match.orElse(() => false),
-								)
-							)
+							if (turn.status._tag !== "Running")
 								return yield* new Turn.Conflict({
 									session: input.session,
 									turn: input.turn,
@@ -1469,10 +1440,15 @@ export const make = <
 						turn: input.turn,
 						message: "The Turn has already ended",
 					})
-				const running = Option.getOrUndefined(
-					HashMap.get(yield* SynchronizedRef.get(active), input.session),
+				yield* Option.match(
+					HashMap.get(yield* SynchronizedRef.get(active), input.session).pipe(
+						Option.filter((running) => running.turn === input.turn),
+					),
+					{
+						onNone: () => Effect.void,
+						onSome: (running) => Fiber.interrupt(running.fiber),
+					},
 				)
-				if (running?.turn === input.turn) yield* Fiber.interrupt(running.fiber)
 				return yield* close(input.session, input.turn, { _tag: "Interrupted" })
 			})
 		const approve: Session.Runtime<P, Tools, E, R, HostTools>["approve"] = (
@@ -1506,58 +1482,32 @@ export const make = <
 											turn: input.turn,
 											message: "The approval continuation is no longer loaded",
 										})
-									if (
-										!Match.value(turn.status).pipe(
-											Match.tag("WaitingApproval", () => true),
-											Match.orElse(() => false),
-										)
-									)
+									if (turn.status._tag !== "WaitingApproval")
 										return yield* new Turn.Conflict({
 											session: input.session,
 											turn: input.turn,
 											message: "The Turn is not waiting for approval",
 										})
-									const prompt = fullHistory(view.state.value)
-									let requests = HashSet.empty<string>(),
-										responses = HashSet.empty<string>()
-									for (const message of prompt.content)
-										Match.value(message).pipe(
-											Match.when({ role: "assistant" }, (message) => {
-												for (const part of message.content)
-													Match.value(part).pipe(
-														Match.when(
-															{ type: "tool-approval-request" },
-															(part) => {
-																requests = HashSet.add(
-																	requests,
-																	part.approvalId,
-																)
-															},
-														),
-														Match.orElse(() => {}),
-													)
-											}),
-											Match.when({ role: "tool" }, (message) => {
-												for (const part of message.content)
-													Match.value(part).pipe(
-														Match.when(
-															{ type: "tool-approval-response" },
-															(part) => {
-																responses = HashSet.add(
-																	responses,
-																	part.approvalId,
-																)
-															},
-														),
-														Match.orElse(() => {}),
-													)
-											}),
-											Match.orElse(() => {}),
-										)
-									if (
-										!HashSet.has(requests, input.approval) ||
-										HashSet.has(responses, input.approval)
+									const messages = fullHistory(view.state.value).content
+									const requested = messages.some(
+										(message) =>
+											message.role === "assistant" &&
+											message.content.some(
+												(part) =>
+													part.type === "tool-approval-request" &&
+													part.approvalId === input.approval,
+											),
 									)
+									const answered = messages.some(
+										(message) =>
+											message.role === "tool" &&
+											message.content.some(
+												(part) =>
+													part.type === "tool-approval-response" &&
+													part.approvalId === input.approval,
+											),
+									)
+									if (!requested || answered)
 										return yield* new Turn.Conflict({
 											session: input.session,
 											turn: input.turn,
@@ -1661,7 +1611,7 @@ export const make = <
 				Effect.gen(function* () {
 					yield* options.store.read(input.session)
 					const subscription = yield* PubSub.subscribe(bus)
-					const snapshot = retained.filter(
+					const snapshot = (yield* Ref.get(retained)).filter(
 						(event) =>
 							belongs(event, input.session) &&
 							input.after !== undefined &&
@@ -1711,9 +1661,11 @@ export const make = <
 				const existing = yield* Effect.serviceOption(
 					LanguageModel.LanguageModel,
 				)
-				const driver = Option.isSome(existing)
-					? existing.value
-					: yield* HostActionDriver.make({ action, callId: "host-action" })
+				const driver = yield* Option.match(existing, {
+					onSome: Effect.succeed,
+					onNone: () =>
+						HostActionDriver.make({ action, callId: "host-action" }),
+				})
 				return yield* operation.pipe(
 					Effect.provideService(LanguageModel.LanguageModel, driver),
 				)
@@ -1844,7 +1796,7 @@ export const layer: {
 		options: Session.RuntimeOptions<P, Tools, E, R, BuildE, BuildR, HostTools>,
 	): <I>(
 		tag: Context.Service<I, Session.Runtime<P, Tools, E, R, HostTools>>,
-	) => Layer.Layer<I, BuildE, Exclude<BuildR, import("effect").Scope.Scope>>
+	) => Layer.Layer<I, BuildE, Exclude<BuildR, Scope.Scope>>
 	<
 		I,
 		P,
@@ -1857,7 +1809,7 @@ export const layer: {
 	>(
 		tag: Context.Service<I, Session.Runtime<P, Tools, E, R, HostTools>>,
 		options: Session.RuntimeOptions<P, Tools, E, R, BuildE, BuildR, HostTools>,
-	): Layer.Layer<I, BuildE, Exclude<BuildR, import("effect").Scope.Scope>>
+	): Layer.Layer<I, BuildE, Exclude<BuildR, Scope.Scope>>
 } = dual(
 	2,
 	<

@@ -471,7 +471,7 @@ test("content revisions share identity and keep old bodies, without merging dist
 						.pipe(Effect.flip)).reason,
 					"message-missing",
 				)
-				assert.equal(yield* empty.getRef(created.session.id), null)
+				assert.ok(Option.isNone(yield* empty.getRef(created.session.id)))
 				const encoded = yield* Schema.encodeEffect(
 					Schema.fromJsonString(SessionStore.Record),
 				)(revised)

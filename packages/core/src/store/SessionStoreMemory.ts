@@ -1,4 +1,4 @@
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, type Scope } from "effect"
 import { dual } from "effect/Function"
 import type * as SessionStore from "./SessionStore.ts"
 import type * as Plugin from "../plugins/Plugin.ts"
@@ -8,7 +8,7 @@ import * as SessionStoreRepository from "./SessionStoreRepository.ts"
 type Construction<S extends Plugin.Stores> = Effect.Effect<
 	SessionStore.Store<SessionStore.Plugins<S>>,
 	never,
-	| import("effect").Scope.Scope
+	| Scope.Scope
 	| SessionStore.DecodingServices<S>
 	| SessionStore.EncodingServices<S>
 >

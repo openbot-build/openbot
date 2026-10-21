@@ -43,8 +43,8 @@ export const make = Effect.gen(function* () {
 				refRow(id).pipe(
 					Effect.flatMap((row) =>
 						row === undefined
-							? Effect.succeed(null)
-							: json(Session.Ref, row.body),
+							? Effect.succeedNone
+							: json(Session.Ref, row.body).pipe(Effect.asSome),
 					),
 					Effect.mapError(databaseError),
 				),
@@ -104,17 +104,19 @@ export const make = Effect.gen(function* () {
 						.where(
 							and(eq(versions.namespace, namespace), eq(versions.id, id)),
 						))[0]
-					if (row === undefined) return null
-					return yield* decode(SessionStore.Snapshot)({
-						...row,
-						snapshotFormatVersion: row.format,
-						parents: yield* json(CoreMemory.Parents, row.parents),
-						value: yield* json(Schema.JsonObject, row.value),
-						history: yield* json(
-							SessionStore.Snapshot.fields.history,
-							row.history,
-						),
-					})
+					if (row === undefined) return Option.none()
+					return Option.some(
+						yield* decode(SessionStore.Snapshot)({
+							...row,
+							snapshotFormatVersion: row.format,
+							parents: yield* json(CoreMemory.Parents, row.parents),
+							value: yield* json(Schema.JsonObject, row.value),
+							history: yield* json(
+								SessionStore.Snapshot.fields.history,
+								row.history,
+							),
+						}),
+					)
 				}).pipe(Effect.mapError(databaseError)),
 			contentHeaders: (ids) =>
 				ids.length === 0

@@ -1,6 +1,7 @@
 import { Context, Data, Schema, type Effect } from "effect"
 import * as ModelRuntime from "./Model.ts"
 import * as ProviderRuntime from "./Provider.ts"
+import type * as Memory from "../memory/Memory.ts"
 import type * as Session from "../session/Session.ts"
 import type * as SessionStore from "../store/SessionStore.ts"
 
@@ -143,7 +144,7 @@ export type RuntimeModelConfiguration = ModelConfigurationOperations<
 	| ModelConfigurationError,
 	| Session.SessionNotFound
 	| Session.Conflict
-	| import("../memory/Memory.ts").VersionError
+	| Memory.VersionError
 	| SessionStore.SessionStoreError
 	| ModelConfigurationError,
 	never
@@ -178,7 +179,7 @@ export type RuntimeExecutionMode = ExecutionModeOperations<
 	Session.SessionNotFound | SessionStore.SessionStoreError,
 	| Session.SessionNotFound
 	| Session.Conflict
-	| import("../memory/Memory.ts").VersionError
+	| Memory.VersionError
 	| SessionStore.SessionStoreError,
 	never
 >

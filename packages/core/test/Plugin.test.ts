@@ -879,7 +879,7 @@ test("Store writes return and notify only after the Version is saved", async () 
 				assert.equal(returned, false)
 				assert.deepEqual(
 					yield* storage.getRef(initial.session.id),
-					initial.session,
+					Option.some(initial.session),
 				)
 				assert.deepEqual(yield* runtimeStore.read(initial.session.id), initial)
 				yield* Deferred.succeed(release, undefined)
@@ -887,7 +887,7 @@ test("Store writes return and notify only after the Version is saved", async () 
 				assert.equal(returned, true)
 				const observed = yield* Fiber.join(waiting)
 				assert.deepEqual(
-					observed.session,
+					Option.some(observed.session),
 					yield* storage.getRef(initial.session.id),
 				)
 				assert.deepEqual(observed.state.value.a, { value: 1 })

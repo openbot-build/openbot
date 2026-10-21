@@ -10,8 +10,9 @@ import {
 	Option,
 	PubSub,
 	Schema,
+	Semaphore,
 	Stream,
-	SynchronizedRef,
+	type Scope,
 } from "effect"
 import { dual } from "effect/Function"
 import { IdGenerator } from "effect/ai"
@@ -36,7 +37,7 @@ export const make = <S extends Plugin.Stores>(
 ): Effect.Effect<
 	SessionStore.Store<SessionStore.Plugins<S>>,
 	never,
-	import("effect").Scope.Scope | CodecServices<S>
+	Scope.Scope | CodecServices<S>
 > =>
 	Effect.gen(function* () {
 		type P = SessionStore.Plugins<S>
@@ -50,11 +51,8 @@ export const make = <S extends Plugin.Stores>(
 		const provide = <A, E, R>(program: Effect.Effect<A, E, R>) =>
 			Effect.provideContext(program, services)
 		const storage = options.persistence
-		const lock = yield* SynchronizedRef.make(undefined)
-		const atomic = <A, E, R>(program: Effect.Effect<A, E, R>) =>
-			SynchronizedRef.modifyEffect(lock, () =>
-				program.pipe(Effect.map((value) => [value, undefined] as const)),
-			)
+		// All writes run one at a time.
+		const atomic = (yield* Semaphore.make(1)).withPermits(1)
 		const bus = yield* PubSub.unbounded<SessionStore.Change<P>>()
 		yield* Effect.addFinalizer(() => PubSub.shutdown(bus))
 		const publish = (change: SessionStore.Change<P>) =>
@@ -84,11 +82,15 @@ export const make = <S extends Plugin.Stores>(
 				),
 			)
 		const getRef = (session: Session.Id) =>
-			Effect.gen(function* () {
-				const ref = yield* storage.getRef(session)
-				if (ref === null) return yield* new Session.SessionNotFound({ session })
-				return yield* decodeRef(ref)
-			})
+			storage.getRef(session).pipe(
+				Effect.flatMap((ref) =>
+					Effect.fromOption(
+						ref,
+						() => new Session.SessionNotFound({ session }),
+					),
+				),
+				Effect.flatMap(decodeRef),
+			)
 		const cache = yield* Cache.makeWith(
 			(version: Memory.VersionId) =>
 				provide(
@@ -163,6 +165,20 @@ export const make = <S extends Plugin.Stores>(
 					),
 				),
 			)
+		/** The rows that a new Memory version adds to the delta. */
+		const packVersion = (
+			version: Memory.Version,
+			value: Memory.Value<P>,
+			reusable: ReadonlyArray<Loaded>,
+		) =>
+			encode(value).pipe(
+				Effect.flatMap((raw) => Snapshots.pack(version, raw, reusable, id)),
+				Effect.map((packed) => ({
+					versions: [packed.snapshot],
+					messages: packed.messages,
+				})),
+			)
+		const unchanged = { versions: [], messages: [] }
 		const modifyEffect: SessionStore.Store<P>["modifyEffect"] = (input) =>
 			atomic(
 				Effect.gen(function* () {
@@ -217,20 +233,12 @@ export const make = <S extends Plugin.Stores>(
 						state: changed ? { version, value } : before.state,
 					}
 					const packed = changed
-						? yield* Snapshots.pack(
-								version,
-								yield* encode(value),
-								[yield* load(before.session.head)],
-								id,
-							)
-						: undefined
+						? yield* packVersion(version, value, [
+								yield* load(before.session.head),
+							])
+						: unchanged
 					yield* save(
-						{
-							session: ref,
-							expected: before.session,
-							versions: packed === undefined ? [] : [packed.snapshot],
-							messages: packed?.messages ?? [],
-						},
+						{ session: ref, expected: before.session, ...packed },
 						view,
 						changed,
 					)
@@ -270,22 +278,8 @@ export const make = <S extends Plugin.Stores>(
 						input.business,
 					)
 					const view = { session: ref, state: { version, value } }
-					const packed = yield* Snapshots.pack(
-						version,
-						yield* encode(value),
-						[],
-						id,
-					)
-					yield* save(
-						{
-							session: ref,
-							expected: null,
-							versions: [packed.snapshot],
-							messages: packed.messages,
-						},
-						view,
-						true,
-					)
+					const packed = yield* packVersion(version, value, [])
+					yield* save({ session: ref, expected: null, ...packed }, view, true)
 					return view
 				}),
 			)
@@ -310,32 +304,38 @@ export const make = <S extends Plugin.Stores>(
 				Effect.gen(function* () {
 					const source = yield* readCurrent(input.source)
 					const log = yield* VersionGraph.log(storage, source.session.head)
-					let selected = input.version ?? source.session.head
-					if (!log.some((version) => version.id === selected))
+					const requested = input.version ?? source.session.head
+					if (!log.some((version) => version.id === requested))
 						return yield* new Memory.VersionError({
 							reason: "version-unreachable",
-							version: selected,
+							version: requested,
 							message: "The selected Memory is not reachable",
 						})
-					const select: Effect.Effect<Loaded, SessionStore.SessionStoreError> =
-						Effect.suspend(() =>
-							Effect.gen(function* () {
-								const current = yield* load(selected)
-								if (coherent(current.state.value)) return current
-								if (
-									input.version !== undefined ||
-									current.snapshot.parents[0] === undefined
-								)
-									return yield* error("reference-invalid", {
-										message:
-											"Fork needs a complete and coherent history boundary",
-										version: selected,
-									})
-								selected = current.snapshot.parents[0]
-								return yield* select
+					// Without an explicit version, walk back first parents to the last coherent Memory.
+					const select = (
+						candidate: Memory.VersionId,
+					): Effect.Effect<
+						{ readonly id: Memory.VersionId; readonly loaded: Loaded },
+						SessionStore.SessionStoreError
+					> =>
+						load(candidate).pipe(
+							Effect.flatMap((loaded) => {
+								if (coherent(loaded.state.value))
+									return Effect.succeed({ id: candidate, loaded })
+								const parent = loaded.snapshot.parents[0]
+								return input.version !== undefined || parent === undefined
+									? Effect.fail(
+											error("reference-invalid", {
+												message:
+													"Fork needs a complete and coherent history boundary",
+												version: candidate,
+											}),
+										)
+									: select(parent)
 							}),
 						)
-					const selectedMemory = yield* select
+					const { id: selected, loaded: selectedMemory } =
+						yield* select(requested)
 					const settings = { ...source.session.settings, ...input.settings }
 					const selectedValue = selectedMemory.state.value
 					const context = Match.value(selectedValue.memory.context).pipe(
@@ -386,20 +386,10 @@ export const make = <S extends Plugin.Stores>(
 					}
 					const view = { session: ref, state: { version, value } }
 					const packed = adapted
-						? yield* Snapshots.pack(
-								version,
-								yield* encode(value),
-								[selectedMemory],
-								id,
-							)
-						: undefined
+						? yield* packVersion(version, value, [selectedMemory])
+						: unchanged
 					yield* save(
-						{
-							session: ref,
-							expected: null,
-							versions: packed === undefined ? [] : [packed.snapshot],
-							messages: packed?.messages ?? [],
-						},
+						{ session: ref, expected: null, ...packed },
 						view,
 						adapted,
 					)
@@ -409,15 +399,14 @@ export const make = <S extends Plugin.Stores>(
 		const codec = RecordSerialization.make<S>()
 		const store: SessionStore.Store<P> = {
 			get: (session) =>
-				storage
-					.getRef(session)
-					.pipe(
-						Effect.flatMap((ref) =>
-							ref === null
-								? Effect.succeedNone
-								: decodeRef(ref).pipe(Effect.asSome),
-						),
+				storage.getRef(session).pipe(
+					Effect.flatMap(
+						Option.match({
+							onNone: () => Effect.succeedNone,
+							onSome: (ref) => decodeRef(ref).pipe(Effect.asSome),
+						}),
 					),
+				),
 			list: (input) =>
 				storage
 					.listRefs(input)
