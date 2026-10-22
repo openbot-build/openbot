@@ -1,0 +1,1753 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "49c07e3e-957e-4421-8063-5377efec28c9",
+	"prevIds": ["f8e01b64-03f3-41c9-add1-2eb075878c07"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_channel_conversations"],
+			"writes": [
+				"s|tbl|public.openbot_channel_conversations",
+				"n|tbl|public.openbot_channel_conversations",
+				"e|tbl|public.openbot_channel_conversations",
+				"n|rel|public.openbot_channel_conversations",
+				"n|type|public.openbot_channel_conversations",
+				"n|rel|public.openbot_channel_conversations_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_channel_deliveries"],
+			"writes": [
+				"s|tbl|public.openbot_channel_deliveries",
+				"n|tbl|public.openbot_channel_deliveries",
+				"e|tbl|public.openbot_channel_deliveries",
+				"n|rel|public.openbot_channel_deliveries",
+				"n|type|public.openbot_channel_deliveries",
+				"n|rel|public.openbot_channel_deliveries_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_channel_identities"],
+			"writes": [
+				"s|tbl|public.openbot_channel_identities",
+				"n|tbl|public.openbot_channel_identities",
+				"e|tbl|public.openbot_channel_identities",
+				"n|rel|public.openbot_channel_identities",
+				"n|type|public.openbot_channel_identities",
+				"n|rel|public.openbot_channel_identities_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_channel_inbox"],
+			"writes": [
+				"s|tbl|public.openbot_channel_inbox",
+				"n|tbl|public.openbot_channel_inbox",
+				"e|tbl|public.openbot_channel_inbox",
+				"n|rel|public.openbot_channel_inbox",
+				"n|type|public.openbot_channel_inbox",
+				"n|rel|public.openbot_channel_inbox_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_channel_links"],
+			"writes": [
+				"s|tbl|public.openbot_channel_links",
+				"n|tbl|public.openbot_channel_links",
+				"e|tbl|public.openbot_channel_links",
+				"n|rel|public.openbot_channel_links",
+				"n|type|public.openbot_channel_links",
+				"n|rel|public.openbot_channel_links_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_channels"],
+			"writes": [
+				"s|tbl|public.openbot_channels",
+				"n|tbl|public.openbot_channels",
+				"e|tbl|public.openbot_channels",
+				"n|rel|public.openbot_channels",
+				"n|type|public.openbot_channels",
+				"n|rel|public.openbot_channels_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_channel_conversations",
+				"openbot_channel_conversations_session"
+			],
+			"writes": [
+				"s|idx|public.openbot_channel_conversations_session",
+				"n|idx|public.openbot_channel_conversations_session",
+				"e|idx|public.openbot_channel_conversations_session",
+				"n|rel|public.openbot_channel_conversations_session"
+			],
+			"reads": [
+				"n|tbl|public.openbot_channel_conversations",
+				"n|sch|public",
+				"n|col|public.openbot_channel_conversations.session"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_channel_deliveries",
+				"openbot_channel_deliveries_turn"
+			],
+			"writes": [
+				"s|idx|public.openbot_channel_deliveries_turn",
+				"n|idx|public.openbot_channel_deliveries_turn",
+				"e|idx|public.openbot_channel_deliveries_turn",
+				"n|rel|public.openbot_channel_deliveries_turn"
+			],
+			"reads": [
+				"n|tbl|public.openbot_channel_deliveries",
+				"n|sch|public",
+				"n|col|public.openbot_channel_deliveries.session",
+				"n|col|public.openbot_channel_deliveries.turn"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_channel_deliveries",
+				"openbot_channel_deliveries_request"
+			],
+			"writes": [
+				"s|idx|public.openbot_channel_deliveries_request",
+				"n|idx|public.openbot_channel_deliveries_request",
+				"e|idx|public.openbot_channel_deliveries_request",
+				"n|rel|public.openbot_channel_deliveries_request"
+			],
+			"reads": [
+				"n|tbl|public.openbot_channel_deliveries",
+				"n|sch|public",
+				"n|col|public.openbot_channel_deliveries.channel_id",
+				"n|col|public.openbot_channel_deliveries.request"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_channel_deliveries",
+				"openbot_channel_deliveries_due"
+			],
+			"writes": [
+				"s|idx|public.openbot_channel_deliveries_due",
+				"n|idx|public.openbot_channel_deliveries_due",
+				"e|idx|public.openbot_channel_deliveries_due",
+				"n|rel|public.openbot_channel_deliveries_due"
+			],
+			"reads": [
+				"n|tbl|public.openbot_channel_deliveries",
+				"n|sch|public",
+				"n|col|public.openbot_channel_deliveries.next_at"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_channel_identities",
+				"openbot_channel_identities_user"
+			],
+			"writes": [
+				"s|idx|public.openbot_channel_identities_user",
+				"n|idx|public.openbot_channel_identities_user",
+				"e|idx|public.openbot_channel_identities_user",
+				"n|rel|public.openbot_channel_identities_user"
+			],
+			"reads": [
+				"n|tbl|public.openbot_channel_identities",
+				"n|sch|public",
+				"n|col|public.openbot_channel_identities.organization_id",
+				"n|col|public.openbot_channel_identities.user_id"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_channel_inbox",
+				"openbot_channel_inbox_open"
+			],
+			"writes": [
+				"s|idx|public.openbot_channel_inbox_open",
+				"n|idx|public.openbot_channel_inbox_open",
+				"e|idx|public.openbot_channel_inbox_open",
+				"n|rel|public.openbot_channel_inbox_open"
+			],
+			"reads": [
+				"n|tbl|public.openbot_channel_inbox",
+				"n|sch|public",
+				"n|col|public.openbot_channel_inbox.channel_id",
+				"n|col|public.openbot_channel_inbox.conversation_key",
+				"n|col|public.openbot_channel_inbox.received_at"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_channels",
+				"openbot_channels_id"
+			],
+			"writes": [
+				"s|idx|public.openbot_channels_id",
+				"n|idx|public.openbot_channels_id",
+				"e|idx|public.openbot_channels_id",
+				"n|rel|public.openbot_channels_id"
+			],
+			"reads": [
+				"n|tbl|public.openbot_channels",
+				"n|sch|public",
+				"n|col|public.openbot_channels.id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_channel_conversations"],
+			"writes": [
+				"s|fk|public.openbot_channel_conversations.openbot_channel_conversations_qUcGuZe5tlRN_fkey",
+				"n|fk|public.openbot_channel_conversations.openbot_channel_conversations_qUcGuZe5tlRN_fkey",
+				"e|fk|public.openbot_channel_conversations.openbot_channel_conversations_qUcGuZe5tlRN_fkey",
+				"n|con|public.openbot_channel_conversations.openbot_channel_conversations_qUcGuZe5tlRN_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_channel_conversations",
+				"n|sch|public",
+				"n|tbl|public.openbot_channels",
+				"n|sch|public",
+				"n|col|public.openbot_channel_conversations.organization_id",
+				"n|col|public.openbot_channel_conversations.channel_id",
+				"n|col|public.openbot_channels.organization_id",
+				"n|col|public.openbot_channels.id",
+				"e|uniqueness|public.openbot_channels.id.organization_id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_channel_deliveries"],
+			"writes": [
+				"s|fk|public.openbot_channel_deliveries.openbot_channel_deliveries_j0PlxMGVfTqR_fkey",
+				"n|fk|public.openbot_channel_deliveries.openbot_channel_deliveries_j0PlxMGVfTqR_fkey",
+				"e|fk|public.openbot_channel_deliveries.openbot_channel_deliveries_j0PlxMGVfTqR_fkey",
+				"n|con|public.openbot_channel_deliveries.openbot_channel_deliveries_j0PlxMGVfTqR_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_channel_deliveries",
+				"n|sch|public",
+				"n|tbl|public.openbot_channels",
+				"n|sch|public",
+				"n|col|public.openbot_channel_deliveries.organization_id",
+				"n|col|public.openbot_channel_deliveries.channel_id",
+				"n|col|public.openbot_channels.organization_id",
+				"n|col|public.openbot_channels.id",
+				"e|uniqueness|public.openbot_channels.id.organization_id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_channel_identities"],
+			"writes": [
+				"s|fk|public.openbot_channel_identities.openbot_channel_identities_user_id_openbot_auth_user_id_fkey",
+				"n|fk|public.openbot_channel_identities.openbot_channel_identities_user_id_openbot_auth_user_id_fkey",
+				"e|fk|public.openbot_channel_identities.openbot_channel_identities_user_id_openbot_auth_user_id_fkey",
+				"n|con|public.openbot_channel_identities.openbot_channel_identities_user_id_openbot_auth_user_id_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_channel_identities",
+				"n|sch|public",
+				"n|tbl|public.openbot_auth_user",
+				"n|sch|public",
+				"n|col|public.openbot_channel_identities.user_id",
+				"n|col|public.openbot_auth_user.id",
+				"e|uniqueness|public.openbot_auth_user.id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_channel_identities"],
+			"writes": [
+				"s|fk|public.openbot_channel_identities.openbot_channel_identities_IDJduQQCxk5t_fkey",
+				"n|fk|public.openbot_channel_identities.openbot_channel_identities_IDJduQQCxk5t_fkey",
+				"e|fk|public.openbot_channel_identities.openbot_channel_identities_IDJduQQCxk5t_fkey",
+				"n|con|public.openbot_channel_identities.openbot_channel_identities_IDJduQQCxk5t_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_channel_identities",
+				"n|sch|public",
+				"n|tbl|public.openbot_channels",
+				"n|sch|public",
+				"n|col|public.openbot_channel_identities.organization_id",
+				"n|col|public.openbot_channel_identities.channel_id",
+				"n|col|public.openbot_channels.organization_id",
+				"n|col|public.openbot_channels.id",
+				"e|uniqueness|public.openbot_channels.id.organization_id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_channel_inbox"],
+			"writes": [
+				"s|fk|public.openbot_channel_inbox.openbot_channel_inbox_YVzYaDImkhJ3_fkey",
+				"n|fk|public.openbot_channel_inbox.openbot_channel_inbox_YVzYaDImkhJ3_fkey",
+				"e|fk|public.openbot_channel_inbox.openbot_channel_inbox_YVzYaDImkhJ3_fkey",
+				"n|con|public.openbot_channel_inbox.openbot_channel_inbox_YVzYaDImkhJ3_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_channel_inbox",
+				"n|sch|public",
+				"n|tbl|public.openbot_channels",
+				"n|sch|public",
+				"n|col|public.openbot_channel_inbox.organization_id",
+				"n|col|public.openbot_channel_inbox.channel_id",
+				"n|col|public.openbot_channels.organization_id",
+				"n|col|public.openbot_channels.id",
+				"e|uniqueness|public.openbot_channels.id.organization_id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_channel_links"],
+			"writes": [
+				"s|fk|public.openbot_channel_links.openbot_channel_links_dT23BIuhQbBo_fkey",
+				"n|fk|public.openbot_channel_links.openbot_channel_links_dT23BIuhQbBo_fkey",
+				"e|fk|public.openbot_channel_links.openbot_channel_links_dT23BIuhQbBo_fkey",
+				"n|con|public.openbot_channel_links.openbot_channel_links_dT23BIuhQbBo_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_channel_links",
+				"n|sch|public",
+				"n|tbl|public.openbot_channels",
+				"n|sch|public",
+				"n|col|public.openbot_channel_links.organization_id",
+				"n|col|public.openbot_channel_links.channel_id",
+				"n|col|public.openbot_channels.organization_id",
+				"n|col|public.openbot_channels.id",
+				"e|uniqueness|public.openbot_channels.id.organization_id"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_channel_conversations",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_channel_deliveries",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_channel_identities",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_channel_inbox",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_channel_links",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_channels",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_conversations",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_conversations",
+				"name": "channel_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_conversations",
+				"name": "conversation_key",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_conversations",
+				"name": "kind",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_conversations",
+				"name": "title",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_conversations",
+				"name": "session",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_conversations",
+				"name": "owner",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_conversations",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "channel_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "kind",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "target",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "session",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "turn",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "request",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "body",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "ref",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "state",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "attempts",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "0",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "next_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "claim",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "lease_until",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "0",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "updated_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_identities",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_identities",
+				"name": "channel_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_identities",
+				"name": "external_user_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_identities",
+				"name": "user_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_identities",
+				"name": "display_name",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_identities",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_inbox",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_inbox",
+				"name": "channel_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_inbox",
+				"name": "event_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_inbox",
+				"name": "conversation_key",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_inbox",
+				"name": "event",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_inbox",
+				"name": "received_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_inbox",
+				"name": "attempts",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "0",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_inbox",
+				"name": "next_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_inbox",
+				"name": "claim",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_inbox",
+				"name": "lease_until",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": "0",
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_inbox",
+				"name": "done_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_links",
+				"name": "code_hash",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_links",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_links",
+				"name": "channel_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_links",
+				"name": "external_user_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_links",
+				"name": "display_name",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_links",
+				"name": "expires_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_links",
+				"name": "used_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channels",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channels",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channels",
+				"name": "kind",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channels",
+				"name": "name",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channels",
+				"name": "agent",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channels",
+				"name": "actor",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channels",
+				"name": "enabled",
+				"type": "boolean",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channels",
+				"name": "link_path",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channels",
+				"name": "credentials",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channels",
+				"name": "hints",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channels",
+				"name": "version",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channels",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channels",
+				"name": "updated_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_conversations",
+				"name": "openbot_channel_conversations_session",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "session",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "openbot_channel_deliveries_turn",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "session",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "turn",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "openbot_channel_deliveries_request",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "channel_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "request",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "openbot_channel_deliveries_due",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "next_at",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": "\"state\" = 'pending'",
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_identities",
+				"name": "openbot_channel_identities_user",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "organization_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "user_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_inbox",
+				"name": "openbot_channel_inbox_open",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "channel_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "conversation_key",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "received_at",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": "\"done_at\" IS NULL",
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channels",
+				"name": "openbot_channels_id",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_conversations",
+				"name": "openbot_channel_conversations_qUcGuZe5tlRN_fkey",
+				"nameExplicit": false,
+				"columns": ["organization_id", "channel_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_channels",
+				"columnsTo": ["organization_id", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "openbot_channel_deliveries_j0PlxMGVfTqR_fkey",
+				"nameExplicit": false,
+				"columns": ["organization_id", "channel_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_channels",
+				"columnsTo": ["organization_id", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_identities",
+				"name": "openbot_channel_identities_user_id_openbot_auth_user_id_fkey",
+				"nameExplicit": false,
+				"columns": ["user_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_auth_user",
+				"columnsTo": ["id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_identities",
+				"name": "openbot_channel_identities_IDJduQQCxk5t_fkey",
+				"nameExplicit": false,
+				"columns": ["organization_id", "channel_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_channels",
+				"columnsTo": ["organization_id", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_inbox",
+				"name": "openbot_channel_inbox_YVzYaDImkhJ3_fkey",
+				"nameExplicit": false,
+				"columns": ["organization_id", "channel_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_channels",
+				"columnsTo": ["organization_id", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_links",
+				"name": "openbot_channel_links_dT23BIuhQbBo_fkey",
+				"nameExplicit": false,
+				"columns": ["organization_id", "channel_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_channels",
+				"columnsTo": ["organization_id", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_conversations",
+				"name": "openbot_channel_conversations_pkey",
+				"columns": ["channel_id", "conversation_key"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_identities",
+				"name": "openbot_channel_identities_pkey",
+				"columns": ["channel_id", "external_user_id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_inbox",
+				"name": "openbot_channel_inbox_pkey",
+				"columns": ["channel_id", "event_id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channels",
+				"name": "openbot_channels_pkey",
+				"columns": ["organization_id", "id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_deliveries",
+				"name": "openbot_channel_deliveries_pkey",
+				"columns": ["id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_channel_links",
+				"name": "openbot_channel_links_pkey",
+				"columns": ["code_hash"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		}
+	]
+}

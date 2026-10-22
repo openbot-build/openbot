@@ -1,5 +1,8 @@
 import * as AgentFixture from "./AgentFixture.ts"
 import * as TriggerStore from "../src/triggers/Triggers.ts"
+import * as Channels from "../src/channels/Channels.ts"
+import * as ChannelQueue from "../src/channels/ChannelQueue.ts"
+import * as ChannelRegistry from "../src/channels/ChannelRegistry.ts"
 import * as DeveloperLayers from "../src/apps/DeveloperLayers.ts"
 import * as AppExperience from "../src/apps/Experience.ts"
 import * as Views from "../src/apps/Views.ts"
@@ -486,6 +489,16 @@ const startApi = async (
 				),
 				TokensPostgres.layer,
 				TriggerStore.layer,
+				ChannelRegistry.layer.pipe(
+					Layer.provideMerge(ChannelQueue.layer),
+					Layer.provideMerge(Channels.layer),
+					Layer.provide(
+						Layer.merge(FetchHttpClient.layer, AppHost.layerNetwork),
+					),
+					Layer.provide(
+						Secrets.layer(Redacted.make("test:" + "11".repeat(32))),
+					),
+				),
 				OrganizationFixture.layerEveryoneAdministrator,
 				OrganizationFixture.layerNoAudit,
 				OrganizationFixture.layerUnusedPlatform,

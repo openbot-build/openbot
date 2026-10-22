@@ -1,0 +1,165 @@
+---
+title: Channels
+description: Mit einem Agent in Slack, Lark, Telegram oder deinem eigenen Chat-System sprechen.
+---
+
+Ein **Channel** ist ein Bot deiner Organisation auf einer Chat-Plattform, zum Beispiel eine Slack-App oder ein Telegram-Bot. Personen sprechen mit dem Agent des Channel in Direkt-Chats und Gruppen-Chats. OpenBot bleibt headless (ohne Oberfläche): Ein Channel ist eine Verbindung zwischen der Plattform und der API, keine Benutzeroberfläche.
+
+| Art        | Plattform                                                                               |
+| ---------- | --------------------------------------------------------------------------------------- |
+| `slack`    | Eine Slack-App mit der Events API und Interaktivität.                                   |
+| `lark`     | Eine Lark-App (Feishu) mit Event-Abo und Karten-Callbacks.                              |
+| `telegram` | Ein Telegram-Bot.                                                                       |
+| `custom`   | Jedes andere System, das das [Channel-Protokoll](#eigene-channels) von OpenBot spricht. |
+
+Jede Plattform schickt ihre Events an einen **Webhook** (eine Adresse, die OpenBot zurückruft). OpenBot prüft die Signatur jedes Events, antwortet sofort und macht die Arbeit später.
+
+---
+
+## Einen Channel hinzufügen
+
+Ein Administrator fügt einen Channel hinzu. Er braucht `channels.write`.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Team Slack","agent":"agt_...","linkPath":"/link","credentials":{"kind":"slack","botToken":"xoxb-...","signingSecret":"..."}}' \
+  https://api.example.com/v1/organization/channels
+```
+
+| Feld          | Was es tut                                                                                                                               |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | Ein kurzer Name.                                                                                                                         |
+| `agent`       | Der Agent, der antwortet. Er muss ein gemeinsamer, dauerhafter Agent der Organisation sein.                                              |
+| `credentials` | Die Geheimnisse der Plattform. Siehe unten. Sie gehen hinein, kommen aber nie heraus. Die Antwort zeigt nur `set` und einen `hint`.      |
+| `linkPath`    | Optional. Ein Pfad auf deinem öffentlichen Origin, auf dem dein Client eine Person [ihr Konto verknüpfen](#dein-konto-verknüpfen) lässt. |
+| `enabled`     | Optional. `false` stoppt den Channel. Sein Webhook gibt dann `401` zurück.                                                               |
+
+Die Antwort ist `201` mit dem Channel. Gib seine `webhookUrl` an die Plattform. Der Aufrufer wird der **Actor** des Channel. Die Chats des Channel sind Sessions des Actors. Der Actor muss dem Agent Arbeit geben können.
+
+`GET`, `PATCH` und `DELETE /v1/organization/channels/:channelId` lesen, ändern und löschen einen Channel. Eine Änderung braucht `expectedVersion`, die `version`, die du gelesen hast. Eine alte Version gibt `409` mit `ChannelConflict` zurück. Eine Änderung macht den Aufrufer zum Actor. Lass `credentials` weg, um die Geheimnisse zu behalten. Die Art eines Channel lässt sich nicht ändern.
+
+### Slack
+
+`credentials`: `{ "kind": "slack", "botToken": "xoxb-...", "signingSecret": "..." }`
+
+1. Schalte in der Slack-App **Event Subscriptions** ein, mit der `webhookUrl` als Request-URL. Füge die Bot-Events `app_mention` und `message.im` hinzu.
+2. Schalte **Interactivity** mit derselben `webhookUrl` ein, damit die Buttons des Bots funktionieren.
+3. Gib dem Bot die Scopes `chat:write`, `app_mentions:read` und `im:history`.
+
+OpenBot prüft die `X-Slack-Signature` jedes Requests. Ein Request, der älter als 5 Minuten ist, wird abgelehnt.
+
+### Lark
+
+`credentials`: `{ "kind": "lark", "domain": "feishu", "appId": "cli_...", "appSecret": "...", "verificationToken": "...", "encryptKey": "..." }`
+
+`domain` ist `feishu` für Feishu in China und `lark` für Lark an anderen Orten. Lege in der Lark-App einen **Encrypt Key** fest und nutze die `webhookUrl` als Request-URL für Events und für Karten-Callbacks. Füge das Event `im.message.receive_v1` hinzu. OpenBot prüft die Signatur und das Verification Token jedes Events.
+
+### Telegram
+
+`credentials`: `{ "kind": "telegram", "botToken": "123456:..." }`
+
+OpenBot ruft `setWebhook` für dich auf, mit einem eigenen Geheimnis. Telegram schickt dieses Geheimnis mit jedem Update zurück. In einer Gruppe bekommt der Bot nur Nachrichten, die ihn nennen oder ihm antworten, außer du schaltest seinen Privacy Mode aus.
+
+---
+
+## Dein Konto verknüpfen
+
+Der Bot arbeitet nur für Members der Organisation. Wenn eine Person, die nicht verknüpft ist, dem Bot schreibt, läuft nichts. Der Bot schickt ihr stattdessen einen **Link-Code**. Er schickt den Code dorthin, wo nur diese Person ihn sieht: in den Direkt-Chat oder als private Nachricht in einer Gruppe, wenn die Plattform das kann. Ein Code gilt 15 Minuten.
+
+Mit `linkPath` schickt der Bot einen Link wie `https://api.example.com/link?code=ocl_...`. Dein Client auf diesem Pfad meldet die Person an und ruft dann auf:
+
+1. `GET /v1/channel-links/:code`, um zu zeigen, für wen der Code ist.
+2. `POST /v1/channel-links/:code/accept`, um das Konto mit dem Aufrufer zu verknüpfen. Ein Code funktioniert nur einmal.
+
+Die Verknüpfung braucht einen `POST`. So kann niemand ein Konto verknüpfen, nur weil er einer Person einen Link schickt. Ohne `linkPath` schickt der Bot nur den Code, und die Person nimmt ihn mit denselben Aufrufen an.
+
+`GET /v1/user/channel-identities` listet deine verknüpften Konten auf. `DELETE /v1/user/channel-identities/:channelId/:externalUserId` löst eine Verknüpfung. Ein Administrator listet die Personen eines Channel mit `GET /v1/organization/channels/:channelId/identities` auf und löst eine Verknüpfung mit `DELETE` auf `.../identities/:externalUserId`.
+
+---
+
+## Chats und Sessions
+
+Jeder Chat ist eine dauerhafte Session mit `kind: "channel"`: eine Session für jeden Direkt-Chat und eine für jeden Gruppen-Chat. Liste sie als Actor mit `GET /v1/sessions?kind=channel` auf.
+
+- In einem Direkt-Chat geht jede Nachricht an den Agent.
+- In einem Gruppen-Chat geht nur eine Nachricht an den Agent, die den Bot nennt. Jede Nachricht beginnt mit dem Namen der Person, die sie geschrieben hat. So weiß der Agent, wer spricht.
+- Eine Nachricht, die kommt, während der Agent noch arbeitet, wartet in der [Queue](/de/docs/sessions#steer-queue-und-unterbrechen). Sie läuft als eigener Turn.
+- Während ein Turn läuft, zeigt der Bot seinen Text und ändert die Nachricht, während sie wächst. Eine lange Antwort geht in Teilen hinaus.
+- OpenBot verwirft ein Event, das die Plattform ein zweites Mal schickt.
+
+### Jeder Turn arbeitet für seinen Sprecher
+
+Ein Turn in einem Chat arbeitet für die Person, die seine Nachricht geschrieben hat, nicht für den Actor. OpenBot nennt diese Person den **Author** des Turns. Sein Feld `author` ist ihre User-ID. Also:
+
+- die [Berechtigungen](/de/docs/permissions) des Authors entscheiden, was der Agent tun darf,
+- [Requests](/de/docs/requests) gehen an den Author,
+- der Agent weiß, dass er mit dem Author arbeitet, und lernt über ihn.
+
+Eine Person braucht `channels.use` auf dem Channel, um mit seinem Agent zu sprechen. Ein Member, das nicht mehr aktiv ist, kann ihn nicht nutzen.
+
+---
+
+## Freigaben im Chat
+
+Wenn ein Request auf eine Person wartet, schickt der Bot eine Karte mit drei Buttons: **Allow once** (einmal erlauben), **Allow for this Session** (für diese Session erlauben) und **Deny** (ablehnen). Pläne, die im [Plan-Modus](/de/docs/sessions#plan-modus) auf eine Freigabe warten, bekommen dieselbe Karte. Die Karte geht in den Direkt-Chat der Person, wenn sie auf diesem Channel ein Konto verknüpft hat. Sonst geht sie in den Chat der Arbeit.
+
+Nur die Person, auf die der Request wartet, kann einen Button drücken. Wenn sich der Request ändert, zeigt die Karte die Entscheidung.
+
+Agents können mit dem Tool `openbot_channel_send` auch in einen anderen Chat desselben Channel schreiben. Jeder Beitrag ist die Fähigkeit `channels.send`. Darum entscheidet die [Kette der Entscheider](/de/docs/requests#die-kette-der-entscheider) darüber.
+
+---
+
+## Eigene Channels
+
+Ein eigener Channel verbindet jedes andere Chat-System. Erstelle ihn mit `credentials`: `{ "kind": "custom", "endpoint": "https://chat.example.com/openbot" }`. Erstelle dann sein Signatur-Geheimnis mit `PUT /v1/organization/channels/:channelId/secret`. OpenBot zeigt das Geheimnis nur einmal. Ein neues Geheimnis stoppt das alte.
+
+Beide Richtungen signieren auf dieselbe Weise. Jeder Request hat zwei Header:
+
+- `X-OpenBot-Timestamp`: die Zeit in Sekunden.
+- `X-OpenBot-Signature`: `sha256=` und der hexadezimale HMAC-SHA256 von `timestamp + "." + body` mit dem Geheimnis.
+
+Dein System schickt Events an die `webhookUrl`:
+
+```json
+{
+	"type": "message",
+	"id": "evt_1",
+	"conversation": { "id": "room-1", "kind": "group", "title": "Ops" },
+	"sender": { "id": "u_42", "name": "Ada" },
+	"text": "What broke last night?",
+	"mentioned": true
+}
+```
+
+`id` muss im Channel eindeutig sein. Ein Druck auf einen Button ist `{ "type": "action", "id", "conversation", "sender", "value" }`.
+
+OpenBot schickt Nachrichten an den `endpoint`. Ein `send` hat `markdown`, optional `buttons`, und `conversation`, `person` oder beides. Mit beidem soll nur diese Person sie in diesem Chat sehen. Mit nur `person` geht sie in einen Direkt-Chat. Antworte mit `{ "ref": "<message id>" }`, und füge `conversation` hinzu, wenn OpenBot keine geschickt hat. Ein `edit` hat `conversation`, `ref` und das neue `markdown`. OpenBot ruft nur öffentliche Adressen auf.
+
+---
+
+## Berechtigungen
+
+| Permission Group           | Was sie erlaubt                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------- |
+| `channels.read`            | Die Channels der Organisation lesen und die Personen, die mit ihnen verknüpft sind.         |
+| `channels.write`           | Channels erstellen, ändern und löschen, ihre Geheimnisse festlegen und Verknüpfungen lösen. |
+| `channels.use`             | Mit dem Agent eines Channel sprechen und deine Agents dorthin schreiben lassen.             |
+| `channel_identities.read`  | Deine verknüpften Konten lesen.                                                             |
+| `channel_identities.write` | Deine Konten verknüpfen und die Verknüpfung lösen.                                          |
+
+Channels liegen unter `openbot.org.<org>.channel`. Administratoren verwalten sie. Jedes Member darf sie nutzen und seine eigenen Konten verknüpfen. Siehe [Berechtigungen](/de/docs/permissions).
+
+---
+
+## Fehler
+
+| Fehler                    | Status | Wann                                                                                                                              |
+| ------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `ChannelInvalid`          | 400    | Der Agent ist kein gemeinsamer dauerhafter Agent, die Art hat sich geändert, oder die Plattform hat den Webhook nicht angenommen. |
+| `ChannelNotFound`         | 404    | Es gibt keinen solchen Channel.                                                                                                   |
+| `ChannelLinkInvalid`      | 404    | Der Code ist unbekannt, schon benutzt oder zu alt. Frag den Bot noch einmal.                                                      |
+| `ChannelIdentityNotFound` | 404    | Es gibt kein solches verknüpftes Konto.                                                                                           |
+| `ChannelConflict`         | 409    | Der Channel hat sich geändert, seit du ihn gelesen hast.                                                                          |
+| `ChannelHookDenied`       | 401    | Die Signatur ist falsch oder zu alt, oder der Channel ist abgeschaltet.                                                           |
+| `ChannelsUnavailable`     | 503    | OpenBot erreicht seinen Speicher gerade nicht.                                                                                    |

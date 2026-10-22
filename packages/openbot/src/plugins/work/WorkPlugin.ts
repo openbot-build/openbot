@@ -235,7 +235,8 @@ export const make: Effect.Effect<
 				if (typeof due === "string") return false
 				const current = yield* work
 				const wait = yield* waits.start(current.caller.organizationId, {
-					userId: current.caller.userId,
+					// The wait answers a call in a Session of this member.
+					userId: SessionHost.ownerOf(current.chain),
 					session: current.session,
 					turn: current.turn,
 					toolCallId: context.toolCallId,
@@ -307,8 +308,12 @@ export const make: Effect.Effect<
 						})
 					yield* input.store.modifyEffect({
 						session: current.session,
-						update: (now) =>
-							Effect.succeed([
+						update: (now) => {
+							// The build Turn works for the same person as the plan Turn.
+							const author = now.session.turns.find(
+								(turn) => turn.id === current.turn,
+							)?.author
+							return Effect.succeed([
 								undefined,
 								Option.some({
 									session: {
@@ -324,11 +329,13 @@ export const make: Effect.Effect<
 												content: Prompt.make([
 													{ role: "user", content: approved },
 												]),
+												...(author === undefined ? {} : { author }),
 											},
 										],
 									},
 								}),
-							] as const),
+							] as const)
+						},
 					})
 					return json({
 						approved: true,
@@ -350,6 +357,7 @@ export const make: Effect.Effect<
 					const approval = yield* Plans.approvalFor({
 						settings,
 						state: SessionHost.hostState(view.session),
+						chain: current.chain,
 						agent: current.agent,
 					})
 					const answer = yield* gate.check({

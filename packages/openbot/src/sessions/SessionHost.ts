@@ -1,4 +1,4 @@
-import { type Plugin, Session } from "@openbot-build/core"
+import { type Plugin, Session, type Turn } from "@openbot-build/core"
 import {
 	AgentsApi,
 	MemoryOverrides,
@@ -26,6 +26,11 @@ export const Chain = Schema.Struct({
 	userId: Schema.String,
 	/** The token that started the work, when a token did. The work never does more than it may. */
 	tokenId: Schema.optionalKey(Schema.String),
+	/**
+	 * The member whose Sessions hold the work, when it is not `userId`. In a chat Channel,
+	 * the Sessions belong to the actor of the Channel, and each Turn works for its speaker.
+	 */
+	owner: Schema.optionalKey(Schema.String),
 	agents: Schema.Array(AgentsApi.AgentId),
 	sessions: Schema.Array(Session.Id),
 })
@@ -42,6 +47,10 @@ export const SessionHostState = Schema.Struct({
 	review: Schema.optionalKey(Schema.String),
 	/** The trigger that started a trigger Session. */
 	trigger: Schema.optionalKey(Schema.String),
+	/** The chat of a Channel that a channel Session belongs to. */
+	channel: Schema.optionalKey(
+		Schema.Struct({ channel: Schema.String, conversation: Schema.String }),
+	),
 	/** How plans in this Session are approved, when the Session sets it. */
 	planApproval: Schema.optionalKey(PlanApproval.PlanApproval),
 })
@@ -64,6 +73,34 @@ export const sessionHostStore = {
  */
 export const hostState = (session: Session.Ref): SessionHostState =>
 	session.business[sessionHostId] as SessionHostState
+
+/**
+ * Who one Turn works for. A Turn with an author, such as a speaker in a chat Channel,
+ * works for that member and not for the owner of the Session. It never uses the token
+ * of the owner.
+ */
+export const turnChain = (
+	session: Session.Ref,
+	turn: Turn.Id | undefined,
+): Chain => {
+	const chain = hostState(session).chain
+	const author =
+		turn === undefined
+			? undefined
+			: session.turns.find((record) => record.id === turn)?.author
+	return author === undefined || author === chain.userId
+		? chain
+		: {
+				organizationId: chain.organizationId,
+				userId: author,
+				owner: ownerOf(chain),
+				agents: chain.agents,
+				sessions: chain.sessions,
+			}
+}
+
+/** The member whose Sessions hold the work of a chain. */
+export const ownerOf = (chain: Chain) => chain.owner ?? chain.userId
 
 export const overrides = (session: Session.Ref): MemoryOverrides =>
 	hostState(session)?.memory ?? {}

@@ -212,12 +212,14 @@ export const SessionResponseSseEvent: Schema.Codec<
  * Why a Session exists. A direct Session is work that a client started.
  * A delegated Session is work that another Agent gave. A review Session decides one request.
  * A trigger Session is work that a schedule or a webhook started.
+ * A channel Session is one chat of a Channel, such as a Slack channel.
  */
 export const SessionKind = Schema.Literals([
 	"direct",
 	"delegated",
 	"review",
 	"trigger",
+	"channel",
 ])
 export type SessionKind = typeof SessionKind.Type
 /** The tool call in another Session that started this Session. */

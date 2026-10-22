@@ -54,7 +54,7 @@ OpenBot returns `201` with the Session view. Here is a short form of it:
 }
 ```
 
-`agent` is the Agent of the Session. `kind` is `direct` for work that a client started, `delegated` for work that another Agent gave, `review` for a Session where an Agent decides one [request](/docs/requests), and `trigger` for work that a [trigger](/docs/triggers) started. `parent` names the Session, Turn and tool call that started delegated work. See [Delegation](/docs/delegation).
+`agent` is the Agent of the Session. `kind` is `direct` for work that a client started, `delegated` for work that another Agent gave, `review` for a Session where an Agent decides one [request](/docs/requests), `trigger` for work that a [trigger](/docs/triggers) started, and `channel` for one chat of a [Channel](/docs/channels). `parent` names the Session, Turn and tool call that started delegated work. See [Delegation](/docs/delegation).
 
 `response` is the latest Turn's answer. `activity` is `active` while a Turn runs on this server, `inactive` when nothing runs, and `historical` when a saved Turn says it runs but no server runs it.
 
@@ -190,7 +190,7 @@ A Turn can also stop and wait: for a decision about a capability, or for work th
 
 `GET /v1/sessions/:sessionId/turns` lists Turn records, oldest first. Use `limit` (1 to 100, default 50) and `after` (a Turn ID). The answer is `{ "items": [...], "next": "<turnId>" | null }`. The list also has Turns that a Fork copied from the source Session.
 
-`GET /v1/sessions/:sessionId/turns/:turnId` returns `{ "turn": {...}, "response": {...} }`. The Turn record has `status`, `settings`, `steps`, `usage`, `start` and `end`. `start` is the Version before the Turn. `end` is the Version after it.
+`GET /v1/sessions/:sessionId/turns/:turnId` returns `{ "turn": {...}, "response": {...} }`. The Turn record has `status`, `settings`, `steps`, `usage`, `start` and `end`. `start` is the Version before the Turn. `end` is the Version after it. A Turn that works for another member than the owner of the Session has `author`, the user ID of that member. In a [Channel](/docs/channels), it is the person who wrote the message.
 
 `GET /v1/sessions/:sessionId/turns/:turnId/items` lists the Items of one Turn, with the same `after` and `limit`. Each Item has `id`, `content` and `origin` (`session`, `turn`, `step`).
 
@@ -205,7 +205,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions/$SESSION/turns/$TURN/steer
 ```
 
-OpenBot returns `202` with `session`, `turn`, `item`, `revision` and `version`. If the Turn does not run, you get `409`.
+OpenBot returns `202` with `session`, `turn`, `item`, `revision` and `version`. If the Turn does not run, you get `409`. A Turn with an `author` takes steer messages only from that author.
 
 **Queue** saves a message for later: `POST /v1/sessions/:sessionId/queue` with `{ "input": ..., "expected"?: <revision> }`. When the current Turn ends, OpenBot starts the next queued message as a new Turn. The answer is `202` with `session`, `item` and `revision`.
 

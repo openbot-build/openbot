@@ -34,6 +34,8 @@ export const Pending = Schema.Struct({
 	kind: Schema.Literals(["message", "steer", "action"]),
 	turn: Schema.optionalKey(Turn.Id),
 	action: Schema.optionalKey(Turn.Action),
+	/** Who wrote the message. The Turn that runs it gets the same author. */
+	author: Schema.optionalKey(Turn.Author),
 })
 export type Pending = typeof Pending.Type
 const opaque = Schema.declare(
@@ -106,6 +108,8 @@ export interface Input {
 	readonly input: Prompt.RawInput
 	readonly overrides?: Partial<Turn.Settings>
 	readonly action?: Turn.Action
+	/** Who the Turn works for, when the host sets it. See `Turn.Author`. */
+	readonly author?: Turn.Author
 }
 export interface ActionInput extends Omit<Input, "input" | "action"> {
 	readonly action: Turn.Action
@@ -205,11 +209,14 @@ export interface Runtime<
 		readonly session: Id
 		readonly turn: Turn.Id
 		readonly input: Prompt.RawInput
+		/** Only the author of a Turn can steer it. */
+		readonly author?: Turn.Author
 	}) => Effect.Effect<Receipt, RuntimeError>
 	readonly enqueue: (input: {
 		readonly session: Id
 		readonly message: Prompt.RawInput
 		readonly expectedRevision?: Revision
+		readonly author?: Turn.Author
 	}) => Effect.Effect<
 		{
 			readonly session: Id

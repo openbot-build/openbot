@@ -54,7 +54,7 @@ OpenBot 返回 `201` 和 Session 视图。下面是它的简短形式：
 }
 ```
 
-`agent` 是这个 Session 的 Agent。`kind` 的取值：客户端启动的工作是 `direct`；另一个 Agent 分派的工作是 `delegated`；Agent 在其中决定一个 [request](/zh-cn/docs/requests) 的 Session 是 `review`；[触发器](/zh-cn/docs/triggers)启动的工作是 `trigger`。`parent` 指出启动委派工作的 Session、Turn 和工具调用。见 [委派](/zh-cn/docs/delegation)。
+`agent` 是这个 Session 的 Agent。`kind` 的取值：客户端启动的工作是 `direct`；另一个 Agent 分派的工作是 `delegated`；Agent 在其中决定一个 [request](/zh-cn/docs/requests) 的 Session 是 `review`；[触发器](/zh-cn/docs/triggers)启动的工作是 `trigger`；[Channel](/zh-cn/docs/channels) 中的一个聊天是 `channel`。`parent` 指出启动委派工作的 Session、Turn 和工具调用。见 [委派](/zh-cn/docs/delegation)。
 
 `response` 是最新一个 Turn 的回答。`activity` 的取值：有 Turn 正在这台服务器上运行时是 `active`；没有任何东西在运行时是 `inactive`；保存的 Turn 显示它在运行、但没有服务器在运行它时是 `historical`。
 
@@ -190,7 +190,7 @@ Turn 也可以停下来等待：等待关于某项能力的决定，或者等待
 
 `GET /v1/sessions/:sessionId/turns` 列出 Turn 记录，最早的排在前面。使用 `limit`（1 到 100，默认 50）和 `after`（一个 Turn ID）。回答是 `{ "items": [...], "next": "<turnId>" | null }`。列表中也包括 Fork 从来源 Session 复制过来的 Turns。
 
-`GET /v1/sessions/:sessionId/turns/:turnId` 返回 `{ "turn": {...}, "response": {...} }`。Turn 记录包含 `status`、`settings`、`steps`、`usage`、`start` 和 `end`。`start` 是 Turn 之前的 Version。`end` 是 Turn 之后的 Version。
+`GET /v1/sessions/:sessionId/turns/:turnId` 返回 `{ "turn": {...}, "response": {...} }`。Turn 记录包含 `status`、`settings`、`steps`、`usage`、`start` 和 `end`。`start` 是 Turn 之前的 Version。`end` 是 Turn 之后的 Version。如果 Turn 为 Session 所有者以外的另一个成员工作，它会有 `author`，也就是那个成员的用户 ID。在 [Channel](/zh-cn/docs/channels) 中，它是写下这条消息的人。
 
 `GET /v1/sessions/:sessionId/turns/:turnId/items` 列出一个 Turn 的 Items，使用相同的 `after` 和 `limit`。每个 Item 包含 `id`、`content` 和 `origin`（`session`、`turn`、`step`）。
 
@@ -205,7 +205,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions/$SESSION/turns/$TURN/steer
 ```
 
-OpenBot 返回 `202`，以及 `session`、`turn`、`item`、`revision` 和 `version`。如果这个 Turn 没有在运行，你会得到 `409`。
+OpenBot 返回 `202`，以及 `session`、`turn`、`item`、`revision` 和 `version`。如果这个 Turn 没有在运行，你会得到 `409`。有 `author` 的 Turn 只接受这个 author 发来的 steer 消息。
 
 **Queue**（排队）把一条消息保存起来，留到之后处理：`POST /v1/sessions/:sessionId/queue`，请求体为 `{ "input": ..., "expected"?: <revision> }`。当前 Turn 结束时，OpenBot 把下一条排队的消息作为一个新 Turn 启动。回答是 `202`，包含 `session`、`item` 和 `revision`。
 

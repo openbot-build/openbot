@@ -34,6 +34,11 @@ import * as AgentLayers from "../agents/AgentLayers.ts"
 import * as Coordinator from "../agents/Coordinator.ts"
 import * as Triggers from "../triggers/Triggers.ts"
 import * as TriggerWorker from "../triggers/Worker.ts"
+import * as Channels from "../channels/Channels.ts"
+import * as ChannelQueue from "../channels/ChannelQueue.ts"
+import * as ChannelRegistry from "../channels/ChannelRegistry.ts"
+import * as ChannelWorker from "../channels/ChannelWorker.ts"
+import * as ChannelPlugin from "../plugins/channels/ChannelPlugin.ts"
 import * as Judge from "../capabilities/Judge.ts"
 import * as Sessions from "../sessions/Sessions.ts"
 import { Config } from "@openbot-build/core"
@@ -85,6 +90,7 @@ export interface Options<
 	 */
 	readonly builtinModels?: ModelRegistry.Builtin
 	readonly triggers?: TriggerWorker.Options
+	readonly channels?: ChannelWorker.Options
 }
 
 /**
@@ -222,6 +228,15 @@ export const layer = <
 	)
 	const agents = AgentLayers.layer({ helper })
 
+	// A custom Channel calls an address that an administrator chose, so it uses the
+	// same network guard as Apps.
+	const channels = ChannelPlugin.layer.pipe(
+		Layer.provideMerge(ChannelRegistry.layer),
+		Layer.provideMerge(ChannelQueue.layer),
+		Layer.provideMerge(Channels.layer),
+		Layer.provide(options.appNetwork ?? AppHost.layerNetwork),
+	)
+
 	const indexNamespace = options.indexNamespace ?? "public"
 	const apps = Layer.mergeAll(
 		Lifecycle.layer,
@@ -302,6 +317,7 @@ export const layer = <
 	).pipe(
 		Layer.provideMerge(apps),
 		Layer.provideMerge(Triggers.layer),
+		Layer.provideMerge(channels),
 		Layer.provideMerge(agents),
 		Layer.provideMerge(index),
 		Layer.provideMerge(Governance.layer),
@@ -333,5 +349,9 @@ export const layer = <
 		developer,
 		Coordinator.layer,
 		TriggerWorker.layer(options.triggers),
+		ChannelWorker.layer({
+			publicOrigin: options.auth.publicOrigin,
+			...options.channels,
+		}),
 	).pipe(Layer.provideMerge(base))
 }

@@ -55,6 +55,10 @@ export async function start(options: {
 	}
 	/** How often the trigger worker looks for schedules that are due. */
 	readonly triggerIntervalMs?: number
+	/** How often the Channel worker looks for new events and messages. */
+	readonly channelIntervalMs?: number
+	/** Answers the HTTP calls of the server to other places, such as Slack. */
+	readonly platformFetch?: typeof fetch
 	/** Organization settings for the Agents of each new organization. */
 	readonly agents?: {
 		readonly memory?: boolean
@@ -289,6 +293,9 @@ export async function start(options: {
 		...(options.triggerIntervalMs === undefined
 			? {}
 			: { triggers: { interval: options.triggerIntervalMs } }),
+		...(options.channelIntervalMs === undefined
+			? {}
+			: { channels: { interval: options.channelIntervalMs } }),
 		...(options.discovery === undefined
 			? {}
 			: { discovery: options.discovery }),
@@ -332,7 +339,15 @@ export async function start(options: {
 					Layer.provide(
 						Layer.mergeAll(
 							handlers,
-							Layer.succeed(FetchHttpClient.Fetch, providerFetch),
+							Layer.succeed(FetchHttpClient.Fetch, (input, init) => {
+								const url = new URL(
+									input instanceof Request ? input.url : String(input),
+								)
+								return url.origin !== issuer &&
+									options.platformFetch !== undefined
+									? options.platformFetch(input, init)
+									: providerFetch(input, init)
+							}),
 							Layer.succeed(LanguageModel.LanguageModel, model),
 						),
 					),

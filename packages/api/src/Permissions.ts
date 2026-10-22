@@ -10,6 +10,7 @@ export const ResourceKind = Schema.Literals([
 	"session",
 	"agent",
 	"trigger",
+	"channel",
 	"request",
 	"connection",
 	"apps",
@@ -87,6 +88,40 @@ const permissionTree = {
 				name: "Triggers Write",
 				description:
 					"Create, change and delete triggers, and set their webhook secrets.",
+			},
+		},
+	},
+	channels: {
+		scope: "channel",
+		actions: {
+			read: {
+				name: "Channels Read",
+				description:
+					"Read the Channels of the organization and the people linked to them.",
+			},
+			write: {
+				name: "Channels Write",
+				description:
+					"Create, change and delete Channels, set their secrets, and unlink people.",
+			},
+			use: {
+				name: "Channels Use",
+				description:
+					"Talk with the Agent of a Channel, and let your Agents post to it.",
+			},
+		},
+	},
+	channel_identities: {
+		scope: "user",
+		actions: {
+			read: {
+				name: "Channel Identities Read",
+				description: "Read your linked accounts on the platforms of Channels.",
+			},
+			write: {
+				name: "Channel Identities Write",
+				description:
+					"Link and unlink your accounts on the platforms of Channels.",
 			},
 		},
 	},
@@ -324,6 +359,8 @@ const self = selfResource
 const sharedAgents = "openbot.org.{org}.agent"
 /** The shared triggers of the organization. */
 const sharedTriggers = "openbot.org.{org}.trigger"
+/** The Channels of the organization. */
+const channels = "openbot.org.{org}.channel"
 const own: ReadonlyArray<PermissionGroupId> = [
 	"responses.run",
 	"sessions.read",
@@ -334,6 +371,8 @@ const own: ReadonlyArray<PermissionGroupId> = [
 	"agents.delegate",
 	"triggers.read",
 	"triggers.write",
+	"channel_identities.read",
+	"channel_identities.write",
 	"connections.read",
 	"connections.write",
 	"apps.use",
@@ -355,6 +394,11 @@ const readSharedTriggers: Policy = {
 	effect: "allow",
 	permissionGroups: ["triggers.read"],
 	resources: [sharedTriggers],
+}
+const useChannels: Policy = {
+	effect: "allow",
+	permissionGroups: ["channels.use"],
+	resources: [channels],
 }
 
 /**
@@ -381,11 +425,12 @@ export const builtinRoles = [
 		id: "administrator",
 		name: "Administrator",
 		description:
-			"Manage the organization, its members, its shared Agents and its shared triggers. Work only with your own Sessions and connections.",
+			"Manage the organization, its members, its shared Agents, its shared triggers and its Channels. Work only with your own Sessions and connections.",
 		policies: [
 			ownWork,
 			useSharedAgents,
 			readSharedTriggers,
+			useChannels,
 			{
 				effect: "allow",
 				permissionGroups: ["agents.write"],
@@ -409,6 +454,8 @@ export const builtinRoles = [
 					"model_providers.write",
 					"sso.read",
 					"sso.write",
+					"channels.read",
+					"channels.write",
 					"audit_logs.read",
 				],
 				resources: [organization],
@@ -424,6 +471,7 @@ export const builtinRoles = [
 			ownWork,
 			useSharedAgents,
 			readSharedTriggers,
+			useChannels,
 			{
 				effect: "allow",
 				permissionGroups: [
@@ -432,6 +480,7 @@ export const builtinRoles = [
 					"members.read",
 					"model_providers.read",
 					"sso.read",
+					"channels.read",
 					"audit_logs.read",
 				],
 				resources: [organization],
@@ -442,11 +491,12 @@ export const builtinRoles = [
 		id: "member",
 		name: "Member",
 		description:
-			"Work with your own Agents, Sessions, triggers, connections and tokens, and use the shared Agents, triggers and models of the organization.",
+			"Work with your own Agents, Sessions, triggers, connections and tokens, and use the shared Agents, triggers, Channels and models of the organization.",
 		policies: [
 			ownWork,
 			useSharedAgents,
 			readSharedTriggers,
+			useChannels,
 			{
 				effect: "allow",
 				permissionGroups: ["models.use", "organization.read"],

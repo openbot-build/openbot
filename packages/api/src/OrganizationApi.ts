@@ -89,6 +89,8 @@ const auditActionTree = {
 	grant: ["created", "revoked"],
 	rule: ["created", "updated"],
 	trigger: ["created", "updated", "deleted", "hook_changed", "fired"],
+	channel: ["created", "updated", "deleted", "secret_changed"],
+	channel_identity: ["linked", "unlinked"],
 } as const satisfies Record<string, ReadonlyArray<string>>
 type AuditActionTree = typeof auditActionTree
 /** The audit actions of one resource, such as `token.created`. */

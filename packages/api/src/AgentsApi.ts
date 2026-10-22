@@ -109,6 +109,8 @@ export const CapabilityAction = Schema.Literals([
 	"agents.delegate",
 	/** An Agent in plan mode wants to carry out its plan. The target is the Session. */
 	"plans.run",
+	/** An Agent posts to a chat of a Channel. The target is the Channel. */
+	"channels.send",
 ])
 export type CapabilityAction = typeof CapabilityAction.Type
 export const Capability = Schema.Struct({

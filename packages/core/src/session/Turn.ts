@@ -46,11 +46,18 @@ export const StatusTag = Schema.Literals(
 )
 export type StatusTag = typeof StatusTag.Type
 export const Status = Data.taggedEnum<Status>()
+/**
+ * Who a Turn works for. The host chooses the value, such as a user ID, when many people
+ * talk in one Session. The runtime only keeps it and compares it.
+ */
+export const Author = Schema.String.check(Schema.isMinLength(1))
+export type Author = typeof Author.Type
 export const Record = Schema.Struct({
 	id: Id,
 	session: SessionIdentity.Id,
 	settings: Settings,
 	action: Schema.optionalKey(Action),
+	author: Schema.optionalKey(Author),
 	activeAction: Schema.optionalKey(
 		Schema.Struct({ item: Item.Id, action: Action }),
 	),

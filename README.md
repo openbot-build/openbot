@@ -13,6 +13,7 @@ You give work to an Agent in plain language. OpenBot runs the work on a server, 
 - **Agent for Agents.** A Main Agent acts for you and gives work to a team of lasting Agents and their Session Agents. Each Agent has its own context and memory.
 - **Lazy capabilities.** Agents have no preset limits. When an Agent tries something new, the decider above it answers, and Grants and Rules keep the answer.
 - **Plans, todos and triggers.** An Agent can plan first and wait for approval, keep a todo list, and wait. A trigger starts its work on a schedule or from a webhook.
+- **Channels.** People talk with an Agent in Slack, Lark, Telegram or their own chat system. Each Turn works for the person who wrote the message.
 - **Open Apps.** Agents find and use Apps that publishers put on the open web with the OpenBot App Protocol.
 
 ## Quick start

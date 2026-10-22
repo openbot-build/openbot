@@ -48,6 +48,21 @@ const groups = [
 		"Fire a trigger from another system with its webhook secret.",
 	],
 	[
+		"channels",
+		"Channels",
+		"Manage the bots of the organization in Slack, Lark, Telegram and other chat systems.",
+	],
+	[
+		"channelLinks",
+		"Channel links",
+		"Link your own accounts on the platforms of Channels.",
+	],
+	[
+		"channelHooks",
+		"Channel webhooks",
+		"Take the events of chat platforms. The signature of the platform is the only credential.",
+	],
+	[
 		"memberSettings",
 		"Your settings",
 		"Read and change your own settings, such as how your plans are approved.",

@@ -51,9 +51,17 @@ export interface CreateInput {
 	readonly review?: string
 	readonly planApproval?: SessionHost.SessionHostState["planApproval"]
 	readonly trigger?: string
+	readonly channel?: SessionHost.SessionHostState["channel"]
 	readonly title?: string
 	readonly settings?: CreateSessionRequest["settings"]
 }
+
+/**
+ * A Turn request from inside OpenBot. `author` is the member that the Turn works for,
+ * when it is not the owner of the Session, such as the speaker in a chat Channel.
+ * The HTTP API does not take it.
+ */
+export type SendInput = StartTurnRequest & { readonly author?: Turn.Author }
 
 export type ServiceError =
 	| SessionNotFound
@@ -211,7 +219,7 @@ export class Sessions extends Context.Service<
 		readonly get: (id: Session.Id) => Effect.Effect<SessionView, ServiceError>
 		readonly send: (
 			id: Session.Id,
-			input: StartTurnRequest,
+			input: SendInput,
 		) => Effect.Effect<
 			SessionResponse,
 			ServiceError | SessionExecutionUnavailable
@@ -275,12 +283,14 @@ export class Sessions extends Context.Service<
 			id: Session.Id,
 			turn: Turn.Id,
 			input: StartTurnRequest["input"],
+			author?: Turn.Author,
 		) => Effect.Effect<Session.Receipt, ServiceError>
 		readonly enqueue: (
 			id: Session.Id,
 			input: {
 				readonly input: StartTurnRequest["input"]
 				readonly expected?: Session.Revision
+				readonly author?: Turn.Author
 			},
 		) => Effect.Effect<
 			{
@@ -293,7 +303,7 @@ export class Sessions extends Context.Service<
 
 		readonly sendStream: (
 			id: Session.Id,
-			input: StartTurnRequest,
+			input: SendInput,
 		) => Effect.Effect<
 			Stream.Stream<SessionResponseSseEvent>,
 			ServiceError | SessionExecutionUnavailable,
