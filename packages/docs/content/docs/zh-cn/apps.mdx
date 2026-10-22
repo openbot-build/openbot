@@ -182,6 +182,10 @@ Turn 运行时，OpenBot 会为你可用连接的每项能力给模型一个工�
 | `openbot_app_details` | 通过 Card URL 读取一个 App 的公开信息和来源。                  |
 | `openbot_app_access`  | 列出用户的连接，以及它们在设置或登录方面的需要。               |
 
+### Code Mode
+
+当平台打开 [Code Mode](/zh-cn/docs/code-mode) 时，模型还会得到 `openbot_code_api` 和 `openbot_run_code`。Agent 用它们写一段调用这些 App 工具的小程序。程序中的每次调用都和普通的 App 工具调用走同样的路径。
+
 ### App 操作
 
 OpenBot 把每次 App 调用记录为一个 App 操作（App operation）。用 `GET /v1/sessions/:sessionId/app-operations` 或 `GET /v1/app-operations/:id` 读取它们。

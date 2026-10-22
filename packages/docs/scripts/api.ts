@@ -85,6 +85,11 @@ const groups = [
 		"App operations",
 		"Run App operations and read their results.",
 	],
+	[
+		"codeRuns",
+		"Code runs",
+		"Read the Code Mode programs of a Session and their App calls.",
+	],
 	["appViews", "App views", "Read the views that Apps show."],
 	[
 		"appExperience",

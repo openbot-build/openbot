@@ -283,6 +283,28 @@ export const appInvocations = table(
 		index("openbot_app_invocations_session").on(t.owner, t.session),
 	],
 )
+/**
+ * The Code Mode programs of each owner. The body is sealed. It holds the program,
+ * its seed and clock, and the record of every App call, so a run can start again
+ * and get the same results without sending a call twice.
+ */
+export const codeRuns = table(
+	"openbot_code_runs",
+	{
+		owner: text().notNull(),
+		id: text().notNull(),
+		session: text().notNull(),
+		callId: text("call_id").notNull(),
+		status: text().notNull(),
+		/** While a host runs the program, other hosts leave it alone until this time. */
+		leaseUntil: time("lease_until"),
+		body: text().notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.owner, t.id] }),
+		index("openbot_code_runs_session").on(t.owner, t.session),
+	],
+)
 export const appAuthorizations = table("openbot_app_authorizations", {
 	id: text().primaryKey(),
 	owner: text().notNull(),

@@ -47,6 +47,7 @@ import * as ProtocolStores from "../src/apps/ProtocolStores.ts"
 import * as AppHost from "../src/apps/AppHost.ts"
 import * as Invocations from "../src/apps/Invocations.ts"
 import * as Operations from "../src/apps/Operations.ts"
+import { CodeRuns } from "../src/code/CodeRuns.ts"
 import * as ActionPolicy from "../src/apps/ActionPolicy.ts"
 import * as Lifecycle from "../src/apps/Lifecycle.ts"
 import * as ConnectionLocks from "../src/apps/ConnectionLocks.ts"
@@ -452,6 +453,15 @@ const startApi = async (
 							Layer.succeed(Backend, { get: unused, forCaller: unused }),
 						),
 					),
+					Layer.succeed(CodeRuns, {
+						settings: Effect.succeedNone,
+						start: unused,
+						resume: unused,
+						forCall: unused,
+						get: unused,
+						list: unused,
+						stale: Effect.succeed([]),
+					}),
 				).pipe(
 					Layer.provideMerge(Invocations.layer),
 					Layer.provide(

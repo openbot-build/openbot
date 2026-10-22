@@ -101,6 +101,12 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 	"organizationCreation": "anyone",
 	"policyCeiling": [],
 	"appRestrictions": [],
+	"codeMode": {
+		"enabled": false,
+		"timeoutMs": 30000,
+		"memoryMb": 64,
+		"outputBytes": 65536
+	},
 	"updatedAt": "2026-10-21T09:00:00.000Z"
 }
 ```
@@ -113,6 +119,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `organizationCreation` | Who can create an organization: `anyone` or `platform_admins`. See [Organization creation](#organization-creation). |
 | `policyCeiling`        | Deny policies for every organization. See [Policy ceiling](#policy-ceiling).                                        |
 | `appRestrictions`      | Apps that the App Index hides. See [App Index](/docs/app-index#host-restrictions).                                  |
+| `codeMode`             | Whether Agents can use Code Mode, and its limits. See [Code Mode](/docs/code-mode#turn-on-code-mode).               |
 | `updatedAt`            | When the settings last changed.                                                                                     |
 
 ### Secrets never come back

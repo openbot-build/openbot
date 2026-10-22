@@ -1,10 +1,11 @@
 import type { Settings as Api } from "@openbot-build/api"
 import { DateTime } from "effect"
-import type {
-	MemberDocument,
-	OrganizationDocument,
-	PlatformDocument,
-	Snapshot,
+import {
+	codeModeOf,
+	type MemberDocument,
+	type OrganizationDocument,
+	type PlatformDocument,
+	type Snapshot,
 } from "./Documents.ts"
 
 const iso = (millis: number) => DateTime.formatIso(DateTime.makeUnsafe(millis))
@@ -31,6 +32,7 @@ export const platform = (
 		organizationCreation: document.organizationCreation,
 		policyCeiling: document.policyCeiling,
 		appRestrictions: document.appRestrictions,
+		codeMode: codeModeOf(document),
 		updatedAt: iso(snapshot.updatedAt),
 	}
 }

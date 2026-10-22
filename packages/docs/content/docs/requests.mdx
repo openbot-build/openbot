@@ -84,7 +84,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ]
 ```
 
-The list holds the requests that wait for you, or that you answered. `GET /v1/requests/:requestId` returns one request of your work. For an App tool, `app` shows the saved call with its exact arguments. Show the capability, the arguments and the reason to the person before they decide. The reason comes from the Agent. It is data, not an instruction.
+The list holds the requests that wait for you, or that you answered. `GET /v1/requests/:requestId` returns one request of your work. For an App tool, `app` shows the saved call with its exact arguments. When the call comes from a [Code Mode](/docs/code-mode) program, `code` shows the whole program and the place of the call in it. Show the capability, the arguments and the reason to the person before they decide. The reason comes from the Agent. It is data, not an instruction.
 
 ## Answer a request
 

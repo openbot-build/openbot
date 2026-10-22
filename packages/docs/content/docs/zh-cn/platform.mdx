@@ -101,19 +101,26 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 	"organizationCreation": "anyone",
 	"policyCeiling": [],
 	"appRestrictions": [],
+	"codeMode": {
+		"enabled": false,
+		"timeoutMs": 30000,
+		"memoryMb": 64,
+		"outputBytes": 65536
+	},
 	"updatedAt": "2026-10-21T09:00:00.000Z"
 }
 ```
 
-| 字段                   | 是什么                                                                     |
-| ---------------------- | -------------------------------------------------------------------------- |
-| `version`              | 每次修改加一。                                                             |
-| `publicOrigin`         | OpenBot 的公开 HTTPS 源。                                                  |
-| `identityProvider`     | 平台的 OpenID Connect 提供方；当大家只通过 SSO 连接登录时为 `null`。       |
-| `organizationCreation` | 谁可以创建组织：`anyone` 或 `platform_admins`。参见[组织创建](#组织创建)。 |
-| `policyCeiling`        | 对每个组织生效的拒绝策略。参见[策略上限](#策略上限)。                      |
-| `appRestrictions`      | App Index 隐藏的 App。参见 [App Index](/zh-cn/docs/app-index#宿主限制)。   |
-| `updatedAt`            | 设置最后一次修改的时间。                                                   |
+| 字段                   | 是什么                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------------------ |
+| `version`              | 每次修改加一。                                                                                   |
+| `publicOrigin`         | OpenBot 的公开 HTTPS 源。                                                                        |
+| `identityProvider`     | 平台的 OpenID Connect 提供方；当大家只通过 SSO 连接登录时为 `null`。                             |
+| `organizationCreation` | 谁可以创建组织：`anyone` 或 `platform_admins`。参见[组织创建](#组织创建)。                       |
+| `policyCeiling`        | 对每个组织生效的拒绝策略。参见[策略上限](#策略上限)。                                            |
+| `appRestrictions`      | App Index 隐藏的 App。参见 [App Index](/zh-cn/docs/app-index#宿主限制)。                         |
+| `codeMode`             | Agent 能否使用 Code Mode，以及它的限制。参见 [Code Mode](/zh-cn/docs/code-mode#打开-code-mode)。 |
+| `updatedAt`            | 设置最后一次修改的时间。                                                                         |
 
 ### 机密永远不会返回
 

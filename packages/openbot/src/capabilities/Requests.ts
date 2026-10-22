@@ -1,7 +1,12 @@
 import { Settings } from "../settings/Settings.ts"
 import { randomUUID } from "node:crypto"
 import type { Session, Turn } from "@openbot-build/core"
-import { AgentsApi, type AppExecution, RequestsApi } from "@openbot-build/api"
+import {
+	AgentsApi,
+	type AppExecution,
+	type CodeRunsApi,
+	RequestsApi,
+} from "@openbot-build/api"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { AgentRecords } from "../agents/AgentRecords.ts"
 import { Chain } from "../sessions/SessionHost.ts"
@@ -120,6 +125,7 @@ export class Requests extends Context.Service<
 				readonly turn: Turn.Id
 				readonly toolCallId: string
 				readonly app?: AppExecution.Invocation
+				readonly code?: CodeRunsApi.RequestCode
 				readonly ask?: Ask
 				/** A request that is decided at once, for example by a Grant or by policy. */
 				readonly decided?: {
@@ -453,6 +459,7 @@ export const make: Effect.Effect<
 						turn: input.turn,
 						toolCallId: input.toolCallId,
 						...(input.app === undefined ? {} : { app: input.app }),
+						...(input.code === undefined ? {} : { code: input.code }),
 						endorsements: [],
 						status,
 						decision:

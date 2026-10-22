@@ -4,11 +4,19 @@ import { defineConfig } from "tsdown"
 const path = (relative: string) =>
 	fileURLToPath(new URL(relative, import.meta.url))
 
+// The Code Mode worker runs in its own thread, so it is its own file next to the server.
+const entries = [
+	["Main", "src/app/Main.ts"],
+	["Migrate", "src/app/Migrate.ts"],
+	["Setup", "src/app/Setup.ts"],
+	["CodeWorker", "src/code/Worker.ts"],
+] as const
+
 export default defineConfig(
-	["Main", "Migrate", "Setup"].map((name) =>
+	entries.map(([name, file]) =>
 		defineConfig({
 			cwd: path("../../packages/openbot"),
-			entry: { [name]: `src/app/${name}.ts` },
+			entry: { [name]: file },
 			outDir: path("../../.devenv/openbot/dist/app"),
 			clean: false,
 			format: "esm",

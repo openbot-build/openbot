@@ -19,7 +19,7 @@ import { FetchHttpClient, HttpServer } from "effect/http"
 import { exportJWK, generateKeyPair, SignJWT } from "jose"
 import * as PostgresTest from "./PostgresTest.ts"
 import type { Discovery, Network } from "@openbot-build/protocol"
-import type { AppIndexApi } from "@openbot-build/api"
+import type { AppIndexApi, Settings as SettingsApi } from "@openbot-build/api"
 import type { Probe } from "../src/apps/Probe.ts"
 import type { AppNetwork } from "../src/apps/AppHost.ts"
 import type { DomainControl } from "../src/apps/DomainControl.ts"
@@ -40,6 +40,8 @@ export async function start(options: {
 		readonly tool: string
 	}>
 	readonly appRestrictions?: ReadonlyArray<AppIndexApi.Restriction>
+	/** Turns Code Mode on for the platform, with these limits. */
+	readonly codeMode?: SettingsApi.CodeMode
 	/**
 	 * Test accounts have verified emails at example.com. By default the
 	 * organization of the first account verifies that domain, so every later
@@ -368,6 +370,19 @@ export async function start(options: {
 					if (Option.isNone(current)) return
 					yield* settings.updatePlatform(current.value.version, (document) =>
 						Effect.succeed({ ...document, appRestrictions: restrictions }),
+					)
+				}),
+			)
+		}
+		if (options.codeMode !== undefined) {
+			const codeMode = options.codeMode
+			await runtime.runPromise(
+				Effect.gen(function* () {
+					const settings = yield* Settings
+					const current = yield* settings.platform
+					if (Option.isNone(current)) return
+					yield* settings.updatePlatform(current.value.version, (document) =>
+						Effect.succeed({ ...document, codeMode }),
 					)
 				}),
 			)

@@ -20,6 +20,8 @@ import {
 import { LanguageModel, type Prompt } from "effect/ai"
 import { Backend } from "../app/Backend.ts"
 import { Invocations } from "../apps/Invocations.ts"
+import { CodeRuns, toolResult } from "../code/CodeRuns.ts"
+import type { Run as CodeRun } from "../code/StoredCodeRuns.ts"
 import { ownerKey } from "../apps/StoredConnections.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { Gate } from "../capabilities/Gate.ts"
@@ -202,6 +204,7 @@ const reviewText = (stored: StoredRequest) =>
 		reason: stored.request.reason,
 		endorsements: stored.request.endorsements,
 		app: stored.request.app?.source,
+		code: stored.request.code,
 	})
 
 /**
@@ -224,6 +227,7 @@ export const layer = Layer.effectDiscard(
 		const organization = yield* Organization
 		const helper = yield* HelperModel
 		const invocations = yield* Effect.serviceOption(Invocations)
+		const codeRuns = yield* Effect.serviceOption(CodeRuns)
 		const scope = yield* Scope.Scope
 		const sessionsFor = (member: Member) =>
 			backend.get(ownerKey(member), owner(member))
@@ -489,6 +493,32 @@ export const layer = Layer.effectDiscard(
 				})
 			})
 
+		/** The current Agent of a Session and who it works for, as capability checks need it. */
+		const workOf = (member: Member, session: Session.Id) =>
+			Effect.gen(function* () {
+				const sessions = yield* sessionsFor(member)
+				const view = yield* sessions.get(session)
+				const state = SessionHost.hostState(view.session)
+				const turn = Session.currentTurn(view.session)
+				const agent = yield* agents.find(member.organizationId, state.agent)
+				if (turn === undefined || Option.isNone(agent)) return Option.none()
+				const chain = SessionHost.turnChain(view.session, turn.id)
+				return Option.some(
+					Work.of({
+						caller: callerOf(chain),
+						namespace: ownerKey(member),
+						agent: agent.value,
+						chain,
+						deciders: yield* agents.ownerChain(
+							{ organizationId: chain.organizationId, userId: chain.userId },
+							agent.value,
+						),
+						session,
+						turn: turn.id,
+					}),
+				)
+			})
+
 		/**
 		 * Checks a host tool call that waits for approval, like any capability:
 		 * member policy, Grants and Rules first, and then a request.
@@ -499,33 +529,16 @@ export const layer = Layer.effectDiscard(
 			wait: Session.Wait,
 		) =>
 			Effect.gen(function* () {
+				const work = yield* workOf(member, session)
+				if (Option.isNone(work)) return
 				const sessions = yield* sessionsFor(member)
-				const view = yield* sessions.get(session)
-				const state = SessionHost.hostState(view.session)
-				const turn = Session.currentTurn(view.session)
-				const agent = yield* agents.find(member.organizationId, state.agent)
-				if (turn === undefined || Option.isNone(agent)) return
-				const chain = SessionHost.turnChain(view.session, turn.id)
 				const answer = yield* gate
 					.check({
 						capability: { action: "tools.call", target: wait.toolCall.name },
 						reason: "The tool asks for approval before each call.",
 						toolCallId: wait.toolCallId,
 					})
-					.pipe(
-						Effect.provideService(Work, {
-							caller: callerOf(chain),
-							namespace: ownerKey(member),
-							agent: agent.value,
-							chain,
-							deciders: yield* agents.ownerChain(
-								{ organizationId: chain.organizationId, userId: chain.userId },
-								agent.value,
-							),
-							session,
-							turn: turn.id,
-						}),
-					)
+					.pipe(Effect.provideService(Work, work.value))
 				// A pause made a request. Its news settles the call again.
 				if (answer === "allow")
 					yield* sessions.resolveCall(
@@ -534,6 +547,114 @@ export const layer = Layer.effectDiscard(
 						Session.Outcome.Approved(),
 					)
 			})
+
+		/** Gives the end of a program to its waiting tool call. */
+		const finishCode = (member: Member, run: CodeRun) =>
+			Effect.gen(function* () {
+				const sessions = yield* sessionsFor(member)
+				yield* sessions.resolveCall(
+					run.session,
+					run.callId,
+					Session.Outcome.Result({
+						result: JSON.parse(JSON.stringify(toolResult(run))),
+						isFailure: false,
+					}),
+				)
+			})
+
+		/**
+		 * Moves a waiting Code Mode program on. After a decision about its waiting call,
+		 * the program runs again in the background. When it ends, its tool call gets the result.
+		 */
+		const settleCode = (
+			member: Member,
+			run: CodeRun,
+			list: ReadonlyArray<StoredRequest>,
+		) =>
+			Effect.gen(function* () {
+				if (Option.isNone(codeRuns)) return
+				if (
+					run.status === "Completed" ||
+					run.status === "Failed" ||
+					run.status === "Cancelled"
+				)
+					return yield* finishCode(member, run)
+				const owner = ownerKey(member)
+				let decision:
+					| {
+							readonly index: number
+							readonly allowed: boolean
+							readonly reason?: string
+					  }
+					| undefined
+				if (run.status === "Waiting") {
+					const waiting = run.calls.find(
+						(call) => call.outcome._tag === "Waiting",
+					)
+					if (waiting === undefined) return
+					const request = list
+						.filter(
+							(stored) =>
+								stored.request.toolCallId === run.callId &&
+								stored.request.code?.index === waiting.index,
+						)
+						.at(-1)
+					if (request === undefined || request.request.status === "pending")
+						return
+					const position = { owner, session: run.session, turn: run.turn }
+					const callId = run.callId + ":" + waiting.index
+					if (request.request.status === "allowed") {
+						// An App call is bound to its connection revision. When the connection
+						// changed after the request, the decision does not count.
+						const valid = Option.isNone(invocations)
+							? false
+							: yield* invocations.value.approve(position, callId, true).pipe(
+									Effect.as(true),
+									Effect.orElseSucceed(() => false),
+								)
+						decision = valid
+							? { index: waiting.index, allowed: true }
+							: {
+									index: waiting.index,
+									allowed: false,
+									reason:
+										"The App connection changed after the request. Ask again.",
+								}
+					} else {
+						if (Option.isSome(invocations))
+							yield* invocations.value
+								.approve(position, callId, false)
+								.pipe(Effect.ignore)
+						decision = {
+							index: waiting.index,
+							allowed: false,
+							reason:
+								request.request.decision?.reason ?? "The request was denied.",
+						}
+					}
+				}
+				const work = yield* workOf(member, run.session)
+				if (Option.isNone(work)) return
+				const resumed = yield* codeRuns.value
+					.resume({
+						owner,
+						id: run.id,
+						...(decision === undefined ? {} : { decision }),
+					})
+					.pipe(Effect.provideService(Work, work.value))
+				if (
+					Option.isSome(resumed) &&
+					resumed.value.status !== "Waiting" &&
+					resumed.value.status !== "Running"
+				)
+					yield* finishCode(member, resumed.value)
+			}).pipe(
+				Effect.catchCause((cause) =>
+					Cause.hasInterruptsOnly(cause)
+						? Effect.void
+						: Effect.logWarning("A Code Mode program could not go on", cause),
+				),
+			)
 
 		// Settling runs one at a time, so two news items never make two requests for one call.
 		const settling = yield* Semaphore.make(1)
@@ -551,6 +672,16 @@ export const layer = Layer.effectDiscard(
 					for (const wait of waits) {
 						// The wait tool is answered when its time comes, not with a request.
 						if (answersItself(wait.toolCall.name)) continue
+						const run = Option.isNone(codeRuns)
+							? Option.none<CodeRun>()
+							: yield* codeRuns.value
+									.forCall(ownerKey(member), session, wait.toolCallId)
+									.pipe(Effect.orElseSucceed(() => Option.none<CodeRun>()))
+						if (Option.isSome(run)) {
+							// A program can run for a while, so it goes on outside of the settling.
+							yield* Effect.forkIn(settleCode(member, run.value, list), scope)
+							continue
+						}
 						const delegation = yield* delegations.forCall(
 							member.organizationId,
 							session,
@@ -993,6 +1124,33 @@ export const layer = Layer.effectDiscard(
 			Effect.repeat(Schedule.spaced(Duration.minutes(1))),
 			Effect.forkScoped,
 		)
+		// A program whose host stopped while it ran goes on here.
+		if (Option.isSome(codeRuns))
+			yield* codeRuns.value.stale.pipe(
+				Effect.flatMap((stale) =>
+					Effect.forEach(stale, (entry) =>
+						codeRuns.value.get(entry.owner, entry.id).pipe(
+							Effect.flatMap((run) =>
+								run.userId === ""
+									? Effect.void
+									: settle(
+											{
+												organizationId: run.organizationId,
+												userId: run.userId,
+											},
+											run.session,
+										),
+							),
+							Effect.ignore,
+						),
+					),
+				),
+				Effect.catchCause((cause) =>
+					Effect.logWarning("Code Mode programs could not be recovered", cause),
+				),
+				Effect.repeat(Schedule.spaced(Duration.minutes(1))),
+				Effect.forkScoped,
+			)
 		// Requests that nobody answers in time are denied.
 		yield* requests.expire.pipe(
 			Effect.flatMap((closed) =>
