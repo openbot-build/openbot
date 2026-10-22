@@ -912,3 +912,161 @@ export const channelDeliveries = table(
 			.where(sql`${t.state} = 'pending'`),
 	],
 )
+
+/**
+ * One row for each model call that reached a provider. Rows are only added.
+ * Token counts and the cost are copied at the time of the call, so a later
+ * price change does not change old rows. Money is in micro-USD (one millionth of a US dollar).
+ */
+export const usageEvents = table(
+	"openbot_usage_events",
+	{
+		id: text().primaryKey(),
+		organizationId: text("organization_id").notNull(),
+		occurredAt: time("occurred_at").notNull(),
+		/** `turn`, `compaction`, `session_memory`, `judge`, `agent_memory` or `other`. */
+		source: text().notNull(),
+		sessionId: text("session_id"),
+		turnId: text("turn_id"),
+		agentId: text("agent_id"),
+		userId: text("user_id"),
+		tokenId: text("token_id"),
+		providerId: text("provider_id").notNull(),
+		/** `platform` or `organization`. The owner of the API key that paid for the call. */
+		providerOwner: text("provider_owner").notNull(),
+		modelId: text("model_id").notNull(),
+		inputUncached: bigint("input_uncached", { mode: "number" }).notNull(),
+		inputCacheRead: bigint("input_cache_read", { mode: "number" }).notNull(),
+		inputCacheWrite: bigint("input_cache_write", { mode: "number" }).notNull(),
+		outputText: bigint("output_text", { mode: "number" }).notNull(),
+		outputReasoning: bigint("output_reasoning", { mode: "number" }).notNull(),
+		/** Null when the model had no price. Then the cost is 0. */
+		priceId: text("price_id"),
+		costMicros: bigint("cost_micros", { mode: "number" }).notNull(),
+		/** True when the cost was taken from the credits of the organization. */
+		charged: boolean().notNull(),
+	},
+	(t) => [
+		index("openbot_usage_events_time").on(t.organizationId, t.occurredAt),
+		index("openbot_usage_events_user").on(
+			t.organizationId,
+			t.userId,
+			t.occurredAt,
+		),
+		index("openbot_usage_events_agent").on(
+			t.organizationId,
+			t.agentId,
+			t.occurredAt,
+		),
+		index("openbot_usage_events_token").on(
+			t.organizationId,
+			t.tokenId,
+			t.occurredAt,
+		),
+	],
+)
+
+/**
+ * Prices of a model at one provider, in micro-USD for one million tokens.
+ * A new price is a new row. The row with the latest `effective_from` that is
+ * not in the future is the current price.
+ */
+export const modelPrices = table(
+	"openbot_model_prices",
+	{
+		id: text().primaryKey(),
+		providerId: text("provider_id")
+			.notNull()
+			.references(() => modelProviders.id, { onDelete: "cascade" }),
+		modelId: text("model_id").notNull(),
+		effectiveFrom: time("effective_from").notNull(),
+		inputUncached: bigint("input_uncached", { mode: "number" }).notNull(),
+		inputCacheRead: bigint("input_cache_read", { mode: "number" }).notNull(),
+		inputCacheWrite: bigint("input_cache_write", { mode: "number" }).notNull(),
+		output: bigint({ mode: "number" }).notNull(),
+		/** Null means that reasoning tokens cost the same as `output`. */
+		outputReasoning: bigint("output_reasoning", { mode: "number" }),
+		createdBy: text("created_by").notNull(),
+		createdAt: time("created_at").notNull(),
+	},
+	(t) => [
+		index("openbot_model_prices_current").on(
+			t.providerId,
+			t.modelId,
+			t.effectiveFrom,
+		),
+	],
+)
+
+/** Spending limits of an organization, a member, an Agent or a user token. */
+export const budgets = table(
+	"openbot_budgets",
+	{
+		id: text().primaryKey(),
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
+		/** `organization`, `member`, `agent` or `token`. */
+		scopeKind: text("scope_kind").notNull(),
+		/** The organization ID, user ID, Agent ID or token ID. */
+		scopeId: text("scope_id").notNull(),
+		/** `day` or `month`, in UTC. */
+		period: text().notNull(),
+		limitMicros: bigint("limit_micros", { mode: "number" }).notNull(),
+		/** `hard` stops model calls. `soft` only marks the budget as exceeded. */
+		mode: text().notNull(),
+		version: integer().notNull(),
+		createdAt: time("created_at").notNull(),
+		updatedAt: time("updated_at").notNull(),
+	},
+	(t) => [
+		uniqueIndex("openbot_budgets_scope").on(
+			t.organizationId,
+			t.scopeKind,
+			t.scopeId,
+			t.period,
+		),
+	],
+)
+
+/** The credits of an organization. Only a platform admin turns them on. */
+export const organizationCredits = table("openbot_organization_credits", {
+	organizationId: text("organization_id")
+		.primaryKey()
+		.references(() => organizations.id, { onDelete: "cascade" }),
+	enabled: boolean().notNull(),
+	balanceMicros: bigint("balance_micros", { mode: "number" }).notNull(),
+	updatedAt: time("updated_at").notNull(),
+})
+
+/** Credits that a platform admin gave or took back. Rows are only added. */
+export const creditGrants = table(
+	"openbot_credit_grants",
+	{
+		id: text().primaryKey(),
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
+		amountMicros: bigint("amount_micros", { mode: "number" }).notNull(),
+		note: text().notNull(),
+		createdBy: text("created_by").notNull(),
+		createdAt: time("created_at").notNull(),
+	},
+	(t) => [
+		index("openbot_credit_grants_list").on(t.organizationId, t.createdAt),
+	],
+)
+
+/** Request counts for the API rate limit, one row for each caller and minute. */
+export const rateWindows = table(
+	"openbot_rate_windows",
+	{
+		key: text().notNull(),
+		windowStart: time("window_start").notNull(),
+		count: integer().notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.key, t.windowStart] }),
+		index("openbot_rate_windows_start").on(t.windowStart),
+	],
+)

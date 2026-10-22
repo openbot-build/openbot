@@ -7,6 +7,7 @@ import {
 import { Effect, Option } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { AuditLog } from "../audit/AuditLog.ts"
+import { Billing } from "../billing/Billing.ts"
 import { organizationKey } from "../authorization/Policy.ts"
 import { Settings } from "../settings/Settings.ts"
 import {
@@ -55,6 +56,7 @@ export const layer = HttpApiBuilder.group(
 			const registry = yield* ModelRegistry
 			const audit = yield* AuditLog
 			const settings = yield* Settings
+			const billing = yield* Billing
 			const record = (
 				caller: Caller,
 				action:
@@ -211,6 +213,42 @@ export const layer = HttpApiBuilder.group(
 							name: updated.name,
 						})
 						return view(updated)
+					}),
+				)
+				.handle("listModelPrices", ({ params }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						const provider = yield* find(caller, params.providerId)
+						const items = yield* billing
+							.prices(provider.id)
+							.pipe(Effect.mapError(unavailable))
+						return { items }
+					}),
+				)
+				.handle("setModelPrice", ({ params, payload }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						const provider = yield* find(caller, params.providerId)
+						if (!provider.models.some((link) => link.model === payload.model))
+							return yield* ModelProvidersApi.ModelProviderInvalid.make({
+								message: "The provider does not offer this model.",
+							})
+						const price = yield* billing
+							.setPrice(provider.id, payload, caller.userId)
+							.pipe(Effect.mapError(unavailable))
+						yield* audit
+							.record({
+								organizationId: caller.organizationId,
+								action: "model_price.set",
+								actor: caller,
+								resource:
+									organizationKey(caller.organizationId) +
+									".model." +
+									provider.id,
+								details: { providerId: provider.id, ...price },
+							})
+							.pipe(Effect.mapError(unavailable))
+						return price
 					}),
 				)
 				.handle("deleteModelProvider", ({ params }) =>

@@ -120,6 +120,19 @@ export const codeModeDefaults: CodeMode = {
 	outputBytes: 64 * 1024,
 }
 
+/**
+ * The limit on requests to the API. Each user token, or each signed-in person
+ * without a token, counts on its own. Every instance shares the count.
+ */
+export const RateLimit = Schema.Struct({
+	/** Requests in one minute. Null means no limit. */
+	requestsPerMinute: Schema.NullOr(
+		Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000_000 })),
+	),
+})
+export type RateLimit = typeof RateLimit.Type
+export const rateLimitDefaults: RateLimit = { requestsPerMinute: null }
+
 export const PlatformSettings = Schema.Struct({
 	version: Version,
 	/**
@@ -139,6 +152,7 @@ export const PlatformSettings = Schema.Struct({
 	/** Apps that the App Index hides, with the reason. */
 	appRestrictions: Schema.Array(Restriction).check(Schema.isMaxLength(1000)),
 	codeMode: CodeMode,
+	rateLimit: RateLimit,
 	updatedAt: Schema.String,
 })
 export type PlatformSettings = typeof PlatformSettings.Type
@@ -152,6 +166,7 @@ export const UpdatePlatformSettingsRequest = Schema.Struct({
 		Schema.Array(Restriction).check(Schema.isMaxLength(1000)),
 	),
 	codeMode: Schema.optionalKey(CodeMode),
+	rateLimit: Schema.optionalKey(RateLimit),
 })
 export type UpdatePlatformSettingsRequest =
 	typeof UpdatePlatformSettingsRequest.Type

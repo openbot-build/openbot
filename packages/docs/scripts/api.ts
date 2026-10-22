@@ -27,6 +27,16 @@ const groups = [
 	],
 	["sso", "SSO", "Verify email domains and add SSO connections."],
 	[
+		"usage",
+		"Usage",
+		"Read the model usage, its cost, and the credits of the organization.",
+	],
+	[
+		"budgets",
+		"Budgets",
+		"Set spending limits for the organization, members, Agents, and user tokens.",
+	],
+	[
 		"platform",
 		"Platform",
 		"Manage the whole platform. Only platform admins can use it.",

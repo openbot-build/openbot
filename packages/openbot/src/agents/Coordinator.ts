@@ -41,6 +41,7 @@ import { Waits, type Wait as StoredWait } from "../plugins/work/Waits.ts"
 import { Agents } from "./Agents.ts"
 import { Delegations, type Stored as StoredDelegation } from "./Delegations.ts"
 import { Signals, type Signal } from "./Signals.ts"
+import { attribute } from "../billing/MeteredModel.ts"
 
 interface Member {
 	readonly organizationId: string
@@ -844,7 +845,16 @@ export const layer = Layer.effectDiscard(
 							turn,
 						}),
 					})
-					.pipe(Effect.provideService(LanguageModel.LanguageModel, model))
+					.pipe(
+						Effect.provideService(LanguageModel.LanguageModel, model),
+						attribute({
+							source: "agent_memory",
+							sessionId: view.session.id,
+							turnId: turn.id,
+							agentId: agent.value.id,
+							userId: person,
+						}),
+					)
 			})
 
 		const onTurn = (signal: Extract<Signal, { _tag: "TurnChanged" }>) =>

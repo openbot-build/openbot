@@ -1,5 +1,4 @@
 import { Effect } from "effect"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { migrate } from "drizzle-orm/effect-postgres/migrator"
 import { fileURLToPath } from "node:url"
 import * as Shared from "../sessions/SessionEncoding.ts"
@@ -47,6 +46,13 @@ import {
 	channelConversations,
 	channelInbox,
 	channelDeliveries,
+	codeRuns,
+	usageEvents,
+	modelPrices,
+	budgets,
+	organizationCredits,
+	creditGrants,
+	rateWindows,
 } from "./Schema.ts"
 import {
 	openbot_auth_user,
@@ -54,11 +60,12 @@ import {
 	openbot_auth_account,
 	openbot_auth_verification,
 } from "./AuthSchema.ts"
+import * as Db from "./Database.ts"
 
 const folder = fileURLToPath(new URL("../../migrations", import.meta.url))
 
 export const check = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	yield* db.select().from(developerClaims).limit(0)
 	yield* db.select().from(developerProofs).limit(0)
 	yield* db.select().from(developerMembers).limit(0)
@@ -105,6 +112,13 @@ export const check = Effect.gen(function* () {
 	yield* db.select().from(channelConversations).limit(0)
 	yield* db.select().from(channelInbox).limit(0)
 	yield* db.select().from(channelDeliveries).limit(0)
+	yield* db.select().from(codeRuns).limit(0)
+	yield* db.select().from(usageEvents).limit(0)
+	yield* db.select().from(modelPrices).limit(0)
+	yield* db.select().from(budgets).limit(0)
+	yield* db.select().from(organizationCredits).limit(0)
+	yield* db.select().from(creditGrants).limit(0)
+	yield* db.select().from(rateWindows).limit(0)
 	yield* db
 		.select({ id: openbot_auth_user.id })
 		.from(openbot_auth_user)
@@ -125,7 +139,7 @@ export const check = Effect.gen(function* () {
 
 /** Apply the current schema with the standard Drizzle migrator, which keeps a journal. */
 export const initialize = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	yield* migrate(db, { migrationsFolder: folder })
 	yield* check
 }).pipe(Effect.mapError(Shared.databaseError))

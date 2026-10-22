@@ -48,8 +48,8 @@ import {
 	type SessionView,
 } from "@openbot-build/api"
 import type { PgClient } from "@effect/sql-pg"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import * as StoredSessions from "./StoredSessions.ts"
+import { withAttribution } from "../billing/MeteredModel.ts"
 import {
 	Sessions,
 	type Options,
@@ -69,6 +69,7 @@ import {
 } from "../plugins/apps/AppPlugin.ts"
 import { AgentPlugin } from "../plugins/agents/AgentPlugin.ts"
 import { Signal, publish } from "../agents/Signals.ts"
+import * as Db from "../database/Database.ts"
 
 /** The response of the current Turn, when the Session has one. */
 const currentResponse = (view: Session.View) =>
@@ -116,7 +117,7 @@ export const make = <
 	BuildR | PgClient.PgClient | Scope.Scope | ExecutionServices<Tools, R>
 > =>
 	Effect.gen(function* () {
-		const db = yield* makeWithDefaults(),
+		const db = yield* Db.make,
 			scope = yield* Scope.Scope
 		const namespace = options.namespace ?? "local"
 		const environment = yield* Effect.context<ExecutionServices<Tools, R>>()
@@ -141,10 +142,47 @@ export const make = <
 				: options
 						.resolveModel(turn?.settings.model ?? view.session.settings.model)
 						.pipe(
+							Effect.map((model) =>
+								withAttribution(model, attribution(view, turn)),
+							),
 							Effect.mapError(() =>
 								SessionExecutionUnavailable.make({ session: view.session.id }),
 							),
 						)
+		/**
+		 * Who a model call of the Session works for. It reads the running Turn at
+		 * the time of the call, because a model can serve many Turns.
+		 */
+		const attribution = (view: Session.View, turn?: Turn.Record) =>
+			Effect.gen(function* () {
+				const context = yield* Effect.serviceOption(Agent.Context)
+				const turnId = Option.isSome(context)
+					? yield* context.value.turn
+					: turn?.id
+				// The Turn may be newer than the view, and a Turn can have its own author.
+				const session =
+					turnId === undefined ||
+					view.session.turns.some((record) => record.id === turnId)
+						? view.session
+						: yield* store.read(view.session.id).pipe(
+								Effect.map((current) => current.session),
+								Effect.orElseSucceed(() => view.session),
+							)
+				const state = session.business[SessionHost.sessionHostId] as
+					SessionHost.SessionHostState | undefined
+				const chain =
+					state === undefined
+						? undefined
+						: SessionHost.turnChain(session, turnId)
+				return {
+					source: "turn" as const,
+					sessionId: view.session.id,
+					...(turnId === undefined ? {} : { turnId }),
+					...(state === undefined ? {} : { agentId: state.agent }),
+					...(chain === undefined ? {} : { userId: chain.userId }),
+					...(chain?.tokenId === undefined ? {} : { tokenId: chain.tokenId }),
+				}
+			})
 		const memoryPolicy = options.memory?.policy ?? MemoryRules.policy,
 			memoryModel = options.memory?.model ?? LanguageModelMemory.model,
 			memoryDefaults: Memory.Settings = {

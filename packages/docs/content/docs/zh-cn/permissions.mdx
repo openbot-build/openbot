@@ -56,6 +56,9 @@ description: 权限组、策略、角色和资源键。
 | `sso.read`                 | Organization | 读取邮箱域名和 SSO 连接。                                         |
 | `sso.write`                | Organization | 添加和验证邮箱域名，以及修改 SSO 连接。                           |
 | `audit_logs.read`          | Organization | 读取审计日志。                                                    |
+| `usage.read`               | Organization | 读取[模型用量](/zh-cn/docs/usage)和它的费用，以及组织的额度。     |
+| `budgets.read`             | Organization | 读取[预算](/zh-cn/docs/usage#预算)，以及已经花了多少。            |
+| `budgets.write`            | Organization | 创建、修改和删除预算。                                            |
 | `platform.read`            | Platform     | 读取平台设置、组织、管理员，以及共享的模型和模型提供方。          |
 | `platform.write`           | Platform     | 修改平台设置、组织、管理员，以及共享的模型和模型提供方。          |
 
@@ -186,17 +189,18 @@ curl -b cookies.txt \
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `super_administrator`     | 组织中的一切。只有 Super Administrator 能给出或拿走这个角色。                                                     |
 | `administrator`           | 管理组织、成员、共享的 Agents、共享的触发器和 Channels，并读取审计日志。只能操作自己的 Sessions 和连接。          |
-| `administrator_read_only` | 读取组织、成员和审计日志，并使用共享的 Agents、触发器和 Channels。只能操作自己的 Sessions 和连接。                |
+| `administrator_read_only` | 读取组织、成员、用量、预算和审计日志，并使用共享的 Agents、触发器和 Channels。只能操作自己的 Sessions 和连接。    |
 | `member`                  | 操作自己的 Agents、Sessions、触发器、连接和令牌，使用组织共享的 Agents、触发器、Channels 和模型，并读取组织设置。 |
-| `auditor`                 | 读取组织、成员和审计日志。不能做其他事。                                                                          |
+| `auditor`                 | 读取组织、成员、用量、预算和审计日志。不能做其他事。                                                              |
 
-一些内置角色还拥有角色、模型提供方、SSO 和 Channels 相关的权限组：
+一些内置角色还拥有角色、模型提供方、SSO、Channels、用量和预算相关的权限组：
 
-| 角色                      | 组织功能的额外权限组                                                                                                         |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `super_administrator`     | 所有权限组，但 `platform.read` 和 `platform.write` 除外。                                                                    |
-| `administrator`           | `roles.write`、`model_providers.read`、`model_providers.write`、`sso.read`、`sso.write`、`channels.read`、`channels.write`。 |
-| `administrator_read_only` | `model_providers.read`、`sso.read`、`channels.read`。                                                                        |
+| 角色                      | 组织功能的额外权限组                                                                                                                                                        |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `super_administrator`     | 所有权限组，但 `platform.read` 和 `platform.write` 除外。                                                                                                                   |
+| `administrator`           | `roles.write`、`model_providers.read`、`model_providers.write`、`sso.read`、`sso.write`、`channels.read`、`channels.write`、`usage.read`、`budgets.read`、`budgets.write`。 |
+| `administrator_read_only` | `model_providers.read`、`sso.read`、`channels.read`、`usage.read`、`budgets.read`。                                                                                         |
+| `auditor`                 | `usage.read`、`budgets.read`。                                                                                                                                              |
 
 要让成员的权限比角色少，请给成员添加一个 `deny` 策略。下面的例子禁止成员运行工作，但允许他们读取自己的 Sessions：
 

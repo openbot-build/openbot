@@ -6,6 +6,7 @@ import {
 	HttpApiSchema,
 	OpenApi,
 } from "effect/http-api"
+import { ModelPrice, ModelPrices, SetModelPriceRequest } from "./BillingApi.ts"
 import { PermissionErrors, Required, requires } from "./Permissions.ts"
 import { SecretInput, SecretState, Version } from "./Settings.ts"
 
@@ -226,6 +227,8 @@ export const ModelCatalog = Schema.Struct({
 			serviceTiers: Schema.Array(Schema.String),
 			contextWindow: Schema.optionalKey(PositiveInt),
 			maxOutputTokens: Schema.optionalKey(PositiveInt),
+			/** The current price at this provider. Missing when the model has no price. */
+			price: Schema.optionalKey(ModelPrice),
 		}),
 	),
 	/** The decision model of the organization, or null when it has none. */
@@ -369,5 +372,26 @@ export const ModelProvidersApi = HttpApiGroup.make("modelProviders").add(
 			success: HttpApiSchema.NoContent,
 			error: errors,
 		},
+	),
+	HttpApiEndpoint.get(
+		"listModelPrices",
+		"/v1/organization/model_providers/:providerId/prices",
+		{ params: ProviderParams, success: ModelPrices, error: errors },
+	).annotate(
+		OpenApi.Description,
+		"Lists the current price of each model of a provider of the organization. Usage of these models counts toward budgets, but never takes credits.",
+	),
+	HttpApiEndpoint.put(
+		"setModelPrice",
+		"/v1/organization/model_providers/:providerId/prices",
+		{
+			params: ProviderParams,
+			payload: SetModelPriceRequest,
+			success: ModelPrice,
+			error: errors,
+		},
+	).annotate(
+		OpenApi.Description,
+		"Sets a new price for one model of the provider. The price applies to calls from now on. Old calls keep their cost.",
 	),
 )

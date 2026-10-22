@@ -264,6 +264,29 @@ const permissionTree = {
 			},
 		},
 	},
+	usage: {
+		scope: "organization",
+		actions: {
+			read: {
+				name: "Usage Read",
+				description:
+					"Read the model usage and its cost, and the credits of the organization.",
+			},
+		},
+	},
+	budgets: {
+		scope: "organization",
+		actions: {
+			read: {
+				name: "Budgets Read",
+				description: "Read the budgets and how much of them is spent.",
+			},
+			write: {
+				name: "Budgets Write",
+				description: "Create, change and delete budgets.",
+			},
+		},
+	},
 } as const satisfies Record<
 	string,
 	{
@@ -457,6 +480,9 @@ export const builtinRoles = [
 					"channels.read",
 					"channels.write",
 					"audit_logs.read",
+					"usage.read",
+					"budgets.read",
+					"budgets.write",
 				],
 				resources: [organization],
 			},
@@ -466,7 +492,7 @@ export const builtinRoles = [
 		id: "administrator_read_only",
 		name: "Administrator Read Only",
 		description:
-			"Read the organization, its members and the audit log. Work only with your own Sessions and connections.",
+			"Read the organization, its members, usage, budgets and the audit log. Work only with your own Sessions and connections.",
 		policies: [
 			ownWork,
 			useSharedAgents,
@@ -482,6 +508,8 @@ export const builtinRoles = [
 					"sso.read",
 					"channels.read",
 					"audit_logs.read",
+					"usage.read",
+					"budgets.read",
 				],
 				resources: [organization],
 			},
@@ -507,7 +535,8 @@ export const builtinRoles = [
 	{
 		id: "auditor",
 		name: "Auditor",
-		description: "Read the organization, its members and the audit log.",
+		description:
+			"Read the organization, its members, usage, budgets and the audit log.",
 		policies: [
 			{
 				effect: "allow",
@@ -515,6 +544,8 @@ export const builtinRoles = [
 					"organization.read",
 					"members.read",
 					"audit_logs.read",
+					"usage.read",
+					"budgets.read",
 				],
 				resources: [organization],
 			},

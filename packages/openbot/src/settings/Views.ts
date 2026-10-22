@@ -2,6 +2,7 @@ import type { Settings as Api } from "@openbot-build/api"
 import { DateTime } from "effect"
 import {
 	codeModeOf,
+	rateLimitOf,
 	type MemberDocument,
 	type OrganizationDocument,
 	type PlatformDocument,
@@ -33,6 +34,7 @@ export const platform = (
 		policyCeiling: document.policyCeiling,
 		appRestrictions: document.appRestrictions,
 		codeMode: codeModeOf(document),
+		rateLimit: rateLimitOf(document),
 		updatedAt: iso(snapshot.updatedAt),
 	}
 }

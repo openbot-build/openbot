@@ -172,12 +172,23 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 			"name": "Qwen3 32B",
 			"reasoningEfforts": [],
 			"serviceTiers": [],
-			"contextWindow": 131072
+			"contextWindow": 131072,
+			"price": {
+				"model": "qwen3-32b",
+				"inputUncached": 400000,
+				"inputCacheRead": 100000,
+				"inputCacheWrite": 0,
+				"output": 1200000,
+				"outputReasoning": null,
+				"effectiveFrom": "2026-10-20T08:00:00.000Z"
+			}
 		}
 	],
 	"decisionModel": null
 }
 ```
+
+`price` is the current price of the model at this provider. It is missing when nobody set a price. See [Prices](/docs/usage#prices).
 
 A model selection names both the provider and the model ID:
 

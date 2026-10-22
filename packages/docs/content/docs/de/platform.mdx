@@ -107,6 +107,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		"memoryMb": 64,
 		"outputBytes": 65536
 	},
+	"rateLimit": { "requestsPerMinute": null },
 	"updatedAt": "2026-10-21T09:00:00.000Z"
 }
 ```
@@ -120,6 +121,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `policyCeiling`        | Policies zum Ablehnen für jede Organization. Siehe [Obergrenze für Policies](#obergrenze-für-policies).                           |
 | `appRestrictions`      | Apps, die der App Index versteckt. Siehe [App Index](/de/docs/app-index#sperren-durch-den-host).                                  |
 | `codeMode`             | Ob Agents Code Mode nutzen können, und seine Grenzen. Siehe [Code Mode](/de/docs/code-mode#code-mode-einschalten).                |
+| `rateLimit`            | Wie viele API-Anfragen jeder Aufrufer in einer Minute senden darf. Siehe [Rate Limit](/de/docs/usage#rate-limit).                 |
 | `updatedAt`            | Wann sich die Einstellungen zuletzt geändert haben.                                                                               |
 
 ### Geheimnisse kommen nie zurück
@@ -213,24 +215,28 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 Niemand kann eine gesperrte Organization nutzen. Ihre Tokens hören sofort auf zu funktionieren. Setze `status` auf `active`, um das rückgängig zu machen.
 
+`GET /v1/platform/organizations/:organizationId/credits` liest die Credits einer Organization. `PATCH` auf derselben Route schaltet sie ein oder aus, und `POST .../credits/grants` gibt Credits. Siehe [Credits](/de/docs/usage#credits).
+
 ---
 
 ## Geteilte Model Providers
 
 Eine Platform kann für Model Providers bezahlen und sie mit Organizations teilen. Sie kann auch Models teilen. Organizations können auch ihre eigenen Schlüssel mitbringen. Siehe [Models](/de/docs/models).
 
-| Route                                             | Was sie tut                          |
-| ------------------------------------------------- | ------------------------------------ |
-| `GET /v1/platform/models`                         | Listet die geteilten Models auf.     |
-| `POST /v1/platform/models`                        | Fügt ein geteiltes Model hinzu.      |
-| `GET /v1/platform/models/:modelId`                | Liest ein geteiltes Model.           |
-| `PATCH /v1/platform/models/:modelId`              | Ändert ein geteiltes Model.          |
-| `DELETE /v1/platform/models/:modelId`             | Entfernt ein geteiltes Model.        |
-| `GET /v1/platform/model_providers`                | Listet die geteilten Anbieter auf.   |
-| `POST /v1/platform/model_providers`               | Fügt einen geteilten Anbieter hinzu. |
-| `GET /v1/platform/model_providers/:providerId`    | Liest einen geteilten Anbieter.      |
-| `PATCH /v1/platform/model_providers/:providerId`  | Ändert einen geteilten Anbieter.     |
-| `DELETE /v1/platform/model_providers/:providerId` | Entfernt einen geteilten Anbieter.   |
+| Route                                                 | Was sie tut                                                                             |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `GET /v1/platform/models`                             | Listet die geteilten Models auf.                                                        |
+| `POST /v1/platform/models`                            | Fügt ein geteiltes Model hinzu.                                                         |
+| `GET /v1/platform/models/:modelId`                    | Liest ein geteiltes Model.                                                              |
+| `PATCH /v1/platform/models/:modelId`                  | Ändert ein geteiltes Model.                                                             |
+| `DELETE /v1/platform/models/:modelId`                 | Entfernt ein geteiltes Model.                                                           |
+| `GET /v1/platform/model_providers`                    | Listet die geteilten Anbieter auf.                                                      |
+| `POST /v1/platform/model_providers`                   | Fügt einen geteilten Anbieter hinzu.                                                    |
+| `GET /v1/platform/model_providers/:providerId`        | Liest einen geteilten Anbieter.                                                         |
+| `PATCH /v1/platform/model_providers/:providerId`      | Ändert einen geteilten Anbieter.                                                        |
+| `DELETE /v1/platform/model_providers/:providerId`     | Entfernt einen geteilten Anbieter.                                                      |
+| `GET /v1/platform/model_providers/:providerId/prices` | Listet die Preise eines geteilten Anbieters auf. Siehe [Preise](/de/docs/usage#preise). |
+| `PUT /v1/platform/model_providers/:providerId/prices` | Setzt einen neuen Preis für ein Model eines geteilten Anbieters.                        |
 
 Die Bodies sind dieselben wie für die Models und Anbieter einer Organization, plus `availability`. Füge zuerst das Model hinzu, dann einen Anbieter, der es verknüpft:
 

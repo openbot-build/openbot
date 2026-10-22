@@ -107,6 +107,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		"memoryMb": 64,
 		"outputBytes": 65536
 	},
+	"rateLimit": { "requestsPerMinute": null },
 	"updatedAt": "2026-10-21T09:00:00.000Z"
 }
 ```
@@ -120,6 +121,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `policyCeiling`        | 对每个组织生效的拒绝策略。参见[策略上限](#策略上限)。                                            |
 | `appRestrictions`      | App Index 隐藏的 App。参见 [App Index](/zh-cn/docs/app-index#宿主限制)。                         |
 | `codeMode`             | Agent 能否使用 Code Mode，以及它的限制。参见 [Code Mode](/zh-cn/docs/code-mode#打开-code-mode)。 |
+| `rateLimit`            | 每个调用方在一分钟内最多可以发送多少个 API 请求。参见[速率限制](/zh-cn/docs/usage#速率限制)。    |
 | `updatedAt`            | 设置最后一次修改的时间。                                                                         |
 
 ### 机密永远不会返回
@@ -212,24 +214,28 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 任何人都不能使用被暂停的组织。它的令牌会立刻失效。把 `status` 设为 `active` 即可撤销暂停。
 
+`GET /v1/platform/organizations/:organizationId/credits` 读取一个组织的额度。对同一路由使用 `PATCH` 可以打开或关闭额度，`POST .../credits/grants` 给出额度。参见[额度](/zh-cn/docs/usage#额度)。
+
 ---
 
 ## 共享的模型提供方
 
 平台可以为模型提供方付费，并把它们共享给各个组织。它也可以共享模型。组织也可以使用自己的密钥。参见 [Model](/zh-cn/docs/models)。
 
-| 路由                                              | 作用                   |
-| ------------------------------------------------- | ---------------------- |
-| `GET /v1/platform/models`                         | 列出共享的模型。       |
-| `POST /v1/platform/models`                        | 添加一个共享的模型。   |
-| `GET /v1/platform/models/:modelId`                | 读取一个共享的模型。   |
-| `PATCH /v1/platform/models/:modelId`              | 修改一个共享的模型。   |
-| `DELETE /v1/platform/models/:modelId`             | 移除一个共享的模型。   |
-| `GET /v1/platform/model_providers`                | 列出共享的提供方。     |
-| `POST /v1/platform/model_providers`               | 添加一个共享的提供方。 |
-| `GET /v1/platform/model_providers/:providerId`    | 读取一个共享的提供方。 |
-| `PATCH /v1/platform/model_providers/:providerId`  | 修改一个共享的提供方。 |
-| `DELETE /v1/platform/model_providers/:providerId` | 移除一个共享的提供方。 |
+| 路由                                                  | 作用                                                             |
+| ----------------------------------------------------- | ---------------------------------------------------------------- |
+| `GET /v1/platform/models`                             | 列出共享的模型。                                                 |
+| `POST /v1/platform/models`                            | 添加一个共享的模型。                                             |
+| `GET /v1/platform/models/:modelId`                    | 读取一个共享的模型。                                             |
+| `PATCH /v1/platform/models/:modelId`                  | 修改一个共享的模型。                                             |
+| `DELETE /v1/platform/models/:modelId`                 | 移除一个共享的模型。                                             |
+| `GET /v1/platform/model_providers`                    | 列出共享的提供方。                                               |
+| `POST /v1/platform/model_providers`                   | 添加一个共享的提供方。                                           |
+| `GET /v1/platform/model_providers/:providerId`        | 读取一个共享的提供方。                                           |
+| `PATCH /v1/platform/model_providers/:providerId`      | 修改一个共享的提供方。                                           |
+| `DELETE /v1/platform/model_providers/:providerId`     | 移除一个共享的提供方。                                           |
+| `GET /v1/platform/model_providers/:providerId/prices` | 列出一个共享的提供方的价格。参见[价格](/zh-cn/docs/usage#价格)。 |
+| `PUT /v1/platform/model_providers/:providerId/prices` | 为一个共享的提供方中的一个模型设置新价格。                       |
 
 请求体和组织的模型与提供方相同，只是多了 `availability`。先添加模型，再添加一个关联它的提供方：
 

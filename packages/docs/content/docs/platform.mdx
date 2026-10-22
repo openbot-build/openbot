@@ -107,6 +107,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		"memoryMb": 64,
 		"outputBytes": 65536
 	},
+	"rateLimit": { "requestsPerMinute": null },
 	"updatedAt": "2026-10-21T09:00:00.000Z"
 }
 ```
@@ -120,6 +121,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `policyCeiling`        | Deny policies for every organization. See [Policy ceiling](#policy-ceiling).                                        |
 | `appRestrictions`      | Apps that the App Index hides. See [App Index](/docs/app-index#host-restrictions).                                  |
 | `codeMode`             | Whether Agents can use Code Mode, and its limits. See [Code Mode](/docs/code-mode#turn-on-code-mode).               |
+| `rateLimit`            | How many API requests each caller may send in one minute. See [Rate limit](/docs/usage#rate-limit).                 |
 | `updatedAt`            | When the settings last changed.                                                                                     |
 
 ### Secrets never come back
@@ -213,24 +215,28 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 Nobody can use a suspended organization. Its tokens stop working at once. Set `status` to `active` to undo it.
 
+`GET /v1/platform/organizations/:organizationId/credits` reads the credits of an organization. `PATCH` on the same route turns them on or off, and `POST .../credits/grants` gives credits. See [Credits](/docs/usage#credits).
+
 ---
 
 ## Shared model providers
 
 A platform can pay for model providers and share them with organizations. It can also share models. Organizations can also bring their own keys. See [Models](/docs/models).
 
-| Route                                             | What it does                |
-| ------------------------------------------------- | --------------------------- |
-| `GET /v1/platform/models`                         | Lists the shared models.    |
-| `POST /v1/platform/models`                        | Adds a shared model.        |
-| `GET /v1/platform/models/:modelId`                | Reads one shared model.     |
-| `PATCH /v1/platform/models/:modelId`              | Changes a shared model.     |
-| `DELETE /v1/platform/models/:modelId`             | Removes a shared model.     |
-| `GET /v1/platform/model_providers`                | Lists the shared providers. |
-| `POST /v1/platform/model_providers`               | Adds a shared provider.     |
-| `GET /v1/platform/model_providers/:providerId`    | Reads one shared provider.  |
-| `PATCH /v1/platform/model_providers/:providerId`  | Changes a shared provider.  |
-| `DELETE /v1/platform/model_providers/:providerId` | Removes a shared provider.  |
+| Route                                                 | What it does                                                             |
+| ----------------------------------------------------- | ------------------------------------------------------------------------ |
+| `GET /v1/platform/models`                             | Lists the shared models.                                                 |
+| `POST /v1/platform/models`                            | Adds a shared model.                                                     |
+| `GET /v1/platform/models/:modelId`                    | Reads one shared model.                                                  |
+| `PATCH /v1/platform/models/:modelId`                  | Changes a shared model.                                                  |
+| `DELETE /v1/platform/models/:modelId`                 | Removes a shared model.                                                  |
+| `GET /v1/platform/model_providers`                    | Lists the shared providers.                                              |
+| `POST /v1/platform/model_providers`                   | Adds a shared provider.                                                  |
+| `GET /v1/platform/model_providers/:providerId`        | Reads one shared provider.                                               |
+| `PATCH /v1/platform/model_providers/:providerId`      | Changes a shared provider.                                               |
+| `DELETE /v1/platform/model_providers/:providerId`     | Removes a shared provider.                                               |
+| `GET /v1/platform/model_providers/:providerId/prices` | Lists the prices of a shared provider. See [Prices](/docs/usage#prices). |
+| `PUT /v1/platform/model_providers/:providerId/prices` | Sets a new price for one model of a shared provider.                     |
 
 The bodies are the same as for the models and providers of an organization, plus `availability`. First add the model, then a provider that links it:
 

@@ -23,12 +23,18 @@ export const PlatformDocument = Schema.Struct({
 	appRestrictions: Api.PlatformSettings.fields.appRestrictions,
 	/** Missing in documents from before Code Mode. Then the defaults apply. */
 	codeMode: Schema.optionalKey(Api.CodeMode),
+	/** Missing in documents from before the rate limit. Then there is no limit. */
+	rateLimit: Schema.optionalKey(Api.RateLimit),
 })
 export type PlatformDocument = typeof PlatformDocument.Type
 
 /** The Code Mode settings of the platform. */
 export const codeModeOf = (document: PlatformDocument): Api.CodeMode =>
 	document.codeMode ?? Api.codeModeDefaults
+
+/** The API rate limit of the platform. */
+export const rateLimitOf = (document: PlatformDocument): Api.RateLimit =>
+	document.rateLimit ?? Api.rateLimitDefaults
 
 export const OrganizationDocument = Schema.Struct({
 	rulesModel: Api.OrganizationSettings.fields.rulesModel,

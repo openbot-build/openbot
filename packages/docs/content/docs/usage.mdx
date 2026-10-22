@@ -1,0 +1,255 @@
+---
+title: Usage and budgets
+description: See the model usage and its cost, set budgets, and pay for platform models with credits.
+---
+
+OpenBot records each call to a model. You can see how many tokens each member, Agent, and user token used, and what they cost. A token is a small piece of text that a model reads or writes. You can also set **budgets** that stop model calls when too much money is spent. A platform can give organizations **credits** to pay for the models that the platform shares.
+
+| Word         | Meaning                                                                                               |
+| ------------ | ----------------------------------------------------------------------------------------------------- |
+| Usage event  | One model call: its tokens, its cost, and who made it.                                                |
+| Price        | What one million tokens of a model cost at one provider.                                              |
+| Budget       | A spending limit for the organization, a member, an Agent, or a user token, for one day or one month. |
+| Credits      | Money that the platform gives an organization to pay for the models of the platform.                  |
+| Micro-USD    | All money in the API is in micro-USD. One US dollar is 1,000,000 micro-USD.                           |
+| Platform key | A [shared model provider](/docs/platform#shared-model-providers). The platform pays for it.           |
+| Own key      | A model provider of the organization. The organization pays the model company itself.                 |
+
+---
+
+## What OpenBot records
+
+OpenBot records each model call that gets an answer. Each usage event has a `source`:
+
+| `source`         | What made the call                                               |
+| ---------------- | ---------------------------------------------------------------- |
+| `turn`           | A model step of a Turn in a Session.                             |
+| `compaction`     | A summary of old messages, so the conversation fits the model.   |
+| `session_memory` | The [memory](/docs/memory) of a Session.                         |
+| `judge`          | The model that judges [Rules](/docs/rules).                      |
+| `agent_memory`   | The model that learns [Agent memory](/docs/memory#agent-memory). |
+| `other`          | Any other call.                                                  |
+
+A usage event also has the Session, the Turn, the Agent, the member and the user token, when the call has them. In a [Channel](/docs/channels), the member is the person who wrote the message.
+
+Some calls are not recorded:
+
+- A call that fails before the model answers.
+- A stream that stops before its end, for example when you interrupt a Turn. The model may still count these tokens.
+- A step that runs a host action again. It does not call a model.
+
+---
+
+## Prices
+
+A price belongs to one model at one provider, because the same model can cost a different amount at another provider. Each value is the cost of one million tokens, in micro-USD.
+
+| Field             | Which tokens                                                   |
+| ----------------- | -------------------------------------------------------------- |
+| `inputUncached`   | Input tokens that the provider did not read from its cache.    |
+| `inputCacheRead`  | Input tokens that the provider read from its cache.            |
+| `inputCacheWrite` | Input tokens that the provider wrote to its cache.             |
+| `output`          | Output text and tool calls.                                    |
+| `outputReasoning` | Reasoning tokens. Leave it out or send `null` to use `output`. |
+
+An administrator of the organization sets the prices of the organization's own providers. These prices are an estimate of what the model company charges. A platform admin sets the prices of the shared providers. For this example, input costs 2.50 US dollars and output costs 10 US dollars for one million tokens:
+
+```sh
+curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-4.1","inputUncached":2500000,"inputCacheRead":625000,"inputCacheWrite":0,"output":10000000}' \
+  https://api.example.com/v1/organization/model_providers/prov_4c1e/prices
+```
+
+| Route                                                     | What it does                                                |
+| --------------------------------------------------------- | ----------------------------------------------------------- |
+| `GET /v1/organization/model_providers/:providerId/prices` | Lists the current price of each model of your own provider. |
+| `PUT /v1/organization/model_providers/:providerId/prices` | Sets a new price for one model of your own provider.        |
+| `GET /v1/platform/model_providers/:providerId/prices`     | Lists the current price of each model of a shared provider. |
+| `PUT /v1/platform/model_providers/:providerId/prices`     | Sets a new price for one model of a shared provider.        |
+
+A provider can only price the models that it links. Another model gives `400` with `ModelProviderInvalid`. The [model catalog](/docs/models#choose-a-model) shows the current `price` of each model.
+
+A new price applies to calls from now on. Each usage event keeps the cost from the time of the call, so old costs never change. OpenBot rounds the cost of each call up to a whole micro-USD.
+
+A model without a price costs 0. Its calls are still recorded, but they do not count toward budgets and do not take credits.
+
+---
+
+## See the usage
+
+`GET /v1/organization/usage` adds up the tokens and the cost in a time range. It needs `usage.read`.
+
+| Query     | What it does                                                                          |
+| --------- | ------------------------------------------------------------------------------------- |
+| `from`    | The start, as an ISO 8601 time. The default is the start of the current month in UTC. |
+| `to`      | The end, as an ISO 8601 time. The default is now.                                     |
+| `groupBy` | `day` (the default), `model`, `provider`, `member`, `agent`, `token` or `source`.     |
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  "https://api.example.com/v1/organization/usage?groupBy=member"
+```
+
+```json
+{
+	"from": "2026-10-01T00:00:00.000Z",
+	"to": "2026-10-23T09:00:00.001Z",
+	"groupBy": "member",
+	"total": {
+		"calls": 42,
+		"inputUncached": 81200,
+		"inputCacheRead": 20400,
+		"inputCacheWrite": 0,
+		"outputText": 9800,
+		"outputReasoning": 1200,
+		"costMicros": 325250
+	},
+	"items": [
+		{
+			"key": "u_123",
+			"calls": 42,
+			"inputUncached": 81200,
+			"inputCacheRead": 20400,
+			"inputCacheWrite": 0,
+			"outputText": 9800,
+			"outputReasoning": 1200,
+			"costMicros": 325250
+		}
+	]
+}
+```
+
+`key` is the value of the group, such as a user ID or a day. It is `null` for calls without that value, such as calls without an Agent.
+
+`GET /v1/organization/usage/events` lists the single usage events, newest first. It takes `from`, `to`, `limit` (1 to 200, the default is 50) and `after`. Send the `next` value of a page as `after` to get the next page. Each event has `priced` and `charged`. `charged` is `true` when the cost came from the credits.
+
+---
+
+## Budgets
+
+A budget stops spending at a limit. You can set a budget on four scopes:
+
+| `scope`        | `scopeId`                                | What counts                                |
+| -------------- | ---------------------------------------- | ------------------------------------------ |
+| `organization` | Leave it out. It is the organization ID. | Every call of the organization.            |
+| `member`       | The user ID of a member.                 | The calls that work for this member.       |
+| `agent`        | The ID of an Agent.                      | The calls of this Agent.                   |
+| `token`        | The ID of a user token.                  | The calls of work that this token started. |
+
+Each budget has a `period`: `day` or `month`. Both start at midnight UTC. Each scope can have one budget for each period.
+
+Each budget also has a `mode`:
+
+- A `hard` budget stops model calls when the spend in the period reaches `limitMicros`. The call fails, so the Turn fails with a model error. The next period starts again from 0.
+- A `soft` budget never stops a call. It only shows `exceeded: true`.
+
+A budget counts every priced call, also the calls with the organization's own key. OpenBot checks the budgets before each model call, not only at the start of a Turn. A long Turn stops at its next model call. So the spend can go over the limit by the cost of one call.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"scope":"agent","scopeId":"agt_7d2c","period":"month","limitMicros":50000000,"mode":"hard"}' \
+  https://api.example.com/v1/organization/budgets
+```
+
+```json
+{
+	"id": "budget_5c9e",
+	"scope": "agent",
+	"scopeId": "agt_7d2c",
+	"period": "month",
+	"limitMicros": 50000000,
+	"mode": "hard",
+	"periodStart": "2026-10-01T00:00:00.000Z",
+	"spentMicros": 1250000,
+	"exceeded": false,
+	"version": 1,
+	"createdAt": "2026-10-23T09:00:00.000Z",
+	"updatedAt": "2026-10-23T09:00:00.000Z"
+}
+```
+
+| Route                                       | What it does                                                              |
+| ------------------------------------------- | ------------------------------------------------------------------------- |
+| `GET /v1/organization/budgets`              | Lists the budgets, with their spend now.                                  |
+| `POST /v1/organization/budgets`             | Adds a budget.                                                            |
+| `GET /v1/organization/budgets/:budgetId`    | Reads one budget.                                                         |
+| `PATCH /v1/organization/budgets/:budgetId`  | Changes `limitMicros` or `mode`. Send the `version` as `expectedVersion`. |
+| `DELETE /v1/organization/budgets/:budgetId` | Removes a budget.                                                         |
+
+Reading budgets needs `budgets.read`. Changing them needs `budgets.write`. Each change goes to the [audit log](/docs/organization#audit-log).
+
+---
+
+## Credits
+
+Credits let a platform sell or give the use of its shared models. They are off by default. Then an organization can use the shared models without limit, unless a budget stops it.
+
+A platform admin turns credits on for one organization, and gives credits:
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled":true}' \
+  https://api.example.com/v1/platform/organizations/org_8f3a/credits
+
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"amountMicros":20000000,"note":"Trial for October"}' \
+  https://api.example.com/v1/platform/organizations/org_8f3a/credits/grants
+```
+
+A negative `amountMicros` takes credits back. Each grant goes to the platform audit log.
+
+While credits are on:
+
+- Each call to a model of the platform takes its cost from the balance.
+- When the balance is 0 or less, calls to the models of the platform fail. Calls with the organization's own key still work.
+- The balance can go below 0 by the cost of one call, because OpenBot checks the balance before a call and takes the cost after it.
+
+Calls with the organization's own key never take credits, also when credits are on.
+
+`GET /v1/organization/credits` shows `enabled`, `balanceMicros` and the newest 50 grants. It needs `usage.read`. A platform admin reads the same with `GET /v1/platform/organizations/:organizationId/credits`.
+
+OpenBot has no payments yet. A platform that sells credits records the payment in its own system, then gives the credits with the API.
+
+---
+
+## When a call is stopped
+
+When a budget or the credits stop a call, the model call fails with an `AiError` of the reason `QuotaExhaustedError`. The Turn ends with the status `Failed` and the code `model_error`. The metadata of the error says why, in `openbot.reason`: `budget` or `credits`. For a budget, `openbot.budgetId` names it.
+
+When OpenBot cannot read the budgets, for example because the database is down, it stops the call too.
+
+---
+
+## Rate limit
+
+A platform admin can limit how many API requests each caller sends in one minute. Each user token counts on its own. A signed-in person without a token counts as one caller. Every instance of OpenBot shares the count. Set `rateLimit` in the [platform settings](/docs/platform#platform-settings):
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":4,"rateLimit":{"requestsPerMinute":600}}' \
+  https://api.example.com/v1/platform/settings
+```
+
+`null` means no limit. This is the default. A caller over the limit gets `429` with `RateLimited`. `retryAfterSeconds` says when the next minute starts. The limit covers the API of organizations. It does not cover `/v1/platform`, sign-in, or webhooks.
+
+---
+
+## Errors
+
+| Status | Error                  | When                                                                       |
+| ------ | ---------------------- | -------------------------------------------------------------------------- |
+| `400`  | `UsageQueryInvalid`    | `from` or `to` is not an ISO 8601 time, or `from` is not before `to`.      |
+| `400`  | `BudgetInvalid`        | The scope ID is missing, or no member or token of the organization has it. |
+| `400`  | `ModelProviderInvalid` | The provider does not link the model that you want to price.               |
+| `403`  | `PermissionDenied`     | The caller does not have `usage.read`, `budgets.read` or `budgets.write`.  |
+| `404`  | `BudgetNotFound`       | No budget of the organization has this ID.                                 |
+| `409`  | `BudgetConflict`       | The scope already has a budget for this period, or the budget changed.     |
+| `429`  | `RateLimited`          | The caller sent too many requests in this minute.                          |
+| `503`  | `BillingUnavailable`   | OpenBot cannot reach its database.                                         |
+
+See the full shapes in the [Usage reference](/docs/api/operations/tags/usage/) and the [Budgets reference](/docs/api/operations/tags/budgets/).

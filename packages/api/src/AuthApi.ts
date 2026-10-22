@@ -60,6 +60,14 @@ export class OrganizationRequired extends Schema.TaggedError<OrganizationRequire
 	"OrganizationRequired",
 	{},
 ) {}
+/** The caller sent more requests in this minute than the platform allows. */
+export class RateLimited extends Schema.TaggedError<RateLimited>()(
+	"RateLimited",
+	{
+		/** Wait this many seconds before the next request. */
+		retryAfterSeconds: Schema.Int,
+	},
+) {}
 /** The organization that a request with the session cookie acts in. Tokens belong to one organization, so they ignore it. */
 export const OrganizationHeader = "openbot-organization"
 export const AuthErrors = [
@@ -114,6 +122,7 @@ export class AgentAuth extends HttpApiMiddleware.Service<
 		...AuthErrors,
 		ForbiddenOrigin.pipe(HttpApiSchema.status(403)),
 		OrganizationRequired.pipe(HttpApiSchema.status(400)),
+		RateLimited.pipe(HttpApiSchema.status(429)),
 	],
 }) {}
 /**

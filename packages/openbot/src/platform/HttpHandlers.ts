@@ -11,6 +11,7 @@ import { Effect, Layer, Option } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { Tokens } from "../auth/Tokens.ts"
+import { Billing } from "../billing/Billing.ts"
 import { decide, organizationKey } from "../authorization/Policy.ts"
 import { checkUnused } from "../models/HttpHandlers.ts"
 import {
@@ -104,7 +105,22 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 		const providers = yield* ModelProviders
 		const models = yield* Models
 		const audit = yield* AuditLog
+		const billing = yield* Billing
 		const unavailable = () => PlatformApi.PlatformUnavailable.make({})
+		const credits = <A>(
+			effect: Effect.Effect<
+				A,
+				{ readonly _tag: "BillingStorageError" | "OrganizationMissing" }
+			>,
+			organizationId: string,
+		) =>
+			effect.pipe(
+				Effect.mapError((error) =>
+					error._tag === "OrganizationMissing"
+						? PlatformApi.OrganizationNotFound.make({ organizationId })
+						: unavailable(),
+				),
+			)
 		const record = (
 			account: AccountCaller,
 			input: {
@@ -385,6 +401,77 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 						details: { providerId: updated.id, name: updated.name },
 					})
 					return view(updated)
+				}),
+			)
+			.handle("listPlatformModelPrices", ({ params }) =>
+				Effect.gen(function* () {
+					const provider = yield* findProvider(params.providerId)
+					const items = yield* billing
+						.prices(provider.id)
+						.pipe(Effect.mapError(unavailable))
+					return { items }
+				}),
+			)
+			.handle("setPlatformModelPrice", ({ params, payload }) =>
+				Effect.gen(function* () {
+					const account = yield* Account
+					const provider = yield* findProvider(params.providerId)
+					if (!provider.models.some((link) => link.model === payload.model))
+						return yield* ModelProvidersApi.ModelProviderInvalid.make({
+							message: "The provider does not offer this model.",
+						})
+					const price = yield* billing
+						.setPrice(provider.id, payload, account.userId)
+						.pipe(Effect.mapError(unavailable))
+					yield* record(account, {
+						action: "model_price.set",
+						resource: Permissions.platformResource,
+						details: { providerId: provider.id, ...price },
+					})
+					return price
+				}),
+			)
+			.handle("getPlatformOrganizationCredits", ({ params }) =>
+				credits(billing.credits(params.organizationId), params.organizationId),
+			)
+			.handle("updatePlatformOrganizationCredits", ({ params, payload }) =>
+				Effect.gen(function* () {
+					const account = yield* Account
+					const updated = yield* credits(
+						billing.setCreditsEnabled(params.organizationId, payload.enabled),
+						params.organizationId,
+					)
+					yield* record(account, {
+						organizationId: params.organizationId,
+						action: "credits.updated",
+						resource: organizationKey(params.organizationId),
+						details: { enabled: payload.enabled },
+					})
+					return updated
+				}),
+			)
+			.handle("grantPlatformOrganizationCredits", ({ params, payload }) =>
+				Effect.gen(function* () {
+					const account = yield* Account
+					const grant = yield* credits(
+						billing.grantCredits(
+							params.organizationId,
+							payload,
+							account.userId,
+						),
+						params.organizationId,
+					)
+					yield* record(account, {
+						organizationId: params.organizationId,
+						action: "credits.granted",
+						resource: organizationKey(params.organizationId),
+						details: {
+							grantId: grant.id,
+							amountMicros: grant.amountMicros,
+							note: grant.note,
+						},
+					})
+					return grant
 				}),
 			)
 			.handle("deletePlatformModelProvider", ({ params }) =>

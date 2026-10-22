@@ -3,6 +3,7 @@ import { Context, Data, Duration, Effect, Layer, Option, Schema } from "effect"
 import { LanguageModel, Prompt } from "effect/ai"
 import { AgentRecords } from "../agents/AgentRecords.ts"
 import { type Capability, describe, hash } from "./Capability.ts"
+import { attribute } from "../billing/MeteredModel.ts"
 
 /** What the judge model returns. */
 export const Verdict = Schema.Struct({
@@ -133,6 +134,7 @@ export const make: Effect.Effect<
 				}).pipe(
 					Effect.map((response) => check({ verdict: response.value, rules })),
 					Effect.provideService(LanguageModel.LanguageModel, model),
+					attribute({ source: "judge", agentId: input.agent.id }),
 				)
 				// The reason changes from call to call, but the Rules decide only on the capability.
 				yield* cache

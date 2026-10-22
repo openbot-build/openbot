@@ -21,6 +21,8 @@ import * as AnthropicProvider from "../providers/anthropic/AnthropicProvider.ts"
 import * as OpenAiCompatProvider from "../providers/openai-compat/OpenAiCompatProvider.ts"
 import * as OpenAiProvider from "../providers/openai/OpenAiProvider.ts"
 import * as TypeSafeProvider from "../providers/typesafe/TypeSafeProvider.ts"
+import { Billing, priceKey } from "../billing/Billing.ts"
+import { meter } from "../billing/MeteredModel.ts"
 import { Settings } from "../settings/Settings.ts"
 import { linkedOwner, ModelProviders, type Stored } from "./ModelProviders.ts"
 import { type Effective, effective, Models, modelKey } from "./Models.ts"
@@ -212,6 +214,20 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 		const scope = yield* Scope.Scope
 		const services = yield* Effect.context<HttpClient.HttpClient>()
 		const builtin = options.builtin
+		// A registry without Billing, such as in a unit test, does not meter its models.
+		const billing = yield* Effect.serviceOption(Billing)
+		const metered =
+			(call: {
+				readonly organizationId: string
+				readonly providerId: string
+				readonly providerOwner: "platform" | "organization"
+				readonly modelId: string
+			}) =>
+			(model: LanguageModel.LanguageModel) =>
+				Option.match(billing, {
+					onNone: () => model,
+					onSome: (billing) => meter(model, call, billing),
+				})
 		/**
 		 * One built model for each provider, model and option. A change to the
 		 * provider gives it a new version, so the next call builds it again and
@@ -401,7 +417,16 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 						(provider) => provider.id === selection.provider,
 					)
 				)
-					return yield* builtin.resolve(selection)
+					return yield* builtin.resolve(selection).pipe(
+						Effect.map(
+							metered({
+								organizationId,
+								providerId: selection.provider,
+								providerOwner: "platform",
+								modelId: selection.model,
+							}),
+						),
+					)
 				const current = yield* stored(organizationId)
 				if (
 					!current.providers.some(
@@ -440,7 +465,13 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 						message:
 							"The model does not offer this reasoning effort or service tier.",
 					})
-				return yield* build(offer, selection)
+				// The built model is shared by every organization, so each call wraps it again.
+				return metered({
+					organizationId,
+					providerId: offer.provider.id,
+					providerOwner: offer.provider.owner.kind,
+					modelId: offer.model.id,
+				})(yield* build(offer, selection))
 			})
 
 		/** The model that one setting of the organization names. */
@@ -464,6 +495,13 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 			view: (organizationId) =>
 				Effect.gen(function* () {
 					const current = yield* stored(organizationId)
+					const prices = yield* Option.match(billing, {
+						onNone: () => Effect.succeed(new Map()),
+						onSome: (billing) =>
+							billing
+								.currentPrices(current.providers.map((provider) => provider.id))
+								.pipe(Effect.orElseSucceed(() => new Map())),
+					})
 					return {
 						providers: [
 							...(builtin?.providers ?? []).map((provider) => ({
@@ -509,6 +547,12 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 								...(model.maxOutputTokens === null
 									? {}
 									: { maxOutputTokens: model.maxOutputTokens }),
+								...Option.match(
+									Option.fromNullishOr(
+										prices.get(priceKey(provider.id, model.id)),
+									),
+									{ onNone: () => ({}), onSome: (price) => ({ price }) },
+								),
 							})),
 						],
 						decisionModel: (yield* organizationSettings(organizationId))

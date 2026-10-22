@@ -9,6 +9,7 @@ export * as RequestsApi from "./RequestsApi.ts"
 export * as PlanApproval from "./PlanApproval.ts"
 export * as TriggersApi from "./TriggersApi.ts"
 export * as ChannelsApi from "./ChannelsApi.ts"
+export * as BillingApi from "./BillingApi.ts"
 export { MemberSettingsApi } from "./MemberSettingsApi.ts"
 export * as AuthApi from "./AuthApi.ts"
 export * as UserTokensApi from "./UserTokensApi.ts"
@@ -42,6 +43,7 @@ export {
 	AuthenticationRequired,
 	AuthenticationUnavailable,
 	MembershipRequired,
+	RateLimited,
 } from "./AuthApi.ts"
 export {
 	SessionsApi,

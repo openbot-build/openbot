@@ -1,0 +1,255 @@
+---
+title: Nutzung und Budgets
+description: Sieh die Nutzung der Models und ihre Kosten, setze Budgets und bezahle Models der Platform mit Credits.
+---
+
+OpenBot zeichnet jeden Aufruf eines Model auf. Du siehst, wie viele Tokens jedes Member, jeder Agent und jedes User-Token verbraucht hat und was sie gekostet haben. Ein Token ist ein kleines Stück Text, das ein Model liest oder schreibt. Du kannst auch **Budgets** setzen. Ein Budget stoppt Aufrufe von Models, wenn zu viel Geld ausgegeben ist. Eine Platform kann Organisationen **Credits** (Guthaben) geben. Damit bezahlen sie die Models, die die Platform teilt.
+
+| Wort               | Bedeutung                                                                                                                   |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| Usage event        | Ein Aufruf eines Model: seine Tokens, seine Kosten und wer ihn gemacht hat.                                                 |
+| Preis              | Was eine Million Tokens eines Model bei einem Anbieter kosten.                                                              |
+| Budget             | Eine Grenze für Ausgaben der Organisation, eines Member, eines Agent oder eines User-Token, für einen Tag oder einen Monat. |
+| Credits            | Geld, das die Platform einer Organisation gibt, um die Models der Platform zu bezahlen.                                     |
+| Mikro-USD          | Alles Geld in der API ist in Mikro-USD. Ein US-Dollar sind 1.000.000 Mikro-USD.                                             |
+| Platform-Schlüssel | Ein [geteilter Model Provider](/de/docs/platform#geteilte-model-providers). Die Platform bezahlt ihn.                       |
+| Eigener Schlüssel  | Ein Model Provider der Organisation. Die Organisation bezahlt die Firma des Model selbst.                                   |
+
+---
+
+## Was OpenBot aufzeichnet
+
+OpenBot zeichnet jeden Aufruf eines Model auf, der eine Antwort bekommt. Jedes Usage event hat eine `source` (Quelle):
+
+| `source`         | Was den Aufruf gemacht hat                                                  |
+| ---------------- | --------------------------------------------------------------------------- |
+| `turn`           | Ein Schritt eines Model in einem Turn einer Session.                        |
+| `compaction`     | Eine Zusammenfassung alter Nachrichten, damit das Gespräch ins Model passt. |
+| `session_memory` | Das [Memory](/de/docs/memory) einer Session.                                |
+| `judge`          | Das Model, das [Rules](/de/docs/rules) prüft.                               |
+| `agent_memory`   | Das Model, das [Agent Memory](/de/docs/memory#agent-memory) lernt.          |
+| `other`          | Jeder andere Aufruf.                                                        |
+
+Ein Usage event hat auch die Session, den Turn, den Agent, das Member und das User-Token, wenn der Aufruf sie hat. In einem [Channel](/de/docs/channels) ist das Member die Person, die die Nachricht geschrieben hat.
+
+Manche Aufrufe zeichnet OpenBot nicht auf:
+
+- Ein Aufruf, der fehlschlägt, bevor das Model antwortet.
+- Ein Stream, der vor seinem Ende stoppt, zum Beispiel wenn du einen Turn unterbrichst. Das Model zählt diese Tokens vielleicht trotzdem.
+- Ein Schritt, der eine Aktion des Host noch einmal ausführt. Er ruft kein Model auf.
+
+---
+
+## Preise
+
+Ein Preis gehört zu einem Model bei einem Anbieter. Dasselbe Model kann nämlich bei einem anderen Anbieter anders viel kosten. Jeder Wert ist der Preis für eine Million Tokens, in Mikro-USD.
+
+| Feld              | Welche Tokens                                                                |
+| ----------------- | ---------------------------------------------------------------------------- |
+| `inputUncached`   | Eingabe-Tokens, die der Anbieter nicht aus seinem Cache gelesen hat.         |
+| `inputCacheRead`  | Eingabe-Tokens, die der Anbieter aus seinem Cache gelesen hat.               |
+| `inputCacheWrite` | Eingabe-Tokens, die der Anbieter in seinen Cache geschrieben hat.            |
+| `output`          | Ausgabe-Text und Aufrufe von Tools.                                          |
+| `outputReasoning` | Tokens zum Nachdenken. Lass es weg oder sende `null`, um `output` zu nutzen. |
+
+Ein Administrator der Organisation setzt die Preise der eigenen Anbieter der Organisation. Diese Preise schätzen, was die Firma des Model verlangt. Ein Platform-Admin setzt die Preise der geteilten Anbieter. In diesem Beispiel kostet die Eingabe 2,50 US-Dollar und die Ausgabe 10 US-Dollar für eine Million Tokens:
+
+```sh
+curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-4.1","inputUncached":2500000,"inputCacheRead":625000,"inputCacheWrite":0,"output":10000000}' \
+  https://api.example.com/v1/organization/model_providers/prov_4c1e/prices
+```
+
+| Route                                                     | Was sie tut                                                           |
+| --------------------------------------------------------- | --------------------------------------------------------------------- |
+| `GET /v1/organization/model_providers/:providerId/prices` | Listet den aktuellen Preis jedes Model deines eigenen Anbieters auf.  |
+| `PUT /v1/organization/model_providers/:providerId/prices` | Setzt einen neuen Preis für ein Model deines eigenen Anbieters.       |
+| `GET /v1/platform/model_providers/:providerId/prices`     | Listet den aktuellen Preis jedes Model eines geteilten Anbieters auf. |
+| `PUT /v1/platform/model_providers/:providerId/prices`     | Setzt einen neuen Preis für ein Model eines geteilten Anbieters.      |
+
+Ein Anbieter kann nur die Models mit einem Preis versehen, die er verknüpft. Ein anderes Model ergibt `400` mit `ModelProviderInvalid`. Der [Katalog der Models](/de/docs/models#ein-model-auswählen) zeigt den aktuellen `price` jedes Model.
+
+Ein neuer Preis gilt für Aufrufe ab jetzt. Jedes Usage event behält die Kosten aus der Zeit des Aufrufs. Alte Kosten ändern sich also nie. OpenBot rundet die Kosten jedes Aufrufs auf ganze Mikro-USD auf.
+
+Ein Model ohne Preis kostet 0. OpenBot zeichnet seine Aufrufe trotzdem auf. Sie zählen aber nicht für Budgets und nehmen keine Credits.
+
+---
+
+## Die Nutzung ansehen
+
+`GET /v1/organization/usage` zählt die Tokens und die Kosten in einem Zeitraum zusammen. Es braucht `usage.read`.
+
+| Query     | Was es tut                                                                               |
+| --------- | ---------------------------------------------------------------------------------------- |
+| `from`    | Der Anfang, als Zeit nach ISO 8601. Standard ist der Anfang des aktuellen Monats in UTC. |
+| `to`      | Das Ende, als Zeit nach ISO 8601. Standard ist jetzt.                                    |
+| `groupBy` | `day` (Standard), `model`, `provider`, `member`, `agent`, `token` oder `source`.         |
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  "https://api.example.com/v1/organization/usage?groupBy=member"
+```
+
+```json
+{
+	"from": "2026-10-01T00:00:00.000Z",
+	"to": "2026-10-23T09:00:00.001Z",
+	"groupBy": "member",
+	"total": {
+		"calls": 42,
+		"inputUncached": 81200,
+		"inputCacheRead": 20400,
+		"inputCacheWrite": 0,
+		"outputText": 9800,
+		"outputReasoning": 1200,
+		"costMicros": 325250
+	},
+	"items": [
+		{
+			"key": "u_123",
+			"calls": 42,
+			"inputUncached": 81200,
+			"inputCacheRead": 20400,
+			"inputCacheWrite": 0,
+			"outputText": 9800,
+			"outputReasoning": 1200,
+			"costMicros": 325250
+		}
+	]
+}
+```
+
+`key` ist der Wert der Gruppe, zum Beispiel eine User-ID oder ein Tag. Er ist `null` für Aufrufe ohne diesen Wert, zum Beispiel Aufrufe ohne Agent.
+
+`GET /v1/organization/usage/events` listet die einzelnen Usage events auf, die neuesten zuerst. Es nimmt `from`, `to`, `limit` (1 bis 200, Standard ist 50) und `after`. Sende den Wert `next` einer Seite als `after`, um die nächste Seite zu bekommen. Jedes Event hat `priced` und `charged`. `charged` ist `true`, wenn die Kosten von den Credits kamen.
+
+---
+
+## Budgets
+
+Ein Budget stoppt Ausgaben an einer Grenze. Du kannst ein Budget für vier Bereiche setzen:
+
+| `scope`        | `scopeId`                                    | Was zählt                                               |
+| -------------- | -------------------------------------------- | ------------------------------------------------------- |
+| `organization` | Lass es weg. Es ist die ID der Organisation. | Jeder Aufruf der Organisation.                          |
+| `member`       | Die User-ID eines Member.                    | Die Aufrufe, die für dieses Member arbeiten.            |
+| `agent`        | Die ID eines Agent.                          | Die Aufrufe dieses Agent.                               |
+| `token`        | Die ID eines User-Token.                     | Die Aufrufe der Arbeit, die dieses Token gestartet hat. |
+
+Jedes Budget hat eine `period` (Zeitraum): `day` oder `month`. Beide beginnen um Mitternacht UTC. Jeder Bereich kann ein Budget für jeden Zeitraum haben.
+
+Jedes Budget hat auch einen `mode`:
+
+- Ein `hard`-Budget stoppt Aufrufe von Models, wenn die Ausgaben im Zeitraum `limitMicros` erreichen. Der Aufruf schlägt fehl, also schlägt der Turn mit einem Fehler des Model fehl. Der nächste Zeitraum beginnt wieder bei 0.
+- Ein `soft`-Budget stoppt nie einen Aufruf. Es zeigt nur `exceeded: true`.
+
+Ein Budget zählt jeden Aufruf mit Preis, auch die Aufrufe mit dem eigenen Schlüssel der Organisation. OpenBot prüft die Budgets vor jedem Aufruf eines Model, nicht nur am Anfang eines Turn. Ein langer Turn stoppt bei seinem nächsten Aufruf eines Model. Die Ausgaben können die Grenze also um die Kosten eines Aufrufs überschreiten.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"scope":"agent","scopeId":"agt_7d2c","period":"month","limitMicros":50000000,"mode":"hard"}' \
+  https://api.example.com/v1/organization/budgets
+```
+
+```json
+{
+	"id": "budget_5c9e",
+	"scope": "agent",
+	"scopeId": "agt_7d2c",
+	"period": "month",
+	"limitMicros": 50000000,
+	"mode": "hard",
+	"periodStart": "2026-10-01T00:00:00.000Z",
+	"spentMicros": 1250000,
+	"exceeded": false,
+	"version": 1,
+	"createdAt": "2026-10-23T09:00:00.000Z",
+	"updatedAt": "2026-10-23T09:00:00.000Z"
+}
+```
+
+| Route                                       | Was sie tut                                                                  |
+| ------------------------------------------- | ---------------------------------------------------------------------------- |
+| `GET /v1/organization/budgets`              | Listet die Budgets auf, mit ihren aktuellen Ausgaben.                        |
+| `POST /v1/organization/budgets`             | Fügt ein Budget hinzu.                                                       |
+| `GET /v1/organization/budgets/:budgetId`    | Liest ein Budget.                                                            |
+| `PATCH /v1/organization/budgets/:budgetId`  | Ändert `limitMicros` oder `mode`. Sende die `version` als `expectedVersion`. |
+| `DELETE /v1/organization/budgets/:budgetId` | Entfernt ein Budget.                                                         |
+
+Budgets lesen braucht `budgets.read`. Budgets ändern braucht `budgets.write`. Jede Änderung kommt ins [Audit-Log](/de/docs/organization#audit-log).
+
+---
+
+## Credits
+
+Mit Credits kann eine Platform die Nutzung ihrer geteilten Models verkaufen oder verschenken. Standardmäßig sind sie aus. Dann kann eine Organisation die geteilten Models ohne Grenze nutzen, außer ein Budget stoppt sie.
+
+Ein Platform-Admin schaltet Credits für eine Organisation ein und gibt Credits:
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled":true}' \
+  https://api.example.com/v1/platform/organizations/org_8f3a/credits
+
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"amountMicros":20000000,"note":"Trial for October"}' \
+  https://api.example.com/v1/platform/organizations/org_8f3a/credits/grants
+```
+
+Ein negativer `amountMicros` nimmt Credits zurück. Jede Vergabe kommt ins Audit-Log der Platform.
+
+Solange Credits an sind:
+
+- Jeder Aufruf eines Model der Platform nimmt seine Kosten vom Guthaben.
+- Wenn das Guthaben 0 oder weniger ist, schlagen Aufrufe der Models der Platform fehl. Aufrufe mit dem eigenen Schlüssel der Organisation funktionieren weiter.
+- Das Guthaben kann um die Kosten eines Aufrufs unter 0 fallen. OpenBot prüft das Guthaben nämlich vor einem Aufruf und nimmt die Kosten danach.
+
+Aufrufe mit dem eigenen Schlüssel der Organisation nehmen nie Credits, auch wenn Credits an sind.
+
+`GET /v1/organization/credits` zeigt `enabled`, `balanceMicros` und die neuesten 50 Vergaben. Es braucht `usage.read`. Ein Platform-Admin liest dasselbe mit `GET /v1/platform/organizations/:organizationId/credits`.
+
+OpenBot hat noch keine Zahlungen. Eine Platform, die Credits verkauft, speichert die Zahlung in ihrem eigenen System. Dann gibt sie die Credits über die API.
+
+---
+
+## Wenn ein Aufruf gestoppt wird
+
+Wenn ein Budget oder die Credits einen Aufruf stoppen, schlägt der Aufruf des Model mit einem `AiError` fehl. Sein Grund ist `QuotaExhaustedError`. Der Turn endet mit dem Status `Failed` und dem Code `model_error`. Die Metadaten des Fehlers sagen in `openbot.reason`, warum: `budget` oder `credits`. Bei einem Budget nennt `openbot.budgetId` das Budget.
+
+Wenn OpenBot die Budgets nicht lesen kann, zum Beispiel weil die Datenbank nicht läuft, stoppt es den Aufruf auch.
+
+---
+
+## Rate Limit
+
+Ein Platform-Admin kann begrenzen, wie viele API-Anfragen jeder Aufrufer in einer Minute sendet. Diese Grenze heißt Rate Limit. Jedes User-Token zählt für sich. Eine angemeldete Person ohne Token zählt als ein Aufrufer. Alle Instanzen von OpenBot teilen die Zählung. Setze `rateLimit` in den [Einstellungen der Platform](/de/docs/platform#einstellungen-der-platform):
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":4,"rateLimit":{"requestsPerMinute":600}}' \
+  https://api.example.com/v1/platform/settings
+```
+
+`null` heißt: keine Grenze. Das ist der Standard. Ein Aufrufer über der Grenze bekommt `429` mit `RateLimited`. `retryAfterSeconds` sagt, wann die nächste Minute beginnt. Die Grenze gilt für die API der Organisationen. Sie gilt nicht für `/v1/platform`, die Anmeldung und Webhooks.
+
+---
+
+## Fehler
+
+| Status | Fehler                 | Wann                                                                                     |
+| ------ | ---------------------- | ---------------------------------------------------------------------------------------- |
+| `400`  | `UsageQueryInvalid`    | `from` oder `to` ist keine Zeit nach ISO 8601, oder `from` liegt nicht vor `to`.         |
+| `400`  | `BudgetInvalid`        | Die ID des Bereichs fehlt, oder kein Member und kein Token der Organisation hat sie.     |
+| `400`  | `ModelProviderInvalid` | Der Anbieter verknüpft das Model nicht, für das du einen Preis setzen willst.            |
+| `403`  | `PermissionDenied`     | Der Aufrufer hat nicht `usage.read`, `budgets.read` oder `budgets.write`.                |
+| `404`  | `BudgetNotFound`       | Kein Budget der Organisation hat diese ID.                                               |
+| `409`  | `BudgetConflict`       | Der Bereich hat schon ein Budget für diesen Zeitraum, oder das Budget hat sich geändert. |
+| `429`  | `RateLimited`          | Der Aufrufer hat in dieser Minute zu viele Anfragen gesendet.                            |
+| `503`  | `BillingUnavailable`   | OpenBot erreicht seine Datenbank nicht.                                                  |
+
+Die vollständigen Formen findest du in der [Usage-Referenz](/docs/api/operations/tags/usage/) und der [Budgets-Referenz](/docs/api/operations/tags/budgets/).

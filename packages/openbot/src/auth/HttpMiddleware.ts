@@ -17,6 +17,7 @@ import { Tokens } from "./Tokens.ts"
 import { Auth } from "./Auth.js"
 import { AuthUnavailable, CredentialRejected } from "./Model.ts"
 import { Organization } from "../organization/Organization.ts"
+import { RateLimiter } from "../billing/RateLimit.ts"
 
 /** The public error for a credential that failed to resolve. */
 const publicError = (error: AuthUnavailable | CredentialRejected) =>
@@ -156,9 +157,11 @@ export const layerAgentAuth = (config: { readonly publicOrigin: string }) =>
 			const auth = yield* Auth
 			const tokens = yield* Tokens
 			const organization = yield* Organization
+			const limiter = yield* RateLimiter
 			return {
 				token: (httpEffect, { credential }) =>
 					activeToken(tokens, organization, credential).pipe(
+						Effect.tap(limiter.hit),
 						Effect.flatMap((caller) =>
 							Effect.provideService(httpEffect, Identity, caller),
 						),
@@ -179,6 +182,7 @@ export const layerAgentAuth = (config: { readonly publicOrigin: string }) =>
 							userId: session.userId,
 							organizationId,
 						}
+						yield* limiter.hit(caller)
 						return yield* Effect.provideService(httpEffect, Identity, caller)
 					}),
 			}

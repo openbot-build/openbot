@@ -1,0 +1,255 @@
+---
+title: 用量和预算
+description: 查看模型用量和费用，设置预算，并用额度支付平台的模型。
+---
+
+OpenBot 会记录每一次模型调用。你可以看到每个成员、每个 Agent 和每个用户令牌用了多少 token，以及花了多少钱。token 是模型读或写的一小段文本。你也可以设置**预算**。花的钱太多时，预算会停止模型调用。平台可以给组织**额度**，用来支付平台共享的模型。
+
+| 词         | 含义                                                                        |
+| ---------- | --------------------------------------------------------------------------- |
+| 用量事件   | 一次模型调用：它的 token、它的费用，以及谁发起了它。                        |
+| 价格       | 一个模型在一个提供方那里，一百万个 token 的费用。                           |
+| 预算       | 组织、成员、Agent 或用户令牌的花费上限，按一天或一个月计算。                |
+| 额度       | 平台给组织的钱，用来支付平台的模型。                                        |
+| 微美元     | API 中所有的钱都以微美元（micro-USD）为单位。1 美元等于 1,000,000 微美元。  |
+| 平台密钥   | 一个[共享的模型提供方](/zh-cn/docs/platform#共享的模型提供方)。由平台付费。 |
+| 自己的密钥 | 组织自己的模型提供方。由组织直接向模型公司付费。                            |
+
+---
+
+## OpenBot 记录什么
+
+OpenBot 会记录每一次得到回答的模型调用。每个用量事件都有一个 `source`：
+
+| `source`         | 是什么发起了调用                                         |
+| ---------------- | -------------------------------------------------------- |
+| `turn`           | Session 中一个 Turn 的一个模型步骤。                     |
+| `compaction`     | 对旧消息的总结，让对话能放进模型。                       |
+| `session_memory` | Session 的[记忆](/zh-cn/docs/memory)。                   |
+| `judge`          | 评判 [Rules](/zh-cn/docs/rules) 的模型。                 |
+| `agent_memory`   | 学习 [Agent 记忆](/zh-cn/docs/memory#agent-记忆)的模型。 |
+| `other`          | 其他任何调用。                                           |
+
+当调用有这些信息时，用量事件还会带有 Session、Turn、Agent、成员和用户令牌。在 [Channel](/zh-cn/docs/channels) 中，成员是写这条消息的人。
+
+有些调用不会被记录：
+
+- 在模型回答之前就失败的调用。
+- 在结束之前就停止的流，比如你中断了一个 Turn。模型可能仍然会计算这些 token。
+- 再次运行宿主操作的步骤。它不调用模型。
+
+---
+
+## 价格
+
+一个价格属于一个提供方的一个模型，因为同一个模型在另一个提供方那里的费用可能不同。每个值是一百万个 token 的费用，单位是微美元。
+
+| 字段              | 哪些 token                                          |
+| ----------------- | --------------------------------------------------- |
+| `inputUncached`   | 提供方没有从缓存读取的输入 token。                  |
+| `inputCacheRead`  | 提供方从缓存读取的输入 token。                      |
+| `inputCacheWrite` | 提供方写入缓存的输入 token。                        |
+| `output`          | 输出的文本和工具调用。                              |
+| `outputReasoning` | 推理 token。不写它或发送 `null` 时，使用 `output`。 |
+
+组织的管理员为组织自己的提供方设置价格。这些价格是对模型公司收费的估计。平台管理员为共享的提供方设置价格。在下面的例子中，一百万个 token 的输入费用是 2.50 美元，输出费用是 10 美元：
+
+```sh
+curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-4.1","inputUncached":2500000,"inputCacheRead":625000,"inputCacheWrite":0,"output":10000000}' \
+  https://api.example.com/v1/organization/model_providers/prov_4c1e/prices
+```
+
+| 路由                                                      | 作用                                       |
+| --------------------------------------------------------- | ------------------------------------------ |
+| `GET /v1/organization/model_providers/:providerId/prices` | 列出你自己的提供方中每个模型的当前价格。   |
+| `PUT /v1/organization/model_providers/:providerId/prices` | 为你自己的提供方中的一个模型设置新价格。   |
+| `GET /v1/platform/model_providers/:providerId/prices`     | 列出一个共享的提供方中每个模型的当前价格。 |
+| `PUT /v1/platform/model_providers/:providerId/prices`     | 为一个共享的提供方中的一个模型设置新价格。 |
+
+提供方只能为它关联的模型设置价格。其他模型会返回 `400` 和 `ModelProviderInvalid`。[模型目录](/zh-cn/docs/models#选择模型)会显示每个模型当前的 `price`。
+
+新价格只对之后的调用生效。每个用量事件都保存调用时的费用，所以旧的费用永远不会改变。OpenBot 会把每次调用的费用向上取整到整数微美元。
+
+没有价格的模型费用为 0。它的调用仍然会被记录，但不计入预算，也不扣除额度。
+
+---
+
+## 查看用量
+
+`GET /v1/organization/usage` 把一段时间内的 token 和费用加起来。它需要 `usage.read`。
+
+| 查询参数  | 作用                                                                         |
+| --------- | ---------------------------------------------------------------------------- |
+| `from`    | 开始时间，使用 ISO 8601 格式。默认是 UTC 时间当前月份的开始。                |
+| `to`      | 结束时间，使用 ISO 8601 格式。默认是现在。                                   |
+| `groupBy` | `day`（默认）、`model`、`provider`、`member`、`agent`、`token` 或 `source`。 |
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  "https://api.example.com/v1/organization/usage?groupBy=member"
+```
+
+```json
+{
+	"from": "2026-10-01T00:00:00.000Z",
+	"to": "2026-10-23T09:00:00.001Z",
+	"groupBy": "member",
+	"total": {
+		"calls": 42,
+		"inputUncached": 81200,
+		"inputCacheRead": 20400,
+		"inputCacheWrite": 0,
+		"outputText": 9800,
+		"outputReasoning": 1200,
+		"costMicros": 325250
+	},
+	"items": [
+		{
+			"key": "u_123",
+			"calls": 42,
+			"inputUncached": 81200,
+			"inputCacheRead": 20400,
+			"inputCacheWrite": 0,
+			"outputText": 9800,
+			"outputReasoning": 1200,
+			"costMicros": 325250
+		}
+	]
+}
+```
+
+`key` 是分组的值，比如一个用户 ID 或一天。对于没有这个值的调用，比如没有 Agent 的调用，它为 `null`。
+
+`GET /v1/organization/usage/events` 列出单个用量事件，最新的在前。它接受 `from`、`to`、`limit`（1 到 200，默认 50）和 `after`。把一页的 `next` 值作为 `after` 发送，就能得到下一页。每个事件都有 `priced` 和 `charged`。当费用从额度中扣除时，`charged` 为 `true`。
+
+---
+
+## 预算
+
+预算会在花费达到上限时停止花钱。你可以在四种范围上设置预算：
+
+| `scope`        | `scopeId`               | 计入什么                     |
+| -------------- | ----------------------- | ---------------------------- |
+| `organization` | 不写它。它就是组织 ID。 | 组织的每一次调用。           |
+| `member`       | 一个成员的用户 ID。     | 为这个成员工作的调用。       |
+| `agent`        | 一个 Agent 的 ID。      | 这个 Agent 的调用。          |
+| `token`        | 一个用户令牌的 ID。     | 这个令牌启动的工作中的调用。 |
+
+每个预算都有一个 `period`（周期）：`day` 或 `month`。两者都从 UTC 午夜开始。每个范围在每种周期上只能有一个预算。
+
+每个预算还有一个 `mode`：
+
+- `hard` 预算：当周期内的花费达到 `limitMicros` 时，停止模型调用。调用会失败，所以 Turn 会因为模型错误而失败。下一个周期再从 0 开始。
+- `soft` 预算：从不停止调用。它只显示 `exceeded: true`。
+
+预算计入每一次有价格的调用，也包括使用组织自己密钥的调用。OpenBot 在每次模型调用之前检查预算，而不只是在 Turn 开始时检查。很长的 Turn 会在下一次模型调用时停止。所以花费可能超出上限，最多超出一次调用的费用。
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"scope":"agent","scopeId":"agt_7d2c","period":"month","limitMicros":50000000,"mode":"hard"}' \
+  https://api.example.com/v1/organization/budgets
+```
+
+```json
+{
+	"id": "budget_5c9e",
+	"scope": "agent",
+	"scopeId": "agt_7d2c",
+	"period": "month",
+	"limitMicros": 50000000,
+	"mode": "hard",
+	"periodStart": "2026-10-01T00:00:00.000Z",
+	"spentMicros": 1250000,
+	"exceeded": false,
+	"version": 1,
+	"createdAt": "2026-10-23T09:00:00.000Z",
+	"updatedAt": "2026-10-23T09:00:00.000Z"
+}
+```
+
+| 路由                                        | 作用                                                                     |
+| ------------------------------------------- | ------------------------------------------------------------------------ |
+| `GET /v1/organization/budgets`              | 列出预算，以及它们现在的花费。                                           |
+| `POST /v1/organization/budgets`             | 添加一个预算。                                                           |
+| `GET /v1/organization/budgets/:budgetId`    | 读取一个预算。                                                           |
+| `PATCH /v1/organization/budgets/:budgetId`  | 修改 `limitMicros` 或 `mode`。把 `version` 作为 `expectedVersion` 发送。 |
+| `DELETE /v1/organization/budgets/:budgetId` | 移除一个预算。                                                           |
+
+读取预算需要 `budgets.read`。修改预算需要 `budgets.write`。每次修改都会写入[审计日志](/zh-cn/docs/organization#审计日志)。
+
+---
+
+## 额度
+
+平台可以用额度出售或赠送共享模型的使用。额度默认是关闭的。这时，组织可以无限制地使用共享模型，除非预算停止了它。
+
+平台管理员为一个组织打开额度，并给出额度：
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled":true}' \
+  https://api.example.com/v1/platform/organizations/org_8f3a/credits
+
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"amountMicros":20000000,"note":"Trial for October"}' \
+  https://api.example.com/v1/platform/organizations/org_8f3a/credits/grants
+```
+
+负的 `amountMicros` 会收回额度。每次给出额度都会写入平台审计日志。
+
+额度打开时：
+
+- 每次调用平台的模型，都会从余额中扣除它的费用。
+- 当余额为 0 或更少时，调用平台模型会失败。使用组织自己密钥的调用仍然可以工作。
+- 余额最多可以低于 0 一次调用的费用，因为 OpenBot 在调用之前检查余额，在调用之后扣除费用。
+
+使用组织自己密钥的调用永远不会扣除额度，即使额度是打开的。
+
+`GET /v1/organization/credits` 显示 `enabled`、`balanceMicros` 和最新的 50 次给出记录。它需要 `usage.read`。平台管理员用 `GET /v1/platform/organizations/:organizationId/credits` 读取同样的内容。
+
+OpenBot 还没有支付功能。出售额度的平台在自己的系统中记录付款，然后用 API 给出额度。
+
+---
+
+## 调用被停止时
+
+当预算或额度停止一次调用时，模型调用会失败，返回原因为 `QuotaExhaustedError` 的 `AiError`。Turn 以状态 `Failed` 和代码 `model_error` 结束。错误的元数据在 `openbot.reason` 中说明原因：`budget` 或 `credits`。对于预算，`openbot.budgetId` 指明是哪个预算。
+
+当 OpenBot 无法读取预算时，比如数据库宕机，它也会停止调用。
+
+---
+
+## 速率限制
+
+平台管理员可以限制每个调用方在一分钟内发送多少个 API 请求。这就是速率限制。每个用户令牌单独计数。没有令牌的已登录用户算作一个调用方。所有 OpenBot 实例共享这个计数。在[平台设置](/zh-cn/docs/platform#平台设置)中设置 `rateLimit`：
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":4,"rateLimit":{"requestsPerMinute":600}}' \
+  https://api.example.com/v1/platform/settings
+```
+
+`null` 表示没有限制。这是默认值。超过限制的调用方会得到 `429` 和 `RateLimited`。`retryAfterSeconds` 说明下一分钟什么时候开始。这个限制涵盖组织的 API。它不涵盖 `/v1/platform`、登录和 webhook。
+
+---
+
+## 错误
+
+| 状态  | 错误                   | 何时                                                            |
+| ----- | ---------------------- | --------------------------------------------------------------- |
+| `400` | `UsageQueryInvalid`    | `from` 或 `to` 不是 ISO 8601 时间，或者 `from` 不在 `to` 之前。 |
+| `400` | `BudgetInvalid`        | 缺少范围 ID，或者组织中没有成员或令牌有这个 ID。                |
+| `400` | `ModelProviderInvalid` | 提供方没有关联你要设置价格的模型。                              |
+| `403` | `PermissionDenied`     | 调用方没有 `usage.read`、`budgets.read` 或 `budgets.write`。    |
+| `404` | `BudgetNotFound`       | 组织中没有预算有这个 ID。                                       |
+| `409` | `BudgetConflict`       | 这个范围在这个周期上已经有预算，或者预算已经被修改。            |
+| `429` | `RateLimited`          | 调用方在这一分钟内发送了太多请求。                              |
+| `503` | `BillingUnavailable`   | OpenBot 无法连接它的数据库。                                    |
+
+在 [Usage 参考](/docs/api/operations/tags/usage/)和 [Budgets 参考](/docs/api/operations/tags/budgets/)中查看完整的结构。

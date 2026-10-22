@@ -3,7 +3,6 @@ import { AuthApi } from "@openbot-build/api"
 import { NodeServices } from "@effect/platform-node"
 import { Config, Model, Provider } from "@openbot-build/core"
 import { Auth, Server, DatabasePostgres } from "@openbot-build/openbot"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import {
 	Option,
 	Match,
@@ -25,6 +24,7 @@ import type { AppNetwork } from "../src/apps/AppHost.ts"
 import type { DomainControl } from "../src/apps/DomainControl.ts"
 import { organizationDomains } from "../src/database/Schema.ts"
 import { Settings } from "../src/settings/Settings.ts"
+import * as Db from "../src/database/Database.ts"
 
 /** A disposable OpenBot host with real PostgreSQL and signed OIDC test identities. */
 export async function start(options: {
@@ -51,6 +51,11 @@ export async function start(options: {
 	readonly domainControl?: Layer.Layer<DomainControl>
 	/** People with these emails are platform admins. */
 	readonly platformAdmins?: ReadonlyArray<string>
+	/**
+	 * Sessions use the stored model providers, as in production, instead of the
+	 * fixture model. Then each Session must name its model, and model calls are metered.
+	 */
+	readonly registryModels?: boolean
 	readonly indexWork?: {
 		readonly intervalMs?: number
 		readonly retryMs?: number
@@ -321,11 +326,15 @@ export async function start(options: {
 		sessions: {
 			runtime: { toolkit },
 			layerExecution: () => handlers,
-			modelCatalog: Effect.succeed(catalog),
-			defaults: Effect.succeed({
-				model: Config.Selection.make({ provider, model: modelId }),
-			}),
-			resolveModel: () => Effect.succeed(options.model ?? model),
+			...(options.registryModels === true
+				? {}
+				: {
+						modelCatalog: Effect.succeed(catalog),
+						defaults: Effect.succeed({
+							model: Config.Selection.make({ provider, model: modelId }),
+						}),
+						resolveModel: () => Effect.succeed(options.model ?? model),
+					}),
 		},
 	}
 	const migration = ManagedRuntime.make(
@@ -415,7 +424,7 @@ export async function start(options: {
 							}),
 					)
 					if (options.sharedDomain === false || prepared.size > 1) return
-					const db = yield* makeWithDefaults()
+					const db = yield* Db.make
 					yield* db.insert(organizationDomains).values({
 						organizationId,
 						domain: "example.com",

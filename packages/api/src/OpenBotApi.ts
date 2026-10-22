@@ -24,6 +24,7 @@ import { ChannelHooksApi, ChannelLinksApi, ChannelsApi } from "./ChannelsApi.ts"
 import { AppOperationsApi } from "./AppOperationsApi.ts"
 import { CodeRunsApi } from "./CodeRunsApi.ts"
 import { AppViewsApi } from "./AppViewsApi.ts"
+import { BudgetsApi, UsageApi } from "./BillingApi.ts"
 import { Authorize, GroupRequired, requires } from "./Permissions.ts"
 
 const connection = (permission: Parameters<typeof requires>[0]) => [
@@ -64,6 +65,8 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 		ChannelsApi,
 		ChannelLinksApi,
 		ChannelHooksApi,
+		UsageApi,
+		BudgetsApi,
 		AppOperationsApi.annotate(GroupRequired, { read: apps, write: apps })
 			.middleware(Authorize)
 			.middleware(AgentAuth),

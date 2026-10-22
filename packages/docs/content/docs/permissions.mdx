@@ -56,6 +56,9 @@ List them with `GET /v1/organization/permission_groups`.
 | `sso.read`                 | Organization | Read the email domains and SSO connections.                                                |
 | `sso.write`                | Organization | Add and verify email domains, and change SSO connections.                                  |
 | `audit_logs.read`          | Organization | Read the audit log.                                                                        |
+| `usage.read`               | Organization | Read the [model usage](/docs/usage) and its cost, and the credits of the organization.     |
+| `budgets.read`             | Organization | Read the [budgets](/docs/usage#budgets) and how much of them is spent.                     |
+| `budgets.write`            | Organization | Create, change and delete budgets.                                                         |
 | `platform.read`            | Platform     | Read the platform settings, organizations, admins and shared models and model providers.   |
 | `platform.write`           | Platform     | Change the platform settings, organizations, admins and shared models and model providers. |
 
@@ -182,21 +185,22 @@ List them with `GET /v1/organization/roles`. The list has the built-in roles and
 
 Every organization has these roles. They cannot change. A change returns `409` with `RoleReadOnly`.
 
-| Role                      | What it can do                                                                                                                                                           |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `super_administrator`     | Everything in the organization. Only a Super Administrator can give or take away this role.                                                                              |
-| `administrator`           | Manage the organization, its members, its shared Agents, its shared triggers and its Channels, and read the audit log. Work only with your own Sessions and connections. |
-| `administrator_read_only` | Read the organization, its members and the audit log, and use the shared Agents, triggers and Channels. Work only with your own Sessions and connections.                |
-| `member`                  | Work with your own Agents, Sessions, triggers, connections and tokens, use the shared Agents, triggers, Channels and models of the organization, and read its settings.  |
-| `auditor`                 | Read the organization, its members and the audit log. Nothing else.                                                                                                      |
+| Role                      | What it can do                                                                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `super_administrator`     | Everything in the organization. Only a Super Administrator can give or take away this role.                                                                               |
+| `administrator`           | Manage the organization, its members, its shared Agents, its shared triggers and its Channels, and read the audit log. Work only with your own Sessions and connections.  |
+| `administrator_read_only` | Read the organization, its members, usage, budgets and the audit log, and use the shared Agents, triggers and Channels. Work only with your own Sessions and connections. |
+| `member`                  | Work with your own Agents, Sessions, triggers, connections and tokens, use the shared Agents, triggers, Channels and models of the organization, and read its settings.   |
+| `auditor`                 | Read the organization, its members, usage, budgets and the audit log. Nothing else.                                                                                       |
 
-Some built-in roles also hold the groups for roles, model providers, SSO and Channels:
+Some built-in roles also hold the groups for roles, model providers, SSO, Channels, usage and budgets:
 
-| Role                      | Extra groups for organization features                                                                                      |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `super_administrator`     | Every permission group, except `platform.read` and `platform.write`.                                                        |
-| `administrator`           | `roles.write`, `model_providers.read`, `model_providers.write`, `sso.read`, `sso.write`, `channels.read`, `channels.write`. |
-| `administrator_read_only` | `model_providers.read`, `sso.read`, `channels.read`.                                                                        |
+| Role                      | Extra groups for organization features                                                                                                                                     |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `super_administrator`     | Every permission group, except `platform.read` and `platform.write`.                                                                                                       |
+| `administrator`           | `roles.write`, `model_providers.read`, `model_providers.write`, `sso.read`, `sso.write`, `channels.read`, `channels.write`, `usage.read`, `budgets.read`, `budgets.write`. |
+| `administrator_read_only` | `model_providers.read`, `sso.read`, `channels.read`, `usage.read`, `budgets.read`.                                                                                         |
+| `auditor`                 | `usage.read`, `budgets.read`.                                                                                                                                              |
 
 To give a member less than a role, add a `deny` policy to the member. This example stops a member from running work, but lets them read their Sessions:
 

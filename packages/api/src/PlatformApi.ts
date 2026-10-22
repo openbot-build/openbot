@@ -7,6 +7,15 @@ import {
 	OpenApi,
 } from "effect/http-api"
 import { AccountAuth, NoStore } from "./AuthApi.ts"
+import {
+	CreditGrant,
+	Credits,
+	GrantCreditsRequest,
+	ModelPrice,
+	ModelPrices,
+	SetModelPriceRequest,
+	UpdateCreditsRequest,
+} from "./BillingApi.ts"
 import { Account } from "./Identity.ts"
 import {
 	CreatePlatformModelProviderRequest,
@@ -230,6 +239,75 @@ export const PlatformApi = HttpApiGroup.make("platform")
 				success: ModelProvider,
 				error: [...errors, ...ModelProviderErrors],
 			},
+		),
+		HttpApiEndpoint.get(
+			"listPlatformModelPrices",
+			"/v1/platform/model_providers/:providerId/prices",
+			{
+				params: ProviderParams,
+				success: ModelPrices,
+				error: [...errors, ...ModelProviderErrors],
+			},
+		).annotate(
+			OpenApi.Description,
+			"Lists the current price of each model of a provider of the platform. Organizations pay this price with their credits.",
+		),
+		HttpApiEndpoint.put(
+			"setPlatformModelPrice",
+			"/v1/platform/model_providers/:providerId/prices",
+			{
+				params: ProviderParams,
+				payload: SetModelPriceRequest,
+				success: ModelPrice,
+				error: [...errors, ...ModelProviderErrors],
+			},
+		).annotate(
+			OpenApi.Description,
+			"Sets a new price for one model of the provider. The price applies to calls from now on. Old calls keep their cost.",
+		),
+		HttpApiEndpoint.get(
+			"getPlatformOrganizationCredits",
+			"/v1/platform/organizations/:organizationId/credits",
+			{
+				params: { organizationId: Schema.String },
+				success: Credits,
+				error: [
+					...errors,
+					OrganizationNotFound.pipe(HttpApiSchema.status(404)),
+				],
+			},
+		),
+		HttpApiEndpoint.patch(
+			"updatePlatformOrganizationCredits",
+			"/v1/platform/organizations/:organizationId/credits",
+			{
+				params: { organizationId: Schema.String },
+				payload: UpdateCreditsRequest,
+				success: Credits,
+				error: [
+					...errors,
+					OrganizationNotFound.pipe(HttpApiSchema.status(404)),
+				],
+			},
+		).annotate(
+			OpenApi.Description,
+			"Turns the credits of an organization on or off. While they are on, the organization can use the models of the platform only when its balance is more than 0.",
+		),
+		HttpApiEndpoint.post(
+			"grantPlatformOrganizationCredits",
+			"/v1/platform/organizations/:organizationId/credits/grants",
+			{
+				params: { organizationId: Schema.String },
+				payload: GrantCreditsRequest,
+				success: CreditGrant.pipe(HttpApiSchema.status(201)),
+				error: [
+					...errors,
+					OrganizationNotFound.pipe(HttpApiSchema.status(404)),
+				],
+			},
+		).annotate(
+			OpenApi.Description,
+			"Adds credits to an organization. A negative amount takes credits back.",
 		),
 		HttpApiEndpoint.delete(
 			"deletePlatformModelProvider",

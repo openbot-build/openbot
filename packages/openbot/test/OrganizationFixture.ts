@@ -14,6 +14,8 @@ import { ModelProviders } from "../src/models/ModelProviders.ts"
 import { Models } from "../src/models/Models.ts"
 import { ModelRegistry } from "../src/models/ModelRegistry.ts"
 import { Sso } from "../src/sso/Sso.ts"
+import { Billing } from "../src/billing/Billing.ts"
+import { RateLimiter } from "../src/billing/RateLimit.ts"
 
 /**
  * An organization where every account is an active Super Administrator.
@@ -132,6 +134,24 @@ export const layerAuthorization = Layer.mergeAll(
 export const layerUnusedPlatform = Layer.mergeAll(
 	layerBuiltinRoles,
 	layerDefaultSettings,
+	Layer.succeed(RateLimiter, { hit: () => Effect.void }),
+	Layer.succeed(Billing, {
+		check: () => Effect.void,
+		record: () => Effect.void,
+		prices: () => Effect.die("unused"),
+		setPrice: () => Effect.die("unused"),
+		currentPrices: () => Effect.succeed(new Map()),
+		summary: () => Effect.die("unused"),
+		events: () => Effect.die("unused"),
+		credits: () => Effect.die("unused"),
+		setCreditsEnabled: () => Effect.die("unused"),
+		grantCredits: () => Effect.die("unused"),
+		budgets: () => Effect.die("unused"),
+		budget: () => Effect.die("unused"),
+		createBudget: () => Effect.die("unused"),
+		updateBudget: () => Effect.die("unused"),
+		deleteBudget: () => Effect.die("unused"),
+	}),
 	Layer.succeed(PlatformAdmins, {
 		list: Effect.die("unused"),
 		add: () => Effect.die("unused"),

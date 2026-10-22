@@ -84,6 +84,7 @@ export default defineConfig({
 						"docs/configuration",
 						"docs/platform",
 						"docs/models",
+						"docs/usage",
 						"docs/error-logs",
 						"docs/deploy",
 					],

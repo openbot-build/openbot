@@ -91,6 +91,9 @@ const auditActionTree = {
 	trigger: ["created", "updated", "deleted", "hook_changed", "fired"],
 	channel: ["created", "updated", "deleted", "secret_changed"],
 	channel_identity: ["linked", "unlinked"],
+	model_price: ["set"],
+	budget: ["created", "updated", "deleted"],
+	credits: ["updated", "granted"],
 } as const satisfies Record<string, ReadonlyArray<string>>
 type AuditActionTree = typeof auditActionTree
 /** The audit actions of one resource, such as `token.created`. */
