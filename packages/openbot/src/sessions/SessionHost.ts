@@ -40,6 +40,8 @@ export const SessionHostState = Schema.Struct({
 	chain: Chain,
 	/** The request that a review Session decides. */
 	review: Schema.optionalKey(Schema.String),
+	/** The trigger that started a trigger Session. */
+	trigger: Schema.optionalKey(Schema.String),
 	/** How plans in this Session are approved, when the Session sets it. */
 	planApproval: Schema.optionalKey(PlanApproval.PlanApproval),
 })

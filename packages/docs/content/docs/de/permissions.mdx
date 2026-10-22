@@ -32,6 +32,8 @@ Liste sie mit `GET /v1/organization/permission_groups` auf.
 | `agents.read`           | Agent        | Agents lesen, mit ihrem Memory, ihren Rules und Grants.                                               |
 | `agents.write`          | Agent        | Agents erstellen und ändern, mit ihrem Memory, ihren Rules und Grants.                                |
 | `agents.delegate`       | Agent        | Einem Agent Arbeit geben, von einem Client oder von einem anderen Agent aus.                          |
+| `triggers.read`         | Trigger      | [Trigger](/de/docs/triggers) lesen: ihre Zeitpläne und Webhooks.                                      |
+| `triggers.write`        | Trigger      | Trigger erstellen, ändern und löschen und ihre Webhook-Geheimnisse festlegen.                         |
 | `connections.read`      | Connection   | App-Verbindungen und App-Konten lesen.                                                                |
 | `connections.write`     | Connection   | App-Verbindungen erstellen, ändern und löschen, und sich bei App-Konten anmelden.                     |
 | `apps.use`              | Apps         | Apps finden und App-Operationen und App-Ansichten nutzen.                                             |
@@ -70,6 +72,8 @@ Ein Ressourcen-Schlüssel ist ein Name aus Teilen, die durch Punkte getrennt sin
 | Eine Session               | `openbot.org.<org>.user.<user>.session.<session>`       |
 | Ein Agent eines Members    | `openbot.org.<org>.user.<user>.agent.<agent>`           |
 | Ein gemeinsamer Agent      | `openbot.org.<org>.agent.<agent>`                       |
+| Ein Trigger eines Members  | `openbot.org.<org>.user.<user>.trigger.<trigger>`       |
+| Ein gemeinsamer Trigger    | `openbot.org.<org>.trigger.<trigger>`                   |
 | Die Requests eines Members | `openbot.org.<org>.user.<user>.request`                 |
 | Eine Verbindung            | `openbot.org.<org>.user.<user>.connection.<connection>` |
 | Die Apps eines Members     | `openbot.org.<org>.user.<user>.apps`                    |
@@ -172,13 +176,13 @@ Liste sie mit `GET /v1/organization/roles` auf. Die Liste enthält die eingebaut
 
 Jede Organisation hat diese Roles. Sie lassen sich nicht ändern. Eine Änderung ergibt `409` mit `RoleReadOnly`.
 
-| Role                      | Was sie kann                                                                                                                                                |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `super_administrator`     | Alles in der Organisation. Nur ein Super Administrator kann diese Role geben oder wegnehmen.                                                                |
-| `administrator`           | Die Organisation, ihre Members und ihre gemeinsamen Agents verwalten und das Audit-Log lesen. Nur mit den eigenen Sessions und Verbindungen arbeiten.       |
-| `administrator_read_only` | Die Organisation, ihre Members und das Audit-Log lesen und die gemeinsamen Agents nutzen. Nur mit den eigenen Sessions und Verbindungen arbeiten.           |
-| `member`                  | Mit den eigenen Agents, Sessions, Verbindungen und Tokens arbeiten, die gemeinsamen Agents und Models der Organisation nutzen und ihre Einstellungen lesen. |
-| `auditor`                 | Die Organisation, ihre Members und das Audit-Log lesen. Sonst nichts.                                                                                       |
+| Role                      | Was sie kann                                                                                                                                                                    |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `super_administrator`     | Alles in der Organisation. Nur ein Super Administrator kann diese Role geben oder wegnehmen.                                                                                    |
+| `administrator`           | Die Organisation, ihre Members, ihre gemeinsamen Agents und ihre gemeinsamen Trigger verwalten und das Audit-Log lesen. Nur mit den eigenen Sessions und Verbindungen arbeiten. |
+| `administrator_read_only` | Die Organisation, ihre Members und das Audit-Log lesen und die gemeinsamen Agents und Trigger nutzen. Nur mit den eigenen Sessions und Verbindungen arbeiten.                   |
+| `member`                  | Mit den eigenen Agents, Sessions, Triggern, Verbindungen und Tokens arbeiten, die gemeinsamen Agents, Trigger und Models der Organisation nutzen und ihre Einstellungen lesen.  |
+| `auditor`                 | Die Organisation, ihre Members und das Audit-Log lesen. Sonst nichts.                                                                                                           |
 
 Einige eingebaute Roles haben auch die Gruppen für Roles, Model Providers und SSO:
 

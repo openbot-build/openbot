@@ -66,6 +66,7 @@ export default defineConfig({
 						"docs/agents",
 						"docs/sessions",
 						"docs/delegation",
+						"docs/triggers",
 						"docs/requests",
 						"docs/rules",
 						"docs/memory",

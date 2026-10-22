@@ -53,6 +53,8 @@ export async function start(options: {
 		readonly intervalMs?: number
 		readonly retryMs?: number
 	}
+	/** How often the trigger worker looks for schedules that are due. */
+	readonly triggerIntervalMs?: number
 	/** Organization settings for the Agents of each new organization. */
 	readonly agents?: {
 		readonly memory?: boolean
@@ -284,6 +286,9 @@ export async function start(options: {
 		...(options.indexWork === undefined
 			? {}
 			: { indexWork: options.indexWork }),
+		...(options.triggerIntervalMs === undefined
+			? {}
+			: { triggers: { interval: options.triggerIntervalMs } }),
 		...(options.discovery === undefined
 			? {}
 			: { discovery: options.discovery }),

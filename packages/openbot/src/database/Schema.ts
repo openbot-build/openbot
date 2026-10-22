@@ -687,3 +687,36 @@ export const agentRecords = table(
 		index("openbot_agent_records_status").on(t.kind, t.status),
 	],
 )
+/**
+ * A trigger starts a new Session for one Agent with one prompt, on a schedule or
+ * from a webhook. `owner_user_id` is null for a shared trigger.
+ */
+export const triggers = table(
+	"openbot_triggers",
+	{
+		organizationId: text("organization_id").notNull(),
+		id: text().notNull(),
+		ownerUserId: text("owner_user_id"),
+		agent: text().notNull(),
+		prompt: text().notNull(),
+		scheduleCron: text("schedule_cron"),
+		scheduleTimeZone: text("schedule_time_zone"),
+		nextRunAt: time("next_run_at"),
+		lastFiredAt: time("last_fired_at"),
+		hookSecretHash: text("hook_secret_hash"),
+		actor: text().notNull(),
+		enabled: boolean().notNull(),
+		revision: integer().notNull(),
+		createdAt: time("created_at").notNull(),
+		updatedAt: time("updated_at").notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.organizationId, t.id] }),
+		// A webhook names only the trigger, so its ID must find it.
+		uniqueIndex("openbot_triggers_id").on(t.id),
+		index("openbot_triggers_owner").on(t.organizationId, t.ownerUserId),
+		index("openbot_triggers_due")
+			.on(t.nextRunAt)
+			.where(sql`${t.nextRunAt} IS NOT NULL AND ${t.enabled}`),
+	],
+)

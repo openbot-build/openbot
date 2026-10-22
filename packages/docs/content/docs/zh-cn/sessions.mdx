@@ -54,7 +54,7 @@ OpenBot 返回 `201` 和 Session 视图。下面是它的简短形式：
 }
 ```
 
-`agent` 是这个 Session 的 Agent。`kind` 的取值：客户端启动的工作是 `direct`；另一个 Agent 分派的工作是 `delegated`；Agent 在其中决定一个 [request](/zh-cn/docs/requests) 的 Session 是 `review`。`parent` 指出启动委派工作的 Session、Turn 和工具调用。见 [委派](/zh-cn/docs/delegation)。
+`agent` 是这个 Session 的 Agent。`kind` 的取值：客户端启动的工作是 `direct`；另一个 Agent 分派的工作是 `delegated`；Agent 在其中决定一个 [request](/zh-cn/docs/requests) 的 Session 是 `review`；[触发器](/zh-cn/docs/triggers)启动的工作是 `trigger`。`parent` 指出启动委派工作的 Session、Turn 和工具调用。见 [委派](/zh-cn/docs/delegation)。
 
 `response` 是最新一个 Turn 的回答。`activity` 的取值：有 Turn 正在这台服务器上运行时是 `active`；没有任何东西在运行时是 `inactive`；保存的 Turn 显示它在运行、但没有服务器在运行它时是 `historical`。
 

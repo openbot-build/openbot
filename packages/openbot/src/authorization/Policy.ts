@@ -1,4 +1,8 @@
-import { type AgentsApi, Permissions } from "@openbot-build/api"
+import {
+	type AgentsApi,
+	Permissions,
+	type TriggersApi,
+} from "@openbot-build/api"
 import { Option } from "effect"
 
 type PermissionGroupId = Permissions.PermissionGroupId
@@ -44,8 +48,10 @@ export const resourceKey = (target: {
 		case "connection":
 		case "request":
 			return child(userKey(subject))
-		// The key of one Agent depends on its owner. Use agentKey when the Agent is known.
+		// The key of one Agent or trigger depends on its owner.
+		// Use agentKey or triggerKey when the Agent or trigger is known.
 		case "agent":
+		case "trigger":
 		case "model":
 			return child(organizationKey(subject.organizationId))
 	}
@@ -93,6 +99,29 @@ export const agentKey = (agent: {
 	}) +
 	"." +
 	segment(agent.id)
+
+/** The place for the triggers of a member, or for shared triggers when `userId` is `null`. */
+export const triggerPlace = (input: {
+	readonly organizationId: string
+	readonly userId: string | null
+}) =>
+	(input.userId === null
+		? organizationKey(input.organizationId)
+		: userKey({ organizationId: input.organizationId, userId: input.userId })) +
+	".trigger"
+
+/** The key of one trigger. */
+export const triggerKey = (trigger: {
+	readonly organizationId: string
+	readonly id: string
+	readonly owner: TriggersApi.TriggerOwner
+}) =>
+	triggerPlace({
+		organizationId: trigger.organizationId,
+		userId: trigger.owner._tag === "Member" ? trigger.owner.userId : null,
+	}) +
+	"." +
+	segment(trigger.id)
 
 /** Put the organization and the user of the caller into a resource pattern. */
 export const expand = ({

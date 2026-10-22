@@ -88,6 +88,8 @@ const auditActionTree = {
 	request: ["resolved"],
 	grant: ["created", "revoked"],
 	rule: ["created", "updated"],
+	trigger: ["created", "updated", "deleted", "hook_changed", "fired"],
+	/** Workflows are gone. Old audit entries still use these actions. */
 	workflow: [
 		"created",
 		"updated",

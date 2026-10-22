@@ -1,4 +1,5 @@
 import * as AgentFixture from "./AgentFixture.ts"
+import * as TriggerStore from "../src/triggers/Triggers.ts"
 import * as DeveloperLayers from "../src/apps/DeveloperLayers.ts"
 import * as AppExperience from "../src/apps/Experience.ts"
 import * as Views from "../src/apps/Views.ts"
@@ -484,6 +485,7 @@ const startApi = async (
 					Layer.provide(IndexStore.layer),
 				),
 				TokensPostgres.layer,
+				TriggerStore.layer,
 				OrganizationFixture.layerEveryoneAdministrator,
 				OrganizationFixture.layerNoAudit,
 				OrganizationFixture.layerUnusedPlatform,

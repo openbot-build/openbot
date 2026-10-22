@@ -9,6 +9,7 @@ export const ResourceKind = Schema.Literals([
 	"user",
 	"session",
 	"agent",
+	"trigger",
 	"request",
 	"connection",
 	"apps",
@@ -72,6 +73,20 @@ const permissionTree = {
 				name: "Agents Delegate",
 				description:
 					"Give work to an Agent, from a client or from another Agent.",
+			},
+		},
+	},
+	triggers: {
+		scope: "trigger",
+		actions: {
+			read: {
+				name: "Triggers Read",
+				description: "Read triggers: their schedules and webhooks.",
+			},
+			write: {
+				name: "Triggers Write",
+				description:
+					"Create, change and delete triggers, and set their webhook secrets.",
 			},
 		},
 	},
@@ -307,6 +322,8 @@ const organization = organizationResource
 const self = selfResource
 /** The shared Agents of the organization. */
 const sharedAgents = "openbot.org.{org}.agent"
+/** The shared triggers of the organization. */
+const sharedTriggers = "openbot.org.{org}.trigger"
 const own: ReadonlyArray<PermissionGroupId> = [
 	"responses.run",
 	"sessions.read",
@@ -315,6 +332,8 @@ const own: ReadonlyArray<PermissionGroupId> = [
 	"agents.read",
 	"agents.write",
 	"agents.delegate",
+	"triggers.read",
+	"triggers.write",
 	"connections.read",
 	"connections.write",
 	"apps.use",
@@ -331,6 +350,11 @@ const useSharedAgents: Policy = {
 	effect: "allow",
 	permissionGroups: ["agents.read", "agents.delegate"],
 	resources: [sharedAgents],
+}
+const readSharedTriggers: Policy = {
+	effect: "allow",
+	permissionGroups: ["triggers.read"],
+	resources: [sharedTriggers],
 }
 
 /**
@@ -357,14 +381,20 @@ export const builtinRoles = [
 		id: "administrator",
 		name: "Administrator",
 		description:
-			"Manage the organization, its members, and its shared Agents. Work only with your own Sessions and connections.",
+			"Manage the organization, its members, its shared Agents and its shared triggers. Work only with your own Sessions and connections.",
 		policies: [
 			ownWork,
 			useSharedAgents,
+			readSharedTriggers,
 			{
 				effect: "allow",
 				permissionGroups: ["agents.write"],
 				resources: [sharedAgents],
+			},
+			{
+				effect: "allow",
+				permissionGroups: ["triggers.write"],
+				resources: [sharedTriggers],
 			},
 			{
 				effect: "allow",
@@ -393,6 +423,7 @@ export const builtinRoles = [
 		policies: [
 			ownWork,
 			useSharedAgents,
+			readSharedTriggers,
 			{
 				effect: "allow",
 				permissionGroups: [
@@ -411,10 +442,11 @@ export const builtinRoles = [
 		id: "member",
 		name: "Member",
 		description:
-			"Work with your own Agents, Sessions, connections and tokens, and use the shared Agents and models of the organization.",
+			"Work with your own Agents, Sessions, triggers, connections and tokens, and use the shared Agents, triggers and models of the organization.",
 		policies: [
 			ownWork,
 			useSharedAgents,
+			readSharedTriggers,
 			{
 				effect: "allow",
 				permissionGroups: ["models.use", "organization.read"],

@@ -1,0 +1,84 @@
+---
+title: 触发器
+description: 按计划时间或通过 webhook，用一句 prompt 为一个 Agent 启动 Session。
+---
+
+**触发器**用一句 prompt 为一个 Agent 启动一个新的 Session。它可以按计划时间触发，也可以通过 webhook 触发，或者两者都有。它只做这一件事：怎么完成工作由 Agent 决定。Agent 可以先做计划、维护[待办列表](/zh-cn/docs/sessions#待办列表)，也可以把工作交给其他 Agent。
+
+---
+
+## 创建触发器
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"Check the open issues and sum them up.","schedule":{"cron":"0 9 * * 1-5","timeZone":"Europe/Berlin"}}' \
+  https://api.example.com/v1/triggers
+```
+
+| 字段       | 作用                                                     |
+| ---------- | -------------------------------------------------------- |
+| `prompt`   | 启动工作的消息。                                         |
+| `agent`    | 可选。做这项工作的 Agent。不填时由你的 Main Agent 来做。 |
+| `schedule` | 可选。触发器什么时候自己触发。                           |
+| `shared`   | 可选。`true` 表示创建属于组织的共享触发器。              |
+| `enabled`  | 可选。`false` 表示触发器不会触发。默认是 `true`。        |
+
+返回 `201` 和这个触发器。它有 `nextRunAt`（计划下一次触发的时间）和 `lastFiredAt`。
+
+`GET /v1/triggers` 列出你自己的触发器和共享的触发器。`GET`、`PATCH` 和 `DELETE /v1/triggers/:triggerId` 读取、修改和删除一个触发器。修改需要 `expected`，也就是你读到的 `revision`。旧的 revision 会返回 `409` 和 `TriggerConflict`。
+
+每次触发都会创建一个 `kind: "trigger"` 的新 Session。用 `GET /v1/sessions?kind=trigger` 列出它们。
+
+---
+
+## 计划时间
+
+计划时间有一个五个字段的 `cron` 文本，例如 `0 9 * * 1-5` 表示工作日的 9:00。`timeZone` 是 IANA 时区，例如 `Europe/Berlin`。不填时使用 UTC。无效的 cron 文本会返回 `400` 和 `TriggerInvalid`。
+
+OpenBot 每 15 秒查找一次到期的计划。有多台服务器运行时，每个触发器也只触发一次。
+
+---
+
+## Webhooks
+
+`PUT /v1/triggers/:triggerId/webhook` 会生成一个 webhook 密钥。OpenBot 只显示一次：
+
+```json
+{
+	"url": "https://api.example.com/v1/hooks/triggers/trg_4c1e...",
+	"secret": "otg_..."
+}
+```
+
+另一个系统用这个密钥触发它：
+
+```sh
+curl -H "Authorization: Bearer $WEBHOOK_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"issue": 42}' \
+  https://api.example.com/v1/hooks/triggers/trg_4c1e...
+```
+
+返回 `202` 和 `session`。JSON 内容会作为单独的一条消息交给 Agent。OpenBot 会标明它是另一个系统发来的数据，不是指令。密钥错误、触发器没有 webhook，或者触发器已停用，都会返回 `401` 和 `TriggerHookDenied`。
+
+再次 `PUT` 会生成新的密钥，旧的密钥就不能用了。`DELETE /v1/triggers/:triggerId/webhook` 会删除 webhook。
+
+---
+
+## Session 为谁工作
+
+触发器的 Session 为它的 **actor** 工作，也就是最后一个创建或修改这个触发器或它的 webhook 的成员。所以你修改它以后，你就成了 actor。actor 必须能把工作交给这个 Agent。如果 actor 不再能这样做，触发器就不会触发。
+
+Agent 的工作方式和在其他 Session 里一样。它没有额外的限制，需要新能力时用 [requests](/zh-cn/docs/requests) 申请。
+
+---
+
+## 权限
+
+| 权限组           | 允许做什么                                          |
+| ---------------- | --------------------------------------------------- |
+| `triggers.read`  | 读取触发器：它们的计划时间和 webhook。              |
+| `triggers.write` | 创建、修改和删除触发器，并设置它们的 webhook 密钥。 |
+
+你自己的触发器位于 `openbot.org.<org>.user.<user>.trigger` 之下。共享触发器位于 `openbot.org.<org>.trigger` 之下。每个成员都能读取共享触发器，管理员可以修改它们。见 [权限](/zh-cn/docs/permissions)。

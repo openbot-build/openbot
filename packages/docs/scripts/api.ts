@@ -38,6 +38,16 @@ const groups = [
 	],
 	["sessions", "Sessions", "Give work to an Agent in Sessions and Turns."],
 	[
+		"triggers",
+		"Triggers",
+		"Start a Session for an Agent with a prompt, on a schedule or from a webhook.",
+	],
+	[
+		"triggerHooks",
+		"Trigger webhooks",
+		"Fire a trigger from another system with its webhook secret.",
+	],
+	[
 		"memberSettings",
 		"Your settings",
 		"Read and change your own settings, such as how your plans are approved.",

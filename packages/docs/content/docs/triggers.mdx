@@ -1,0 +1,84 @@
+---
+title: Triggers
+description: Start a Session for an Agent with a prompt, on a schedule or from a webhook.
+---
+
+A **trigger** starts a new Session for one Agent with one prompt. It fires on a schedule, from a webhook, or both. It does nothing else: the Agent decides how to do the work. It can plan first, keep a [todo list](/docs/sessions#todo-list), and give work to other Agents.
+
+---
+
+## Create a trigger
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"Check the open issues and sum them up.","schedule":{"cron":"0 9 * * 1-5","timeZone":"Europe/Berlin"}}' \
+  https://api.example.com/v1/triggers
+```
+
+| Field      | What it does                                                                 |
+| ---------- | ---------------------------------------------------------------------------- |
+| `prompt`   | The message that starts the work.                                            |
+| `agent`    | Optional. The Agent that does the work. Without it, your Main Agent does it. |
+| `schedule` | Optional. When the trigger fires by itself.                                  |
+| `shared`   | Optional. `true` makes a shared trigger that belongs to the organization.    |
+| `enabled`  | Optional. `false` keeps the trigger from firing. The default is `true`.      |
+
+The answer is `201` with the trigger. It has `nextRunAt`, the next time that the schedule fires, and `lastFiredAt`.
+
+`GET /v1/triggers` lists your triggers and the shared ones. `GET`, `PATCH` and `DELETE /v1/triggers/:triggerId` read, change and delete one. A change needs `expected`, the `revision` that you read. An old revision returns `409` with `TriggerConflict`.
+
+Each firing makes a new Session with `kind: "trigger"`. List them with `GET /v1/sessions?kind=trigger`.
+
+---
+
+## Schedules
+
+A schedule has a `cron` text with five fields, such as `0 9 * * 1-5` for 9:00 on work days. `timeZone` is an IANA time zone, such as `Europe/Berlin`. Without it, the time zone is UTC. A cron text that is not valid returns `400` with `TriggerInvalid`.
+
+OpenBot looks for schedules that are due every 15 seconds. When many servers run, each trigger fires only once.
+
+---
+
+## Webhooks
+
+`PUT /v1/triggers/:triggerId/webhook` makes a webhook secret. OpenBot shows it only once:
+
+```json
+{
+	"url": "https://api.example.com/v1/hooks/triggers/trg_4c1e...",
+	"secret": "otg_..."
+}
+```
+
+Another system fires the trigger with the secret:
+
+```sh
+curl -H "Authorization: Bearer $WEBHOOK_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"issue": 42}' \
+  https://api.example.com/v1/hooks/triggers/trg_4c1e...
+```
+
+The answer is `202` with the `session`. The JSON body goes to the Agent as its own message. OpenBot marks it as data from another system, not as an instruction. A wrong secret, a trigger without a webhook, or a disabled trigger returns `401` with `TriggerHookDenied`.
+
+A new `PUT` makes a new secret, and the old one stops working. `DELETE /v1/triggers/:triggerId/webhook` removes the webhook.
+
+---
+
+## Who the Session works for
+
+The Sessions of a trigger work for its **actor**: the last member who created or changed the trigger or its webhook. So a change makes you the actor. The actor must be able to give work to the Agent. If the actor cannot do that any more, the trigger does not fire.
+
+The Agent works as it does in any Session. It has no extra limits, and it asks for new capabilities with [requests](/docs/requests).
+
+---
+
+## Permissions
+
+| Permission group | What it allows                                                     |
+| ---------------- | ------------------------------------------------------------------ |
+| `triggers.read`  | Read triggers: their schedules and webhooks.                       |
+| `triggers.write` | Create, change and delete triggers, and set their webhook secrets. |
+
+Your own triggers are below `openbot.org.<org>.user.<user>.trigger`. Shared triggers are below `openbot.org.<org>.trigger`. Every member can read the shared triggers. Administrators can change them. See [Permissions](/docs/permissions).

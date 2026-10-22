@@ -467,6 +467,7 @@ export const make = <
 					...(input.planApproval === undefined
 						? {}
 						: { planApproval: input.planApproval }),
+					...(input.trigger === undefined ? {} : { trigger: input.trigger }),
 				}
 				return yield* store
 					.create({
@@ -620,6 +621,7 @@ export const make = <
 		const forked = ({
 			parent: _parent,
 			review: _review,
+			trigger: _trigger,
 			...kept
 		}: SessionHost.SessionHostState): SessionHost.SessionHostState => ({
 			...kept,
