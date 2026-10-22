@@ -19,6 +19,8 @@ import * as MemoryRules from "../plugins/memory/MemoryRules.ts"
 import * as LanguageModelMemory from "../plugins/memory/LanguageModelMemory.ts"
 import * as MemoryOperations from "../plugins/memory/MemoryOperations.ts"
 import * as MemoryPlugin from "../plugins/memory/MemoryPlugin.ts"
+import * as Todos from "../plugins/work/Todos.ts"
+import { WorkPlugin } from "../plugins/work/WorkPlugin.ts"
 import {
 	Array,
 	Cause,
@@ -120,6 +122,7 @@ export const make = <
 		const fallback = yield* Effect.serviceOption(LanguageModel.LanguageModel)
 		const appPlugin = yield* Effect.serviceOption(AppPlugin)
 		const agentPlugin = yield* Effect.serviceOption(AgentPlugin)
+		const workPlugin = yield* Effect.serviceOption(WorkPlugin)
 		const modelFor = (view: Session.View, turn?: Turn.Record) =>
 			options.resolveModel === undefined
 				? Effect.serviceOption(LanguageModel.LanguageModel).pipe(
@@ -250,7 +253,7 @@ export const make = <
 			Effect.orDie,
 		)
 		const definition = yield* Store.define({
-			stores: composed.stores,
+			stores: { ...composed.stores, ...Todos.stores },
 			schemaVersion: "timeline/1",
 		})
 		const store: SessionStore.Store<SessionHost.Values> =
@@ -361,6 +364,7 @@ export const make = <
 					),
 			})
 		// The Agent plugin runs inside the App plugin, so it sees every tool of the Turn.
+		// The work plugin runs inside the Agent plugin, so it sees the current Agent.
 		const hostPlugin =
 			options.owner === undefined || Option.isNone(agentPlugin)
 				? apps
@@ -368,7 +372,15 @@ export const make = <
 					// cannot see that their merged tool types fit the App tool type.
 					(PluginComposition.merge(
 						apps,
-						agentPluginFor(agentPlugin.value, options.owner),
+						Option.isNone(workPlugin)
+							? agentPluginFor(agentPlugin.value, options.owner)
+							: PluginComposition.merge(
+									agentPluginFor(agentPlugin.value, options.owner),
+									workPlugin.value.forOwner({
+										read: (id) => store.read(id),
+										store,
+									}),
+								),
 					) as unknown as typeof apps)
 		const runtime = yield* SessionRuntime.make({
 			store,
@@ -1184,6 +1196,19 @@ export const make = <
 				sendStream,
 				resolveCall,
 				updateMemory,
+				todos: (id) => read(id).pipe(Effect.map(Todos.of)),
+				updateTodos: (id, input) =>
+					Todos.replace({
+						store,
+						session: id,
+						items: input.items,
+						base: input,
+					}).pipe(
+						Effect.mapError((error) =>
+							error._tag === "SessionConflict" ? error : publicError(error),
+						),
+						Effect.flatMap(project),
+					),
 				history,
 				versions: (id) =>
 					read(id).pipe(

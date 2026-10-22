@@ -368,6 +368,32 @@ export const UpdateMemoryRequest = Schema.Struct({
 })
 export type UpdateMemoryRequest = typeof UpdateMemoryRequest.Type
 
+/** Where one item of a todo list is. */
+export const TodoStatus = Schema.Literals(["pending", "in_progress", "done"])
+export type TodoStatus = typeof TodoStatus.Type
+/** One step of the work in a Session. */
+export const Todo = Schema.Struct({
+	id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+	content: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4000)),
+	status: TodoStatus,
+})
+export type Todo = typeof Todo.Type
+/**
+ * The todo list of a Session. It is part of the Timeline, so a fork or a restore
+ * takes the list of that point. While an item is not done, the Agent goes on working.
+ */
+export const SessionTodos = Schema.Struct({
+	items: Schema.Array(Todo).check(Schema.isMaxLength(1000)),
+})
+export type SessionTodos = typeof SessionTodos.Type
+/** Replaces the whole list. `expected` and `revision` guard against concurrent changes. */
+export const UpdateTodosRequest = Schema.Struct({
+	expected: Timeline.VersionId,
+	revision: Session.Revision,
+	items: SessionTodos.fields.items,
+})
+export type UpdateTodosRequest = typeof UpdateTodosRequest.Type
+
 export type UpdateSessionRequest = typeof UpdateSessionRequest.Type
 
 export type ForkSessionRequest = typeof ForkSessionRequest.Type
@@ -466,6 +492,20 @@ export class SessionsApi extends HttpApiGroup.make("sessions")
 				success: SessionView,
 				error: SessionOperationErrors,
 			},
+		),
+		HttpApiEndpoint.get("sessionTodos", "/v1/sessions/:sessionId/todos", {
+			params: sessionParams,
+			success: SessionTodos,
+			error: SessionOperationErrors,
+		}),
+		HttpApiEndpoint.put("updateSessionTodos", "/v1/sessions/:sessionId/todos", {
+			params: sessionParams,
+			payload: UpdateTodosRequest,
+			success: SessionView,
+			error: SessionOperationErrors,
+		}).annotate(
+			OpenApi.Description,
+			"Replaces the todo list of the Session. The Agent also changes it with its todo tool.",
 		),
 		HttpApiEndpoint.get("listSessions", "/v1/sessions", {
 			query: {

@@ -69,6 +69,10 @@ export {
 	MemoryCommand,
 	MemoryOverrides,
 	SessionMemory,
+	Todo,
+	TodoStatus,
+	SessionTodos,
+	UpdateTodosRequest,
 } from "./SessionsApi.ts"
 
 export {

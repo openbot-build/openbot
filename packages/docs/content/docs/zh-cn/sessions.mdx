@@ -215,6 +215,41 @@ OpenBot 返回 `202`，以及 `session`、`turn`、`item`、`revision` 和 `vers
 
 ---
 
+## 待办列表
+
+每个 Session 都有一个待办列表。当工作不止一步时，Agent 用工具 `openbot_todos` 来维护它。每一项都有 `id`、`content` 和 `status`。`status` 是 `pending`、`in_progress` 或 `done`。同一时间只能有一项是 `in_progress`。
+
+只要还有一项不是 `done`，Agent 就会继续工作。如果 Agent 想在还有未完成项时结束 Turn，OpenBot 会加一条提醒，列出未完成的项，Agent 就会再做一步。对列表的每一种状态，OpenBot 只提醒一次。所以如果 Agent 再次停下，而列表没有变化，Turn 就会结束。
+
+用 `GET /v1/sessions/:sessionId/todos` 读取列表：
+
+```json
+{
+	"items": [
+		{ "id": "read", "content": "Read the open issues", "status": "done" },
+		{ "id": "fix", "content": "Fix the login bug", "status": "in_progress" }
+	]
+}
+```
+
+用 `PUT /v1/sessions/:sessionId/todos` 替换整个列表。请发送你读到的 Session 的 Version 和 revision：
+
+```json
+{
+	"expected": "<version>",
+	"revision": 7,
+	"items": [
+		{ "id": "fix", "content": "Fix the login bug", "status": "pending" }
+	]
+}
+```
+
+返回的是 Session 视图。旧的 Version 或 revision 会返回 `409` 和 `SessionConflict`。如果两项的 `id` 相同，或者不止一项是 `in_progress`，也会返回同样的错误。
+
+列表是 Timeline 的一部分。对旧 Version 做 Fork 或恢复时，得到的是那个 Version 的列表。
+
+---
+
 ## 模型和执行模式
 
 `GET /v1/sessions/:sessionId/models` 显示你可以选择的模型：

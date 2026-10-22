@@ -6,6 +6,7 @@ import {
 	SessionParent,
 } from "@openbot-build/api"
 import type * as Memory from "../plugins/memory/Memory.ts"
+import type * as Todos from "../plugins/work/Todos.ts"
 import { Schema } from "effect"
 
 /** The OpenBot plugin that adds the host toolkit, the user plugin and the execution services. */
@@ -41,9 +42,10 @@ export const SessionHostState = Schema.Struct({
 })
 export type SessionHostState = typeof SessionHostState.Type
 /** The plugin data in a Session: learned memory and the OpenBot data. */
-export type Values = Memory.Values & {
-	readonly [sessionHostKey]?: SessionHostState
-}
+export type Values = Memory.Values &
+	Todos.Values & {
+		readonly [sessionHostKey]?: SessionHostState
+	}
 export const sessionHostStore = {
 	scope: "session",
 	schema: Schema.toCodecJson(SessionHostState),

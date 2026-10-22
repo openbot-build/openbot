@@ -215,6 +215,41 @@ OpenBot antwortet mit `202` und `session`, `turn`, `item`, `revision` und `versi
 
 ---
 
+## Todo-Liste
+
+Eine Session hat eine Todo-Liste (eine Liste offener Aufgaben). Der Agent führt sie mit dem Werkzeug `openbot_todos`, wenn seine Arbeit mehr als einen Schritt hat. Jeder Eintrag hat eine `id`, einen `content` und einen `status`: `pending`, `in_progress` oder `done`. Nur ein Eintrag kann zur selben Zeit `in_progress` sein.
+
+Solange ein Eintrag nicht `done` ist, arbeitet der Agent weiter. Wenn der Agent den Turn mit offenen Einträgen beenden will, fügt OpenBot eine Erinnerung mit den offenen Einträgen hinzu. Dann macht der Agent noch einen Schritt. OpenBot erinnert ihn nur einmal für jeden Stand der Liste. Wenn der Agent also wieder aufhört und sich die Liste nicht geändert hat, endet der Turn.
+
+Lies die Liste mit `GET /v1/sessions/:sessionId/todos`:
+
+```json
+{
+	"items": [
+		{ "id": "read", "content": "Read the open issues", "status": "done" },
+		{ "id": "fix", "content": "Fix the login bug", "status": "in_progress" }
+	]
+}
+```
+
+Ersetze die ganze Liste mit `PUT /v1/sessions/:sessionId/todos`. Sende die Version und die Revision der Session, die du gelesen hast:
+
+```json
+{
+	"expected": "<version>",
+	"revision": 7,
+	"items": [
+		{ "id": "fix", "content": "Fix the login bug", "status": "pending" }
+	]
+}
+```
+
+Die Antwort ist die Ansicht der Session. Eine alte Version oder Revision gibt `409` mit `SessionConflict` zurück. Das gilt auch für eine Liste, in der zwei Einträge dieselbe `id` haben oder mehr als ein Eintrag `in_progress` ist.
+
+Die Liste ist Teil der Timeline. Ein Fork oder eine Wiederherstellung einer älteren Version hat die Liste dieser Version.
+
+---
+
 ## Models und Ausführungsmodus
 
 `GET /v1/sessions/:sessionId/models` zeigt die Models, die du wählen kannst:

@@ -215,6 +215,41 @@ OpenBot returns `202` with `session`, `turn`, `item`, `revision` and `version`. 
 
 ---
 
+## Todo list
+
+A Session has a todo list. The Agent keeps it with the tool `openbot_todos` when its work has more than one step. Each item has an `id`, a `content` and a `status`: `pending`, `in_progress` or `done`. Only one item can be `in_progress` at a time.
+
+While an item is not `done`, the Agent goes on working. When the Agent wants to end the Turn with open items, OpenBot adds a reminder with the open items, and the Agent takes one more step. OpenBot reminds it only once for each state of the list. So if the Agent stops again and the list did not change, the Turn ends.
+
+Read the list with `GET /v1/sessions/:sessionId/todos`:
+
+```json
+{
+	"items": [
+		{ "id": "read", "content": "Read the open issues", "status": "done" },
+		{ "id": "fix", "content": "Fix the login bug", "status": "in_progress" }
+	]
+}
+```
+
+Replace the whole list with `PUT /v1/sessions/:sessionId/todos`. Send the Version and the revision of the Session that you read:
+
+```json
+{
+	"expected": "<version>",
+	"revision": 7,
+	"items": [
+		{ "id": "fix", "content": "Fix the login bug", "status": "pending" }
+	]
+}
+```
+
+The answer is the Session view. An old Version or revision returns `409` with `SessionConflict`. So does a list where two items have the same `id`, or where more than one item is `in_progress`.
+
+The list is part of the Timeline. A Fork or a restore of an older Version has the list of that Version.
+
+---
+
 ## Models and execution mode
 
 `GET /v1/sessions/:sessionId/models` shows the models you can pick:
