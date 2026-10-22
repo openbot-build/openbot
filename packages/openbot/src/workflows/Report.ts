@@ -1,6 +1,6 @@
 import type { WorkflowsApi } from "@openbot-build/api"
 
-const seconds = (result: WorkflowsApi.StepResult) =>
+const seconds = (result: WorkflowsApi.NodeResult) =>
 	result.startedAt === null || result.finishedAt === null
 		? 0
 		: (result.finishedAt - result.startedAt) / 1000
@@ -16,17 +16,19 @@ export const markdown = (run: WorkflowsApi.Run) =>
 		`- Run: ${run.id}`,
 		`- Status: ${run.status}`,
 		`- Trigger: ${run.trigger}`,
-		`- Steps: ${run.summary.passed} passed, ${run.summary.failed} failed, ${run.summary.skipped} skipped`,
+		`- Revision: ${run.revision} of Workflow ${run.workflow}`,
+		`- Nodes: ${run.summary.passed} passed, ${run.summary.failed} failed, ${run.summary.skipped} skipped`,
 		`- Modes: ${run.summary.deterministic} deterministic, ${run.summary.live} live, ${run.summary.replayed} replayed, ${run.summary.handedOff} handed off`,
+		`- Model tokens: ${run.usage.tokens}`,
 		...(run.error === null ? [] : [`- Error: ${line(run.error)}`]),
 		"",
-		"## Steps",
+		"## Nodes",
 		"",
-		"| Step | Kind | Status | Mode | Message |",
-		"| --- | --- | --- | --- | --- |",
-		...run.steps.map(
-			(step) =>
-				`| ${step.id} | ${step.kind} | ${step.status} | ${step.mode ?? ""} | ${line(step.message).replaceAll("|", "\\|")} |`,
+		"| Node | Kind | Needs | Status | Mode | Child Runs | Message |",
+		"| --- | --- | --- | --- | --- | --- | --- |",
+		...run.nodes.map(
+			(node) =>
+				`| ${node.id} | ${node.kind} | ${node.needs.join(", ")} | ${node.status} | ${node.mode ?? ""} | ${node.children.join(", ")} | ${line(node.message).replaceAll("|", "\\|")} |`,
 		),
 		...(run.findings.length === 0
 			? []
@@ -37,7 +39,7 @@ export const markdown = (run: WorkflowsApi.Run) =>
 						"",
 						`### [${finding.severity}] ${finding.title}`,
 						"",
-						`- Step: ${finding.step}`,
+						`- Node: ${finding.node}`,
 						`- Expected: ${line(finding.expected)}`,
 						`- Observed: ${line(finding.observed)}`,
 						"- Steps to show it again:",
@@ -56,14 +58,14 @@ const xml = (text: string) =>
 		.replaceAll(">", "&gt;")
 		.replaceAll('"', "&quot;")
 
-/** The Run as JUnit XML. Each step is one test case. A skipped step is a skipped test case. */
+/** The Run as JUnit XML. Each node is one test case. A skipped node is a skipped test case. */
 export const junit = (run: WorkflowsApi.Run) => {
-	const total = run.steps.reduce((all, step) => all + seconds(step), 0)
+	const total = run.nodes.reduce((all, node) => all + seconds(node), 0)
 	return [
 		'<?xml version="1.0" encoding="UTF-8"?>',
-		`<testsuites name="${xml(run.name)}" tests="${run.steps.length}" failures="${run.summary.failed}" skipped="${run.summary.skipped}" time="${total}">`,
-		`  <testsuite name="${xml(run.name)}" id="${xml(run.id)}" tests="${run.steps.length}" failures="${run.summary.failed}" skipped="${run.summary.skipped}" time="${total}">`,
-		...run.steps.flatMap((step) => {
+		`<testsuites name="${xml(run.name)}" tests="${run.nodes.length}" failures="${run.summary.failed}" skipped="${run.summary.skipped}" time="${total}">`,
+		`  <testsuite name="${xml(run.name)}" id="${xml(run.id)}" tests="${run.nodes.length}" failures="${run.summary.failed}" skipped="${run.summary.skipped}" time="${total}">`,
+		...run.nodes.flatMap((step) => {
 			const open = `    <testcase classname="${xml(run.name)}" name="${xml(step.id)}" time="${seconds(step)}">`
 			if (step.status === "failed")
 				return [

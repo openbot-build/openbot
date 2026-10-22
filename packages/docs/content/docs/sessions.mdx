@@ -54,7 +54,7 @@ OpenBot returns `201` with the Session view. Here is a short form of it:
 }
 ```
 
-`agent` is the Agent of the Session. `kind` is `direct` for work that a client started, `delegated` for work that another Agent gave, `review` for a Session where an Agent decides one [request](/docs/requests), and `workflow` for a Session where an Agent does the steps of a [Workflow Run](/docs/workflows). `parent` names the Session, Turn and tool call that started delegated work. See [Delegation](/docs/delegation).
+`agent` is the Agent of the Session. `kind` is `direct` for work that a client started, `delegated` for work that another Agent gave, `review` for a Session where an Agent decides one [request](/docs/requests), and `workflow` for a Session where an Agent does the nodes of a [Workflow Run](/docs/workflows). `parent` names the Session, Turn and tool call that started delegated work. See [Delegation](/docs/delegation).
 
 `response` is the latest Turn's answer. `activity` is `active` while a Turn runs on this server, `inactive` when nothing runs, and `historical` when a saved Turn says it runs but no server runs it.
 

@@ -13,7 +13,7 @@ import {
 	Permissions,
 	WorkflowsApi,
 } from "@openbot-build/api"
-import { and, eq, isNotNull, lte, or } from "drizzle-orm"
+import { and, eq, isNotNull, isNull, lte, or } from "drizzle-orm"
 import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import {
 	Clock,
@@ -30,7 +30,7 @@ import {
 import { can } from "../authorization/Check.ts"
 import { rootOf, workflowKey } from "../authorization/Policy.ts"
 import { Agents } from "../agents/Agents.ts"
-import { workflows } from "../database/Schema.ts"
+import { workflowRevisions, workflows } from "../database/Schema.ts"
 
 type Workflow = WorkflowsApi.Workflow
 
@@ -54,18 +54,22 @@ const invalid = (message: string) =>
 	WorkflowsApi.WorkflowInvalid.make({ message })
 const notFound = (id: string) => WorkflowsApi.WorkflowNotFound.make({ id })
 
-/** The steps and the judge model, as the `definition` column keeps them. */
-const Definition = Schema.Struct({
-	steps: WorkflowsApi.Steps,
+/** The graph and the judge model, as the `definition` columns keep them. */
+export const Definition = Schema.Struct({
+	graph: WorkflowsApi.Graph,
 	judge: Schema.optionalKey(Config.Selection),
 })
+export type Definition = typeof Definition.Type
 const definitionCodec = Schema.fromJsonString(Schema.toCodecJson(Definition))
+const originCodec = Schema.fromJsonString(
+	Schema.toCodecJson(WorkflowsApi.WorkflowOrigin),
+)
 
 /**
- * A runtime schema for the JSON Schema of an `Extract` step.
+ * A runtime schema for the JSON Schema of the `output` of a `Check` node.
  * Patterns are ignored, because a pattern from a client could take a very long time to check.
  */
-export const extractSchema = (schema: Schema.JsonObject) =>
+export const outputSchema = (schema: Schema.JsonObject) =>
 	Result.try({
 		try: () =>
 			SchemaRepresentation.fromJsonSchemaDocument(
@@ -73,9 +77,84 @@ export const extractSchema = (schema: Schema.JsonObject) =>
 				{ patterns: "ignore" },
 			),
 		catch: (error) =>
-			"The schema of the Extract step cannot be used: " +
+			"The output schema of the Check node cannot be used: " +
 			(error instanceof Error ? error.message : String(error)),
 	})
+
+/** The Agents that do the nodes of a graph. */
+// It is a plain function of two values. A pipeable form does not help here.
+// @effect-diagnostics-next-line missingPipeableSignature:off
+export const agentsOf = (
+	agent: AgentsApi.AgentId | null,
+	graph: WorkflowsApi.Graph,
+): ReadonlyArray<AgentsApi.AgentId> => [
+	...new Set([
+		...(agent === null ? [] : [agent]),
+		...graph.nodes.flatMap((node) =>
+			"agent" in node && node.agent !== undefined ? [node.agent] : [],
+		),
+	]),
+]
+
+/** Why a graph cannot run, or undefined when it can. It checks ids, `needs`, cycles and node fields. */
+export const graphProblem = (graph: WorkflowsApi.Graph): string | undefined => {
+	const ids = graph.nodes.map((node) => node.id)
+	const repeated = ids.find((id, index) => ids.indexOf(id) !== index)
+	if (repeated !== undefined) return `Two nodes have the id ${repeated}.`
+	const known = new Set(ids)
+	for (const node of graph.nodes) {
+		for (const need of node.needs ?? []) {
+			if (need === node.id) return `The node ${node.id} needs itself.`
+			if (!known.has(need))
+				return `The node ${node.id} needs ${need}, but there is no such node.`
+		}
+		if (node._tag === "Check" && node.output !== undefined) {
+			const schema = outputSchema(node.output)
+			if (Result.isFailure(schema)) return schema.failure
+		}
+		if (
+			node._tag === "Check" &&
+			node.until !== undefined &&
+			node.until.intervalSeconds > node.until.timeoutSeconds
+		)
+			return `In node ${node.id}, intervalSeconds must not be more than timeoutSeconds.`
+	}
+	// A node can start only after its needs, so the needs must not go in a circle.
+	const needs = new Map(graph.nodes.map((node) => [node.id, node.needs ?? []]))
+	const done = new Set<string>()
+	const visiting = new Set<string>()
+	const circle = (id: string): string | undefined => {
+		if (done.has(id)) return undefined
+		if (visiting.has(id)) return id
+		visiting.add(id)
+		for (const need of needs.get(id) ?? []) {
+			const found = circle(need)
+			if (found !== undefined) return found
+		}
+		visiting.delete(id)
+		done.add(id)
+		return undefined
+	}
+	for (const id of ids) {
+		const found = circle(id)
+		if (found !== undefined)
+			return `The needs of the node ${found} go in a circle.`
+	}
+	return undefined
+}
+
+/** A plan that an Agent wrote, to keep as a Workflow of that Agent. */
+export interface PlanInput {
+	readonly organizationId: string
+	/** The id of the planned Workflow. The same plan always has the same id. */
+	readonly id: WorkflowsApi.WorkflowId
+	readonly agent: AgentsApi.Agent
+	readonly name: string
+	readonly description: string
+	readonly graph: WorkflowsApi.Graph
+	readonly origin: WorkflowsApi.WorkflowOrigin
+	readonly judge?: Config.Selection
+}
 
 /** The next time after `now` that a schedule starts a Run. */
 export const nextRun = ({
@@ -118,6 +197,7 @@ export class Workflows extends Context.Service<
 			input: {
 				readonly archived?: boolean
 				readonly owner?: AgentsApi.AgentId
+				readonly planned?: boolean
 			},
 		) => Effect.Effect<ReadonlyArray<Workflow>, Failure, AuthorizationServices>
 		readonly create: (
@@ -150,6 +230,31 @@ export class Workflows extends Context.Service<
 			Option.Option<Stored>,
 			WorkflowsApi.WorkflowStorageUnavailable
 		>
+		/** The definition of one revision of a Workflow. */
+		readonly revision: (
+			organizationId: string,
+			id: string,
+			revision: number,
+		) => Effect.Effect<
+			Option.Option<Definition>,
+			WorkflowsApi.WorkflowStorageUnavailable
+		>
+		/**
+		 * Keeps a plan of an Agent as its Workflow. The first plan makes the Workflow, and each
+		 * later plan makes a new revision. The Gate already agreed, so this checks no permission.
+		 */
+		readonly savePlan: (
+			input: PlanInput,
+		) => Effect.Effect<
+			Workflow,
+			WorkflowsApi.WorkflowInvalid | WorkflowsApi.WorkflowStorageUnavailable
+		>
+		/** Notes that a Run passed with this revision. A Plan node uses it again later. */
+		readonly passed: (
+			organizationId: string,
+			id: string,
+			revision: number,
+		) => Effect.Effect<void, WorkflowsApi.WorkflowStorageUnavailable>
 		/**
 		 * The scheduled Workflows that must start a Run now, in every organization.
 		 * Each one gets its next time in the same step, so two workers never start the same Run.
@@ -182,7 +287,11 @@ export const make: Effect.Effect<
 		Effect.gen(function* () {
 			const definition = yield* Schema.decodeEffect(definitionCodec)(
 				row.definition,
-			).pipe(Effect.mapError(unavailable))
+			)
+			const origin =
+				row.origin === null
+					? null
+					: yield* Schema.decodeEffect(originCodec)(row.origin)
 			const owner: WorkflowsApi.WorkflowOwner =
 				row.ownerKind === "Organization"
 					? { _tag: "Organization" }
@@ -200,7 +309,9 @@ export const make: Effect.Effect<
 				description: row.description,
 				agent: row.agent === null ? null : (row.agent as AgentsApi.AgentId),
 				...(definition.judge === undefined ? {} : { judge: definition.judge }),
-				steps: definition.steps,
+				graph: definition.graph,
+				origin,
+				passedRevision: row.passedRevision,
 				schedule:
 					row.scheduleCron === null
 						? null
@@ -218,14 +329,18 @@ export const make: Effect.Effect<
 				updatedAt: row.updatedAt,
 			}
 			return workflow
-		})
+		}).pipe(Effect.mapError(unavailable))
 	/** The row columns of a Workflow. The hash of the webhook secret is not part of the API value. */
 	const toRow = (organizationId: string, workflow: Workflow, now: number) =>
 		Effect.gen(function* () {
 			const definition = yield* Schema.encodeEffect(definitionCodec)({
-				steps: workflow.steps,
+				graph: workflow.graph,
 				...(workflow.judge === undefined ? {} : { judge: workflow.judge }),
-			}).pipe(Effect.mapError(unavailable))
+			})
+			const origin =
+				workflow.origin === null
+					? null
+					: yield* Schema.encodeEffect(originCodec)(workflow.origin)
 			const next =
 				workflow.schedule === null || workflow.archived
 					? null
@@ -242,6 +357,8 @@ export const make: Effect.Effect<
 				description: workflow.description,
 				agent: workflow.agent,
 				definition,
+				origin,
+				passedRevision: workflow.passedRevision,
 				scheduleCron: workflow.schedule?.cron ?? null,
 				scheduleTimeZone: workflow.schedule?.timeZone ?? null,
 				nextRunAt: next,
@@ -251,7 +368,7 @@ export const make: Effect.Effect<
 				createdAt: workflow.createdAt,
 				updatedAt: workflow.updatedAt,
 			}
-		})
+		}).pipe(Effect.mapError(unavailable))
 	const where = (organizationId: string, id: string) =>
 		and(eq(workflows.organizationId, organizationId), eq(workflows.id, id))
 	const findRow = (organizationId: string, id: string, lock = false) =>
@@ -304,38 +421,17 @@ export const make: Effect.Effect<
 				}),
 			),
 		)
-	/** Checks the steps, the schedule and the Agents of a Workflow before it is saved. */
+	/** Checks the graph, the schedule and the Agents of a Workflow before it is saved. */
 	const validate = (caller: Caller, workflow: Workflow, now: number) =>
 		Effect.gen(function* () {
-			const ids = workflow.steps.map((step) => step.id)
-			const repeated = ids.find((id, index) => ids.indexOf(id) !== index)
-			if (repeated !== undefined)
-				return yield* invalid(`Two steps have the id ${repeated}.`)
-			for (const step of workflow.steps) {
-				if (step._tag === "Extract") {
-					const schema = extractSchema(step.schema)
-					if (Result.isFailure(schema)) return yield* invalid(schema.failure)
-				}
-				if (
-					step._tag === "WaitFor" &&
-					step.intervalSeconds > step.timeoutSeconds
-				)
-					return yield* invalid(
-						`In step ${step.id}, intervalSeconds must not be more than timeoutSeconds.`,
-					)
-			}
+			const problem = graphProblem(workflow.graph)
+			if (problem !== undefined) return yield* invalid(problem)
 			if (workflow.schedule !== null) {
 				const next = nextRun({ schedule: workflow.schedule, now })
 				if (Result.isFailure(next)) return yield* invalid(next.failure)
 			}
 			// The caller must be able to give work to every Agent of the Workflow.
-			const used = [
-				...(workflow.agent === null ? [] : [workflow.agent]),
-				...workflow.steps.flatMap((step) =>
-					"agent" in step && step.agent !== undefined ? [step.agent] : [],
-				),
-			]
-			for (const agent of new Set(used))
+			for (const agent of agentsOf(workflow.agent, workflow.graph))
 				yield* agents.access(caller, agent, "agents.delegate").pipe(
 					Effect.catchTags({
 						AgentNotFound: () =>
@@ -346,6 +442,7 @@ export const make: Effect.Effect<
 					}),
 				)
 		})
+	/** Saves a Workflow, and its definition as the row of its revision. */
 	const put = (organizationId: string, workflow: Workflow, now: number) =>
 		toRow(organizationId, workflow, now).pipe(
 			Effect.flatMap(({ organizationId: _organization, id: _id, ...set }) =>
@@ -357,6 +454,21 @@ export const make: Effect.Effect<
 							target: [workflows.organizationId, workflows.id],
 							set,
 						}),
+				).pipe(
+					Effect.andThen(
+						stored(
+							db
+								.insert(workflowRevisions)
+								.values({
+									organizationId,
+									workflowId: workflow.id,
+									revision: workflow.revision,
+									definition: set.definition,
+									createdAt: now,
+								})
+								.onConflictDoNothing(),
+						),
+					),
 				),
 			),
 			Effect.as(workflow),
@@ -439,6 +551,13 @@ export const make: Effect.Effect<
 								input.archived === undefined
 									? undefined
 									: eq(workflows.archived, input.archived),
+								// Planned Workflows stay out of the list, unless the caller asks for them or for one Agent.
+								input.planned === true
+									? isNotNull(workflows.origin)
+									: input.planned === false ||
+										  (input.planned === undefined && input.owner === undefined)
+										? isNull(workflows.origin)
+										: undefined,
 							),
 						)
 						.orderBy(workflows.createdAt, workflows.id),
@@ -478,7 +597,9 @@ export const make: Effect.Effect<
 					description: input.description ?? "",
 					agent: input.agent ?? null,
 					...(input.judge === undefined ? {} : { judge: input.judge }),
-					steps: input.steps,
+					graph: input.graph,
+					origin: null,
+					passedRevision: null,
 					schedule: input.schedule ?? null,
 					webhook: false,
 					actor: input.schedule === undefined ? null : caller.userId,
@@ -516,7 +637,7 @@ export const make: Effect.Effect<
 							? {}
 							: { description: input.description }),
 						...(input.agent === undefined ? {} : { agent: input.agent }),
-						...(input.steps === undefined ? {} : { steps: input.steps }),
+						...(input.graph === undefined ? {} : { graph: input.graph }),
 						...(input.schedule === undefined
 							? {}
 							: { schedule: input.schedule, actor: caller.userId }),
@@ -547,6 +668,82 @@ export const make: Effect.Effect<
 			change(caller, id, "workflows.write", (current) =>
 				Effect.succeed({ workflow: current, hash: null }),
 			),
+		revision: (organizationId, id, revision) =>
+			stored(
+				db
+					.select({ definition: workflowRevisions.definition })
+					.from(workflowRevisions)
+					.where(
+						and(
+							eq(workflowRevisions.organizationId, organizationId),
+							eq(workflowRevisions.workflowId, id),
+							eq(workflowRevisions.revision, revision),
+						),
+					),
+			).pipe(
+				Effect.flatMap((rows) =>
+					rows[0] === undefined
+						? Effect.succeedNone
+						: Schema.decodeEffect(definitionCodec)(rows[0].definition).pipe(
+								Effect.mapError(unavailable),
+								Effect.asSome,
+							),
+				),
+			),
+		savePlan: (input) =>
+			Effect.gen(function* () {
+				const problem = graphProblem(input.graph)
+				if (problem !== undefined) return yield* invalid(problem)
+				return yield* transaction(
+					Effect.gen(function* () {
+						const now = yield* Clock.currentTimeMillis
+						const row = yield* findRow(input.organizationId, input.id, true)
+						const current = Option.isSome(row)
+							? Option.some(yield* fromRow(row.value))
+							: Option.none<Workflow>()
+						const workflow: Workflow = Option.match(current, {
+							onNone: (): Workflow => ({
+								id: input.id,
+								owner: {
+									_tag: "Agent",
+									agent: input.agent.id,
+									userId: rootOf(input.agent.owner),
+								},
+								name: input.name,
+								description: input.description,
+								agent: input.agent.id,
+								...(input.judge === undefined ? {} : { judge: input.judge }),
+								graph: input.graph,
+								origin: input.origin,
+								passedRevision: null,
+								schedule: null,
+								webhook: false,
+								actor: null,
+								archived: false,
+								revision: 0,
+								createdAt: now,
+								updatedAt: now,
+							}),
+							onSome: (current) => ({
+								...current,
+								name: input.name,
+								description: input.description,
+								graph: input.graph,
+								revision: current.revision + 1,
+								updatedAt: now,
+							}),
+						})
+						return yield* put(input.organizationId, workflow, now)
+					}),
+				)
+			}),
+		passed: (organizationId, id, revision) =>
+			stored(
+				db
+					.update(workflows)
+					.set({ passedRevision: revision })
+					.where(where(organizationId, id)),
+			).pipe(Effect.asVoid),
 		verifyHook: (id, secret) =>
 			Effect.gen(function* () {
 				const row = (yield* stored(

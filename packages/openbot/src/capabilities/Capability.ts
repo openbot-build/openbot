@@ -99,8 +99,13 @@ export const permission = (input: {
 		case "agents.delegate":
 			return onAgent("agents.delegate")
 		case "workflows.run":
+		case "workflows.budget":
+		case "workflows.edit":
 			return {
-				permission: "workflows.run",
+				permission:
+					input.capability.action === "workflows.edit"
+						? "workflows.write"
+						: "workflows.run",
 				key:
 					input.workflow === undefined
 						? workflowPlace({

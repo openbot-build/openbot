@@ -18,19 +18,9 @@ import { Recordings } from "./Recordings.ts"
 import * as Report from "./Report.ts"
 import { Runs, view } from "./Runs.ts"
 import { Tasks } from "./Tasks.ts"
-import { Workflows } from "./Workflows.ts"
+import { agentsOf, Workflows } from "./Workflows.ts"
 
 const unavailable = () => WorkflowsApi.WorkflowStorageUnavailable.make({})
-
-/** The Agents that do the steps of a Workflow. */
-const agentsOf = (workflow: WorkflowsApi.Workflow) => [
-	...new Set([
-		...(workflow.agent === null ? [] : [workflow.agent]),
-		...workflow.steps.flatMap((step) =>
-			"agent" in step && step.agent !== undefined ? [step.agent] : [],
-		),
-	]),
-]
 
 export const layer = (publicOrigin: string) =>
 	HttpApiBuilder.group(OpenBotApi, "workflows", (handlers) =>
@@ -69,7 +59,7 @@ export const layer = (publicOrigin: string) =>
 						details,
 					})
 					.pipe(Effect.mapError(unavailable))
-			/** The caller must be able to give work to every Agent that does the steps. */
+			/** The caller must be able to give work to every Agent that does the nodes. */
 			const mayUse = (
 				caller: Caller,
 				list: ReadonlyArray<WorkflowsApi.Workflow["agent"] & string>,
@@ -132,6 +122,9 @@ export const layer = (publicOrigin: string) =>
 									? {}
 									: { archived: query.archived === "true" }),
 								...(query.owner === undefined ? {} : { owner: query.owner }),
+								...(query.planned === undefined
+									? {}
+									: { planned: query.planned === "true" }),
 							})
 							.pipe(Effect.provideContext(services))
 					}),
@@ -144,7 +137,7 @@ export const layer = (publicOrigin: string) =>
 							.pipe(Effect.provideContext(services))
 						yield* record(caller, "workflow.created", workflow, {
 							name: workflow.name,
-							steps: workflow.steps.length,
+							nodes: workflow.graph.nodes.length,
 						})
 						return workflow
 					}),
@@ -178,14 +171,14 @@ export const layer = (publicOrigin: string) =>
 							return yield* WorkflowsApi.WorkflowInvalid.make({
 								message: "An archived Workflow cannot run.",
 							})
-						yield* mayUse(caller, agentsOf(workflow))
+						yield* mayUse(caller, agentsOf(workflow.agent, workflow.graph))
 						const run = yield* launcher.start({
 							organizationId: caller.organizationId,
 							userId: caller.userId,
 							trigger: "manual",
 							input: payload.input ?? {},
 							cache: payload.cache ?? "use",
-							source: { _tag: "Workflow", workflow },
+							workflow,
 						})
 						return view(run)
 					}),
@@ -241,29 +234,6 @@ export const layer = (publicOrigin: string) =>
 						})
 					}),
 				)
-				.handle("explore", ({ payload }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						yield* ownRuns(caller, "workflows.run")
-						if (payload.agent !== undefined)
-							yield* mayUse(caller, [payload.agent])
-						const run = yield* launcher.start({
-							organizationId: caller.organizationId,
-							userId: caller.userId,
-							trigger: "explore",
-							input: payload.input ?? {},
-							cache: "off",
-							source: {
-								_tag: "Explore",
-								goal: payload.goal,
-								...(payload.agent === undefined
-									? {}
-									: { agent: payload.agent }),
-							},
-						})
-						return view(run)
-					}),
-				)
 				.handle("listRuns", ({ query }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
@@ -291,6 +261,18 @@ export const layer = (publicOrigin: string) =>
 						const run = yield* ownRun(caller, params.runId, "workflows.run")
 						const cancelled = yield* tasks.cancel(run.organizationId, run.id)
 						return view(Option.getOrElse(cancelled, () => run))
+					}),
+				)
+				.handle("reviseRun", ({ params, payload }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						const run = yield* ownRun(caller, params.runId, "workflows.run")
+						const revised = yield* launcher.revise(
+							run.organizationId,
+							run.id,
+							payload.revision,
+						)
+						return view(revised)
 					}),
 				)
 				.handle("runReportMarkdown", ({ params }) =>
@@ -338,7 +320,7 @@ export const layerHooks = HttpApiBuilder.group(
 							trigger: "webhook",
 							input: payload,
 							cache: "use",
-							source: { _tag: "Workflow", workflow },
+							workflow,
 						})
 						return { run: run.id }
 					}),

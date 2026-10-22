@@ -23,9 +23,9 @@ const ended = (status: string) =>
 	status === "Completed" || status === "Failed" || status === "Interrupted"
 
 /**
- * Keeps Runs going: it wakes a Run when the Turn that it waits for ends, starts the Runs
- * of schedules, and after a restart starts again the Runs that were open. A lost signal
- * only makes a Run wait until the next check.
+ * Keeps Runs going: it wakes a node when the Turn that it waits for ends, starts the Runs
+ * of schedules, and after a restart starts again the Runs and nodes that were open.
+ * A lost signal only makes a node wait until the next check.
  */
 export const layer = (options: Options = {}) =>
 	Layer.effectDiscard(
@@ -38,11 +38,13 @@ export const layer = (options: Options = {}) =>
 			const scope = yield* Scope.Scope
 			const onTurn = (signal: Extract<Signal, { _tag: "TurnChanged" }>) =>
 				ended(signal.status)
-					? runs.waitingOn(signal.session).pipe(
+					? runs.waitsOn(signal.session).pipe(
 							Effect.flatMap((list) =>
-								Effect.forEach(list, (run) => tasks.wake(run), {
-									discard: true,
-								}),
+								Effect.forEach(
+									list.filter((wait) => wait.turn === signal.turn),
+									(wait) => tasks.wake(wait),
+									{ discard: true },
+								),
 							),
 						)
 					: Effect.void
@@ -54,12 +56,13 @@ export const layer = (options: Options = {}) =>
 							: Effect.logWarning("A Workflow signal failed", cause),
 					),
 				)
-			/** Runs that wait, or that never started, get one more push. */
+			/** Nodes that wait, and Runs that never started, get one more push. */
 			const check = Effect.gen(function* () {
 				const now = yield* Effect.clockWith((clock) => clock.currentTimeMillis)
 				for (const run of yield* runs.open) {
-					if (run.waiting !== null) yield* tasks.wake(run)
-					else if (run.status === "queued" && now - run.createdAt > 30_000)
+					for (const wait of yield* runs.waitsOf(run.organizationId, run.id))
+						yield* tasks.wake(wait)
+					if (run.status === "queued" && now - run.createdAt > 30_000)
 						yield* launcher.resume(run)
 				}
 			})
@@ -74,7 +77,7 @@ export const layer = (options: Options = {}) =>
 							trigger: "schedule",
 							input: {},
 							cache: "use",
-							source: { _tag: "Workflow", workflow: due.workflow },
+							workflow: due.workflow,
 						})
 						.pipe(
 							Effect.catchCause((cause) =>
@@ -91,9 +94,7 @@ export const layer = (options: Options = {}) =>
 			// After a start, Runs that were open go on.
 			yield* runs.open.pipe(
 				Effect.flatMap((open) =>
-					Effect.forEach(open, (run) =>
-						run.waiting === null ? launcher.resume(run) : tasks.wake(run),
-					),
+					Effect.forEach(open, (run) => tasks.recover(run), { discard: true }),
 				),
 				Effect.catchCause((cause) =>
 					Effect.logWarning("Open Workflow Runs could not go on", cause),

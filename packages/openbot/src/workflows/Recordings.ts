@@ -11,16 +11,16 @@ import { unavailable } from "./Workflows.ts"
 const callsCodec = Schema.fromJsonString(Schema.toCodecJson(Calls))
 
 /**
- * The key of the recording of one `Act` step. `goal` is the goal after its templates are filled in.
+ * The key of the recording of one `Task` node. `goal` is the goal after its templates are filled in.
  * Another goal, other input or another Agent makes a new key, so a recording never replays for other work.
  */
 export const keyOf = (input: {
-	readonly step: WorkflowsApi.StepId
+	readonly node: WorkflowsApi.NodeId
 	readonly goal: string
 	readonly agent: AgentsApi.AgentId
-}) => hash([input.step, input.goal, input.agent])
+}) => hash([input.node, input.goal, input.agent])
 
-/** The tool calls of `Act` steps that a later check confirmed. */
+/** The tool calls of `Task` nodes that a later check confirmed. */
 export class Recordings extends Context.Service<
 	Recordings,
 	{
@@ -37,7 +37,7 @@ export class Recordings extends Context.Service<
 			workflowId: string,
 			input: {
 				readonly key: string
-				readonly step: WorkflowsApi.StepId
+				readonly node: WorkflowsApi.NodeId
 				readonly calls: Calls
 				readonly verifiedAt: number
 			},
@@ -97,7 +97,7 @@ export const make = Effect.gen(function* () {
 								organizationId,
 								workflowId,
 								stepKey: input.key,
-								step: input.step,
+								node: input.node,
 								calls,
 								verifiedAt: input.verifiedAt,
 							})
@@ -107,7 +107,7 @@ export const make = Effect.gen(function* () {
 									workflowRecordings.workflowId,
 									workflowRecordings.stepKey,
 								],
-								set: { step: input.step, calls, verifiedAt: input.verifiedAt },
+								set: { node: input.node, calls, verifiedAt: input.verifiedAt },
 							}),
 					),
 				),
@@ -119,13 +119,13 @@ export const make = Effect.gen(function* () {
 					.select()
 					.from(workflowRecordings)
 					.where(of(organizationId, workflowId))
-					.orderBy(workflowRecordings.step),
+					.orderBy(workflowRecordings.node),
 			).pipe(
 				Effect.flatMap((rows) =>
 					Effect.forEach(rows, (row) =>
 						decode(row.calls).pipe(
 							Effect.map((calls): WorkflowsApi.Recording => ({
-								step: row.step as WorkflowsApi.StepId,
+								node: row.node as WorkflowsApi.NodeId,
 								calls,
 								verifiedAt: row.verifiedAt,
 							})),
