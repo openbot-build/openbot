@@ -10,14 +10,15 @@ This page shows how the check works, how a person answers requests, and what eac
 
 ## Capabilities
 
-| Action            | Target                      | When an Agent uses it                                  |
-| ----------------- | --------------------------- | ------------------------------------------------------ |
-| `apps.call`       | `<connection>/<tool name>`  | It calls an App tool.                                  |
-| `tools.call`      | The tool name               | It calls a tool of the host that asks for approval.    |
-| `agents.delegate` | The ID of the other Agent   | It gives work to another lasting Agent.                |
-| `agents.spawn`    | `*`                         | It starts a Session Agent.                             |
-| `agents.create`   | `*`                         | It makes a lasting Agent that it owns.                 |
-| `agents.promote`  | The ID of the Session Agent | It makes a Session Agent a lasting Agent that it owns. |
+| Action            | Target                      | When an Agent uses it                                                      |
+| ----------------- | --------------------------- | -------------------------------------------------------------------------- |
+| `apps.call`       | `<connection>/<tool name>`  | It calls an App tool.                                                      |
+| `tools.call`      | The tool name               | It calls a tool of the host that asks for approval.                        |
+| `agents.delegate` | The ID of the other Agent   | It gives work to another lasting Agent.                                    |
+| `agents.spawn`    | `*`                         | It starts a Session Agent.                                                 |
+| `agents.create`   | `*`                         | It makes a lasting Agent that it owns.                                     |
+| `agents.promote`  | The ID of the Session Agent | It makes a Session Agent a lasting Agent that it owns.                     |
+| `plans.run`       | The ID of the Session       | It wants to carry out its plan. See [Plan mode](/docs/sessions#plan-mode). |
 
 Each capability tool takes a `reason`. App tools get an extra `openbot_reason` parameter for it. OpenBot never sends it to the App.
 
@@ -109,7 +110,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 The waiting work goes on at once. When you deny, the tool does not run. The model gets a tool result with your reason, and the Turn goes on.
 
-A request that nobody answers is denied after 24 hours. An organization can change this time with `requestTimeoutMs` in its [settings](/docs/organization#settings).
+A request that nobody answers is denied after 24 hours. An organization can change this time with `requestTimeoutMs` in its [settings](/docs/organization#settings). A request for a plan has its own time and says in `onExpire` what happens then: `allow` or `deny`.
 
 ### Errors
 

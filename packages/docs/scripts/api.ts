@@ -38,6 +38,11 @@ const groups = [
 	],
 	["sessions", "Sessions", "Give work to an Agent in Sessions and Turns."],
 	[
+		"memberSettings",
+		"Your settings",
+		"Read and change your own settings, such as how your plans are approved.",
+	],
+	[
 		"requests",
 		"Requests",
 		"Answer the requests of your Agents for new capabilities.",

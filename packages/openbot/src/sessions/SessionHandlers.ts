@@ -91,6 +91,9 @@ const implementations = Effect.gen(function* () {
 						sessions: [],
 					},
 					...(payload.title === undefined ? {} : { title: payload.title }),
+					...(payload.planApproval === undefined
+						? {}
+						: { planApproval: payload.planApproval }),
 					...(payload.settings === undefined
 						? {}
 						: { settings: payload.settings }),

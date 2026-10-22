@@ -240,6 +240,11 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 					),
 				),
 		})
+		/** Marks a tool that only reads, so plan mode keeps it. */
+		const reading = (entry: Entry): Entry => ({
+			...entry,
+			tool: entry.tool.annotate(Tool.Readonly, true) as Tools[string],
+		})
 		/** Runs a check and pauses the call when anything fails, so it never runs by mistake. */
 		const pauseOnFailure = (check: Effect.Effect<boolean, unknown>) =>
 			check.pipe(Effect.orElseSucceed(() => true))
@@ -512,57 +517,62 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 						}),
 					),
 			),
-			entry(
-				names.list,
-				"List the Agents you can give work to, with their ids and roles. It includes the Session Agents of this Session.",
-				{ type: "object", properties: {} },
-				() =>
-					Effect.gen(function* () {
-						const current = yield* work
-						const all = yield* agents
-							.list(current.caller, {})
-							.pipe(Effect.provideContext(services))
-						const own = yield* agents.ownedBy(current.caller, current.session)
-						return json(
-							[...all, ...own]
-								.filter(
-									(agent) => agent.id !== current.agent.id && !agent.archived,
-								)
-								.map((agent) => ({
-									id: agent.id,
-									name: agent.name,
-									role: agent.role,
-									kind: agent.kind,
-									owner: agent.owner,
-								})),
-						)
-					}),
+			reading(
+				entry(
+					names.list,
+					"List the Agents you can give work to, with their ids and roles. It includes the Session Agents of this Session.",
+					{ type: "object", properties: {} },
+					() =>
+						Effect.gen(function* () {
+							const current = yield* work
+							const all = yield* agents
+								.list(current.caller, {})
+								.pipe(Effect.provideContext(services))
+							const own = yield* agents.ownedBy(current.caller, current.session)
+							return json(
+								[...all, ...own]
+									.filter(
+										(agent) => agent.id !== current.agent.id && !agent.archived,
+									)
+									.map((agent) => ({
+										id: agent.id,
+										name: agent.name,
+										role: agent.role,
+										kind: agent.kind,
+										owner: agent.owner,
+									})),
+							)
+						}),
+				),
 			),
-			entry(
-				names.details,
-				"Read the role and instructions of one Agent.",
-				{ type: "object", properties: { agent: text }, required: ["agent"] },
-				(input) =>
-					Effect.gen(function* () {
-						const current = yield* work
-						const { agent } = yield* decode(AgentInput)(input)
-						const found = yield* agents.find(
-							current.caller.organizationId,
-							agent,
-						)
-						return Option.match(found, {
-							onNone: () => json({ error: "There is no Agent with this id." }),
-							onSome: (agent) =>
-								json({
-									id: agent.id,
-									name: agent.name,
-									role: agent.role,
-									kind: agent.kind,
-									owner: agent.owner,
-									instructions: agent.instructions,
-								}),
-						})
-					}),
+			reading(
+				entry(
+					names.details,
+					"Read the role and instructions of one Agent.",
+					{ type: "object", properties: { agent: text }, required: ["agent"] },
+					(input) =>
+						Effect.gen(function* () {
+							const current = yield* work
+							const { agent } = yield* decode(AgentInput)(input)
+							const found = yield* agents.find(
+								current.caller.organizationId,
+								agent,
+							)
+							return Option.match(found, {
+								onNone: () =>
+									json({ error: "There is no Agent with this id." }),
+								onSome: (agent) =>
+									json({
+										id: agent.id,
+										name: agent.name,
+										role: agent.role,
+										kind: agent.kind,
+										owner: agent.owner,
+										instructions: agent.instructions,
+									}),
+							})
+						}),
+				),
 			),
 			...(delegated
 				? [

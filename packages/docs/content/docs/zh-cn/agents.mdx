@@ -41,14 +41,15 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/agents
 ```
 
-| 字段           | 含义                                                                             |
-| -------------- | -------------------------------------------------------------------------------- |
-| `name`         | 必填。一个简短的名字。OpenBot 会去掉首尾空格。剩下的部分必须有 1 到 100 个字符。 |
-| `role`         | 必填。用一行话说明 Agent 做什么。其他 Agents 读取它来选择工作者。                |
-| `instructions` | 必填。Agent 的长期指令，类似一份职位说明。                                       |
-| `model`        | 可选。当 Session 没有选择自己的模型时，这个 Agent 的 Session 使用的模型。        |
-| `shared`       | 可选。`true` 会创建一个组织 Agent，每个成员都可以使用。                          |
-| `agent`        | 可选。拥有这个新 Agent 的 Agent 的 ID。它不能和 `shared` 一起使用。              |
+| 字段           | 含义                                                                              |
+| -------------- | --------------------------------------------------------------------------------- |
+| `name`         | 必填。一个简短的名字。OpenBot 会去掉首尾空格。剩下的部分必须有 1 到 100 个字符。  |
+| `role`         | 必填。用一行话说明 Agent 做什么。其他 Agents 读取它来选择工作者。                 |
+| `instructions` | 必填。Agent 的长期指令，类似一份职位说明。                                        |
+| `model`        | 可选。当 Session 没有选择自己的模型时，这个 Agent 的 Session 使用的模型。         |
+| `planApproval` | 可选。这个 Agent 的计划如何被批准。见 [计划模式](/zh-cn/docs/sessions#计划模式)。 |
+| `shared`       | 可选。`true` 会创建一个组织 Agent，每个成员都可以使用。                           |
+| `agent`        | 可选。拥有这个新 Agent 的 Agent 的 ID。它不能和 `shared` 一起使用。               |
 
 OpenBot 返回 `201` 和这个 Agent：
 

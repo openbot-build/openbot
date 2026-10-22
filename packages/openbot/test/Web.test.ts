@@ -288,7 +288,7 @@ test(
 				(
 					await request(alice.session, path + "/mode", "PUT", {
 						expected: completed.session.revision,
-						mode: "default",
+						mode: "build",
 					})
 				).status,
 				409,
@@ -347,7 +347,7 @@ test(
 				body: JSON.stringify({
 					expected: generationOff.session.revision,
 					input: "slow output",
-					overrides: { mode: "default" },
+					overrides: { mode: "build" },
 					stream: true,
 				}),
 			})
@@ -363,7 +363,7 @@ test(
 			controller.abort()
 			const final = await wait()
 			assert.equal(final.response?.status, "completed")
-			assert.equal(final.session.turns.at(-1)!.settings.mode, "default")
+			assert.equal(final.session.turns.at(-1)!.settings.mode, "build")
 			assert.equal(final.session.settings.mode, "plan")
 			assert.equal(host.consolidations(), beforeConsolidations)
 			assert.match(final.response.output[0]!.content[0]!.text, /Progress stays/)

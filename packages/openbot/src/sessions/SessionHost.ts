@@ -2,6 +2,7 @@ import { type Plugin, Session } from "@openbot-build/core"
 import {
 	AgentsApi,
 	MemoryOverrides,
+	PlanApproval,
 	SessionKind,
 	SessionParent,
 } from "@openbot-build/api"
@@ -39,6 +40,8 @@ export const SessionHostState = Schema.Struct({
 	chain: Chain,
 	/** The request that a review Session decides. */
 	review: Schema.optionalKey(Schema.String),
+	/** How plans in this Session are approved, when the Session sets it. */
+	planApproval: Schema.optionalKey(PlanApproval.PlanApproval),
 })
 export type SessionHostState = typeof SessionHostState.Type
 /** The plugin data in a Session: learned memory and the OpenBot data. */

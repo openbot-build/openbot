@@ -805,8 +805,36 @@ export const layer = Layer.effectDiscard(
 				)
 				if (Option.isNone(found)) return
 				const stored = found.value
-				if (stored.request.status === "pending")
+				if (stored.request.status === "pending") {
+					// A request with its own timeout, such as a plan, closes on time. Other
+					// requests and requests after a restart close in the check each minute.
+					if (stored.request.onExpire !== undefined) {
+						const now = yield* Clock.currentTimeMillis
+						yield* Effect.sleep(
+							Duration.millis(Math.max(0, stored.request.expiresAt - now)),
+						).pipe(
+							Effect.andThen(
+								requests.expireOne(signal.organizationId, stored.request.id),
+							),
+							Effect.flatMap(
+								Option.match({
+									onNone: () => Effect.void,
+									onSome: (closed) =>
+										signals.publish({
+											_tag: "RequestChanged",
+											organizationId: signal.organizationId,
+											request: closed.request.id,
+										}),
+								}),
+							),
+							Effect.catchCause((cause) =>
+								Effect.logWarning("A request could not be closed", cause),
+							),
+							Effect.forkIn(scope),
+						)
+					}
 					return yield* review(signal.organizationId, stored)
+				}
 				yield* audit
 					.record({
 						organizationId: signal.organizationId,

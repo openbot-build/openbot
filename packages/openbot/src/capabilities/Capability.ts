@@ -93,6 +93,8 @@ export const permission = (input: {
 			}
 		case "agents.delegate":
 			return onAgent("agents.delegate")
+		// Carrying out a plan is work in the Session, like a tool call.
+		case "plans.run":
 		case "tools.call":
 			return {
 				permission: "responses.run",

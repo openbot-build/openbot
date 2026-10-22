@@ -11,6 +11,7 @@ import * as Memory from "./Memory.ts"
 import { Authorize, GroupRequired, Required, requires } from "./Permissions.ts"
 import { AgentErrors, AgentId, Delegation } from "./AgentsApi.ts"
 import { Name } from "./Name.ts"
+import { PlanApproval } from "./PlanApproval.ts"
 import { Schema } from "effect"
 import { Sse } from "effect/encoding"
 import {
@@ -43,6 +44,8 @@ export const CreateSessionRequest = Schema.Struct({
 	agent: Schema.optionalKey(AgentId),
 	title: Schema.optionalKey(Name),
 	settings: Schema.optionalKey(SettingsPatch),
+	/** How plans in this Session are approved. Without it, the Agent and then the member decide. */
+	planApproval: Schema.optionalKey(PlanApproval),
 })
 export type CreateSessionRequest = typeof CreateSessionRequest.Type
 
@@ -238,6 +241,8 @@ export const SessionView = Schema.Struct({
 	parent: Schema.NullOr(SessionParent),
 	response: Schema.NullOr(SessionResponse),
 	activity: Schema.optionalKey(SessionActivity),
+	/** Only when this Session sets how its plans are approved. */
+	planApproval: Schema.optionalKey(PlanApproval),
 })
 export type SessionView = typeof SessionView.Type
 
@@ -323,6 +328,8 @@ export const UpdateSessionRequest = Schema.Struct({
 	/** A new title. `null` removes the title. */
 	title: Schema.optionalKey(Schema.NullOr(Name)),
 	archived: Schema.optionalKey(Schema.Boolean),
+	/** `null` makes the Session follow its Agent and the member again. */
+	planApproval: Schema.optionalKey(Schema.NullOr(PlanApproval)),
 })
 export const ForkSessionRequest = Schema.Struct({
 	version: Schema.optionalKey(Timeline.VersionId),

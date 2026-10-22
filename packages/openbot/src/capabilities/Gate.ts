@@ -7,7 +7,7 @@ import { Signal, Signals } from "../agents/Signals.ts"
 import { type Capability, describe, permission } from "./Capability.ts"
 import { Grants } from "./Grants.ts"
 import { Judge } from "./Judge.ts"
-import { Requests } from "./Requests.ts"
+import { type Ask, Requests } from "./Requests.ts"
 import { Rules } from "./Rules.ts"
 import { Work } from "./Work.ts"
 
@@ -24,6 +24,8 @@ export interface Attempt {
 	/** The deployment owner allows this without asking, for example a read-only App tool. */
 	readonly implicit?: boolean
 	readonly app?: AppExecution.Invocation
+	/** How the request waits, when the attempt needs one. */
+	readonly ask?: Ask
 }
 
 /**
@@ -127,6 +129,7 @@ export const make: Effect.Effect<
 						turn: current.turn,
 						toolCallId: attempt.toolCallId,
 						...(attempt.app === undefined ? {} : { app: attempt.app }),
+						...(attempt.ask === undefined ? {} : { ask: attempt.ask }),
 						...(decided === undefined ? {} : { decided }),
 					})
 					.pipe(
@@ -165,6 +168,8 @@ export const make: Effect.Effect<
 						".",
 				})
 			if (attempt.implicit === true) return "allow" as const
+			// Some attempts must go to the person, so Grants and Rules do not answer them.
+			if (attempt.ask?.person === true) return yield* record()
 			const grant = yield* grants.match({
 				organizationId,
 				agent: current.agent.id,

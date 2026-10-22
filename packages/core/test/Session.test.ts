@@ -136,7 +136,7 @@ test("Session settings change revision without changing the Timeline or a comple
 				})
 				assert.equal(Session.currentTurn(next.session)!.settings.mode, "plan")
 				assert.notEqual(Session.currentTurn(next.session)!.id, record.id)
-				assert.equal(next.session.turns[0]!.settings.mode, "default")
+				assert.equal(next.session.turns[0]!.settings.mode, "build")
 			}),
 		).pipe(
 			Effect.provide(

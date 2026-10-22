@@ -1,10 +1,18 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { Session } from "@openbot-build/core"
-import { SessionTodos, SessionView } from "@openbot-build/api"
+import {
+	AgentsApi,
+	RequestsApi,
+	SessionTodos,
+	SessionView,
+	Settings,
+} from "@openbot-build/api"
 import { Effect, Redacted, Schema, Stream } from "effect"
 import { LanguageModel, type Prompt, Response } from "effect/ai"
 import { names } from "../src/plugins/work/WorkPlugin.ts"
+
+const planNames = names
 import * as BrowserHost from "./BrowserHost.ts"
 
 const publicOrigin = "https://work.example.com"
@@ -53,7 +61,7 @@ const model = Effect.runSync(
 	LanguageModel.make({
 		generateText: () =>
 			Effect.succeed([Response.makePart("text", { text: '{"changes":[]}' })]),
-		streamText: ({ prompt }) =>
+		streamText: ({ prompt, tools }) =>
 			Stream.suspend((): Stream.Stream<Response.StreamPartEncoded> => {
 				const last = prompt.content.findLastIndex(
 					(message) => message.role === "user",
@@ -63,6 +71,35 @@ const model = Effect.runSync(
 					.slice(last + 1)
 					.some((message) => message.role === "tool")
 				const reminded = input.startsWith("OpenBot reminder")
+				const system = prompt.content
+					.filter((message) => message.role === "system")
+					.map(textOf)
+					.join("\n")
+				const lastResult = JSON.stringify(
+					prompt.content.slice(last + 1).at(-1)?.content ?? "",
+				)
+				if (system.includes("You are in plan mode")) {
+					const names = tools.map((tool) => tool.name)
+					// Plan mode keeps only the tools that read.
+					if (names.includes("openbot_create_agent"))
+						return answer("A tool that changes things leaked.")
+					if (!names.includes("openbot_list_agents"))
+						return answer("A tool that reads is missing.")
+					if (!answered)
+						return call(planNames.submitPlan, {
+							items: [todo("a", "pending"), todo("b", "pending")],
+							summary: "Fix the bug in two steps.",
+						})
+					return answer(
+						lastResult.includes("approved") ? "Plan sent." : "Still planning.",
+					)
+				}
+				if (input.startsWith("OpenBot: your plan is approved"))
+					return answered
+						? answer("Built.")
+						: call(names.todos, {
+								items: [todo("a", "done"), todo("b", "done")],
+							})
 				if (input.includes("do two steps")) {
 					if (answered) return answer("I started.")
 					return call(names.todos, {
@@ -333,6 +370,150 @@ test(
 			// A wrong input does not wait. The Agent gets an error.
 			await work.turn("wait wrongly")
 			assert.match(await text(), /Give either seconds or until, not both/)
+		} finally {
+			await host.close()
+		}
+	},
+)
+
+test(
+	"a plan waits for approval as the most specific setting says, and then runs in build mode",
+	{ timeout: 120000 },
+	async () => {
+		const host = await BrowserHost.start({ publicOrigin, model })
+		try {
+			const { send, json, until } = client(host)
+			const alice = await host.login("plan-alice")
+			const organization = await json(
+				Settings.OrganizationSettings,
+				send(alice.session, "/v1/organization/settings"),
+			)
+			assert.deepEqual(organization.planApproval, {
+				approver: "chain",
+				timeoutMs: 86400000,
+				onTimeout: "stay",
+			})
+			// Alice says that her plans stay plans when nobody answers within one second.
+			const mine = await json(
+				Settings.MemberSettings,
+				send(alice.session, "/v1/me/settings", "PATCH", {
+					expectedVersion: 0,
+					planApproval: {
+						approver: "person",
+						timeoutMs: 1000,
+						onTimeout: "stay",
+					},
+				}),
+			)
+			assert.equal(mine.version, 1)
+			const stale = await send(alice.session, "/v1/me/settings", "PATCH", {
+				expectedVersion: 0,
+				planApproval: null,
+			})
+			assert.equal(stale.status, 409)
+
+			const plan = async (body: Record<string, unknown>) => {
+				const created = await json(
+					SessionView,
+					send(alice.session, "/v1/sessions", "POST", {
+						settings: { mode: "plan" },
+						...body,
+					}),
+				)
+				const path = "/v1/sessions/" + created.session.id
+				const view = () => json(SessionView, send(alice.session, path))
+				const started = await send(alice.session, path + "/turns", "POST", {
+					expected: created.session.revision,
+					input: "plan the fix",
+				})
+				assert.equal(started.status, 202, await started.clone().text())
+				return { path, view }
+			}
+			const settled = (work: Awaited<ReturnType<typeof plan>>, turns: number) =>
+				until("the Session settles", async () => {
+					const current = await work.view()
+					return current.session.turns.length >= turns &&
+						Session.status(current.session)._tag === "Completed"
+						? current
+						: undefined
+				})
+			const pending = () =>
+				until("a plan request", async () => {
+					const list = await json(
+						Schema.Array(RequestsApi.CapabilityRequest),
+						send(alice.session, "/v1/requests?status=pending"),
+					)
+					return list.find(
+						(request) => request.capability.action === "plans.run",
+					)
+				})
+
+			// 1. The Session asks the person and waits. Alice allows it, so the plan runs.
+			const first = await plan({
+				planApproval: {
+					approver: "person",
+					timeoutMs: 600000,
+					onTimeout: "stay",
+				},
+			})
+			const request = await pending()
+			assert.deepEqual(request.approver, {
+				_tag: "Person",
+				userId: alice.identity.userId,
+			})
+			assert.equal(request.onExpire, "deny")
+			const resolved = await send(
+				alice.session,
+				"/v1/requests/" + request.id,
+				"POST",
+				{ expected: request.revision, decision: "allow" },
+			)
+			assert.equal(resolved.status, 200, await resolved.clone().text())
+			const built = await settled(first, 2)
+			assert.equal(built.session.settings.mode, "build")
+			assert.equal(built.session.turns.at(-1)!.settings.mode, "build")
+			assert.deepEqual(
+				(await json(SessionTodos, send(alice.session, first.path + "/todos")))
+					.items,
+				[todo("a", "done"), todo("b", "done")],
+			)
+
+			// 2. The Session says that silence means yes. It wins over the member setting.
+			const second = await plan({
+				planApproval: { approver: "person", timeoutMs: 1000, onTimeout: "run" },
+			})
+			const ran = await settled(second, 2)
+			assert.equal(ran.session.settings.mode, "build")
+
+			// 3. Without a Session setting, the member setting counts: the plan stays a plan.
+			const third = await plan({})
+			const stayed = await settled(third, 1)
+			assert.equal(stayed.session.settings.mode, "plan")
+			assert.equal(stayed.session.turns.length, 1)
+
+			// 4. An Agent setting comes before the member setting.
+			const agents = await json(
+				Schema.Array(AgentsApi.Agent),
+				send(alice.session, "/v1/agents"),
+			)
+			const main = agents.find((agent) => agent.kind === "main")!
+			const changed = await send(
+				alice.session,
+				"/v1/agents/" + main.id,
+				"PATCH",
+				{
+					expected: main.revision,
+					planApproval: {
+						approver: "person",
+						timeoutMs: 1000,
+						onTimeout: "run",
+					},
+				},
+			)
+			assert.equal(changed.status, 200, await changed.clone().text())
+			const fourth = await plan({})
+			const agentRan = await settled(fourth, 2)
+			assert.equal(agentRan.session.settings.mode, "build")
 		} finally {
 			await host.close()
 		}

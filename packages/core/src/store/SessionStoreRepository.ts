@@ -256,7 +256,7 @@ export const make = <S extends Plugin.Stores>(
 				head,
 				revision: Session.Revision.make(0),
 				metadata: { ...metadata, archived: false },
-				settings: { mode: "default", ...settings },
+				settings: { mode: "build", ...settings },
 				pending: [],
 				turns: [],
 				inheritedTurns: [],

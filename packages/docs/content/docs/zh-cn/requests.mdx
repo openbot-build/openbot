@@ -10,14 +10,15 @@ Agent 不知道自己有什么限制。当 Agent 尝试使用一项**能力**（
 
 ## 能力
 
-| 动作              | 目标                       | Agent 何时使用                                     |
-| ----------------- | -------------------------- | -------------------------------------------------- |
-| `apps.call`       | `<connection>/<tool name>` | 调用 App 工具时。                                  |
-| `tools.call`      | 工具名称                   | 调用一个需要批准的宿主工具时。                     |
-| `agents.delegate` | 另一个 Agent 的 ID         | 把工作交给另一个长期存在的 Agent 时。              |
-| `agents.spawn`    | `*`                        | 启动一个 Session Agent 时。                        |
-| `agents.create`   | `*`                        | 创建一个归它所有的长期 Agent 时。                  |
-| `agents.promote`  | Session Agent 的 ID        | 把一个 Session Agent 变成归它所有的长期 Agent 时。 |
+| 动作              | 目标                       | Agent 何时使用                                                   |
+| ----------------- | -------------------------- | ---------------------------------------------------------------- |
+| `apps.call`       | `<connection>/<tool name>` | 调用 App 工具时。                                                |
+| `tools.call`      | 工具名称                   | 调用一个需要批准的宿主工具时。                                   |
+| `agents.delegate` | 另一个 Agent 的 ID         | 把工作交给另一个长期存在的 Agent 时。                            |
+| `agents.spawn`    | `*`                        | 启动一个 Session Agent 时。                                      |
+| `agents.create`   | `*`                        | 创建一个归它所有的长期 Agent 时。                                |
+| `agents.promote`  | Session Agent 的 ID        | 把一个 Session Agent 变成归它所有的长期 Agent 时。               |
+| `plans.run`       | Session 的 ID              | 想执行它的计划时。见 [计划模式](/zh-cn/docs/sessions#计划模式)。 |
 
 每个能力工具都接受一个 `reason`（理由）。App 工具会多一个 `openbot_reason` 参数来传理由。OpenBot 不会把它发给 App。
 
@@ -109,7 +110,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 等待中的工作会立刻继续。当你拒绝时，工具不会运行。模型会收到一个带有你的理由的工具结果，然后 Turn 继续。
 
-没有人回答的请求会在 24 小时后被拒绝。组织可以在[设置](/zh-cn/docs/organization#设置)中用 `requestTimeoutMs` 修改这个时间。
+没有人回答的请求会在 24 小时后被拒绝。组织可以在[设置](/zh-cn/docs/organization#设置)中用 `requestTimeoutMs` 修改这个时间。计划的请求有自己的时间，并在 `onExpire` 中说明到时会怎样：`allow` 或 `deny`。
 
 ### 错误
 

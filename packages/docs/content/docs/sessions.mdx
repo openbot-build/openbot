@@ -37,7 +37,7 @@ OpenBot returns `201` with the Session view. Here is a short form of it:
 		"revision": 0,
 		"head": "v-7d21",
 		"metadata": { "title": "Trip plan" },
-		"settings": { "mode": "default" },
+		"settings": { "mode": "build" },
 		"pending": [],
 		"turns": [],
 		"inheritedTurns": []
@@ -260,6 +260,36 @@ To wait for the work of several Agents at once, the Agent gives them their tasks
 
 ---
 
+## Plan mode
+
+In `plan` mode, the Agent looks things up, but it does not change anything yet. It gets only the tools that just read: the Agent tools that list and read Agents, App resources and prompts, and the App tools that the organization lists in `appReadRules`. It also gets the todo tool and the wait tool.
+
+When the plan is ready, the Agent calls `openbot_submit_plan` with the steps as a todo list and a short summary. OpenBot saves the list and makes a [request](/docs/requests) for the capability `plans.run`. The Turn waits.
+
+- When the request is allowed, the Session moves to `build` mode. A new Turn starts with all tools, and the Agent carries out the plan.
+- When it is denied, the Agent gets the reason and stays in `plan` mode.
+
+The approval setting says who answers and what happens when nobody answers in time:
+
+```json
+{ "approver": "person", "timeoutMs": 600000, "onTimeout": "run" }
+```
+
+| Field       | Values             | What it does                                                                                                |
+| ----------- | ------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `approver`  | `chain`, `person`  | `chain` asks the decider above the Agent, so a Grant or a Rule can answer. `person` always asks the person. |
+| `timeoutMs` | 1 second to 7 days | How long the request waits.                                                                                 |
+| `onTimeout` | `run`, `stay`      | `run` carries out the plan when nobody answers in time. `stay` keeps the Session in `plan` mode.            |
+
+You can set it in four places. The most specific one that is set wins, also when it is looser:
+
+1. The Session: `planApproval` when you create it, or with `PATCH /v1/sessions/:sessionId`. Send `null` to remove it.
+2. The Agent: `planApproval` on the [Agent](/docs/agents).
+3. You: `PATCH /v1/me/settings` with `{ "expectedVersion": 0, "planApproval": { ... } }`. Read your settings with `GET /v1/me/settings`.
+4. The organization: `planApproval` in its [settings](/docs/organization#settings). It is only the default. It cannot forbid a looser setting.
+
+---
+
 ## Models and execution mode
 
 `GET /v1/sessions/:sessionId/models` shows the models you can pick:
@@ -302,9 +332,9 @@ Pick a model for the Session with `PUT /v1/sessions/:sessionId/model`:
 
 A wrong choice returns `400` with `SessionModelInvalid`. The `reason` is `provider-not-found`, `model-not-found` or `unsupported-option`. To use a model for one Turn only, put the selection in `overrides.model` when you start the Turn. See [Models](/docs/models) for how OpenBot gets its models.
 
-The execution mode is `default` or `plan`. Set it with `PUT /v1/sessions/:sessionId/mode` and `{ "expected": 4, "mode": "plan" }`. OpenBot saves the mode on the Session and copies it into each new Turn's `settings`, where tools and plugins can read it.
+The execution mode is `build` or `plan`. `build` is the normal mode: the Agent does the work. In `plan` mode, the Agent writes a plan first. See [Plan mode](#plan-mode). Set the mode with `PUT /v1/sessions/:sessionId/mode` and `{ "expected": 4, "mode": "plan" }`, or with `settings.mode` when you create the Session. OpenBot saves the mode on the Session and copies it into each new Turn's `settings`.
 
-`PUT /v1/sessions/:sessionId/settings` replaces all settings at once: `{ "expected": 4, "settings": { "mode": "default" } }`.
+`PUT /v1/sessions/:sessionId/settings` replaces all settings at once: `{ "expected": 4, "settings": { "mode": "build" } }`.
 
 ---
 

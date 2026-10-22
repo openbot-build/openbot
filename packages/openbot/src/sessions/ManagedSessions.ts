@@ -397,9 +397,11 @@ export const make = <
 		): Effect.Effect<SessionView> =>
 			Effect.gen(function* () {
 				const active = yield* runtime.isActive(view.session.id)
+				const planApproval = SessionHost.hostState(view.session)?.planApproval
 				return {
 					...view,
 					...SessionHost.agentFields(view.session),
+					...(planApproval === undefined ? {} : { planApproval }),
 					response: Option.getOrNull(currentResponse(view)),
 					activity: active
 						? ("active" as const)
@@ -462,6 +464,9 @@ export const make = <
 					chain: input.chain,
 					...(input.parent === undefined ? {} : { parent: input.parent }),
 					...(input.review === undefined ? {} : { review: input.review }),
+					...(input.planApproval === undefined
+						? {}
+						: { planApproval: input.planApproval }),
 				}
 				return yield* store
 					.create({
@@ -546,6 +551,21 @@ export const make = <
 					session: id,
 					expectedRevision: input.expected,
 					update: (view) => {
+						const state = SessionHost.hostState(view.session)
+						// A `null` makes the Session follow its Agent and the member again.
+						const { planApproval: _approval, ...kept } = state
+						const business =
+							input.planApproval === undefined
+								? {}
+								: {
+										business: {
+											...view.session.business,
+											[sessionHostId]:
+												input.planApproval === null
+													? kept
+													: { ...kept, planApproval: input.planApproval },
+										},
+									}
 						// A `null` title removes the title.
 						const title =
 							input.title === undefined
@@ -559,6 +579,7 @@ export const make = <
 										...(title === undefined ? {} : { title }),
 										archived: input.archived ?? view.session.metadata.archived,
 									},
+									...business,
 								},
 							}),
 						] as const)

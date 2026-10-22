@@ -47,6 +47,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `role`         | Pflicht. Was der Agent tut, in einer Zeile. Andere Agents lesen sie, um Arbeiter auszuwählen.                     |
 | `instructions` | Pflicht. Die dauerhaften Anweisungen des Agents, wie eine Stellenbeschreibung.                                    |
 | `model`        | Optional. Das Model der Sessions dieses Agents, wenn eine Session kein eigenes wählt.                             |
+| `planApproval` | Optional. Wie die Pläne dieses Agents erlaubt werden. Siehe [Plan-Modus](/de/docs/sessions#plan-modus).           |
 | `shared`       | Optional. `true` erstellt einen Agent der Organisation, den jedes Member nutzen kann.                             |
 | `agent`        | Optional. Die ID des Agents, dem der neue Agent gehört. Du kannst es nicht zusammen mit `shared` nutzen.          |
 

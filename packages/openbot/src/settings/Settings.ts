@@ -1,6 +1,7 @@
 import { Settings as Api } from "@openbot-build/api"
 import { Context, type Effect, type Option, type Stream } from "effect"
 import type {
+	MemberDocument,
 	OrganizationDocument,
 	PlatformDocument,
 	Scope,
@@ -54,6 +55,20 @@ export class Settings extends Context.Service<
 			) => Effect.Effect<OrganizationDocument, E>,
 		) => Effect.Effect<
 			Snapshot<OrganizationDocument>,
+			E | Api.SettingsConflict | Api.SettingsUnavailable
+		>
+		/** The defaults with version 0 when the member did not change them yet. */
+		readonly member: (
+			organizationId: string,
+			userId: string,
+		) => Effect.Effect<Snapshot<MemberDocument>, Api.SettingsUnavailable>
+		readonly updateMember: <E>(
+			organizationId: string,
+			userId: string,
+			expectedVersion: number,
+			change: (current: MemberDocument) => Effect.Effect<MemberDocument, E>,
+		) => Effect.Effect<
+			Snapshot<MemberDocument>,
 			E | Api.SettingsConflict | Api.SettingsUnavailable
 		>
 		/** Tells every instance that a scope changed, such as `signIn`. */

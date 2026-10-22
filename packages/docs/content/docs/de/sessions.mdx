@@ -37,7 +37,7 @@ OpenBot antwortet mit `201` und der Ansicht der Session. Hier ist eine kurze For
 		"revision": 0,
 		"head": "v-7d21",
 		"metadata": { "title": "Trip plan" },
-		"settings": { "mode": "default" },
+		"settings": { "mode": "build" },
 		"pending": [],
 		"turns": [],
 		"inheritedTurns": []
@@ -260,6 +260,36 @@ Um auf die Arbeit mehrerer Agents zugleich zu warten, gibt der Agent ihnen ihre 
 
 ---
 
+## Plan-Modus
+
+Im Modus `plan` sieht der Agent nach, aber er ändert noch nichts. Er bekommt nur die Werkzeuge, die nur lesen: die Agent-Werkzeuge, die Agents auflisten und lesen, App-Ressourcen und Prompts, und die App-Werkzeuge, die die Organisation in `appReadRules` nennt. Er bekommt auch das Todo-Werkzeug und das Warte-Werkzeug.
+
+Wenn der Plan fertig ist, ruft der Agent `openbot_submit_plan` mit den Schritten als Todo-Liste und einer kurzen Zusammenfassung auf. OpenBot speichert die Liste und erstellt einen [Request](/de/docs/requests) für die Fähigkeit `plans.run`. Der Turn wartet.
+
+- Wenn der Request erlaubt wird, wechselt die Session in den Modus `build`. Ein neuer Turn startet mit allen Werkzeugen, und der Agent führt den Plan aus.
+- Wenn er abgelehnt wird, bekommt der Agent den Grund und bleibt im Modus `plan`.
+
+Die Einstellung für die Erlaubnis sagt, wer antwortet und was passiert, wenn niemand rechtzeitig antwortet:
+
+```json
+{ "approver": "person", "timeoutMs": 600000, "onTimeout": "run" }
+```
+
+| Feld        | Werte                | Was es tut                                                                                                                   |
+| ----------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `approver`  | `chain`, `person`    | `chain` fragt den Entscheider über dem Agent. So kann ein Grant oder eine Rule antworten. `person` fragt immer den Menschen. |
+| `timeoutMs` | 1 Sekunde bis 7 Tage | Wie lange der Request wartet.                                                                                                |
+| `onTimeout` | `run`, `stay`        | `run` führt den Plan aus, wenn niemand rechtzeitig antwortet. `stay` lässt die Session im Modus `plan`.                      |
+
+Du kannst sie an vier Stellen festlegen. Die genaueste Stelle, die etwas festlegt, gewinnt, auch wenn sie lockerer ist:
+
+1. Die Session: `planApproval`, wenn du sie erstellst, oder mit `PATCH /v1/sessions/:sessionId`. Sende `null`, um es zu entfernen.
+2. Der Agent: `planApproval` am [Agent](/de/docs/agents).
+3. Du: `PATCH /v1/me/settings` mit `{ "expectedVersion": 0, "planApproval": { ... } }`. Lies deine Einstellungen mit `GET /v1/me/settings`.
+4. Die Organisation: `planApproval` in ihren [Einstellungen](/de/docs/organization#einstellungen). Das ist nur der Standard. Es kann eine lockerere Einstellung nicht verbieten.
+
+---
+
 ## Models und Ausführungsmodus
 
 `GET /v1/sessions/:sessionId/models` zeigt die Models, die du wählen kannst:
@@ -302,9 +332,9 @@ Wähle ein Model für die Session mit `PUT /v1/sessions/:sessionId/model`:
 
 Eine falsche Wahl ergibt `400` mit `SessionModelInvalid`. Der `reason` ist `provider-not-found`, `model-not-found` oder `unsupported-option`. Um ein Model nur für einen Turn zu nutzen, setze die Auswahl in `overrides.model`, wenn du den Turn startest. Wie OpenBot seine Models bekommt, steht unter [Models](/de/docs/models).
 
-Der Ausführungsmodus ist `default` oder `plan`. Setze ihn mit `PUT /v1/sessions/:sessionId/mode` und `{ "expected": 4, "mode": "plan" }`. OpenBot speichert den Modus in der Session und kopiert ihn in die `settings` jedes neuen Turns. Dort können Werkzeuge und Plugins ihn lesen.
+Der Ausführungsmodus ist `build` oder `plan`. `build` ist der normale Modus: Der Agent macht die Arbeit. Im Modus `plan` schreibt der Agent zuerst einen Plan. Siehe [Plan-Modus](#plan-modus). Setze den Modus mit `PUT /v1/sessions/:sessionId/mode` und `{ "expected": 4, "mode": "plan" }`, oder mit `settings.mode`, wenn du die Session erstellst. OpenBot speichert den Modus in der Session und kopiert ihn in die `settings` jedes neuen Turns.
 
-`PUT /v1/sessions/:sessionId/settings` ersetzt alle Einstellungen auf einmal: `{ "expected": 4, "settings": { "mode": "default" } }`.
+`PUT /v1/sessions/:sessionId/settings` ersetzt alle Einstellungen auf einmal: `{ "expected": 4, "settings": { "mode": "build" } }`.
 
 ---
 

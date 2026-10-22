@@ -12,6 +12,13 @@ import { Effect, Layer, ManagedRuntime, Redacted } from "effect"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
+/** A later migration gives every organization the default plan approval. */
+const planApproval = {
+	approver: "chain",
+	timeoutMs: 86400000,
+	onTimeout: "stay",
+}
+
 const migrations = fileURLToPath(new URL("../migrations", import.meta.url))
 /** The first migration that knows models as their own table. */
 const firstModelMigration = "20261022063828_create_models"
@@ -273,7 +280,12 @@ test("old models become language models, and old organization settings get no de
 					[
 						[
 							"org_a",
-							{ decisionModel: null, rulesModel: null, agentMemoryModel: null },
+							{
+								decisionModel: null,
+								rulesModel: null,
+								agentMemoryModel: null,
+								planApproval,
+							},
 						],
 						[
 							"org_b",
@@ -281,6 +293,7 @@ test("old models become language models, and old organization settings get no de
 								decisionModel: selection,
 								rulesModel: null,
 								agentMemoryModel: null,
+								planApproval,
 							},
 						],
 						["platform", { publicOrigin: "https://a.example" }],
@@ -394,6 +407,7 @@ test("the old default model moves to Agents without a model, and the old helper 
 								decisionModel: null,
 								rulesModel: selection("big"),
 								agentMemoryModel: selection("big"),
+								planApproval,
 							},
 						],
 						[
@@ -402,11 +416,17 @@ test("the old default model moves to Agents without a model, and the old helper 
 								decisionModel: null,
 								rulesModel: selection("small"),
 								agentMemoryModel: selection("small"),
+								planApproval,
 							},
 						],
 						[
 							"org_c",
-							{ decisionModel: null, rulesModel: null, agentMemoryModel: null },
+							{
+								decisionModel: null,
+								rulesModel: null,
+								agentMemoryModel: null,
+								planApproval,
+							},
 						],
 					],
 				)

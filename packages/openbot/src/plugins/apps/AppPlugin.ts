@@ -219,6 +219,8 @@ const entriesFor = (
 			schema: JsonSchema.JsonSchema,
 			description: string,
 			needsApproval: boolean,
+			/** True for a tool that only reads, so plan mode keeps it. */
+			readOnly: boolean,
 			perform: (
 				input: unknown,
 			) => Effect.Effect<
@@ -286,7 +288,7 @@ const entriesFor = (
 									),
 								)
 						: false,
-				}),
+				}).annotate(Tool.Readonly, readOnly) as Entry["tool"],
 				handle: (input, context) =>
 					Effect.gen(function* () {
 						if (context.toolCallId === undefined)
@@ -379,6 +381,10 @@ const entriesFor = (
 				tool.inputSchema,
 				tool.description ?? "Call this App capability.",
 				true,
+				yield* services.policy.isRead({
+					organizationId: organizationOf(owner),
+					source: origin,
+				}),
 				(input) =>
 					Effect.gen(function* () {
 						const args = yield* Schema.decodeUnknownEffect(Schema.JsonObject)(
@@ -415,6 +421,7 @@ const entriesFor = (
 				{ type: "object", properties: {}, additionalProperties: false },
 				resource.description ?? "Read this App resource.",
 				false,
+				true,
 				() =>
 					opened.client.readResource(
 						{ uri: resource.uri },
@@ -429,6 +436,7 @@ const entriesFor = (
 				{ type: "object", additionalProperties: { type: "string" } },
 				template.description ?? "Read this App resource template.",
 				false,
+				true,
 				(input) =>
 					Effect.flatMap(
 						Schema.decodeUnknownEffect(argumentStrings)(input),
@@ -464,6 +472,7 @@ const entriesFor = (
 				},
 				prompt.description ?? "Read this App prompt as external content.",
 				false,
+				true,
 				(input) =>
 					Effect.gen(function* () {
 						const values =

@@ -37,7 +37,7 @@ OpenBot 返回 `201` 和 Session 视图。下面是它的简短形式：
 		"revision": 0,
 		"head": "v-7d21",
 		"metadata": { "title": "Trip plan" },
-		"settings": { "mode": "default" },
+		"settings": { "mode": "build" },
 		"pending": [],
 		"turns": [],
 		"inheritedTurns": []
@@ -260,6 +260,36 @@ OpenBot 会保存每一次等待。重启以后，等待会继续，直到时间
 
 ---
 
+## 计划模式
+
+在 `plan` 模式下，Agent 可以查资料，但还不改动任何东西。它只能用只读取的工具：列出和读取 Agents 的 Agent 工具、App 的资源和 prompt，以及组织在 `appReadRules` 中列出的 App 工具。它也能用待办工具和等待工具。
+
+计划写好后，Agent 调用 `openbot_submit_plan`，把步骤作为待办列表，再加一段简短的总结。OpenBot 会保存这个列表，并为能力 `plans.run` 创建一个 [request](/zh-cn/docs/requests)。Turn 会等待。
+
+- 请求被允许时，Session 切换到 `build` 模式。一个新的 Turn 会带着所有工具开始，Agent 执行计划。
+- 请求被拒绝时，Agent 会得到原因，并留在 `plan` 模式。
+
+批准设置决定由谁回答，以及没人及时回答时会怎样：
+
+```json
+{ "approver": "person", "timeoutMs": 600000, "onTimeout": "run" }
+```
+
+| 字段        | 取值              | 作用                                                                              |
+| ----------- | ----------------- | --------------------------------------------------------------------------------- |
+| `approver`  | `chain`、`person` | `chain` 问 Agent 的上一级决策者，所以 Grant 或 Rule 可以回答。`person` 总是问人。 |
+| `timeoutMs` | 1 秒到 7 天       | 请求等待多久。                                                                    |
+| `onTimeout` | `run`、`stay`     | `run` 表示没人及时回答时就执行计划。`stay` 表示 Session 留在 `plan` 模式。        |
+
+你可以在四个地方设置它。设置了的地方里，最具体的那个生效，即使它更宽松：
+
+1. Session：创建时的 `planApproval`，或者用 `PATCH /v1/sessions/:sessionId`。发送 `null` 可以移除它。
+2. Agent：[Agent](/zh-cn/docs/agents) 上的 `planApproval`。
+3. 你自己：`PATCH /v1/me/settings`，内容是 `{ "expectedVersion": 0, "planApproval": { ... } }`。用 `GET /v1/me/settings` 读取你的设置。
+4. 组织：[设置](/zh-cn/docs/organization#设置)中的 `planApproval`。它只是默认值，不能禁止更宽松的设置。
+
+---
+
 ## 模型和执行模式
 
 `GET /v1/sessions/:sessionId/models` 显示你可以选择的模型：
@@ -302,9 +332,9 @@ OpenBot 会保存每一次等待。重启以后，等待会继续，直到时间
 
 错误的选择会返回 `400` 和 `SessionModelInvalid`。`reason` 是 `provider-not-found`、`model-not-found` 或 `unsupported-option`。如果只想在一个 Turn 中使用某个模型，请在启动 Turn 时把选择放在 `overrides.model` 中。OpenBot 如何得到它的模型，见 [Models](/zh-cn/docs/models)。
 
-执行模式是 `default` 或 `plan`。用 `PUT /v1/sessions/:sessionId/mode` 和 `{ "expected": 4, "mode": "plan" }` 设置它。OpenBot 把模式保存在 Session 上，并把它复制到每个新 Turn 的 `settings` 中，工具和插件可以在那里读取它。
+执行模式是 `build` 或 `plan`。`build` 是普通模式：Agent 直接做事。在 `plan` 模式下，Agent 先写一个计划。见 [计划模式](#计划模式)。用 `PUT /v1/sessions/:sessionId/mode` 和 `{ "expected": 4, "mode": "plan" }` 设置模式，或者在创建 Session 时用 `settings.mode` 设置。OpenBot 把模式保存在 Session 上，并把它复制到每个新 Turn 的 `settings` 中。
 
-`PUT /v1/sessions/:sessionId/settings` 一次替换所有设置：`{ "expected": 4, "settings": { "mode": "default" } }`。
+`PUT /v1/sessions/:sessionId/settings` 一次替换所有设置：`{ "expected": 4, "settings": { "mode": "build" } }`。
 
 ---
 

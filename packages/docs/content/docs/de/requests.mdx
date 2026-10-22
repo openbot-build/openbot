@@ -10,14 +10,15 @@ Diese Seite zeigt dir, wie die Prüfung abläuft, wie eine Person Requests beant
 
 ## Fähigkeiten
 
-| Aktion            | Ziel                       | Wann ein Agent sie nutzt                                                  |
-| ----------------- | -------------------------- | ------------------------------------------------------------------------- |
-| `apps.call`       | `<connection>/<tool name>` | Er ruft ein Tool einer App auf.                                           |
-| `tools.call`      | Der Name des Tools         | Er ruft ein Tool des Hosts auf, das um Erlaubnis fragt.                   |
-| `agents.delegate` | Die ID des anderen Agent   | Er gibt Arbeit an einen anderen dauerhaften Agent.                        |
-| `agents.spawn`    | `*`                        | Er startet einen Session Agent.                                           |
-| `agents.create`   | `*`                        | Er erstellt einen dauerhaften Agent, der ihm gehört.                      |
-| `agents.promote`  | Die ID des Session Agent   | Er macht aus einem Session Agent einen dauerhaften Agent, der ihm gehört. |
+| Aktion            | Ziel                       | Wann ein Agent sie nutzt                                                         |
+| ----------------- | -------------------------- | -------------------------------------------------------------------------------- |
+| `apps.call`       | `<connection>/<tool name>` | Er ruft ein Tool einer App auf.                                                  |
+| `tools.call`      | Der Name des Tools         | Er ruft ein Tool des Hosts auf, das um Erlaubnis fragt.                          |
+| `agents.delegate` | Die ID des anderen Agent   | Er gibt Arbeit an einen anderen dauerhaften Agent.                               |
+| `agents.spawn`    | `*`                        | Er startet einen Session Agent.                                                  |
+| `agents.create`   | `*`                        | Er erstellt einen dauerhaften Agent, der ihm gehört.                             |
+| `agents.promote`  | Die ID des Session Agent   | Er macht aus einem Session Agent einen dauerhaften Agent, der ihm gehört.        |
+| `plans.run`       | Die ID der Session         | Er will seinen Plan ausführen. Siehe [Plan-Modus](/de/docs/sessions#plan-modus). |
 
 Jedes Tool für eine Fähigkeit nimmt einen `reason` (einen Grund). Tools einer App bekommen dafür einen zusätzlichen Parameter `openbot_reason`. OpenBot schickt ihn nie an die App.
 
@@ -109,7 +110,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 Die wartende Arbeit geht sofort weiter. Wenn du ablehnst, läuft das Tool nicht. Das Modell bekommt ein Tool-Ergebnis mit deinem Grund, und der Turn geht weiter.
 
-Ein Request, den niemand beantwortet, wird nach 24 Stunden abgelehnt. Eine Organization kann diese Zeit mit `requestTimeoutMs` in ihren [Einstellungen](/de/docs/organization#einstellungen) ändern.
+Ein Request, den niemand beantwortet, wird nach 24 Stunden abgelehnt. Eine Organization kann diese Zeit mit `requestTimeoutMs` in ihren [Einstellungen](/de/docs/organization#einstellungen) ändern. Ein Request für einen Plan hat seine eigene Zeit und sagt in `onExpire`, was dann passiert: `allow` oder `deny`.
 
 ### Fehler
 

@@ -97,6 +97,11 @@ Jede Organisation hat ihre eigenen Einstellungen. Sie liegen in der Datenbank. S
 	"memory": { "use": true, "generate": true },
 	"agentMemory": true,
 	"requestTimeoutMs": 86400000,
+	"planApproval": {
+		"approver": "chain",
+		"timeoutMs": 86400000,
+		"onTimeout": "stay"
+	},
 	"appReadRules": [],
 	"defaultRoles": ["member"],
 	"joinByDomain": true,
@@ -104,17 +109,18 @@ Jede Organisation hat ihre eigenen Einstellungen. Sie liegen in der Datenbank. S
 }
 ```
 
-| Feld               | Standard     | Was es tut                                                                                                                                     |
-| ------------------ | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rulesModel`       | `null`       | Das Model, das [Rules](/de/docs/rules) beurteilt. `null` heißt: Kein Model beurteilt sie. Siehe [Models](/de/docs/models#ein-model-auswählen). |
-| `agentMemoryModel` | `null`       | Das Model, das [Agent-Memory](/de/docs/memory#agent-memory) lernt. `null` heißt: Agents lernen nichts.                                         |
-| `decisionModel`    | `null`       | Das Decision-Model, zum Beispiel Jev. Es muss ein `decision`-Model sein. `null` heißt: keins. Siehe [Models](/de/docs/models#decision-model).  |
-| `memory`           | beide an     | Die Memory-Schalter `use` und `generate` einer neuen Session. Siehe [Memory](/de/docs/memory#schalter).                                        |
-| `agentMemory`      | `true`       | Agent-Memory nach jedem Turn lernen.                                                                                                           |
-| `requestTimeoutMs` | 24 Stunden   | Wie lange ein [Request](/de/docs/requests) auf eine Antwort wartet, bevor OpenBot ihn ablehnt. Von 1 Sekunde bis 7 Tage.                       |
-| `appReadRules`     | `[]`         | App-Werkzeuge, die nur lesen: `{ cardUrl, tool }`. Siehe [Requests](/de/docs/requests).                                                        |
-| `defaultRoles`     | `["member"]` | Die Roles eines neuen Members.                                                                                                                 |
-| `joinByDomain`     | `true`       | Menschen mit einer geprüften E-Mail in einer bestätigten Domain der Organisation treten bei, wenn sie sich anmelden.                           |
+| Feld               | Standard                                                         | Was es tut                                                                                                                                     |
+| ------------------ | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rulesModel`       | `null`                                                           | Das Model, das [Rules](/de/docs/rules) beurteilt. `null` heißt: Kein Model beurteilt sie. Siehe [Models](/de/docs/models#ein-model-auswählen). |
+| `agentMemoryModel` | `null`                                                           | Das Model, das [Agent-Memory](/de/docs/memory#agent-memory) lernt. `null` heißt: Agents lernen nichts.                                         |
+| `decisionModel`    | `null`                                                           | Das Decision-Model, zum Beispiel Jev. Es muss ein `decision`-Model sein. `null` heißt: keins. Siehe [Models](/de/docs/models#decision-model).  |
+| `memory`           | beide an                                                         | Die Memory-Schalter `use` und `generate` einer neuen Session. Siehe [Memory](/de/docs/memory#schalter).                                        |
+| `agentMemory`      | `true`                                                           | Agent-Memory nach jedem Turn lernen.                                                                                                           |
+| `requestTimeoutMs` | 24 Stunden                                                       | Wie lange ein [Request](/de/docs/requests) auf eine Antwort wartet, bevor OpenBot ihn ablehnt. Von 1 Sekunde bis 7 Tage.                       |
+| `planApproval`     | den Entscheider darüber fragen, nach 24 Stunden ein Plan bleiben | Wie ein Plan erlaubt wird, wenn kein Member, Agent und keine Session es festlegt. Siehe [Plan-Modus](/de/docs/sessions#plan-modus).            |
+| `appReadRules`     | `[]`                                                             | App-Werkzeuge, die nur lesen: `{ cardUrl, tool }`. Siehe [Requests](/de/docs/requests).                                                        |
+| `defaultRoles`     | `["member"]`                                                     | Die Roles eines neuen Members.                                                                                                                 |
+| `joinByDomain`     | `true`                                                           | Menschen mit einer geprüften E-Mail in einer bestätigten Domain der Organisation treten bei, wenn sie sich anmelden.                           |
 
 `PATCH /v1/organization/settings` ändert sie. Es braucht `organization.write`. Der Body braucht `expectedVersion`, also die `version`, die du gelesen hast. Füge nur die Felder hinzu, die du ändern willst.
 

@@ -17,6 +17,9 @@ import { and, eq, sql } from "drizzle-orm"
 import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { settings } from "../database/Schema.ts"
 import {
+	MemberDocument,
+	memberDefaults,
+	memberScope,
 	OrganizationDocument,
 	organizationDefaults,
 	organizationScope,
@@ -35,11 +38,12 @@ export const channel = "openbot_settings"
 
 const platformCodec = Schema.fromJsonString(PlatformDocument)
 const organizationCodec = Schema.fromJsonString(OrganizationDocument)
+const memberCodec = Schema.fromJsonString(MemberDocument)
 
 const columns = (scope: DocumentScope) =>
 	scope.kind === "platform"
 		? { scopeKind: "platform", scopeId: "platform" }
-		: { scopeKind: "organization", scopeId: scope.id }
+		: { scopeKind: scope.kind, scopeId: scope.id }
 
 export const make = Effect.gen(function* () {
 	const db = yield* makeWithDefaults()
@@ -115,12 +119,40 @@ export const make = Effect.gen(function* () {
 				),
 			),
 	})
+	const memberCache = yield* Cache.make({
+		capacity: 10_000,
+		timeToLive,
+		lookup: (key: string) =>
+			read({ kind: "member", id: key }).pipe(
+				Effect.flatMap(
+					Option.match({
+						onNone: () =>
+							Effect.succeed<Snapshot<MemberDocument>>({
+								document: memberDefaults,
+								version: 0,
+								updatedAt: 0,
+							}),
+						onSome: (row) =>
+							Schema.decodeEffect(memberCodec)(row.document).pipe(
+								Effect.map((document): Snapshot<MemberDocument> => ({
+									document,
+									version: row.version,
+									updatedAt: row.updatedAt,
+								})),
+								Effect.mapError(unavailable),
+							),
+					}),
+				),
+			),
+	})
 	const invalidate = (scope: Scope) =>
 		scope.kind === "platform"
 			? Cache.invalidate(platformCache, "platform")
 			: scope.kind === "organization"
 				? Cache.invalidate(organizationCache, scope.id)
-				: Effect.void
+				: scope.kind === "member"
+					? Cache.invalidate(memberCache, scope.id)
+					: Effect.void
 
 	const pubsub = yield* PubSub.unbounded<Scope>()
 	yield* Effect.addFinalizer(() => PubSub.shutdown(pubsub))
@@ -134,6 +166,7 @@ export const make = Effect.gen(function* () {
 			const notices = yield* client.listen(channel)
 			yield* Cache.invalidateAll(platformCache)
 			yield* Cache.invalidateAll(organizationCache)
+			yield* Cache.invalidateAll(memberCache)
 			while (true) {
 				const notice = yield* Queue.take(notices)
 				const scope = parseScopeKey(notice.payload)
@@ -287,6 +320,17 @@ export const make = Effect.gen(function* () {
 				expectedVersion,
 				codec: organizationCodec,
 				initial: Option.some(organizationDefaults),
+				change,
+				missing: unavailable,
+			}),
+		member: (organizationId, userId) =>
+			Cache.get(memberCache, memberScope({ organizationId, userId }).id),
+		updateMember: (organizationId, userId, expectedVersion, change) =>
+			write({
+				scope: memberScope({ organizationId, userId }),
+				expectedVersion,
+				codec: memberCodec,
+				initial: Option.some(memberDefaults),
 				change,
 				missing: unavailable,
 			}),
