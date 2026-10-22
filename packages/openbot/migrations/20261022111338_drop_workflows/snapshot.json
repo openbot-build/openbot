@@ -1,0 +1,439 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "7b6cb4d1-b186-4823-b6d0-65ddb0a4bbeb",
+	"prevIds": ["095ad990-ac2c-441d-a2d0-eb81bd9c7d97"],
+	"footprints": [
+		{
+			"statementType": "drop_fk",
+			"statementTarget": ["table", "public", "openbot_workflow_recordings"],
+			"writes": [
+				"s|fk|public.openbot_workflow_recordings.openbot_workflow_recordings_qHUhb7a5aVIj_fkey",
+				"n|fk|public.openbot_workflow_recordings.openbot_workflow_recordings_qHUhb7a5aVIj_fkey",
+				"e|fk|public.openbot_workflow_recordings.openbot_workflow_recordings_qHUhb7a5aVIj_fkey",
+				"n|con|public.openbot_workflow_recordings.openbot_workflow_recordings_qHUhb7a5aVIj_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_workflow_recordings",
+				"n|sch|public",
+				"e|col|public.openbot_workflow_recordings.organization_id",
+				"e|col|public.openbot_workflow_recordings.workflow_id"
+			]
+		},
+		{
+			"statementType": "drop_fk",
+			"statementTarget": ["table", "public", "openbot_workflow_runs"],
+			"writes": [
+				"s|fk|public.openbot_workflow_runs.openbot_workflow_runs_vsPNiGW05x4T_fkey",
+				"n|fk|public.openbot_workflow_runs.openbot_workflow_runs_vsPNiGW05x4T_fkey",
+				"e|fk|public.openbot_workflow_runs.openbot_workflow_runs_vsPNiGW05x4T_fkey",
+				"n|con|public.openbot_workflow_runs.openbot_workflow_runs_vsPNiGW05x4T_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_workflow_runs",
+				"n|sch|public",
+				"e|col|public.openbot_workflow_runs.organization_id",
+				"e|col|public.openbot_workflow_runs.workflow_id"
+			]
+		},
+		{
+			"statementType": "drop_fk",
+			"statementTarget": ["table", "public", "openbot_workflow_revisions"],
+			"writes": [
+				"s|fk|public.openbot_workflow_revisions.openbot_workflow_revisions_BkHC5J7yCb0p_fkey",
+				"n|fk|public.openbot_workflow_revisions.openbot_workflow_revisions_BkHC5J7yCb0p_fkey",
+				"e|fk|public.openbot_workflow_revisions.openbot_workflow_revisions_BkHC5J7yCb0p_fkey",
+				"n|con|public.openbot_workflow_revisions.openbot_workflow_revisions_BkHC5J7yCb0p_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_workflow_revisions",
+				"n|sch|public",
+				"e|col|public.openbot_workflow_revisions.organization_id",
+				"e|col|public.openbot_workflow_revisions.workflow_id"
+			]
+		},
+		{
+			"statementType": "drop_fk",
+			"statementTarget": ["table", "public", "openbot_workflow_waits"],
+			"writes": [
+				"s|fk|public.openbot_workflow_waits.openbot_workflow_waits_5YTRkblv18YZ_fkey",
+				"n|fk|public.openbot_workflow_waits.openbot_workflow_waits_5YTRkblv18YZ_fkey",
+				"e|fk|public.openbot_workflow_waits.openbot_workflow_waits_5YTRkblv18YZ_fkey",
+				"n|con|public.openbot_workflow_waits.openbot_workflow_waits_5YTRkblv18YZ_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_workflow_waits",
+				"n|sch|public",
+				"e|col|public.openbot_workflow_waits.organization_id",
+				"e|col|public.openbot_workflow_waits.run_id"
+			]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": ["table", "public", "openbot_workflow_recordings"],
+			"writes": [
+				"s|tbl|public.openbot_workflow_recordings",
+				"n|tbl|public.openbot_workflow_recordings",
+				"e|tbl|public.openbot_workflow_recordings",
+				"n|rel|public.openbot_workflow_recordings",
+				"n|type|public.openbot_workflow_recordings"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": ["table", "public", "openbot_workflow_runs"],
+			"writes": [
+				"s|tbl|public.openbot_workflow_runs",
+				"n|tbl|public.openbot_workflow_runs",
+				"e|tbl|public.openbot_workflow_runs",
+				"n|rel|public.openbot_workflow_runs",
+				"n|type|public.openbot_workflow_runs"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": ["table", "public", "openbot_workflows"],
+			"writes": [
+				"s|tbl|public.openbot_workflows",
+				"n|tbl|public.openbot_workflows",
+				"e|tbl|public.openbot_workflows",
+				"n|rel|public.openbot_workflows",
+				"n|type|public.openbot_workflows"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": ["table", "public", "openbot_workflow_revisions"],
+			"writes": [
+				"s|tbl|public.openbot_workflow_revisions",
+				"n|tbl|public.openbot_workflow_revisions",
+				"e|tbl|public.openbot_workflow_revisions",
+				"n|rel|public.openbot_workflow_revisions",
+				"n|type|public.openbot_workflow_revisions"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": ["table", "public", "openbot_workflow_waits"],
+			"writes": [
+				"s|tbl|public.openbot_workflow_waits",
+				"n|tbl|public.openbot_workflow_waits",
+				"e|tbl|public.openbot_workflow_waits",
+				"n|rel|public.openbot_workflow_waits",
+				"n|type|public.openbot_workflow_waits"
+			],
+			"reads": ["n|sch|public"]
+		}
+	],
+	"deltas": [
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_workflow_recordings\"]"
+		},
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_workflow_runs\"]"
+		},
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_workflows\"]"
+		},
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_workflow_revisions\"]"
+		},
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_workflow_waits\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_recordings\",\"organization_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_recordings\",\"workflow_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_recordings\",\"step_key\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_recordings\",\"calls\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_recordings\",\"verified_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_runs\",\"organization_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_runs\",\"id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_runs\",\"workflow_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_runs\",\"user_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_runs\",\"trigger\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_runs\",\"status\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_runs\",\"body\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_runs\",\"parent_session\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_runs\",\"parent_tool_call\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_runs\",\"created_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_runs\",\"finished_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"organization_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"owner_kind\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"owner_user_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"owner_agent\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"name\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"description\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"agent\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"definition\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"schedule_cron\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"schedule_time_zone\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"next_run_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"hook_secret_hash\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"actor\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"revision\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"archived\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"created_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"updated_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_recordings\",\"node\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_revisions\",\"organization_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_revisions\",\"workflow_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_revisions\",\"revision\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_revisions\",\"definition\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_revisions\",\"created_at\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_runs\",\"parent_run\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_runs\",\"parent_node\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_runs\",\"parent_key\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_waits\",\"organization_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_waits\",\"run_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_waits\",\"task\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_waits\",\"session\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_waits\",\"turn\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflow_waits\",\"token\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"origin\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_workflows\",\"passed_revision\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_workflow_runs_user\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_workflow_runs_workflow\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_workflow_runs_status\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_workflow_runs_parent\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_workflows_id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_workflows_owner\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_workflows_owner_agent\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_workflows_due\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_workflow_runs_parent_run\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_workflow_waits_turn\"]"
+		},
+		{
+			"op": "drop",
+			"key": "fks\u0000[\"public\",\"openbot_workflow_recordings\",\"openbot_workflow_recordings_qHUhb7a5aVIj_fkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "fks\u0000[\"public\",\"openbot_workflow_runs\",\"openbot_workflow_runs_vsPNiGW05x4T_fkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "fks\u0000[\"public\",\"openbot_workflow_revisions\",\"openbot_workflow_revisions_BkHC5J7yCb0p_fkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "fks\u0000[\"public\",\"openbot_workflow_runs\",\"openbot_workflow_runs_d3FodOtfmHmq_fkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "fks\u0000[\"public\",\"openbot_workflow_waits\",\"openbot_workflow_waits_5YTRkblv18YZ_fkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_workflow_recordings\",\"openbot_workflow_recordings_pkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_workflow_runs\",\"openbot_workflow_runs_pkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_workflows\",\"openbot_workflows_pkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_workflow_revisions\",\"openbot_workflow_revisions_pkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_workflow_waits\",\"openbot_workflow_waits_pkey\"]"
+		}
+	]
+}

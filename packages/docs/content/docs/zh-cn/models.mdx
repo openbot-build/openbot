@@ -1,0 +1,393 @@
+---
+title: Model
+description: 通过模型和模型提供方，把 OpenBot 连接到语言模型。
+---
+
+Agent 需要一个语言模型才能工作。OpenBot 不自带模型。你需要连接一个。
+OpenBot 为此保存两种记录：
+
+- **Model**（模型）描述一个语言模型，比如 `gpt-5`：它的名称、选项和限制。模型不属于某个提供方。
+- **Model Provider**（模型提供方）是一个模型服务和它的 API 密钥。提供方会**关联**它提供的模型。关联可以只为这个提供方修改模型的某些值。
+
+两者都通过 API 添加。OpenBot 把它们保存在数据库中，所以每个实例使用的都是同一份。
+
+每个模型和每个提供方都归平台或某个组织所有：
+
+| 所有者 | 谁添加                     | 谁可以使用                                                                                 |
+| ------ | -------------------------- | ------------------------------------------------------------------------------------------ |
+| 组织   | 组织，使用自己的密钥       | 只有这个组织。这就是"自带密钥"。                                                           |
+| 平台   | 平台管理员，使用平台的密钥 | 它的 `availability` 中列出的组织。参见 [Platform](/zh-cn/docs/platform#共享的模型提供方)。 |
+
+只有当组织既能使用提供方、也能使用模型时，它才能使用该提供方的这个模型。
+
+每个模型有两种类型之一：
+
+- `language` 模型会写文本、调用工具。它运行 Session、评判 Rule，并学习 Agent 记忆。
+- `decision` 模型只从固定的列表中选一个答案。它不写文本。TypeSafe 的 Jev 就是一个例子。见[决策模型](#决策模型)。
+
+当你从代码中运行 OpenBot 时，还可以提供内置模型。参见[内置模型](#内置模型)。
+
+---
+
+## 添加模型
+
+`POST /v1/organization/models` 向你的组织添加一个模型。它需要 `model_providers.write`。
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "id": "qwen3-32b", "name": "Qwen3 32B", "reasoningEfforts": [], "serviceTiers": [], "contextWindow": 131072 }' \
+  https://api.example.com/v1/organization/models
+```
+
+| 字段               | 规则                                                                                                                 |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `id`               | 必填。1 到 200 个字符。它对所有者来说是唯一的，并且不能修改。提供方把它作为模型名称发送，除非关联设置了 `upstream`。 |
+| `name`             | 必填。给人看的名称。                                                                                                 |
+| `reasoningEfforts` | 必填。模型接受的 `reasoningEffort` 值。可以为空。                                                                    |
+| `serviceTiers`     | 必填。模型接受的 `serviceTier` 值。可以为空。                                                                        |
+| `contextWindow`    | 可选。上下文窗口的大小，单位是 token。                                                                               |
+| `maxOutputTokens`  | 可选。模型在一次回答中最多能写的 token 数。                                                                          |
+
+如果你的组织已经有一个使用这个 `id` 的模型，OpenBot 会返回 `409` 和 `ModelConflict`。
+
+| 路由                                      | 作用                                                                       |
+| ----------------------------------------- | -------------------------------------------------------------------------- |
+| `GET /v1/organization/models`             | 列出你组织的模型。共享的模型不在这个列表中。                               |
+| `GET /v1/organization/models/:modelId`    | 读取一个模型。                                                             |
+| `PATCH /v1/organization/models/:modelId`  | 修改一个模型。请求体需要 `expectedVersion`。某个限制传 `null` 即可删除它。 |
+| `DELETE /v1/organization/models/:modelId` | 移除一个模型。                                                             |
+
+读取需要 `model_providers.read`。修改需要 `model_providers.write`。
+当你的某个提供方关联着一个模型时，你不能移除它。OpenBot 会返回 `409` 和 `ModelInUse`。请先移除关联。
+
+## 添加提供方
+
+`POST /v1/organization/model_providers` 向你的组织添加一个提供方。它需要 `model_providers.write`。
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "kind": "openai-compat",
+    "name": "Local vLLM",
+    "endpoint": "https://llm.example.com/v1",
+    "apiKey": "sk-...",
+    "models": [
+      { "model": "qwen3-32b", "modelOwner": "organization", "upstream": "Qwen/Qwen3-32B" }
+    ]
+  }' \
+  https://api.example.com/v1/organization/model_providers
+```
+
+| 字段       | 规则                                                                                                                               |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`     | 必填。服务使用的 API：`openai`、`anthropic` 或 `openai-compat`。见下表。                                                           |
+| `name`     | 必填。1 到 120 个字符。                                                                                                            |
+| `endpoint` | 对 `openai-compat` 必填。对其他类型可选。一个 `http` 或 `https` 基础 URL，通常以 `/v1` 结尾。不能带用户名、密码、查询或 `#` 部分。 |
+| `apiKey`   | 必填。OpenBot 加密保存它，并且只把它发送到该端点。                                                                                 |
+| `models`   | 必填。0 到 200 个关联。顺序就是模型列表的顺序。                                                                                    |
+
+| `kind`          | API                                             |
+| --------------- | ----------------------------------------------- |
+| `openai`        | OpenAI Responses API。                          |
+| `anthropic`     | Anthropic Messages API。                        |
+| `openai-compat` | OpenAI Chat Completions API，以及仿照它的服务。 |
+
+每个关联有下面这些字段：
+
+| 字段               | 规则                                                           |
+| ------------------ | -------------------------------------------------------------- |
+| `model`            | 必填。模型的 `id`。一个提供方对每个模型 ID 只能关联一次。      |
+| `modelOwner`       | 必填。你组织的模型用 `organization`，共享的模型用 `platform`。 |
+| `upstream`         | 可选。服务收到的模型名称，在它不同于模型 `id` 时使用。         |
+| `reasoningEfforts` | 可选。为这个提供方替换模型的 `reasoningEfforts`。              |
+| `serviceTiers`     | 可选。为这个提供方替换模型的 `serviceTiers`。                  |
+| `contextWindow`    | 可选。为这个提供方替换模型的 `contextWindow`。                 |
+| `maxOutputTokens`  | 可选。为这个提供方替换模型的 `maxOutputTokens`。               |
+
+你组织的提供方可以关联你自己的模型，以及平台向你开放的共享模型。对于任何其他模型，OpenBot 会返回 `404` 和 `ModelNotFound`。
+
+OpenBot 会返回这个提供方。它的 `id` 以 `prov_` 开头。提供方 ID 在整个平台中是唯一的。模型选择用 `provider` 指明它。
+API 密钥永远不会返回。响应中显示的是 `apiKey: { set, hint }`。参见 [Platform](/zh-cn/docs/platform#机密永远不会返回)。
+
+### 修改或移除提供方
+
+| 路由                                                  | 作用             |
+| ----------------------------------------------------- | ---------------- |
+| `GET /v1/organization/model_providers`                | 列出提供方。     |
+| `GET /v1/organization/model_providers/:providerId`    | 读取一个提供方。 |
+| `PATCH /v1/organization/model_providers/:providerId`  | 修改一个提供方。 |
+| `DELETE /v1/organization/model_providers/:providerId` | 移除一个提供方。 |
+
+读取需要 `model_providers.read`。修改需要 `model_providers.write`。
+
+`PATCH` 的请求体需要 `expectedVersion`，也就是你读到的 `version`。如果有人在你读取之后修改了提供方，OpenBot 会返回 `409` 和 `ModelProviderConflict`。不填 `apiKey` 即可保留当前密钥。发送 `models` 会替换提供方的所有关联。
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":0,"apiKey":"sk-new..."}' \
+  https://api.example.com/v1/organization/model_providers/prov_4c1e...
+```
+
+修改之后的下一次模型调用会使用新的密钥、端点或关联。OpenBot 对每个模型只构建一次，在它的提供方变化时再重新构建。
+
+当[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel`、`agentMemoryModel` 或 `decisionModel` 指向某个提供方时，你不能移除它。OpenBot 会返回 `409` 和 `ModelProviderInUse`。请先修改设置。
+
+---
+
+## 选择模型
+
+`GET /v1/organization/model_catalog` 列出你的组织现在可以使用的模型。它需要 `models.use`。
+每一项都是某个提供方的一个模型，关联中的值已经应用。被两个提供方关联的模型会显示两次。
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/organization/model_catalog
+```
+
+```json
+{
+	"providers": [
+		{
+			"id": "prov_4c1e...",
+			"owner": "organization",
+			"kind": "openai-compat",
+			"name": "Local vLLM"
+		}
+	],
+	"models": [
+		{
+			"provider": "prov_4c1e...",
+			"id": "qwen3-32b",
+			"owner": "organization",
+			"name": "Qwen3 32B",
+			"reasoningEfforts": [],
+			"serviceTiers": [],
+			"contextWindow": 131072
+		}
+	],
+	"decisionModel": null
+}
+```
+
+模型选择同时指明提供方和模型 ID：
+
+```json
+{ "_tag": "Config.Selection", "provider": "prov_4c1e...", "model": "qwen3-32b" }
+```
+
+OpenBot 从不替你选模型。没有默认模型。每种用途都要指明自己的模型：
+
+- **新 Session** 使用请求中的 `settings.model`。没有它时，Session 使用它的 [Agent](/zh-cn/docs/agents) 的 `model`。两者都没有模型时，OpenBot 返回 `400`、`SessionModelInvalid` 和原因 `missing`。你的 Main Agent 一开始没有模型，所以请先用 `PATCH /v1/agents/:id` 设置它的 `model`。
+- **[Rule](/zh-cn/docs/rules) 的评判**使用[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel`。它为 `null` 时，评判不给出答案，由人或 Agent 来决定。
+- **[Agent 记忆](/zh-cn/docs/memory#agent-记忆)**使用同一份设置中的 `agentMemoryModel`。它为 `null` 时，Agent 什么都不学。
+
+`rulesModel` 和 `agentMemoryModel` 必须是 `language` 模型。目录会给出每个模型的 `type`，Session 只能选择 `language` 模型。
+
+旧版本的 OpenBot 有 `defaultModel` 和 `helperModel`。升级时，OpenBot 把旧的 `defaultModel` 给每个没有模型的 Agent。`rulesModel` 和 `agentMemoryModel` 得到旧的辅助模型：`helperModel`，没有时用 `defaultModel`。如果两者都是 `null`，新的值保持为空，你必须设置它们。
+
+例如，要给你的 Main Agent 设置模型，把它当前的 `revision` 作为 `expected` 发送：
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"expected":0,"model":{"_tag":"Config.Selection","provider":"prov_4c1e...","model":"qwen3-32b"}}' \
+  https://api.example.com/v1/agents/$AGENT_ID
+```
+
+Session 可以保存自己的选择。把当前的 Session 修订版本作为 `expected` 发送：
+
+```sh
+curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"expected":3,"selection":{"_tag":"Config.Selection","provider":"prov_4c1e...","model":"qwen3-32b"}}' \
+  https://api.example.com/v1/sessions/$SESSION_ID/model
+```
+
+`GET /v1/sessions/:id/models` 为一个 Session 显示同样的模型。所有字段参见 [Sessions API 参考](/docs/api/operations/tags/sessions/)。
+
+要限制成员可以选择哪些提供方，请在 `openbot.org.<org>.model.<providerId>` 上使用 `models.use`。参见[权限](/zh-cn/docs/permissions#限制模型)。
+
+## 决策模型
+
+[组织设置](/zh-cn/docs/organization#设置)中的 `decisionModel` 指明你的组织的决策模型。它必须是你的某个提供方提供的 `decision` 模型。否则 OpenBot 返回 `400` 和 `SettingsInvalid`。`null` 表示你的组织没有决策模型。
+
+例如，要通过 TypeSafe 使用 Jev，先添加模型，再添加关联它的提供方，最后修改设置：
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "id": "jev-latest", "type": "decision", "name": "Jev", "reasoningEfforts": [], "serviceTiers": [] }' \
+  https://api.example.com/v1/organization/models
+
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" -H "Content-Type: application/json" \
+  -d '{
+    "kind": "typesafe",
+    "name": "TypeSafe",
+    "endpoint": "https://typesafe.example.com/v1",
+    "apiKey": "...",
+    "models": [{ "model": "jev-latest", "modelOwner": "organization" }]
+  }' \
+  https://api.example.com/v1/organization/model_providers
+
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H "Content-Type: application/json" \
+  -d '{"expectedVersion":3,"decisionModel":{"_tag":"Config.Selection","provider":"prov_9a2b...","model":"jev-latest"}}' \
+  https://api.example.com/v1/organization/settings
+```
+
+`GET /v1/organization/model_catalog` 把这个设置显示为 `decisionModel`。
+
+OpenBot 用 Effect 的 TypeSafe 客户端（`@effect/ai-typesafe`）调用 `typesafe` 提供方。它把每个请求发到 `<endpoint>/systemone`，把 API 密钥作为 bearer token，并把 `upstream` 作为模型名发送。OpenBot 为每个提供方和模型只构建一次客户端，在提供方变化时再重新构建。
+OpenBot 还不能通过 `openai-compat` 提供方询问决策模型。你可以在那里关联它，但要询问它，请使用 `typesafe` 提供方。
+
+OpenBot 目前还没有任何部分会询问决策模型。
+
+## 没有模型时运行
+
+没有任何提供方的组织，仍然可以读取、重命名、分叉和删除它已有的 Session。它不能创建新的 Session，因为新的 Session 需要模型。见[选择模型](#选择模型)。
+
+需要模型的工作会失败，返回状态 `503` 和错误 `SessionExecutionUnavailable`。这包括：
+
+- 用 `POST /v1/sessions/:id/turns` 启动一个 Turn；
+- 用 `PUT /v1/sessions/:id/model` 选择一个模型；
+- 在做出决定或委派工作完成后继续一个 Turn。
+
+```json
+{ "_tag": "SessionExecutionUnavailable", "session": "..." }
+```
+
+---
+
+## 内置模型
+
+当你从自己的程序中运行 OpenBot 时，可以用 `builtinModels` 选项在代码中提供模型。参见[从代码运行](/zh-cn/docs/server)。
+
+- 每个组织都可以使用它们。
+- API 不能修改它们。
+- 它们和保存的提供方一起显示在模型列表中。
+
+`builtinModels` 有三个字段：
+
+| 字段        | 是什么                                                           |
+| ----------- | ---------------------------------------------------------------- |
+| `providers` | 要显示的提供方，比如 `{ id, name }`。                            |
+| `models`    | 要显示的模型，是 `Config.Model` 值。                             |
+| `resolve`   | 一个函数，接收一个选择，返回一个带有 `LanguageModel` 的 Effect。 |
+
+这个示例提供一个 Anthropic 模型，密钥来自你程序的环境：
+
+```ts
+import { NodeRuntime } from "@effect/platform-node"
+import { Config, Model, Provider } from "@openbot-build/core"
+import {
+	AnthropicProvider,
+	EnvironmentConfiguration,
+	Server,
+} from "@openbot-build/openbot"
+import { Context, Effect, Layer, Redacted } from "effect"
+import { LanguageModel } from "effect/ai"
+import { FetchHttpClient } from "effect/http"
+
+const selection = Config.Selection.make({
+	provider: Provider.Id.make("house"),
+	model: Model.Id.make("claude-sonnet-4-5"),
+})
+
+NodeRuntime.runMain(
+	Effect.scoped(
+		Effect.gen(function* () {
+			const settings = yield* EnvironmentConfiguration.load
+			// 只构建一次模型。它和程序存在的时间一样长。
+			const layer = Layer.unwrap(
+				AnthropicProvider.make({ max_tokens: 4096 }).model(selection),
+			).pipe(
+				Layer.provide(
+					AnthropicProvider.layerClient({
+						apiKey: Redacted.make(process.env.ANTHROPIC_API_KEY ?? ""),
+					}),
+				),
+				Layer.provide(FetchHttpClient.layer),
+			)
+			const claude = Context.get(
+				yield* Layer.build(layer),
+				LanguageModel.LanguageModel,
+			)
+			const builtinModels = {
+				providers: [{ id: selection.provider, name: "House models" }],
+				models: [
+					Config.Model.make({
+						provider: selection.provider,
+						id: selection.model,
+						name: "Claude Sonnet 4.5",
+						reasoningEfforts: [],
+						serviceTiers: [],
+					}),
+				],
+				resolve: (requested: Config.Selection) =>
+					requested.model === selection.model
+						? Effect.succeed(claude)
+						: Effect.fail(
+								new Config.ModelConfigurationError({
+									reason: "model-not-found",
+									message: "This model is not available",
+								}),
+							),
+			}
+			return yield* Layer.launch(
+				Server.layer({ ...settings, builtinModels }).pipe(
+					Layer.provide(FetchHttpClient.layer),
+				),
+			)
+		}),
+	),
+)
+```
+
+当 `resolve` 失败时，启动 Turn 会返回 `503`。
+开发入口用 `builtinModels` 提供它的测试模型。完整示例参见 `packages/openbot/src/app/DevelopmentModel.ts`。
+
+### 提供方模块
+
+提供方模块为某一种 API 把模型名称变成一个 `LanguageModel`。`@openbot-build/openbot` 导出了三个这样的模块。每个模块都有同样的部分：
+
+| 部分                        | 作用                                                           |
+| --------------------------- | -------------------------------------------------------------- |
+| `make(defaults?)`           | 创建一个提供方。`defaults` 是每次调用都使用的请求选项。        |
+| `provider.model(selection)` | 返回一个选择对应的模型 Layer。它不发送任何请求。               |
+| `layerClient(options)`      | 创建 HTTP 客户端。传入 `apiKey`；要用其他地址时传入 `apiUrl`。 |
+| `layer(tag, defaults?)`     | 把提供方放进一个由你命名的服务中。                             |
+
+| 模块                   | 提供方 ID       | API                                                                |
+| ---------------------- | --------------- | ------------------------------------------------------------------ |
+| `OpenAiProvider`       | `openai`        | OpenAI Responses API。`ResponsesCompaction` 增加原生的上下文压缩。 |
+| `OpenAiCompatProvider` | `openai-compat` | OpenAI Chat Completions API，以及仿照它的服务。                    |
+| `AnthropicProvider`    | `anthropic`     | Anthropic Messages API。                                           |
+
+OpenBot 对保存的提供方也使用这些模块。
+上下文压缩（context compaction）会把很长的历史变短，让它能放进模型的上下文窗口。
+每个提供方的简短示例参见 [Packages](/zh-cn/docs/packages)。
+
+---
+
+## 开发用模型
+
+开发服务器（`devenv shell -- pnpm dev`）不会调用真实的模型。它改用测试模型。它们每次都给出同样的回答，所以你可以零成本地测试客户端。
+
+提供方 ID 是 `development`。模型 ID 有：
+
+| 模型           | 作用                                                                   |
+| -------------- | ---------------------------------------------------------------------- |
+| `mock-text`    | 默认模型。立刻返回固定的文本。                                         |
+| `mock-slow`    | 在十秒内慢慢返回文本。用它测试流式输出和中断。                         |
+| `mock-tool`    | 调用一个无害的测试工具，该工具会等待一个[请求](/zh-cn/docs/requests)。 |
+| `mock-app`     | 调用测试 App 的一个工具，并返回它的真实内容。                          |
+| `mock-failure` | 先发送一些文本，然后故意以模型错误失败。                               |
+
+它们回答中的 token 数不是真实的。要选择其中一个，请把它保存到 Session 上：
+
+```sh
+curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"expected":1,"selection":{"_tag":"Config.Selection","provider":"development","model":"mock-slow"}}' \
+  https://localhost:8443/v1/sessions/$SESSION_ID/model
+```
+
+开发入口通过 `builtinModels` 提供这些模型，所以开发平台的每个组织都可以使用它们。生产程序永远不会使用它们。

@@ -5,6 +5,7 @@ import { Roles, builtin } from "../src/authorization/Roles.ts"
 import { Settings } from "../src/settings/Settings.ts"
 import {
 	type OrganizationDocument,
+	memberDefaults,
 	organizationDefaults,
 } from "../src/settings/Documents.ts"
 import type { AppIndexApi } from "@openbot-build/api"
@@ -108,6 +109,9 @@ export const layerSettings = (
 		updatePlatform: () => Effect.die("unused"),
 		replacePlatform: () => Effect.die("unused"),
 		updateOrganization: () => Effect.die("unused"),
+		member: () =>
+			Effect.succeed({ document: memberDefaults, version: 0, updatedAt: 0 }),
+		updateMember: () => Effect.die("unused"),
 		notify: () => Effect.void,
 		changes: Stream.never,
 	})

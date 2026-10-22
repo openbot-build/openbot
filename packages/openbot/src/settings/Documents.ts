@@ -1,4 +1,4 @@
-import { Settings as Api } from "@openbot-build/api"
+import { PlanApproval, Settings as Api } from "@openbot-build/api"
 import { Schema } from "effect"
 
 /**
@@ -31,6 +31,7 @@ export const OrganizationDocument = Schema.Struct({
 	memory: Api.OrganizationSettings.fields.memory,
 	agentMemory: Schema.Boolean,
 	requestTimeoutMs: Api.RequestTimeout,
+	planApproval: PlanApproval.PlanApproval,
 	appReadRules: Api.AppReadRules,
 	defaultRoles: Api.DefaultRoles,
 	joinByDomain: Schema.Boolean,
@@ -45,14 +46,24 @@ export const organizationDefaults: OrganizationDocument = {
 	memory: { use: true, generate: true },
 	agentMemory: true,
 	requestTimeoutMs: 24 * 60 * 60 * 1000,
+	planApproval: PlanApproval.defaults,
 	appReadRules: [],
 	defaultRoles: ["member"],
 	joinByDomain: true,
 }
 
+/** The settings of one member in one organization. */
+export const MemberDocument = Schema.Struct({
+	planApproval: Api.MemberSettings.fields.planApproval,
+})
+export type MemberDocument = typeof MemberDocument.Type
+export const memberDefaults: MemberDocument = { planApproval: null }
+
 export type Scope =
 	| { readonly kind: "platform" }
 	| { readonly kind: "organization"; readonly id: string }
+	/** `id` is the organization and the user, joined with a slash. */
+	| { readonly kind: "member"; readonly id: string }
 	/** Has no document. It says that SSO connections or domains changed. */
 	| { readonly kind: "signIn" }
 
@@ -64,11 +75,18 @@ export const organizationScope = (id: string): DocumentScope => ({
 	kind: "organization",
 	id,
 })
+export const memberScope = (member: {
+	readonly organizationId: string
+	readonly userId: string
+}) => ({
+	kind: "member" as const,
+	id: member.organizationId + "/" + member.userId,
+})
 /** The key of a scope in the table and in change notices. */
 export const signInScope: Scope = { kind: "signIn" }
 export const scopeKey = (scope: Scope) =>
-	scope.kind === "organization"
-		? "organization:" + scope.id
+	scope.kind === "organization" || scope.kind === "member"
+		? scope.kind + ":" + scope.id
 		: scope.kind + ":" + scope.kind
 export const parseScopeKey = (key: string): Scope | undefined => {
 	const colon = key.indexOf(":")
@@ -78,6 +96,7 @@ export const parseScopeKey = (key: string): Scope | undefined => {
 	if (kind === "platform") return platformScope
 	if (kind === "signIn") return signInScope
 	if (kind === "organization") return organizationScope(id)
+	if (kind === "member") return { kind: "member", id }
 	return undefined
 }
 

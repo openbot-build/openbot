@@ -63,7 +63,7 @@ test("steering stays in the current Turn and queued input starts a separate Turn
 					assert.equal(Session.currentTurn(done.session)!.steps, 2)
 					assert.equal(
 						Session.currentTurn(done.session)!.settings.mode,
-						"default",
+						"build",
 					)
 					assert.match(JSON.stringify(requests[1]), /steering instruction/)
 					assert.doesNotMatch(

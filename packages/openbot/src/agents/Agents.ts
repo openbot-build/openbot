@@ -327,6 +327,7 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 			readonly role: string
 			readonly instructions: string
 			readonly model?: Config.Selection
+			readonly planApproval?: AgentsApi.Agent["planApproval"]
 			readonly kind: "persistent" | "session"
 			readonly now: number
 		}): Agent => ({
@@ -337,6 +338,9 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 			role: input.role,
 			instructions: input.instructions,
 			...(input.model === undefined ? {} : { model: input.model }),
+			...(input.planApproval === undefined
+				? {}
+				: { planApproval: input.planApproval }),
 			archived: false,
 			revision: 0,
 			createdAt: input.now,
@@ -463,11 +467,16 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 										message: "The Main Agent cannot be archived.",
 									}),
 								)
-							const { model: _model, ...rest } = agent
+							const { model: _model, planApproval: _approval, ...rest } = agent
 							const model =
 								input.model === undefined
 									? agent.model
 									: (input.model ?? undefined)
+							// A `null` makes the Agent follow the settings of the member again.
+							const planApproval =
+								input.planApproval === undefined
+									? agent.planApproval
+									: (input.planApproval ?? undefined)
 							return Effect.succeed({
 								...rest,
 								...(input.name === undefined ? {} : { name: input.name }),
@@ -479,6 +488,7 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 									? {}
 									: { archived: input.archived }),
 								...(model === undefined ? {} : { model }),
+								...(planApproval === undefined ? {} : { planApproval }),
 							})
 						},
 					)

@@ -4,6 +4,7 @@ import { HttpApiSchema } from "effect/http-api"
 import { Restriction } from "./AppIndexApi.ts"
 import * as Memory from "./Memory.ts"
 import { Policy, RoleId } from "./Permissions.ts"
+import { PlanApproval } from "./PlanApproval.ts"
 
 /**
  * Settings that every instance of OpenBot must share live in the database.
@@ -155,6 +156,8 @@ export const OrganizationSettings = Schema.Struct({
 	/** Learn Agent memory after each Turn. */
 	agentMemory: Schema.Boolean,
 	requestTimeoutMs: RequestTimeout,
+	/** How plans are approved when no member, Agent or Session sets it. */
+	planApproval: PlanApproval,
 	appReadRules: AppReadRules,
 	/** The roles of a new member. */
 	defaultRoles: DefaultRoles,
@@ -171,12 +174,28 @@ export const UpdateOrganizationSettingsRequest = Schema.Struct({
 	memory: Schema.optionalKey(Memory.Settings),
 	agentMemory: Schema.optionalKey(Schema.Boolean),
 	requestTimeoutMs: Schema.optionalKey(RequestTimeout),
+	planApproval: Schema.optionalKey(PlanApproval),
 	appReadRules: Schema.optionalKey(AppReadRules),
 	defaultRoles: Schema.optionalKey(DefaultRoles),
 	joinByDomain: Schema.optionalKey(Schema.Boolean),
 })
 export type UpdateOrganizationSettingsRequest =
 	typeof UpdateOrganizationSettingsRequest.Type
+
+/** The settings of one member in one organization. */
+export const MemberSettings = Schema.Struct({
+	version: Version,
+	/** How the plans of your Agents are approved. `null` follows the organization. */
+	planApproval: Schema.NullOr(PlanApproval),
+	updatedAt: Schema.String,
+})
+export type MemberSettings = typeof MemberSettings.Type
+export const UpdateMemberSettingsRequest = Schema.Struct({
+	expectedVersion: Version,
+	planApproval: Schema.optionalKey(Schema.NullOr(PlanApproval)),
+})
+export type UpdateMemberSettingsRequest =
+	typeof UpdateMemberSettingsRequest.Type
 
 /** Someone changed the settings after you read them. Read them again, then retry. */
 export class SettingsConflict extends Schema.TaggedError<SettingsConflict>()(

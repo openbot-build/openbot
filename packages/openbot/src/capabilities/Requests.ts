@@ -84,6 +84,17 @@ export interface Decision {
 	readonly rule?: string
 }
 
+/**
+ * How one request waits. `person` sends it to the person at once, not to the Agent above.
+ * `timeoutMs` replaces the timeout of the organization. `onExpire` says what happens when
+ * nobody answers in time. Without it, the request is denied.
+ */
+export interface Ask {
+	readonly person?: boolean
+	readonly timeoutMs?: number
+	readonly onExpire?: "allow" | "deny"
+}
+
 /** The result of a decision: the request is final, or it went up to the next decider. */
 export type Outcome =
 	| { readonly _tag: "Final"; readonly stored: Stored }
@@ -109,6 +120,7 @@ export class Requests extends Context.Service<
 				readonly turn: Turn.Id
 				readonly toolCallId: string
 				readonly app?: AppExecution.Invocation
+				readonly ask?: Ask
 				/** A request that is decided at once, for example by a Grant or by policy. */
 				readonly decided?: {
 					readonly allow: boolean
@@ -161,6 +173,11 @@ export class Requests extends Context.Service<
 			organizationId: string,
 			id: string,
 			from: AgentsApi.AgentId,
+		) => Effect.Effect<Option.Option<Stored>, AgentsApi.AgentStorageUnavailable>
+		/** Closes one pending request when its time is over. */
+		readonly expireOne: (
+			organizationId: string,
+			id: string,
 		) => Effect.Effect<Option.Option<Stored>, AgentsApi.AgentStorageUnavailable>
 		readonly expire: Effect.Effect<
 			ReadonlyArray<{
@@ -383,16 +400,19 @@ export const make: Effect.Effect<
 		stored: Stored,
 		status: "expired" | "cancelled",
 		now: number,
-	) =>
-		put(organizationId, {
+	) => {
+		// Some requests say that silence means yes, such as a plan with `onTimeout: "run"`.
+		const allow = status === "expired" && stored.request.onExpire === "allow"
+		return put(organizationId, {
 			...stored,
 			request: {
 				...stored.request,
-				status,
+				status: allow ? "allowed" : status,
 				decision: {
 					by: { _tag: "Person", userId: stored.chain.userId },
-					reason:
-						status === "expired"
+					reason: allow
+						? "Nobody answered the request in time, and the settings allow it then."
+						: status === "expired"
 							? "Nobody answered the request in time."
 							: "The work stopped before the request was answered.",
 					at: now,
@@ -400,11 +420,13 @@ export const make: Effect.Effect<
 				revision: stored.request.revision + 1,
 			},
 		})
+	}
 	return Requests.of({
 		create: (organizationId, input) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				const timeout = yield* timeoutOf(organizationId)
+				const timeout =
+					input.ask?.timeoutMs ?? (yield* timeoutOf(organizationId))
 				const status: Request["status"] =
 					input.decided === undefined
 						? "pending"
@@ -418,11 +440,14 @@ export const make: Effect.Effect<
 						agent: input.agent,
 						capability: input.capability,
 						reason: input.reason,
-						approver: superior({
-							deciders: input.deciders,
-							userId: input.chain.userId,
-							agent: input.agent,
-						}),
+						approver:
+							input.ask?.person === true
+								? { _tag: "Person", userId: input.chain.userId }
+								: superior({
+										deciders: input.deciders,
+										userId: input.chain.userId,
+										agent: input.agent,
+									}),
 						chain: input.deciders,
 						session: input.session,
 						turn: input.turn,
@@ -443,6 +468,9 @@ export const make: Effect.Effect<
 						revision: 0,
 						createdAt: now,
 						expiresAt: now + timeout,
+						...(input.ask?.onExpire === undefined
+							? {}
+							: { onExpire: input.ask.onExpire }),
 					},
 				})
 			}),
@@ -479,6 +507,23 @@ export const make: Effect.Effect<
 								revision: stored.request.revision + 1,
 							},
 						}),
+					)
+				}),
+			),
+		expireOne: (organizationId, id) =>
+			records.transaction(
+				"request:" + organizationId + ":" + id,
+				Effect.gen(function* () {
+					const now = yield* Clock.currentTimeMillis
+					const found = yield* requests.find(organizationId, id)
+					if (
+						Option.isNone(found) ||
+						found.value.request.status !== "pending" ||
+						found.value.request.expiresAt > now
+					)
+						return Option.none()
+					return Option.some(
+						yield* close(organizationId, found.value, "expired", now),
 					)
 				}),
 			),

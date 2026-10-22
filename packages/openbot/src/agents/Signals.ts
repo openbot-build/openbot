@@ -11,6 +11,11 @@ export type Signal = Data.TaggedEnum<{
 		readonly turn: Turn.Id
 		readonly status: Turn.Status["_tag"]
 	}
+	/** A tool call started to wait until a time. */
+	WaitStarted: {
+		readonly organizationId: string
+		readonly wait: string
+	}
 	/** A request was made, decided or passed up. */
 	RequestChanged: {
 		readonly organizationId: string

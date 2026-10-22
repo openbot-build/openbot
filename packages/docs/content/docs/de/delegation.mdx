@@ -1,0 +1,115 @@
+---
+title: Delegation
+description: Wie Agents anderen Agents Arbeit geben und die Ergebnisse zurückbekommen.
+---
+
+**Delegation** heißt: Ein Agent gibt eine Aufgabe an einen anderen Agent. Der andere Agent arbeitet in seiner eigenen Session, mit seinem eigenen Kontext. Nur ein kurzer Auftrag geht nach unten, und nur ein kurzes Ergebnis kommt zurück. So bleibt jeder Agent bei seiner eigenen Arbeit.
+Diese Seite zeigt die Agent-Werkzeuge, den Auftrag und das Ergebnis, und wie du abgegebene Arbeit beobachtest.
+
+---
+
+## Die Agent-Werkzeuge
+
+OpenBot gibt jedem Agent diese Werkzeuge:
+
+| Werkzeug                      | Was es tut                                                                                                                               |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `openbot_list_agents`         | Listet die Agents auf, denen er Arbeit geben kann, mit ihren Rollen. Seine Session Agents sind dabei.                                    |
+| `openbot_agent_details`       | Liest die Rolle und die Anweisungen eines Agents.                                                                                        |
+| `openbot_delegate`            | Gibt einem anderen Agent eine Aufgabe und wartet auf das Ergebnis.                                                                       |
+| `openbot_start_session_agent` | Startet einen neuen [Session Agent](/de/docs/agents#drei-arten-von-agents) für seine Session.                                            |
+| `openbot_create_agent`        | Erstellt einen neuen dauerhaften Agent, der ihm gehört. Siehe [Agents, die Agents besitzen](/de/docs/agents#agents-die-agents-besitzen). |
+| `openbot_promote_agent`       | Macht einen Session Agent seiner Session zu einem dauerhaften Agent, der ihm gehört.                                                     |
+| `openbot_report`              | Nur bei abgegebener Arbeit. Schickt das Ergebnis zurück.                                                                                 |
+
+Wenn ein Agent zum ersten Mal einem anderen dauerhaften Agent Arbeit gibt, einen Session Agent startet, einen Agent erstellt oder einen dauerhaft macht, muss die Stelle über ihm zustimmen. Siehe [Requests](/de/docs/requests). Den Session Agents seiner Session und den Agents, die ihm gehören, kann ein Agent immer Arbeit geben.
+
+---
+
+## Der Auftrag
+
+`openbot_delegate` nimmt einen Auftrag (Brief) an:
+
+| Feld             | Bedeutung                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| `agent`          | Die ID des anderen Agents.                                                             |
+| `reason`         | Warum der Agent das will. Eine entscheidende Stelle liest es, wenn sie zustimmen muss. |
+| `task`           | Was zu tun ist.                                                                        |
+| `userRequest`    | Die Worte der Person, unverändert. Ein Auftrag ersetzt sie nie.                        |
+| `context`        | Kurze Fakten, die der andere Agent braucht.                                            |
+| `references`     | Session- und Item-IDs, die der andere Agent lesen kann.                                |
+| `constraints`    | Regeln für die Arbeit.                                                                 |
+| `expectedOutput` | Wie ein gutes Ergebnis aussieht.                                                       |
+| `session`        | Optional. Frühere Arbeit dieses Agents in dieser Session fortsetzen.                   |
+
+Der andere Agent bekommt den Auftrag als erste Nachricht eines Turns. Er sieht nie den Verlauf des Agents, der die Arbeit abgegeben hat.
+
+### Welche Session die Arbeit nutzt
+
+- Mit `session` geht die Arbeit in dieser Session weiter, wenn sie dem anderen Agent gehört und aus derselben Session gestartet wurde.
+- Bei einem Session Agent geht die Arbeit in seiner neuesten Session aus derselben Eltern-Session weiter. So behält ein Session Agent seinen Kontext.
+- Sonst beginnt die Arbeit in einer neuen Session.
+
+Wenn die andere Session beschäftigt ist, wartet der Auftrag in ihrer Queue (Warteschlange) und läuft als Nächstes.
+
+## Das Ergebnis
+
+Der andere Agent ruft `openbot_report` einmal auf, wenn er fertig ist. Wenn er ohne Bericht endet, nutzt OpenBot seine letzte Antwort.
+
+```json
+{
+	"status": "completed",
+	"summary": "Added the endpoint and two tests.",
+	"artifacts": [{ "kind": "branch", "ref": "agents-contract" }],
+	"openQuestions": [],
+	"child": { "session": "c81d…", "turn": "t-77" }
+}
+```
+
+`status` ist `completed`, `failed` oder `cancelled`. Das Ergebnis enthält nie den ganzen Verlauf. Um die Details zu lesen, öffne die Session in `child`.
+
+---
+
+## Wie die Eltern-Session wartet
+
+Während der andere Agent arbeitet, hat der Turn, der die Arbeit abgegeben hat, den Status `Waiting`. Er hält keinen laufenden Prozess. Darum kann das Warten lange dauern und übersteht einen Neustart des Servers. Wenn die Arbeit endet, gibt OpenBot das Ergebnis an den wartenden Werkzeugaufruf, und der Turn geht weiter. Wenn ein Turn mehreren Agents gleichzeitig Arbeit gibt, geht er nach dem letzten Ergebnis weiter.
+
+Abgegebene Sessions haben `kind: "delegated"` und ein `parent` mit der Session, dem Turn und dem Werkzeugaufruf, die sie gestartet haben. Sie haben dieselben Routen wie jede Session. Du kannst sie lesen, lenken und unterbrechen.
+
+## Abgegebene Arbeit beobachten
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/sessions/$SESSION/delegations
+```
+
+```json
+[
+	{
+		"id": "dlg_9f1e…",
+		"parent": { "session": "a41c…", "turn": "t-12", "toolCallId": "call-3" },
+		"agent": "agt_5c0e…",
+		"child": { "session": "c81d…", "turn": "t-77" },
+		"status": "running",
+		"brief": { "task": "…", "userRequest": "…" },
+		"result": null
+	}
+]
+```
+
+| Status        | Bedeutung                                                                         |
+| ------------- | --------------------------------------------------------------------------------- |
+| `authorizing` | Die Arbeit wartet darauf, dass ein [Request](/de/docs/requests) beantwortet wird. |
+| `queued`      | Die Arbeit darf beginnen. OpenBot startet sie jetzt.                              |
+| `running`     | Der andere Agent arbeitet daran.                                                  |
+| `completed`   | Die Arbeit ist fertig. `result` enthält das Ergebnis.                             |
+| `failed`      | Die Arbeit ist fehlgeschlagen oder war nicht erlaubt.                             |
+| `cancelled`   | Die Arbeit wurde gestoppt.                                                        |
+
+## Abgegebene Arbeit stoppen
+
+Wenn du einen Turn [unterbrichst](/de/docs/sessions#steer-queue-und-unterbrechen), stoppt OpenBot auch die Arbeit, die er abgegeben hat, und schließt seine offenen Requests. Jeder Eintrag wird `cancelled`.
+
+## Forks
+
+Ein Fork (Abzweigung) einer Session ist neue direkte Arbeit. Er behält den Agent seiner Quelle, hat aber kein `parent`. Arbeit, die ein Fork abgibt, beginnt in neuen Sessions. So teilen sich zwei Zweige nie die Arbeit eines Session Agents.

@@ -11,6 +11,7 @@ import * as Memory from "./Memory.ts"
 import { Authorize, GroupRequired, Required, requires } from "./Permissions.ts"
 import { AgentErrors, AgentId, Delegation } from "./AgentsApi.ts"
 import { Name } from "./Name.ts"
+import { PlanApproval } from "./PlanApproval.ts"
 import { Schema } from "effect"
 import { Sse } from "effect/encoding"
 import {
@@ -43,6 +44,8 @@ export const CreateSessionRequest = Schema.Struct({
 	agent: Schema.optionalKey(AgentId),
 	title: Schema.optionalKey(Name),
 	settings: Schema.optionalKey(SettingsPatch),
+	/** How plans in this Session are approved. Without it, the Agent and then the member decide. */
+	planApproval: Schema.optionalKey(PlanApproval),
 })
 export type CreateSessionRequest = typeof CreateSessionRequest.Type
 
@@ -208,13 +211,13 @@ export const SessionResponseSseEvent: Schema.Codec<
 /**
  * Why a Session exists. A direct Session is work that a client started.
  * A delegated Session is work that another Agent gave. A review Session decides one request.
- * A workflow Session is where an Agent does the steps of one Workflow Run.
+ * A trigger Session is work that a schedule or a webhook started.
  */
 export const SessionKind = Schema.Literals([
 	"direct",
 	"delegated",
 	"review",
-	"workflow",
+	"trigger",
 ])
 export type SessionKind = typeof SessionKind.Type
 /** The tool call in another Session that started this Session. */
@@ -244,6 +247,8 @@ export const SessionView = Schema.Struct({
 	parent: Schema.NullOr(SessionParent),
 	response: Schema.NullOr(SessionResponse),
 	activity: Schema.optionalKey(SessionActivity),
+	/** Only when this Session sets how its plans are approved. */
+	planApproval: Schema.optionalKey(PlanApproval),
 })
 export type SessionView = typeof SessionView.Type
 
@@ -329,6 +334,8 @@ export const UpdateSessionRequest = Schema.Struct({
 	/** A new title. `null` removes the title. */
 	title: Schema.optionalKey(Schema.NullOr(Name)),
 	archived: Schema.optionalKey(Schema.Boolean),
+	/** `null` makes the Session follow its Agent and the member again. */
+	planApproval: Schema.optionalKey(Schema.NullOr(PlanApproval)),
 })
 export const ForkSessionRequest = Schema.Struct({
 	version: Schema.optionalKey(Timeline.VersionId),
@@ -373,6 +380,32 @@ export const UpdateMemoryRequest = Schema.Struct({
 	command: MemoryCommand,
 })
 export type UpdateMemoryRequest = typeof UpdateMemoryRequest.Type
+
+/** Where one item of a todo list is. */
+export const TodoStatus = Schema.Literals(["pending", "in_progress", "done"])
+export type TodoStatus = typeof TodoStatus.Type
+/** One step of the work in a Session. */
+export const Todo = Schema.Struct({
+	id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+	content: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4000)),
+	status: TodoStatus,
+})
+export type Todo = typeof Todo.Type
+/**
+ * The todo list of a Session. It is part of the Timeline, so a fork or a restore
+ * takes the list of that point. While an item is not done, the Agent goes on working.
+ */
+export const SessionTodos = Schema.Struct({
+	items: Schema.Array(Todo).check(Schema.isMaxLength(1000)),
+})
+export type SessionTodos = typeof SessionTodos.Type
+/** Replaces the whole list. `expected` and `revision` guard against concurrent changes. */
+export const UpdateTodosRequest = Schema.Struct({
+	expected: Timeline.VersionId,
+	revision: Session.Revision,
+	items: SessionTodos.fields.items,
+})
+export type UpdateTodosRequest = typeof UpdateTodosRequest.Type
 
 export type UpdateSessionRequest = typeof UpdateSessionRequest.Type
 
@@ -472,6 +505,20 @@ export class SessionsApi extends HttpApiGroup.make("sessions")
 				success: SessionView,
 				error: SessionOperationErrors,
 			},
+		),
+		HttpApiEndpoint.get("sessionTodos", "/v1/sessions/:sessionId/todos", {
+			params: sessionParams,
+			success: SessionTodos,
+			error: SessionOperationErrors,
+		}),
+		HttpApiEndpoint.put("updateSessionTodos", "/v1/sessions/:sessionId/todos", {
+			params: sessionParams,
+			payload: UpdateTodosRequest,
+			success: SessionView,
+			error: SessionOperationErrors,
+		}).annotate(
+			OpenApi.Description,
+			"Replaces the todo list of the Session. The Agent also changes it with its todo tool.",
 		),
 		HttpApiEndpoint.get("listSessions", "/v1/sessions", {
 			query: {

@@ -1,0 +1,321 @@
+---
+title: App Protocol
+description: 把 App 发布到网上，让任何 Agent 宿主都能找到并使用它。
+---
+
+**OpenBot App Protocol**（App 协议）是一种在网上发布 App 的开放方式。发布之后，任何 Agent 宿主都能找到这个 App，连接它，并使用它。你不需要开发者账户、注册中心或审核。有一个你自己控制的 HTTPS 地址就够了。
+
+本页描述的是草案 **V1.1**。在本页中，“必须”表示规则，“应该”表示强烈建议，“可以”表示可选项。所有域名都只是示例。
+
+---
+
+## 使用的标准
+
+这个协议自己新增的内容很少。它挑选现有的标准，并把它们组合在一起。
+
+| 部分                                     | 回答的问题          |
+| ---------------------------------------- | ------------------- |
+| AI Catalog 1.0                           | 这里有哪些服务？    |
+| MCP Server Card v1                       | 我该如何连接？      |
+| 基于 Streamable HTTP 的 MCP `2026-07-28` | 这个 App 能做什么？ |
+| MCP Apps `2026-01-26`                    | 它如何显示视图？    |
+
+MCP（Model Context Protocol，模型上下文协议）是 AI 宿主调用服务器上工具的标准方式。本协议没有自己的 RPC 方法、固定的工具名或界面语言。
+
+---
+
+## 发布 App
+
+### AI Catalog
+
+要让别人通过域名找到你，请在 `/.well-known/ai-catalog.json` 放一个 AI Catalog。以 `application/ai-catalog+json` 类型提供它。
+
+```json
+{
+	"specVersion": "1.0",
+	"entries": [
+		{
+			"identifier": "urn:air:apps.example.com:mcp:calendar",
+			"type": "application/mcp-server-card+json",
+			"url": "https://apps.example.com/mcp/calendar/server-card"
+		}
+	]
+}
+```
+
+Catalog 可以指向其他域名上的 Card。这样别人就可以替你托管服务。
+
+### Server Card
+
+每个 App 都必须有自己稳定的 Card URL。以 `application/mcp-server-card+json` 类型提供 Card。它必须至少列出一个支持 MCP `2026-07-28` 的 HTTPS 端点。
+
+```json
+{
+	"$schema": "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json",
+	"name": "com.example/calendar",
+	"title": "Example Calendar",
+	"version": "1.0.0",
+	"description": "Look up schedules and create calendar events.",
+	"websiteUrl": "https://apps.example.com/apps/calendar",
+	"remotes": [
+		{
+			"type": "streamable-http",
+			"url": "https://apps.example.com/mcp/calendar",
+			"supportedProtocolVersions": ["2026-07-28"]
+		}
+	]
+}
+```
+
+**Card URL 就是 App 的身份**。`name` 和 Catalog 的 `identifier` 只用来描述 App。两个同名的 App 永远不会被合并。
+
+remote 可以要求提供设置，例如 `headers` 或 URL 的 `variables`。用 `isSecret: true` 标记机密值。宿主会为每个用户单独保密这些值。
+
+提供 Catalog 和 Card 时，请带上 `ETag` 或 `Last-Modified`。宿主会发送条件请求，内容没变时期望得到 `304 Not Modified`。
+
+### 图标和使用示例
+
+使用 Card 标准的 `icons` 列表（`src`、`mimeType`、`sizes`、`theme`）。即使缺少图标，宿主也必须显示你的 App。宿主从不把 SVG 文件当作 HTML 运行。
+
+你可以在 `_meta["openbot/presentation"]` 下添加使用示例：
+
+```json
+{
+	"_meta": {
+		"openbot/presentation": {
+			"version": "1",
+			"examples": [
+				{
+					"id": "meeting-plan",
+					"title": "Plan the next team meeting",
+					"prompt": "Find a free 30-minute slot next week and draft an agenda.",
+					"description": "A sample week with one proposed meeting.",
+					"preview": {
+						"src": "https://apps.example.com/assets/meeting.webp",
+						"alt": "A sample week with one proposed meeting",
+						"width": 1200,
+						"height": 800,
+						"mimeType": "image/webp"
+					}
+				}
+			]
+		}
+	}
+}
+```
+
+| 字段          | 规则                                                                                                                             |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `version`     | 必须是 `"1"`。                                                                                                                   |
+| `examples`    | 1 到 12 项。                                                                                                                     |
+| `id`          | 唯一。最多 100 个字母、数字、`.`、`_` 或 `-`。以字母或数字开头。                                                                 |
+| `title`       | 最多 100 个字符。                                                                                                                |
+| `prompt`      | 最多 2000 个字符。                                                                                                               |
+| `description` | 可选。最多 500 个字符。                                                                                                          |
+| `preview`     | 可选。HTTPS 的 `src`，`alt` 最多 500 个字符，`width` 和 `height` 从 1 到 8192，`mimeType` 为 PNG、JPEG、WebP、AVIF 或 SVG 之一。 |
+
+示例中只能包含公开的或编造的数据。宿主以纯文本显示它们。查看或选择一个示例，永远不会添加 App、登录或运行工具。如果展示块有错误，宿主会忽略它，继续使用 Card。
+
+---
+
+## 从域名或链接发现 App
+
+宿主必须接受四种输入：域名、App 页面 URL、Catalog URL 或 Card URL。
+
+- **域名。** 宿主读取 `https://<domain>/.well-known/ai-catalog.json`。
+- **App 页面。** 页面用 link 标签或 HTTP `Link` 头指向它的 Catalog：
+
+  ```html
+  <link
+  	rel="ai-catalog"
+  	type="application/ai-catalog+json"
+  	href="/apps/calendar/catalog.json"
+  />
+  ```
+
+  宿主只读取这些静态链接。它从不运行页面脚本。它保留完整的路径，所以一个 App 的页面不会变成整个域名。
+
+- **含有多个 Card 的 Catalog。** 宿主请用户选择。它从不添加整个 Catalog。
+
+**App Link**（App 链接）是一个普通的 HTTPS URL，最好是 App 页面。**二维码**保存的也是同一个 URL。没有特殊的二维码格式或 URI scheme。链接中不能包含令牌或私密数据。打开链接只会开始一次审查。它不授予任何访问权限，也不运行任何东西。
+
+---
+
+## 连接和调用
+
+添加、登录和运行是三个独立的步骤。添加会保存连接。登录会授予明确的访问权限。运行需要用户的意图、有效的登录，以及宿主自己的规则。
+
+用户添加 App 之后，宿主会：
+
+1. 调用 `server/discover`，读取当前版本和能力；
+2. 调用 `tools/list`、`resources/list` 和 `prompts/list`；
+3. 用 `tools/call`、`resources/read` 和 `prompts/get` 完成工作。
+
+所有消息、结果和错误都遵循 MCP。按照工具做的事情给它命名，例如 `create_event`。用 `inputSchema` 描述输入。用 `outputSchema` 和 `structuredContent` 返回结构化输出。同时也总要返回一个清楚的文本结果。
+
+### 账户登录
+
+需要用户账户的 App 必须使用 MCP 授权。这就是 OAuth 2.1：
+
+- **Protected Resource Metadata（受保护资源元数据）。** App 返回 401 或 403，并带上一个指向其元数据的质询。元数据中写明授权服务器和权限范围。
+- **Client ID Metadata Document（客户端 ID 元数据文档）。** 宿主的客户端 ID 是一个 HTTPS URL，指向一个公开的 JSON 文档。授权服务器读取它。不需要有人手动注册宿主。双方都必须支持这一点。
+- **使用 S256 的 PKCE。** 它保护登录码。请求还会发送确切的 `resource`。
+
+你的 App 仍然可以要求登录、套餐或业务权限。这不属于注册中心的步骤。
+
+---
+
+## MCP Apps 视图
+
+App 可以显示一个交互式视图。工具在它的元数据中链接到一个 UI 资源：
+
+```json
+{
+	"_meta": {
+		"ui": {
+			"resourceUri": "ui://calendar/planner.html",
+			"visibility": ["model", "app"]
+		}
+	}
+}
+```
+
+该资源必须使用 `ui://` URI 和类型 `text/html;profile=mcp-app`。宿主用 `resources/read` 读取它。宿主在它的客户端能力中声明 `io.modelcontextprotocol/ui`。
+
+| 用途                 | 标准方法                                                                 | 方向               |
+| -------------------- | ------------------------------------------------------------------------ | ------------------ |
+| 启动并告知已就绪     | `ui/initialize`、`ui/notifications/initialized`                          | 视图到宿主         |
+| 获取工具的输入和结果 | `ui/notifications/tool-input`、`ui/notifications/tool-result`            | 宿主到视图         |
+| 执行工作或读取数据   | `tools/call`、`resources/read`                                           | 视图经由宿主到 App |
+| 更新模型上下文       | `ui/update-model-context`                                                | 视图到宿主         |
+| 发送聊天消息         | `ui/message`                                                             | 视图到宿主         |
+| 打开链接             | `ui/open-link`                                                           | 视图到宿主         |
+| 共享主题和尺寸       | `ui/notifications/host-context-changed`、`ui/notifications/size-changed` | 双向               |
+| 清理                 | `ui/resource-teardown`                                                   | 宿主到视图         |
+
+视图的规则：
+
+- 宿主要等视图就绪后，才发送工具数据。
+- 带有 `visibility: ["app"]` 的工具只供视图使用。可见性不是访问控制。你的服务器仍然必须检查权限。
+- 如果视图加载失败，宿主不能再次运行该工具。文本结果仍然存在。
+
+---
+
+## App 记录、Index 条目和连接
+
+宿主保存三样不同的东西：
+
+| 东西       | 保存什么                             | 是否共享？   |
+| ---------- | ------------------------------------ | ------------ |
+| App 记录   | Card 及其来源。                      | 每个账户一份 |
+| Index 条目 | 公开的 Card 和发布者证据。用于搜索。 | 公开         |
+| 用户连接   | 用户的设置、登录和访问权限。         | 用户私有     |
+
+许多用户可以连接同一个 App。删除一个连接永远不会影响其他用户或 Index。公开的 Index 宕机时，不能阻碍已知的连接。
+
+---
+
+## 公开索引
+
+**当你在自己的公开 AI Catalog 中列出一个 Card 时，就表示你允许公开索引它。** 宿主必须从你自己的文档中确认这一点。别人 Catalog 中的副本只是一条线索。
+
+爬虫在没有用户数据的情况下工作。它使用用户代理标记 `OpenBot`，并遵守 `robots.txt`（RFC 9309）。它接受以下来源的发布者证据：
+
+- Card 所在源的 `/.well-known/ai-catalog.json` 中的 Catalog；
+- Card 响应上的 `ai-catalog` `Link` 头所指的 Catalog；
+- Card 的 `websiteUrl` 页面所链接的 Catalog。
+
+要退出索引，请在 Card 上发送 `X-Robots-Tag: noindex`。`noindex` 不是访问控制。如果你从 Catalog 中删除了 Card，宿主会在下次检查时删除对应的 Index 条目。无法访问的 Catalog 不算删除。
+
+发布、添加或调用 App 都不需要注册中心。宿主也可以读取其他注册中心。OpenBot 的做法请看 [App Index](/zh-cn/docs/app-index)。
+
+---
+
+## 安全规则
+
+- 所有连接都使用 HTTPS。宿主会显示每个 App 的真实来源。
+- 名称、图标、Index 条目和工具说明都不是可信的信号。App 的内容是数据，永远不是给宿主的指令。
+- 公开爬虫会限制大小、时间和重定向。它们检查每个目标，永远不会访问私有地址、回环地址或云元数据地址。库的默认值是 1 MiB、10 秒和 5 次重定向。
+- 写操作需要权限检查。可能被重试的写操作需要一个业务幂等键。
+- 当一次调用的结果未知时，宿主不能盲目重试。
+- 更换端点、提供方或权限范围时，需要重新审查。旧的令牌永远不会转移到新目标。
+- 删除连接会停止所有调用，并删除它的令牌。
+
+---
+
+## 使用库
+
+`@openbot-build/protocol` 用 Effect 4 实现了这个协议。它的版本是 0.1.0，还没有发布到 npm。请在本仓库的 pnpm 工作区中使用它。
+
+| 入口                                         | 用途                             |
+| -------------------------------------------- | -------------------------------- |
+| `McpPublisher`                               | 提供 Card、Catalog 和 MCP 端点。 |
+| `McpPublisher.layerProtected`、`Protection`  | 用 OAuth 保护端点。              |
+| `Discovery`、`CatalogDiscovery`              | 从域名或链接查找 App。           |
+| `AppConnections`、`McpClient`                | 添加、调用、重新验证和删除连接。 |
+| `OAuthAuthorization`                         | 运行账户登录的宿主端。           |
+| `Indexing`、`PublicIndexing`、`RobotsPolicy` | 检查并索引公开的 App。           |
+| `@openbot-build/protocol/NodeHttpServer`     | 带有公网规则的 Node 网络层。     |
+| `@openbot-build/protocol/McpApps`            | MCP Apps 视图的浏览器宿主。      |
+
+发布一个小 App：
+
+```ts
+import { Document, McpPublisher } from "@openbot-build/protocol"
+import { Effect, Schema } from "effect"
+import { McpServer, Tool, Toolkit } from "effect/ai"
+
+const tools = Toolkit.make(
+	Tool.make("hello", {
+		parameters: Schema.Struct({ name: Schema.String }),
+		success: Schema.Struct({ greeting: Schema.String }),
+	}),
+)
+const handlers = tools.toLayer({
+	hello: ({ name }) => Effect.succeed({ greeting: `Hello, ${name}` }),
+})
+const origin = "https://apps.example.com"
+
+export const publisher = McpPublisher.layer({
+	publication: {
+		card: {
+			$schema: Document.cardSchemaUrl,
+			name: "com.example/hello",
+			version: "1.0.0",
+			description: "Say hello.",
+			remotes: [
+				{
+					type: "streamable-http",
+					url: origin + "/mcp",
+					supportedProtocolVersions: [Document.protocolVersion],
+				},
+			],
+		},
+		cardUrl: origin + "/mcp/server-card",
+		catalogUrl: origin + "/.well-known/ai-catalog.json",
+		mcpUrl: origin + "/mcp",
+		allowedOrigins: ["https://host.example.com"],
+	},
+	register: McpServer.registerToolkit(tools).pipe(Effect.provide(handlers)),
+})
+```
+
+用 Effect 的 `HttpRouter.serve` 提供 `publisher`。构建这个 layer 不做任何 I/O。`publication` 还接受 `etag`、`lastModified`、`cacheControl` 和 `noindex`。用 `McpPublisher.registerUi` 添加一个 `ui://` 视图资源。
+
+发现一个 App：
+
+```ts
+import { CatalogDiscovery, Discovery } from "@openbot-build/protocol"
+import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
+import { Effect, Layer } from "effect"
+
+const discovery = CatalogDiscovery.layer().pipe(
+	Layer.provide(CatalogDiscovery.layerRules),
+	Layer.provide(NodeHttpServer.layerPublicNetwork()),
+)
+const result = await Effect.runPromise(
+	Discovery.resolve("apps.example.com").pipe(Effect.provide(discovery)),
+)
+```
+
+结果是 `Single` 或 `Multiple`。要用真实的宿主测试你自己的 App，请使用[协议测试服务](/zh-cn/docs/protocol-test)和[开发者工具](/zh-cn/docs/developer-tools)。

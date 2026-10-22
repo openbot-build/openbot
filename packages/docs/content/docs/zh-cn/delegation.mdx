@@ -1,0 +1,115 @@
+---
+title: 委派
+description: Agents 如何把工作交给其他 Agents，并拿回结果。
+---
+
+**委派**（Delegation）是指一个 Agent 把任务交给另一个 Agent。另一个 Agent 在自己的 Session 中、用自己的上下文工作。向下只传一份简短的说明，向上只返回一个简短的结果。所以每个 Agent 都能专注于自己的工作。
+本页介绍 Agent 工具、任务说明和结果，以及如何查看委派出去的工作。
+
+---
+
+## Agent 工具
+
+OpenBot 给每个 Agent 提供这些工具：
+
+| 工具                          | 作用                                                                                                     |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `openbot_list_agents`         | 列出它可以分派工作的 Agents，以及它们的角色。其中包括它的 Session Agents。                               |
+| `openbot_agent_details`       | 读取某个 Agent 的角色和指令。                                                                            |
+| `openbot_delegate`            | 把任务交给另一个 Agent，并等待结果。                                                                     |
+| `openbot_start_session_agent` | 为它的 Session 启动一个新的 [Session Agent](/zh-cn/docs/agents#三种-agents)。                            |
+| `openbot_create_agent`        | 创建一个归它所有的新的长期 Agent。见 [拥有 Agents 的 Agents](/zh-cn/docs/agents#拥有-agents-的-agents)。 |
+| `openbot_promote_agent`       | 把它 Session 中的 Session Agent 变成一个归它所有的长期 Agent。                                           |
+| `openbot_report`              | 只在委派的工作中使用。把结果发回去。                                                                     |
+
+当 Agent 第一次给另一个长期 Agent 分派工作、启动 Session Agent、创建 Agent 或提升 Agent 时，它上面的决策者必须同意。见 [Requests](/zh-cn/docs/requests)。Agent 总是可以给它 Session 中的 Session Agents，以及它拥有的 Agents 分派工作。
+
+---
+
+## 任务说明
+
+`openbot_delegate` 接收一份任务说明（brief）：
+
+| 字段             | 含义                                                     |
+| ---------------- | -------------------------------------------------------- |
+| `agent`          | 另一个 Agent 的 ID。                                     |
+| `reason`         | Agent 为什么需要这样做。需要决策者同意时，决策者会读它。 |
+| `task`           | 要做什么。                                               |
+| `userRequest`    | 人的原话，不做修改。任务说明永远不会替代它。             |
+| `context`        | 另一个 Agent 需要的简短事实。                            |
+| `references`     | 另一个 Agent 可以读取的 Session 和 Item ID。             |
+| `constraints`    | 工作的规则。                                             |
+| `expectedOutput` | 好的结果是什么样子。                                     |
+| `session`        | 可选。在这个 Session 中继续那个 Agent 之前的工作。       |
+
+另一个 Agent 把任务说明作为一个 Turn 的第一条消息收到。它永远看不到分派工作的那个 Agent 的历史。
+
+### 工作使用哪个 Session
+
+- 有 `session` 时，工作在那个 Session 中继续，前提是它属于另一个 Agent，并且是从同一个 Session 启动的。
+- 对于 Session Agent，工作在它最新的、来自同一个父 Session 的 Session 中继续。所以 Session Agent 会保留它的上下文。
+- 否则，工作会在一个新的 Session 中开始。
+
+如果另一个 Session 正忙，任务说明会在它的队列中等待，接下来运行。
+
+## 结果
+
+另一个 Agent 完成后，调用一次 `openbot_report`。如果它结束时没有报告，OpenBot 使用它的最后一个回答。
+
+```json
+{
+	"status": "completed",
+	"summary": "Added the endpoint and two tests.",
+	"artifacts": [{ "kind": "branch", "ref": "agents-contract" }],
+	"openQuestions": [],
+	"child": { "session": "c81d…", "turn": "t-77" }
+}
+```
+
+`status` 是 `completed`、`failed` 或 `cancelled`。结果中从不包含完整的历史。要读取细节，请打开 `child` 中的 Session。
+
+---
+
+## 父级如何等待
+
+在另一个 Agent 工作时，分派工作的那个 Turn 的状态是 `Waiting`。它不会占用一个正在运行的进程，所以等待可以持续很久，并且在服务器重启后依然有效。工作结束时，OpenBot 把结果交给正在等待的工具调用，然后这个 Turn 继续。当一个 Turn 同时给多个 Agents 分派工作时，它会在最后一个结果到达后继续。
+
+委派的 Sessions 有 `kind: "delegated"`，以及一个 `parent`，其中包含启动它们的 Session、Turn 和工具调用。它们和其他 Session 使用相同的路由。你可以读取它们、引导它们和中断它们。
+
+## 查看委派的工作
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/sessions/$SESSION/delegations
+```
+
+```json
+[
+	{
+		"id": "dlg_9f1e…",
+		"parent": { "session": "a41c…", "turn": "t-12", "toolCallId": "call-3" },
+		"agent": "agt_5c0e…",
+		"child": { "session": "c81d…", "turn": "t-77" },
+		"status": "running",
+		"brief": { "task": "…", "userRequest": "…" },
+		"result": null
+	}
+]
+```
+
+| 状态          | 含义                                                      |
+| ------------- | --------------------------------------------------------- |
+| `authorizing` | 工作在等待一个 [request](/zh-cn/docs/requests) 得到回答。 |
+| `queued`      | 工作可以开始。OpenBot 现在启动它。                        |
+| `running`     | 另一个 Agent 正在处理它。                                 |
+| `completed`   | 工作已完成。`result` 中有结果。                           |
+| `failed`      | 工作失败，或者不被允许。                                  |
+| `cancelled`   | 工作被停止了。                                            |
+
+## 停止委派的工作
+
+当你 [中断](/zh-cn/docs/sessions#引导排队和中断) 一个 Turn 时，OpenBot 也会停止它分派出去的工作，并关闭它未完成的 requests。每条记录都会变成 `cancelled`。
+
+## Forks
+
+Session 的 Fork（分叉）是新的直接工作。它保留来源的 Agent，但没有 `parent`。Fork 分派出去的工作会在新的 Sessions 中开始，所以两个分支永远不会共享同一个 Session Agent 的工作。

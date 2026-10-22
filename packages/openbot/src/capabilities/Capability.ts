@@ -3,7 +3,6 @@ import {
 	type AgentsApi,
 	type Caller,
 	type Permissions,
-	type WorkflowsApi,
 } from "@openbot-build/api"
 import { Option } from "effect"
 import {
@@ -11,8 +10,6 @@ import {
 	agentPlace,
 	resourceKey,
 	rootOf,
-	workflowKey,
-	workflowPlace,
 } from "../authorization/Policy.ts"
 
 export type Capability = AgentsApi.Capability
@@ -56,8 +53,6 @@ export const permission = (input: {
 	readonly session: string
 	/** The target Agent, for actions on an Agent. */
 	readonly agent?: AgentsApi.Agent
-	/** The target Workflow, for actions on a Workflow. */
-	readonly workflow?: Pick<WorkflowsApi.Workflow, "id" | "owner">
 	/** The Agent that tries the action. The Agents it makes go below its owner tree. */
 	readonly self: AgentsApi.Agent
 }): {
@@ -98,25 +93,8 @@ export const permission = (input: {
 			}
 		case "agents.delegate":
 			return onAgent("agents.delegate")
-		case "workflows.run":
-		case "workflows.budget":
-		case "workflows.edit":
-			return {
-				permission:
-					input.capability.action === "workflows.edit"
-						? "workflows.write"
-						: "workflows.run",
-				key:
-					input.workflow === undefined
-						? workflowPlace({
-								organizationId: subject.organizationId,
-								root: subject.userId,
-							})
-						: workflowKey({
-								...input.workflow,
-								organizationId: subject.organizationId,
-							}),
-			}
+		// Carrying out a plan is work in the Session, like a tool call.
+		case "plans.run":
 		case "tools.call":
 			return {
 				permission: "responses.run",

@@ -115,9 +115,11 @@ Then open `http://localhost:4321`.
 | Path in `packages/docs/`    | What it is                                                                         |
 | --------------------------- | ---------------------------------------------------------------------------------- |
 | `content/docs/*.mdx`        | The pages. The file name is the URL: `deploy.mdx` is `/docs/deploy`.               |
+| `content/docs/<locale>/`    | The translations: `zh-cn` for Simplified Chinese and `de` for German.              |
 | `astro.config.ts`           | The site settings and the order of the pages in the sidebar.                       |
 | `src/components/`           | The components that pages can use without an import: `Callout`, `Steps`, and more. |
-| `src/pages/index.astro`     | The home page.                                                                     |
+| `src/landing/`              | The home page. `messages/` has its text, with one file for each language.          |
+| `src/i18n.ts`               | The languages of the docs and of the home page.                                    |
 | `src/pages/openapi.json.ts` | Serves `openapi.json` at `/openapi.json`, so people can download it.               |
 | `scripts/api.ts`            | Makes `openapi.json` from the API contract.                                        |
 
@@ -137,6 +139,11 @@ Each push to `main` publishes the site to [openbot.build](https://openbot.build)
 
 Write all text in [Simple English](https://en.wikipedia.org/wiki/Simple_English). This covers docs, code comments, error messages, logs, prompts, and test text.
 Use short sentences and common words. Explain each technical term the first time you use it.
+
+English is the source for all text. The docs are also in Simplified Chinese and German, and the home page is in many more languages.
+When you change an English page, change its translations in the same change. A translation keeps the same headings in the same order, and its links go to pages in its own language, such as `/de/docs/deploy`.
+When you change text on the home page, change it in every file in `src/landing/messages/`.
+The API reference is only in English.
 
 ### Headless
 

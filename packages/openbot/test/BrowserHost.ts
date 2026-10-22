@@ -53,8 +53,8 @@ export async function start(options: {
 		readonly intervalMs?: number
 		readonly retryMs?: number
 	}
-	/** How often the Workflow worker starts scheduled Runs and checks waiting Runs. */
-	readonly workflowIntervalMs?: number
+	/** How often the trigger worker looks for schedules that are due. */
+	readonly triggerIntervalMs?: number
 	/** Organization settings for the Agents of each new organization. */
 	readonly agents?: {
 		readonly memory?: boolean
@@ -286,9 +286,9 @@ export async function start(options: {
 		...(options.indexWork === undefined
 			? {}
 			: { indexWork: options.indexWork }),
-		...(options.workflowIntervalMs === undefined
+		...(options.triggerIntervalMs === undefined
 			? {}
-			: { workflows: { interval: options.workflowIntervalMs } }),
+			: { triggers: { interval: options.triggerIntervalMs } }),
 		...(options.discovery === undefined
 			? {}
 			: { discovery: options.discovery }),

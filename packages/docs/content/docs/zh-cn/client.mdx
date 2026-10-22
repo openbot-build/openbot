@@ -1,0 +1,226 @@
+---
+title: 客户端
+description: 用 TypeScript 调用 OpenBot，请求和错误都有类型。
+---
+
+`@openbot-build/client` 是 OpenBot 的 TypeScript 客户端。它和服务器基于同一份 API 契约构建。
+每个请求、应答和错误都有类型。你在运行代码之前，编辑器就会指出错误。
+
+客户端使用 [Effect](https://effect.website)，这是一个用于编写带类型程序的 TypeScript 库。它可以在 Node.js、Deno、Bun、worker 和浏览器中运行。
+
+---
+
+## 安装
+
+OpenBot 的包还没有发布到 npm。请在 OpenBot 工作区中使用它们：
+
+```json
+{
+	"dependencies": {
+		"@openbot-build/client": "workspace:*",
+		"effect": "4.0.5"
+	}
+}
+```
+
+## 创建客户端
+
+`layer` 创建一个 Layer，它提供 `Client` 服务。Layer 是 Effect 中用来构建服务的“配方”。
+
+```ts
+import { Client, layer } from "@openbot-build/client"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+	const client = yield* Client
+	const view = yield* client.api.sessions.createSession({
+		payload: { title: "Release notes" },
+	})
+	return view.session.id
+})
+
+const id = await Effect.runPromise(
+	program.pipe(
+		Effect.provide(
+			layer({
+				baseUrl: "https://api.example.com",
+				token: process.env.OPENBOT_TOKEN,
+			}),
+		),
+	),
+)
+```
+
+| 选项             | 必需 | 作用                                                                                                  |
+| ---------------- | ---- | ----------------------------------------------------------------------------------------------------- |
+| `baseUrl`        | 是   | OpenBot 的源，例如 `https://api.example.com`。                                                        |
+| `token`          | 否   | 用户令牌，可以是字符串，也可以是 Effect 的 `Redacted` 值。它以 `Authorization: Bearer <token>` 发送。 |
+| `organization`   | 否   | 组织 ID。使用会话 cookie 时，它以 `OpenBot-Organization` 头发送。使用令牌时会忽略它。                 |
+| `onUnauthorized` | 否   | 一个函数，在受保护的请求返回 `401` 时运行。                                                           |
+
+如何创建用户令牌，请看[认证](/zh-cn/docs/authentication)。
+
+客户端从不保存令牌，也从不把令牌放进 URL。`onUnauthorized` 不会登录，也不会重试请求。用它来通知用户，例如在令牌过期或被撤销之后。
+
+## 调用操作
+
+每个操作都位于 `client.api.<group>.<operation>`。名称和 [API 参考](/docs/api/)中的相同。
+每次调用接受一个对象，它有以下可选字段：
+
+| 字段      | 内容                           |
+| --------- | ------------------------------ |
+| `params`  | 路径中的值，例如 `sessionId`。 |
+| `query`   | 查询字符串中的值。             |
+| `payload` | JSON 请求体。                  |
+
+```ts
+const sessions = yield * client.api.sessions.listSessions({ query: {} })
+
+const view =
+	yield *
+	client.api.sessions.getSession({
+		params: { sessionId: id },
+	})
+
+const archived =
+	yield *
+	client.api.sessions.listSessions({
+		query: { archived: "true" },
+	})
+```
+
+一些分组及其页面：
+
+| 分组             | 用途                                                | 参考                                                          |
+| ---------------- | --------------------------------------------------- | ------------------------------------------------------------- |
+| `sessions`       | 创建 Session（会话）、启动 Turn（轮次）、读取结果。 | [Sessions](/docs/api/operations/tags/sessions/)               |
+| `agents`         | 创建和管理 Agent。                                  | [Agents](/docs/api/operations/tags/agents/)                   |
+| `requests`       | 回答你的 Agent 发出的 Request。                     | [Requests](/docs/api/operations/tags/requests/)               |
+| `apps`           | 在某个地址上查找 App。                              | [App discovery](/docs/api/operations/tags/app-discovery/)     |
+| `connections`    | 添加和管理 App 连接。                               | [Connections](/docs/api/operations/tags/connections/)         |
+| `appIndex`       | 搜索公开的 App Index。                              | [App Index](/docs/api/operations/tags/app-index/)             |
+| `userTokens`     | 列出、创建、撤销和检查用户令牌。                    | [User tokens](/docs/api/operations/tags/user-tokens/)         |
+| `organizations`  | 列出和创建你的组织。                                | [Organizations](/docs/api/operations/tags/organizations/)     |
+| `organization`   | 管理组织及其成员、角色和设置。                      | [Organization](/docs/api/operations/tags/organization/)       |
+| `modelProviders` | 管理模型提供方，列出模型。                          | [Model providers](/docs/api/operations/tags/model-providers/) |
+| `sso`            | 验证邮箱域名，管理 SSO 连接。                       | [SSO](/docs/api/operations/tags/sso/)                         |
+| `platform`       | 管理平台。仅限平台管理员。                          | [Platform](/docs/api/operations/tags/platform/)               |
+| `health`         | 读取服务文档和健康状态。                            | [Health](/docs/api/operations/tags/service-and-health/)       |
+
+每个操作都需要一项权限。没有权限的调用会以 `PermissionDenied` 失败。请看[权限](/zh-cn/docs/permissions)。
+
+## 处理错误
+
+每次失败的调用都会给出一个带类型的错误。类型 `ClientError` 列出了所有错误：
+
+- 来自契约的 **API 错误**。每个都有一个 `_tag`，例如 `SessionNotFound` 或 `SessionConflict`。
+- 应答与契约不符时的 **Schema 错误**（`SchemaError`）。
+- 网络故障时的 **HTTP 客户端错误**。
+
+用 `Effect.catchTag` 处理某一类错误：
+
+```ts
+const view =
+	yield *
+	client.api.sessions
+		.getSession({ params: { sessionId: id } })
+		.pipe(Effect.catchTag("SessionNotFound", () => Effect.succeed(undefined)))
+```
+
+常见的登录错误：
+
+| 标签                        | 状态码 | 含义                                                            |
+| --------------------------- | ------ | --------------------------------------------------------------- |
+| `AuthenticationRequired`    | `401`  | 没有密钥或 cookie，或者密钥已被撤销或已过期。                   |
+| `OrganizationRequired`      | `400`  | 使用 cookie 的请求没有带 `organization`，而这个人属于多个组织。 |
+| `MembershipRequired`        | `403`  | 该账户不是这个组织的有效成员。                                  |
+| `ForbiddenOrigin`           | `403`  | 一个修改数据的 cookie 请求带有错误的 `Origin`。                 |
+| `AuthenticationUnavailable` | `503`  | OpenBot 目前无法检查凭据。                                      |
+
+所有错误的 schema 都从 `@openbot-build/api` 导出。
+
+---
+
+## 在浏览器中使用客户端
+
+与 OpenBot 同源的 Web 应用可以用登录 cookie 代替令牌。不要传 `token`：
+
+```ts
+import { layer } from "@openbot-build/client"
+
+const ClientLive = layer({
+	baseUrl: window.location.origin,
+	// 当这个人属于多个组织时需要。
+	organization: "org_8f3a",
+	onUnauthorized: async () => {
+		// OpenBot 选择提供方，并返回它的地址。
+		const response = await fetch("/auth/sign-in", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ returnTo: "/" }),
+		})
+		const { url } = await response.json()
+		window.location.assign(url)
+	},
+})
+```
+
+客户端用 `credentials: "same-origin"` 发送请求，所以浏览器会带上 cookie。
+浏览器还会加上 `Origin` 头。对于修改数据的请求，OpenBot 会检查它是否正好等于平台设置中的 `publicOrigin`。
+用 `GET /auth/session` 读取这个人所属的组织。请看[认证](/zh-cn/docs/authentication#读取和结束登录)。
+
+如何在同源上提供你的 Web 应用，请看[部署](/zh-cn/docs/deploy#同源的自有客户端)。
+
+<Callout type="warn">
+	不要把用户令牌放进浏览器代码。任何打开这个页面的人都能读到它。
+</Callout>
+
+## 自定义设置
+
+`make({ baseUrl })` 构建 `Client` 服务，但不带默认部件。你需要自己提供：
+
+- 一个 `HttpClient` 服务，
+- `AgentAuth` 的客户端中间件，供使用令牌的路由使用，
+- `AccountAuth` 的客户端中间件，供不在某个组织中操作的路由使用，例如 `/v1/organizations` 和 `/v1/platform`，
+- `SessionAuth` 的客户端中间件，供只接受 cookie 的路由使用。
+
+当你需要自己的 HTTP 客户端、日志或请求头时，就用这种方式。`layer` 的做法请看 `packages/client/src/Client.ts`。
+
+---
+
+## 显示 App 视图
+
+有些 App 工具带有一个小的用户界面，叫作 MCP Apps 视图。MCP 是 Model Context Protocol（模型上下文协议），它是 Agent 和工具通信的标准方式。
+OpenBot 把视图保存在服务器上。你的客户端只负责显示它。
+
+先为一个 App 操作打开视图。然后用 `AppViews.make` 创建视图客户端：
+
+```ts
+import { AppViews, Client } from "@openbot-build/client"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+	const client = yield* Client
+	const opened = yield* client.api.appViews.open({
+		params: { operationId },
+		payload: { sessionId, itemId },
+	})
+	return yield* AppViews.make(opened, accountId, () => refresh())
+})
+```
+
+| 参数       | 是什么                                                                  |
+| ---------- | ----------------------------------------------------------------------- |
+| `opened`   | `appViews.open` 返回的视图。                                            |
+| `owner`    | 已登录账户的稳定 ID。它把不同账户的视图分开。                           |
+| `onChange` | 可选。当视图中某个操作的状态改变时运行。用它来刷新 Request 和 Session。 |
+
+结果可以配合 `@openbot-build/protocol/McpApps` 中的 `mount` 使用，`mount` 在 iframe 中显示视图。请看[协议](/zh-cn/docs/protocol)。
+
+视图客户端不持有任何凭据。每个请求都经过 OpenBot，所以常规的能力检查都会生效：
+
+- 它检查每个应答都是有效的 MCP 结果。
+- 它把每个操作只发送一次，并带上新的请求 ID。
+- 然后它每 250 毫秒检查一次已保存的操作，直到得到最终结果。它从不重发操作。
+
+关闭视图后，客户端停止检查。OpenBot 已经接受的操作仍会运行到结束。

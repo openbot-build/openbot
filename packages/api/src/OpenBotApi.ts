@@ -18,7 +18,8 @@ import {
 } from "./AppAuthorizationApi.ts"
 import { AgentsApi } from "./AgentsApi.ts"
 import { RequestsApi } from "./RequestsApi.ts"
-import { WorkflowHooksApi, WorkflowsApi } from "./WorkflowsApi.ts"
+import { MemberSettingsApi } from "./MemberSettingsApi.ts"
+import { TriggerHooksApi, TriggersApi } from "./TriggersApi.ts"
 import { AppOperationsApi } from "./AppOperationsApi.ts"
 import { AppViewsApi } from "./AppViewsApi.ts"
 import { Authorize, GroupRequired, requires } from "./Permissions.ts"
@@ -54,9 +55,10 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 			.middleware(AgentAuth),
 		SessionsApi,
 		AgentsApi,
-		WorkflowsApi,
-		WorkflowHooksApi,
 		RequestsApi,
+		MemberSettingsApi,
+		TriggersApi,
+		TriggerHooksApi,
 		AppOperationsApi.annotate(GroupRequired, { read: apps, write: apps })
 			.middleware(Authorize)
 			.middleware(AgentAuth),

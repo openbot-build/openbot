@@ -12,11 +12,12 @@ import * as ConnectionHandlers from "../apps/ConnectionHttpHandlers.ts"
 import * as SessionHandlers from "../sessions/SessionHandlers.ts"
 import * as AgentHandlers from "../agents/HttpHandlers.ts"
 import * as RequestHandlers from "../capabilities/HttpHandlers.ts"
-import * as WorkflowHandlers from "../workflows/HttpHandlers.ts"
 import * as OrganizationHandlers from "../organization/HttpHandlers.ts"
 import * as ModelProviderHandlers from "../models/HttpHandlers.ts"
 import * as PlatformHandlers from "../platform/HttpHandlers.ts"
 import * as SsoHandlers from "../sso/HttpHandlers.ts"
+import * as SettingsHandlers from "../settings/HttpHandlers.ts"
+import * as TriggerHandlers from "../triggers/HttpHandlers.ts"
 
 const cloudHealth = HttpApiBuilder.group(OpenBotApi, "health", (handlers) =>
 	handlers
@@ -40,9 +41,10 @@ export const layerPlatform = (publicOrigin: string) =>
 					ConnectionHandlers.layer,
 					SessionHandlers.layerPlatform,
 					AgentHandlers.layer,
-					WorkflowHandlers.layer(publicOrigin),
-					WorkflowHandlers.layerHooks,
 					RequestHandlers.layer,
+					SettingsHandlers.layerMember,
+					TriggerHandlers.layer(publicOrigin),
+					TriggerHandlers.layerHooks,
 					OrganizationHandlers.layer,
 					ModelProviderHandlers.layer,
 					PlatformHandlers.layer,

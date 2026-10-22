@@ -1,0 +1,84 @@
+---
+title: Trigger
+description: Eine Session für einen Agent mit einem Prompt starten, nach Zeitplan oder über einen Webhook.
+---
+
+Ein **Trigger** (Auslöser) startet eine neue Session für einen Agent mit einem Prompt. Er löst nach einem Zeitplan aus, über einen Webhook oder beides. Mehr tut er nicht: Der Agent entscheidet, wie er die Arbeit macht. Er kann zuerst planen, eine [Todo-Liste](/de/docs/sessions#todo-liste) führen und Arbeit an andere Agents geben.
+
+---
+
+## Einen Trigger erstellen
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"Check the open issues and sum them up.","schedule":{"cron":"0 9 * * 1-5","timeZone":"Europe/Berlin"}}' \
+  https://api.example.com/v1/triggers
+```
+
+| Feld       | Was es tut                                                                        |
+| ---------- | --------------------------------------------------------------------------------- |
+| `prompt`   | Die Nachricht, die die Arbeit startet.                                            |
+| `agent`    | Optional. Der Agent, der die Arbeit macht. Ohne ihn macht dein Main Agent sie.    |
+| `schedule` | Optional. Wann der Trigger von selbst auslöst.                                    |
+| `shared`   | Optional. `true` erstellt einen gemeinsamen Trigger, der der Organisation gehört. |
+| `enabled`  | Optional. `false` verhindert, dass der Trigger auslöst. Der Standard ist `true`.  |
+
+Die Antwort ist `201` mit dem Trigger. Er hat `nextRunAt`, die nächste Zeit, zu der der Zeitplan auslöst, und `lastFiredAt`.
+
+`GET /v1/triggers` listet deine Trigger und die gemeinsamen auf. `GET`, `PATCH` und `DELETE /v1/triggers/:triggerId` lesen, ändern und löschen einen. Eine Änderung braucht `expected`, die `revision`, die du gelesen hast. Eine alte Revision gibt `409` mit `TriggerConflict` zurück.
+
+Jedes Auslösen erstellt eine neue Session mit `kind: "trigger"`. Liste sie mit `GET /v1/sessions?kind=trigger` auf.
+
+---
+
+## Zeitpläne
+
+Ein Zeitplan hat einen `cron`-Text mit fünf Feldern, zum Beispiel `0 9 * * 1-5` für 9:00 Uhr an Werktagen. `timeZone` ist eine IANA-Zeitzone, zum Beispiel `Europe/Berlin`. Ohne sie ist die Zeitzone UTC. Ein ungültiger cron-Text gibt `400` mit `TriggerInvalid` zurück.
+
+OpenBot sucht alle 15 Sekunden nach fälligen Zeitplänen. Wenn viele Server laufen, löst jeder Trigger nur einmal aus.
+
+---
+
+## Webhooks
+
+`PUT /v1/triggers/:triggerId/webhook` erstellt ein Webhook-Geheimnis. OpenBot zeigt es nur einmal:
+
+```json
+{
+	"url": "https://api.example.com/v1/hooks/triggers/trg_4c1e...",
+	"secret": "otg_..."
+}
+```
+
+Ein anderes System löst den Trigger mit dem Geheimnis aus:
+
+```sh
+curl -H "Authorization: Bearer $WEBHOOK_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"issue": 42}' \
+  https://api.example.com/v1/hooks/triggers/trg_4c1e...
+```
+
+Die Antwort ist `202` mit der `session`. Der JSON-Body geht als eigene Nachricht an den Agent. OpenBot markiert ihn als Daten eines anderen Systems, nicht als Anweisung. Ein falsches Geheimnis, ein Trigger ohne Webhook oder ein abgeschalteter Trigger gibt `401` mit `TriggerHookDenied` zurück.
+
+Ein neues `PUT` erstellt ein neues Geheimnis, und das alte funktioniert nicht mehr. `DELETE /v1/triggers/:triggerId/webhook` entfernt den Webhook.
+
+---
+
+## Für wen die Session arbeitet
+
+Die Sessions eines Triggers arbeiten für seinen **Actor**: das letzte Member, das den Trigger oder seinen Webhook erstellt oder geändert hat. Eine Änderung macht dich also zum Actor. Der Actor muss dem Agent Arbeit geben können. Wenn er das nicht mehr kann, löst der Trigger nicht aus.
+
+Der Agent arbeitet wie in jeder Session. Er hat keine zusätzlichen Grenzen und fragt mit [Requests](/de/docs/requests) nach neuen Fähigkeiten.
+
+---
+
+## Berechtigungen
+
+| Permission Group | Was sie erlaubt                                                               |
+| ---------------- | ----------------------------------------------------------------------------- |
+| `triggers.read`  | Trigger lesen: ihre Zeitpläne und Webhooks.                                   |
+| `triggers.write` | Trigger erstellen, ändern und löschen und ihre Webhook-Geheimnisse festlegen. |
+
+Deine eigenen Trigger liegen unter `openbot.org.<org>.user.<user>.trigger`. Gemeinsame Trigger liegen unter `openbot.org.<org>.trigger`. Jedes Member kann die gemeinsamen Trigger lesen. Administratoren können sie ändern. Siehe [Berechtigungen](/de/docs/permissions).

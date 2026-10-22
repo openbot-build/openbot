@@ -1,6 +1,7 @@
 import type { Settings as Api } from "@openbot-build/api"
 import { DateTime } from "effect"
 import type {
+	MemberDocument,
 	OrganizationDocument,
 	PlatformDocument,
 	Snapshot,
@@ -37,6 +38,14 @@ export const platform = (
 export const organization = (
 	snapshot: Snapshot<OrganizationDocument>,
 ): Api.OrganizationSettings => ({
+	...snapshot.document,
+	version: snapshot.version,
+	updatedAt: iso(snapshot.updatedAt),
+})
+
+export const member = (
+	snapshot: Snapshot<MemberDocument>,
+): Api.MemberSettings => ({
 	...snapshot.document,
 	version: snapshot.version,
 	updatedAt: iso(snapshot.updatedAt),

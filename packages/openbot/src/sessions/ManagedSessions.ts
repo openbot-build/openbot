@@ -19,6 +19,8 @@ import * as MemoryRules from "../plugins/memory/MemoryRules.ts"
 import * as LanguageModelMemory from "../plugins/memory/LanguageModelMemory.ts"
 import * as MemoryOperations from "../plugins/memory/MemoryOperations.ts"
 import * as MemoryPlugin from "../plugins/memory/MemoryPlugin.ts"
+import * as Todos from "../plugins/work/Todos.ts"
+import { WorkPlugin } from "../plugins/work/WorkPlugin.ts"
 import {
 	Array,
 	Cause,
@@ -65,7 +67,6 @@ import {
 	empty as emptyAppPlugin,
 } from "../plugins/apps/AppPlugin.ts"
 import { AgentPlugin } from "../plugins/agents/AgentPlugin.ts"
-import { WorkflowPlugin } from "../plugins/workflows/WorkflowPlugin.ts"
 import { Signal, publish } from "../agents/Signals.ts"
 
 /** The response of the current Turn, when the Session has one. */
@@ -121,7 +122,7 @@ export const make = <
 		const fallback = yield* Effect.serviceOption(LanguageModel.LanguageModel)
 		const appPlugin = yield* Effect.serviceOption(AppPlugin)
 		const agentPlugin = yield* Effect.serviceOption(AgentPlugin)
-		const workflowPlugin = yield* Effect.serviceOption(WorkflowPlugin)
+		const workPlugin = yield* Effect.serviceOption(WorkPlugin)
 		const modelFor = (view: Session.View, turn?: Turn.Record) =>
 			options.resolveModel === undefined
 				? Effect.serviceOption(LanguageModel.LanguageModel).pipe(
@@ -252,7 +253,7 @@ export const make = <
 			Effect.orDie,
 		)
 		const definition = yield* Store.define({
-			stores: composed.stores,
+			stores: { ...composed.stores, ...Todos.stores },
 			schemaVersion: "timeline/1",
 		})
 		const store: SessionStore.Store<SessionHost.Values> =
@@ -363,7 +364,7 @@ export const make = <
 					),
 			})
 		// The Agent plugin runs inside the App plugin, so it sees every tool of the Turn.
-		// The Workflow plugin runs inside the Agent plugin, so its tools see the current Agent.
+		// The work plugin runs inside the Agent plugin, so it sees the current Agent.
 		const hostPlugin =
 			options.owner === undefined || Option.isNone(agentPlugin)
 				? apps
@@ -371,12 +372,13 @@ export const make = <
 					// cannot see that their merged tool types fit the App tool type.
 					(PluginComposition.merge(
 						apps,
-						Option.isNone(workflowPlugin)
+						Option.isNone(workPlugin)
 							? agentPluginFor(agentPlugin.value, options.owner)
 							: PluginComposition.merge(
 									agentPluginFor(agentPlugin.value, options.owner),
-									workflowPlugin.value.forOwner({
+									workPlugin.value.forOwner({
 										read: (id) => store.read(id),
+										store,
 									}),
 								),
 					) as unknown as typeof apps)
@@ -395,9 +397,11 @@ export const make = <
 		): Effect.Effect<SessionView> =>
 			Effect.gen(function* () {
 				const active = yield* runtime.isActive(view.session.id)
+				const planApproval = SessionHost.hostState(view.session)?.planApproval
 				return {
 					...view,
 					...SessionHost.agentFields(view.session),
+					...(planApproval === undefined ? {} : { planApproval }),
 					response: Option.getOrNull(currentResponse(view)),
 					activity: active
 						? ("active" as const)
@@ -460,7 +464,10 @@ export const make = <
 					chain: input.chain,
 					...(input.parent === undefined ? {} : { parent: input.parent }),
 					...(input.review === undefined ? {} : { review: input.review }),
-					...(input.run === undefined ? {} : { run: input.run }),
+					...(input.planApproval === undefined
+						? {}
+						: { planApproval: input.planApproval }),
+					...(input.trigger === undefined ? {} : { trigger: input.trigger }),
 				}
 				return yield* store
 					.create({
@@ -545,6 +552,21 @@ export const make = <
 					session: id,
 					expectedRevision: input.expected,
 					update: (view) => {
+						const state = SessionHost.hostState(view.session)
+						// A `null` makes the Session follow its Agent and the member again.
+						const { planApproval: _approval, ...kept } = state
+						const business =
+							input.planApproval === undefined
+								? {}
+								: {
+										business: {
+											...view.session.business,
+											[sessionHostId]:
+												input.planApproval === null
+													? kept
+													: { ...kept, planApproval: input.planApproval },
+										},
+									}
 						// A `null` title removes the title.
 						const title =
 							input.title === undefined
@@ -558,6 +580,7 @@ export const make = <
 										...(title === undefined ? {} : { title }),
 										archived: input.archived ?? view.session.metadata.archived,
 									},
+									...business,
 								},
 							}),
 						] as const)
@@ -598,7 +621,7 @@ export const make = <
 		const forked = ({
 			parent: _parent,
 			review: _review,
-			run: _run,
+			trigger: _trigger,
 			...kept
 		}: SessionHost.SessionHostState): SessionHost.SessionHostState => ({
 			...kept,
@@ -1196,6 +1219,19 @@ export const make = <
 				sendStream,
 				resolveCall,
 				updateMemory,
+				todos: (id) => read(id).pipe(Effect.map(Todos.of)),
+				updateTodos: (id, input) =>
+					Todos.replace({
+						store,
+						session: id,
+						items: input.items,
+						base: input,
+					}).pipe(
+						Effect.mapError((error) =>
+							error._tag === "SessionConflict" ? error : publicError(error),
+						),
+						Effect.flatMap(project),
+					),
 				history,
 				versions: (id) =>
 					read(id).pipe(

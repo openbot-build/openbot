@@ -14,7 +14,10 @@
 
 - Write all text in [Simple English](https://en.wikipedia.org/wiki/Simple_English). This covers docs, comments, error messages, logs, prompts, test names, test data, and commit messages.
 - Use short sentences, common words, one idea in each sentence, and active voice. Explain a technical word the first time you use it.
-- Do not use any other language in the repository.
+- English is the source language. Use another language only for translations on the docs site:
+  - The docs are in English, Simplified Chinese (`zh-cn`), and German (`de`). Translations live in `packages/docs/content/docs/<locale>/`.
+  - The home page has all the languages in `homeLocales` in `packages/docs/src/i18n.ts`. Its text lives in `packages/docs/src/landing/messages/<locale>.ts`.
+  - Keep the plain style of Simple English in every translation.
 - The `LICENSE` file is the official legal text of the AGPL. Do not change it.
 
 ## License
@@ -25,7 +28,9 @@
 ## Docs
 
 - All docs live on the docs site, as MDX pages in `packages/docs/content/docs`. Do not add other documentation files. The root `README.md` gives only a short overview.
-- When you change how something works, update its page in the same change.
+- When you change how something works, update its page in the same change, in English, Chinese, and German.
+- When you change text on the home page, update it in every language.
+- A translated page keeps the same headings in the same order as the English page, and links to pages in its own language.
 - The API reference is made from the contract by `packages/docs/scripts/api.ts`. Do not edit it by hand.
 
 ## Code

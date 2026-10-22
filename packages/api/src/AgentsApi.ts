@@ -16,6 +16,7 @@ import {
 	HttpApiSchema,
 	OpenApi,
 } from "effect/http-api"
+import { PlanApproval } from "./PlanApproval.ts"
 
 export const AgentId = Schema.String.check(
 	Schema.isMinLength(1),
@@ -52,6 +53,8 @@ export const Agent = Schema.Struct({
 	instructions: Schema.String,
 	/** The default model for new Sessions of this Agent. */
 	model: Schema.optionalKey(Config.Selection),
+	/** How the plans of this Agent are approved. Without it, the settings of the member count. */
+	planApproval: Schema.optionalKey(PlanApproval),
 	archived: Schema.Boolean,
 	revision: Schema.Natural,
 	createdAt: Schema.Finite,
@@ -66,6 +69,7 @@ export const CreateAgentRequest = Schema.Struct({
 	role: Schema.String.check(Schema.isMaxLength(500)),
 	instructions: Text,
 	model: Schema.optionalKey(Config.Selection),
+	planApproval: Schema.optionalKey(PlanApproval),
 	/** Shared Agents belong to the organization. Other Agents belong to the caller. */
 	shared: Schema.optionalKey(Schema.Boolean),
 	/** The Agent that owns the new Agent. You cannot use it together with `shared`. */
@@ -79,6 +83,8 @@ export const UpdateAgentRequest = Schema.Struct({
 	role: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(500))),
 	instructions: Schema.optionalKey(Text),
 	model: Schema.optionalKey(Schema.NullOr(Config.Selection)),
+	/** `null` makes the Agent follow the settings of the member again. */
+	planApproval: Schema.optionalKey(Schema.NullOr(PlanApproval)),
 	archived: Schema.optionalKey(Schema.Boolean),
 })
 export type UpdateAgentRequest = typeof UpdateAgentRequest.Type
@@ -101,11 +107,8 @@ export const CapabilityAction = Schema.Literals([
 	"agents.create",
 	"agents.promote",
 	"agents.delegate",
-	"workflows.run",
-	/** Change a Workflow that the Agent does not own, for example with a new plan. */
-	"workflows.edit",
-	/** Let a Goal node go on after it used its token budget. */
-	"workflows.budget",
+	/** An Agent in plan mode wants to carry out its plan. The target is the Session. */
+	"plans.run",
 ])
 export type CapabilityAction = typeof CapabilityAction.Type
 export const Capability = Schema.Struct({

@@ -2,11 +2,13 @@ export { Health, HealthApi, Service, service } from "./HealthApi.ts"
 export { OpenBotApi } from "./OpenBotApi.ts"
 export { Account, AccountCaller, Caller, Identity } from "./Identity.ts"
 export * as AgentsApi from "./AgentsApi.ts"
-export * as WorkflowsApi from "./WorkflowsApi.ts"
 export { Name } from "./Name.ts"
 export * as Memory from "./Memory.ts"
 export * as AgentMemory from "./AgentMemory.ts"
 export * as RequestsApi from "./RequestsApi.ts"
+export * as PlanApproval from "./PlanApproval.ts"
+export * as TriggersApi from "./TriggersApi.ts"
+export { MemberSettingsApi } from "./MemberSettingsApi.ts"
 export * as AuthApi from "./AuthApi.ts"
 export * as UserTokensApi from "./UserTokensApi.ts"
 export * as OrganizationApi from "./OrganizationApi.ts"
@@ -70,6 +72,10 @@ export {
 	MemoryCommand,
 	MemoryOverrides,
 	SessionMemory,
+	Todo,
+	TodoStatus,
+	SessionTodos,
+	UpdateTodosRequest,
 } from "./SessionsApi.ts"
 
 export {

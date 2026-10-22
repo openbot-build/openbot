@@ -70,7 +70,7 @@ test("empty Sessions, metadata, settings and Session business values have indepe
 				assert.ok(Exit.isFailure(stale))
 				assert.equal(
 					(yield* store.read(b.session.id)).session.settings.mode,
-					"default",
+					"build",
 				)
 				const fork = yield* store.fork({ source: a.session.id })
 				assert.deepEqual(fork.session.business, {})

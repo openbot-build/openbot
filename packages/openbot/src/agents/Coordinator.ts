@@ -4,6 +4,7 @@ import { AgentsApi, type Identity, type SessionView } from "@openbot-build/api"
 import type * as AgentMemory from "../plugins/memory/AgentMemory.ts"
 import {
 	Cause,
+	Clock,
 	Duration,
 	Effect,
 	Layer,
@@ -33,6 +34,8 @@ import { Organization } from "../organization/Organization.ts"
 import * as SessionHost from "../sessions/SessionHost.ts"
 import { AgentMemories } from "./AgentMemories.ts"
 import { ReportInput, names } from "../plugins/agents/AgentPlugin.ts"
+import { answersItself } from "../plugins/work/WorkPlugin.ts"
+import { Waits, type Wait as StoredWait } from "../plugins/work/Waits.ts"
 import { Agents } from "./Agents.ts"
 import { Delegations, type Stored as StoredDelegation } from "./Delegations.ts"
 import { Signals, type Signal } from "./Signals.ts"
@@ -214,6 +217,7 @@ export const layer = Layer.effectDiscard(
 		const memories = yield* AgentMemories
 		const delegations = yield* Delegations
 		const requests = yield* Requests
+		const waits = yield* Waits
 		const gate = yield* Gate
 		const signals = yield* Signals
 		const audit = yield* AuditLog
@@ -534,6 +538,8 @@ export const layer = Layer.effectDiscard(
 						session,
 					)
 					for (const wait of waits) {
+						// The wait tool is answered when its time comes, not with a request.
+						if (answersItself(wait.toolCall.name)) continue
 						const delegation = yield* delegations.forCall(
 							member.organizationId,
 							session,
@@ -713,6 +719,11 @@ export const layer = Layer.effectDiscard(
 				// Stopped work stops the work it gave away, and its open requests.
 				if (signal.status === "Interrupted") {
 					yield* requests.cancel(member.organizationId, signal.session)
+					for (const wait of yield* waits.forSession(
+						member.organizationId,
+						signal.session,
+					))
+						yield* waits.close(member.organizationId, wait, "cancelled")
 					const given = yield* delegations.forSession(
 						member.organizationId,
 						signal.session,
@@ -794,8 +805,36 @@ export const layer = Layer.effectDiscard(
 				)
 				if (Option.isNone(found)) return
 				const stored = found.value
-				if (stored.request.status === "pending")
+				if (stored.request.status === "pending") {
+					// A request with its own timeout, such as a plan, closes on time. Other
+					// requests and requests after a restart close in the check each minute.
+					if (stored.request.onExpire !== undefined) {
+						const now = yield* Clock.currentTimeMillis
+						yield* Effect.sleep(
+							Duration.millis(Math.max(0, stored.request.expiresAt - now)),
+						).pipe(
+							Effect.andThen(
+								requests.expireOne(signal.organizationId, stored.request.id),
+							),
+							Effect.flatMap(
+								Option.match({
+									onNone: () => Effect.void,
+									onSome: (closed) =>
+										signals.publish({
+											_tag: "RequestChanged",
+											organizationId: signal.organizationId,
+											request: closed.request.id,
+										}),
+								}),
+							),
+							Effect.catchCause((cause) =>
+								Effect.logWarning("A request could not be closed", cause),
+							),
+							Effect.forkIn(scope),
+						)
+					}
 					return yield* review(signal.organizationId, stored)
+				}
 				yield* audit
 					.record({
 						organizationId: signal.organizationId,
@@ -826,6 +865,7 @@ export const layer = Layer.effectDiscard(
 			Match.value(signal).pipe(
 				Match.tag("TurnChanged", onTurn),
 				Match.tag("RequestChanged", onRequest),
+				Match.tag("WaitStarted", onWait),
 				Match.exhaustive,
 				Effect.catchCause((cause) =>
 					Cause.hasInterruptsOnly(cause)
@@ -833,6 +873,42 @@ export const layer = Layer.effectDiscard(
 						: Effect.logWarning("Agent coordination failed", cause),
 				),
 			)
+
+		/**
+		 * Lets a waiting `openbot_wait` call go on. A Turn that ended or moved on
+		 * does not wait any more, so the answer does nothing then.
+		 */
+		const answerWait = (organizationId: string, wait: StoredWait) =>
+			Effect.gen(function* () {
+				const sessions = yield* sessionsFor({
+					organizationId,
+					userId: wait.userId,
+				})
+				yield* sessions
+					.resolveCall(
+						wait.session,
+						wait.toolCallId,
+						Session.Outcome.Result({
+							result: { waited: true, at: new Date(wait.dueAt).toISOString() },
+							isFailure: false,
+						}),
+					)
+					.pipe(Effect.ignore)
+				yield* waits.close(organizationId, wait, "done")
+			})
+		/** Sleeps until the time of a new wait, then answers it. */
+		const onWait = (signal: Extract<Signal, { _tag: "WaitStarted" }>) =>
+			Effect.gen(function* () {
+				const found = yield* waits.find(signal.organizationId, signal.wait)
+				if (Option.isNone(found) || found.value.status !== "waiting") return
+				const now = yield* Clock.currentTimeMillis
+				yield* Effect.sleep(
+					Duration.millis(Math.max(0, found.value.dueAt - now)),
+				)
+				const current = yield* waits.find(signal.organizationId, signal.wait)
+				if (Option.isSome(current) && current.value.status === "waiting")
+					yield* answerWait(signal.organizationId, current.value)
+			})
 
 		/** Finds work that was open when the server stopped. */
 		const recover = Effect.gen(function* () {
@@ -876,6 +952,34 @@ export const layer = Layer.effectDiscard(
 			Effect.forkScoped,
 		)
 		yield* Effect.forkScoped(recover)
+		// After a restart, each open wait sleeps again until its time.
+		yield* waits.open.pipe(
+			Effect.flatMap((open) =>
+				Effect.forEach(open, ({ organizationId, value }) =>
+					Effect.forkIn(
+						handle({ _tag: "WaitStarted", organizationId, wait: value.id }),
+						scope,
+					),
+				),
+			),
+			Effect.catchCause((cause) =>
+				Effect.logWarning("Waits could not be recovered", cause),
+			),
+			Effect.forkScoped,
+		)
+		// A check each minute answers a wait whose sleep got lost.
+		yield* waits.due.pipe(
+			Effect.flatMap((due) =>
+				Effect.forEach(due, ({ organizationId, value }) =>
+					answerWait(organizationId, value),
+				),
+			),
+			Effect.catchCause((cause) =>
+				Effect.logWarning("Waits could not be answered", cause),
+			),
+			Effect.repeat(Schedule.spaced(Duration.minutes(1))),
+			Effect.forkScoped,
+		)
 		// Requests that nobody answers in time are denied.
 		yield* requests.expire.pipe(
 			Effect.flatMap((closed) =>

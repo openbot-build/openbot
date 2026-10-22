@@ -74,6 +74,8 @@ export const CapabilityRequest = Schema.Struct({
 	revision: Schema.Natural,
 	createdAt: Schema.Finite,
 	expiresAt: Schema.Finite,
+	/** What happens when nobody answers in time. Without it, the request is denied. */
+	onExpire: Schema.optionalKey(Schema.Literals(["allow", "deny"])),
 })
 export type CapabilityRequest = typeof CapabilityRequest.Type
 

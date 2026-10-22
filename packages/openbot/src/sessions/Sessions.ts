@@ -33,6 +33,8 @@ import {
 	type SessionKind,
 	type SessionParent,
 	type SessionMemory,
+	type SessionTodos,
+	type UpdateTodosRequest,
 } from "@openbot-build/api"
 import { Context, Effect, Layer, Scope, Stream } from "effect"
 import { LanguageModel, type Tool, type Toolkit } from "effect/ai"
@@ -47,7 +49,8 @@ export interface CreateInput {
 	readonly chain: SessionHost.Chain
 	readonly parent?: SessionParent
 	readonly review?: string
-	readonly run?: string
+	readonly planApproval?: SessionHost.SessionHostState["planApproval"]
+	readonly trigger?: string
 	readonly title?: string
 	readonly settings?: CreateSessionRequest["settings"]
 }
@@ -159,6 +162,13 @@ export class Sessions extends Context.Service<
 				readonly revision: Session.Revision
 				readonly command: MemoryCommand
 			},
+		) => Effect.Effect<SessionView, ServiceError>
+		readonly todos: (
+			id: Session.Id,
+		) => Effect.Effect<SessionTodos, ServiceError>
+		readonly updateTodos: (
+			id: Session.Id,
+			input: UpdateTodosRequest,
 		) => Effect.Effect<SessionView, ServiceError>
 		readonly list: (input?: {
 			readonly archived?: boolean

@@ -41,7 +41,7 @@
 		"@openbot-build/core": "workspace:*",
 		"@openbot-build/protocol": "workspace:*",
 		"better-auth": "1.7.8",
-		"drizzle-orm": "1.0.0-rc.5-5935859",
+		"drizzle-orm": "1.0.0-rc.5",
 		"effect": "4.0.5",
 		"jose": "6.2.12",
 		"pg": "8.23.1"

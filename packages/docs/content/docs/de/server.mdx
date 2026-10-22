@@ -1,0 +1,201 @@
+---
+title: Aus Code starten
+description: Starte OpenBot aus deinem eigenen TypeScript-Programm.
+---
+
+Das Programm `openbot` deckt die meisten Bedürfnisse ab. Wenn du mehr brauchst, kannst du OpenBot aus deinem eigenen Programm starten.
+Dann kannst du eigene Models, Werkzeuge, Routen und Quellen für den App Index hinzufügen.
+
+OpenBot ist mit [Effect](https://effect.website) gebaut. Du baust es aus Layers zusammen. Ein Layer ist ein Rezept in Effect, das Dienste baut. Wenn du einen Layer erstellst, öffnet das weder das Netzwerk noch die Datenbank. Das passiert erst, wenn du ihn startest.
+
+---
+
+## Das kleinste Programm
+
+Dieses Programm macht dasselbe wie `openbot`:
+
+```ts
+import { NodeRuntime } from "@effect/platform-node"
+import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
+import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/http"
+
+NodeRuntime.runMain(
+	Effect.gen(function* () {
+		const settings = yield* EnvironmentConfiguration.load
+		return yield* Layer.launch(
+			Server.layer(settings).pipe(Layer.provide(FetchHttpClient.layer)),
+		)
+	}),
+)
+```
+
+`EnvironmentConfiguration.load` liest die Variablen aus [Konfiguration](/de/docs/configuration). Es gibt `host`, `port`, `databaseUrl`, `secretKeys` und `tls` zurück.
+Du kannst diese Werte auch im Code schreiben.
+
+Das Programm braucht trotzdem eine Plattform. Führe das Einrichtungsprogramm einmal aus, bevor Menschen es nutzen. Siehe [Platform](/de/docs/platform#setup).
+
+## Was das Paket exportiert
+
+| Export                                                      | Was es ist                                                                                                                     |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `Server.layer(options)`                                     | OpenBot mit eigenem Node.js-Server für HTTP oder HTTPS. Er liest die Anmeldung aus den Plattform-Einstellungen.                |
+| `Server.layerFixed(options)`                                | OpenBot mit einer festen Anmelde-Konfiguration. Für Tests und den Entwicklungsserver.                                          |
+| `Server.layerApi(options)`                                  | Nur die HTTP-Routen, für einen HTTP-Server, den du schon hast.                                                                 |
+| `OpenBot.layerShared(options)`                              | Die Dienste, die so lange leben wie die Instanz: der Datenbank-Pool, die geheimen Schlüssel und die gemeinsamen Einstellungen. |
+| `OpenBot.layer(options)`                                    | Die Dienste hinter den Routen: Anmeldung, Tokens, Berechtigungen, Speicher, Sessions und Apps.                                 |
+| `DatabasePostgres`                                          | Der Datenbank-Layer und das Programm `migrate`.                                                                                |
+| `EnvironmentConfiguration`                                  | Liest die Einstellungen der Instanz aus Umgebungsvariablen.                                                                    |
+| `Auth`, `Sessions`, `AppHost`, `AppPlugin`, `Configuration` | Diensttypen für fortgeschrittene Aufbauten.                                                                                    |
+
+---
+
+## Optionen
+
+`Server.layer` nimmt Instanz-Optionen und App-Optionen.
+
+### Instanz-Optionen
+
+| Option        | Typ                | Was es ist                                                                                                      |
+| ------------- | ------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `host`        | `string`           | Pflicht. Die Adresse, auf der der Server hört, zum Beispiel `127.0.0.1`.                                        |
+| `port`        | `number`           | Pflicht. Der Port, auf dem der Server hört, zum Beispiel `3000`.                                                |
+| `databaseUrl` | `Redacted<string>` | Pflicht. Die PostgreSQL-URL.                                                                                    |
+| `secretKeys`  | `Redacted<string>` | Pflicht. Die Liste der geheimen Schlüssel. Siehe [Geheime Schlüssel](/de/docs/configuration#geheime-schlüssel). |
+| `tls`         | object             | Optional. `{ certFile, keyFile }`: Pfade zu PEM-Dateien. OpenBot stellt dann selbst HTTPS bereit.               |
+
+### Anmeldung
+
+`Server.layer` nimmt keine Anmelde-Optionen. Es liest den öffentlichen Origin, den Anbieter der Plattform und das Anmelde-Geheimnis aus den [Plattform-Einstellungen](/de/docs/platform#einstellungen-der-platform).
+
+- Vor der Einrichtung antwortet jede Route außer `/health` mit `503` und `SetupRequired`.
+- Wenn sich eine dieser Einstellungen ändert, baut der Server eine neue App mit den neuen Werten. Die neue App nimmt zuerst Anfragen an, dann hält die alte App an.
+
+`Server.layerFixed` stellt stattdessen eine feste `auth`-Konfiguration bereit und baut nie eine neue App. Es gibt die App-Dienste auch an dein Programm weiter, damit Tests sie nutzen können. Wenn die Datenbank keine Plattform-Einstellungen hat, schreibt es sie zuerst, für den `publicOrigin` von `auth`. Tests und der Entwicklungsserver nutzen es.
+
+### App-Optionen
+
+| Option          | Was sie tut                                                                                                      |
+| --------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `sessions`      | Werkzeuge und Memory für Sessions. Siehe unten.                                                                  |
+| `builtinModels` | Models, die jede Organisation nutzen kann, im Code angegeben. Siehe [Models](/de/docs/models#eingebaute-models). |
+| `routes`        | Eine Funktion, die die Anmelde-Konfiguration bekommt und einen Layer mit deinen eigenen HTTP-Routen zurückgibt.  |
+| `discovery`     | Ein Layer, der Apps im Web findet. Standardmäßig liest er öffentliche Catalogs über das Internet.                |
+| `indexSources`  | Weitere Quellen für die Suche im App Index, neben dem OpenBot Index.                                             |
+| `indexWork`     | Zeitplan des App-Index-Workers: `{ intervalMs, retryMs }`.                                                       |
+
+Einige Werte waren früher Optionen. Jetzt sind sie Einstellungen in der Datenbank. So teilen alle Instanzen sie:
+
+| Alte Option             | Einstellung                                                                                       |
+| ----------------------- | ------------------------------------------------------------------------------------------------- |
+| `appRestrictions`       | `appRestrictions` in den [Plattform-Einstellungen](/de/docs/platform#einstellungen-der-platform). |
+| `appReadRules`          | `appReadRules` in den [Organisations-Einstellungen](/de/docs/organization#einstellungen).         |
+| `agents.helperModel`    | `rulesModel` und `agentMemoryModel` in den Organisations-Einstellungen.                           |
+| `agents.requestTimeout` | `requestTimeoutMs` in den Organisations-Einstellungen.                                            |
+| `agents.memory`         | `agentMemory` in den Organisations-Einstellungen.                                                 |
+| `appEncryptionKey`      | Die Instanz-Option `secretKeys`.                                                                  |
+
+---
+
+## Sessions
+
+Die Option `sessions` legt fest, wie Sessions ihre Arbeit machen.
+
+| Feld             | Was es tut                                                                             |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| `runtime`        | Die Agent-Definition: `toolkit`, `plugin`, `providers`, `compaction` und mehr.         |
+| `layerExecution` | Eine Funktion, die für jeden Turn zusätzliche Dienste baut, zum Beispiel Tool-Handler. |
+| `memory`         | Gelerntes Memory: dein eigenes `model` und deine eigene `policy`.                      |
+
+Models kommen von den Model Providers in der Datenbank und aus `builtinModels`. Siehe [Models](/de/docs/models).
+Die Memory-Schalter einer neuen Session kommen aus `memory` in den [Organisations-Einstellungen](/de/docs/organization#einstellungen). Siehe [Memory](/de/docs/memory#schalter).
+
+### Ein Werkzeug hinzufügen
+
+Ein Werkzeug (Tool) ist eine Funktion, die das Model aufrufen kann. Erstelle es mit Effect AI. Gib dann das Toolkit und seine Handler an OpenBot:
+
+```ts
+import { type Configuration, Server } from "@openbot-build/openbot"
+import { Effect, Layer, Schema } from "effect"
+import { Tool, Toolkit } from "effect/ai"
+
+const CurrentTime = Tool.make("CurrentTime", {
+	description: "Returns the current time on the server.",
+	parameters: Schema.Struct({}),
+	success: Schema.String,
+})
+const toolkit = Toolkit.make(CurrentTime)
+const handlers = toolkit.toLayer({
+	CurrentTime: () => Effect.sync(() => new Date().toISOString()),
+})
+
+const server = (settings: Configuration.Settings) =>
+	Server.layer({
+		...settings,
+		sessions: {
+			runtime: { toolkit },
+			layerExecution: () => handlers,
+		},
+	}).pipe(Layer.provide(handlers))
+```
+
+Füge `needsApproval: true` zu `Tool.make` hinzu, wenn jeder Aufruf eine Entscheidung braucht. OpenBot erstellt dann dafür einen `tools.call`-Request. Siehe [Requests](/de/docs/requests).
+
+---
+
+## Deine eigenen Routen
+
+`routes` fügt demselben Server HTTP-Routen hinzu. Es ist eine Funktion, die die aktuelle Anmelde-Konfiguration bekommt und einen Layer zurückgibt. Der Layer kann den Dienst `Auth` nutzen, um das Anmelde-Cookie zu prüfen.
+
+```ts
+import { HttpRouter, HttpServerResponse } from "effect/http"
+
+const routes = HttpRouter.add(
+	"GET",
+	"/status",
+	HttpServerResponse.text("ready"),
+)
+
+Server.layer({ ...settings, routes: () => routes })
+```
+
+Nutze keine Pfade unter `/auth/` oder `/v1/`. Sie gehören OpenBot.
+
+## Deinen eigenen HTTP-Server nutzen
+
+`Server.layerApp(options)` gibt eine Funktion zurück. Sie bekommt eine Anmelde-Konfiguration und gibt die OpenBot-Routen und -Dienste dafür zurück.
+`Server.layerApi({ publicOrigin })` gibt nur die OpenBot-Routen. Es fügt auch Fehler-Logs für fehlgeschlagene Anfragen hinzu.
+
+`Server.layer` und `Server.layerFixed` starten ihren eigenen Node.js-Server.
+Wenn du OpenBot in einen Server einbauen willst, den du schon hast, baue dieselben Teile selbst. Lies `packages/openbot/src/app/Server.ts`, um zu sehen, wie `layerFixed` eine Konfiguration bereitstellt. Lies `packages/openbot/src/app/Supervisor.ts`, um zu sehen, wie `Server.layer` eine neue App baut, wenn sich die Plattform-Einstellungen ändern.
+Bewahre das Anmelde-Geheimnis in den Plattform-Einstellungen auf, nicht in deiner eigenen Umgebungsvariable. Jede Instanz muss dasselbe nutzen.
+
+---
+
+## Die Datenbank migrieren
+
+`DatabasePostgres.migrate` führt die Migrationen aus. `OpenBot.layerShared` prüft nur, ob die Tabellen da sind, und schlägt fehl, wenn nicht.
+Führe Migrationen in einem eigenen Programm aus, bevor du den Server startest:
+
+```ts
+import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { DatabasePostgres } from "@openbot-build/openbot"
+import { Config, Effect, Layer } from "effect"
+
+NodeRuntime.runMain(
+	DatabasePostgres.migrate.pipe(
+		Effect.provide(
+			Layer.unwrap(
+				Effect.map(Config.Redacted("OPENBOT_DATABASE_URL"), (databaseUrl) =>
+					DatabasePostgres.layer({ databaseUrl }),
+				),
+			).pipe(Layer.provide(NodeServices.layer)),
+		),
+	),
+)
+```
+
+## Fehler-Logs an deinen eigenen Dienst senden
+
+OpenBot schreibt Fehlschläge als Fehler-Logs. Füge deinen eigenen Effect-Logger hinzu, um sie an einen anderen Dienst zu senden.
+Was jedes Log enthält, und ein vollständiges Beispiel, findest du unter [Fehler-Logs](/de/docs/error-logs).

@@ -1,7 +1,7 @@
 import {
 	type AgentsApi,
 	Permissions,
-	type WorkflowsApi,
+	type TriggersApi,
 } from "@openbot-build/api"
 import { Option } from "effect"
 
@@ -48,10 +48,10 @@ export const resourceKey = (target: {
 		case "connection":
 		case "request":
 			return child(userKey(subject))
-		// The key of one Agent or Workflow depends on its owner.
-		// Use agentKey or workflowKey when the Agent or Workflow is known.
+		// The key of one Agent or trigger depends on its owner.
+		// Use agentKey or triggerKey when the Agent or trigger is known.
 		case "agent":
-		case "workflow":
+		case "trigger":
 		case "model":
 			return child(organizationKey(subject.organizationId))
 	}
@@ -100,33 +100,28 @@ export const agentKey = (agent: {
 	"." +
 	segment(agent.id)
 
-/**
- * The place for the Workflows of a member, or for shared Workflows when `root` is `null`.
- * A Workflow of an Agent is below the member at the top of the owner tree of that Agent.
- */
-export const workflowPlace = ({
-	organizationId,
-	root,
-}: {
+/** The place for the triggers of a member, or for shared triggers when `userId` is `null`. */
+export const triggerPlace = (input: {
 	readonly organizationId: string
-	readonly root: string | null
+	readonly userId: string | null
 }) =>
-	(root === null
-		? organizationKey(organizationId)
-		: userKey({ organizationId, userId: root })) + ".workflow"
+	(input.userId === null
+		? organizationKey(input.organizationId)
+		: userKey({ organizationId: input.organizationId, userId: input.userId })) +
+	".trigger"
 
-/** The key of one Workflow. */
-export const workflowKey = (workflow: {
+/** The key of one trigger. */
+export const triggerKey = (trigger: {
 	readonly organizationId: string
 	readonly id: string
-	readonly owner: WorkflowsApi.WorkflowOwner
+	readonly owner: TriggersApi.TriggerOwner
 }) =>
-	workflowPlace({
-		organizationId: workflow.organizationId,
-		root: workflow.owner._tag === "Organization" ? null : workflow.owner.userId,
+	triggerPlace({
+		organizationId: trigger.organizationId,
+		userId: trigger.owner._tag === "Member" ? trigger.owner.userId : null,
 	}) +
 	"." +
-	segment(workflow.id)
+	segment(trigger.id)
 
 /** Put the organization and the user of the caller into a resource pattern. */
 export const expand = ({

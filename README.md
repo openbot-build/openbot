@@ -12,7 +12,7 @@ You give work to an Agent in plain language. OpenBot runs the work on a server, 
 - **Sessions and Timelines.** Work happens in Sessions and Turns. The Timeline keeps versions, so you can go back and try again.
 - **Agent for Agents.** A Main Agent acts for you and gives work to a team of lasting Agents and their Session Agents. Each Agent has its own context and memory.
 - **Lazy capabilities.** Agents have no preset limits. When an Agent tries something new, the decider above it answers, and Grants and Rules keep the answer.
-- **Agents in Workflows.** A Workflow mixes exact tool calls and checks with goals for an Agent. OpenBot records Agent work that a check confirmed, and replays it later without a model. Runs keep going after a restart.
+- **Plans, todos and triggers.** An Agent can plan first and wait for approval, keep a todo list, and wait. A trigger starts its work on a schedule or from a webhook.
 - **Open Apps.** Agents find and use Apps that publishers put on the open web with the OpenBot App Protocol.
 
 ## Quick start

@@ -1,0 +1,240 @@
+---
+import "@fontsource-variable/dm-sans"
+import "@fontsource-variable/geist"
+import "./landing.css"
+import { docsPath, type HomeLocale, homeLocales, localePrefix } from "../i18n.ts"
+import { messagesFor } from "./messages/index.ts"
+import Scene from "./Scene.astro"
+import StoryVisual from "./StoryVisual.astro"
+
+interface Props {
+	locale: HomeLocale
+}
+
+const { locale } = Astro.props
+const t = messagesFor(locale.path)
+const home = `${localePrefix(locale.path)}/`
+const docs = docsPath(locale.path)
+const githubUrl = "https://github.com/openbot-build/openbot"
+
+// The body goes in single quotes in the shell, so a single quote in the
+// text must end the quotes, add a quote, and start them again.
+const body = JSON.stringify({ expected: 0, input: t.hero.prompt }).replaceAll(
+	"'",
+	"'\\''",
+)
+const startTurn = `curl -H "Authorization: Bearer $OPENBOT_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '${body}' \\
+  https://api.example.com/v1/sessions/$SESSION/turns`
+
+const endpoints = `POST  /v1/sessions
+POST  /v1/sessions/:sessionId/turns
+POST  /v1/sessions/:sessionId/turns/:turnId/steer
+POST  /v1/sessions/:sessionId/turns/:turnId/interrupt
+GET   /v1/sessions/:sessionId/wait
+POST  /v1/sessions/:sessionId/queue
+GET   /v1/apps/discover`
+
+const scenarios = [
+	{ id: "script", ...t.scenarios.script },
+	{ id: "service", ...t.scenarios.service },
+	{ id: "bot", ...t.scenarios.bot },
+]
+---
+
+<!doctype html>
+<html lang={locale.lang} dir={locale.dir}>
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="color-scheme" content="light dark" />
+		<meta name="description" content={t.description} />
+		<title>OpenBot</title>
+		<link rel="canonical" href={new URL(home, Astro.site)} />
+		{
+			homeLocales.map((other) => (
+				<link
+					rel="alternate"
+					hreflang={other.lang}
+					href={new URL(`${localePrefix(other.path)}/`, Astro.site)}
+				/>
+			))
+		}
+		<link rel="alternate" hreflang="x-default" href={new URL("/", Astro.site)} />
+		<script is:inline>
+			// Use the theme that the docs theme picker saved, if there is one.
+			try {
+				const theme = localStorage.getItem("starlight-theme")
+				if (theme === "light" || theme === "dark") {
+					document.documentElement.dataset.theme = theme
+				}
+			} catch {}
+		</script>
+	</head>
+	<body class="landing">
+		<main class="home-page">
+			<header class="site-header">
+				<a class="project-brand" href={home}>OpenBot</a>
+				<nav class="site-tools" aria-label={t.nav.label}>
+					<a href={docs}>{t.nav.docs}</a>
+					<a href="/docs/api/">{t.nav.api}</a>
+					<a href={githubUrl}>GitHub</a>
+					<a href="#languages">{t.nav.language}</a>
+				</nav>
+			</header>
+			<div class="page-content">
+				<div class="product-landing marketing-story">
+					<Scene class="campaign-hero kay-opening">
+						<div class="hero-title">
+							<h1>
+								<span>{t.hero.title[0]}</span>
+								<span>{t.hero.title[1]}</span>
+							</h1>
+						</div>
+						<div class="hero-aside">
+							<p>{t.hero.body}</p>
+							<p class="hero-links">
+								<a href={`${docs}quickstart/`}>{t.hero.quickStart}</a>
+								<a href="/docs/api/">{t.hero.apiReference}</a>
+							</p>
+						</div>
+						<StoryVisual label={t.hero.visual} tone="hero" code={startTurn} />
+					</Scene>
+
+					<Scene class="kay-scenarios" aria-labelledby="scenario-title">
+						<h2 id="scenario-title">{t.scenarios.title}</h2>
+						<div class="connection-story">
+							<div class="perspective-switch" role="group" aria-label={t.scenarios.label}>
+								{
+									scenarios.map((scenario, index) => (
+										<button
+											type="button"
+											data-scenario={scenario.id}
+											aria-pressed={index === 0 ? "true" : "false"}
+											aria-controls={`scenario-${scenario.id}`}
+										>
+											{scenario.label}
+										</button>
+									))
+								}
+							</div>
+							{
+								scenarios.map((scenario, index) => (
+									<div
+										id={`scenario-${scenario.id}`}
+										class="connection-perspective"
+										data-scenario={scenario.id}
+										aria-hidden={index === 0 ? "false" : "true"}
+										inert={index !== 0}
+									>
+										<blockquote>{scenario.prompt}</blockquote>
+										<div class="scenario-meaning">
+											<h3>{scenario.meaning}</h3>
+										</div>
+									</div>
+								))
+							}
+						</div>
+					</Scene>
+
+					<Scene class="campaign-proof" aria-labelledby="contract-title">
+						<StoryVisual label={t.contract.visual} tone="proof" code={endpoints} />
+						<div>
+							<h2 id="contract-title">
+								{t.contract.title[0]}
+								<br />
+								{t.contract.title[1]}
+							</h2>
+							<p>{t.contract.body}</p>
+						</div>
+					</Scene>
+
+					<Scene class="resource-horizons" aria-labelledby="features-title">
+						<h2 id="features-title">
+							{t.features.title[0]} <span>{t.features.title[1]}</span>
+						</h2>
+						<div class="horizon-notes">
+							{
+								t.features.items.map((feature) => (
+									<article>
+										<h3>{feature.title}</h3>
+										<p>{feature.text}</p>
+									</article>
+								))
+							}
+						</div>
+					</Scene>
+
+					<Scene class="closing-scene" aria-labelledby="closing-title">
+						<div class="closing-atmosphere" aria-hidden="true"></div>
+						<h2 id="closing-title">
+							<span>{t.closing.title[0]}</span> <span>{t.closing.title[1]}</span>
+						</h2>
+						<ol class="inline-usage" aria-label={t.closing.label}>
+							{
+								t.closing.steps.map((step) => (
+									<li>
+										<h3>{step.title}</h3>
+										<p>{step.text}</p>
+									</li>
+								))
+							}
+						</ol>
+					</Scene>
+
+					<aside class="kay-builder" aria-label={t.license.label}>
+						<p>{t.license.body}</p>
+						<a href={githubUrl}>{t.license.link}</a>
+					</aside>
+					<footer class="landing-footer">
+						<span>OpenBot</span>
+						<a href={docs}>{t.nav.docs}</a>
+						<nav id="languages" class="language-list" aria-label={t.nav.language}>
+							<ul>
+								{
+									homeLocales.map((other) => (
+										<li>
+											<a
+												href={`${localePrefix(other.path)}/`}
+												hreflang={other.lang}
+												lang={other.lang}
+												aria-current={other === locale ? "page" : undefined}
+											>
+												{other.name}
+											</a>
+										</li>
+									))
+								}
+							</ul>
+						</nav>
+					</footer>
+				</div>
+			</div>
+		</main>
+		<script>
+			// Show the scenario of the button that the reader picks.
+			document.addEventListener("click", (event) => {
+				const button =
+					event.target instanceof Element
+						? event.target.closest<HTMLButtonElement>("button[data-scenario]")
+						: null
+				const story = button?.closest(".connection-story")
+				if (button === null || button === undefined || story === null || story === undefined) return
+				const current = button.dataset["scenario"]
+				story
+					.querySelectorAll<HTMLButtonElement>("button[data-scenario]")
+					.forEach((option) => {
+						option.setAttribute("aria-pressed", String(option === button))
+					})
+				story
+					.querySelectorAll<HTMLElement>(".connection-perspective")
+					.forEach((panel) => {
+						const hidden = panel.dataset["scenario"] !== current
+						panel.inert = hidden
+						panel.setAttribute("aria-hidden", String(hidden))
+					})
+			})
+		</script>
+	</body>
+</html>

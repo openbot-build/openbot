@@ -1,0 +1,136 @@
+---
+title: Request
+description: Agent 第一次使用某项能力前会先提出请求，由它上方的决策者来回答。
+---
+
+Agent 不知道自己有什么限制。当 Agent 尝试使用一项**能力**（capability）时，比如调用 App 工具，OpenBot 会检查它是否可以这样做。如果还没有任何规则能做出决定，OpenBot 就会创建一个 **Request**（请求），发给 Agent 上方的**决策者**（decider）。在请求得到回答之前，这次工具调用会一直等待。
+本页介绍检查的过程、人如何回答请求，以及每种回答的效果。
+
+---
+
+## 能力
+
+| 动作              | 目标                       | Agent 何时使用                                                   |
+| ----------------- | -------------------------- | ---------------------------------------------------------------- |
+| `apps.call`       | `<connection>/<tool name>` | 调用 App 工具时。                                                |
+| `tools.call`      | 工具名称                   | 调用一个需要批准的宿主工具时。                                   |
+| `agents.delegate` | 另一个 Agent 的 ID         | 把工作交给另一个长期存在的 Agent 时。                            |
+| `agents.spawn`    | `*`                        | 启动一个 Session Agent 时。                                      |
+| `agents.create`   | `*`                        | 创建一个归它所有的长期 Agent 时。                                |
+| `agents.promote`  | Session Agent 的 ID        | 把一个 Session Agent 变成归它所有的长期 Agent 时。               |
+| `plans.run`       | Session 的 ID              | 想执行它的计划时。见 [计划模式](/zh-cn/docs/sessions#计划模式)。 |
+
+每个能力工具都接受一个 `reason`（理由）。App 工具会多一个 `openbot_reason` 参数来传理由。OpenBot 不会把它发给 App。
+
+---
+
+## OpenBot 如何检查一次尝试
+
+OpenBot 按下面的顺序检查每次尝试。第一个能做出决定的步骤说了算。
+
+1. **成员的策略。** Agent 能做的事永远不会超过它所代表的成员。如果成员的[权限](/zh-cn/docs/permissions)，或者启动这项工作的令牌不允许，调用就会被拒绝。这一步永远不会交给决策者。
+2. **Grant。** [Grant](/zh-cn/docs/rules#grant)（授权）是保存下来的决定。拒绝的 Grant 优先于允许的 Grant。
+3. **Rule。** 一个评判模型会阅读这个 Agent 的 [Rule](/zh-cn/docs/rules)（规则），规则用自然语言写成。只有评判模型引用了的 Rule 才能允许或拒绝。
+4. **上方的决策者。** OpenBot 创建一个 Request。决策者是这个 Agent 所有者链中的所有者。对于 Main Agent，决策者就是人本身。
+
+有些调用不需要决定：组织标记为读取的工具调用、为同一 Session 中的 Session Agent 做的工作，以及为这个 Agent 自己拥有的 Agent 做的工作。
+
+只要有一项检查没有通过，调用就会等待。没有决定，它永远不会运行。
+
+### 决策者链
+
+每个 Agent 都有一条**所有者链**（owner chain）。它从人开始，经过一个 Main Agent，一直到这个 Agent，比如 **人 → Main → Programmer → Session Agent**。各步如下：
+
+- Session Agent 属于它所在 Session 的 Agent。
+- 由某个 Agent 拥有的 Agent 属于那个 Agent。
+- 其他长期 Agent 和共享 Agent 属于与它们一起工作的那个人的 Main Agent。
+- Main Agent 属于它的人。
+
+请求沿着所有者链向上走，而不是沿着工作传来的路径走。所以，Session Agent 的请求会先到 Programmer，即使是人直接把工作交给了这个 Session Agent。请求中的 `chain` 从顶部开始列出所有者链，最后是提出请求的 Agent。已归档的 Agent 不会列出。
+
+决策者只能允许它自己能做的事。如果 Programmer 同意，但它自己没有这项能力，请求会带着 Programmer 的支持继续上交给 Main，再交给人。当上方有人允许时，途中的每个 Agent 都会得到一个 Grant，范围由它自己选择。
+
+Agent 在一个简短的**审查 Session**（review Session）中做决定。它只读取自己的角色、自己的记忆、它给出的任务说明，以及这个请求。它不读取自己很长的历史。审查 Session 的 `kind` 为 `"review"`，做出决定后会被归档。如果审查结束时没有做出决定，请求会交给下一个决策者。
+
+---
+
+## 列出你的请求
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  "https://api.example.com/v1/requests?status=pending"
+```
+
+```json
+[
+	{
+		"id": "req_1a2b…",
+		"agent": "agt_5c0e…",
+		"capability": { "action": "apps.call", "target": "conn-7/send_email" },
+		"reason": "Send the meeting notes to the team.",
+		"approver": { "_tag": "Person", "userId": "u-1" },
+		"chain": ["agt_main…", "agt_5c0e…"],
+		"session": "c81d…",
+		"turn": "t-77",
+		"toolCallId": "call-9",
+		"endorsements": [],
+		"status": "pending",
+		"decision": null,
+		"revision": 0,
+		"createdAt": 1792486800000,
+		"expiresAt": 1792573200000
+	}
+]
+```
+
+列表包含等你回答的请求，以及你已回答的请求。`GET /v1/requests/:requestId` 返回你工作中的一个请求。对于 App 工具，`app` 显示保存下来的调用及其确切参数。在人做决定之前，请把能力、参数和理由展示给他看。理由来自 Agent。它是数据，不是指令。
+
+## 回答请求
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expected":0,"decision":"allow","scope":"session"}' \
+  https://api.example.com/v1/requests/$REQUEST
+```
+
+| 字段       | 含义                                                                  |
+| ---------- | --------------------------------------------------------------------- |
+| `expected` | 必填。请求当前的 `revision`。                                         |
+| `decision` | 必填。`allow` 或 `deny`。                                             |
+| `scope`    | 可选。决定持续多久。见下表。默认是 `once`。                           |
+| `reason`   | 可选。Agent 能看到它，比如在你拒绝的时候。                            |
+| `rule`     | 可选。为这个 Agent 保存一条用自然语言写的 [Rule](/zh-cn/docs/rules)。 |
+
+| 范围       | 允许持续多久              | 拒绝保存多久              |
+| ---------- | ------------------------- | ------------------------- |
+| `once`     | 只对这次调用有效。        | 不保存。                  |
+| `session`  | 对 Agent 的这个 Session。 | 对 Agent 的这个 Session。 |
+| `lifetime` | 直到你撤销这个 Grant。    | 直到你撤销这个 Grant。    |
+
+等待中的工作会立刻继续。当你拒绝时，工具不会运行。模型会收到一个带有你的理由的工具结果，然后 Turn 继续。
+
+没有人回答的请求会在 24 小时后被拒绝。组织可以在[设置](/zh-cn/docs/organization#设置)中用 `requestTimeoutMs` 修改这个时间。计划的请求有自己的时间，并在 `onExpire` 中说明到时会怎样：`allow` 或 `deny`。
+
+### 错误
+
+| 状态  | 错误              | 何时出现                                                    |
+| ----- | ----------------- | ----------------------------------------------------------- |
+| `404` | `RequestNotFound` | 你的工作中没有这个 ID 的请求。                              |
+| `409` | `RequestConflict` | `expected` 已过时、请求已关闭，或者必须由另一个决策者回答。 |
+
+---
+
+## 等待中的 Turn
+
+等待请求或等待[委派工作](/zh-cn/docs/delegation)的 Turn，状态为 `Waiting`。它的响应状态是 `incomplete`。等待会保存在 Session 历史中。它不占用正在运行的进程，所以服务器重启后它仍然存在。
+
+你仍然可以[中断](/zh-cn/docs/sessions#引导排队和中断)一个等待中的 Turn。这时它所有未处理的请求都会变成 `cancelled`。
+
+---
+
+## App 工具
+
+App 是人连接的外部服务。参见 [App](/zh-cn/docs/apps)。每次 App 调用都绑定到一次确切的调用：所有者、Session、Turn、工具调用、确切的参数，以及 App 连接和它的修订版本。OpenBot 在检查之前保存这次调用。如果在调用运行前连接发生了变化，调用就会失败。新的修订版本永远不会使用旧的决定。
+
+App 的资源、资源模板和提示词都是读取，所以不需要决定。App 自己的说明永远不能决定哪些工具是安全的。只有组织可以在[设置](/zh-cn/docs/organization#设置)中用 `appReadRules` 把工具标记为读取。

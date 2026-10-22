@@ -96,7 +96,8 @@ export class Model extends Schema.TaggedClass<Model>()("Config.Model", {
 	),
 }) {}
 
-export const Mode = Schema.Literals(["default", "plan"])
+/** `build` does the work. `plan` looks things up and writes a plan first. */
+export const Mode = Schema.Literals(["build", "plan"])
 export type Mode = typeof Mode.Type
 
 /** Why a model selection or model setting is not valid. */

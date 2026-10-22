@@ -61,6 +61,12 @@ const implementations = Effect.gen(function* () {
 			Effect.flatMap(current, (sessions) =>
 				withModel(sessions.updateMemory(params.sessionId, payload)),
 			),
+		sessionTodos: ({ params }: Request<"sessionTodos">) =>
+			Effect.flatMap(current, (sessions) => sessions.todos(params.sessionId)),
+		updateSessionTodos: ({ params, payload }: Request<"updateSessionTodos">) =>
+			Effect.flatMap(current, (sessions) =>
+				sessions.updateTodos(params.sessionId, payload),
+			),
 		createSession: ({ payload }: Request<"createSession">) =>
 			Effect.gen(function* () {
 				const caller = yield* Identity
@@ -85,6 +91,9 @@ const implementations = Effect.gen(function* () {
 						sessions: [],
 					},
 					...(payload.title === undefined ? {} : { title: payload.title }),
+					...(payload.planApproval === undefined
+						? {}
+						: { planApproval: payload.planApproval }),
 					...(payload.settings === undefined
 						? {}
 						: { settings: payload.settings }),

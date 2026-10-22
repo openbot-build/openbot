@@ -175,6 +175,8 @@ const registryWith = (input: {
 				updatePlatform: () => Effect.die("unused"),
 				replacePlatform: () => Effect.die("unused"),
 				updateOrganization: () => Effect.die("unused"),
+				member: () => Effect.die("unused"),
+				updateMember: () => Effect.die("unused"),
 				notify: () => Effect.die("unused"),
 				changes: Stream.empty,
 			}),

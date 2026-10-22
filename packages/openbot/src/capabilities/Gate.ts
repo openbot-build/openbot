@@ -1,13 +1,13 @@
 import type { Session } from "@openbot-build/core"
 import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
-import type { AgentsApi, AppExecution, WorkflowsApi } from "@openbot-build/api"
+import type { AgentsApi, AppExecution } from "@openbot-build/api"
 import { Context, Effect, Layer, Option } from "effect"
 import { can } from "../authorization/Check.ts"
 import { Signal, Signals } from "../agents/Signals.ts"
 import { type Capability, describe, permission } from "./Capability.ts"
 import { Grants } from "./Grants.ts"
 import { Judge } from "./Judge.ts"
-import { Requests } from "./Requests.ts"
+import { type Ask, Requests } from "./Requests.ts"
 import { Rules } from "./Rules.ts"
 import { Work } from "./Work.ts"
 
@@ -21,11 +21,11 @@ export interface Attempt {
 	readonly toolCallId: string
 	/** The target Agent, for actions on an Agent. */
 	readonly target?: AgentsApi.Agent
-	/** The target Workflow, for actions on a Workflow. */
-	readonly workflow?: Pick<WorkflowsApi.Workflow, "id" | "owner">
 	/** The deployment owner allows this without asking, for example a read-only App tool. */
 	readonly implicit?: boolean
 	readonly app?: AppExecution.Invocation
+	/** How the request waits, when the attempt needs one. */
+	readonly ask?: Ask
 }
 
 /**
@@ -129,6 +129,7 @@ export const make: Effect.Effect<
 						turn: current.turn,
 						toolCallId: attempt.toolCallId,
 						...(attempt.app === undefined ? {} : { app: attempt.app }),
+						...(attempt.ask === undefined ? {} : { ask: attempt.ask }),
 						...(decided === undefined ? {} : { decided }),
 					})
 					.pipe(
@@ -148,9 +149,6 @@ export const make: Effect.Effect<
 				session: current.session,
 				self: current.agent,
 				...(attempt.target === undefined ? {} : { agent: attempt.target }),
-				...(attempt.workflow === undefined
-					? {}
-					: { workflow: attempt.workflow }),
 			})
 			const member = yield* can({
 				caller: current.caller,
@@ -170,6 +168,8 @@ export const make: Effect.Effect<
 						".",
 				})
 			if (attempt.implicit === true) return "allow" as const
+			// Some attempts must go to the person, so Grants and Rules do not answer them.
+			if (attempt.ask?.person === true) return yield* record()
 			const grant = yield* grants.match({
 				organizationId,
 				agent: current.agent.id,

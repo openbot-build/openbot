@@ -1,0 +1,134 @@
+---
+title: 快速开始
+description: 在你的电脑上运行 OpenBot，并完成第一次调用。
+---
+
+本页使用测试账户和测试模型，在你的电脑上启动 OpenBot。
+你不需要身份提供方，也不需要模型密钥。
+
+---
+
+## 前提条件
+
+你需要：
+
+1. [devenv](https://devenv.sh) 2.0 或更新版本。它提供合适版本的 Node.js、pnpm、PostgreSQL 和 mkcert。devenv 还会运行开发用的数据库，所以你不需要 Docker。
+2. 一份代码：
+
+```sh
+git clone https://github.com/openbot-build/openbot.git
+cd openbot
+```
+
+所有命令都在代码的顶层文件夹中运行，并放在 `devenv shell --` 里面。
+
+---
+
+## 启动 OpenBot
+
+<Steps>
+
+<Step>
+
+### 生成本地设置
+
+```sh
+devenv shell -- pnpm dev:setup
+devenv shell -- mkcert -install
+```
+
+第一条命令会生成 `.env.development`，其中有一个新的密钥，同时为 `localhost` 生成一个证书。
+如果你有旧版本留下的 `.env.development`，请先删除它。
+第二条命令让你的电脑信任这个证书。它可能会要求你输入密码。
+
+</Step>
+
+<Step>
+
+### 启动服务器
+
+```sh
+devenv shell -- pnpm dev
+```
+
+这条命令会启动 PostgreSQL，构建 OpenBot，更新数据库，然后在 `https://localhost:8443` 启动 OpenBot。
+开发服务器会自己设置好平台，所以你不需要运行设置程序。
+第一次启动可能需要几分钟。按 **Ctrl+C** 停止。你的数据会保留在数据库中。
+
+</Step>
+
+<Step>
+
+### 登录
+
+```sh
+curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
+  -H "Origin: https://localhost:8443" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+在开发环境中，这会立即让你登录本地测试账户 `developer@localhost.test`。登录 cookie 会保存到 `cookies.txt`。
+这个账户是平台管理员。它还会得到一个自己的组织，名字是 "Personal"。
+
+</Step>
+
+<Step>
+
+### 创建用户令牌
+
+```sh
+curl -b cookies.txt \
+  -H 'Origin: https://localhost:8443' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"local"}' \
+  https://localhost:8443/v1/user/tokens
+```
+
+你是 "Personal" 组织的 Super Administrator（超级管理员），这个令牌属于该组织。回答中有一个以 `obut_` 开头的 `secret`。它只显示一次，所以请保存好：
+
+```sh
+export OPENBOT_TOKEN=obut_...
+```
+
+</Step>
+
+<Step>
+
+### 启动 Session 和 Turn
+
+创建一个 Session：
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"My first Session"}' \
+  https://localhost:8443/v1/sessions
+```
+
+从回答中取出 `session.id` 和 `session.revision`。然后给这个 Session 一些工作：
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"expected":0,"input":"Hello"}' \
+  https://localhost:8443/v1/sessions/<sessionId>/turns
+```
+
+Turn 在后台运行，你会立即得到 `202`。加上 `"stream": true`，就能以实时流的形式得到回答。
+
+</Step>
+
+</Steps>
+
+测试模型 `mock-text` 的回答是 `Development response:` 加上你的输入。
+其他测试模型见 [Models](/zh-cn/docs/models)。
+
+---
+
+## 下一步
+
+- 阅读 [Sessions](/zh-cn/docs/sessions) 和 Turns 的工作方式。
+- 使用真实的身份提供方：[身份验证](/zh-cn/docs/authentication) 和 [Platform](/zh-cn/docs/platform)。
+- 添加真实的模型：[Models](/zh-cn/docs/models)。
+- 在服务器上运行 OpenBot：[部署](/zh-cn/docs/deploy)。
