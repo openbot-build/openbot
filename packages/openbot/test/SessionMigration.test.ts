@@ -44,7 +44,7 @@ const session = (id: string, kind: string, spaced: boolean) => {
 	}
 }
 
-test("old Sessions get the mode build, Sessions of Runs become direct, and old organizations get the default plan approval", async () => {
+test("old Sessions get the mode build, Sessions of Runs become direct, Workflow audit entries go, and old organizations get the default plan approval", async () => {
 	const database = await PostgresTest.start()
 	const before = await mkdtemp(join(tmpdir(), "openbot-migrations-"))
 	await using runtime = ManagedRuntime.make(
@@ -75,6 +75,16 @@ test("old Sessions get the mode build, Sessions of Runs become direct, and old o
 					version: 1,
 					updated_at: 1,
 				})}`
+				for (const action of ["workflow.run_started", "agent.created"])
+					yield* sql`insert into openbot_audit_logs ${sql.insert({
+						organization_id: "org_a",
+						created_at: 1,
+						action,
+						actor_user_id: "user_a",
+						actor: "{}",
+						resource: "openbot.org.org_a",
+						details: "{}",
+					})}`
 				// Effect made these tables for the Workflow Runs.
 				yield* sql`create table openbot_cluster_runners (id text)`
 			}),
@@ -110,6 +120,14 @@ test("old Sessions get the mode build, Sessions of Runs become direct, and old o
 						onTimeout: "stay",
 					},
 				})
+				// The audit log has no Workflow actions any more.
+				const audit = yield* sql<{
+					readonly action: string
+				}>`select action from openbot_audit_logs order by sequence`
+				assert.deepEqual(
+					audit.map((row) => row.action),
+					["agent.created"],
+				)
 				const cluster = yield* sql<{
 					readonly tablename: string
 				}>`select tablename from pg_catalog.pg_tables where tablename like 'openbot_cluster%'`
