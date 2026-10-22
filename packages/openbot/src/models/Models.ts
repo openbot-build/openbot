@@ -6,6 +6,7 @@ import type { Owner } from "./ModelProviders.ts"
 export interface StoredModel {
 	readonly owner: Owner
 	readonly id: string
+	readonly type: ModelProvidersApi.ModelType
 	readonly name: string
 	readonly reasoningEfforts: ReadonlyArray<string>
 	readonly serviceTiers: ReadonlyArray<string>
@@ -80,6 +81,7 @@ export const modelKey = ({
 export const view = (model: StoredModel): ModelProvidersApi.Model => ({
 	id: model.id,
 	owner: model.owner.kind,
+	type: model.type,
 	name: model.name,
 	reasoningEfforts: model.reasoningEfforts,
 	serviceTiers: model.serviceTiers,
@@ -105,6 +107,7 @@ export const effective = ({
 }) => ({
 	id: model.id,
 	owner: model.owner.kind,
+	type: model.type,
 	name: model.name,
 	upstream: link.upstream ?? model.id,
 	reasoningEfforts: link.reasoningEfforts ?? model.reasoningEfforts,

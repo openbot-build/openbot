@@ -140,8 +140,16 @@ const modelLayer = (
 					Layer.provide(OpenAiCompatProvider.layerClient(client)),
 				)
 			}
+			case "typesafe":
+				return yield* new Config.ModelConfigurationError({
+					reason: "unsupported-option",
+					message: "A typesafe provider serves only decision models.",
+				})
 		}
 	})
+
+/** Only a language model can run a Session or do the work of the helper model. */
+const isLanguage = (offer: Offer) => offer.model.type === "language"
 
 interface Built {
 	readonly version: number
@@ -207,19 +215,22 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				],
 				models: [
 					...(builtin?.models ?? []),
-					...current.offers.map(catalogModel),
+					...current.offers.filter(isLanguage).map(catalogModel),
 				],
 			}))
 
+		const organizationSettings = (organizationId: string) =>
+			settings
+				.organization(organizationId)
+				.pipe(
+					Effect.mapError(() =>
+						unavailable("OpenBot cannot read the settings right now."),
+					),
+				)
+
 		const defaultSelection = (organizationId: string) =>
 			Effect.gen(function* () {
-				const current = yield* settings
-					.organization(organizationId)
-					.pipe(
-						Effect.mapError(() =>
-							unavailable("OpenBot cannot read the settings right now."),
-						),
-					)
+				const current = yield* organizationSettings(organizationId)
 				if (current.document.defaultModel !== null)
 					return Option.some(current.document.defaultModel)
 				const first = (yield* catalog(organizationId)).models[0]
@@ -330,6 +341,11 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 						reason: "model-not-found",
 						message: "The model provider does not offer this model.",
 					})
+				if (!isLanguage(offer))
+					return yield* new Config.ModelConfigurationError({
+						reason: "model-not-found",
+						message: "This is a decision model. It cannot write text.",
+					})
 				if (
 					(selection.reasoningEffort !== undefined &&
 						!offer.model.reasoningEfforts.includes(
@@ -372,6 +388,7 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 								provider: model.provider,
 								id: model.id,
 								owner: "platform" as const,
+								type: "language" as const,
 								name: model.name,
 								reasoningEfforts: model.reasoningEfforts,
 								serviceTiers: model.serviceTiers,
@@ -386,6 +403,7 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 								provider: provider.id,
 								id: model.id,
 								owner: model.owner,
+								type: model.type,
 								name: model.name,
 								reasoningEfforts: model.reasoningEfforts,
 								serviceTiers: model.serviceTiers,
@@ -400,18 +418,14 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 						defaultModel: Option.getOrNull(
 							yield* defaultSelection(organizationId),
 						),
+						decisionModel: (yield* organizationSettings(organizationId))
+							.document.decisionModel,
 					}
 				}),
 			resolve,
 			helper: (organizationId) =>
 				Effect.gen(function* () {
-					const current = yield* settings
-						.organization(organizationId)
-						.pipe(
-							Effect.mapError(() =>
-								unavailable("OpenBot cannot read the settings right now."),
-							),
-						)
+					const current = yield* organizationSettings(organizationId)
 					return yield* resolve(
 						organizationId,
 						current.document.helperModel ?? undefined,

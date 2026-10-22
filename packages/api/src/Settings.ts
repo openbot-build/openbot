@@ -148,6 +148,8 @@ export const OrganizationSettings = Schema.Struct({
 	defaultModel: Schema.NullOr(Config.Selection),
 	/** The model that judges Rules and learns Agent memory. Null means the default model. */
 	helperModel: Schema.NullOr(Config.Selection),
+	/** The decision model, such as Jev. It must be a model of type `decision`. Null means none. */
+	decisionModel: Schema.NullOr(Config.Selection),
 	/** The memory switches of a new Session. */
 	memory: Memory.Settings,
 	/** Learn Agent memory after each Turn. */
@@ -165,6 +167,7 @@ export const UpdateOrganizationSettingsRequest = Schema.Struct({
 	expectedVersion: Version,
 	defaultModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
 	helperModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
+	decisionModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
 	memory: Schema.optionalKey(Memory.Settings),
 	agentMemory: Schema.optionalKey(Schema.Boolean),
 	requestTimeoutMs: Schema.optionalKey(RequestTimeout),

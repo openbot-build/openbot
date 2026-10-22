@@ -199,3 +199,87 @@ test("models in old providers move to their own table, and their IDs stay the sa
 		await database.close()
 	}
 })
+
+test("old models become language models, and old organization settings get no decision model", async () => {
+	const database = await PostgresTest.start()
+	const before = await mkdtemp(join(tmpdir(), "openbot-migrations-"))
+	await using runtime = ManagedRuntime.make(
+		DatabasePostgres.layer({ databaseUrl: Redacted.make(database.url) }).pipe(
+			Layer.provide(NodeServices.layer),
+		),
+	)
+	const selection = {
+		_tag: "Config.Selection",
+		provider: "prov_d",
+		model: "jev-latest",
+	}
+	try {
+		for (const name of await readdir(migrations))
+			if (name < "20261022070958_add_model_type")
+				await cp(join(migrations, name), join(before, name), {
+					recursive: true,
+				})
+		await runtime.runPromise(
+			Effect.gen(function* () {
+				const db = yield* makeWithDefaults()
+				yield* migrate(db, { migrationsFolder: before })
+				const sql = yield* PgClient.PgClient
+				yield* sql`insert into openbot_models ${sql.insert({
+					owner_kind: "organization",
+					owner_id: "org_a",
+					id: "small",
+					name: "Small",
+					reasoning_efforts: "[]",
+					service_tiers: "[]",
+					context_window: null,
+					max_output_tokens: null,
+					availability: null,
+					version: 1,
+					created_at: 1,
+					updated_at: 1,
+				})}`
+				const settings = [
+					["organization", "org_a", { defaultModel: null }],
+					["organization", "org_b", { decisionModel: selection }],
+					["platform", "platform", { publicOrigin: "https://a.example" }],
+				] as const
+				for (const [kind, id, document] of settings)
+					yield* sql`insert into openbot_settings ${sql.insert({
+						scope_kind: kind,
+						scope_id: id,
+						document: JSON.stringify(document),
+						version: 1,
+						updated_at: 1,
+					})}`
+			}),
+		)
+		await runtime.runPromise(DatabasePostgres.migrate)
+		await runtime.runPromise(
+			Effect.gen(function* () {
+				const sql = yield* PgClient.PgClient
+				const models = yield* sql<{
+					readonly type: string
+				}>`select type from openbot_models`
+				assert.deepEqual(
+					models.map((row) => row.type),
+					["language"],
+				)
+				const settings = yield* sql<{
+					readonly scope_id: string
+					readonly document: string
+				}>`select scope_id, document from openbot_settings order by scope_id`
+				assert.deepEqual(
+					settings.map((row) => [row.scope_id, JSON.parse(row.document)]),
+					[
+						["org_a", { defaultModel: null, decisionModel: null }],
+						["org_b", { decisionModel: selection }],
+						["platform", { publicOrigin: "https://a.example" }],
+					],
+				)
+			}),
+		)
+	} finally {
+		await rm(before, { recursive: true, force: true })
+		await database.close()
+	}
+})

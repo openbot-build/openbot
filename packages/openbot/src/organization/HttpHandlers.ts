@@ -19,6 +19,7 @@ import {
 	userKey,
 } from "../authorization/Policy.ts"
 import { Roles } from "../authorization/Roles.ts"
+import { ModelRegistry } from "../models/ModelRegistry.ts"
 import { Settings } from "../settings/Settings.ts"
 import * as Views from "../settings/Views.ts"
 import { PlatformAdmins } from "../platform/PlatformAdmins.ts"
@@ -36,6 +37,7 @@ const organizationGroup = HttpApiBuilder.group(
 			const organization = yield* Organization
 			const roles = yield* Roles
 			const settings = yield* Settings
+			const registry = yield* ModelRegistry
 			const services = yield* Effect.context<AuthorizationServices>()
 			const audit = yield* AuditLog
 			const record = (
@@ -53,6 +55,54 @@ const organizationGroup = HttpApiBuilder.group(
 						details,
 					})
 					.pipe(Effect.mapError(unavailable))
+			/**
+			 * A decision model must be a `decision` model that a provider offers.
+			 * The default and helper models must not be `decision` models.
+			 */
+			const checkModels = (
+				caller: Caller,
+				changes: Omit<
+					SettingsApi.UpdateOrganizationSettingsRequest,
+					"expectedVersion"
+				>,
+			) =>
+				Effect.gen(function* () {
+					const { defaultModel, helperModel, decisionModel } = changes
+					if ((defaultModel ?? helperModel ?? decisionModel ?? null) === null)
+						return
+					const catalog = yield* registry
+						.view(caller.organizationId)
+						.pipe(
+							Effect.mapError(() => SettingsApi.SettingsUnavailable.make({})),
+						)
+					const typeOf = (selection: { provider: string; model: string }) =>
+						catalog.models.find(
+							(model) =>
+								model.provider === selection.provider &&
+								model.id === selection.model,
+						)?.type
+					for (const [name, selection] of [
+						["defaultModel", defaultModel],
+						["helperModel", helperModel],
+					] as const)
+						if (
+							selection !== undefined &&
+							selection !== null &&
+							typeOf(selection) === "decision"
+						)
+							return yield* SettingsApi.SettingsInvalid.make({
+								message: `${name} cannot be a decision model.`,
+							})
+					if (
+						decisionModel !== undefined &&
+						decisionModel !== null &&
+						typeOf(decisionModel) !== "decision"
+					)
+						return yield* SettingsApi.SettingsInvalid.make({
+							message:
+								"decisionModel must be a decision model that a provider of the organization offers.",
+						})
+				})
 			/** Fails unless the caller is a Super Administrator. */
 			const requireSuperAdministrator = (
 				caller: Caller,
@@ -218,6 +268,7 @@ const organizationGroup = HttpApiBuilder.group(
 										message: `The role ${roleId} does not exist.`,
 									})
 						}
+						yield* checkModels(caller, changes)
 						const updated = yield* settings.updateOrganization(
 							caller.organizationId,
 							expectedVersion,

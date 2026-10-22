@@ -14,8 +14,17 @@ export const ProviderKind = Schema.Literals([
 	"openai",
 	"anthropic",
 	"openai-compat",
+	/** The decision API of TypeSafe, as Jev uses it. It links only decision models. */
+	"typesafe",
 ])
 export type ProviderKind = typeof ProviderKind.Type
+
+/**
+ * What a model does. A `language` model writes text and calls tools. A
+ * `decision` model, such as Jev, only picks an answer from a fixed list.
+ */
+export const ModelType = Schema.Literals(["language", "decision"])
+export type ModelType = typeof ModelType.Type
 
 /** An HTTP address without credentials, query or fragment. */
 export const Endpoint = Schema.NonEmptyString.check(
@@ -69,6 +78,7 @@ export const Model = Schema.Struct({
 	/** The ID is unique for its owner. A provider sends it as the model name unless the link sets `upstream`. */
 	id: Schema.String,
 	owner: ModelOwner,
+	type: ModelType,
 	name: Schema.String,
 	reasoningEfforts: Schema.Array(Schema.String),
 	serviceTiers: Schema.Array(Schema.String),
@@ -84,6 +94,8 @@ export type Model = typeof Model.Type
 
 export const CreateModelRequest = Schema.Struct({
 	id: ModelId,
+	/** Leave it out for a language model. You cannot change it later. */
+	type: Schema.optionalKey(ModelType),
 	name: ModelName,
 	reasoningEfforts: Options,
 	serviceTiers: Options,
@@ -162,7 +174,7 @@ const ProviderName = Schema.String.check(
 export const CreateModelProviderRequest = Schema.Struct({
 	kind: ProviderKind,
 	name: ProviderName,
-	/** An `openai-compat` provider needs it. */
+	/** An `openai-compat` or `typesafe` provider needs it. */
 	endpoint: Schema.optionalKey(Endpoint),
 	apiKey: SecretInput,
 	models: ProviderModels,
@@ -208,6 +220,7 @@ export const ModelCatalog = Schema.Struct({
 			provider: Schema.String,
 			id: Schema.String,
 			owner: ModelOwner,
+			type: ModelType,
 			name: Schema.String,
 			reasoningEfforts: Schema.Array(Schema.String),
 			serviceTiers: Schema.Array(Schema.String),
@@ -217,6 +230,8 @@ export const ModelCatalog = Schema.Struct({
 	),
 	/** The model of a new Session, or null when there is no model. */
 	defaultModel: Schema.NullOr(Config.Selection),
+	/** The decision model of the organization, or null when it has none. */
+	decisionModel: Schema.NullOr(Config.Selection),
 })
 export type ModelCatalog = typeof ModelCatalog.Type
 

@@ -401,6 +401,167 @@ test(
 	},
 )
 
+test(
+	"An organization sets a decision model with a decision provider and a decision model",
+	{ timeout: 60000 },
+	async () => {
+		const host = await BrowserHost.start({
+			publicOrigin,
+			sharedDomain: false,
+			platformAdmins: ["root@example.com"],
+		})
+		try {
+			const account = withCookie({ address: host.address, publicOrigin })
+			const alice = await host.login("alice")
+			const create = (body: object) =>
+				account(alice.session, "/v1/organization/models", "POST", body)
+			const provider = (body: object) =>
+				account(alice.session, "/v1/organization/model_providers", "POST", {
+					apiKey: "sk-test-0123456789",
+					...body,
+				})
+
+			// A model is a language model unless it says otherwise.
+			const chat = await create({
+				id: "chat",
+				name: "Chat",
+				reasoningEfforts: [],
+				serviceTiers: [],
+			})
+			assert.equal((await chat.json()).type, "language")
+			const jev = await create({
+				id: "jev-latest",
+				type: "decision",
+				name: "Jev",
+				reasoningEfforts: [],
+				serviceTiers: [],
+			})
+			assert.equal(jev.status, 200, await jev.clone().text())
+			assert.equal((await jev.json()).type, "decision")
+
+			// A typesafe provider needs an address, and it links only decision models.
+			const noAddress = await provider({
+				kind: "typesafe",
+				name: "TypeSafe",
+				models: [],
+			})
+			assert.equal((await noAddress.json())._tag, "ModelProviderInvalid")
+			const wrongModel = await provider({
+				kind: "typesafe",
+				name: "TypeSafe",
+				endpoint: "https://decisions.example.com/v1",
+				models: [{ model: "chat", modelOwner: "organization" }],
+			})
+			assert.equal((await wrongModel.json())._tag, "ModelProviderInvalid")
+			const openai = await provider({
+				kind: "openai",
+				name: "OpenAI",
+				models: [{ model: "jev-latest", modelOwner: "organization" }],
+			})
+			assert.equal((await openai.json())._tag, "ModelProviderInvalid")
+			const typesafe = await provider({
+				kind: "typesafe",
+				name: "TypeSafe",
+				endpoint: "https://decisions.example.com/v1",
+				models: [{ model: "jev-latest", modelOwner: "organization" }],
+			})
+			assert.equal(typesafe.status, 200, await typesafe.clone().text())
+			const decisions = await typesafe.json()
+			// A gateway can link both types.
+			const gateway = await provider({
+				kind: "openai-compat",
+				name: "Gateway",
+				endpoint: "https://gateway.example.com/v1",
+				models: [
+					{ model: "chat", modelOwner: "organization" },
+					{ model: "jev-latest", modelOwner: "organization" },
+				],
+			})
+			assert.equal(gateway.status, 200, await gateway.clone().text())
+			const both = await gateway.json()
+
+			// The catalog shows the type of each model. A decision model is never the default model.
+			const catalog = await (
+				await account(alice.session, "/v1/organization/model_catalog")
+			).json()
+			assert.deepEqual(
+				catalog.models.map(
+					(model: { provider: string; id: string; type: string }) => [
+						model.provider,
+						model.id,
+						model.type,
+					],
+				),
+				[
+					[decisions.id, "jev-latest", "decision"],
+					[both.id, "chat", "language"],
+					[both.id, "jev-latest", "decision"],
+				],
+			)
+			assert.deepEqual(catalog.defaultModel, {
+				_tag: "Config.Selection",
+				provider: both.id,
+				model: "chat",
+			})
+			assert.equal(catalog.decisionModel, null)
+
+			// Each setting takes only the right type of model.
+			const selection = (providerId: string, model: string) => ({
+				_tag: "Config.Selection",
+				provider: providerId,
+				model,
+			})
+			const update = async (changes: object) => {
+				const current = await (
+					await account(alice.session, "/v1/organization/settings")
+				).json()
+				return account(alice.session, "/v1/organization/settings", "PATCH", {
+					expectedVersion: current.version,
+					...changes,
+				})
+			}
+			for (const changes of [
+				{ decisionModel: selection(both.id, "chat") },
+				{ decisionModel: selection(decisions.id, "missing") },
+				{ defaultModel: selection(both.id, "jev-latest") },
+				{ helperModel: selection(decisions.id, "jev-latest") },
+			]) {
+				const refused = await update(changes)
+				assert.equal(refused.status, 400, JSON.stringify(changes))
+				assert.equal((await refused.json())._tag, "SettingsInvalid")
+			}
+			const saved = await update({
+				decisionModel: selection(decisions.id, "jev-latest"),
+			})
+			assert.equal(saved.status, 200, await saved.clone().text())
+			assert.deepEqual(
+				(await saved.json()).decisionModel,
+				selection(decisions.id, "jev-latest"),
+			)
+			assert.deepEqual(
+				(
+					await (
+						await account(alice.session, "/v1/organization/model_catalog")
+					).json()
+				).decisionModel,
+				selection(decisions.id, "jev-latest"),
+			)
+
+			// The provider cannot go while the decision model names it.
+			const inUse = await account(
+				alice.session,
+				"/v1/organization/model_providers/" + decisions.id,
+				"DELETE",
+			)
+			assert.equal((await inUse.json())._tag, "ModelProviderInUse")
+			const cleared = await update({ decisionModel: null })
+			assert.equal((await cleared.json()).decisionModel, null)
+		} finally {
+			await host.close()
+		}
+	},
+)
+
 test("every instance sees a settings change at once, and setup runs only once", async () => {
 	const database = await PostgresTest.start()
 	const options = {
