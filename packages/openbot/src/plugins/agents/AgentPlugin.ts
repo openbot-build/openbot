@@ -1,6 +1,7 @@
 import type { Services as AuthorizationServices } from "../../authorization/Authorize.ts"
 import {
 	Agent,
+	Config,
 	Plugin,
 	type Session,
 	type SessionStore,
@@ -60,6 +61,16 @@ const reason = {
 	description:
 		"Why you need this. The decider above you reads it when it must agree first.",
 } as const
+const model = {
+	type: "object",
+	properties: {
+		provider: { type: "string" },
+		model: { type: "string" },
+	},
+	required: ["provider", "model"],
+	description:
+		"Optional. The model of the new Agent. Without it, the new Agent uses your model.",
+} as const
 const scope = {
 	type: "string",
 	enum: AgentsApi.GrantScope.literals,
@@ -86,8 +97,24 @@ const SpawnInput = Schema.Struct({
 	name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
 	role: Schema.String.check(Schema.isMaxLength(500)),
 	instructions: Schema.String.check(Schema.isMaxLength(20000)),
+	model: Schema.optionalKey(
+		Schema.Struct({
+			provider: Config.Selection.fields.provider,
+			model: Config.Selection.fields.model,
+		}),
+	),
 	reason: Schema.String,
 })
+/** The model of a new Agent: the model in the tool call, or else the model of the Agent that makes it. */
+const modelOf = (
+	input: typeof SpawnInput.Type,
+	creator: AgentsApi.Agent,
+): { readonly model?: Config.Selection } =>
+	input.model !== undefined
+		? { model: Config.Selection.make(input.model) }
+		: creator.model === undefined
+			? {}
+			: { model: creator.model }
 const AgentInput = Schema.Struct({ agent: Schema.String })
 const PromoteInput = Schema.Struct({
 	agent: Schema.String,
@@ -353,7 +380,13 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 				"Start a new Session Agent for this Session. It keeps its own context while this Session lasts. Give it a clear role and instructions.",
 				{
 					type: "object",
-					properties: { name: text, role: text, instructions: text, reason },
+					properties: {
+						name: text,
+						role: text,
+						instructions: text,
+						model,
+						reason,
+					},
 					required: ["name", "role", "instructions", "reason"],
 				},
 				(input) =>
@@ -366,6 +399,7 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 							name: spawn.name,
 							role: spawn.role,
 							instructions: spawn.instructions,
+							...modelOf(spawn, current.agent),
 						})
 						return json({ agent: agent.id, name: agent.name })
 					}),
@@ -387,7 +421,13 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 				"Make a new lasting Agent that you own. It keeps its own memory and can work for you in later Sessions. Give it a clear role and instructions.",
 				{
 					type: "object",
-					properties: { name: text, role: text, instructions: text, reason },
+					properties: {
+						name: text,
+						role: text,
+						instructions: text,
+						model,
+						reason,
+					},
 					required: ["name", "role", "instructions", "reason"],
 				},
 				(input) =>
@@ -401,6 +441,7 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 								name: create.name,
 								role: create.role,
 								instructions: create.instructions,
+								...modelOf(create, current.agent),
 							},
 						)
 						return json({ agent: agent.id, name: agent.name })

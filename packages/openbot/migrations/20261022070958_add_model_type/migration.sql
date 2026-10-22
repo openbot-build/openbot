@@ -1,0 +1,1 @@
+ALTER TABLE "openbot_models" ADD COLUMN "type" text DEFAULT 'language' NOT NULL;

@@ -18,6 +18,8 @@ This page shows the kinds of Agents and the routes under `/v1/agents`. Every rou
 
 Every member has exactly one **Main Agent**. OpenBot makes it the first time it is needed. A Session that you create without an Agent belongs to your Main Agent.
 
+A new Main Agent has no model. Set its `model` before you create a Session without a model of its own. See [Models](/docs/models#choose-a-model).
+
 A **Session Agent** is "almost lasting". An Agent starts it with a tool while it works. The Session Agent keeps its context while its Session lasts, so the Agent can give it work many times. When you delete the Session, its Session Agents are archived too. You can [promote](#promote-a-session-agent) a useful Session Agent to a lasting Agent.
 
 An Agent can own lasting Agents too. See [Agents that own Agents](#agents-that-own-agents).
@@ -44,7 +46,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `name`         | Required. A short name. OpenBot removes spaces at the start and end. The rest must have 1 to 100 characters. |
 | `role`         | Required. What the Agent does, in one line. Other Agents read it to choose workers.                          |
 | `instructions` | Required. The lasting instructions of the Agent, like a job description.                                     |
-| `model`        | Optional. The default model for new Sessions of this Agent.                                                  |
+| `model`        | Optional. The model of the Sessions of this Agent, when a Session does not choose its own.                   |
 | `shared`       | Optional. `true` makes an organization Agent that every member can use.                                      |
 | `agent`        | Optional. The ID of the Agent that owns the new Agent. You cannot use it with `shared`.                      |
 
@@ -102,6 +104,7 @@ An Agent can promote a Session Agent of its own Session with the `openbot_promot
 An Agent can own lasting Agents. So an Agent can build its own team, and each member of the team keeps its own memory.
 
 - An Agent makes an Agent that it owns with the `openbot_create_agent` tool. A person makes one with `POST /v1/agents` and the `agent` field.
+- An Agent that another Agent makes with a tool, a lasting Agent or a Session Agent, gets the `model` of the Agent that makes it. The tool call can name another `model`.
 - The owner is `{ "_tag": "Agent", "agent": "<owner ID>", "userId": "<member>" }`. `userId` is the member at the top of the owner tree. It is `null` when the organization owns the Agent at the top.
 - An Agent can give work to the Agents it owns without a request.
 - The **owner chain** of an Agent goes up through its owners to a Main Agent, and then to the person. For example: **person → Main → Worker → Scout**. Requests of an Agent go up this chain, also when a person works with the Agent directly. See [Requests](/docs/requests#the-chain-of-deciders).

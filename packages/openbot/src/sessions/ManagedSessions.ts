@@ -435,7 +435,7 @@ export const make = <
 		const create: typeof Sessions.Service.create = (input) =>
 			Effect.gen(function* () {
 				const defaults = yield* options.defaults ?? Effect.succeed({})
-				// The model of the Agent comes before the server default.
+				// The model of the Agent comes after the defaults of the host.
 				const settings = {
 					...defaults,
 					...(input.agent.model === undefined
@@ -443,6 +443,13 @@ export const make = <
 						: { model: input.agent.model }),
 					...input.settings,
 				}
+				// A host that resolves models by selection needs a model for each Session.
+				if (settings.model === undefined && options.resolveModel !== undefined)
+					return yield* SessionModelInvalid.make({
+						reason: "missing",
+						message:
+							"Choose a model for the Session, or set the model of the Agent.",
+					})
 				const model =
 					settings.model === undefined
 						? undefined

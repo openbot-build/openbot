@@ -20,6 +20,7 @@ const AvailabilityJson = Schema.fromJsonString(ModelProvidersApi.Availability)
 const decodeOptions = Schema.decodeUnknownSync(Options)
 const decodeAvailability = Schema.decodeUnknownSync(AvailabilityJson)
 const decodeKind = Schema.decodeUnknownSync(ModelProvidersApi.ProviderKind)
+const decodeType = Schema.decodeUnknownSync(ModelProvidersApi.ModelType)
 
 const binding = (id: string) => "openbot_model_providers:" + id + ":api_key"
 
@@ -86,18 +87,38 @@ const stored = (
 	updatedAt: row.updatedAt,
 })
 
-/** An `openai-compat` provider has no default address. */
+/**
+ * An `openai-compat` provider has no default address. A `typesafe` provider
+ * has none yet either, because TypeSafe has not published one official address.
+ */
 const checkEndpoint = (
 	kind: ModelProvidersApi.ProviderKind,
 	endpoint: string | null,
 ) =>
-	kind === "openai-compat" && endpoint === null
+	(kind === "openai-compat" || kind === "typesafe") && endpoint === null
 		? Effect.fail(
 				ModelProvidersApi.ModelProviderInvalid.make({
-					message: "An openai-compat provider needs an endpoint.",
+					message: `An ${kind} provider needs an endpoint.`,
 				}),
 			)
 		: Effect.void
+
+/** The model types that each provider kind can serve. */
+const servesType = (
+	kind: ModelProvidersApi.ProviderKind,
+	type: ModelProvidersApi.ModelType,
+) => {
+	switch (kind) {
+		case "openai":
+		case "anthropic":
+			return type === "language"
+		case "typesafe":
+			return type === "decision"
+		// A gateway, such as OpenRouter or LiteLLM, can serve both.
+		case "openai-compat":
+			return true
+	}
+}
 
 type Database = Effect.Success<ReturnType<typeof makeWithDefaults>>
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0]
@@ -166,11 +187,13 @@ export const make = Effect.gen(function* () {
 	/**
 	 * A provider of the platform links only models of the platform. A provider
 	 * of an organization links its own models and the shared models that the
-	 * organization may use.
+	 * organization may use. The kind of the provider must serve the type of
+	 * each model.
 	 */
 	const checkLinks = (
 		client: Reader,
 		owner: Owner,
+		kind: ModelProvidersApi.ProviderKind,
 		links: ReadonlyArray<ModelProvidersApi.ProviderModel>,
 	) =>
 		Effect.gen(function* () {
@@ -209,6 +232,11 @@ export const make = Effect.gen(function* () {
 				if (!usable)
 					return yield* ModelProvidersApi.ModelNotFound.make({
 						modelId: item.model,
+					})
+				const type = decodeType(row.type)
+				if (!servesType(kind, type))
+					return yield* ModelProvidersApi.ModelProviderInvalid.make({
+						message: `A ${kind} provider cannot link the ${type} model ${item.model}.`,
 					})
 			}
 		})
@@ -285,7 +313,7 @@ export const make = Effect.gen(function* () {
 					const links = linkRows({ id, owner }, input.models)
 					yield* db.transaction((tx) =>
 						Effect.gen(function* () {
-							yield* checkLinks(tx, owner, input.models)
+							yield* checkLinks(tx, owner, input.kind, input.models)
 							yield* tx.insert(modelProviders).values(row)
 							if (links.length > 0)
 								yield* tx.insert(providerModels).values(links)
@@ -308,9 +336,10 @@ export const make = Effect.gen(function* () {
 							return yield* ModelProvidersApi.ModelProviderConflict.make({
 								version: row.version,
 							})
+						const kind = decodeKind(row.kind)
 						const endpoint =
 							patch.endpoint === undefined ? row.endpoint : patch.endpoint
-						yield* checkEndpoint(decodeKind(row.kind), endpoint)
+						yield* checkEndpoint(kind, endpoint)
 						const now = yield* Clock.currentTimeMillis
 						const key =
 							patch.apiKey === undefined
@@ -320,7 +349,7 @@ export const make = Effect.gen(function* () {
 										apiKeyHint: hint(patch.apiKey),
 									}
 						if (patch.models !== undefined) {
-							yield* checkLinks(tx, owner, patch.models)
+							yield* checkLinks(tx, owner, kind, patch.models)
 							yield* tx
 								.delete(providerModels)
 								.where(eq(providerModels.providerId, id))

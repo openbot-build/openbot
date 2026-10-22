@@ -26,13 +26,18 @@ export class HelperModelUnavailable extends Data.TaggedError(
 )<{ readonly message: string }> {}
 
 /**
- * A small and fast model for work that OpenBot does itself:
- * it reads Rules for the judge and learns Agent memory.
+ * The models for work that OpenBot does itself. Each kind of work has its own
+ * setting, and none falls back to another model.
  */
 export class HelperModel extends Context.Service<
 	HelperModel,
 	{
-		readonly model: (
+		/** The model that reads Rules for the judge: `rulesModel`. */
+		readonly rules: (
+			organizationId: string,
+		) => Effect.Effect<LanguageModel.LanguageModel, HelperModelUnavailable>
+		/** The model that learns Agent memory: `agentMemoryModel`. */
+		readonly agentMemory: (
 			organizationId: string,
 		) => Effect.Effect<LanguageModel.LanguageModel, HelperModelUnavailable>
 	}
@@ -103,7 +108,7 @@ export const make: Effect.Effect<
 					.find(input.organizationId, key)
 					.pipe(Effect.orElseSucceed(() => Option.none<Verdict>()))
 				if (Option.isSome(cached)) return cached.value
-				const model = yield* helper.model(input.organizationId)
+				const model = yield* helper.rules(input.organizationId)
 				const verdict = yield* LanguageModel.generateObject({
 					objectName: "rule_decision",
 					schema: Verdict,

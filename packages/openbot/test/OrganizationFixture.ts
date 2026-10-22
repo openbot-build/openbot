@@ -154,9 +154,10 @@ export const layerUnusedPlatform = Layer.mergeAll(
 	Layer.succeed(ModelRegistry, {
 		catalog: () => Effect.die("unused"),
 		view: () => Effect.die("unused"),
-		defaultSelection: () => Effect.die("unused"),
 		resolve: () => Effect.die("unused"),
-		helper: () => Effect.die("unused"),
+		rulesModel: () => Effect.die("unused"),
+		agentMemoryModel: () => Effect.die("unused"),
+		decision: () => Effect.die("unused"),
 	}),
 	Layer.succeed(Sso, {
 		listDomains: () => Effect.die("unused"),

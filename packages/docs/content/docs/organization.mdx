@@ -87,12 +87,13 @@ Each organization has its own settings. They live in the database, so every Open
 ```json
 {
 	"version": 2,
-	"defaultModel": {
+	"rulesModel": {
 		"_tag": "Config.Selection",
 		"provider": "prov_4c1e...",
-		"model": "gpt-4.1"
+		"model": "gpt-4.1-mini"
 	},
-	"helperModel": null,
+	"agentMemoryModel": null,
+	"decisionModel": null,
 	"memory": { "use": true, "generate": true },
 	"agentMemory": true,
 	"requestTimeoutMs": 86400000,
@@ -103,16 +104,17 @@ Each organization has its own settings. They live in the database, so every Open
 }
 ```
 
-| Field              | Default      | What it does                                                                                                                     |
-| ------------------ | ------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| `defaultModel`     | `null`       | The model of a new Session. `null` means the first model in the catalog. See [Models](/docs/models).                             |
-| `helperModel`      | `null`       | The model that judges [Rules](/docs/rules) and learns [Agent memory](/docs/memory#agent-memory). `null` means the default model. |
-| `memory`           | both on      | The memory switches `use` and `generate` of a new Session. See [Memory](/docs/memory#switches).                                  |
-| `agentMemory`      | `true`       | Learn Agent memory after each Turn.                                                                                              |
-| `requestTimeoutMs` | 24 hours     | How long a [request](/docs/requests) waits for an answer before OpenBot denies it. From 1 second to 7 days.                      |
-| `appReadRules`     | `[]`         | App tools that only read: `{ cardUrl, tool }`. See [Requests](/docs/requests).                                                   |
-| `defaultRoles`     | `["member"]` | The roles of a new member.                                                                                                       |
-| `joinByDomain`     | `true`       | People with a verified email in a verified domain of the organization join when they sign in.                                    |
+| Field              | Default      | What it does                                                                                                                   |
+| ------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `rulesModel`       | `null`       | The model that judges [Rules](/docs/rules). `null` means that no model judges them. See [Models](/docs/models#choose-a-model). |
+| `agentMemoryModel` | `null`       | The model that learns [Agent memory](/docs/memory#agent-memory). `null` means that Agents learn nothing.                       |
+| `decisionModel`    | `null`       | The decision model, such as Jev. It must be a `decision` model. `null` means none. See [Models](/docs/models#decision-model).  |
+| `memory`           | both on      | The memory switches `use` and `generate` of a new Session. See [Memory](/docs/memory#switches).                                |
+| `agentMemory`      | `true`       | Learn Agent memory after each Turn.                                                                                            |
+| `requestTimeoutMs` | 24 hours     | How long a [request](/docs/requests) waits for an answer before OpenBot denies it. From 1 second to 7 days.                    |
+| `appReadRules`     | `[]`         | App tools that only read: `{ cardUrl, tool }`. See [Requests](/docs/requests).                                                 |
+| `defaultRoles`     | `["member"]` | The roles of a new member.                                                                                                     |
+| `joinByDomain`     | `true`       | People with a verified email in a verified domain of the organization join when they sign in.                                  |
 
 `PATCH /v1/organization/settings` changes them. It needs `organization.write`. The body needs `expectedVersion`, the `version` that you read. Add only the fields that you want to change.
 

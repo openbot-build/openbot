@@ -144,10 +144,12 @@ export const DefaultRoles = Schema.Array(RoleId).check(Schema.isMinLength(1))
 
 export const OrganizationSettings = Schema.Struct({
 	version: Version,
-	/** The model of a new Session. Null means the first model in the catalog. */
-	defaultModel: Schema.NullOr(Config.Selection),
-	/** The model that judges Rules and learns Agent memory. Null means the default model. */
-	helperModel: Schema.NullOr(Config.Selection),
+	/** The model that judges Rules. Null means that no model judges Rules. */
+	rulesModel: Schema.NullOr(Config.Selection),
+	/** The model that learns Agent memory. Null means that Agents learn no memory. */
+	agentMemoryModel: Schema.NullOr(Config.Selection),
+	/** The decision model, such as Jev. It must be a model of type `decision`. Null means none. */
+	decisionModel: Schema.NullOr(Config.Selection),
 	/** The memory switches of a new Session. */
 	memory: Memory.Settings,
 	/** Learn Agent memory after each Turn. */
@@ -163,8 +165,9 @@ export const OrganizationSettings = Schema.Struct({
 export type OrganizationSettings = typeof OrganizationSettings.Type
 export const UpdateOrganizationSettingsRequest = Schema.Struct({
 	expectedVersion: Version,
-	defaultModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
-	helperModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
+	rulesModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
+	agentMemoryModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
+	decisionModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
 	memory: Schema.optionalKey(Memory.Settings),
 	agentMemory: Schema.optionalKey(Schema.Boolean),
 	requestTimeoutMs: Schema.optionalKey(RequestTimeout),

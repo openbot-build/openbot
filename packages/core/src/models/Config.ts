@@ -105,13 +105,16 @@ export const ModelConfigurationReason = Schema.Literals([
 	"model-not-found",
 	"unsupported-option",
 	"unavailable",
+	/** No model is chosen. */
+	"missing",
 ])
 export type ModelConfigurationReason = typeof ModelConfigurationReason.Type
-/** Why a selection does not fit the catalog. */
+/** Why a selection does not fit the catalog, or why there is no selection. */
 export const SelectionReason = ModelConfigurationReason.pick([
 	"provider-not-found",
 	"model-not-found",
 	"unsupported-option",
+	"missing",
 ])
 export type SelectionReason = typeof SelectionReason.Type
 

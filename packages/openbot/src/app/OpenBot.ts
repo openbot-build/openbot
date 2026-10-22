@@ -40,14 +40,7 @@ import { Config } from "@openbot-build/core"
 import * as Backend from "./Backend.ts"
 import type { PgClient } from "@effect/sql-pg"
 import { NodeServices, NodeCrypto } from "@effect/platform-node"
-import {
-	Effect,
-	Layer,
-	Option,
-	type Redacted,
-	Schema,
-	SchemaIssue,
-} from "effect"
+import { Effect, Layer, type Redacted, Schema, SchemaIssue } from "effect"
 import { type Tool } from "effect/ai"
 import { FetchHttpClient } from "effect/http"
 import * as DatabasePostgres from "../database/DatabasePostgres.ts"
@@ -122,6 +115,13 @@ export const layer = <
 >(
 	options: Options<Tools, E, R, BuildE, BuildR>,
 ) => {
+	// A Session names its model. OpenBot never picks one for it.
+	const noModel = Effect.fail(
+		new Config.ModelConfigurationError({
+			reason: "missing",
+			message: "The Session has no model.",
+		}),
+	)
 	/**
 	 * Each member gets the models and memory switches of their organization.
 	 * A host that gives its own `resolveModel`, such as a test, keeps it.
@@ -144,17 +144,10 @@ export const layer = <
 				modelCatalog: registry
 					.catalog(organizationId)
 					.pipe(Effect.orElseSucceed(() => ({ providers: [], models: [] }))),
-				defaults: registry.defaultSelection(organizationId).pipe(
-					Effect.map(
-						Option.match({
-							onNone: () => ({}),
-							onSome: (model) => ({ model }),
-						}),
-					),
-					Effect.orElseSucceed(() => ({})),
-				),
 				resolveModel: (selection) =>
-					registry.resolve(organizationId, selection),
+					selection === undefined
+						? noModel
+						: registry.resolve(organizationId, selection),
 				memoryDefaults: settings.organization(organizationId).pipe(
 					Effect.map((current) => current.document.memory),
 					Effect.orElseSucceed(() => ({})),
@@ -162,29 +155,16 @@ export const layer = <
 			})
 			// A runtime without an owner has no organization. It can use only the built-in models.
 			const builtin = options.builtinModels
-			const first = builtin?.models[0]
 			const fallback =
-				builtin === undefined || first === undefined
+				builtin === undefined
 					? {}
 					: {
 							modelCatalog: Effect.succeed({
 								providers: builtin.providers,
 								models: builtin.models,
 							}),
-							defaults: Effect.succeed({
-								model: Config.Selection.make({
-									provider: first.provider,
-									model: first.id,
-								}),
-							}),
 							resolveModel: (selection: Config.Selection | undefined) =>
-								builtin.resolve(
-									selection ??
-										Config.Selection.make({
-											provider: first.provider,
-											model: first.id,
-										}),
-								),
+								selection === undefined ? noModel : builtin.resolve(selection),
 						}
 			return BackendLayers.layer(
 				options.sessions?.resolveModel === undefined
@@ -194,21 +174,49 @@ export const layer = <
 		}),
 	)
 
-	// The helper model comes from the settings of the organization, or from the model of the host.
+	// Each helper model comes from its own setting of the organization. A host
+	// with its own `resolveModel`, such as a test, resolves the setting itself.
 	const helper = Layer.effect(
 		Judge.HelperModel,
 		Effect.gen(function* () {
 			const registry = yield* ModelRegistry.ModelRegistry
+			const settings = yield* Settings
 			const resolve = options.sessions?.resolveModel
+			const model = (
+				organizationId: string,
+				name: "rulesModel" | "agentMemoryModel",
+			) =>
+				Effect.mapError(
+					resolve === undefined
+						? name === "rulesModel"
+							? registry.rulesModel(organizationId)
+							: registry.agentMemoryModel(organizationId)
+						: settings.organization(organizationId).pipe(
+								Effect.mapError(
+									() =>
+										new Config.ModelConfigurationError({
+											reason: "unavailable",
+											message: "OpenBot cannot read the settings right now.",
+										}),
+								),
+								Effect.flatMap((current) =>
+									current.document[name] === null
+										? Effect.fail(
+												new Config.ModelConfigurationError({
+													reason: "missing",
+													message: `The organization has no ${name}.`,
+												}),
+											)
+										: resolve(current.document[name]),
+								),
+							),
+					(error) =>
+						new Judge.HelperModelUnavailable({ message: error.message }),
+				)
 			return Judge.HelperModel.of({
-				model: (organizationId) =>
-					Effect.mapError(
-						resolve === undefined
-							? registry.helper(organizationId)
-							: resolve(undefined),
-						(error) =>
-							new Judge.HelperModelUnavailable({ message: error.message }),
-					),
+				rules: (organizationId) => model(organizationId, "rulesModel"),
+				agentMemory: (organizationId) =>
+					model(organizationId, "agentMemoryModel"),
 			})
 		}),
 	)

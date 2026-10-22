@@ -82,6 +82,12 @@ export interface Options<
 		readonly providers: ReadonlyArray<Config.Provider>
 		readonly models: ReadonlyArray<Config.Model>
 	}>
+	/**
+	 * Settings that the host gives to each new Session, such as the simulated
+	 * model of a development platform or of a test. They come before the model
+	 * of the Agent. A real platform never sets them: each Session gets its model
+	 * from its own settings or from its Agent.
+	 */
 	readonly defaults?: Effect.Effect<Partial<Turn.Settings>>
 	readonly resolveModel?: (
 		selection: Config.Selection | undefined,
@@ -113,7 +119,7 @@ export interface Options<
 
 /** The options that come from the settings of an organization. */
 export type OrganizationOptions = Required<
-	Pick<Options, "modelCatalog" | "defaults" | "resolveModel" | "memoryDefaults">
+	Pick<Options, "modelCatalog" | "resolveModel" | "memoryDefaults">
 >
 
 export class Sessions extends Context.Service<

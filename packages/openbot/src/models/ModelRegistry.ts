@@ -11,14 +11,16 @@ import {
 	HashMap,
 	Layer,
 	Option,
+	type Redacted,
 	Scope,
 	SynchronizedRef,
 } from "effect"
-import { LanguageModel } from "effect/ai"
+import { DecisionModel, LanguageModel } from "effect/ai"
 import type { HttpClient } from "effect/http"
 import * as AnthropicProvider from "../providers/anthropic/AnthropicProvider.ts"
 import * as OpenAiCompatProvider from "../providers/openai-compat/OpenAiCompatProvider.ts"
 import * as OpenAiProvider from "../providers/openai/OpenAiProvider.ts"
+import * as TypeSafeProvider from "../providers/typesafe/TypeSafeProvider.ts"
 import { Settings } from "../settings/Settings.ts"
 import { linkedOwner, ModelProviders, type Stored } from "./ModelProviders.ts"
 import { type Effective, effective, Models, modelKey } from "./Models.ts"
@@ -50,33 +52,39 @@ export class ModelRegistry extends Context.Service<
 		readonly catalog: (
 			organizationId: string,
 		) => Effect.Effect<Catalog, Config.ModelConfigurationError>
-		/** The API form of the catalog, with the default model. */
+		/** The API form of the catalog. */
 		readonly view: (
 			organizationId: string,
 		) => Effect.Effect<
 			ModelProvidersApi.ModelCatalog,
 			Config.ModelConfigurationError
 		>
-		/** The default model of a new Session in the organization. */
-		readonly defaultSelection: (
-			organizationId: string,
-		) => Effect.Effect<
-			Option.Option<Config.Selection>,
-			Config.ModelConfigurationError
-		>
-		/** Leave out the selection for the default model of the organization. */
 		readonly resolve: (
 			organizationId: string,
-			selection: Config.Selection | undefined,
+			selection: Config.Selection,
 		) => Effect.Effect<
 			LanguageModel.LanguageModel,
 			Config.ModelConfigurationError
 		>
-		/** The helper model of the organization, or its default model. */
-		readonly helper: (
+		/** The model that judges Rules. It fails when the organization has none. */
+		readonly rulesModel: (
 			organizationId: string,
 		) => Effect.Effect<
 			LanguageModel.LanguageModel,
+			Config.ModelConfigurationError
+		>
+		/** The model that learns Agent memory. It fails when the organization has none. */
+		readonly agentMemoryModel: (
+			organizationId: string,
+		) => Effect.Effect<
+			LanguageModel.LanguageModel,
+			Config.ModelConfigurationError
+		>
+		/** The decision model of the organization. None when its settings name none. */
+		readonly decision: (
+			organizationId: string,
+		) => Effect.Effect<
+			Option.Option<DecisionModel.DecisionModel>,
 			Config.ModelConfigurationError
 		>
 	}
@@ -106,19 +114,58 @@ const catalogModel = ({ provider, model }: Offer): Config.Model =>
 			: { maxOutputTokensLimit: model.maxOutputTokens }),
 	})
 
+type ApiKey = Redacted.Redacted<string>
+
+/** The client options of a provider: its key, and its address without a trailing slash. */
+const clientOptions = (provider: Stored, apiKey: ApiKey) => ({
+	apiKey,
+	...(provider.endpoint === null
+		? {}
+		: { apiUrl: provider.endpoint.replace(/\/$/, "") }),
+})
+
+/** The decision model Layer of one provider kind, with its client. */
+const decisionLayer = (
+	provider: Stored,
+	apiKey: ApiKey,
+	upstreamModel: string,
+) => {
+	switch (provider.kind) {
+		case "typesafe":
+			return Effect.succeed(
+				TypeSafeProvider.layer({
+					...clientOptions(provider, apiKey),
+					upstreamModel,
+				}),
+			)
+		case "openai-compat":
+			return Effect.fail(
+				new Config.ModelConfigurationError({
+					reason: "unsupported-option",
+					message:
+						"OpenBot cannot ask a decision model through an openai-compat provider yet. Use a typesafe provider.",
+				}),
+			)
+		case "openai":
+		case "anthropic":
+			return Effect.fail(
+				new Config.ModelConfigurationError({
+					reason: "unsupported-option",
+					message: `A ${provider.kind} provider serves only language models.`,
+				}),
+			)
+	}
+}
+
 /** The model Layer of one provider kind, with its client. */
 const modelLayer = (
 	provider: Stored,
-	apiKey: Parameters<typeof OpenAiProvider.layerClient>[0]["apiKey"],
+	apiKey: ApiKey,
 	selection: Config.Selection,
 	upstreamModel: string,
 ) =>
 	Effect.gen(function* () {
-		const apiUrl =
-			provider.endpoint === null
-				? undefined
-				: provider.endpoint.replace(/\/$/, "")
-		const client = { apiKey, ...(apiUrl === undefined ? {} : { apiUrl }) }
+		const client = clientOptions(provider, apiKey)
 		switch (provider.kind) {
 			case "openai": {
 				const model = yield* OpenAiProvider.make({ upstreamModel }).model(
@@ -140,13 +187,21 @@ const modelLayer = (
 					Layer.provide(OpenAiCompatProvider.layerClient(client)),
 				)
 			}
+			case "typesafe":
+				return yield* new Config.ModelConfigurationError({
+					reason: "unsupported-option",
+					message: "A typesafe provider serves only decision models.",
+				})
 		}
 	})
 
-interface Built {
+/** Only a language model can run a Session or do the work of the helper model. */
+const isLanguage = (offer: Offer) => offer.model.type === "language"
+
+interface Built<A> {
 	readonly version: number
 	readonly scope: Scope.Closeable
-	readonly model: LanguageModel.LanguageModel
+	readonly model: A
 }
 
 export const make = (options: { readonly builtin?: Builtin } = {}) =>
@@ -162,7 +217,66 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 		 * provider gives it a new version, so the next call builds it again and
 		 * closes the old one.
 		 */
-		const built = yield* SynchronizedRef.make(HashMap.empty<string, Built>())
+		const built = yield* SynchronizedRef.make(
+			HashMap.empty<string, Built<LanguageModel.LanguageModel>>(),
+		)
+		/** The same for decision models. */
+		const builtDecisions = yield* SynchronizedRef.make(
+			HashMap.empty<string, Built<DecisionModel.DecisionModel>>(),
+		)
+
+		/**
+		 * Gives the built model for a key from the cache. It builds the model when
+		 * the cache has none, or when the provider changed after the last build.
+		 */
+		const cached = <I, A, E>(
+			cache: SynchronizedRef.SynchronizedRef<HashMap.HashMap<string, Built<A>>>,
+			key: string,
+			provider: Stored,
+			tag: Context.Key<I, A>,
+			layerOf: (
+				apiKey: ApiKey,
+			) => Effect.Effect<
+				Layer.Layer<I, E, HttpClient.HttpClient>,
+				Config.ModelConfigurationError
+			>,
+		) =>
+			SynchronizedRef.modifyEffect(cache, (map) =>
+				Effect.gen(function* () {
+					const existing = HashMap.get(map, key)
+					if (
+						Option.isSome(existing) &&
+						existing.value.version === provider.version
+					)
+						return [existing.value.model, map] as const
+					if (Option.isSome(existing))
+						yield* Scope.close(existing.value.scope, Exit.void)
+					const apiKey = yield* providers
+						.openKey(provider)
+						.pipe(
+							Effect.mapError(() =>
+								unavailable("OpenBot cannot open the provider key right now."),
+							),
+						)
+					const layer = yield* layerOf(apiKey)
+					const entryScope = yield* Scope.fork(scope)
+					const context = yield* Layer.buildWithScope(layer, entryScope).pipe(
+						Effect.provideContext(services),
+						Effect.mapError(() =>
+							unavailable("OpenBot cannot start the model right now."),
+						),
+					)
+					const model = Context.get(context, tag)
+					return [
+						model,
+						HashMap.set(map, key, {
+							version: provider.version,
+							scope: entryScope,
+							model,
+						}),
+					] as const
+				}),
+			)
 
 		/** The usable providers, and each model that they offer to the organization. */
 		const stored = (organizationId: string) =>
@@ -207,26 +321,18 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				],
 				models: [
 					...(builtin?.models ?? []),
-					...current.offers.map(catalogModel),
+					...current.offers.filter(isLanguage).map(catalogModel),
 				],
 			}))
 
-		const defaultSelection = (organizationId: string) =>
-			Effect.gen(function* () {
-				const current = yield* settings
-					.organization(organizationId)
-					.pipe(
-						Effect.mapError(() =>
-							unavailable("OpenBot cannot read the settings right now."),
-						),
-					)
-				if (current.document.defaultModel !== null)
-					return Option.some(current.document.defaultModel)
-				const first = (yield* catalog(organizationId)).models[0]
-				return Option.map(Option.fromNullishOr(first), (model) =>
-					Config.Selection.make({ provider: model.provider, model: model.id }),
+		const organizationSettings = (organizationId: string) =>
+			settings
+				.organization(organizationId)
+				.pipe(
+					Effect.mapError(() =>
+						unavailable("OpenBot cannot read the settings right now."),
+					),
 				)
-			})
 
 		const build = (
 			{ provider, model: offered }: Offer,
@@ -240,31 +346,13 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 					selection.reasoningEffort ?? null,
 					selection.serviceTier ?? null,
 				])
-				return yield* SynchronizedRef.modifyEffect(built, (map) =>
-					Effect.gen(function* () {
-						const existing = HashMap.get(map, key)
-						if (
-							Option.isSome(existing) &&
-							existing.value.version === provider.version
-						)
-							return [existing.value.model, map] as const
-						if (Option.isSome(existing))
-							yield* Scope.close(existing.value.scope, Exit.void)
-						const apiKey = yield* providers
-							.openKey(provider)
-							.pipe(
-								Effect.mapError(() =>
-									unavailable(
-										"OpenBot cannot open the provider key right now.",
-									),
-								),
-							)
-						const layer = yield* modelLayer(
-							provider,
-							apiKey,
-							selection,
-							offered.upstream,
-						).pipe(
+				return yield* cached(
+					built,
+					key,
+					provider,
+					LanguageModel.LanguageModel,
+					(apiKey) =>
+						modelLayer(provider, apiKey, selection, offered.upstream).pipe(
 							Effect.mapError(
 								(error) =>
 									new Config.ModelConfigurationError({
@@ -272,37 +360,41 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 										message: String(error),
 									}),
 							),
-						)
-						const entryScope = yield* Scope.fork(scope)
-						const context = yield* Layer.buildWithScope(layer, entryScope).pipe(
-							Effect.provideContext(services),
-							Effect.mapError(() =>
-								unavailable("OpenBot cannot start the model right now."),
-							),
-						)
-						const model = Context.get(context, LanguageModel.LanguageModel)
-						return [
-							model,
-							HashMap.set(map, key, {
-								version: provider.version,
-								scope: entryScope,
-								model,
-							}),
-						] as const
-					}),
+						),
 				)
 			})
 
-		const resolve = (
-			organizationId: string,
-			requested: Config.Selection | undefined,
-		) =>
+		const decision = (organizationId: string) =>
 			Effect.gen(function* () {
-				const selection =
-					requested ??
-					Option.getOrUndefined(yield* defaultSelection(organizationId))
-				if (selection === undefined)
-					return yield* unavailable("The organization has no model.")
+				const selection = (yield* organizationSettings(organizationId)).document
+					.decisionModel
+				if (selection === null) return Option.none()
+				const offer = (yield* stored(organizationId)).offers.find(
+					(offer) =>
+						offer.provider.id === selection.provider &&
+						offer.model.id === selection.model,
+				)
+				if (offer === undefined || offer.model.type !== "decision")
+					return yield* new Config.ModelConfigurationError({
+						reason: "model-not-found",
+						message:
+							"No provider of the organization offers its decision model now.",
+					})
+				const key = JSON.stringify([offer.provider.id, offer.model.upstream])
+				return Option.some(
+					yield* cached(
+						builtDecisions,
+						key,
+						offer.provider,
+						DecisionModel.DecisionModel,
+						(apiKey) =>
+							decisionLayer(offer.provider, apiKey, offer.model.upstream),
+					),
+				)
+			})
+
+		const resolve = (organizationId: string, selection: Config.Selection) =>
+			Effect.gen(function* () {
 				if (
 					builtin !== undefined &&
 					builtin.providers.some(
@@ -330,6 +422,11 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 						reason: "model-not-found",
 						message: "The model provider does not offer this model.",
 					})
+				if (!isLanguage(offer))
+					return yield* new Config.ModelConfigurationError({
+						reason: "model-not-found",
+						message: "This is a decision model. It cannot write text.",
+					})
 				if (
 					(selection.reasoningEffort !== undefined &&
 						!offer.model.reasoningEfforts.includes(
@@ -346,9 +443,24 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				return yield* build(offer, selection)
 			})
 
+		/** The model that one setting of the organization names. */
+		const setting = (
+			organizationId: string,
+			name: "rulesModel" | "agentMemoryModel",
+		) =>
+			Effect.gen(function* () {
+				const selection = (yield* organizationSettings(organizationId))
+					.document[name]
+				if (selection === null)
+					return yield* new Config.ModelConfigurationError({
+						reason: "missing",
+						message: `The organization has no ${name}.`,
+					})
+				return yield* resolve(organizationId, selection)
+			})
+
 		return ModelRegistry.of({
 			catalog,
-			defaultSelection,
 			view: (organizationId) =>
 				Effect.gen(function* () {
 					const current = yield* stored(organizationId)
@@ -372,6 +484,7 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 								provider: model.provider,
 								id: model.id,
 								owner: "platform" as const,
+								type: "language" as const,
 								name: model.name,
 								reasoningEfforts: model.reasoningEfforts,
 								serviceTiers: model.serviceTiers,
@@ -386,6 +499,7 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 								provider: provider.id,
 								id: model.id,
 								owner: model.owner,
+								type: model.type,
 								name: model.name,
 								reasoningEfforts: model.reasoningEfforts,
 								serviceTiers: model.serviceTiers,
@@ -397,26 +511,15 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 									: { maxOutputTokens: model.maxOutputTokens }),
 							})),
 						],
-						defaultModel: Option.getOrNull(
-							yield* defaultSelection(organizationId),
-						),
+						decisionModel: (yield* organizationSettings(organizationId))
+							.document.decisionModel,
 					}
 				}),
 			resolve,
-			helper: (organizationId) =>
-				Effect.gen(function* () {
-					const current = yield* settings
-						.organization(organizationId)
-						.pipe(
-							Effect.mapError(() =>
-								unavailable("OpenBot cannot read the settings right now."),
-							),
-						)
-					return yield* resolve(
-						organizationId,
-						current.document.helperModel ?? undefined,
-					)
-				}),
+			decision,
+			rulesModel: (organizationId) => setting(organizationId, "rulesModel"),
+			agentMemoryModel: (organizationId) =>
+				setting(organizationId, "agentMemoryModel"),
 		})
 	})
 

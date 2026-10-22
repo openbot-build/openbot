@@ -25,8 +25,9 @@ export const PlatformDocument = Schema.Struct({
 export type PlatformDocument = typeof PlatformDocument.Type
 
 export const OrganizationDocument = Schema.Struct({
-	defaultModel: Api.OrganizationSettings.fields.defaultModel,
-	helperModel: Api.OrganizationSettings.fields.helperModel,
+	rulesModel: Api.OrganizationSettings.fields.rulesModel,
+	agentMemoryModel: Api.OrganizationSettings.fields.agentMemoryModel,
+	decisionModel: Api.OrganizationSettings.fields.decisionModel,
 	memory: Api.OrganizationSettings.fields.memory,
 	agentMemory: Schema.Boolean,
 	requestTimeoutMs: Api.RequestTimeout,
@@ -38,8 +39,9 @@ export type OrganizationDocument = typeof OrganizationDocument.Type
 
 /** A new organization starts with these settings. */
 export const organizationDefaults: OrganizationDocument = {
-	defaultModel: null,
-	helperModel: null,
+	rulesModel: null,
+	agentMemoryModel: null,
+	decisionModel: null,
 	memory: { use: true, generate: true },
 	agentMemory: true,
 	requestTimeoutMs: 24 * 60 * 60 * 1000,

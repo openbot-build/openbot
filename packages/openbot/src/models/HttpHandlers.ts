@@ -21,8 +21,8 @@ import { Models, view as modelView } from "./Models.ts"
 const unavailable = () => ModelProvidersApi.ModelProvidersUnavailable.make({})
 
 /**
- * A provider cannot go while a setting still names it, or the default model
- * of new Sessions would point at nothing.
+ * A provider cannot go while a setting still names it, or the setting would
+ * point at nothing.
  */
 export const checkUnused = (input: {
 	readonly providerId: string
@@ -35,8 +35,9 @@ export const checkUnused = (input: {
 				.organization(organizationId)
 				.pipe(Effect.mapError(unavailable))
 			if (
-				current.document.defaultModel?.provider === input.providerId ||
-				current.document.helperModel?.provider === input.providerId
+				current.document.rulesModel?.provider === input.providerId ||
+				current.document.agentMemoryModel?.provider === input.providerId ||
+				current.document.decisionModel?.provider === input.providerId
 			)
 				return yield* ModelProvidersApi.ModelProviderInUse.make({
 					providerId: input.providerId,

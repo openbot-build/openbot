@@ -508,6 +508,8 @@ export const models = table(
 		ownerKind: text("owner_kind").notNull(),
 		ownerId: text("owner_id").notNull(),
 		id: text().notNull(),
+		/** `language` or `decision`. */
+		type: text().notNull().default("language"),
 		name: text().notNull(),
 		reasoningEfforts: text("reasoning_efforts").notNull(),
 		serviceTiers: text("service_tiers").notNull(),

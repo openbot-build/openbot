@@ -41,6 +41,24 @@ test(
 					},
 					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
 				})
+			// Agents learn memory only with the Agent memory model of the organization.
+			const settings = await (
+				await request(alice.session, "/v1/organization/settings")
+			).json()
+			const configured = await request(
+				alice.session,
+				"/v1/organization/settings",
+				"PATCH",
+				{
+					expectedVersion: settings.version,
+					agentMemoryModel: {
+						_tag: "Config.Selection",
+						provider: "fixture",
+						model: "fixture-model",
+					},
+				},
+			)
+			assert.equal(configured.status, 200, await configured.clone().text())
 			const decode = Schema.decodeUnknownSync(SessionView)
 			const get = async (path: string) =>
 				decode(await (await request(alice.session, path)).json())

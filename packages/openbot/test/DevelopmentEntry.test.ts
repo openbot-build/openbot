@@ -202,19 +202,21 @@ test(
 							.reason,
 						"BlockedTarget",
 					)
-					const ordinary = await create(production.address)
-					const unavailable = await fetch(
-						production.address + `/v1/sessions/${ordinary.session.id}/turns`,
-						{
+					// Production has no default model and no simulated models.
+					const post = (settings: object) =>
+						fetch(production.address + "/v1/sessions", {
 							method: "POST",
 							headers,
-							body: JSON.stringify({
-								input: "No implicit simulator",
-								expected: ordinary.session.revision,
-							}),
-						},
-					)
-					assert.equal(unavailable.status, 503)
+							body: JSON.stringify(settings),
+						})
+					const withoutModel = await post({})
+					assert.equal(withoutModel.status, 400)
+					assert.equal((await withoutModel.json()).reason, "missing")
+					const simulated = await post({
+						settings: { model: agent.session.settings.model },
+					})
+					assert.equal(simulated.status, 400)
+					assert.equal((await simulated.json())._tag, "SessionModelInvalid")
 					assert.equal(
 						production.output().includes("Development login:"),
 						false,

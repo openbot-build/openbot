@@ -15,10 +15,12 @@ const Options = Schema.fromJsonString(Schema.Array(Schema.String))
 const AvailabilityJson = Schema.fromJsonString(ModelProvidersApi.Availability)
 const decodeOptions = Schema.decodeUnknownSync(Options)
 const decodeAvailability = Schema.decodeUnknownSync(AvailabilityJson)
+const decodeType = Schema.decodeUnknownSync(ModelProvidersApi.ModelType)
 
 const stored = (row: typeof models.$inferSelect): StoredModel => ({
 	owner: ownerOf(row),
 	id: row.id,
+	type: decodeType(row.type),
 	name: row.name,
 	reasoningEfforts: decodeOptions(row.reasoningEfforts),
 	serviceTiers: decodeOptions(row.serviceTiers),
@@ -117,6 +119,7 @@ export const make = Effect.gen(function* () {
 					const row = {
 						...ownerColumns(owner),
 						id: input.id,
+						type: input.type ?? "language",
 						name: input.name.trim(),
 						reasoningEfforts: JSON.stringify(input.reasoningEfforts),
 						serviceTiers: JSON.stringify(input.serviceTiers),
