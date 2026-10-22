@@ -240,3 +240,63 @@ test("two Sessions run independently, and another start cannot replace an active
 		),
 	)
 })
+
+test("a queued message keeps its author, and only the author of a Turn can steer it", async () => {
+	let requests = 0
+	await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const ready = yield* Deferred.make<void>(),
+					gate = yield* Deferred.make<void>()
+				const model = LanguageModelTest({
+					streamText: () => {
+						requests++
+						return requests === 1
+							? Stream.fromEffect(
+									Deferred.succeed(ready, undefined).pipe(
+										Effect.andThen(Deferred.await(gate)),
+									),
+								).pipe(Stream.flatMap(() => Stream.fromArray(textParts("one"))))
+							: Stream.fromArray(textParts("two"))
+					},
+				})
+				yield* Effect.gen(function* () {
+					const { runtime, runtimeStore, base } = yield* SessionTest()
+					const executing = yield* Effect.forkChild(
+						runtime.execute({ base, input: "from ada", author: "ada" }),
+					)
+					yield* Deferred.await(ready)
+					const running = yield* runtimeStore.read(base.session),
+						turn = Session.currentTurn(running.session)!
+					assert.equal(turn.author, "ada")
+					const stranger = yield* Effect.exit(
+						runtime.steer({
+							session: base.session,
+							turn: turn.id,
+							input: "from bob",
+							author: "bob",
+						}),
+					)
+					assert.ok(Exit.isFailure(stranger))
+					yield* runtime.steer({
+						session: base.session,
+						turn: turn.id,
+						input: "more from ada",
+						author: "ada",
+					})
+					yield* runtime.enqueue({
+						session: base.session,
+						message: "queued from bob",
+						author: "bob",
+					})
+					yield* Deferred.succeed(gate, undefined)
+					yield* Fiber.join(executing)
+					const next = yield* runtime.runQueued(base.session)
+					assert.ok(Option.isSome(next))
+					const latest = yield* runtimeStore.read(base.session)
+					assert.equal(Session.currentTurn(latest.session)!.author, "bob")
+				}).pipe(Effect.provide(model))
+			}),
+		),
+	)
+})

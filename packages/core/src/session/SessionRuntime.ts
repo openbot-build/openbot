@@ -252,6 +252,7 @@ export const make = <
 							)
 							const record: Turn.Record = {
 								...(input.action === undefined ? {} : { action: input.action }),
+								...(input.author === undefined ? {} : { author: input.author }),
 								id: turn,
 								session: view.session.id,
 								settings,
@@ -1326,6 +1327,7 @@ export const make = <
 					{
 						base: { session, revision: view.session.revision },
 						input: queued.content,
+						...(queued.author === undefined ? {} : { author: queued.author }),
 					},
 					queued,
 				)
@@ -1369,6 +1371,12 @@ export const make = <
 									turn: input.turn,
 									message: "Steering needs a running Turn",
 								})
+							if (turn.author !== input.author)
+								return yield* new Turn.Conflict({
+									session: input.session,
+									turn: input.turn,
+									message: "Only the author of a Turn can steer it",
+								})
 							return [
 								undefined,
 								Option.some({
@@ -1405,6 +1413,9 @@ export const make = <
 										id: item,
 										kind: "message" as const,
 										content: Prompt.make(input.message),
+										...(input.author === undefined
+											? {}
+											: { author: input.author }),
 									}),
 								},
 							}),
