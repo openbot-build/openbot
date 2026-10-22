@@ -10,6 +10,7 @@ import {
 import type { AppIndexApi } from "@openbot-build/api"
 import { PlatformAdmins } from "../src/platform/PlatformAdmins.ts"
 import { ModelProviders } from "../src/models/ModelProviders.ts"
+import { Models } from "../src/models/Models.ts"
 import { ModelRegistry } from "../src/models/ModelRegistry.ts"
 import { Sso } from "../src/sso/Sso.ts"
 
@@ -141,6 +142,14 @@ export const layerUnusedPlatform = Layer.mergeAll(
 		update: () => Effect.die("unused"),
 		delete: () => Effect.die("unused"),
 		openKey: () => Effect.die("unused"),
+	}),
+	Layer.succeed(Models, {
+		list: () => Effect.die("unused"),
+		get: () => Effect.die("unused"),
+		available: () => Effect.succeed([]),
+		create: () => Effect.die("unused"),
+		update: () => Effect.die("unused"),
+		delete: () => Effect.die("unused"),
 	}),
 	Layer.succeed(ModelRegistry, {
 		catalog: () => Effect.die("unused"),

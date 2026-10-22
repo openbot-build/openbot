@@ -20,7 +20,8 @@ import * as AnthropicProvider from "../providers/anthropic/AnthropicProvider.ts"
 import * as OpenAiCompatProvider from "../providers/openai-compat/OpenAiCompatProvider.ts"
 import * as OpenAiProvider from "../providers/openai/OpenAiProvider.ts"
 import { Settings } from "../settings/Settings.ts"
-import { ModelProviders, type Stored } from "./ModelProviders.ts"
+import { linkedOwner, ModelProviders, type Stored } from "./ModelProviders.ts"
+import { type Effective, effective, Models, modelKey } from "./Models.ts"
 
 /**
  * Models that the program itself gives, such as the simulated model of the
@@ -42,7 +43,7 @@ export interface Catalog {
 	readonly models: ReadonlyArray<Config.Model>
 }
 
-/** The models that each organization can use now, built from the stored providers. */
+/** The models that each organization can use now, built from the stored providers, links and models. */
 export class ModelRegistry extends Context.Service<
 	ModelRegistry,
 	{
@@ -84,22 +85,25 @@ export class ModelRegistry extends Context.Service<
 const unavailable = (message: string) =>
 	new Config.ModelConfigurationError({ reason: "unavailable", message })
 
-const catalogModel = (
-	provider: Stored,
-	entry: ModelProvidersApi.ModelEntry,
-): Config.Model =>
+/** One model that one provider offers, with the values of the link applied. */
+interface Offer {
+	readonly provider: Stored
+	readonly model: Effective
+}
+
+const catalogModel = ({ provider, model }: Offer): Config.Model =>
 	Config.Model.make({
 		provider: CoreProvider.Id.make(provider.id),
-		id: CoreModel.Id.make(entry.id),
-		name: entry.name,
-		reasoningEfforts: entry.reasoningEfforts,
-		serviceTiers: entry.serviceTiers,
-		...(entry.contextWindow === undefined
+		id: CoreModel.Id.make(model.id),
+		name: model.name,
+		reasoningEfforts: model.reasoningEfforts,
+		serviceTiers: model.serviceTiers,
+		...(model.contextWindow === null
 			? {}
-			: { maxContextWindow: entry.contextWindow }),
-		...(entry.maxOutputTokens === undefined
+			: { maxContextWindow: model.contextWindow }),
+		...(model.maxOutputTokens === null
 			? {}
-			: { maxOutputTokensLimit: entry.maxOutputTokens }),
+			: { maxOutputTokensLimit: model.maxOutputTokens }),
 	})
 
 /** The model Layer of one provider kind, with its client. */
@@ -107,6 +111,7 @@ const modelLayer = (
 	provider: Stored,
 	apiKey: Parameters<typeof OpenAiProvider.layerClient>[0]["apiKey"],
 	selection: Config.Selection,
+	upstreamModel: string,
 ) =>
 	Effect.gen(function* () {
 		const apiUrl =
@@ -116,15 +121,21 @@ const modelLayer = (
 		const client = { apiKey, ...(apiUrl === undefined ? {} : { apiUrl }) }
 		switch (provider.kind) {
 			case "openai": {
-				const model = yield* OpenAiProvider.make().model(selection)
+				const model = yield* OpenAiProvider.make({ upstreamModel }).model(
+					selection,
+				)
 				return model.pipe(Layer.provide(OpenAiProvider.layerClient(client)))
 			}
 			case "anthropic": {
-				const model = yield* AnthropicProvider.make().model(selection)
+				const model = yield* AnthropicProvider.make({ upstreamModel }).model(
+					selection,
+				)
 				return model.pipe(Layer.provide(AnthropicProvider.layerClient(client)))
 			}
 			case "openai-compat": {
-				const model = yield* OpenAiCompatProvider.make().model(selection)
+				const model = yield* OpenAiCompatProvider.make({ upstreamModel }).model(
+					selection,
+				)
 				return model.pipe(
 					Layer.provide(OpenAiCompatProvider.layerClient(client)),
 				)
@@ -141,6 +152,7 @@ interface Built {
 export const make = (options: { readonly builtin?: Builtin } = {}) =>
 	Effect.gen(function* () {
 		const providers = yield* ModelProviders
+		const models = yield* Models
 		const settings = yield* Settings
 		const scope = yield* Scope.Scope
 		const services = yield* Effect.context<HttpClient.HttpClient>()
@@ -152,20 +164,40 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 		 */
 		const built = yield* SynchronizedRef.make(HashMap.empty<string, Built>())
 
+		/** The usable providers, and each model that they offer to the organization. */
 		const stored = (organizationId: string) =>
-			providers
-				.available(organizationId)
-				.pipe(
-					Effect.mapError(() =>
-						unavailable("OpenBot cannot read the model providers right now."),
+			Effect.gen(function* () {
+				const list = yield* providers.available(organizationId)
+				const usable = new Map(
+					(yield* models.available(organizationId)).map(
+						(model) => [modelKey(model), model] as const,
 					),
 				)
+				const offers = list.flatMap((provider) =>
+					provider.models.flatMap((link): ReadonlyArray<Offer> => {
+						const model = usable.get(
+							modelKey({
+								owner: linkedOwner({ provider, link }),
+								id: link.model,
+							}),
+						)
+						return model === undefined
+							? []
+							: [{ provider, model: effective({ model, link }) }]
+					}),
+				)
+				return { providers: list, offers }
+			}).pipe(
+				Effect.mapError(() =>
+					unavailable("OpenBot cannot read the model providers right now."),
+				),
+			)
 
 		const catalog = (organizationId: string) =>
-			Effect.map(stored(organizationId), (list) => ({
+			Effect.map(stored(organizationId), (current) => ({
 				providers: [
 					...(builtin?.providers ?? []),
-					...list.map((provider): Config.Provider => ({
+					...current.providers.map((provider): Config.Provider => ({
 						id: CoreProvider.Id.make(provider.id),
 						name: provider.name,
 						...(provider.endpoint === null
@@ -175,9 +207,7 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				],
 				models: [
 					...(builtin?.models ?? []),
-					...list.flatMap((provider) =>
-						provider.models.map((entry) => catalogModel(provider, entry)),
-					),
+					...current.offers.map(catalogModel),
 				],
 			}))
 
@@ -198,11 +228,15 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				)
 			})
 
-		const build = (provider: Stored, selection: Config.Selection) =>
+		const build = (
+			{ provider, model: offered }: Offer,
+			selection: Config.Selection,
+		) =>
 			Effect.gen(function* () {
 				const key = JSON.stringify([
 					provider.id,
 					selection.model,
+					offered.upstream,
 					selection.reasoningEffort ?? null,
 					selection.serviceTier ?? null,
 				])
@@ -225,7 +259,12 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 									),
 								),
 							)
-						const layer = yield* modelLayer(provider, apiKey, selection).pipe(
+						const layer = yield* modelLayer(
+							provider,
+							apiKey,
+							selection,
+							offered.upstream,
+						).pipe(
 							Effect.mapError(
 								(error) =>
 									new Config.ModelConfigurationError({
@@ -271,34 +310,40 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 					)
 				)
 					return yield* builtin.resolve(selection)
-				const provider = (yield* stored(organizationId)).find(
-					(provider) => provider.id === selection.provider,
+				const current = yield* stored(organizationId)
+				if (
+					!current.providers.some(
+						(provider) => provider.id === selection.provider,
+					)
 				)
-				if (provider === undefined)
 					return yield* new Config.ModelConfigurationError({
 						reason: "provider-not-found",
 						message: "The organization cannot use this model provider.",
 					})
-				const entry = provider.models.find(
-					(model) => model.id === selection.model,
+				const offer = current.offers.find(
+					(offer) =>
+						offer.provider.id === selection.provider &&
+						offer.model.id === selection.model,
 				)
-				if (entry === undefined)
+				if (offer === undefined)
 					return yield* new Config.ModelConfigurationError({
 						reason: "model-not-found",
 						message: "The model provider does not offer this model.",
 					})
 				if (
 					(selection.reasoningEffort !== undefined &&
-						!entry.reasoningEfforts.includes(selection.reasoningEffort)) ||
+						!offer.model.reasoningEfforts.includes(
+							selection.reasoningEffort,
+						)) ||
 					(selection.serviceTier !== undefined &&
-						!entry.serviceTiers.includes(selection.serviceTier))
+						!offer.model.serviceTiers.includes(selection.serviceTier))
 				)
 					return yield* new Config.ModelConfigurationError({
 						reason: "unsupported-option",
 						message:
 							"The model does not offer this reasoning effort or service tier.",
 					})
-				return yield* build(provider, selection)
+				return yield* build(offer, selection)
 			})
 
 		return ModelRegistry.of({
@@ -306,8 +351,7 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 			defaultSelection,
 			view: (organizationId) =>
 				Effect.gen(function* () {
-					const list = yield* stored(organizationId)
-					const current = yield* catalog(organizationId)
+					const current = yield* stored(organizationId)
 					return {
 						providers: [
 							...(builtin?.providers ?? []).map((provider) => ({
@@ -316,26 +360,43 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 								kind: "openai-compat" as const,
 								name: provider.name,
 							})),
-							...list.map((provider) => ({
+							...current.providers.map((provider) => ({
 								id: provider.id,
 								owner: provider.owner.kind,
 								kind: provider.kind,
 								name: provider.name,
 							})),
 						],
-						models: current.models.map((model) => ({
-							provider: model.provider,
-							id: model.id,
-							name: model.name,
-							reasoningEfforts: model.reasoningEfforts,
-							serviceTiers: model.serviceTiers,
-							...(model.maxContextWindow === undefined
-								? {}
-								: { contextWindow: model.maxContextWindow }),
-							...(model.maxOutputTokensLimit === undefined
-								? {}
-								: { maxOutputTokens: model.maxOutputTokensLimit }),
-						})),
+						models: [
+							...(builtin?.models ?? []).map((model) => ({
+								provider: model.provider,
+								id: model.id,
+								owner: "platform" as const,
+								name: model.name,
+								reasoningEfforts: model.reasoningEfforts,
+								serviceTiers: model.serviceTiers,
+								...(model.maxContextWindow === undefined
+									? {}
+									: { contextWindow: model.maxContextWindow }),
+								...(model.maxOutputTokensLimit === undefined
+									? {}
+									: { maxOutputTokens: model.maxOutputTokensLimit }),
+							})),
+							...current.offers.map(({ provider, model }) => ({
+								provider: provider.id,
+								id: model.id,
+								owner: model.owner,
+								name: model.name,
+								reasoningEfforts: model.reasoningEfforts,
+								serviceTiers: model.serviceTiers,
+								...(model.contextWindow === null
+									? {}
+									: { contextWindow: model.contextWindow }),
+								...(model.maxOutputTokens === null
+									? {}
+									: { maxOutputTokens: model.maxOutputTokens }),
+							})),
+						],
 						defaultModel: Option.getOrNull(
 							yield* defaultSelection(organizationId),
 						),

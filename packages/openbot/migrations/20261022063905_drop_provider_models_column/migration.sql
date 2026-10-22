@@ -1,0 +1,1 @@
+ALTER TABLE "openbot_model_providers" DROP COLUMN "models";

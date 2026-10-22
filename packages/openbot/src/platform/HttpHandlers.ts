@@ -18,6 +18,7 @@ import {
 	platformOwner,
 	view,
 } from "../models/ModelProviders.ts"
+import { Models, view as modelView } from "../models/Models.ts"
 import { Organization } from "../organization/Organization.ts"
 import { hint, Secrets } from "../secrets/Secrets.ts"
 import type { PlatformDocument } from "../settings/Documents.ts"
@@ -101,6 +102,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 		const admins = yield* PlatformAdmins
 		const organization = yield* Organization
 		const providers = yield* ModelProviders
+		const models = yield* Models
 		const audit = yield* AuditLog
 		const unavailable = () => PlatformApi.PlatformUnavailable.make({})
 		const record = (
@@ -144,6 +146,16 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 							Effect.fail(
 								ModelProvidersApi.ModelProviderNotFound.make({ providerId }),
 							),
+						onSome: Effect.succeed,
+					}),
+				),
+			)
+		const findModel = (modelId: string) =>
+			models.get(platformOwner, modelId).pipe(
+				Effect.flatMap(
+					Option.match({
+						onNone: () =>
+							Effect.fail(ModelProvidersApi.ModelNotFound.make({ modelId })),
 						onSome: Effect.succeed,
 					}),
 				),
@@ -288,6 +300,54 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 						action: "member.updated",
 						resource: Permissions.platformResource,
 						details: { platformAdmin: "removed", email: params.email },
+					})
+				}),
+			)
+			.handle("listPlatformModels", () =>
+				models
+					.list(platformOwner)
+					.pipe(Effect.map((items) => ({ items: items.map(modelView) }))),
+			)
+			.handle("getPlatformModel", ({ params }) =>
+				Effect.map(findModel(params.modelId), modelView),
+			)
+			.handle("createPlatformModel", ({ payload }) =>
+				Effect.gen(function* () {
+					const account = yield* Account
+					const created = yield* models.create(platformOwner, payload)
+					yield* record(account, {
+						action: "model.created",
+						resource: Permissions.platformResource,
+						details: { modelId: created.id, name: created.name },
+					})
+					return modelView(created)
+				}),
+			)
+			.handle("updatePlatformModel", ({ params, payload }) =>
+				Effect.gen(function* () {
+					const account = yield* Account
+					const updated = yield* models.update(
+						platformOwner,
+						params.modelId,
+						payload,
+					)
+					yield* record(account, {
+						action: "model.updated",
+						resource: Permissions.platformResource,
+						details: { modelId: updated.id, name: updated.name },
+					})
+					return modelView(updated)
+				}),
+			)
+			.handle("deletePlatformModel", ({ params }) =>
+				Effect.gen(function* () {
+					const account = yield* Account
+					const model = yield* findModel(params.modelId)
+					yield* models.delete(platformOwner, model.id)
+					yield* record(account, {
+						action: "model.deleted",
+						resource: Permissions.platformResource,
+						details: { modelId: model.id, name: model.name },
 					})
 				}),
 			)

@@ -33,22 +33,19 @@ export const Endpoint = Schema.NonEmptyString.check(
 )
 
 const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0))
-/** One model that a provider offers. */
-export const ModelEntry = Schema.Struct({
-	id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
-	name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
-	reasoningEfforts: Schema.Array(Schema.NonEmptyString),
-	serviceTiers: Schema.Array(Schema.NonEmptyString),
-	contextWindow: Schema.optionalKey(PositiveInt),
-	maxOutputTokens: Schema.optionalKey(PositiveInt),
-})
-export type ModelEntry = typeof ModelEntry.Type
-export const ModelEntries = Schema.Array(ModelEntry).check(
+const ModelId = Schema.String.check(
 	Schema.isMinLength(1),
 	Schema.isMaxLength(200),
 )
+const ModelName = Schema.String.check(
+	Schema.isMinLength(1),
+	Schema.isMaxLength(200),
+)
+const Options = Schema.Array(Schema.NonEmptyString).check(
+	Schema.isMaxLength(50),
+)
 
-/** Which organizations can use a provider of the platform. */
+/** Which organizations can use a provider or a model of the platform. */
 export const Availability = Schema.Union([
 	Schema.TaggedStruct("All", {}),
 	Schema.TaggedStruct("None", {}),
@@ -60,6 +57,85 @@ export type Availability = typeof Availability.Type
 
 export const ProviderOwner = Schema.Literals(["platform", "organization"])
 export type ProviderOwner = typeof ProviderOwner.Type
+/** The platform or an organization owns a model, in the same way as a provider. */
+export const ModelOwner = ProviderOwner
+export type ModelOwner = ProviderOwner
+
+/**
+ * A model, such as `gpt-5`. It does not belong to a provider. A provider
+ * links it to offer it, and the link can change some of its values.
+ */
+export const Model = Schema.Struct({
+	/** The ID is unique for its owner. A provider sends it as the model name unless the link sets `upstream`. */
+	id: Schema.String,
+	owner: ModelOwner,
+	name: Schema.String,
+	reasoningEfforts: Schema.Array(Schema.String),
+	serviceTiers: Schema.Array(Schema.String),
+	contextWindow: Schema.optionalKey(PositiveInt),
+	maxOutputTokens: Schema.optionalKey(PositiveInt),
+	/** Only models of the platform have it. */
+	availability: Schema.NullOr(Availability),
+	version: Version,
+	createdAt: Schema.String,
+	updatedAt: Schema.String,
+})
+export type Model = typeof Model.Type
+
+export const CreateModelRequest = Schema.Struct({
+	id: ModelId,
+	name: ModelName,
+	reasoningEfforts: Options,
+	serviceTiers: Options,
+	contextWindow: Schema.optionalKey(PositiveInt),
+	maxOutputTokens: Schema.optionalKey(PositiveInt),
+})
+export type CreateModelRequest = typeof CreateModelRequest.Type
+export const UpdateModelRequest = Schema.Struct({
+	expectedVersion: Version,
+	name: Schema.optionalKey(ModelName),
+	reasoningEfforts: Schema.optionalKey(Options),
+	serviceTiers: Schema.optionalKey(Options),
+	/** Null removes the limit. */
+	contextWindow: Schema.optionalKey(Schema.NullOr(PositiveInt)),
+	maxOutputTokens: Schema.optionalKey(Schema.NullOr(PositiveInt)),
+})
+export type UpdateModelRequest = typeof UpdateModelRequest.Type
+export const CreatePlatformModelRequest = Schema.Struct({
+	...CreateModelRequest.fields,
+	availability: Availability,
+})
+export type CreatePlatformModelRequest = typeof CreatePlatformModelRequest.Type
+export const UpdatePlatformModelRequest = Schema.Struct({
+	...UpdateModelRequest.fields,
+	availability: Schema.optionalKey(Availability),
+})
+export type UpdatePlatformModelRequest = typeof UpdatePlatformModelRequest.Type
+
+/**
+ * A link from a provider to a model. Each value that the link sets
+ * replaces the value of the model for this provider only.
+ */
+export const ProviderModel = Schema.Struct({
+	/** The ID of the model. A provider links at most one model with each ID. */
+	model: ModelId,
+	modelOwner: ModelOwner,
+	/** The model name that the provider gets. Leave it out to send the model ID. */
+	upstream: Schema.optionalKey(ModelName),
+	reasoningEfforts: Schema.optionalKey(Options),
+	serviceTiers: Schema.optionalKey(Options),
+	contextWindow: Schema.optionalKey(PositiveInt),
+	maxOutputTokens: Schema.optionalKey(PositiveInt),
+})
+export type ProviderModel = typeof ProviderModel.Type
+export const ProviderModels = Schema.Array(ProviderModel).check(
+	Schema.isMaxLength(200),
+	Schema.makeFilter((links: ReadonlyArray<ProviderModel>) =>
+		new Set(links.map((link) => link.model)).size === links.length
+			? undefined
+			: "Expected each model ID only once",
+	),
+)
 
 export const ModelProvider = Schema.Struct({
 	/** A provider ID is unique in the whole platform. A model selection names it. */
@@ -70,7 +146,7 @@ export const ModelProvider = Schema.Struct({
 	/** Null means the default address of the provider kind. */
 	endpoint: Schema.NullOr(Schema.String),
 	apiKey: SecretState,
-	models: Schema.Array(ModelEntry),
+	models: Schema.Array(ProviderModel),
 	/** Only providers of the platform have it. */
 	availability: Schema.NullOr(Availability),
 	version: Version,
@@ -89,7 +165,7 @@ export const CreateModelProviderRequest = Schema.Struct({
 	/** An `openai-compat` provider needs it. */
 	endpoint: Schema.optionalKey(Endpoint),
 	apiKey: SecretInput,
-	models: ModelEntries,
+	models: ProviderModels,
 })
 export type CreateModelProviderRequest = typeof CreateModelProviderRequest.Type
 export const UpdateModelProviderRequest = Schema.Struct({
@@ -98,7 +174,7 @@ export const UpdateModelProviderRequest = Schema.Struct({
 	endpoint: Schema.optionalKey(Schema.NullOr(Endpoint)),
 	/** Leave it out to keep the current key. */
 	apiKey: Schema.optionalKey(SecretInput),
-	models: Schema.optionalKey(ModelEntries),
+	models: Schema.optionalKey(ProviderModels),
 })
 export type UpdateModelProviderRequest = typeof UpdateModelProviderRequest.Type
 export const CreatePlatformModelProviderRequest = Schema.Struct({
@@ -114,7 +190,10 @@ export const UpdatePlatformModelProviderRequest = Schema.Struct({
 export type UpdatePlatformModelProviderRequest =
 	typeof UpdatePlatformModelProviderRequest.Type
 
-/** The models that the organization can use now: its own providers, and the providers that the platform shares with it. */
+/**
+ * The models that the organization can use now. Each item is one model of one
+ * provider, with the values of the link already applied.
+ */
 export const ModelCatalog = Schema.Struct({
 	providers: Schema.Array(
 		Schema.Struct({
@@ -125,7 +204,16 @@ export const ModelCatalog = Schema.Struct({
 		}),
 	),
 	models: Schema.Array(
-		Schema.Struct({ provider: Schema.String, ...ModelEntry.fields }),
+		Schema.Struct({
+			provider: Schema.String,
+			id: Schema.String,
+			owner: ModelOwner,
+			name: Schema.String,
+			reasoningEfforts: Schema.Array(Schema.String),
+			serviceTiers: Schema.Array(Schema.String),
+			contextWindow: Schema.optionalKey(PositiveInt),
+			maxOutputTokens: Schema.optionalKey(PositiveInt),
+		}),
 	),
 	/** The model of a new Session, or null when there is no model. */
 	defaultModel: Schema.NullOr(Config.Selection),
@@ -149,6 +237,18 @@ export class ModelProviderInUse extends Schema.TaggedError<ModelProviderInUse>()
 	"ModelProviderInUse",
 	{ providerId: Schema.String },
 ) {}
+export class ModelNotFound extends Schema.TaggedError<ModelNotFound>()(
+	"ModelNotFound",
+	{ modelId: Schema.String },
+) {}
+export class ModelConflict extends Schema.TaggedError<ModelConflict>()(
+	"ModelConflict",
+	{ version: Version },
+) {}
+/** A provider still links the model, or a setting names it. Remove those first. */
+export class ModelInUse extends Schema.TaggedError<ModelInUse>()("ModelInUse", {
+	modelId: Schema.String,
+}) {}
 export class ModelProvidersUnavailable extends Schema.TaggedError<ModelProvidersUnavailable>()(
 	"ModelProvidersUnavailable",
 	{},
@@ -159,22 +259,57 @@ export const ModelProviderErrors = [
 	ModelProviderInUse.pipe(HttpApiSchema.status(409)),
 	ModelProviderInvalid.pipe(HttpApiSchema.status(400)),
 	ModelProvidersUnavailable.pipe(HttpApiSchema.status(503)),
+	ModelNotFound.pipe(HttpApiSchema.status(404)),
+	ModelConflict.pipe(HttpApiSchema.status(409)),
+	ModelInUse.pipe(HttpApiSchema.status(409)),
 ] as const
 const errors = [...ModelProviderErrors, ...PermissionErrors] as const
 
 const ProviderParams = { providerId: Schema.String }
+const ModelParams = { modelId: Schema.String }
 
-/** The model providers of the organization. API keys go in, but they never come out. */
+/** The models and model providers of the organization. API keys go in, but they never come out. */
 export const ModelProvidersApi = HttpApiGroup.make("modelProviders").add(
-	HttpApiEndpoint.get("listModels", "/v1/organization/models", {
+	HttpApiEndpoint.get("getModelCatalog", "/v1/organization/model_catalog", {
 		success: ModelCatalog,
 		error: errors,
 	})
 		.annotate(Required, [requires("models.use").on("organization")])
 		.annotate(
 			OpenApi.Description,
-			"Lists the models that the organization can use: its own providers and the providers that the platform shares with it.",
+			"Lists the models that the organization can use now, for each provider that offers them.",
 		),
+	HttpApiEndpoint.get("listModels", "/v1/organization/models", {
+		success: Schema.Struct({ items: Schema.Array(Model) }),
+		error: errors,
+	}).annotate(
+		OpenApi.Description,
+		"Lists the models of the organization. The models that the platform shares are not in the list.",
+	),
+	HttpApiEndpoint.get("getModel", "/v1/organization/models/:modelId", {
+		params: ModelParams,
+		success: Model,
+		error: errors,
+	}),
+	HttpApiEndpoint.post("createModel", "/v1/organization/models", {
+		payload: CreateModelRequest,
+		success: Model,
+		error: errors,
+	}).annotate(
+		OpenApi.Description,
+		"Adds a model to the organization. Link it to a provider to use it.",
+	),
+	HttpApiEndpoint.patch("updateModel", "/v1/organization/models/:modelId", {
+		params: ModelParams,
+		payload: UpdateModelRequest,
+		success: Model,
+		error: errors,
+	}),
+	HttpApiEndpoint.delete("deleteModel", "/v1/organization/models/:modelId", {
+		params: ModelParams,
+		success: HttpApiSchema.NoContent,
+		error: errors,
+	}),
 	HttpApiEndpoint.get(
 		"listModelProviders",
 		"/v1/organization/model_providers",

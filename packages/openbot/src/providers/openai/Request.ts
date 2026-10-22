@@ -12,7 +12,7 @@ import {
 	type Config,
 	type ContextCompaction,
 } from "@openbot-build/core"
-import { type Defaults } from "./OpenAiProvider.ts"
+import { type Defaults, type Options } from "./OpenAiProvider.ts"
 
 const invalid = (description: string) =>
 	AiError.AiError.make({
@@ -20,28 +20,30 @@ const invalid = (description: string) =>
 		method: "encodeRequest",
 		reason: AiError.InvalidRequestError.make({ description }),
 	})
-export const config = (defaults: Defaults) => (selection: Config.Selection) =>
-	Effect.gen(function* () {
-		const reasoning =
-			selection.reasoningEffort === undefined
-				? defaults.reasoning
-				: yield* Schema.decodeUnknownEffect(
-						OpenAiSchema.CreateResponse.fields.reasoning,
-					)({
-						...defaults.reasoning,
-						effort: selection.reasoningEffort,
-					}).pipe(Effect.mapError((e) => invalid(String(e))))
-		return {
-			store: false,
-			...defaults,
-			model: selection.model,
-			reasoning,
-			...Record.filter(
-				{ service_tier: selection.serviceTier },
-				Predicate.isNotUndefined,
-			),
-		} satisfies typeof OpenAiLanguageModel.Config.Service
-	})
+export const config =
+	({ upstreamModel, ...defaults }: Defaults & Options) =>
+	(selection: Config.Selection) =>
+		Effect.gen(function* () {
+			const reasoning =
+				selection.reasoningEffort === undefined
+					? defaults.reasoning
+					: yield* Schema.decodeUnknownEffect(
+							OpenAiSchema.CreateResponse.fields.reasoning,
+						)({
+							...defaults.reasoning,
+							effort: selection.reasoningEffort,
+						}).pipe(Effect.mapError((e) => invalid(String(e))))
+			return {
+				store: false,
+				...defaults,
+				model: upstreamModel ?? selection.model,
+				reasoning,
+				...Record.filter(
+					{ service_tier: selection.serviceTier },
+					Predicate.isNotUndefined,
+				),
+			} satisfies typeof OpenAiLanguageModel.Config.Service
+		})
 
 export const nativeInput = (
 	selection: Config.Selection,

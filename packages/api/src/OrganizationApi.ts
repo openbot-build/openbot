@@ -77,6 +77,7 @@ const auditActionTree = {
 	organization: ["created", "updated"],
 	settings: ["updated"],
 	role: ["created", "updated", "deleted"],
+	model: ["created", "updated", "deleted"],
 	model_provider: ["created", "updated", "deleted"],
 	domain: ["added", "verified", "removed"],
 	sso_connection: ["created", "updated", "deleted"],

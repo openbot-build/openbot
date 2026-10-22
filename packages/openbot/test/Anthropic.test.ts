@@ -373,3 +373,38 @@ test("provider Layers keep service identity with direct and pipeable optional de
 		)
 	}
 })
+
+test("the API gets the upstream model name, and the model keeps the selected ID", async () => {
+	let sent: unknown
+	const HttpClientTest = Layer.succeed(
+		HttpClient.HttpClient,
+		HttpClient.make((request) => {
+			if (request.body._tag === "Uint8Array")
+				sent = JSON.parse(new TextDecoder().decode(request.body.body))
+			return Effect.succeed(
+				HttpClientResponse.fromWeb(
+					request,
+					new globalThis.Response("Gateway unavailable", { status: 503 }),
+				),
+			)
+		}),
+	)
+	const name = await Effect.runPromise(
+		Effect.gen(function* () {
+			const model = yield* AnthropicProvider.make({
+				upstreamModel: "upstream-name",
+			}).model(selection)
+			yield* LanguageModel.generateText({ prompt: "Hello." }).pipe(
+				Effect.provide(model),
+				Effect.exit,
+			)
+			return yield* AiModel.ModelName.pipe(Effect.provide(model))
+		}).pipe(
+			Effect.provide(
+				AnthropicProvider.layerClient({}).pipe(Layer.provide(HttpClientTest)),
+			),
+		),
+	)
+	assert.equal((sent as { readonly model?: unknown }).model, "upstream-name")
+	assert.equal(name, selection.model)
+})

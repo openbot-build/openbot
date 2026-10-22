@@ -33,6 +33,8 @@ import {
 	platformAdmins,
 	roles,
 	modelProviders,
+	models,
+	providerModels,
 	organizationDomains,
 	ssoConnections,
 	members,
@@ -42,6 +44,8 @@ import {
 	workflows,
 	workflowRuns,
 	workflowRecordings,
+	workflowRevisions,
+	workflowWaits,
 } from "./Schema.ts"
 import {
 	openbot_auth_user,
@@ -88,6 +92,8 @@ export const check = Effect.gen(function* () {
 	yield* db.select().from(platformAdmins).limit(0)
 	yield* db.select().from(roles).limit(0)
 	yield* db.select().from(modelProviders).limit(0)
+	yield* db.select().from(models).limit(0)
+	yield* db.select().from(providerModels).limit(0)
 	yield* db.select().from(organizationDomains).limit(0)
 	yield* db.select().from(ssoConnections).limit(0)
 	yield* db.select().from(members).limit(0)
@@ -97,6 +103,8 @@ export const check = Effect.gen(function* () {
 	yield* db.select().from(workflows).limit(0)
 	yield* db.select().from(workflowRuns).limit(0)
 	yield* db.select().from(workflowRecordings).limit(0)
+	yield* db.select().from(workflowRevisions).limit(0)
+	yield* db.select().from(workflowWaits).limit(0)
 	yield* db
 		.select({ id: openbot_auth_user.id })
 		.from(openbot_auth_user)

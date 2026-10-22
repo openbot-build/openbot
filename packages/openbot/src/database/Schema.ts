@@ -475,7 +475,8 @@ export const roles = table(
 
 /**
  * Model providers of the platform (`owner_kind` is `platform`) and of organizations.
- * The API key is sealed. Models and availability are JSON text.
+ * The API key is sealed. Availability is JSON text. The models that a provider
+ * offers are in `openbot_provider_models`.
  */
 export const modelProviders = table(
 	"openbot_model_providers",
@@ -488,13 +489,71 @@ export const modelProviders = table(
 		endpoint: text(),
 		apiKey: text("api_key").notNull(),
 		apiKeyHint: text("api_key_hint"),
-		models: text().notNull(),
 		availability: text(),
 		version: integer().notNull(),
 		createdAt: bigint("created_at", { mode: "number" }).notNull(),
 		updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
 	},
 	(t) => [index("openbot_model_providers_owner").on(t.ownerKind, t.ownerId)],
+)
+
+/**
+ * Models of the platform (`owner_kind` is `platform`) and of organizations. A
+ * model does not belong to a provider. The ID is unique for each owner.
+ * Option lists and availability are JSON text.
+ */
+export const models = table(
+	"openbot_models",
+	{
+		ownerKind: text("owner_kind").notNull(),
+		ownerId: text("owner_id").notNull(),
+		id: text().notNull(),
+		name: text().notNull(),
+		reasoningEfforts: text("reasoning_efforts").notNull(),
+		serviceTiers: text("service_tiers").notNull(),
+		contextWindow: integer("context_window"),
+		maxOutputTokens: integer("max_output_tokens"),
+		availability: text(),
+		version: integer().notNull(),
+		createdAt: bigint("created_at", { mode: "number" }).notNull(),
+		updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+	},
+	(t) => [primaryKey({ columns: [t.ownerKind, t.ownerId, t.id] })],
+)
+
+/**
+ * The models that a provider offers. A provider links at most one model with
+ * each ID. A null column takes the value of the model. `upstream` is the
+ * model name that the provider gets; null means the model ID.
+ */
+export const providerModels = table(
+	"openbot_provider_models",
+	{
+		providerId: text("provider_id")
+			.notNull()
+			.references(() => modelProviders.id, { onDelete: "cascade" }),
+		modelOwnerKind: text("model_owner_kind").notNull(),
+		modelOwnerId: text("model_owner_id").notNull(),
+		modelId: text("model_id").notNull(),
+		position: integer().notNull(),
+		upstream: text(),
+		reasoningEfforts: text("reasoning_efforts"),
+		serviceTiers: text("service_tiers"),
+		contextWindow: integer("context_window"),
+		maxOutputTokens: integer("max_output_tokens"),
+	},
+	(t) => [
+		primaryKey({ columns: [t.providerId, t.modelId] }),
+		foreignKey({
+			columns: [t.modelOwnerKind, t.modelOwnerId, t.modelId],
+			foreignColumns: [models.ownerKind, models.ownerId, models.id],
+		}).onDelete("restrict"),
+		index("openbot_provider_models_model").on(
+			t.modelOwnerKind,
+			t.modelOwnerId,
+			t.modelId,
+		),
+	],
 )
 
 /** Email domains of organizations. Only one organization can verify a domain. */
@@ -626,7 +685,10 @@ export const agentRecords = table(
 		index("openbot_agent_records_status").on(t.kind, t.status),
 	],
 )
-/** A Workflow: its owner, its steps and its triggers. `definition` holds the steps and the judge as JSON. */
+/**
+ * A Workflow: its owner, its graph and its triggers. `definition` holds the graph and the judge as JSON.
+ * `origin` is set for a Workflow that an Agent planned.
+ */
 export const workflows = table(
 	"openbot_workflows",
 	{
@@ -639,6 +701,8 @@ export const workflows = table(
 		description: text().notNull(),
 		agent: text(),
 		definition: text().notNull(),
+		origin: text(),
+		passedRevision: integer("passed_revision"),
 		scheduleCron: text("schedule_cron"),
 		scheduleTimeZone: text("schedule_time_zone"),
 		nextRunAt: time("next_run_at"),
@@ -660,25 +724,44 @@ export const workflows = table(
 			.where(sql`${t.scheduleCron} IS NOT NULL AND NOT ${t.archived}`),
 	],
 )
+/** Every revision of the definition of a Workflow. A Run reads the revision that it uses. */
+export const workflowRevisions = table(
+	"openbot_workflow_revisions",
+	{
+		organizationId: text("organization_id").notNull(),
+		workflowId: text("workflow_id").notNull(),
+		revision: integer().notNull(),
+		definition: text().notNull(),
+		createdAt: time("created_at").notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.organizationId, t.workflowId, t.revision] }),
+		foreignKey({
+			columns: [t.organizationId, t.workflowId],
+			foreignColumns: [workflows.organizationId, workflows.id],
+		}).onDelete("cascade"),
+	],
+)
 /**
- * One Run of a Workflow, or one exploration. `body` holds the step results, variables and findings as JSON.
- * `waiting_*` names the Turn that the durable execution waits for.
+ * One Run of a Workflow. `body` holds the nodes, their results and the findings as JSON.
+ * A Run has a parent tool call of a Session, or a parent node of another Run.
  */
 export const workflowRuns = table(
 	"openbot_workflow_runs",
 	{
 		organizationId: text("organization_id").notNull(),
 		id: text().notNull(),
-		workflowId: text("workflow_id"),
+		workflowId: text("workflow_id").notNull(),
 		userId: text("user_id").notNull(),
 		trigger: text().notNull(),
 		status: text().notNull(),
 		body: text().notNull(),
-		waitingSession: text("waiting_session"),
-		waitingTurn: text("waiting_turn"),
-		waitingToken: text("waiting_token"),
 		parentSession: text("parent_session"),
 		parentToolCall: text("parent_tool_call"),
+		parentRun: text("parent_run"),
+		parentNode: text("parent_node"),
+		/** The node, its attempt and its round, so a node starts each child Run once. */
+		parentKey: text("parent_key"),
 		createdAt: time("created_at").notNull(),
 		finishedAt: time("finished_at"),
 	},
@@ -698,23 +781,54 @@ export const workflowRuns = table(
 			t.workflowId,
 			t.createdAt,
 		),
-		index("openbot_workflow_runs_waiting").on(t.waitingSession),
 		index("openbot_workflow_runs_status").on(t.status),
 		uniqueIndex("openbot_workflow_runs_parent").on(
 			t.organizationId,
 			t.parentSession,
 			t.parentToolCall,
 		),
+		foreignKey({
+			columns: [t.organizationId, t.parentRun],
+			foreignColumns: [t.organizationId, t.id],
+		}).onDelete("cascade"),
+		uniqueIndex("openbot_workflow_runs_parent_run").on(
+			t.organizationId,
+			t.parentRun,
+			t.parentKey,
+		),
 	],
 )
-/** The tool calls of one `Act` step that a later check confirmed. Runs replay them without a model. */
+/**
+ * A Turn that the durable execution of a Run waits for, with the token that wakes it.
+ * Nodes run at the same time, so one Run can wait for many Turns.
+ */
+export const workflowWaits = table(
+	"openbot_workflow_waits",
+	{
+		organizationId: text("organization_id").notNull(),
+		runId: text("run_id").notNull(),
+		task: text().notNull(),
+		session: text().notNull(),
+		turn: text().notNull(),
+		token: text().notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.organizationId, t.runId, t.task] }),
+		foreignKey({
+			columns: [t.organizationId, t.runId],
+			foreignColumns: [workflowRuns.organizationId, workflowRuns.id],
+		}).onDelete("cascade"),
+		index("openbot_workflow_waits_turn").on(t.session, t.turn),
+	],
+)
+/** The tool calls of one `Task` node that a later check confirmed. Runs replay them without a model. */
 export const workflowRecordings = table(
 	"openbot_workflow_recordings",
 	{
 		organizationId: text("organization_id").notNull(),
 		workflowId: text("workflow_id").notNull(),
 		stepKey: text("step_key").notNull(),
-		step: text().notNull(),
+		node: text().notNull(),
 		calls: text().notNull(),
 		verifiedAt: time("verified_at").notNull(),
 	},

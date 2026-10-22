@@ -115,51 +115,7 @@ Your program finds, loads, and runs the skills.
 
 ## Plugins in openbot
 
-`@openbot-build/openbot` has all plugins of OpenBot. The server uses the Agent, App, and memory plugins in every Turn. You can also use the goal, memory, and Turn limit plugins with your own `SessionRuntime`.
-
-### Goals
-
-`GoalPlugin` gives the Agent six tools: `SetGoal`, `GetGoal`, `UpdateGoal`, `PauseGoal`, `ResumeGoal`, and `ClearGoal`.
-The goal belongs to one Session. A fork starts with no goal.
-
-```ts
-import {
-	PluginState,
-	SessionRuntime,
-	SessionStoreMemory,
-	Store,
-} from "@openbot-build/core"
-import { GoalPlugin } from "@openbot-build/openbot"
-import { Effect, Layer } from "effect"
-
-const program = Effect.scoped(
-	Effect.gen(function* () {
-		const plugin = GoalPlugin.make()
-		const definition = yield* Store.define({
-			stores: plugin.stores,
-			schemaVersion: "timeline/1",
-		})
-		const store = yield* SessionStoreMemory.make(definition)
-		const state = yield* PluginState.make({ store, plugin })
-		const runtime = yield* SessionRuntime.make({ store, agent: { plugin } })
-		const view = yield* store.create({ metadata: {} })
-		return yield* runtime
-			.execute({
-				base: { session: view.session.id, revision: view.session.revision },
-				input: "Set a goal to write the release notes",
-			})
-			.pipe(
-				Effect.provide(
-					GoalPlugin.layer.pipe(
-						Layer.provide(Layer.succeed(plugin.store, state)),
-					),
-				),
-			)
-	}),
-)
-```
-
-A goal has an `objective` and an optional `tokenBudget`. The plugin saves the budget, but it does not stop work when the budget is used up.
+`@openbot-build/openbot` has all plugins of OpenBot. The server uses the Agent, App, and memory plugins in every Turn. You can also use the memory and Turn limit plugins with your own `SessionRuntime`. Goals and plans are part of [Workflows](/docs/workflows).
 
 ### Memory
 

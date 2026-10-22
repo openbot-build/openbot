@@ -10,9 +10,12 @@ import { AccountAuth, NoStore } from "./AuthApi.ts"
 import { Account } from "./Identity.ts"
 import {
 	CreatePlatformModelProviderRequest,
+	CreatePlatformModelRequest,
+	Model,
 	ModelProvider,
 	ModelProviderErrors,
 	UpdatePlatformModelProviderRequest,
+	UpdatePlatformModelRequest,
 } from "./ModelProvidersApi.ts"
 import {
 	Organization,
@@ -83,6 +86,7 @@ const Limit = Schema.FiniteFromString.check(
 	Schema.isBetween({ minimum: 1, maximum: 100 }),
 )
 const ProviderParams = { providerId: Schema.String }
+const ModelParams = { modelId: Schema.String }
 
 /** The settings of the whole deployment. Only platform admins can use it. */
 export const PlatformApi = HttpApiGroup.make("platform")
@@ -150,6 +154,42 @@ export const PlatformApi = HttpApiGroup.make("platform")
 					PlatformAdminNotFound.pipe(HttpApiSchema.status(404)),
 					LastPlatformAdmin.pipe(HttpApiSchema.status(409)),
 				],
+			},
+		),
+		HttpApiEndpoint.get("listPlatformModels", "/v1/platform/models", {
+			success: Schema.Struct({ items: Schema.Array(Model) }),
+			error: [...errors, ...ModelProviderErrors],
+		}),
+		HttpApiEndpoint.get("getPlatformModel", "/v1/platform/models/:modelId", {
+			params: ModelParams,
+			success: Model,
+			error: [...errors, ...ModelProviderErrors],
+		}),
+		HttpApiEndpoint.post("createPlatformModel", "/v1/platform/models", {
+			payload: CreatePlatformModelRequest,
+			success: Model,
+			error: [...errors, ...ModelProviderErrors],
+		}).annotate(
+			OpenApi.Description,
+			"Adds a model of the platform. `availability` says which organizations can use it. A provider must link it before anyone can call it.",
+		),
+		HttpApiEndpoint.patch(
+			"updatePlatformModel",
+			"/v1/platform/models/:modelId",
+			{
+				params: ModelParams,
+				payload: UpdatePlatformModelRequest,
+				success: Model,
+				error: [...errors, ...ModelProviderErrors],
+			},
+		),
+		HttpApiEndpoint.delete(
+			"deletePlatformModel",
+			"/v1/platform/models/:modelId",
+			{
+				params: ModelParams,
+				success: HttpApiSchema.NoContent,
+				error: [...errors, ...ModelProviderErrors],
 			},
 		),
 		HttpApiEndpoint.get(
