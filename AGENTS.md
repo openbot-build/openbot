@@ -36,7 +36,8 @@
 
 ## Changes
 
-- Do not keep old behavior for old callers, clients, or stored data. Make the breaking change and keep one current model.
+- When a change would need compatibility work for old callers, clients, or stored data, ask the user first. Do not decide alone between a breaking change and keeping old behavior.
+- Never regenerate or change the baseline migration in `packages/openbot/migrations`. For each schema change, add a new migration with `drizzle-kit generate --name <change>`, so existing databases upgrade in place.
 - When you must work around a bug in a dependency or a tool, explain the bug in a comment next to the workaround.
 
 ## Checks
