@@ -250,6 +250,16 @@ The list is part of the Timeline. A Fork or a restore of an older Version has th
 
 ---
 
+## Wait
+
+An Agent can wait with the tool `openbot_wait`. It gives `seconds`, or `until` with a date and time, such as `2026-10-23T09:00:00Z`. The Turn becomes `Waiting`. When the time comes, the tool call gets `{ "waited": true, "at": "<time>" }`, and the Turn goes on.
+
+OpenBot saves each wait. After a restart, the wait goes on until its time. A wait whose time passed while no server ran goes on right after the start. An interrupt of the Turn ends its waits.
+
+To wait for the work of several Agents at once, the Agent gives them their tasks with several `openbot_delegate` calls in the same step. The Turn goes on when all of them are done. See [Delegation](/docs/delegation).
+
+---
+
 ## Models and execution mode
 
 `GET /v1/sessions/:sessionId/models` shows the models you can pick:

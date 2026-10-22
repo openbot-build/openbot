@@ -7,6 +7,7 @@ import * as Rules from "../capabilities/Rules.ts"
 import * as AgentMemories from "./AgentMemories.ts"
 import * as AgentPlugin from "../plugins/agents/AgentPlugin.ts"
 import * as WorkPlugin from "../plugins/work/WorkPlugin.ts"
+import * as Waits from "../plugins/work/Waits.ts"
 import * as AgentRecords from "./AgentRecords.ts"
 import * as Agents from "./Agents.ts"
 import * as Delegations from "./Delegations.ts"
@@ -21,6 +22,7 @@ export const layer = <R>(options: {
 	readonly helper: Layer.Layer<Judge.HelperModel, never, R>
 }) =>
 	Layer.merge(AgentPlugin.layer, WorkPlugin.layer).pipe(
+		Layer.provideMerge(Waits.layer),
 		Layer.provideMerge(Gate.layer),
 		Layer.provideMerge(Requests.layer),
 		Layer.provideMerge(

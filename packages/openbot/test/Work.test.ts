@@ -86,6 +86,18 @@ const model = Effect.runSync(
 						: call(names.todos, {
 								items: [todo("a", "pending"), todo("a", "done")],
 							})
+				if (input.includes("wait a moment"))
+					return answered
+						? answer("Waited.")
+						: call(names.wait, { seconds: 2, reason: "The build needs time." })
+				if (input.includes("wait long"))
+					return answered
+						? answer("Waited long.")
+						: call(names.wait, { seconds: 3600 })
+				if (input.includes("wait wrongly"))
+					return answered
+						? answer("Wrong wait.")
+						: call(names.wait, { seconds: 1, until: "2026-10-23T09:00:00Z" })
 				return answer("Hello.")
 			}),
 	}),
@@ -256,6 +268,71 @@ test(
 			const bob = await host.login("work-bob")
 			const hidden = await work.send(bob.session, work.path + "/todos")
 			assert.ok([403, 404].includes(hidden.status), String(hidden.status))
+		} finally {
+			await host.close()
+		}
+	},
+)
+
+test(
+	"an Agent waits for some time, also over a restart, and an interrupt ends the wait",
+	{ timeout: 120000 },
+	async () => {
+		const host = await BrowserHost.start({ publicOrigin, model })
+		try {
+			const { until } = client(host)
+			const alice = await host.login("wait-alice")
+			const work = await session(host, alice.session)
+			const start = async (input: string) => {
+				const current = await work.view()
+				const started = await work.send(
+					alice.session,
+					work.path + "/turns",
+					"POST",
+					{ expected: current.session.revision, input },
+				)
+				assert.equal(started.status, 202, await started.clone().text())
+				return until("the Turn waits", async () => {
+					const next = await work.view()
+					return Session.status(next.session)._tag === "Waiting"
+						? next
+						: undefined
+				})
+			}
+			const ended = (tag: string) =>
+				until("the Turn ends as " + tag, async () => {
+					const next = await work.view()
+					return Session.status(next.session)._tag === tag ? next : undefined
+				})
+			const text = async () =>
+				JSON.stringify(
+					await (await work.send(alice.session, work.path + "/history")).json(),
+				)
+
+			// The wait is saved, so a restart does not lose it.
+			const began = Date.now()
+			await start("wait a moment")
+			await host.restart()
+			await ended("Completed")
+			assert.ok(Date.now() - began >= 2000)
+			assert.match(await text(), /"waited":true/)
+			assert.match(await text(), /Waited\./)
+
+			// An interrupt ends a long wait.
+			const waiting = await start("wait long")
+			const turn = Session.currentTurn(waiting.session)!
+			const stopped = await work.send(
+				alice.session,
+				work.path + "/turns/" + turn.id + "/interrupt",
+				"POST",
+				{},
+			)
+			assert.equal(stopped.status, 200, await stopped.clone().text())
+			await ended("Interrupted")
+
+			// A wrong input does not wait. The Agent gets an error.
+			await work.turn("wait wrongly")
+			assert.match(await text(), /Give either seconds or until, not both/)
 		} finally {
 			await host.close()
 		}

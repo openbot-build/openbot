@@ -250,6 +250,16 @@ OpenBot 返回 `202`，以及 `session`、`turn`、`item`、`revision` 和 `vers
 
 ---
 
+## 等待
+
+Agent 可以用工具 `openbot_wait` 等待。它给出 `seconds`，或者给出 `until` 和一个日期时间，例如 `2026-10-23T09:00:00Z`。Turn 会变成 `Waiting`。时间到了以后，这个工具调用会得到 `{ "waited": true, "at": "<time>" }`，Turn 接着运行。
+
+OpenBot 会保存每一次等待。重启以后，等待会继续，直到时间到。如果等待的时间在没有服务器运行时就过了，它会在启动后马上继续。中断 Turn 会结束它的等待。
+
+如果要同时等几个 Agent 的工作，Agent 在同一步里用几个 `openbot_delegate` 调用把任务交给它们。它们全部完成后，Turn 才会继续。见 [委派](/zh-cn/docs/delegation)。
+
+---
+
 ## 模型和执行模式
 
 `GET /v1/sessions/:sessionId/models` 显示你可以选择的模型：

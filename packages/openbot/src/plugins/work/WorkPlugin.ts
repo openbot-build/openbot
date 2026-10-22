@@ -19,9 +19,11 @@ import {
 	Stream,
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
+import { Signal, publish } from "../../agents/Signals.ts"
 import { Work } from "../../capabilities/Work.ts"
 import * as SessionHost from "../../sessions/SessionHost.ts"
 import * as Todos from "./Todos.ts"
+import { Waits } from "./Waits.ts"
 
 export const pluginId = Plugin.Id.make("@openbot-build/openbot/work")
 
@@ -41,9 +43,32 @@ export type Tools = Record<
 
 export const names = {
 	todos: "openbot_todos",
+	wait: "openbot_wait",
 } as const
 
+/**
+ * Tools whose waiting calls OpenBot answers by itself, not with a request.
+ * The coordinator leaves them alone.
+ */
+export const answersItself = (tool: string) => tool === names.wait
+
 const TodosInput = Schema.Struct({ items: Schema.Array(Todo) })
+const WaitInput = Schema.Struct({
+	seconds: Schema.optionalKey(Schema.Finite.check(Schema.isGreaterThan(0))),
+	until: Schema.optionalKey(Schema.String),
+	reason: Schema.optionalKey(Schema.String),
+})
+
+/** When a wait ends, or why the input is not valid. */
+const dueAt = (input: typeof WaitInput.Type, now: number): number | string => {
+	if ((input.seconds === undefined) === (input.until === undefined))
+		return "Give either seconds or until, not both."
+	if (input.seconds !== undefined) return now + input.seconds * 1000
+	const at = Date.parse(input.until!)
+	if (Number.isNaN(at))
+		return "until must be a date and time, such as 2026-10-23T09:00:00Z."
+	return Math.max(at, now)
+}
 
 interface Entry {
 	readonly tool: Tools[string]
@@ -53,6 +78,8 @@ interface Entry {
 const text = { type: "string" } as const
 const json = (value: unknown): Schema.Json =>
 	JSON.parse(JSON.stringify(value)) as Schema.Json
+
+const waitInstructions = `To wait for some time, call ${names.wait} with seconds, or with until and a date and time. Your Turn waits, and goes on when the time comes. To wait for several Agents at once, give them their tasks with several openbot_delegate calls in the same step.`
 
 const todoInstructions = `Keep a todo list when work has more than one step. Call ${names.todos} with the whole list each time it changes: when you plan the steps, when you start a step, and when you finish one. Keep one item in_progress at a time. While an item is not done, you go on working. If an item is not needed any more, remove it and say why.`
 
@@ -80,8 +107,9 @@ export class WorkPlugin extends Context.Service<
 	{ readonly forOwner: (input: ForOwnerInput) => Plugin.Plugin<Tools> }
 >()("@openbot-build/openbot/plugins/work/WorkPlugin") {}
 
-export const make: Effect.Effect<typeof WorkPlugin.Service> = Effect.sync(
-	() => {
+export const make: Effect.Effect<typeof WorkPlugin.Service, never, Waits> =
+	Effect.gen(function* () {
+		const waits = yield* Waits
 		const work = Effect.serviceOption(Work).pipe(
 			Effect.flatMap(Effect.fromOption),
 		)
@@ -90,11 +118,16 @@ export const make: Effect.Effect<typeof WorkPlugin.Service> = Effect.sync(
 			description: string,
 			parameters: JsonSchema.JsonSchema,
 			handle: (input: unknown) => Effect.Effect<Schema.Json, unknown>,
+			needsApproval?: (
+				input: unknown,
+				context: Tool.NeedsApprovalContext,
+			) => Effect.Effect<boolean>,
 		): Entry => ({
 			tool: Tool.dynamic(name, {
 				description,
 				parameters,
 				success: Schema.Json,
+				...(needsApproval === undefined ? {} : { needsApproval }),
 			}) as Tools[string],
 			handle: (input) =>
 				handle(input).pipe(
@@ -150,6 +183,67 @@ export const make: Effect.Effect<typeof WorkPlugin.Service> = Effect.sync(
 						})
 					}),
 			)
+		/**
+		 * The call waits: `needsApproval` saves the wait and always pauses. The coordinator
+		 * answers the call when the time comes. The handler runs only for a wrong input.
+		 */
+		const waitEntry = entry(
+			names.wait,
+			"Wait for some time, then go on. Give seconds, or until with a date and time.",
+			{
+				type: "object",
+				properties: {
+					seconds: { type: "number", exclusiveMinimum: 0 },
+					until: { type: "string", format: "date-time" },
+					reason: text,
+				},
+			},
+			(raw) =>
+				Effect.gen(function* () {
+					const request = yield* Schema.decodeUnknownEffect(WaitInput)(raw)
+					const now = yield* Effect.clockWith(
+						(clock) => clock.currentTimeMillis,
+					)
+					const due = dueAt(request, now)
+					return json({
+						error:
+							typeof due === "string"
+								? due
+								: "OpenBot could not save the wait.",
+					})
+				}),
+			(raw, context) =>
+				Effect.gen(function* () {
+					const request = yield* Schema.decodeUnknownEffect(WaitInput)(raw)
+					const now = yield* Effect.clockWith(
+						(clock) => clock.currentTimeMillis,
+					)
+					const due = dueAt(request, now)
+					if (typeof due === "string") return false
+					const current = yield* work
+					const wait = yield* waits.start(current.caller.organizationId, {
+						userId: current.caller.userId,
+						session: current.session,
+						turn: current.turn,
+						toolCallId: context.toolCallId,
+						dueAt: due,
+					})
+					yield* publish(
+						Signal.WaitStarted({
+							organizationId: current.caller.organizationId,
+							wait: wait.id,
+						}),
+					)
+					return true
+				}).pipe(
+					// Without a saved wait, nothing would answer the call, so it must not pause.
+					Effect.catchCause((cause) =>
+						Effect.logWarning("A wait could not be saved", cause).pipe(
+							Effect.as(false),
+						),
+					),
+				),
+		)
 		/**
 		 * Keeps the Turn going while todos are open. When a model step ends with no tool
 		 * call, it adds a reminder as a steer message, so the runtime runs one more step.
@@ -232,7 +326,7 @@ export const make: Effect.Effect<typeof WorkPlugin.Service> = Effect.sync(
 								const state = SessionHost.hostState(view.session)
 								// A review decides one request, so it gets no work tools.
 								if (state.kind === "review") return next(options)
-								const entries = [todosEntry(input)]
+								const entries = [todosEntry(input), waitEntry]
 								const incoming = yield* options.toolkit
 								const own = Toolkit.make(...entries.map((entry) => entry.tool))
 								const handlers = yield* own.toHandlers(
@@ -246,10 +340,15 @@ export const make: Effect.Effect<typeof WorkPlugin.Service> = Effect.sync(
 									Prompt.make([
 										{
 											role: "system",
-											content:
-												open.length === 0
-													? todoInstructions
-													: `${todoInstructions}\n\nYour todo list now:\n${Todos.describe(Todos.of(view).items)}`,
+											content: [
+												todoInstructions,
+												waitInstructions,
+												...(open.length === 0
+													? []
+													: [
+															`Your todo list now:\n${Todos.describe(Todos.of(view).items)}`,
+														]),
+											].join("\n\n"),
 										},
 									]),
 								)
@@ -268,6 +367,5 @@ export const make: Effect.Effect<typeof WorkPlugin.Service> = Effect.sync(
 					),
 				),
 		})
-	},
-)
+	})
 export const layer = Layer.effect(WorkPlugin, make)

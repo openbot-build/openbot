@@ -250,6 +250,16 @@ Die Liste ist Teil der Timeline. Ein Fork oder eine Wiederherstellung einer ält
 
 ---
 
+## Warten
+
+Ein Agent kann mit dem Werkzeug `openbot_wait` warten. Er gibt `seconds` an, oder `until` mit Datum und Uhrzeit, zum Beispiel `2026-10-23T09:00:00Z`. Der Turn wird `Waiting`. Wenn die Zeit kommt, bekommt der Werkzeugaufruf `{ "waited": true, "at": "<time>" }`, und der Turn geht weiter.
+
+OpenBot speichert jedes Warten. Nach einem Neustart läuft das Warten bis zu seiner Zeit weiter. Ein Warten, dessen Zeit vorbei ist, während kein Server lief, geht gleich nach dem Start weiter. Ein Unterbrechen des Turns beendet sein Warten.
+
+Um auf die Arbeit mehrerer Agents zugleich zu warten, gibt der Agent ihnen ihre Aufgaben mit mehreren `openbot_delegate`-Aufrufen im selben Schritt. Der Turn geht weiter, wenn alle fertig sind. Siehe [Delegation](/de/docs/delegation).
+
+---
+
 ## Models und Ausführungsmodus
 
 `GET /v1/sessions/:sessionId/models` zeigt die Models, die du wählen kannst:
