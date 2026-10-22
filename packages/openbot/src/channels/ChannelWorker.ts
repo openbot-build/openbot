@@ -131,7 +131,7 @@ const outcome = (request: RequestsApi.CapabilityRequest) => {
 }
 
 /** The card of a request. It has buttons only while the request waits. */
-export const requestCard = (
+const requestCard = (
 	request: RequestsApi.CapabilityRequest,
 	agentName: string,
 	approverName: string | null,

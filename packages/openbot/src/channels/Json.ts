@@ -1,3 +1,5 @@
+// These readers take a value and a key, like property access. A pipeable form does not help here.
+// @effect-diagnostics missingPipeableSignature:off
 import { Predicate } from "effect"
 
 /**

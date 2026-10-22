@@ -757,12 +757,23 @@ test(
 				return {
 					id: created.session.id,
 					turn: async (input: string) => {
-						const current = await view()
-						const started = await send(dave.session, path + "/turns", "POST", {
-							expected: current.session.revision,
-							input,
-						})
-						assert.equal(started.status, 202, await started.clone().text())
+						// Work after a Turn, such as learning memory, can still change the
+						// Session. Like any client, read it again and retry on a conflict.
+						for (let tries = 0; ; tries++) {
+							const current = await view()
+							const started = await send(
+								dave.session,
+								path + "/turns",
+								"POST",
+								{
+									expected: current.session.revision,
+									input,
+								},
+							)
+							if (started.status === 409 && tries < 5) continue
+							assert.equal(started.status, 202, await started.clone().text())
+							return
+						}
 					},
 					completed: () =>
 						until("the Turn completes", async () => {

@@ -1,3 +1,5 @@
+// `make` builds a Channel from its secrets and a way to call the platform. A pipeable form does not help here.
+// @effect-diagnostics missingPipeableSignature:off
 import { ChannelsApi } from "@openbot-build/api"
 import { Clock, Effect, Option, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"

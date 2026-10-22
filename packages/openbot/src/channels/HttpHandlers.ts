@@ -31,7 +31,7 @@ const channelKey = (organizationId: string, id: string) =>
 	organizationKey(organizationId) + ".channel." + segment(id)
 
 /** The API view of a stored Channel, with the address that its platform calls. */
-export const view = (
+const view = (
 	publicOrigin: string,
 	channel: StoredChannel,
 ): ChannelsApi.Channel => ({

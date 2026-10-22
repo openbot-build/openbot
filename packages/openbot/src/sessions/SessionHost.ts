@@ -79,6 +79,8 @@ export const hostState = (session: Session.Ref): SessionHostState =>
  * works for that member and not for the owner of the Session. It never uses the token
  * of the owner.
  */
+// It reads a stored Session, like the other helpers here. A pipeable form does not help.
+// @effect-diagnostics-next-line missingPipeableSignature:off
 export const turnChain = (
 	session: Session.Ref,
 	turn: Turn.Id | undefined,

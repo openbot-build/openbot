@@ -1,3 +1,5 @@
+// These helpers build and read platform requests. A pipeable form does not help here.
+// @effect-diagnostics missingPipeableSignature:off
 import { Network } from "@openbot-build/protocol/Network"
 import { Effect, Layer, Stream } from "effect"
 import { type HttpClient, type HttpClientRequest } from "effect/http"
@@ -80,6 +82,8 @@ export const fromNetwork =
 				} satisfies Reply
 			}),
 		).pipe(
+			// Each custom Channel has its own guarded network, made for its endpoint.
+			// @effect-diagnostics-next-line strictEffectProvide:off
 			Effect.provide(network),
 			Effect.mapError(unreachable),
 			Effect.timeoutOrElse({ duration: timeoutMs, orElse: timedOut }),

@@ -1,3 +1,5 @@
+// These are plain text and crypto helpers. A pipeable form does not help here.
+// @effect-diagnostics missingPipeableSignature:off
 import { createHash, createHmac, timingSafeEqual } from "node:crypto"
 
 /** Compares two secrets in constant time. Values of different lengths are never equal. */
