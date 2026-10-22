@@ -25,11 +25,10 @@ export const NonNegativeMicros = Schema.Int.check(
 )
 
 /**
- * The price of a model at one provider. Each value is the cost of one million
- * tokens, in micro-USD. For example, 2500000 is 2.50 US dollars.
+ * The rates of one price tier. Each value is the cost of one million tokens, in
+ * micro-USD. For example, 2500000 is 2.50 US dollars.
  */
-export const ModelPrice = Schema.Struct({
-	model: Schema.String,
+export const Rates = Schema.Struct({
 	/** Input tokens that the provider did not read from its cache. */
 	inputUncached: NonNegativeMicros,
 	/** Input tokens that the provider read from its cache. */
@@ -40,17 +39,128 @@ export const ModelPrice = Schema.Struct({
 	output: NonNegativeMicros,
 	/** Reasoning tokens. Null means the same price as `output`. */
 	outputReasoning: Schema.NullOr(NonNegativeMicros),
+})
+export type Rates = typeof Rates.Type
+
+/**
+ * One tier of a price. A call uses the first tier whose `upToInputTokens` is at
+ * least the input tokens of the call. All tokens of the call then cost the rates
+ * of that tier. The last tier has no upper limit.
+ */
+export const PriceTier = Schema.Struct({
+	/** The most input tokens of a call in this tier. Null for the last tier. */
+	upToInputTokens: Schema.NullOr(Schema.Int.check(Schema.isGreaterThan(0))),
+	...Rates.fields,
+})
+export type PriceTier = typeof PriceTier.Type
+export const PriceTiers = Schema.Array(PriceTier).check(
+	Schema.isMinLength(1),
+	Schema.isMaxLength(20),
+	Schema.makeFilter((tiers: ReadonlyArray<PriceTier>) => {
+		for (const [index, tier] of tiers.entries()) {
+			const last = index === tiers.length - 1
+			if (last !== (tier.upToInputTokens === null))
+				return "Expected only the last tier to have upToInputTokens null"
+			const previous = tiers[index - 1]?.upToInputTokens
+			if (
+				previous != null &&
+				tier.upToInputTokens !== null &&
+				tier.upToInputTokens <= previous
+			)
+				return "Expected upToInputTokens to grow from tier to tier"
+		}
+		return undefined
+	}),
+)
+
+/** A time of day as `HH:MM`, from `00:00` to `24:00`. */
+export const TimeOfDay = Schema.String.check(
+	Schema.isPattern(/^(?:[01]\d|2[0-3]):[0-5]\d$|^24:00$/),
+)
+export const Weekday = Schema.Literals([
+	"mon",
+	"tue",
+	"wed",
+	"thu",
+	"fri",
+	"sat",
+	"sun",
+])
+export type Weekday = typeof Weekday.Type
+
+/**
+ * A part of the day in the time zone of the price. When `end` is before `start`,
+ * the window goes past midnight. `days` are the days on which the window starts.
+ */
+export const TimeWindow = Schema.Struct({
+	start: TimeOfDay,
+	end: TimeOfDay,
+	/** Leave it out for every day. */
+	days: Schema.optionalKey(
+		Schema.Array(Weekday).check(Schema.isMinLength(1), Schema.isMaxLength(7)),
+	),
+}).check(
+	Schema.makeFilter(
+		(window: { readonly start: string; readonly end: string }) =>
+			window.start === window.end
+				? "Expected a window with a different start and end"
+				: undefined,
+	),
+)
+export type TimeWindow = typeof TimeWindow.Type
+
+/** Other tiers for some times, such as a lower price at night. */
+export const PricePeriod = Schema.Struct({
+	/** A short name, such as `off-peak`. */
+	name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(60)),
+	windows: Schema.Array(TimeWindow).check(
+		Schema.isMinLength(1),
+		Schema.isMaxLength(20),
+	),
+	tiers: PriceTiers,
+})
+export type PricePeriod = typeof PricePeriod.Type
+
+/** An IANA time zone, such as `UTC` or `Asia/Shanghai`. */
+export const TimeZone = Schema.String.check(
+	Schema.isMaxLength(64),
+	Schema.makeFilter((value: string) => {
+		try {
+			new Intl.DateTimeFormat("en-US", { timeZone: value })
+			return undefined
+		} catch {
+			return "Expected an IANA time zone, such as UTC or Asia/Shanghai"
+		}
+	}),
+)
+
+/**
+ * How a model is priced at one provider. A call uses the first period with a
+ * window that holds the start of the call. Without one, it uses `tiers`.
+ */
+export const PriceSchedule = Schema.Struct({
+	/** The time zone of the windows of the periods. */
+	timeZone: TimeZone,
+	tiers: PriceTiers,
+	periods: Schema.Array(PricePeriod).check(Schema.isMaxLength(20)),
+})
+export type PriceSchedule = typeof PriceSchedule.Type
+
+/** The price of a model at one provider. */
+export const ModelPrice = Schema.Struct({
+	model: Schema.String,
+	...PriceSchedule.fields,
 	/** The time from which this price applies. */
 	effectiveFrom: Schema.String,
 })
 export type ModelPrice = typeof ModelPrice.Type
 export const SetModelPriceRequest = Schema.Struct({
 	model: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
-	inputUncached: NonNegativeMicros,
-	inputCacheRead: NonNegativeMicros,
-	inputCacheWrite: NonNegativeMicros,
-	output: NonNegativeMicros,
-	outputReasoning: Schema.optionalKey(Schema.NullOr(NonNegativeMicros)),
+	/** Leave it out for `UTC`. */
+	timeZone: Schema.optionalKey(TimeZone),
+	tiers: PriceTiers,
+	/** Leave it out when the price is the same at all times. */
+	periods: Schema.optionalKey(PriceSchedule.fields.periods),
 })
 export type SetModelPriceRequest = typeof SetModelPriceRequest.Type
 /** The current prices of the models of one provider. A model without a price costs 0. */

@@ -968,6 +968,7 @@ export const usageEvents = table(
 
 /**
  * Prices of a model at one provider, in micro-USD for one million tokens.
+ * A price can have tiers by input size and periods by time of day.
  * A new price is a new row. The row with the latest `effective_from` that is
  * not in the future is the current price.
  */
@@ -980,12 +981,8 @@ export const modelPrices = table(
 			.references(() => modelProviders.id, { onDelete: "cascade" }),
 		modelId: text("model_id").notNull(),
 		effectiveFrom: time("effective_from").notNull(),
-		inputUncached: bigint("input_uncached", { mode: "number" }).notNull(),
-		inputCacheRead: bigint("input_cache_read", { mode: "number" }).notNull(),
-		inputCacheWrite: bigint("input_cache_write", { mode: "number" }).notNull(),
-		output: bigint({ mode: "number" }).notNull(),
-		/** Null means that reasoning tokens cost the same as `output`. */
-		outputReasoning: bigint("output_reasoning", { mode: "number" }),
+		/** The time zone, tiers and periods of the price, as JSON text. */
+		schedule: text().notNull(),
 		createdBy: text("created_by").notNull(),
 		createdAt: time("created_at").notNull(),
 	},

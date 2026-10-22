@@ -42,22 +42,24 @@ Manche Aufrufe zeichnet OpenBot nicht auf:
 
 ## Preise
 
-Ein Preis gehört zu einem Model bei einem Anbieter. Dasselbe Model kann nämlich bei einem anderen Anbieter anders viel kosten. Jeder Wert ist der Preis für eine Million Tokens, in Mikro-USD.
+Ein Preis gehört zu einem Model bei einem Anbieter. Dasselbe Model kann nämlich bei einem anderen Anbieter anders viel kosten. Viele Models kosten mehr, wenn eine Anfrage lang ist. Manche Anbieter kosten in der Nacht weniger. Ein Preis hat also **Stufen** (`tiers`) nach der Größe der Eingabe und **Perioden** (`periods`) nach der Tageszeit.
 
-| Feld              | Welche Tokens                                                                |
-| ----------------- | ---------------------------------------------------------------------------- |
-| `inputUncached`   | Eingabe-Tokens, die der Anbieter nicht aus seinem Cache gelesen hat.         |
-| `inputCacheRead`  | Eingabe-Tokens, die der Anbieter aus seinem Cache gelesen hat.               |
-| `inputCacheWrite` | Eingabe-Tokens, die der Anbieter in seinen Cache geschrieben hat.            |
-| `output`          | Ausgabe-Text und Aufrufe von Tools.                                          |
-| `outputReasoning` | Tokens zum Nachdenken. Lass es weg oder sende `null`, um `output` zu nutzen. |
+Jede Stufe hat Werte. Jeder Wert ist der Preis für eine Million Tokens, in Mikro-USD:
 
-Ein Administrator der Organisation setzt die Preise der eigenen Anbieter der Organisation. Diese Preise schätzen, was die Firma des Model verlangt. Ein Platform-Admin setzt die Preise der geteilten Anbieter. In diesem Beispiel kostet die Eingabe 2,50 US-Dollar und die Ausgabe 10 US-Dollar für eine Million Tokens:
+| Feld              | Welche Tokens                                                            |
+| ----------------- | ------------------------------------------------------------------------ |
+| `inputUncached`   | Eingabe-Tokens, die der Anbieter nicht aus seinem Cache gelesen hat.     |
+| `inputCacheRead`  | Eingabe-Tokens, die der Anbieter aus seinem Cache gelesen hat.           |
+| `inputCacheWrite` | Eingabe-Tokens, die der Anbieter in seinen Cache geschrieben hat.        |
+| `output`          | Ausgabe-Text und Aufrufe von Tools.                                      |
+| `outputReasoning` | Tokens zum Nachdenken. Sende `null`, um den Wert von `output` zu nutzen. |
+
+Ein Administrator der Organisation setzt die Preise der eigenen Anbieter der Organisation. Diese Preise schätzen, was die Firma des Model verlangt. Ein Platform-Admin setzt die Preise der geteilten Anbieter. In diesem Beispiel kostet die Eingabe 2,50 US-Dollar und die Ausgabe 10 US-Dollar für eine Million Tokens, für jede Größe der Eingabe und zu jeder Zeit:
 
 ```sh
 curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"model":"gpt-4.1","inputUncached":2500000,"inputCacheRead":625000,"inputCacheWrite":0,"output":10000000}' \
+  -d '{"model":"gpt-4.1","tiers":[{"upToInputTokens":null,"inputUncached":2500000,"inputCacheRead":625000,"inputCacheWrite":0,"output":10000000,"outputReasoning":null}]}' \
   https://api.example.com/v1/organization/model_providers/prov_4c1e/prices
 ```
 
@@ -70,9 +72,102 @@ curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 Ein Anbieter kann nur die Models mit einem Preis versehen, die er verknüpft. Ein anderes Model ergibt `400` mit `ModelProviderInvalid`. Der [Katalog der Models](/de/docs/models#ein-model-auswählen) zeigt den aktuellen `price` jedes Model.
 
-Ein neuer Preis gilt für Aufrufe ab jetzt. Jedes Usage event behält die Kosten aus der Zeit des Aufrufs. Alte Kosten ändern sich also nie. OpenBot rundet die Kosten jedes Aufrufs auf ganze Mikro-USD auf.
+Ein neuer Preis gilt für Aufrufe, die ab jetzt beginnen. Jedes Usage event behält die Kosten aus der Zeit des Aufrufs. Alte Kosten ändern sich also nie. OpenBot rundet die Kosten jedes Aufrufs auf ganze Mikro-USD auf.
 
 Ein Model ohne Preis kostet 0. OpenBot zeichnet seine Aufrufe trotzdem auf. Sie zählen aber nicht für Budgets und nehmen keine Credits.
+
+### Stufen nach Größe der Eingabe
+
+`tiers` ist eine Liste, von klein nach groß. Jede Stufe hat `upToInputTokens`: die höchste Zahl an Eingabe-Tokens, die ein Aufruf in dieser Stufe haben kann. Dabei zählen alle Eingabe-Tokens des Aufrufs, aus dem Cache oder nicht. Die letzte Stufe hat `upToInputTokens: null`, denn sie hat keine obere Grenze. Du kannst bis zu 20 Stufen haben.
+
+Ein Aufruf nutzt die erste Stufe, in die seine Eingabe passt. Dann kosten alle Tokens des Aufrufs die Werte dieser Stufe, nicht nur die Tokens über der Grenze. Die meisten Anbieter berechnen lange Anfragen so.
+
+Zum Beispiel kostet ein Model bis 32.000 Eingabe-Tokens weniger, bis 128.000 mehr und darüber am meisten:
+
+```json
+{
+	"model": "qwen-plus",
+	"tiers": [
+		{
+			"upToInputTokens": 32000,
+			"inputUncached": 800000,
+			"inputCacheRead": 160000,
+			"inputCacheWrite": 0,
+			"output": 2000000,
+			"outputReasoning": 8000000
+		},
+		{
+			"upToInputTokens": 128000,
+			"inputUncached": 2400000,
+			"inputCacheRead": 480000,
+			"inputCacheWrite": 0,
+			"output": 6000000,
+			"outputReasoning": 24000000
+		},
+		{
+			"upToInputTokens": null,
+			"inputUncached": 4800000,
+			"inputCacheRead": 960000,
+			"inputCacheWrite": 0,
+			"output": 12000000,
+			"outputReasoning": 48000000
+		}
+	]
+}
+```
+
+Ein Aufruf mit 50.000 Eingabe-Tokens nutzt die zweite Stufe.
+
+### Perioden nach Tageszeit
+
+`periods` gibt andere Stufen für manche Zeiten, zum Beispiel einen niedrigeren Preis in der Nacht. Jede Periode hat einen `name`, ein oder mehr `windows` (Zeitfenster) und ihre eigenen `tiers`. `timeZone` sagt, in welcher Zeitzone die Zeitfenster sind. Es ist ein IANA-Name, zum Beispiel `UTC` oder `Asia/Shanghai`. Lass es weg für `UTC`.
+
+| Feld des Zeitfensters | Was es ist                                                                                                              |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `start`               | Der Anfang, als `HH:MM`. Das Zeitfenster enthält diese Minute.                                                          |
+| `end`                 | Das Ende, als `HH:MM`, bis `24:00`. Das Zeitfenster endet vor dieser Minute.                                            |
+| `days`                | Die Tage, an denen das Zeitfenster beginnt: `mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun`. Lass es weg für jeden Tag. |
+
+Wenn `end` vor `start` liegt, geht das Zeitfenster über Mitternacht. Es gehört zu dem Tag, an dem es beginnt. Zum Beispiel enthält `{"start":"22:00","end":"02:00","days":["fri"]}` Freitag 23:00 und Samstag 01:00, aber nicht Freitag 01:00.
+
+OpenBot nimmt die Zeit, zu der der Aufruf beginnt. Es nutzt die erste Periode mit einem Zeitfenster, das diese Zeit enthält. Wenn keine Periode sie enthält, nutzt der Aufruf die `tiers` des Preises. In jedem Fall wählt der Aufruf dann seine Stufe nach der Größe der Eingabe.
+
+Zum Beispiel kostet ein Anbieter von 00:30 bis 08:30 Pekinger Zeit die Hälfte:
+
+```json
+{
+	"model": "deepseek-chat",
+	"timeZone": "Asia/Shanghai",
+	"tiers": [
+		{
+			"upToInputTokens": null,
+			"inputUncached": 2000000,
+			"inputCacheRead": 500000,
+			"inputCacheWrite": 0,
+			"output": 8000000,
+			"outputReasoning": null
+		}
+	],
+	"periods": [
+		{
+			"name": "off-peak",
+			"windows": [{ "start": "00:30", "end": "08:30" }],
+			"tiers": [
+				{
+					"upToInputTokens": null,
+					"inputUncached": 1000000,
+					"inputCacheRead": 250000,
+					"inputCacheWrite": 0,
+					"output": 4000000,
+					"outputReasoning": null
+				}
+			]
+		}
+	]
+}
+```
+
+Lass `periods` weg, wenn der Preis zu jeder Zeit gleich ist.
 
 ---
 

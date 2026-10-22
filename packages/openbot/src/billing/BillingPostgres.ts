@@ -30,6 +30,7 @@ import {
 	BillingStorageError,
 	type Call,
 	costOf,
+	ratesOf,
 	OrganizationMissing,
 	periodStart,
 	type Price,
@@ -47,13 +48,13 @@ type PriceRow = typeof modelPrices.$inferSelect
 type BudgetRow = typeof budgets.$inferSelect
 type EventRow = typeof usageEvents.$inferSelect
 
+/** The schedule column holds JSON that only this file writes, from a checked request. */
+const scheduleOf = (row: PriceRow): BillingApi.PriceSchedule =>
+	JSON.parse(row.schedule) as BillingApi.PriceSchedule
+
 const priceView = (row: PriceRow): BillingApi.ModelPrice => ({
 	model: row.modelId,
-	inputUncached: row.inputUncached,
-	inputCacheRead: row.inputCacheRead,
-	inputCacheWrite: row.inputCacheWrite,
-	output: row.output,
-	outputReasoning: row.outputReasoning,
+	...scheduleOf(row),
 	effectiveFrom: iso(row.effectiveFrom),
 })
 
@@ -203,7 +204,10 @@ export const make = Effect.gen(function* () {
 				)
 				.orderBy(desc(modelPrices.effectiveFrom))
 				.limit(1)
-			const price: Option.Option<Price> = Option.fromNullishOr(row)
+			const price: Option.Option<Price> = Option.map(
+				Option.fromNullishOr(row),
+				(row) => ({ id: row.id, schedule: scheduleOf(row) }),
+			)
 			yield* Ref.update(prices, HashMap.set(key, { price, at: now }))
 			return price
 		})
@@ -423,14 +427,20 @@ export const make = Effect.gen(function* () {
 					}
 				}),
 			),
-		record: (call, attribution, used) =>
+		record: (call, attribution, used, startedAt) =>
 			stored(
 				Effect.gen(function* () {
 					const now = yield* Clock.currentTimeMillis
-					const price = yield* currentPrice(call.providerId, call.modelId, now)
+					// The price at the start of the call applies, also when the call ends later.
+					const price = yield* currentPrice(
+						call.providerId,
+						call.modelId,
+						startedAt,
+					)
 					const cost = Option.match(price, {
 						onNone: () => 0,
-						onSome: (price) => costOf(used, price),
+						onSome: (price) =>
+							costOf(used, ratesOf(price.schedule, used, startedAt)),
 					})
 					yield* db.transaction((tx) =>
 						Effect.gen(function* () {
@@ -511,11 +521,11 @@ export const make = Effect.gen(function* () {
 							providerId,
 							modelId: input.model,
 							effectiveFrom: now,
-							inputUncached: input.inputUncached,
-							inputCacheRead: input.inputCacheRead,
-							inputCacheWrite: input.inputCacheWrite,
-							output: input.output,
-							outputReasoning: input.outputReasoning ?? null,
+							schedule: JSON.stringify({
+								timeZone: input.timeZone ?? "UTC",
+								tiers: input.tiers,
+								periods: input.periods ?? [],
+							} satisfies BillingApi.PriceSchedule),
 							createdBy,
 							createdAt: now,
 						})

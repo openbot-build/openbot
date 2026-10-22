@@ -42,22 +42,24 @@ OpenBot 会记录每一次得到回答的模型调用。每个用量事件都有
 
 ## 价格
 
-一个价格属于一个提供方的一个模型，因为同一个模型在另一个提供方那里的费用可能不同。每个值是一百万个 token 的费用，单位是微美元。
+一个价格属于一个提供方的一个模型，因为同一个模型在另一个提供方那里的费用可能不同。很多模型在请求很长时更贵。有些提供方在夜间更便宜。所以一个价格有按输入大小划分的**档位**（tier），也有按一天中的时间划分的**时段**（period）。
 
-| 字段              | 哪些 token                                          |
-| ----------------- | --------------------------------------------------- |
-| `inputUncached`   | 提供方没有从缓存读取的输入 token。                  |
-| `inputCacheRead`  | 提供方从缓存读取的输入 token。                      |
-| `inputCacheWrite` | 提供方写入缓存的输入 token。                        |
-| `output`          | 输出的文本和工具调用。                              |
-| `outputReasoning` | 推理 token。不写它或发送 `null` 时，使用 `output`。 |
+每个档位都有一组费率。每个费率是一百万个 token 的费用，单位是微美元：
 
-组织的管理员为组织自己的提供方设置价格。这些价格是对模型公司收费的估计。平台管理员为共享的提供方设置价格。在下面的例子中，一百万个 token 的输入费用是 2.50 美元，输出费用是 10 美元：
+| 字段              | 哪些 token                                         |
+| ----------------- | -------------------------------------------------- |
+| `inputUncached`   | 提供方没有从缓存读取的输入 token。                 |
+| `inputCacheRead`  | 提供方从缓存读取的输入 token。                     |
+| `inputCacheWrite` | 提供方写入缓存的输入 token。                       |
+| `output`          | 输出的文本和工具调用。                             |
+| `outputReasoning` | 推理 token。发送 `null` 时，使用 `output` 的费率。 |
+
+组织的管理员为组织自己的提供方设置价格。这些价格是对模型公司收费的估计。平台管理员为共享的提供方设置价格。在下面的例子中，一百万个 token 的输入费用是 2.50 美元，输出费用是 10 美元。这个价格适用于所有输入大小和所有时间：
 
 ```sh
 curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"model":"gpt-4.1","inputUncached":2500000,"inputCacheRead":625000,"inputCacheWrite":0,"output":10000000}' \
+  -d '{"model":"gpt-4.1","tiers":[{"upToInputTokens":null,"inputUncached":2500000,"inputCacheRead":625000,"inputCacheWrite":0,"output":10000000,"outputReasoning":null}]}' \
   https://api.example.com/v1/organization/model_providers/prov_4c1e/prices
 ```
 
@@ -70,9 +72,102 @@ curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 提供方只能为它关联的模型设置价格。其他模型会返回 `400` 和 `ModelProviderInvalid`。[模型目录](/zh-cn/docs/models#选择模型)会显示每个模型当前的 `price`。
 
-新价格只对之后的调用生效。每个用量事件都保存调用时的费用，所以旧的费用永远不会改变。OpenBot 会把每次调用的费用向上取整到整数微美元。
+新价格只对从现在起开始的调用生效。每个用量事件都保存调用时的费用，所以旧的费用永远不会改变。OpenBot 会把每次调用的费用向上取整到整数微美元。
 
 没有价格的模型费用为 0。它的调用仍然会被记录，但不计入预算，也不扣除额度。
+
+### 按输入大小划分的档位
+
+`tiers` 是一个列表，从小到大排列。每个档位都有 `upToInputTokens`：这个档位中一次调用最多可以有多少个输入 token。一次调用的输入 token 是它全部的输入 token，不管是否来自缓存。最后一个档位的 `upToInputTokens` 为 `null`，因为它没有上限。你最多可以有 20 个档位。
+
+一次调用使用它的输入能放进的第一个档位。然后这次调用的所有 token 都按这个档位的费率计费，而不只是超出上限的那部分 token。大多数提供方都这样对长请求收费。
+
+在下面的例子中，一个模型在 32,000 个输入 token 以内较便宜，在 128,000 个以内更贵，超过 128,000 个时最贵：
+
+```json
+{
+	"model": "qwen-plus",
+	"tiers": [
+		{
+			"upToInputTokens": 32000,
+			"inputUncached": 800000,
+			"inputCacheRead": 160000,
+			"inputCacheWrite": 0,
+			"output": 2000000,
+			"outputReasoning": 8000000
+		},
+		{
+			"upToInputTokens": 128000,
+			"inputUncached": 2400000,
+			"inputCacheRead": 480000,
+			"inputCacheWrite": 0,
+			"output": 6000000,
+			"outputReasoning": 24000000
+		},
+		{
+			"upToInputTokens": null,
+			"inputUncached": 4800000,
+			"inputCacheRead": 960000,
+			"inputCacheWrite": 0,
+			"output": 12000000,
+			"outputReasoning": 48000000
+		}
+	]
+}
+```
+
+一次有 50,000 个输入 token 的调用使用第二个档位。
+
+### 按一天中的时间划分的时段
+
+`periods` 为某些时间给出另外的档位，比如夜间的较低价格。每个时段都有一个 `name`、一个或多个 `windows`（时间窗口），以及它自己的 `tiers`。`timeZone` 说明时间窗口使用哪个时区。它是一个 IANA 名称，比如 `UTC` 或 `Asia/Shanghai`。不写它时，使用 `UTC`。
+
+| 窗口字段 | 是什么                                                                                    |
+| -------- | ----------------------------------------------------------------------------------------- |
+| `start`  | 开始时间，格式为 `HH:MM`。窗口包含这一分钟。                                              |
+| `end`    | 结束时间，格式为 `HH:MM`，最大为 `24:00`。窗口在这一分钟之前结束。                        |
+| `days`   | 窗口在哪些天开始：`mon`、`tue`、`wed`、`thu`、`fri`、`sat`、`sun`。不写它时，表示每一天。 |
+
+当 `end` 早于 `start` 时，窗口会跨过午夜。它属于它开始的那一天。例如，`{"start":"22:00","end":"02:00","days":["fri"]}` 包含周五 23:00 和周六 01:00，但不包含周五 01:00。
+
+OpenBot 使用调用开始的时间。它使用第一个有窗口包含这个时间的时段。没有时段包含这个时间时，调用使用价格本身的 `tiers`。在两种情况下，调用都再按输入大小选择档位。
+
+在下面的例子中，一个提供方在北京时间 00:30 到 08:30 收半价：
+
+```json
+{
+	"model": "deepseek-chat",
+	"timeZone": "Asia/Shanghai",
+	"tiers": [
+		{
+			"upToInputTokens": null,
+			"inputUncached": 2000000,
+			"inputCacheRead": 500000,
+			"inputCacheWrite": 0,
+			"output": 8000000,
+			"outputReasoning": null
+		}
+	],
+	"periods": [
+		{
+			"name": "off-peak",
+			"windows": [{ "start": "00:30", "end": "08:30" }],
+			"tiers": [
+				{
+					"upToInputTokens": null,
+					"inputUncached": 1000000,
+					"inputCacheRead": 250000,
+					"inputCacheWrite": 0,
+					"output": 4000000,
+					"outputReasoning": null
+				}
+			]
+		}
+	]
+}
+```
+
+价格在所有时间都相同时，不写 `periods`。
 
 ---
 

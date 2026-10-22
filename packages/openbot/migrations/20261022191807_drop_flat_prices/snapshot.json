@@ -1,0 +1,124 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "0535e7ce-6403-4944-8be9-1238433847ef",
+	"prevIds": ["7835aea0-c3c3-443e-94fa-b3b4357be5a9"],
+	"footprints": [
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_model_prices",
+				"input_uncached"
+			],
+			"writes": [
+				"s|col|public.openbot_model_prices.input_uncached",
+				"n|col|public.openbot_model_prices.input_uncached",
+				"e|col|public.openbot_model_prices.input_uncached"
+			],
+			"reads": ["n|tbl|public.openbot_model_prices", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_model_prices",
+				"input_cache_read"
+			],
+			"writes": [
+				"s|col|public.openbot_model_prices.input_cache_read",
+				"n|col|public.openbot_model_prices.input_cache_read",
+				"e|col|public.openbot_model_prices.input_cache_read"
+			],
+			"reads": ["n|tbl|public.openbot_model_prices", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_model_prices",
+				"input_cache_write"
+			],
+			"writes": [
+				"s|col|public.openbot_model_prices.input_cache_write",
+				"n|col|public.openbot_model_prices.input_cache_write",
+				"e|col|public.openbot_model_prices.input_cache_write"
+			],
+			"reads": ["n|tbl|public.openbot_model_prices", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": ["column", "public", "openbot_model_prices", "output"],
+			"writes": [
+				"s|col|public.openbot_model_prices.output",
+				"n|col|public.openbot_model_prices.output",
+				"e|col|public.openbot_model_prices.output"
+			],
+			"reads": ["n|tbl|public.openbot_model_prices", "n|sch|public"]
+		},
+		{
+			"statementType": "drop_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_model_prices",
+				"output_reasoning"
+			],
+			"writes": [
+				"s|col|public.openbot_model_prices.output_reasoning",
+				"n|col|public.openbot_model_prices.output_reasoning",
+				"e|col|public.openbot_model_prices.output_reasoning"
+			],
+			"reads": ["n|tbl|public.openbot_model_prices", "n|sch|public"]
+		},
+		{
+			"statementType": "alter_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_model_prices",
+				"schedule"
+			],
+			"writes": ["s|colprop|public.openbot_model_prices.schedule.notNull"],
+			"reads": [
+				"n|tbl|public.openbot_model_prices",
+				"n|sch|public",
+				"n|col|public.openbot_model_prices.schedule"
+			],
+			"sqlHash": "30e22f74a37306c1"
+		}
+	],
+	"deltas": [
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_model_prices\",\"input_uncached\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_model_prices\",\"input_cache_read\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_model_prices\",\"input_cache_write\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_model_prices\",\"output\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_model_prices\",\"output_reasoning\"]"
+		},
+		{
+			"op": "alter",
+			"key": "columns\u0000[\"public\",\"openbot_model_prices\",\"schedule\"]",
+			"set": {
+				"notNull": true
+			}
+		}
+	]
+}

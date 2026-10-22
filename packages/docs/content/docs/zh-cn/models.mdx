@@ -168,11 +168,18 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 			"contextWindow": 131072,
 			"price": {
 				"model": "qwen3-32b",
-				"inputUncached": 400000,
-				"inputCacheRead": 100000,
-				"inputCacheWrite": 0,
-				"output": 1200000,
-				"outputReasoning": null,
+				"timeZone": "UTC",
+				"tiers": [
+					{
+						"upToInputTokens": null,
+						"inputUncached": 400000,
+						"inputCacheRead": 100000,
+						"inputCacheWrite": 0,
+						"output": 1200000,
+						"outputReasoning": null
+					}
+				],
+				"periods": [],
 				"effectiveFrom": "2026-10-20T08:00:00.000Z"
 			}
 		}

@@ -64,30 +64,92 @@ export const tokensOf = (usage: Response.Usage): Tokens => {
 export const priceKey = (providerId: string, modelId: string) =>
 	JSON.stringify([providerId, modelId])
 
-/** A stored price. Each value is micro-USD for one million tokens. */
+/** A stored price, with its tiers and periods. */
 export interface Price {
 	readonly id: string
-	readonly inputUncached: number
-	readonly inputCacheRead: number
-	readonly inputCacheWrite: number
-	readonly output: number
-	readonly outputReasoning: number | null
+	readonly schedule: BillingApi.PriceSchedule
 }
 
 /**
- * The cost of the tokens in micro-USD, rounded up. BigInt keeps the products
- * exact before the division.
+ * The cost of the tokens at some rates, in micro-USD, rounded up. Each rate is
+ * micro-USD for one million tokens. BigInt keeps the products exact before the division.
  */
-export const costOf = (tokens: Tokens, price: Price): number => {
+export const costOf = (tokens: Tokens, rates: BillingApi.Rates): number => {
 	const total =
-		BigInt(tokens.inputUncached) * BigInt(price.inputUncached) +
-		BigInt(tokens.inputCacheRead) * BigInt(price.inputCacheRead) +
-		BigInt(tokens.inputCacheWrite) * BigInt(price.inputCacheWrite) +
-		BigInt(tokens.outputText) * BigInt(price.output) +
+		BigInt(tokens.inputUncached) * BigInt(rates.inputUncached) +
+		BigInt(tokens.inputCacheRead) * BigInt(rates.inputCacheRead) +
+		BigInt(tokens.inputCacheWrite) * BigInt(rates.inputCacheWrite) +
+		BigInt(tokens.outputText) * BigInt(rates.output) +
 		BigInt(tokens.outputReasoning) *
-			BigInt(price.outputReasoning ?? price.output)
+			BigInt(rates.outputReasoning ?? rates.output)
 	const million = 1_000_000n
 	return Number((total + million - 1n) / million)
+}
+
+const weekdays: ReadonlyArray<BillingApi.Weekday> = [
+	"sun",
+	"mon",
+	"tue",
+	"wed",
+	"thu",
+	"fri",
+	"sat",
+]
+const minutesOf = (time: string) =>
+	Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5))
+
+/** The day of the week and the minute of the day of a time in a time zone. */
+const localTime = (at: number, timeZone: string) => {
+	const parts = new Intl.DateTimeFormat("en-US", {
+		timeZone,
+		weekday: "short",
+		hour: "2-digit",
+		minute: "2-digit",
+		hourCycle: "h23",
+	}).formatToParts(at)
+	const part = (type: string) =>
+		parts.find((part) => part.type === type)?.value ?? ""
+	return {
+		day: weekdays.indexOf(part("weekday").toLowerCase() as BillingApi.Weekday),
+		minute: Number(part("hour")) * 60 + Number(part("minute")),
+	}
+}
+
+/** Whether a window holds a local time. A window past midnight belongs to the day it starts. */
+const holds = (
+	window: BillingApi.TimeWindow,
+	local: { readonly day: number; readonly minute: number },
+) => {
+	const start = minutesOf(window.start)
+	const end = minutesOf(window.end)
+	const on = (day: number) =>
+		window.days === undefined || window.days.includes(weekdays[(day + 7) % 7]!)
+	return start < end
+		? local.minute >= start && local.minute < end && on(local.day)
+		: (local.minute >= start && on(local.day)) ||
+				(local.minute < end && on(local.day - 1))
+}
+
+/**
+ * The rates of one call. The first period with a window that holds the start of
+ * the call gives the tiers. Then the first tier that the input tokens fit gives the rates.
+ */
+export const ratesOf = (
+	schedule: BillingApi.PriceSchedule,
+	tokens: Tokens,
+	startedAt: number,
+): BillingApi.Rates => {
+	const local = localTime(startedAt, schedule.timeZone)
+	const tiers =
+		schedule.periods.find((period) =>
+			period.windows.some((window) => holds(window, local)),
+		)?.tiers ?? schedule.tiers
+	const input =
+		tokens.inputUncached + tokens.inputCacheRead + tokens.inputCacheWrite
+	// The contract makes the last tier open, so a tier always fits.
+	return tiers.find(
+		(tier) => tier.upToInputTokens === null || input <= tier.upToInputTokens,
+	)!
 }
 
 /** The start of the current day or month in UTC, in milliseconds. */
@@ -138,6 +200,8 @@ export class Billing extends Context.Service<
 			call: Call,
 			attribution: Attribution,
 			tokens: Tokens,
+			/** The time that the call started. It chooses the period of the price. */
+			startedAt: number,
 		) => Effect.Effect<void, BillingStorageError>
 		readonly prices: (
 			providerId: string,

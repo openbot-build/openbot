@@ -42,22 +42,24 @@ Some calls are not recorded:
 
 ## Prices
 
-A price belongs to one model at one provider, because the same model can cost a different amount at another provider. Each value is the cost of one million tokens, in micro-USD.
+A price belongs to one model at one provider, because the same model can cost a different amount at another provider. Many models cost more when a request is long, and some providers cost less at night. So a price has **tiers** by input size and **periods** by time of day.
 
-| Field             | Which tokens                                                   |
-| ----------------- | -------------------------------------------------------------- |
-| `inputUncached`   | Input tokens that the provider did not read from its cache.    |
-| `inputCacheRead`  | Input tokens that the provider read from its cache.            |
-| `inputCacheWrite` | Input tokens that the provider wrote to its cache.             |
-| `output`          | Output text and tool calls.                                    |
-| `outputReasoning` | Reasoning tokens. Leave it out or send `null` to use `output`. |
+Each tier has rates. Each rate is the cost of one million tokens, in micro-USD:
 
-An administrator of the organization sets the prices of the organization's own providers. These prices are an estimate of what the model company charges. A platform admin sets the prices of the shared providers. For this example, input costs 2.50 US dollars and output costs 10 US dollars for one million tokens:
+| Field             | Which tokens                                                |
+| ----------------- | ----------------------------------------------------------- |
+| `inputUncached`   | Input tokens that the provider did not read from its cache. |
+| `inputCacheRead`  | Input tokens that the provider read from its cache.         |
+| `inputCacheWrite` | Input tokens that the provider wrote to its cache.          |
+| `output`          | Output text and tool calls.                                 |
+| `outputReasoning` | Reasoning tokens. Send `null` to use the rate of `output`.  |
+
+An administrator of the organization sets the prices of the organization's own providers. These prices are an estimate of what the model company charges. A platform admin sets the prices of the shared providers. For this example, input costs 2.50 US dollars and output costs 10 US dollars for one million tokens, for all input sizes and at all times:
 
 ```sh
 curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"model":"gpt-4.1","inputUncached":2500000,"inputCacheRead":625000,"inputCacheWrite":0,"output":10000000}' \
+  -d '{"model":"gpt-4.1","tiers":[{"upToInputTokens":null,"inputUncached":2500000,"inputCacheRead":625000,"inputCacheWrite":0,"output":10000000,"outputReasoning":null}]}' \
   https://api.example.com/v1/organization/model_providers/prov_4c1e/prices
 ```
 
@@ -70,9 +72,102 @@ curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 A provider can only price the models that it links. Another model gives `400` with `ModelProviderInvalid`. The [model catalog](/docs/models#choose-a-model) shows the current `price` of each model.
 
-A new price applies to calls from now on. Each usage event keeps the cost from the time of the call, so old costs never change. OpenBot rounds the cost of each call up to a whole micro-USD.
+A new price applies to calls that start from now on. Each usage event keeps the cost from the time of the call, so old costs never change. OpenBot rounds the cost of each call up to a whole micro-USD.
 
 A model without a price costs 0. Its calls are still recorded, but they do not count toward budgets and do not take credits.
+
+### Tiers by input size
+
+`tiers` is a list, from small to large. Each tier has `upToInputTokens`: the most input tokens that a call in this tier can have. The input tokens of a call are all its input tokens, from the cache or not. The last tier has `upToInputTokens: null`, because it has no upper limit. You can have up to 20 tiers.
+
+A call uses the first tier that its input fits. All tokens of the call then cost the rates of that tier, not only the tokens over the limit. Most providers bill long requests in this way.
+
+For example, a model costs less up to 32,000 input tokens, more up to 128,000, and the most above that:
+
+```json
+{
+	"model": "qwen-plus",
+	"tiers": [
+		{
+			"upToInputTokens": 32000,
+			"inputUncached": 800000,
+			"inputCacheRead": 160000,
+			"inputCacheWrite": 0,
+			"output": 2000000,
+			"outputReasoning": 8000000
+		},
+		{
+			"upToInputTokens": 128000,
+			"inputUncached": 2400000,
+			"inputCacheRead": 480000,
+			"inputCacheWrite": 0,
+			"output": 6000000,
+			"outputReasoning": 24000000
+		},
+		{
+			"upToInputTokens": null,
+			"inputUncached": 4800000,
+			"inputCacheRead": 960000,
+			"inputCacheWrite": 0,
+			"output": 12000000,
+			"outputReasoning": 48000000
+		}
+	]
+}
+```
+
+A call with 50,000 input tokens uses the second tier.
+
+### Periods by time of day
+
+`periods` gives other tiers for some times, such as a lower price at night. Each period has a `name`, one or more `windows`, and its own `tiers`. `timeZone` says in which time zone the windows are. It is an IANA name, such as `UTC` or `Asia/Shanghai`. Leave it out for `UTC`.
+
+| Window field | What it is                                                                                                        |
+| ------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `start`      | The start, as `HH:MM`. The window includes this minute.                                                           |
+| `end`        | The end, as `HH:MM`, up to `24:00`. The window stops before this minute.                                          |
+| `days`       | The days on which the window starts: `mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun`. Leave it out for every day. |
+
+When `end` is before `start`, the window goes past midnight. It belongs to the day on which it starts. For example, `{"start":"22:00","end":"02:00","days":["fri"]}` holds Friday 23:00 and Saturday 01:00, but not Friday 01:00.
+
+OpenBot takes the time at which the call starts. It uses the first period with a window that holds this time. When no period holds it, the call uses the `tiers` of the price. In each case, the call then picks its tier by input size.
+
+For example, a provider costs half from 00:30 to 08:30 in Beijing time:
+
+```json
+{
+	"model": "deepseek-chat",
+	"timeZone": "Asia/Shanghai",
+	"tiers": [
+		{
+			"upToInputTokens": null,
+			"inputUncached": 2000000,
+			"inputCacheRead": 500000,
+			"inputCacheWrite": 0,
+			"output": 8000000,
+			"outputReasoning": null
+		}
+	],
+	"periods": [
+		{
+			"name": "off-peak",
+			"windows": [{ "start": "00:30", "end": "08:30" }],
+			"tiers": [
+				{
+					"upToInputTokens": null,
+					"inputUncached": 1000000,
+					"inputCacheRead": 250000,
+					"inputCacheWrite": 0,
+					"output": 4000000,
+					"outputReasoning": null
+				}
+			]
+		}
+	]
+}
+```
+
+Leave `periods` out when the price is the same at all times.
 
 ---
 

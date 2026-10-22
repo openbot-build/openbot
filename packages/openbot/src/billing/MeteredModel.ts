@@ -1,6 +1,6 @@
 // `meter` wraps one model object. A pipeable form does not help.
 // @effect-diagnostics missingPipeableSignature:off
-import { Context, Effect, Stream } from "effect"
+import { Clock, Context, Effect, Stream } from "effect"
 import { AiError, type LanguageModel, type Response } from "effect/ai"
 import {
 	type Attribution,
@@ -95,14 +95,18 @@ export const meter = (
 	const before = (method: "generateText" | "generateObject" | "streamText") =>
 		Effect.gen(function* () {
 			const attribution = refine(yield* yield* CurrentAttribution, method)
+			const startedAt = yield* Clock.currentTimeMillis
 			yield* billing
 				.check(call, attribution)
 				.pipe(Effect.mapError((error) => blocked(method, error)))
-			return attribution
+			return { attribution, startedAt }
 		})
-	const after = (attribution: Attribution, usage: Response.Usage) =>
+	const after = (
+		started: { readonly attribution: Attribution; readonly startedAt: number },
+		usage: Response.Usage,
+	) =>
 		billing
-			.record(call, attribution, tokensOf(usage))
+			.record(call, started.attribution, tokensOf(usage), started.startedAt)
 			.pipe(
 				Effect.catch((error) =>
 					Effect.logWarning("OpenBot could not record model usage", error),
@@ -114,27 +118,27 @@ export const meter = (
 	const methods: Methods = {
 		generateText: (options) =>
 			Effect.gen(function* () {
-				const attribution = yield* before("generateText")
+				const started = yield* before("generateText")
 				const response = yield* plain.generateText(options)
-				yield* after(attribution, response.usage)
+				yield* after(started, response.usage)
 				return response
 			}),
 		generateObject: (options) =>
 			Effect.gen(function* () {
-				const attribution = yield* before("generateObject")
+				const started = yield* before("generateObject")
 				const response = yield* plain.generateObject(options)
-				yield* after(attribution, response.usage)
+				yield* after(started, response.usage)
 				return response
 			}),
 		streamText: (options) =>
 			Stream.unwrap(
-				Effect.map(before("streamText"), (attribution) =>
+				Effect.map(before("streamText"), (started) =>
 					plain
 						.streamText(options)
 						.pipe(
 							Stream.tap((part) =>
 								part.type === "finish"
-									? after(attribution, part.usage)
+									? after(started, part.usage)
 									: Effect.void,
 							),
 						),

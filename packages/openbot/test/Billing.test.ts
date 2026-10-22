@@ -5,7 +5,7 @@ import { SessionView } from "@openbot-build/api"
 import { type Redacted, Schema } from "effect"
 import * as BrowserHost from "./BrowserHost.ts"
 import { withCookie } from "./Caller.ts"
-import { costOf, tokensOf } from "../src/billing/Billing.ts"
+import { costOf, ratesOf, tokensOf } from "../src/billing/Billing.ts"
 
 const publicOrigin = "https://billing.example.com"
 
@@ -22,7 +22,10 @@ const price = {
 	inputCacheRead: 500_000,
 	inputCacheWrite: 0,
 	output: 8_000_000,
+	outputReasoning: null,
 }
+/** A price with one tier for every input size, at every time. */
+const flat = { tiers: [{ upToInputTokens: null, ...price }] }
 /** 800 uncached, 200 cached and 500 output tokens: 1600 + 100 + 4000. */
 const callCost = 5700
 
@@ -85,10 +88,7 @@ test("the cost of a call is the tokens times the price, rounded up", () => {
 		outputText: 400,
 		outputReasoning: 100,
 	})
-	assert.equal(
-		costOf(tokens, { id: "p", ...price, outputReasoning: null }),
-		callCost,
-	)
+	assert.equal(costOf(tokens, price), callCost)
 	// One token at a price of one micro-USD for one million tokens still costs 1.
 	assert.equal(
 		costOf(
@@ -99,10 +99,64 @@ test("the cost of a call is the tokens times the price, rounded up", () => {
 				outputText: 0,
 				outputReasoning: 0,
 			},
-			{ id: "p", ...price, inputUncached: 1, outputReasoning: null },
+			{ ...price, inputUncached: 1 },
 		),
 		1,
 	)
+})
+
+test("a call uses the tier of its input size and the period of its start time", () => {
+	const rates = (output: number) => ({ ...price, output })
+	const schedule = {
+		timeZone: "Asia/Shanghai",
+		tiers: [
+			{ upToInputTokens: 32_000, ...rates(1) },
+			{ upToInputTokens: 128_000, ...rates(2) },
+			{ upToInputTokens: null, ...rates(3) },
+		],
+		periods: [
+			{
+				name: "night",
+				windows: [{ start: "00:30", end: "08:30" }],
+				tiers: [{ upToInputTokens: null, ...rates(4) }],
+			},
+		],
+	}
+	const input = (inputUncached: number) => ({
+		inputUncached,
+		inputCacheRead: 0,
+		inputCacheWrite: 0,
+		outputText: 0,
+		outputReasoning: 0,
+	})
+	// 10:00 in Shanghai on Friday, 23 October 2026.
+	const day = Date.parse("2026-10-23T02:00:00Z")
+	assert.equal(ratesOf(schedule, input(1000), day).output, 1)
+	assert.equal(ratesOf(schedule, input(32_000), day).output, 1)
+	assert.equal(ratesOf(schedule, input(32_001), day).output, 2)
+	assert.equal(ratesOf(schedule, input(500_000), day).output, 3)
+	// 01:00 in Shanghai is in the night period, for any input size.
+	const night = Date.parse("2026-10-22T17:00:00Z")
+	assert.equal(ratesOf(schedule, input(500_000), night).output, 4)
+	// A window past midnight belongs to the day that it starts.
+	const friday = {
+		timeZone: "UTC",
+		tiers: [{ upToInputTokens: null, ...rates(1) }],
+		periods: [
+			{
+				name: "friday night",
+				windows: [{ start: "22:00", end: "02:00", days: ["fri" as const] }],
+				tiers: [{ upToInputTokens: null, ...rates(2) }],
+			},
+		],
+	}
+	const at = (time: string) =>
+		ratesOf(friday, input(1), Date.parse(time)).output
+	assert.equal(at("2026-10-23T23:00:00Z"), 2)
+	assert.equal(at("2026-10-24T01:59:00Z"), 2)
+	assert.equal(at("2026-10-24T02:00:00Z"), 1)
+	assert.equal(at("2026-10-23T01:00:00Z"), 1)
+	assert.equal(at("2026-10-24T23:00:00Z"), 1)
 })
 
 test(
@@ -187,16 +241,24 @@ test(
 					root.session,
 					`/v1/platform/model_providers/${platformProvider.id}/prices`,
 					"PUT",
-					{ model: "large", ...price },
+					{
+						model: "large",
+						// Calls of this test have 1000 input tokens, so they use the second tier.
+						tiers: [
+							{ upToInputTokens: 500, ...price, output: 99_000_000 },
+							{ upToInputTokens: null, ...price },
+						],
+					},
 				),
 			)
-			assert.equal(platformPrice.outputReasoning, null)
+			assert.equal(platformPrice.timeZone, "UTC")
+			assert.deepEqual(platformPrice.periods, [])
 			await json(
 				send(
 					alice.session,
 					`/v1/organization/model_providers/${ownProvider.id}/prices`,
 					"PUT",
-					{ model: "small", ...price },
+					{ model: "small", ...flat },
 				),
 			)
 			const unknown = await json(
@@ -204,7 +266,7 @@ test(
 					alice.session,
 					`/v1/organization/model_providers/${ownProvider.id}/prices`,
 					"PUT",
-					{ model: "large", ...price },
+					{ model: "large", ...flat },
 				),
 				400,
 			)
@@ -216,7 +278,7 @@ test(
 				catalog.models.find(
 					(model: { readonly provider: string }) =>
 						model.provider === platformProvider.id,
-				)?.price?.output,
+				)?.price?.tiers[1]?.output,
 				price.output,
 			)
 
