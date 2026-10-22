@@ -38,15 +38,13 @@ export const layer = (options: Options = {}) =>
 			const scope = yield* Scope.Scope
 			const onTurn = (signal: Extract<Signal, { _tag: "TurnChanged" }>) =>
 				ended(signal.status)
-					? runs
-							.waitingOn(signal.session)
-							.pipe(
-								Effect.flatMap((list) =>
-									Effect.forEach(list, (run) => tasks.wake(run), {
-										discard: true,
-									}),
-								),
-							)
+					? runs.waitingOn(signal.session).pipe(
+							Effect.flatMap((list) =>
+								Effect.forEach(list, (run) => tasks.wake(run), {
+									discard: true,
+								}),
+							),
+						)
 					: Effect.void
 			const handle = (signal: Signal) =>
 				(signal._tag === "TurnChanged" ? onTurn(signal) : Effect.void).pipe(
