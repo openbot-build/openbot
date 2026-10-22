@@ -1,6 +1,6 @@
 ---
 title: Platform
-description: Platform admins, the setup program, platform settings, and shared model providers.
+description: Platform admins, the setup program, platform settings, and shared models and model providers.
 ---
 
 The platform is the whole OpenBot deployment. One platform has many organizations.
@@ -210,36 +210,52 @@ Nobody can use a suspended organization. Its tokens stop working at once. Set `s
 
 ## Shared model providers
 
-A platform can pay for a model provider and share it with organizations. Organizations can also bring their own keys. See [Models](/docs/models).
+A platform can pay for model providers and share them with organizations. It can also share models. Organizations can also bring their own keys. See [Models](/docs/models).
 
 | Route                                             | What it does                |
 | ------------------------------------------------- | --------------------------- |
+| `GET /v1/platform/models`                         | Lists the shared models.    |
+| `POST /v1/platform/models`                        | Adds a shared model.        |
+| `GET /v1/platform/models/:modelId`                | Reads one shared model.     |
+| `PATCH /v1/platform/models/:modelId`              | Changes a shared model.     |
+| `DELETE /v1/platform/models/:modelId`             | Removes a shared model.     |
 | `GET /v1/platform/model_providers`                | Lists the shared providers. |
 | `POST /v1/platform/model_providers`               | Adds a shared provider.     |
 | `GET /v1/platform/model_providers/:providerId`    | Reads one shared provider.  |
 | `PATCH /v1/platform/model_providers/:providerId`  | Changes a shared provider.  |
 | `DELETE /v1/platform/model_providers/:providerId` | Removes a shared provider.  |
 
-The body is the same as for an organization provider, plus `availability`:
+The bodies are the same as for the models and providers of an organization, plus `availability`. First add the model, then a provider that links it:
 
 ```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "id": "gpt-4.1", "name": "GPT-4.1", "reasoningEfforts": [], "serviceTiers": [], "availability": { "_tag": "All" } }' \
+  https://api.example.com/v1/platform/models
+
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "kind": "openai",
     "name": "OpenAI",
     "apiKey": "sk-...",
-    "models": [{ "id": "gpt-4.1", "name": "GPT-4.1", "reasoningEfforts": [], "serviceTiers": [] }],
+    "models": [{ "model": "gpt-4.1", "modelOwner": "platform" }],
     "availability": { "_tag": "All" }
   }' \
   https://api.example.com/v1/platform/model_providers
 ```
 
-| `availability`                                       | Who can use the provider       |
-| ---------------------------------------------------- | ------------------------------ |
-| `{ "_tag": "All" }`                                  | Every organization.            |
-| `{ "_tag": "None" }`                                 | No organization.               |
-| `{ "_tag": "Selected", "organizations": ["org_…"] }` | Only the listed organizations. |
+| `availability`                                       | Who can use the model or provider |
+| ---------------------------------------------------- | --------------------------------- |
+| `{ "_tag": "All" }`                                  | Every organization.               |
+| `{ "_tag": "None" }`                                 | No organization.                  |
+| `{ "_tag": "Selected", "organizations": ["org_…"] }` | Only the listed organizations.    |
+
+An organization sees a shared model of a shared provider only when the `availability` of both lets it in.
+An organization can also link a shared model that it may use to its own provider. Then it uses the model with its own key.
+
+A shared provider links only shared models. You cannot remove a shared model while a shared provider links it: OpenBot returns `409` with `ModelInUse`.
+When you remove a shared model, OpenBot also removes the links that the providers of organizations have to it.
 
 ---
 

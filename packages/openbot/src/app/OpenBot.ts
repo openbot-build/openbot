@@ -59,6 +59,7 @@ import * as PlatformAdminsPostgres from "../platform/PlatformAdminsPostgres.ts"
 import * as RolesPostgres from "../authorization/RolesPostgres.ts"
 import * as ModelRegistry from "../models/ModelRegistry.ts"
 import * as ModelProvidersPostgres from "../models/ModelProvidersPostgres.ts"
+import * as ModelsPostgres from "../models/ModelsPostgres.ts"
 import * as SsoPostgres from "../sso/SsoPostgres.ts"
 import * as DomainControl from "../apps/DomainControl.ts"
 import { Settings } from "../settings/Settings.ts"
@@ -308,6 +309,7 @@ export const layer = <
 			),
 		),
 		Layer.provideMerge(ModelProvidersPostgres.layer),
+		Layer.provideMerge(ModelsPostgres.layer),
 		Layer.provideMerge(
 			SsoPostgres.layer.pipe(
 				Layer.provide(options.domainControl ?? DomainControl.layer),

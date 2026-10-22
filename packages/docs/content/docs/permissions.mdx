@@ -23,37 +23,37 @@ A member gets the policies of their roles, plus their own extra policies. A user
 
 List them with `GET /v1/organization/permission_groups`.
 
-| ID                      | Resource     | What it allows                                                                  |
-| ----------------------- | ------------ | ------------------------------------------------------------------------------- |
-| `responses.run`         | Session      | Start, steer, queue and resume work in a Session.                               |
-| `sessions.read`         | Session      | Read Sessions, their history, memory and delegations.                           |
-| `sessions.write`        | Session      | Create, change, fork, restore, interrupt and delete Sessions.                   |
-| `requests.resolve`      | Request      | Answer the requests of your Agents for new capabilities.                        |
-| `agents.read`           | Agent        | Read Agents, their memory, Rules and Grants.                                    |
-| `agents.write`          | Agent        | Create and change Agents, their memory, Rules and Grants.                       |
-| `agents.delegate`       | Agent        | Give work to an Agent, from a client or from another Agent.                     |
-| `workflows.read`        | Workflow     | Read Workflows, their Runs, reports and recorded steps.                         |
-| `workflows.write`       | Workflow     | Create and change Workflows, their schedules, webhooks and recorded steps.      |
-| `workflows.run`         | Workflow     | Start and cancel Runs of a Workflow, from a client or from an Agent.            |
-| `connections.read`      | Connection   | Read App connections and App accounts.                                          |
-| `connections.write`     | Connection   | Create, change and delete App connections, and sign in to App accounts.         |
-| `apps.use`              | Apps         | Find Apps, and use App operations and App views.                                |
-| `apps.publish`          | Apps         | Use the developer tools for Apps that you publish.                              |
-| `models.use`            | Model        | Choose a model for a Session.                                                   |
-| `tokens.read`           | User         | List API tokens.                                                                |
-| `tokens.write`          | User         | Create and revoke API tokens.                                                   |
-| `organization.read`     | Organization | Read the organization settings.                                                 |
-| `organization.write`    | Organization | Change the organization settings.                                               |
-| `members.read`          | Organization | List members, their roles and their policies.                                   |
-| `members.write`         | Organization | Change the roles, policies and status of members, and remove members.           |
-| `roles.write`           | Organization | Create, change and delete the custom roles of the organization.                 |
-| `model_providers.read`  | Organization | Read the model providers of the organization. Keys are never shown.             |
-| `model_providers.write` | Organization | Add, change and remove the model providers and keys of the organization.        |
-| `sso.read`              | Organization | Read the email domains and SSO connections.                                     |
-| `sso.write`             | Organization | Add and verify email domains, and change SSO connections.                       |
-| `audit_logs.read`       | Organization | Read the audit log.                                                             |
-| `platform.read`         | Platform     | Read the platform settings, organizations, admins and shared model providers.   |
-| `platform.write`        | Platform     | Change the platform settings, organizations, admins and shared model providers. |
+| ID                      | Resource     | What it allows                                                                             |
+| ----------------------- | ------------ | ------------------------------------------------------------------------------------------ |
+| `responses.run`         | Session      | Start, steer, queue and resume work in a Session.                                          |
+| `sessions.read`         | Session      | Read Sessions, their history, memory and delegations.                                      |
+| `sessions.write`        | Session      | Create, change, fork, restore, interrupt and delete Sessions.                              |
+| `requests.resolve`      | Request      | Answer the requests of your Agents for new capabilities.                                   |
+| `agents.read`           | Agent        | Read Agents, their memory, Rules and Grants.                                               |
+| `agents.write`          | Agent        | Create and change Agents, their memory, Rules and Grants.                                  |
+| `agents.delegate`       | Agent        | Give work to an Agent, from a client or from another Agent.                                |
+| `workflows.read`        | Workflow     | Read Workflows, their Runs, reports and recorded steps.                                    |
+| `workflows.write`       | Workflow     | Create and change Workflows, their schedules, webhooks and recorded steps.                 |
+| `workflows.run`         | Workflow     | Start and cancel Runs of a Workflow, from a client or from an Agent.                       |
+| `connections.read`      | Connection   | Read App connections and App accounts.                                                     |
+| `connections.write`     | Connection   | Create, change and delete App connections, and sign in to App accounts.                    |
+| `apps.use`              | Apps         | Find Apps, and use App operations and App views.                                           |
+| `apps.publish`          | Apps         | Use the developer tools for Apps that you publish.                                         |
+| `models.use`            | Model        | Choose a model for a Session.                                                              |
+| `tokens.read`           | User         | List API tokens.                                                                           |
+| `tokens.write`          | User         | Create and revoke API tokens.                                                              |
+| `organization.read`     | Organization | Read the organization settings.                                                            |
+| `organization.write`    | Organization | Change the organization settings.                                                          |
+| `members.read`          | Organization | List members, their roles and their policies.                                              |
+| `members.write`         | Organization | Change the roles, policies and status of members, and remove members.                      |
+| `roles.write`           | Organization | Create, change and delete the custom roles of the organization.                            |
+| `model_providers.read`  | Organization | Read the models and model providers of the organization. Keys are never shown.             |
+| `model_providers.write` | Organization | Add, change and remove the models, model providers and keys of the organization.           |
+| `sso.read`              | Organization | Read the email domains and SSO connections.                                                |
+| `sso.write`             | Organization | Add and verify email domains, and change SSO connections.                                  |
+| `audit_logs.read`       | Organization | Read the audit log.                                                                        |
+| `platform.read`         | Platform     | Read the platform settings, organizations, admins and shared models and model providers.   |
+| `platform.write`        | Platform     | Change the platform settings, organizations, admins and shared models and model providers. |
 
 `organization.read` and `organization.write` also cover the [organization settings](/docs/organization#settings).
 `platform.read` and `platform.write` only work on the resource `openbot.platform`, and only for platform admins. See [Platform groups](#platform-groups).

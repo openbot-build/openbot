@@ -33,6 +33,8 @@ import {
 	platformAdmins,
 	roles,
 	modelProviders,
+	models,
+	providerModels,
 	organizationDomains,
 	ssoConnections,
 	members,
@@ -88,6 +90,8 @@ export const check = Effect.gen(function* () {
 	yield* db.select().from(platformAdmins).limit(0)
 	yield* db.select().from(roles).limit(0)
 	yield* db.select().from(modelProviders).limit(0)
+	yield* db.select().from(models).limit(0)
+	yield* db.select().from(providerModels).limit(0)
 	yield* db.select().from(organizationDomains).limit(0)
 	yield* db.select().from(ssoConnections).limit(0)
 	yield* db.select().from(members).limit(0)

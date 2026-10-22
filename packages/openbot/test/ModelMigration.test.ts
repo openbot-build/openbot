@@ -1,0 +1,201 @@
+import assert from "node:assert/strict"
+import { cp, mkdtemp, readdir, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { test } from "node:test"
+import { fileURLToPath } from "node:url"
+import { NodeServices } from "@effect/platform-node"
+import { PgClient } from "@effect/sql-pg"
+import { makeWithDefaults } from "drizzle-orm/effect-postgres"
+import { migrate } from "drizzle-orm/effect-postgres/migrator"
+import { Effect, Layer, ManagedRuntime, Redacted } from "effect"
+import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
+import * as PostgresTest from "./PostgresTest.ts"
+
+const migrations = fileURLToPath(new URL("../migrations", import.meta.url))
+/** The first migration that knows models as their own table. */
+const firstModelMigration = "20261022063828_create_models"
+
+const oldProvider = (input: {
+	readonly id: string
+	readonly ownerKind: string
+	readonly ownerId: string
+	readonly createdAt: number
+	readonly models: ReadonlyArray<object>
+}) => ({
+	id: input.id,
+	owner_kind: input.ownerKind,
+	owner_id: input.ownerId,
+	kind: "openai",
+	name: input.id,
+	endpoint: null,
+	api_key: "sealed",
+	api_key_hint: null,
+	models: JSON.stringify(input.models),
+	availability: input.ownerKind === "platform" ? '{"_tag":"All"}' : null,
+	version: 1,
+	created_at: input.createdAt,
+	updated_at: input.createdAt,
+})
+
+test("models in old providers move to their own table, and their IDs stay the same", async () => {
+	const database = await PostgresTest.start()
+	const before = await mkdtemp(join(tmpdir(), "openbot-migrations-"))
+	await using runtime = ManagedRuntime.make(
+		DatabasePostgres.layer({ databaseUrl: Redacted.make(database.url) }).pipe(
+			Layer.provide(NodeServices.layer),
+		),
+	)
+	try {
+		for (const name of await readdir(migrations))
+			if (name < firstModelMigration)
+				await cp(join(migrations, name), join(before, name), {
+					recursive: true,
+				})
+		await runtime.runPromise(
+			Effect.gen(function* () {
+				const db = yield* makeWithDefaults()
+				yield* migrate(db, { migrationsFolder: before })
+				const sql = yield* PgClient.PgClient
+				const rows = [
+					oldProvider({
+						id: "prov_platform",
+						ownerKind: "platform",
+						ownerId: "platform",
+						createdAt: 1,
+						models: [
+							{
+								id: "small",
+								name: "Small",
+								reasoningEfforts: ["low"],
+								serviceTiers: [],
+							},
+							{
+								id: "big",
+								name: "Big",
+								reasoningEfforts: [],
+								serviceTiers: ["flex"],
+								contextWindow: 9000,
+							},
+						],
+					}),
+					oldProvider({
+						id: "prov_first",
+						ownerKind: "organization",
+						ownerId: "org_a",
+						createdAt: 2,
+						models: [
+							{
+								id: "small",
+								name: "Small A",
+								reasoningEfforts: [],
+								serviceTiers: [],
+							},
+						],
+					}),
+					oldProvider({
+						id: "prov_second",
+						ownerKind: "organization",
+						ownerId: "org_a",
+						createdAt: 3,
+						models: [
+							{
+								id: "small",
+								name: "Small B",
+								reasoningEfforts: ["high"],
+								serviceTiers: [],
+								maxOutputTokens: 50,
+							},
+						],
+					}),
+				]
+				for (const row of rows)
+					yield* sql`insert into openbot_model_providers ${sql.insert(row)}`
+			}),
+		)
+		await runtime.runPromise(DatabasePostgres.migrate)
+		await runtime.runPromise(
+			Effect.gen(function* () {
+				const sql = yield* PgClient.PgClient
+				const models = yield* sql<{
+					readonly owner_kind: string
+					readonly owner_id: string
+					readonly id: string
+					readonly name: string
+					readonly reasoning_efforts: string
+					readonly service_tiers: string
+					readonly context_window: number | null
+					readonly availability: string | null
+				}>`select owner_kind, owner_id, id, name, reasoning_efforts, service_tiers, context_window, availability
+					from openbot_models order by owner_kind, owner_id, id`
+				assert.deepEqual(
+					models.map((row) => [
+						row.owner_kind,
+						row.owner_id,
+						row.id,
+						row.name,
+						JSON.parse(row.reasoning_efforts),
+						JSON.parse(row.service_tiers),
+						row.context_window,
+						row.availability,
+					]),
+					[
+						["organization", "org_a", "small", "Small A", [], [], null, null],
+						[
+							"platform",
+							"platform",
+							"big",
+							"Big",
+							[],
+							["flex"],
+							9000,
+							'{"_tag":"All"}',
+						],
+						[
+							"platform",
+							"platform",
+							"small",
+							"Small",
+							["low"],
+							[],
+							null,
+							'{"_tag":"All"}',
+						],
+					],
+				)
+				const links = yield* sql<{
+					readonly provider_id: string
+					readonly model_owner_kind: string
+					readonly model_id: string
+					readonly position: number
+					readonly reasoning_efforts: string | null
+					readonly max_output_tokens: number | null
+				}>`select provider_id, model_owner_kind, model_id, position, reasoning_efforts, max_output_tokens
+					from openbot_provider_models order by provider_id, position`
+				assert.deepEqual(
+					links.map((row) => [
+						row.provider_id,
+						row.model_owner_kind,
+						row.model_id,
+						row.position,
+						row.reasoning_efforts,
+						row.max_output_tokens,
+					]),
+					[
+						["prov_first", "organization", "small", 0, null, null],
+						["prov_platform", "platform", "small", 0, null, null],
+						["prov_platform", "platform", "big", 1, null, null],
+						["prov_second", "organization", "small", 0, '["high"]', 50],
+					],
+				)
+				const columns = yield* sql<{ readonly column_name: string }>`
+					select column_name from information_schema.columns
+					where table_name = 'openbot_model_providers' and column_name = 'models'`
+				assert.equal(columns.length, 0)
+			}),
+		)
+	} finally {
+		await rm(before, { recursive: true, force: true })
+		await database.close()
+	}
+})

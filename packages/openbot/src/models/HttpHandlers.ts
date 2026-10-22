@@ -16,6 +16,7 @@ import {
 	view,
 } from "./ModelProviders.ts"
 import { ModelRegistry } from "./ModelRegistry.ts"
+import { Models, view as modelView } from "./Models.ts"
 
 const unavailable = () => ModelProvidersApi.ModelProvidersUnavailable.make({})
 
@@ -49,6 +50,7 @@ export const layer = HttpApiBuilder.group(
 	(handlers) =>
 		Effect.gen(function* () {
 			const providers = yield* ModelProviders
+			const models = yield* Models
 			const registry = yield* ModelRegistry
 			const audit = yield* AuditLog
 			const settings = yield* Settings
@@ -72,6 +74,23 @@ export const layer = HttpApiBuilder.group(
 						details,
 					})
 					.pipe(Effect.mapError(unavailable))
+			const recordModel = (
+				caller: Caller,
+				action: "model.created" | "model.updated" | "model.deleted",
+				details: { readonly modelId: string; readonly name: string },
+			) =>
+				audit
+					.record({
+						organizationId: caller.organizationId,
+						action,
+						actor: caller,
+						resource:
+							organizationKey(caller.organizationId) +
+							".model." +
+							details.modelId,
+						details,
+					})
+					.pipe(Effect.mapError(unavailable))
 			const owned = (caller: Caller): Owner =>
 				organizationOwner(caller.organizationId)
 			const find = (caller: Caller, providerId: string) =>
@@ -86,11 +105,72 @@ export const layer = HttpApiBuilder.group(
 						}),
 					),
 				)
+			const findModel = (caller: Caller, modelId: string) =>
+				models.get(owned(caller), modelId).pipe(
+					Effect.flatMap(
+						Option.match({
+							onNone: () =>
+								Effect.fail(ModelProvidersApi.ModelNotFound.make({ modelId })),
+							onSome: Effect.succeed,
+						}),
+					),
+				)
 			return handlers
-				.handle("listModels", () =>
+				.handle("getModelCatalog", () =>
 					Effect.flatMap(Identity, (caller) =>
 						registry.view(caller.organizationId),
 					).pipe(Effect.mapError(unavailable)),
+				)
+				.handle("listModels", () =>
+					Effect.flatMap(Identity, (caller) => models.list(owned(caller))).pipe(
+						Effect.map((items) => ({ items: items.map(modelView) })),
+					),
+				)
+				.handle("getModel", ({ params }) =>
+					Effect.flatMap(Identity, (caller) =>
+						findModel(caller, params.modelId),
+					).pipe(Effect.map(modelView)),
+				)
+				.handle("createModel", ({ payload }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						const created = yield* models.create(owned(caller), {
+							...payload,
+							// Only the platform shares models.
+							availability: { _tag: "None" },
+						})
+						yield* recordModel(caller, "model.created", {
+							modelId: created.id,
+							name: created.name,
+						})
+						return modelView(created)
+					}),
+				)
+				.handle("updateModel", ({ params, payload }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						const updated = yield* models.update(
+							owned(caller),
+							params.modelId,
+							payload,
+						)
+						yield* recordModel(caller, "model.updated", {
+							modelId: updated.id,
+							name: updated.name,
+						})
+						return modelView(updated)
+					}),
+				)
+				.handle("deleteModel", ({ params }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						const model = yield* findModel(caller, params.modelId)
+						yield* models.delete(owned(caller), model.id)
+						yield* recordModel(caller, "model.deleted", {
+							modelId: model.id,
+							name: model.name,
+						})
+					}),
 				)
 				.handle("listModelProviders", () =>
 					Effect.flatMap(Identity, (caller) =>

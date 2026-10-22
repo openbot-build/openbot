@@ -12,9 +12,6 @@ import * as PostgresTest from "./PostgresTest.ts"
 import { OpenBot } from "@openbot-build/openbot"
 
 const publicOrigin = "https://api.example.com"
-const models = [
-	{ id: "small", name: "Small", reasoningEfforts: [], serviceTiers: [] },
-]
 
 test(
 	"Only platform admins change the platform, and the ceiling denies in every organization",
@@ -113,7 +110,7 @@ test(
 )
 
 test(
-	"Organizations bring their own keys and see only the shared providers that they may use",
+	"Organizations bring their own keys and see only the shared providers and models that they may use",
 	{ timeout: 60000 },
 	async () => {
 		const host = await BrowserHost.start({
@@ -127,6 +124,22 @@ test(
 			const alice = await host.login("alice")
 			const bob = await host.login("bob")
 
+			// A model is its own thing. A provider links it and can change its values.
+			const small = await account(
+				alice.session,
+				"/v1/organization/models",
+				"POST",
+				{ id: "small", name: "Small", reasoningEfforts: [], serviceTiers: [] },
+			)
+			assert.equal(small.status, 200, await small.clone().text())
+			assert.equal((await small.json()).availability, null)
+			const twice = await account(
+				alice.session,
+				"/v1/organization/models",
+				"POST",
+				{ id: "small", name: "Again", reasoningEfforts: [], serviceTiers: [] },
+			)
+			assert.equal((await twice.json())._tag, "ModelConflict")
 			const own = await account(
 				alice.session,
 				"/v1/organization/model_providers",
@@ -136,13 +149,28 @@ test(
 					name: "Alice keys",
 					endpoint: "https://models.example.com/v1",
 					apiKey: "sk-alice-0123456789",
-					models,
+					models: [
+						{
+							model: "small",
+							modelOwner: "organization",
+							upstream: "small-2026",
+							contextWindow: 1000,
+						},
+					],
 				},
 			)
 			assert.equal(own.status, 200, await own.clone().text())
 			const provider = await own.json()
 			assert.deepEqual(provider.apiKey, { set: true, hint: "…6789" })
 			assert.equal(JSON.stringify(provider).includes("sk-alice"), false)
+			assert.deepEqual(provider.models, [
+				{
+					model: "small",
+					modelOwner: "organization",
+					upstream: "small-2026",
+					contextWindow: 1000,
+				},
+			])
 			const stale = await account(
 				alice.session,
 				"/v1/organization/model_providers/" + provider.id,
@@ -154,10 +182,26 @@ test(
 				alice.session,
 				"/v1/organization/model_providers",
 				"POST",
-				{ kind: "openai-compat", name: "No address", apiKey: "sk-x", models },
+				{
+					kind: "openai-compat",
+					name: "No address",
+					apiKey: "sk-x",
+					models: [],
+				},
 			)
 			assert.equal((await missingEndpoint.json())._tag, "ModelProviderInvalid")
 
+			const large = await account(root.session, "/v1/platform/models", "POST", {
+				id: "large",
+				name: "Large",
+				reasoningEfforts: ["low", "high"],
+				serviceTiers: [],
+				availability: {
+					_tag: "Selected",
+					organizations: [alice.identity.organizationId],
+				},
+			})
+			assert.equal(large.status, 200, await large.clone().text())
 			const shared = await account(
 				root.session,
 				"/v1/platform/model_providers",
@@ -166,7 +210,7 @@ test(
 					kind: "anthropic",
 					name: "Shared",
 					apiKey: "sk-platform-0123456789",
-					models,
+					models: [{ model: "large", modelOwner: "platform" }],
 					availability: {
 						_tag: "Selected",
 						organizations: [alice.identity.organizationId],
@@ -175,24 +219,127 @@ test(
 			)
 			assert.equal(shared.status, 200, await shared.clone().text())
 			const sharedProvider = await shared.json()
+			// The platform links only its own models.
+			const foreign = await account(
+				root.session,
+				"/v1/platform/model_providers",
+				"POST",
+				{
+					kind: "anthropic",
+					name: "Foreign",
+					apiKey: "sk-platform-0123456789",
+					models: [{ model: "small", modelOwner: "organization" }],
+					availability: { _tag: "All" },
+				},
+			)
+			assert.equal((await foreign.json())._tag, "ModelProviderInvalid")
+			// Bob may not use the shared model, so his provider cannot link it.
+			const bobLink = await account(
+				bob.session,
+				"/v1/organization/model_providers",
+				"POST",
+				{
+					kind: "anthropic",
+					name: "Bob keys",
+					apiKey: "sk-bob-0123456789",
+					models: [{ model: "large", modelOwner: "platform" }],
+				},
+			)
+			assert.equal((await bobLink.json())._tag, "ModelNotFound")
+			// Alice may use it, so her own key can serve it too.
+			const linked = await account(
+				alice.session,
+				"/v1/organization/model_providers/" + provider.id,
+				"PATCH",
+				{
+					expectedVersion: provider.version,
+					models: [
+						...provider.models,
+						{
+							model: "large",
+							modelOwner: "platform",
+							reasoningEfforts: ["low"],
+						},
+					],
+				},
+			)
+			assert.equal(linked.status, 200, await linked.clone().text())
 
 			const aliceModels = await (
-				await account(alice.session, "/v1/organization/models")
+				await account(alice.session, "/v1/organization/model_catalog")
 			).json()
 			assert.deepEqual(
 				aliceModels.providers.map((value: { id: string }) => value.id).sort(),
 				[provider.id, sharedProvider.id].sort(),
 			)
+			assert.deepEqual(
+				aliceModels.models.map(
+					(value: {
+						provider: string
+						id: string
+						reasoningEfforts: Array<string>
+						contextWindow?: number
+					}) => [
+						value.provider,
+						value.id,
+						value.reasoningEfforts,
+						value.contextWindow,
+					],
+				),
+				[
+					[provider.id, "small", [], 1000],
+					[provider.id, "large", ["low"], undefined],
+					[sharedProvider.id, "large", ["low", "high"], undefined],
+				],
+			)
 			assert.deepEqual(aliceModels.defaultModel, {
 				_tag: "Config.Selection",
-				provider: aliceModels.models[0].provider,
+				provider: provider.id,
 				model: "small",
 			})
 			const bobModels = await (
-				await account(bob.session, "/v1/organization/models")
+				await account(bob.session, "/v1/organization/model_catalog")
 			).json()
 			assert.deepEqual(bobModels.providers, [])
 			assert.equal(bobModels.defaultModel, null)
+
+			// A model cannot go while a provider of its owner links it.
+			const linkedModel = await account(
+				alice.session,
+				"/v1/organization/models/small",
+				"DELETE",
+			)
+			assert.equal((await linkedModel.json())._tag, "ModelInUse")
+			const sharedInUse = await account(
+				root.session,
+				"/v1/platform/models/large",
+				"DELETE",
+			)
+			assert.equal((await sharedInUse.json())._tag, "ModelInUse")
+			// When the platform removes a shared model, the links of organizations go with it.
+			await account(
+				root.session,
+				"/v1/platform/model_providers/" + sharedProvider.id,
+				"PATCH",
+				{ expectedVersion: sharedProvider.version, models: [] },
+			)
+			const removed = await account(
+				root.session,
+				"/v1/platform/models/large",
+				"DELETE",
+			)
+			assert.equal(removed.status, 204, await removed.clone().text())
+			const after = await (
+				await account(
+					alice.session,
+					"/v1/organization/model_providers/" + provider.id,
+				)
+			).json()
+			assert.deepEqual(
+				after.models.map((value: { model: string }) => value.model),
+				["small"],
+			)
+			assert.equal(after.version, provider.version + 2)
 
 			// A provider cannot go while the default model names it.
 			const settings = await (

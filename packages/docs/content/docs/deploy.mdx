@@ -128,7 +128,7 @@ curl http://127.0.0.1:8080/health
 
 `/health` only shows that the HTTP server can answer. It does not check the database, the setup, or the model.
 
-Alice can now sign in. She is a platform admin. Next, add a model provider. See [Models](/docs/models).
+Alice can now sign in. She is a platform admin. Next, add a model and a model provider that links it. See [Models](/docs/models).
 
 </Step>
 </Steps>
@@ -327,7 +327,7 @@ A return path can be any path on the same origin, except paths under `/auth/`, `
 
 Back up two things, and keep them together:
 
-1. **The database.** It holds the platform and organization settings, accounts, organizations and their members, user tokens, model providers, SSO connections, the audit log, Sessions and their Timelines, and App connections.
+1. **The database.** It holds the platform and organization settings, accounts, organizations and their members, user tokens, models and model providers, SSO connections, the audit log, Sessions and their Timelines, and App connections.
 2. **`OPENBOT_SECRET_KEYS`.** The keys decrypt the secrets in the database: App secrets, model provider keys, SSO client secrets, and the sign-in secret. A database backup without the keys cannot restore them.
 
 With Compose, make a database backup like this:

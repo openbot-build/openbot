@@ -475,7 +475,8 @@ export const roles = table(
 
 /**
  * Model providers of the platform (`owner_kind` is `platform`) and of organizations.
- * The API key is sealed. Models and availability are JSON text.
+ * The API key is sealed. Availability is JSON text. The models that a provider
+ * offers are in `openbot_provider_models`.
  */
 export const modelProviders = table(
 	"openbot_model_providers",
@@ -488,13 +489,71 @@ export const modelProviders = table(
 		endpoint: text(),
 		apiKey: text("api_key").notNull(),
 		apiKeyHint: text("api_key_hint"),
-		models: text().notNull(),
 		availability: text(),
 		version: integer().notNull(),
 		createdAt: bigint("created_at", { mode: "number" }).notNull(),
 		updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
 	},
 	(t) => [index("openbot_model_providers_owner").on(t.ownerKind, t.ownerId)],
+)
+
+/**
+ * Models of the platform (`owner_kind` is `platform`) and of organizations. A
+ * model does not belong to a provider. The ID is unique for each owner.
+ * Option lists and availability are JSON text.
+ */
+export const models = table(
+	"openbot_models",
+	{
+		ownerKind: text("owner_kind").notNull(),
+		ownerId: text("owner_id").notNull(),
+		id: text().notNull(),
+		name: text().notNull(),
+		reasoningEfforts: text("reasoning_efforts").notNull(),
+		serviceTiers: text("service_tiers").notNull(),
+		contextWindow: integer("context_window"),
+		maxOutputTokens: integer("max_output_tokens"),
+		availability: text(),
+		version: integer().notNull(),
+		createdAt: bigint("created_at", { mode: "number" }).notNull(),
+		updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+	},
+	(t) => [primaryKey({ columns: [t.ownerKind, t.ownerId, t.id] })],
+)
+
+/**
+ * The models that a provider offers. A provider links at most one model with
+ * each ID. A null column takes the value of the model. `upstream` is the
+ * model name that the provider gets; null means the model ID.
+ */
+export const providerModels = table(
+	"openbot_provider_models",
+	{
+		providerId: text("provider_id")
+			.notNull()
+			.references(() => modelProviders.id, { onDelete: "cascade" }),
+		modelOwnerKind: text("model_owner_kind").notNull(),
+		modelOwnerId: text("model_owner_id").notNull(),
+		modelId: text("model_id").notNull(),
+		position: integer().notNull(),
+		upstream: text(),
+		reasoningEfforts: text("reasoning_efforts"),
+		serviceTiers: text("service_tiers"),
+		contextWindow: integer("context_window"),
+		maxOutputTokens: integer("max_output_tokens"),
+	},
+	(t) => [
+		primaryKey({ columns: [t.providerId, t.modelId] }),
+		foreignKey({
+			columns: [t.modelOwnerKind, t.modelOwnerId, t.modelId],
+			foreignColumns: [models.ownerKind, models.ownerId, models.id],
+		}).onDelete("restrict"),
+		index("openbot_provider_models_model").on(
+			t.modelOwnerKind,
+			t.modelOwnerId,
+			t.modelId,
+		),
+	],
 )
 
 /** Email domains of organizations. Only one organization can verify a domain. */

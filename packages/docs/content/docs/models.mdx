@@ -1,21 +1,60 @@
 ---
 title: Models
-description: Connect OpenBot to language models with model providers.
+description: Connect OpenBot to language models with models and model providers.
 ---
 
 An Agent needs a language model to do work. OpenBot does not include a model. You connect one.
-A **model provider** is a model service, its API key, and the list of its models. You add providers through the API. OpenBot stores them in the database, so every instance uses the same ones.
+OpenBot keeps two kinds of records for this:
 
-There are two kinds of providers:
+- A **model** describes one language model, such as `gpt-5`: its name, its options and its limits. A model does not belong to a provider.
+- A **model provider** is a model service and its API key. A provider **links** the models that it offers. A link can change some values of the model for this provider only.
 
-| Kind                  | Who adds it                               | Who can use it                                                                                  |
-| --------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Organization provider | An organization, with its own key         | Only that organization. This is "bring your own key".                                           |
-| Shared provider       | A platform admin, with the platform's key | The organizations in its `availability`. See [Platform](/docs/platform#shared-model-providers). |
+You add both through the API. OpenBot stores them in the database, so every instance uses the same ones.
+
+The platform or an organization owns each model and each provider:
+
+| Owner        | Who adds it                               | Who can use it                                                                                  |
+| ------------ | ----------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Organization | An organization, with its own key         | Only that organization. This is "bring your own key".                                           |
+| Platform     | A platform admin, with the platform's key | The organizations in its `availability`. See [Platform](/docs/platform#shared-model-providers). |
+
+An organization can use a model of a provider only when it may use both the provider and the model.
 
 When you run OpenBot from code, you can also give built-in models. See [Built-in models](#built-in-models).
 
 ---
+
+## Add a model
+
+`POST /v1/organization/models` adds a model to your organization. It needs `model_providers.write`.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "id": "qwen3-32b", "name": "Qwen3 32B", "reasoningEfforts": [], "serviceTiers": [], "contextWindow": 131072 }' \
+  https://api.example.com/v1/organization/models
+```
+
+| Field              | Rules                                                                                                                                                        |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`               | Required. 1 to 200 characters. It is unique for its owner, and you cannot change it. A provider sends it as the model name, unless the link sets `upstream`. |
+| `name`             | Required. A name for people.                                                                                                                                 |
+| `reasoningEfforts` | Required. The `reasoningEffort` values that the model accepts. Can be empty.                                                                                 |
+| `serviceTiers`     | Required. The `serviceTier` values that the model accepts. Can be empty.                                                                                     |
+| `contextWindow`    | Optional. The size of the context window, in tokens.                                                                                                         |
+| `maxOutputTokens`  | Optional. The most tokens that the model can write in one answer.                                                                                            |
+
+If your organization already has a model with this `id`, OpenBot returns `409` with `ModelConflict`.
+
+| Route                                     | What it does                                                                             |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET /v1/organization/models`             | Lists the models of your organization. Shared models are not in this list.               |
+| `GET /v1/organization/models/:modelId`    | Reads one model.                                                                         |
+| `PATCH /v1/organization/models/:modelId`  | Changes a model. The body needs `expectedVersion`. Send `null` for a limit to remove it. |
+| `DELETE /v1/organization/models/:modelId` | Removes a model.                                                                         |
+
+Reading needs `model_providers.read`. Changes need `model_providers.write`.
+You cannot remove a model while one of your providers links it. OpenBot returns `409` with `ModelInUse`. Remove the link first.
 
 ## Add a provider
 
@@ -30,7 +69,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
     "endpoint": "https://llm.example.com/v1",
     "apiKey": "sk-...",
     "models": [
-      { "id": "qwen3-32b", "name": "Qwen3 32B", "reasoningEfforts": [], "serviceTiers": [], "contextWindow": 131072 }
+      { "model": "qwen3-32b", "modelOwner": "organization", "upstream": "Qwen/Qwen3-32B" }
     ]
   }' \
   https://api.example.com/v1/organization/model_providers
@@ -42,7 +81,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `name`     | Required. 1 to 120 characters.                                                                                                                           |
 | `endpoint` | Required for `openai-compat`. Optional for the others. An `http` or `https` base URL, often ending in `/v1`. No user name, password, query, or `#` part. |
 | `apiKey`   | Required. OpenBot stores it encrypted and sends it to the endpoint only.                                                                                 |
-| `models`   | Required. 1 to 200 models.                                                                                                                               |
+| `models`   | Required. 0 to 200 links. The order is the order of the model list.                                                                                      |
 
 | `kind`          | API                                                     |
 | --------------- | ------------------------------------------------------- |
@@ -50,16 +89,19 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `anthropic`     | Anthropic Messages API.                                 |
 | `openai-compat` | OpenAI Chat Completions API, and services that copy it. |
 
-Each model has these fields:
+Each link has these fields:
 
-| Field              | Rules                                                                        |
-| ------------------ | ---------------------------------------------------------------------------- |
-| `id`               | Required. The model name that the service expects, such as `gpt-4.1`.        |
-| `name`             | Required. A name for people.                                                 |
-| `reasoningEfforts` | Required. The `reasoningEffort` values that the model accepts. Can be empty. |
-| `serviceTiers`     | Required. The `serviceTier` values that the model accepts. Can be empty.     |
-| `contextWindow`    | Optional. The size of the context window, in tokens.                         |
-| `maxOutputTokens`  | Optional. The most tokens that the model can write in one answer.            |
+| Field              | Rules                                                                                        |
+| ------------------ | -------------------------------------------------------------------------------------------- |
+| `model`            | Required. The `id` of the model. A provider links each model ID only once.                   |
+| `modelOwner`       | Required. `organization` for a model of your organization, or `platform` for a shared model. |
+| `upstream`         | Optional. The model name that the service gets, when it is not the model `id`.               |
+| `reasoningEfforts` | Optional. Replaces the `reasoningEfforts` of the model for this provider.                    |
+| `serviceTiers`     | Optional. Replaces the `serviceTiers` of the model for this provider.                        |
+| `contextWindow`    | Optional. Replaces the `contextWindow` of the model for this provider.                       |
+| `maxOutputTokens`  | Optional. Replaces the `maxOutputTokens` of the model for this provider.                     |
+
+A provider of your organization can link your own models, and the shared models that the platform makes available to you. For any other model, OpenBot returns `404` with `ModelNotFound`.
 
 OpenBot answers with the provider. Its `id` starts with `prov_`. A provider ID is unique in the whole platform. A model selection names it as `provider`.
 The API key never comes back. The answer shows `apiKey: { set, hint }` instead. See [Platform](/docs/platform#secrets-never-come-back).
@@ -75,7 +117,7 @@ The API key never comes back. The answer shows `apiKey: { set, hint }` instead. 
 
 Reading needs `model_providers.read`. Changes need `model_providers.write`.
 
-The body of `PATCH` needs `expectedVersion`, the `version` that you read. If someone changed the provider after you read it, OpenBot returns `409` with `ModelProviderConflict`. Leave out `apiKey` to keep the current key.
+The body of `PATCH` needs `expectedVersion`, the `version` that you read. If someone changed the provider after you read it, OpenBot returns `409` with `ModelProviderConflict`. Leave out `apiKey` to keep the current key. Send `models` to replace all links of the provider.
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -84,7 +126,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/organization/model_providers/prov_4c1e...
 ```
 
-The next model call after a change uses the new key or endpoint. OpenBot builds each model once, and builds it again when its provider changes.
+The next model call after a change uses the new key, endpoint or links. OpenBot builds each model once, and builds it again when its provider changes.
 
 You cannot remove a provider while `defaultModel` or `helperModel` in the [organization settings](/docs/organization#settings) names it. OpenBot returns `409` with `ModelProviderInUse`. Change the setting first.
 
@@ -92,12 +134,12 @@ You cannot remove a provider while `defaultModel` or `helperModel` in the [organ
 
 ## Choose a model
 
-`GET /v1/organization/models` lists the models that your organization can use now. It needs `models.use`.
-The list has your own providers, and the shared providers that the platform makes available to you.
+`GET /v1/organization/model_catalog` lists the models that your organization can use now. It needs `models.use`.
+Each item is one model of one provider, with the values of the link already applied. A model that two providers link shows two times.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  https://api.example.com/v1/organization/models
+  https://api.example.com/v1/organization/model_catalog
 ```
 
 ```json
@@ -114,6 +156,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		{
 			"provider": "prov_4c1e...",
 			"id": "qwen3-32b",
+			"owner": "organization",
 			"name": "Qwen3 32B",
 			"reasoningEfforts": [],
 			"serviceTiers": [],
@@ -128,6 +171,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 }
 ```
 
+A model selection names both the provider and the model ID, as in `defaultModel` above.
 `defaultModel` is the model of a new Session. Set it with `defaultModel` in the [organization settings](/docs/organization#settings). When it is `null`, OpenBot uses the first model in the list.
 `helperModel` in the same settings sets the model that OpenBot uses for its own work: the [judge of Rules](/docs/rules) and [Agent memory](/docs/memory#agent-memory).
 

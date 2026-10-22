@@ -13,7 +13,15 @@ export type Provider = CoreProvider.Provider<
 	OpenAiClient.OpenAiClient
 >
 
-export const make = (defaults: Defaults = {}): Provider =>
+/** `upstreamModel` is the model name that the API gets. The default is the selected model ID. */
+export interface Options {
+	readonly upstreamModel?: string
+}
+
+export const make = ({
+	upstreamModel,
+	...defaults
+}: Defaults & Options = {}): Provider =>
 	new CoreProvider.Provider({
 		id: CoreProvider.Id.make("openai-compat"),
 		model: (selection) =>
@@ -22,7 +30,7 @@ export const make = (defaults: Defaults = {}): Provider =>
 					provider: selection.provider,
 					model: selection.model,
 					layer: OpenAiLanguageModel.layer({
-						model: selection.model,
+						model: upstreamModel ?? selection.model,
 						config: {
 							...defaults,
 							...Record.filter(
