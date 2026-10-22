@@ -115,6 +115,13 @@ export const run = (input: Input) =>
 				onNone: () => [],
 				onSome: (current) => current.document.appRestrictions,
 			}),
+			...Option.match(current, {
+				onNone: () => ({}),
+				onSome: (current) =>
+					current.document.codeMode === undefined
+						? {}
+						: { codeMode: current.document.codeMode },
+			}),
 		}
 		const outcome: Outcome = Option.isNone(current)
 			? (yield* settings.initializePlatform(document))

@@ -11,10 +11,12 @@ export default defineConfig({
 		DevelopmentMain: "src/app/DevelopmentMain.ts",
 		Migrate: "src/app/Migrate.ts",
 		Setup: "src/app/Setup.ts",
+		// The Code Mode worker. Nothing imports it, so it needs its own entry.
+		"code/Worker": "src/code/Worker.ts",
 	},
 	exports: {
 		...config.exports,
-		exclude: ["Main", "Migrate", "Setup", "DevelopmentMain"],
+		exclude: ["Main", "Migrate", "Setup", "DevelopmentMain", "code/Worker"],
 		customExports(exports) {
 			return Object.fromEntries(
 				Object.entries(exports).map(([key, value]) => {

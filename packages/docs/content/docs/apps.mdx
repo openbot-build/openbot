@@ -182,6 +182,10 @@ The model also gets three helper tools. They never add an App, sign in, or appro
 | `openbot_app_details` | Reads the public details and sources of one App by its Card URL.           |
 | `openbot_app_access`  | Lists the user's connections and their setup or sign-in needs.             |
 
+### Code Mode
+
+When the platform turns on [Code Mode](/docs/code-mode), the model also gets `openbot_code_api` and `openbot_run_code`. With them, the Agent writes a short program that calls these App tools. Each call in the program takes the same path as a normal App tool call.
+
 ### App operations
 
 OpenBot records each App call as an App operation. Read them with `GET /v1/sessions/:sessionId/app-operations` or `GET /v1/app-operations/:id`.

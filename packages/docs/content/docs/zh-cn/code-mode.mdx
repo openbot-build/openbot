@@ -1,0 +1,148 @@
+---
+title: Code Mode
+description: 让 Agent 写一段调用 App 工具的小程序。
+---
+
+在 **Code Mode** 中，Agent 不再一次调用一个 App 工具，而是写一段简短的 JavaScript 程序。程序调用这些工具，处理它们的结果，只把 Agent 需要的内容交回。这样可以节省 token，因为大的结果留在程序里，不会进入模型的上下文。程序也可以同时调用很多工具。
+
+Code Mode 不给 Agent 任何新的权限。程序中的每次 App 调用都经过和普通 App 工具调用相同的[能力检查](/zh-cn/docs/requests)。每次调用也都是一个普通的 [App operation](/zh-cn/docs/apps#app-操作)。
+
+| 词       | 含义                                                                       |
+| -------- | -------------------------------------------------------------------------- |
+| 程序     | Agent 写的 JavaScript 代码。它是一个 async 函数的函数体。                  |
+| 绑定     | 程序可以调用的一个 App 能力，比如 `apps.work_calendar.list_events`。       |
+| 沙箱     | 程序运行的封闭环境。里面没有网络、没有文件、没有定时器，也没有 Node.js。   |
+| Code run | 一个程序以及它所有 App 调用的记录。用 `GET /v1/code-runs/:id` 读取。       |
+| 重放     | 做出决定后，同一个程序的新一次运行。已经运行过的调用会给出保存下来的结果。 |
+
+---
+
+## 打开 Code Mode
+
+Code Mode 默认是关闭的。平台管理员在[平台设置](/zh-cn/docs/platform#平台设置)中打开它：
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":3,"codeMode":{"enabled":true,"timeoutMs":30000,"memoryMb":64,"outputBytes":65536}}' \
+  https://api.example.com/v1/platform/settings
+```
+
+| 字段          | 含义                                                                       |
+| ------------- | -------------------------------------------------------------------------- |
+| `enabled`     | 为 `true` 时，在有 App 连接的每个 Turn 中，Agent 都会得到 Code Mode 工具。 |
+| `timeoutMs`   | 程序一次运行可以用多长时间。程序等待 App 调用的时间不算在内。              |
+| `memoryMb`    | 一个程序可以使用多少内存。                                                 |
+| `outputBytes` | 程序返回值的最大大小，以及它最多保留多少日志文本。                         |
+
+这些限制保护的是服务器，而不是对 Agent 的限制。OpenBot 的每个实例都使用相同的限制，所以另一个实例再次运行程序时，程序的行为也相同。
+
+---
+
+## Agent 如何使用它
+
+Agent 会多得到两个工具。它们和普通的 App 工具并存，不会取代它们。
+
+| 工具               | 作用                                                        |
+| ------------------ | ----------------------------------------------------------- |
+| `openbot_code_api` | 显示绑定的 TypeScript 声明。Agent 可以按词语或按连接搜索。  |
+| `openbot_run_code` | 运行一个程序，交回它的结果、日志行，以及它的 App 调用列表。 |
+
+每个绑定有两部分：连接和能力。一个名为 "Work calendar" 的连接中有工具 `list-events`，它会变成 `apps.work_calendar.list_events`。`apps.call("work_calendar.list_events", args)` 的作用相同。资源和 prompt 也会变成读取用的绑定。一个程序可以是这样的：
+
+```js
+const [today, tomorrow] = await Promise.all([
+	apps.work_calendar.list_events({ day: "2026-10-23" }),
+	apps.work_calendar.list_events({ day: "2026-10-24" }),
+])
+const busy = [today, tomorrow].flatMap(
+	(result) => result.structuredContent.events,
+)
+console.log("events", busy.length)
+return busy.filter((event) => event.attendees > 10).map((event) => event.title)
+```
+
+工具调用会把 App 发来的结果交给程序。调用不成功时，程序会得到一个 `Error`：
+
+| Error 名称         | 原因                                                                          |
+| ------------------ | ----------------------------------------------------------------------------- |
+| `AppCallDenied`    | 决定者没有允许这次调用。                                                      |
+| `AppCallFailed`    | App 调用失败。`details.reason` 说明原因。                                     |
+| `AppInputRequired` | App 需要更多输入。请在代码之外回答 `details.operationId` 中的 App operation。 |
+
+程序可以捕获这些错误，然后继续运行。
+
+---
+
+## 当调用需要决定时
+
+有些 App 调用需要决定，比如会写入数据的工具。这时程序停在这次调用上，Turn 进入等待。[请求](/zh-cn/docs/requests)的 `app` 中是这次 App 调用，`code` 中是这个程序：
+
+```json
+{
+	"capability": { "action": "apps.call", "target": "conn-7/send_email" },
+	"toolCallId": "call-9",
+	"app": {
+		"id": "…",
+		"callId": "call-9:1",
+		"arguments": { "to": "team@example.com" }
+	},
+	"code": { "run": "8f1c…", "index": 1, "code": "const notes = await …" }
+}
+```
+
+做出决定后，OpenBot 从头再运行一次程序。已经运行过的每次调用都会给出保存下来的结果，OpenBot 不会再把它发给 App。然后程序会越过刚才等待的调用继续运行。程序结束时，Turn 得到结果并继续。
+
+只有程序每次都按相同的顺序做相同的调用，这种方式才行得通。所以程序在 `Date.now()` 中看到的是固定的时间，`Math.random()` 每次运行都给出相同的数字。如果程序做了和上次不同的调用，OpenBot 会以 `ReplayMismatch` 停止它。程序等待期间连接发生变化时，就可能出现这种情况。不会有任何调用被误发。
+
+---
+
+## 读取 code run
+
+`GET /v1/sessions/:sessionId/code-runs` 列出一个 Session 的程序。`GET /v1/code-runs/:id` 读取一个程序。两者都需要 `apps.use`。列表还需要对该 Session 的 `sessions.read`。你只能看到你自己的 Session 中的程序。
+
+```json
+{
+	"id": "8f1c…",
+	"session": "c81d…",
+	"turn": "t-77",
+	"callId": "call-9",
+	"status": "Completed",
+	"code": "const notes = await …",
+	"reason": "Send the notes to the team.",
+	"calls": [
+		{
+			"index": 0,
+			"binding": "notes.read_note",
+			"source": { "connectionName": "Notes", "name": "read_note", "…": "…" },
+			"operationId": "3a9e…",
+			"outcome": { "_tag": "Done", "result": { "_tag": "Completed", "…": "…" } }
+		}
+	],
+	"result": { "_tag": "Completed", "value": "sent", "logs": [] },
+	"createdAt": 1792486800000,
+	"updatedAt": 1792486801000
+}
+```
+
+| `status`    | 含义                                         |
+| ----------- | -------------------------------------------- |
+| `Running`   | 程序正在运行。                               |
+| `Waiting`   | 程序的一次调用正在等待决定。                 |
+| `Completed` | 程序已结束。`result.value` 是它的返回值。    |
+| `Failed`    | 程序没有正常结束。`result.reason` 说明原因。 |
+| `Cancelled` | 程序运行时 Turn 被中断了。                   |
+
+和 App operation 一样，OpenBot 在数据库中加密保存 code run。
+
+### 失败原因
+
+| `reason`         | 含义                                                      |
+| ---------------- | --------------------------------------------------------- |
+| `Error`          | 程序抛出了一个它没有捕获的错误。                          |
+| `Timeout`        | 程序用完了它的全部时间。                                  |
+| `Memory`         | 程序用完了它的全部内存。                                  |
+| `OutputTooLarge` | 程序返回的数据超过了 `outputBytes` 允许的大小。           |
+| `ReplayMismatch` | 程序做了和上次运行不同的调用。                            |
+| `Cancelled`      | 程序被停止了。                                            |
+| `Unavailable`    | OpenBot 无法运行或保存这个程序，或者 Code Mode 是关闭的。 |

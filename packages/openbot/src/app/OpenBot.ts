@@ -32,6 +32,8 @@ import { ResolvedConfiguration } from "../auth/Configuration.js"
 import * as BackendLayers from "./BackendLayers.ts"
 import * as AgentLayers from "../agents/AgentLayers.ts"
 import * as Coordinator from "../agents/Coordinator.ts"
+import * as CodeRuns from "../code/CodeRuns.ts"
+import * as Sandbox from "../code/Sandbox.ts"
 import * as Triggers from "../triggers/Triggers.ts"
 import * as TriggerWorker from "../triggers/Worker.ts"
 import * as Channels from "../channels/Channels.ts"
@@ -244,6 +246,8 @@ export const layer = <
 		AppPlugin.layer,
 		Operations.layer,
 	).pipe(
+		Layer.provideMerge(CodeRuns.layer),
+		Layer.provideMerge(Sandbox.layer),
 		Layer.provideMerge(Invocations.layer),
 		Layer.provideMerge(Connections.layer),
 		Layer.provideMerge(Capabilities.layer),

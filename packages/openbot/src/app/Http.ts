@@ -6,6 +6,7 @@ import { HttpApiBuilder, HttpApiScalar } from "effect/http-api"
 import * as AppViewHandlers from "../apps/ViewHttpHandlers.ts"
 import * as AppHandlers from "../apps/HttpHandlers.ts"
 import * as AppOperationHandlers from "../apps/OperationHttpHandlers.ts"
+import * as CodeRunHandlers from "../code/HttpHandlers.ts"
 import * as IndexHandlers from "../apps/IndexHttpHandlers.ts"
 import * as AppAuthorizationHandlers from "../apps/AuthorizationHttpHandlers.ts"
 import * as ConnectionHandlers from "../apps/ConnectionHttpHandlers.ts"
@@ -35,6 +36,7 @@ export const layerPlatform = (publicOrigin: string) =>
 					DeveloperHandlers.layer,
 					AppHandlers.layer,
 					AppOperationHandlers.layer,
+					CodeRunHandlers.layer,
 					AppViewHandlers.layer,
 					AppExperienceHandlers.layer,
 					IndexHandlers.layer,

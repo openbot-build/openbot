@@ -1,6 +1,6 @@
 import type { Session } from "@openbot-build/core"
 import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
-import type { AgentsApi, AppExecution } from "@openbot-build/api"
+import type { AgentsApi, AppExecution, CodeRunsApi } from "@openbot-build/api"
 import { Context, Effect, Layer, Option } from "effect"
 import { can } from "../authorization/Check.ts"
 import { Signal, Signals } from "../agents/Signals.ts"
@@ -24,6 +24,8 @@ export interface Attempt {
 	/** The deployment owner allows this without asking, for example a read-only App tool. */
 	readonly implicit?: boolean
 	readonly app?: AppExecution.Invocation
+	/** The Code Mode program that makes the call. Deciders see it with the request. */
+	readonly code?: CodeRunsApi.RequestCode
 	/** How the request waits, when the attempt needs one. */
 	readonly ask?: Ask
 }
@@ -129,6 +131,7 @@ export const make: Effect.Effect<
 						turn: current.turn,
 						toolCallId: attempt.toolCallId,
 						...(attempt.app === undefined ? {} : { app: attempt.app }),
+						...(attempt.code === undefined ? {} : { code: attempt.code }),
 						...(attempt.ask === undefined ? {} : { ask: attempt.ask }),
 						...(decided === undefined ? {} : { decided }),
 					})

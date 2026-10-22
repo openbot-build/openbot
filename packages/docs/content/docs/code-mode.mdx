@@ -1,0 +1,148 @@
+---
+title: Code Mode
+description: Let the Agent write a short program that calls App tools.
+---
+
+In **Code Mode**, the Agent writes a short JavaScript program instead of calling App tools one at a time. The program calls the tools, works with their results, and gives back only what the Agent needs. This saves tokens, because large results stay in the program and do not go into the context of the model. The program can also call many tools at once.
+
+Code Mode gives the Agent no new powers. Each App call in a program goes through the same [capability check](/docs/requests) as a normal App tool call. Each call is also a normal [App operation](/docs/apps#app-operations).
+
+| Word     | Meaning                                                                                         |
+| -------- | ----------------------------------------------------------------------------------------------- |
+| Program  | The JavaScript code that the Agent writes. It is the body of an async function.                 |
+| Binding  | One App capability that a program can call, such as `apps.work_calendar.list_events`.           |
+| Sandbox  | A closed place where the program runs. It has no network, no files, no timers and no Node.js.   |
+| Code run | One program and the record of all its App calls. Read it with `GET /v1/code-runs/:id`.          |
+| Replay   | A new run of the same program after a decision. Calls that already ran give their saved result. |
+
+---
+
+## Turn on Code Mode
+
+Code Mode is off by default. A platform admin turns it on in the [platform settings](/docs/platform#platform-settings):
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":3,"codeMode":{"enabled":true,"timeoutMs":30000,"memoryMb":64,"outputBytes":65536}}' \
+  https://api.example.com/v1/platform/settings
+```
+
+| Field         | What it is                                                                                     |
+| ------------- | ---------------------------------------------------------------------------------------------- |
+| `enabled`     | When `true`, Agents get the Code Mode tools in each Turn that has App connections.             |
+| `timeoutMs`   | How long one run of a program may take. Time that the program waits for App calls is not part. |
+| `memoryMb`    | How much memory one program may use.                                                           |
+| `outputBytes` | The largest return value of a program, and the most log text that it keeps.                    |
+
+These limits protect the server. They are not limits on the Agent. Every instance of OpenBot uses the same limits, so a program acts the same when another instance runs it again.
+
+---
+
+## How the Agent uses it
+
+The Agent gets two more tools. They are next to the normal App tools, and do not replace them.
+
+| Tool               | What it does                                                                                            |
+| ------------------ | ------------------------------------------------------------------------------------------------------- |
+| `openbot_code_api` | Shows the TypeScript declarations of the bindings. The Agent can search them by words or by connection. |
+| `openbot_run_code` | Runs a program and gives back its result, its log lines, and a list of its App calls.                   |
+
+Each binding has two parts: the connection and the capability. A connection called "Work calendar" with a tool `list-events` becomes `apps.work_calendar.list_events`. `apps.call("work_calendar.list_events", args)` does the same. Resources and prompts become read bindings too. A program could look like this:
+
+```js
+const [today, tomorrow] = await Promise.all([
+	apps.work_calendar.list_events({ day: "2026-10-23" }),
+	apps.work_calendar.list_events({ day: "2026-10-24" }),
+])
+const busy = [today, tomorrow].flatMap(
+	(result) => result.structuredContent.events,
+)
+console.log("events", busy.length)
+return busy.filter((event) => event.attendees > 10).map((event) => event.title)
+```
+
+A tool call gives the program the result that the App sent. The program gets an `Error` when a call does not work:
+
+| Error name         | Why                                                                                           |
+| ------------------ | --------------------------------------------------------------------------------------------- |
+| `AppCallDenied`    | A decider did not allow the call.                                                             |
+| `AppCallFailed`    | The App call failed. `details.reason` says why.                                               |
+| `AppInputRequired` | The App needs more input. Answer the App operation in `details.operationId` outside the code. |
+
+The program can catch these errors and go on.
+
+---
+
+## When a call needs a decision
+
+Some App calls need a decision, for example a tool that writes. Then the program stops at that call, and the Turn waits. The [request](/docs/requests) has the App call in `app`, and the program in `code`:
+
+```json
+{
+	"capability": { "action": "apps.call", "target": "conn-7/send_email" },
+	"toolCallId": "call-9",
+	"app": {
+		"id": "…",
+		"callId": "call-9:1",
+		"arguments": { "to": "team@example.com" }
+	},
+	"code": { "run": "8f1c…", "index": 1, "code": "const notes = await …" }
+}
+```
+
+After the decision, OpenBot runs the program again from the top. Each call that already ran gives its saved result, and OpenBot does not send it to the App again. The program then goes on past the call that waited. When it ends, the Turn gets the result and goes on.
+
+This works only when the program makes the same calls in the same order each time. So the program sees a fixed time in `Date.now()`, and `Math.random()` gives the same numbers in each run. If a program makes other calls than before, OpenBot stops it with `ReplayMismatch`. This can happen when a connection changed while the program waited. Nothing is sent by mistake.
+
+---
+
+## Read code runs
+
+`GET /v1/sessions/:sessionId/code-runs` lists the programs of a Session. `GET /v1/code-runs/:id` reads one. Both need `apps.use`. The list also needs `sessions.read` on the Session. You only see the programs of your own Sessions.
+
+```json
+{
+	"id": "8f1c…",
+	"session": "c81d…",
+	"turn": "t-77",
+	"callId": "call-9",
+	"status": "Completed",
+	"code": "const notes = await …",
+	"reason": "Send the notes to the team.",
+	"calls": [
+		{
+			"index": 0,
+			"binding": "notes.read_note",
+			"source": { "connectionName": "Notes", "name": "read_note", "…": "…" },
+			"operationId": "3a9e…",
+			"outcome": { "_tag": "Done", "result": { "_tag": "Completed", "…": "…" } }
+		}
+	],
+	"result": { "_tag": "Completed", "value": "sent", "logs": [] },
+	"createdAt": 1792486800000,
+	"updatedAt": 1792486801000
+}
+```
+
+| `status`    | Meaning                                                 |
+| ----------- | ------------------------------------------------------- |
+| `Running`   | The program runs now.                                   |
+| `Waiting`   | A call of the program waits for a decision.             |
+| `Completed` | The program ended. `result.value` is what it returned.  |
+| `Failed`    | The program did not end well. `result.reason` says why. |
+| `Cancelled` | The Turn was interrupted while the program ran.         |
+
+OpenBot keeps code runs sealed in the database, like App operations.
+
+### Failure reasons
+
+| `reason`         | Meaning                                                         |
+| ---------------- | --------------------------------------------------------------- |
+| `Error`          | The program threw an error that it did not catch.               |
+| `Timeout`        | The program used all of its time.                               |
+| `Memory`         | The program used all of its memory.                             |
+| `OutputTooLarge` | The program returned more data than `outputBytes` allows.       |
+| `ReplayMismatch` | The program made other calls than the last time it ran.         |
+| `Cancelled`      | The program was stopped.                                        |
+| `Unavailable`    | OpenBot could not run or save the program, or Code Mode is off. |

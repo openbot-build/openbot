@@ -37,6 +37,7 @@
 		"@effect/ai-typesafe": "4.0.5",
 		"@effect/platform-node": "4.0.5",
 		"@effect/sql-pg": "4.0.5",
+		"@jitl/quickjs-singlefile-mjs-release-sync": "0.32.0",
 		"@openbot-build/api": "workspace:*",
 		"@openbot-build/core": "workspace:*",
 		"@openbot-build/protocol": "workspace:*",
@@ -44,7 +45,8 @@
 		"drizzle-orm": "1.0.0-rc.5",
 		"effect": "4.0.5",
 		"jose": "6.2.12",
-		"pg": "8.23.1"
+		"pg": "8.23.1",
+		"quickjs-emscripten-core": "0.32.0"
 	},
 	"devDependencies": {
 		"@openbot-build/client": "workspace:*",

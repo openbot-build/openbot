@@ -17,6 +17,7 @@ import {
 	GrantScope,
 } from "./AgentsApi.ts"
 import * as AppExecution from "./AppExecution.ts"
+import { RequestCode } from "./CodeRunsApi.ts"
 
 /** Only a `pending` request waits for a decision. */
 export const RequestStatus = Schema.Literals([
@@ -49,6 +50,8 @@ export const CapabilityRequest = Schema.Struct({
 	turn: Turn.Id,
 	toolCallId: Schema.String,
 	app: Schema.optionalKey(AppExecution.Invocation),
+	/** The program that made the call, when the call came from Code Mode. */
+	code: Schema.optionalKey(RequestCode),
 	/**
 	 * Agents that agreed with the request but could not allow it themselves, from the bottom.
 	 * When a decider above them allows it, each one passes it on with its own scope.

@@ -91,6 +91,7 @@ export * as AppIndexApi from "./AppIndexApi.ts"
 export * as AppAuthorizationApi from "./AppAuthorizationApi.ts"
 export * as AppExecution from "./AppExecution.ts"
 export { AppOperationsApi } from "./AppOperationsApi.ts"
+export * as CodeRunsApi from "./CodeRunsApi.ts"
 export * as AppViewsApi from "./AppViewsApi.ts"
 export {
 	ExperienceInputInvalid,

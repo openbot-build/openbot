@@ -72,6 +72,7 @@ export default defineConfig({
 						"docs/rules",
 						"docs/memory",
 						"docs/apps",
+						"docs/code-mode",
 						"docs/app-index",
 						"docs/developer-tools",
 					],

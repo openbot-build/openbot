@@ -94,6 +94,32 @@ export const OrganizationCreation = Schema.Literals([
 ])
 export type OrganizationCreation = typeof OrganizationCreation.Type
 
+/**
+ * The limits of Code Mode. They protect the host, not the Agent. Every instance
+ * uses the same limits, so a program acts the same when another instance runs it again.
+ */
+export const CodeMode = Schema.Struct({
+	/** When false, Agents do not get the Code Mode tools. */
+	enabled: Schema.Boolean,
+	/** How long one run of a program may take, in milliseconds. Time spent waiting for decisions does not count. */
+	timeoutMs: Schema.Int.check(
+		Schema.isBetween({ minimum: 100, maximum: 600_000 }),
+	),
+	/** How much memory a program may use, in megabytes. */
+	memoryMb: Schema.Int.check(Schema.isBetween({ minimum: 8, maximum: 1024 })),
+	/** The largest return value of a program, and the most log text, in bytes. */
+	outputBytes: Schema.Int.check(
+		Schema.isBetween({ minimum: 1024, maximum: 4 * 1024 * 1024 }),
+	),
+})
+export type CodeMode = typeof CodeMode.Type
+export const codeModeDefaults: CodeMode = {
+	enabled: false,
+	timeoutMs: 30_000,
+	memoryMb: 64,
+	outputBytes: 64 * 1024,
+}
+
 export const PlatformSettings = Schema.Struct({
 	version: Version,
 	/**
@@ -112,6 +138,7 @@ export const PlatformSettings = Schema.Struct({
 	policyCeiling: CeilingPolicies,
 	/** Apps that the App Index hides, with the reason. */
 	appRestrictions: Schema.Array(Restriction).check(Schema.isMaxLength(1000)),
+	codeMode: CodeMode,
 	updatedAt: Schema.String,
 })
 export type PlatformSettings = typeof PlatformSettings.Type
@@ -124,6 +151,7 @@ export const UpdatePlatformSettingsRequest = Schema.Struct({
 	appRestrictions: Schema.optionalKey(
 		Schema.Array(Restriction).check(Schema.isMaxLength(1000)),
 	),
+	codeMode: Schema.optionalKey(CodeMode),
 })
 export type UpdatePlatformSettingsRequest =
 	typeof UpdatePlatformSettingsRequest.Type
