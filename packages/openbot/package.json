@@ -18,7 +18,8 @@
 	},
 	"exports": {
 		".": "./dist/index.js",
-		"./StorageMigration": "./dist/database/Migrations.js"
+		"./StorageMigration": "./dist/database/Migrations.js",
+		"./Development": "./dist/Development.js"
 	},
 	"scripts": {
 		"build": "tsdown",

@@ -14,7 +14,7 @@ export default defineConfig({
 	},
 	exports: {
 		...config.exports,
-		exclude: ["Main", "Migrate", "Setup", "Development", "DevelopmentMain"],
+		exclude: ["Main", "Migrate", "Setup", "DevelopmentMain"],
 		customExports(exports) {
 			return Object.fromEntries(
 				Object.entries(exports).map(([key, value]) => {

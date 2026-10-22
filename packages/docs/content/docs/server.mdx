@@ -48,6 +48,8 @@ The program still needs a platform. Run the setup program once before people use
 | `EnvironmentConfiguration`                                  | Reads the instance settings from environment variables.                                                      |
 | `Auth`, `Sessions`, `AppHost`, `AppPlugin`, `Configuration` | Service types for advanced setups.                                                                           |
 
+The subpath `@openbot-build/openbot/Development` exports the development server. See [Run the development server](#run-the-development-server).
+
 ---
 
 ## Options
@@ -194,6 +196,40 @@ NodeRuntime.runMain(
 	),
 )
 ```
+
+## Run the development server
+
+`pnpm dev` runs the development server. It has a local test account, simulated models, and a simulated App. A project that builds on OpenBot can run the same server from its own program:
+
+```ts
+import { NodeRuntime } from "@effect/platform-node"
+import { Settings } from "@openbot-build/api"
+import { EnvironmentConfiguration } from "@openbot-build/openbot"
+import * as Development from "@openbot-build/openbot/Development"
+import { Config, Effect, Layer } from "effect"
+
+NodeRuntime.runMain(
+	Effect.gen(function* () {
+		const settings = yield* EnvironmentConfiguration.load
+		const publicOrigin = yield* Config.schema(
+			Settings.PublicOrigin,
+			"OPENBOT_DEV_PUBLIC_ORIGIN",
+		)
+		return yield* Layer.launch(
+			Development.layer({
+				...settings,
+				auth: {
+					mode: "development",
+					publicOrigin,
+					secret: Development.developmentSecret(settings.secretKeys),
+				},
+			}),
+		)
+	}),
+)
+```
+
+`Development.layer` writes the platform settings itself, so it needs no setup program. `Development.developmentSecret` makes the sign-in secret from the first secret key, so it stays the same after a restart. Never use the development server in production. Everyone who can reach it can sign in.
 
 ## Send error logs to your own service
 
