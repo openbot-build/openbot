@@ -271,9 +271,143 @@ test("old models become language models, and old organization settings get no de
 				assert.deepEqual(
 					settings.map((row) => [row.scope_id, JSON.parse(row.document)]),
 					[
-						["org_a", { defaultModel: null, decisionModel: null }],
-						["org_b", { decisionModel: selection }],
+						[
+							"org_a",
+							{ decisionModel: null, rulesModel: null, agentMemoryModel: null },
+						],
+						[
+							"org_b",
+							{
+								decisionModel: selection,
+								rulesModel: null,
+								agentMemoryModel: null,
+							},
+						],
 						["platform", { publicOrigin: "https://a.example" }],
+					],
+				)
+			}),
+		)
+	} finally {
+		await rm(before, { recursive: true, force: true })
+		await database.close()
+	}
+})
+
+test("the old default model moves to Agents without a model, and the old helper model moves to rulesModel and agentMemoryModel", async () => {
+	const database = await PostgresTest.start()
+	const before = await mkdtemp(join(tmpdir(), "openbot-migrations-"))
+	await using runtime = ManagedRuntime.make(
+		DatabasePostgres.layer({ databaseUrl: Redacted.make(database.url) }).pipe(
+			Layer.provide(NodeServices.layer),
+		),
+	)
+	const selection = (model: string) => ({
+		_tag: "Config.Selection",
+		provider: "prov_a",
+		model,
+	})
+	const agent = (id: string, organizationId: string, extra: object) => ({
+		kind: "agent",
+		organization_id: organizationId,
+		id,
+		owner: "user_a",
+		scope: "user_a",
+		status: "main",
+		body: JSON.stringify({ id, name: id, ...extra }),
+	})
+	try {
+		for (const name of await readdir(migrations))
+			if (name < "20261022072957_move_default_model")
+				await cp(join(migrations, name), join(before, name), {
+					recursive: true,
+				})
+		await runtime.runPromise(
+			Effect.gen(function* () {
+				const db = yield* makeWithDefaults()
+				yield* migrate(db, { migrationsFolder: before })
+				const sql = yield* PgClient.PgClient
+				const settings = [
+					[
+						"org_a",
+						{
+							defaultModel: selection("big"),
+							helperModel: null,
+							decisionModel: null,
+						},
+					],
+					[
+						"org_b",
+						{
+							defaultModel: selection("big"),
+							helperModel: selection("small"),
+							decisionModel: null,
+						},
+					],
+					[
+						"org_c",
+						{ defaultModel: null, helperModel: null, decisionModel: null },
+					],
+				] as const
+				for (const [id, document] of settings)
+					yield* sql`insert into openbot_settings ${sql.insert({
+						scope_kind: "organization",
+						scope_id: id,
+						document: JSON.stringify(document),
+						version: 1,
+						updated_at: 1,
+					})}`
+				for (const row of [
+					agent("agent_plain", "org_a", {}),
+					agent("agent_own", "org_a", { model: selection("own") }),
+					agent("agent_none", "org_c", {}),
+				])
+					yield* sql`insert into openbot_agent_records ${sql.insert(row)}`
+			}),
+		)
+		await runtime.runPromise(DatabasePostgres.migrate)
+		await runtime.runPromise(
+			Effect.gen(function* () {
+				const sql = yield* PgClient.PgClient
+				const agents = yield* sql<{
+					readonly id: string
+					readonly body: string
+				}>`select id, body from openbot_agent_records order by id`
+				assert.deepEqual(
+					agents.map((row) => [row.id, JSON.parse(row.body).model]),
+					[
+						["agent_none", undefined],
+						["agent_own", selection("own")],
+						["agent_plain", selection("big")],
+					],
+				)
+				const settings = yield* sql<{
+					readonly scope_id: string
+					readonly document: string
+				}>`select scope_id, document from openbot_settings order by scope_id`
+				assert.deepEqual(
+					settings.map((row) => [row.scope_id, JSON.parse(row.document)]),
+					[
+						[
+							"org_a",
+							{
+								decisionModel: null,
+								rulesModel: selection("big"),
+								agentMemoryModel: selection("big"),
+							},
+						],
+						[
+							"org_b",
+							{
+								decisionModel: null,
+								rulesModel: selection("small"),
+								agentMemoryModel: selection("small"),
+							},
+						],
+						[
+							"org_c",
+							{ decisionModel: null, rulesModel: null, agentMemoryModel: null },
+						],
 					],
 				)
 			}),

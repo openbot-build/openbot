@@ -292,16 +292,12 @@ test(
 					[sharedProvider.id, "large", ["low", "high"], undefined],
 				],
 			)
-			assert.deepEqual(aliceModels.defaultModel, {
-				_tag: "Config.Selection",
-				provider: provider.id,
-				model: "small",
-			})
+			// There is no default model. Each use names its own model.
+			assert.equal("defaultModel" in aliceModels, false)
 			const bobModels = await (
 				await account(bob.session, "/v1/organization/model_catalog")
 			).json()
 			assert.deepEqual(bobModels.providers, [])
-			assert.equal(bobModels.defaultModel, null)
 
 			// A model cannot go while a provider of its owner links it.
 			const linkedModel = await account(
@@ -341,13 +337,13 @@ test(
 			)
 			assert.equal(after.version, provider.version + 2)
 
-			// A provider cannot go while the default model names it.
+			// A provider cannot go while the Rules model names it.
 			const settings = await (
 				await account(alice.session, "/v1/organization/settings")
 			).json()
 			await account(alice.session, "/v1/organization/settings", "PATCH", {
 				expectedVersion: settings.version,
-				defaultModel: {
+				rulesModel: {
 					_tag: "Config.Selection",
 					provider: provider.id,
 					model: "small",
@@ -480,7 +476,7 @@ test(
 			assert.equal(gateway.status, 200, await gateway.clone().text())
 			const both = await gateway.json()
 
-			// The catalog shows the type of each model. A decision model is never the default model.
+			// The catalog shows the type of each model.
 			const catalog = await (
 				await account(alice.session, "/v1/organization/model_catalog")
 			).json()
@@ -498,11 +494,6 @@ test(
 					[both.id, "jev-latest", "decision"],
 				],
 			)
-			assert.deepEqual(catalog.defaultModel, {
-				_tag: "Config.Selection",
-				provider: both.id,
-				model: "chat",
-			})
 			assert.equal(catalog.decisionModel, null)
 
 			// Each setting takes only the right type of model.
@@ -523,8 +514,8 @@ test(
 			for (const changes of [
 				{ decisionModel: selection(both.id, "chat") },
 				{ decisionModel: selection(decisions.id, "missing") },
-				{ defaultModel: selection(both.id, "jev-latest") },
-				{ helperModel: selection(decisions.id, "jev-latest") },
+				{ rulesModel: selection(both.id, "jev-latest") },
+				{ agentMemoryModel: selection(decisions.id, "jev-latest") },
 			]) {
 				const refused = await update(changes)
 				assert.equal(refused.status, 400, JSON.stringify(changes))

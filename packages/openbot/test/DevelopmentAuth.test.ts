@@ -3,6 +3,7 @@ import { mock, test } from "node:test"
 import { NodeServices } from "@effect/platform-node"
 import { Auth, DatabasePostgres, Server } from "@openbot-build/openbot"
 import { AuthApi, Caller, Identity, OpenBotApi } from "@openbot-build/api"
+import { Config, Model, Provider } from "@openbot-build/core"
 import { Effect, Layer, ManagedRuntime, Option, Redacted, Schema } from "effect"
 import { HttpRouter, HttpServer } from "effect/http"
 import {
@@ -74,9 +75,27 @@ test(
 			},
 		)
 		t.after(() => network.mock.restore())
+		const model = Config.Selection.make({
+			provider: Provider.Id.make("test"),
+			model: Model.Id.make("answer"),
+		})
 		const options = {
 			host: "127.0.0.1",
 			port: 0,
+			// A Session needs a model. This test runs no Turn, so the model never answers.
+			builtinModels: {
+				providers: [{ id: model.provider, name: "Test" }],
+				models: [
+					Config.Model.make({
+						provider: model.provider,
+						id: model.model,
+						name: "Answer",
+						reasoningEfforts: [],
+						serviceTiers: [],
+					}),
+				],
+				resolve: () => Effect.die("This test runs no Turn."),
+			},
 			databaseUrl: Redacted.make(database.url),
 			secretKeys: Redacted.make(
 				"test:" +
@@ -192,6 +211,7 @@ test(
 				headers: { ...accountHeaders, "content-type": "application/json" },
 				body: JSON.stringify({
 					title: "Saved development Session",
+					settings: { model },
 				}),
 			})
 			assert.equal(created.status, 201)

@@ -415,11 +415,25 @@ test(
 			})
 			assert.equal(cookieSessions.status, 200)
 			assert.deepEqual(await cookieSessions.json(), [])
-			const createdSession = await session(
+			// A Session needs a model from its settings or its Agent. There is no default model.
+			const withoutModel = await session(
 				alice.session,
 				"/v1/sessions",
 				"POST",
 				{ title: "Saved" },
+			)
+			assert.equal(withoutModel.status, 400)
+			assert.equal((await withoutModel.json()).reason, "missing")
+			const model = {
+				_tag: "Config.Selection",
+				provider: "test",
+				model: "answer",
+			}
+			const createdSession = await session(
+				alice.session,
+				"/v1/sessions",
+				"POST",
+				{ title: "Saved", settings: { model } },
 			)
 			assert.equal(createdSession.status, 201)
 			const first: { session: { id: string; head: string; revision: number } } =
@@ -478,7 +492,9 @@ test(
 				[],
 			)
 			const bobConversation: { session: { id: string; head: string } } = await (
-				await session(bobSession, "/v1/sessions", "POST", {})
+				await session(bobSession, "/v1/sessions", "POST", {
+					settings: { model },
+				})
 			).json()
 			assert.equal(
 				(

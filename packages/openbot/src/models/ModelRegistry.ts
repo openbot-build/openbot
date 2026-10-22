@@ -52,30 +52,29 @@ export class ModelRegistry extends Context.Service<
 		readonly catalog: (
 			organizationId: string,
 		) => Effect.Effect<Catalog, Config.ModelConfigurationError>
-		/** The API form of the catalog, with the default model. */
+		/** The API form of the catalog. */
 		readonly view: (
 			organizationId: string,
 		) => Effect.Effect<
 			ModelProvidersApi.ModelCatalog,
 			Config.ModelConfigurationError
 		>
-		/** The default model of a new Session in the organization. */
-		readonly defaultSelection: (
-			organizationId: string,
-		) => Effect.Effect<
-			Option.Option<Config.Selection>,
-			Config.ModelConfigurationError
-		>
-		/** Leave out the selection for the default model of the organization. */
 		readonly resolve: (
 			organizationId: string,
-			selection: Config.Selection | undefined,
+			selection: Config.Selection,
 		) => Effect.Effect<
 			LanguageModel.LanguageModel,
 			Config.ModelConfigurationError
 		>
-		/** The helper model of the organization, or its default model. */
-		readonly helper: (
+		/** The model that judges Rules. It fails when the organization has none. */
+		readonly rulesModel: (
+			organizationId: string,
+		) => Effect.Effect<
+			LanguageModel.LanguageModel,
+			Config.ModelConfigurationError
+		>
+		/** The model that learns Agent memory. It fails when the organization has none. */
+		readonly agentMemoryModel: (
 			organizationId: string,
 		) => Effect.Effect<
 			LanguageModel.LanguageModel,
@@ -335,17 +334,6 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 					),
 				)
 
-		const defaultSelection = (organizationId: string) =>
-			Effect.gen(function* () {
-				const current = yield* organizationSettings(organizationId)
-				if (current.document.defaultModel !== null)
-					return Option.some(current.document.defaultModel)
-				const first = (yield* catalog(organizationId)).models[0]
-				return Option.map(Option.fromNullishOr(first), (model) =>
-					Config.Selection.make({ provider: model.provider, model: model.id }),
-				)
-			})
-
 		const build = (
 			{ provider, model: offered }: Offer,
 			selection: Config.Selection,
@@ -405,16 +393,8 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				)
 			})
 
-		const resolve = (
-			organizationId: string,
-			requested: Config.Selection | undefined,
-		) =>
+		const resolve = (organizationId: string, selection: Config.Selection) =>
 			Effect.gen(function* () {
-				const selection =
-					requested ??
-					Option.getOrUndefined(yield* defaultSelection(organizationId))
-				if (selection === undefined)
-					return yield* unavailable("The organization has no model.")
 				if (
 					builtin !== undefined &&
 					builtin.providers.some(
@@ -463,9 +443,24 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				return yield* build(offer, selection)
 			})
 
+		/** The model that one setting of the organization names. */
+		const setting = (
+			organizationId: string,
+			name: "rulesModel" | "agentMemoryModel",
+		) =>
+			Effect.gen(function* () {
+				const selection = (yield* organizationSettings(organizationId))
+					.document[name]
+				if (selection === null)
+					return yield* new Config.ModelConfigurationError({
+						reason: "missing",
+						message: `The organization has no ${name}.`,
+					})
+				return yield* resolve(organizationId, selection)
+			})
+
 		return ModelRegistry.of({
 			catalog,
-			defaultSelection,
 			view: (organizationId) =>
 				Effect.gen(function* () {
 					const current = yield* stored(organizationId)
@@ -516,23 +511,15 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 									: { maxOutputTokens: model.maxOutputTokens }),
 							})),
 						],
-						defaultModel: Option.getOrNull(
-							yield* defaultSelection(organizationId),
-						),
 						decisionModel: (yield* organizationSettings(organizationId))
 							.document.decisionModel,
 					}
 				}),
 			resolve,
 			decision,
-			helper: (organizationId) =>
-				Effect.gen(function* () {
-					const current = yield* organizationSettings(organizationId)
-					return yield* resolve(
-						organizationId,
-						current.document.helperModel ?? undefined,
-					)
-				}),
+			rulesModel: (organizationId) => setting(organizationId, "rulesModel"),
+			agentMemoryModel: (organizationId) =>
+				setting(organizationId, "agentMemoryModel"),
 		})
 	})
 

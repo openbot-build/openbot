@@ -228,8 +228,6 @@ export const ModelCatalog = Schema.Struct({
 			maxOutputTokens: Schema.optionalKey(PositiveInt),
 		}),
 	),
-	/** The model of a new Session, or null when there is no model. */
-	defaultModel: Schema.NullOr(Config.Selection),
 	/** The decision model of the organization, or null when it has none. */
 	decisionModel: Schema.NullOr(Config.Selection),
 })
@@ -247,7 +245,7 @@ export class ModelProviderInvalid extends Schema.TaggedError<ModelProviderInvali
 	"ModelProviderInvalid",
 	{ message: Schema.String },
 ) {}
-/** A setting still names the provider, such as the default model. Change the setting first. */
+/** A setting still names the provider, such as the Rules model. Change the setting first. */
 export class ModelProviderInUse extends Schema.TaggedError<ModelProviderInUse>()(
 	"ModelProviderInUse",
 	{ providerId: Schema.String },

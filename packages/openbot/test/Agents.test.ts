@@ -451,12 +451,25 @@ test(
 		try {
 			const { send, json, until } = client(host)
 			const alice = await host.login("agents-carol")
-			const main = (
+			const listed = (
 				await json(
 					Schema.Array(AgentsApi.Agent),
 					send(alice.session, "/v1/agents"),
 				)
 			)[0]!
+			// A new Agent gets the model of the Agent that makes it.
+			const mainModel = {
+				_tag: "Config.Selection",
+				provider: "fixture",
+				model: "fixture-model",
+			} as const
+			const main = await json(
+				AgentsApi.Agent,
+				send(alice.session, "/v1/agents/" + listed.id, "PATCH", {
+					expected: listed.revision,
+					model: mainModel,
+				}),
+			)
 			const created = await json(
 				SessionView,
 				send(alice.session, "/v1/sessions", "POST", {}),
@@ -510,6 +523,12 @@ test(
 			assert.equal(sessionAgents.length, 1)
 			const helper = sessionAgents[0]!
 			assert.equal(helper.kind, "session")
+			assert.deepEqual(
+				helper.model === undefined
+					? undefined
+					: { ...helper.model, _tag: "Config.Selection" },
+				mainModel,
+			)
 			assert.deepEqual(helper.owner, {
 				_tag: "Session",
 				userId: alice.identity.userId,
@@ -612,6 +631,24 @@ test(
 		try {
 			const { send, json, until } = client(host)
 			const alice = await host.login("agents-dana")
+			// The judge reads Rules only with the Rules model of the organization.
+			const settings = await (
+				await send(alice.session, "/v1/organization/settings")
+			).json()
+			const configured = await send(
+				alice.session,
+				"/v1/organization/settings",
+				"PATCH",
+				{
+					expectedVersion: settings.version,
+					rulesModel: {
+						_tag: "Config.Selection",
+						provider: "fixture",
+						model: "fixture-model",
+					},
+				},
+			)
+			assert.equal(configured.status, 200, await configured.clone().text())
 			const main = (
 				await json(
 					Schema.Array(AgentsApi.Agent),

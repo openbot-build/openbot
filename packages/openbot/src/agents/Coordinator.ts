@@ -676,7 +676,7 @@ export const layer = Layer.effectDiscard(
 				const found = yield* organization
 					.member(member.organizationId, member.userId)
 					.pipe(Effect.orElseSucceed(() => Option.none()))
-				const model = yield* helper.model(member.organizationId)
+				const model = yield* helper.agentMemory(member.organizationId)
 				yield* memories
 					.consolidate(member.organizationId, {
 						agentId: agent.value.id,

@@ -79,4 +79,4 @@ You can also keep a Rule when you answer a request: send `rule` with the answer.
 
 ### The judge model
 
-The judge uses the **helper model**, a model that OpenBot uses for its own work. It is `helperModel` in the [organization settings](/docs/organization#settings). By default it is the default model of the organization. OpenBot keeps each judge answer for the same Rules and the same capability, so the judge does not run again for the same question.
+The judge uses the **Rules model**. It is `rulesModel` in the [organization settings](/docs/organization#settings). It has no default. When it is `null`, the judge gives no answer, so a person or an Agent decides. OpenBot keeps each judge answer for the same Rules and the same capability, so the judge does not run again for the same question.

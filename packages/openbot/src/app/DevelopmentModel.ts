@@ -41,7 +41,7 @@ export const selection = Config.Selection.make({
 	model: Model.Id.make("mock-text" satisfies Scenario),
 })
 
-/** The first model is the default of a new Session. */
+/** The simulated models of a development platform. */
 export const catalog = Effect.succeed({
 	providers: [{ id: provider, name: "Development scenarios (simulated)" }],
 	models: [
@@ -491,6 +491,9 @@ export const make = Effect.gen(function* () {
 		sessions: {
 			runtime: { toolkit },
 			layerExecution: () => layerTools,
+			// A development platform is a simulation, so it gives each new Session a
+			// simulated model. A real platform has no such default.
+			defaults: Effect.succeed({ model: selection }),
 		},
 	}
 })

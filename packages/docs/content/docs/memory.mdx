@@ -199,7 +199,7 @@ Facts that matter for one task only stay in Session memory.
 
 ### How it learns
 
-When a Turn of the Agent completes and its queue is empty, OpenBot asks the helper model which lasting experience to keep. The helper model is `helperModel` in the [organization settings](/docs/organization#settings). To stop this learning, set `agentMemory` to `false` there. Review Sessions do not teach anything. A Session whose `generate` switch is off does not teach its Agent either.
+When a Turn of the Agent completes and its queue is empty, OpenBot asks the Agent memory model which lasting experience to keep. This model is `agentMemoryModel` in the [organization settings](/docs/organization#settings). It has no default. When it is `null`, Agents learn nothing. To stop this learning, set `agentMemory` to `false` there. Review Sessions do not teach anything. A Session whose `generate` switch is off does not teach its Agent either.
 
 - Each entry names its sources: Session and Item IDs.
 - Tool results from Apps are outside data. An entry that only App results support is never kept.

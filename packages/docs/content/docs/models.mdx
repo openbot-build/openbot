@@ -22,7 +22,7 @@ An organization can use a model of a provider only when it may use both the prov
 
 Each model has one of two types:
 
-- A `language` model writes text and calls tools. It runs Sessions and does the work of the helper model.
+- A `language` model writes text and calls tools. It runs Sessions, judges Rules and learns Agent memory.
 - A `decision` model only picks an answer from a fixed list. It does not write text. Jev from TypeSafe is an example. See [Decision model](#decision-model).
 
 When you run OpenBot from code, you can also give built-in models. See [Built-in models](#built-in-models).
@@ -139,7 +139,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 The next model call after a change uses the new key, endpoint or links. OpenBot builds each model once, and builds it again when its provider changes.
 
-You cannot remove a provider while `defaultModel`, `helperModel` or `decisionModel` in the [organization settings](/docs/organization#settings) names it. OpenBot returns `409` with `ModelProviderInUse`. Change the setting first.
+You cannot remove a provider while `rulesModel`, `agentMemoryModel` or `decisionModel` in the [organization settings](/docs/organization#settings) names it. OpenBot returns `409` with `ModelProviderInUse`. Change the setting first.
 
 ---
 
@@ -175,19 +175,33 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 			"contextWindow": 131072
 		}
 	],
-	"defaultModel": {
-		"_tag": "Config.Selection",
-		"provider": "prov_4c1e...",
-		"model": "qwen3-32b"
-	},
 	"decisionModel": null
 }
 ```
 
-A model selection names both the provider and the model ID, as in `defaultModel` above.
-`defaultModel` is the model of a new Session. Set it with `defaultModel` in the [organization settings](/docs/organization#settings). When it is `null`, OpenBot uses the first model in the list.
-`helperModel` in the same settings sets the model that OpenBot uses for its own work: the [judge of Rules](/docs/rules) and [Agent memory](/docs/memory#agent-memory).
-`defaultModel` and `helperModel` must be `language` models. The catalog gives the `type` of each model, and a Session can choose only `language` models.
+A model selection names both the provider and the model ID:
+
+```json
+{ "_tag": "Config.Selection", "provider": "prov_4c1e...", "model": "qwen3-32b" }
+```
+
+OpenBot never picks a model for you. There is no default model. Each use names its own model:
+
+- **A new Session** uses `settings.model` from the request. Without it, the Session uses the `model` of its [Agent](/docs/agents). When neither gives a model, OpenBot returns `400` with `SessionModelInvalid` and the reason `missing`. Your Main Agent has no model at first, so set its `model` with `PATCH /v1/agents/:id`.
+- **The judge of [Rules](/docs/rules)** uses `rulesModel` in the [organization settings](/docs/organization#settings). When it is `null`, the judge gives no answer, so a person or an Agent decides.
+- **[Agent memory](/docs/memory#agent-memory)** uses `agentMemoryModel` in the same settings. When it is `null`, Agents learn nothing.
+
+`rulesModel` and `agentMemoryModel` must be `language` models. The catalog gives the `type` of each model, and a Session can choose only `language` models.
+
+Older versions of OpenBot had `defaultModel` and `helperModel`. When you upgrade, OpenBot gives the old `defaultModel` to each Agent that has no model. `rulesModel` and `agentMemoryModel` get the old helper model: `helperModel`, or else `defaultModel`. When both were `null`, the new values stay empty, and you must set them.
+
+For example, to give your Main Agent a model, send its current `revision` as `expected`:
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"expected":0,"model":{"_tag":"Config.Selection","provider":"prov_4c1e...","model":"qwen3-32b"}}' \
+  https://api.example.com/v1/agents/$AGENT_ID
+```
 
 A Session can save its own choice. Send the current Session revision as `expected`:
 
@@ -236,7 +250,7 @@ No part of OpenBot asks the decision model yet.
 
 ## Run without a model
 
-An organization without any provider can still make, read, rename, fork, and delete Sessions.
+An organization without any provider can still read, rename, fork, and delete the Sessions that it has. It cannot make a new Session, because a new Session needs a model. See [Choose a model](#choose-a-model).
 
 Work that needs a model fails with status `503` and the error `SessionExecutionUnavailable`. This includes:
 
