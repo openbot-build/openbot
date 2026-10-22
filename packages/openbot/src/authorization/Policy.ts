@@ -53,6 +53,7 @@ export const resourceKey = (target: {
 		case "agent":
 		case "trigger":
 		case "model":
+		case "channel":
 			return child(organizationKey(subject.organizationId))
 	}
 }

@@ -21,6 +21,7 @@ import * as MemoryOperations from "../plugins/memory/MemoryOperations.ts"
 import * as MemoryPlugin from "../plugins/memory/MemoryPlugin.ts"
 import * as Todos from "../plugins/work/Todos.ts"
 import { WorkPlugin } from "../plugins/work/WorkPlugin.ts"
+import { ChannelPlugin } from "../plugins/channels/ChannelPlugin.ts"
 import {
 	Array,
 	Cause,
@@ -45,7 +46,6 @@ import {
 	SessionModelInvalid,
 	type SessionResponse,
 	type SessionView,
-	type StartTurnRequest,
 } from "@openbot-build/api"
 import type { PgClient } from "@effect/sql-pg"
 import { makeWithDefaults } from "drizzle-orm/effect-postgres"
@@ -55,6 +55,7 @@ import {
 	type Options,
 	type Instance,
 	type ExecutionServices,
+	type SendInput,
 	type ServiceError,
 } from "./Sessions.ts"
 import { publicError, inputPrompt, response } from "./ResponseMapping.ts"
@@ -123,6 +124,7 @@ export const make = <
 		const appPlugin = yield* Effect.serviceOption(AppPlugin)
 		const agentPlugin = yield* Effect.serviceOption(AgentPlugin)
 		const workPlugin = yield* Effect.serviceOption(WorkPlugin)
+		const channelPlugin = yield* Effect.serviceOption(ChannelPlugin)
 		const modelFor = (view: Session.View, turn?: Turn.Record) =>
 			options.resolveModel === undefined
 				? Effect.serviceOption(LanguageModel.LanguageModel).pipe(
@@ -298,7 +300,8 @@ export const make = <
 							return publish(
 								Signal.TurnChanged({
 									organizationId: state.chain.organizationId,
-									userId: state.chain.userId,
+									// The member whose Sessions hold this Session.
+									userId: SessionHost.ownerOf(state.chain),
 									session: view.session.id,
 									turn: turn.id,
 									status: turn.status._tag,
@@ -364,23 +367,29 @@ export const make = <
 					),
 			})
 		// The Agent plugin runs inside the App plugin, so it sees every tool of the Turn.
-		// The work plugin runs inside the Agent plugin, so it sees the current Agent.
+		// The work and Channel plugins run inside the Agent plugin, so they see the current Agent.
+		// The plugins add tools at run time with JSON Schema parameters. TypeScript cannot see
+		// that their merged tool types fit the type of the plugin they join.
+		const withInner = (agent: ReturnType<typeof agentPluginFor>) => {
+			let inner = agent
+			if (Option.isSome(workPlugin))
+				inner = PluginComposition.merge(
+					inner,
+					workPlugin.value.forOwner({ read: (id) => store.read(id), store }),
+				) as unknown as typeof inner
+			if (Option.isSome(channelPlugin))
+				inner = PluginComposition.merge(
+					inner,
+					channelPlugin.value.forOwner({ read: (id) => store.read(id) }),
+				) as unknown as typeof inner
+			return inner
+		}
 		const hostPlugin =
 			options.owner === undefined || Option.isNone(agentPlugin)
 				? apps
-				: // The plugins add tools at run time with JSON Schema parameters. TypeScript
-					// cannot see that their merged tool types fit the App tool type.
-					(PluginComposition.merge(
+				: (PluginComposition.merge(
 						apps,
-						Option.isNone(workPlugin)
-							? agentPluginFor(agentPlugin.value, options.owner)
-							: PluginComposition.merge(
-									agentPluginFor(agentPlugin.value, options.owner),
-									workPlugin.value.forOwner({
-										read: (id) => store.read(id),
-										store,
-									}),
-								),
+						withInner(agentPluginFor(agentPlugin.value, options.owner)),
 					) as unknown as typeof apps)
 		const runtime = yield* SessionRuntime.make({
 			store,
@@ -468,6 +477,7 @@ export const make = <
 						? {}
 						: { planApproval: input.planApproval }),
 					...(input.trigger === undefined ? {} : { trigger: input.trigger }),
+					...(input.channel === undefined ? {} : { channel: input.channel }),
 				}
 				return yield* store
 					.create({
@@ -622,6 +632,7 @@ export const make = <
 			parent: _parent,
 			review: _review,
 			trigger: _trigger,
+			channel: _channel,
 			...kept
 		}: SessionHost.SessionHostState): SessionHost.SessionHostState => ({
 			...kept,
@@ -715,7 +726,7 @@ export const make = <
 			})
 		const start = (
 			id: Session.Id,
-			input: StartTurnRequest,
+			input: SendInput,
 			sink?: SessionEvents.Sink,
 		): Effect.Effect<
 			SessionResponse,
@@ -785,6 +796,7 @@ export const make = <
 						base: { session: id, revision: input.expected },
 						input: inputPrompt(input.input),
 						...(overrides === undefined ? {} : { overrides }),
+						...(input.author === undefined ? {} : { author: input.author }),
 					})
 					.pipe(
 						Stream.provideContext(
@@ -1280,9 +1292,14 @@ export const make = <
 					runtime
 						.interrupt({ session: id, turn })
 						.pipe(Effect.mapError(publicError), Effect.flatMap(project)),
-				steer: (id, turn, input) =>
+				steer: (id, turn, input, author) =>
 					runtime
-						.steer({ session: id, turn, input: inputPrompt(input) })
+						.steer({
+							session: id,
+							turn,
+							input: inputPrompt(input),
+							...(author === undefined ? {} : { author }),
+						})
 						.pipe(Effect.mapError(publicError)),
 				enqueue: (id, input) =>
 					runtime
@@ -1292,6 +1309,7 @@ export const make = <
 							...(input.expected === undefined
 								? {}
 								: { expectedRevision: input.expected }),
+							...(input.author === undefined ? {} : { author: input.author }),
 						})
 						.pipe(Effect.mapError(publicError)),
 			}),

@@ -104,5 +104,15 @@ export const permission = (input: {
 					id: Option.some(input.session),
 				}),
 			}
+		// Posting to a Channel needs the same permission as talking in it.
+		case "channels.send":
+			return {
+				permission: "channels.use",
+				key: resourceKey({
+					subject,
+					kind: "channel",
+					id: Option.some(input.capability.target),
+				}),
+			}
 	}
 }

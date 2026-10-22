@@ -19,6 +19,7 @@ This page shows how the check works, how a person answers requests, and what eac
 | `agents.create`   | `*`                         | It makes a lasting Agent that it owns.                                     |
 | `agents.promote`  | The ID of the Session Agent | It makes a Session Agent a lasting Agent that it owns.                     |
 | `plans.run`       | The ID of the Session       | It wants to carry out its plan. See [Plan mode](/docs/sessions#plan-mode). |
+| `channels.send`   | The ID of the Channel       | It posts to another chat of a [Channel](/docs/channels).                   |
 
 Each capability tool takes a `reason`. App tools get an extra `openbot_reason` parameter for it. OpenBot never sends it to the App.
 
@@ -28,7 +29,7 @@ Each capability tool takes a `reason`. App tools get an extra `openbot_reason` p
 
 OpenBot checks each attempt in this order. The first step that decides wins.
 
-1. **The policy of the member.** An Agent never does more than the member it works for. If the [permissions](/docs/permissions) of the member, or of the token that started the work, do not allow it, the call is denied. This is never sent to a decider.
+1. **The policy of the member.** An Agent never does more than the member it works for. If the [permissions](/docs/permissions) of the member, or of the token that started the work, do not allow it, the call is denied. This is never sent to a decider. In a [Channel](/docs/channels), the member is the person who wrote the message of the Turn.
 2. **Grants.** A [Grant](/docs/rules#grants) is a kept decision. A deny Grant wins over an allow Grant.
 3. **Rules.** A judge model reads the [Rules](/docs/rules) for this Agent in plain language. Only a Rule that the judge quotes can allow or deny.
 4. **The decider above.** OpenBot makes a request. The decider is the owner of the Agent in its owner chain. For a Main Agent, the decider is the person.

@@ -297,10 +297,15 @@ export const layer = Layer.effectDiscard(
 					}),
 				)
 				if (Option.isNone(claimed)) return
+				// The child works for the person of the Turn that gave the work.
+				const given = SessionHost.turnChain(
+					parent.session,
+					delegation.parent.turn,
+				)
 				const chain: SessionHost.Chain = {
-					...state.chain,
-					agents: [...state.chain.agents, target.value.id],
-					sessions: [...state.chain.sessions, parent.session.id],
+					...given,
+					agents: [...given.agents, target.value.id],
+					sessions: [...given.sessions, parent.session.id],
 				}
 				const link = {
 					session: delegation.parent.session,
@@ -459,12 +464,14 @@ export const layer = Layer.effectDiscard(
 				// The review runs in the owner chain, down to the deciding Agent.
 				const deciders = stored.request.chain
 				const index = deciders.indexOf(approver.agent)
+				// The review is work for the person, so it lives in their own Sessions.
+				const { owner: _owner, ...forPerson } = stored.chain
 				const view = yield* sessions.create({
 					agent: agent.value,
 					kind: "review",
 					review: stored.request.id,
 					chain: {
-						...stored.chain,
+						...forPerson,
 						agents: deciders.slice(0, index + 1),
 						sessions: deciders.slice(0, index).map((decider) =>
 							sessionOf({
@@ -498,6 +505,7 @@ export const layer = Layer.effectDiscard(
 				const turn = Session.currentTurn(view.session)
 				const agent = yield* agents.find(member.organizationId, state.agent)
 				if (turn === undefined || Option.isNone(agent)) return
+				const chain = SessionHost.turnChain(view.session, turn.id)
 				const answer = yield* gate
 					.check({
 						capability: { action: "tools.call", target: wait.toolCall.name },
@@ -506,11 +514,14 @@ export const layer = Layer.effectDiscard(
 					})
 					.pipe(
 						Effect.provideService(Work, {
-							caller: callerOf(state.chain),
+							caller: callerOf(chain),
 							namespace: ownerKey(member),
 							agent: agent.value,
-							chain: state.chain,
-							deciders: yield* agents.ownerChain(member, agent.value),
+							chain,
+							deciders: yield* agents.ownerChain(
+								{ organizationId: chain.organizationId, userId: chain.userId },
+								agent.value,
+							),
 							session,
 							turn: turn.id,
 						}),
@@ -679,8 +690,10 @@ export const layer = Layer.effectDiscard(
 				if (!settings.settings.generate) return
 				const agent = yield* agents.find(member.organizationId, view.agent)
 				if (Option.isNone(agent)) return
+				// The Agent learns about the person that the Turn worked for.
+				const person = SessionHost.turnChain(view.session, turn.id).userId
 				const found = yield* organization
-					.member(member.organizationId, member.userId)
+					.member(member.organizationId, person)
 					.pipe(Effect.orElseSucceed(() => Option.none()))
 				const model = yield* helper.agentMemory(member.organizationId)
 				yield* memories
@@ -688,10 +701,10 @@ export const layer = Layer.effectDiscard(
 						agentId: agent.value.id,
 						agent: { name: agent.value.name, role: agent.value.role },
 						user: {
-							id: member.userId,
+							id: person,
 							name: Option.match(found, {
-								onNone: () => member.userId,
-								onSome: (found) => found.name ?? found.email ?? member.userId,
+								onNone: () => person,
+								onSome: (found) => found.name ?? found.email ?? person,
 							}),
 						},
 						evidence: evidence({
@@ -855,7 +868,7 @@ export const layer = Layer.effectDiscard(
 				yield* settle(
 					{
 						organizationId: signal.organizationId,
-						userId: stored.chain.userId,
+						userId: SessionHost.ownerOf(stored.chain),
 					},
 					stored.request.session,
 				)

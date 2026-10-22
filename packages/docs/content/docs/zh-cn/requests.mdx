@@ -19,6 +19,7 @@ Agent 不知道自己有什么限制。当 Agent 尝试使用一项**能力**（
 | `agents.create`   | `*`                        | 创建一个归它所有的长期 Agent 时。                                |
 | `agents.promote`  | Session Agent 的 ID        | 把一个 Session Agent 变成归它所有的长期 Agent 时。               |
 | `plans.run`       | Session 的 ID              | 想执行它的计划时。见 [计划模式](/zh-cn/docs/sessions#计划模式)。 |
+| `channels.send`   | Channel 的 ID              | 向 [Channel](/zh-cn/docs/channels) 的另一个聊天发消息时。        |
 
 每个能力工具都接受一个 `reason`（理由）。App 工具会多一个 `openbot_reason` 参数来传理由。OpenBot 不会把它发给 App。
 
@@ -28,7 +29,7 @@ Agent 不知道自己有什么限制。当 Agent 尝试使用一项**能力**（
 
 OpenBot 按下面的顺序检查每次尝试。第一个能做出决定的步骤说了算。
 
-1. **成员的策略。** Agent 能做的事永远不会超过它所代表的成员。如果成员的[权限](/zh-cn/docs/permissions)，或者启动这项工作的令牌不允许，调用就会被拒绝。这一步永远不会交给决策者。
+1. **成员的策略。** Agent 能做的事永远不会超过它所代表的成员。如果成员的[权限](/zh-cn/docs/permissions)，或者启动这项工作的令牌不允许，调用就会被拒绝。这一步永远不会交给决策者。在 [Channel](/zh-cn/docs/channels) 中，这个成员是写下这个 Turn 的消息的人。
 2. **Grant。** [Grant](/zh-cn/docs/rules#grant)（授权）是保存下来的决定。拒绝的 Grant 优先于允许的 Grant。
 3. **Rule。** 一个评判模型会阅读这个 Agent 的 [Rule](/zh-cn/docs/rules)（规则），规则用自然语言写成。只有评判模型引用了的 Rule 才能允许或拒绝。
 4. **上方的决策者。** OpenBot 创建一个 Request。决策者是这个 Agent 所有者链中的所有者。对于 Main Agent，决策者就是人本身。

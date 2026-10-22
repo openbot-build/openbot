@@ -41,6 +41,12 @@ import {
 	auditLogs,
 	agentRecords,
 	triggers,
+	channels,
+	channelIdentities,
+	channelLinks,
+	channelConversations,
+	channelInbox,
+	channelDeliveries,
 } from "./Schema.ts"
 import {
 	openbot_auth_user,
@@ -93,6 +99,12 @@ export const check = Effect.gen(function* () {
 	yield* db.select().from(auditLogs).limit(0)
 	yield* db.select().from(agentRecords).limit(0)
 	yield* db.select().from(triggers).limit(0)
+	yield* db.select().from(channels).limit(0)
+	yield* db.select().from(channelIdentities).limit(0)
+	yield* db.select().from(channelLinks).limit(0)
+	yield* db.select().from(channelConversations).limit(0)
+	yield* db.select().from(channelInbox).limit(0)
+	yield* db.select().from(channelDeliveries).limit(0)
 	yield* db
 		.select({ id: openbot_auth_user.id })
 		.from(openbot_auth_user)

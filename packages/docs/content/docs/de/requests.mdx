@@ -19,6 +19,7 @@ Diese Seite zeigt dir, wie die Prüfung abläuft, wie eine Person Requests beant
 | `agents.create`   | `*`                        | Er erstellt einen dauerhaften Agent, der ihm gehört.                             |
 | `agents.promote`  | Die ID des Session Agent   | Er macht aus einem Session Agent einen dauerhaften Agent, der ihm gehört.        |
 | `plans.run`       | Die ID der Session         | Er will seinen Plan ausführen. Siehe [Plan-Modus](/de/docs/sessions#plan-modus). |
+| `channels.send`   | Die ID des Channel         | Er schreibt in einen anderen Chat eines [Channel](/de/docs/channels).            |
 
 Jedes Tool für eine Fähigkeit nimmt einen `reason` (einen Grund). Tools einer App bekommen dafür einen zusätzlichen Parameter `openbot_reason`. OpenBot schickt ihn nie an die App.
 
@@ -28,7 +29,7 @@ Jedes Tool für eine Fähigkeit nimmt einen `reason` (einen Grund). Tools einer 
 
 OpenBot prüft jeden Versuch in dieser Reihenfolge. Der erste Schritt, der entscheidet, gilt.
 
-1. **Die Policy des Member.** Ein Agent tut nie mehr als der Member, für den er arbeitet. Wenn die [Berechtigungen](/de/docs/permissions) des Member es nicht erlauben, wird der Aufruf abgelehnt. Das gilt auch für die Berechtigungen des Tokens, das die Arbeit gestartet hat. Das geht nie an einen Entscheider.
+1. **Die Policy des Member.** Ein Agent tut nie mehr als der Member, für den er arbeitet. Wenn die [Berechtigungen](/de/docs/permissions) des Member es nicht erlauben, wird der Aufruf abgelehnt. Das gilt auch für die Berechtigungen des Tokens, das die Arbeit gestartet hat. Das geht nie an einen Entscheider. In einem [Channel](/de/docs/channels) ist das Member die Person, die die Nachricht des Turns geschrieben hat.
 2. **Grants.** Ein [Grant](/de/docs/rules#grants) ist eine gespeicherte Entscheidung. Ein Grant zum Ablehnen gewinnt gegen einen Grant zum Erlauben.
 3. **Rules.** Ein Prüf-Modell liest die [Rules](/de/docs/rules) (Regeln) für diesen Agent in normaler Sprache. Nur eine Rule, die das Prüf-Modell zitiert, kann erlauben oder ablehnen.
 4. **Der Entscheider darüber.** OpenBot macht einen Request. Der Entscheider ist der Besitzer des Agent in seiner Besitzer-Kette. Für einen Main Agent ist die Person der Entscheider.

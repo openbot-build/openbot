@@ -720,3 +720,173 @@ export const triggers = table(
 			.where(sql`${t.nextRunAt} IS NOT NULL AND ${t.enabled}`),
 	],
 )
+
+/**
+ * A bot of an organization on one platform, such as a Slack app.
+ * `credentials` is the sealed JSON of its secrets. `hints` shows their last characters.
+ */
+export const channels = table(
+	"openbot_channels",
+	{
+		organizationId: text("organization_id").notNull(),
+		id: text().notNull(),
+		kind: text().notNull(),
+		name: text().notNull(),
+		agent: text().notNull(),
+		actor: text().notNull(),
+		enabled: boolean().notNull(),
+		linkPath: text("link_path"),
+		credentials: text().notNull(),
+		hints: text().notNull(),
+		version: integer().notNull(),
+		createdAt: time("created_at").notNull(),
+		updatedAt: time("updated_at").notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.organizationId, t.id] }),
+		// A webhook names only the Channel, so its ID must find it.
+		uniqueIndex("openbot_channels_id").on(t.id),
+	],
+)
+
+/** A person on the platform of a Channel, linked to a member of the organization. */
+export const channelIdentities = table(
+	"openbot_channel_identities",
+	{
+		organizationId: text("organization_id").notNull(),
+		channelId: text("channel_id").notNull(),
+		externalUserId: text("external_user_id").notNull(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => openbot_auth_user.id, { onDelete: "cascade" }),
+		displayName: text("display_name").notNull(),
+		createdAt: time("created_at").notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.channelId, t.externalUserId] }),
+		foreignKey({
+			columns: [t.organizationId, t.channelId],
+			foreignColumns: [channels.organizationId, channels.id],
+		}).onDelete("cascade"),
+		index("openbot_channel_identities_user").on(t.organizationId, t.userId),
+	],
+)
+
+/** A link code that a bot gave to a person. Only its hash is stored. */
+export const channelLinks = table(
+	"openbot_channel_links",
+	{
+		codeHash: text("code_hash").primaryKey(),
+		organizationId: text("organization_id").notNull(),
+		channelId: text("channel_id").notNull(),
+		externalUserId: text("external_user_id").notNull(),
+		displayName: text("display_name").notNull(),
+		expiresAt: time("expires_at").notNull(),
+		usedAt: time("used_at"),
+	},
+	(t) => [
+		foreignKey({
+			columns: [t.organizationId, t.channelId],
+			foreignColumns: [channels.organizationId, channels.id],
+		}).onDelete("cascade"),
+	],
+)
+
+/**
+ * Each chat of a Channel is one long-lived Session. `owner` is the actor of the Channel when
+ * the chat began. The Session stays with that member when the actor changes.
+ */
+export const channelConversations = table(
+	"openbot_channel_conversations",
+	{
+		organizationId: text("organization_id").notNull(),
+		channelId: text("channel_id").notNull(),
+		conversationKey: text("conversation_key").notNull(),
+		kind: text().notNull(),
+		title: text(),
+		session: text().notNull(),
+		owner: text().notNull(),
+		createdAt: time("created_at").notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.channelId, t.conversationKey] }),
+		foreignKey({
+			columns: [t.organizationId, t.channelId],
+			foreignColumns: [channels.organizationId, channels.id],
+		}).onDelete("cascade"),
+		uniqueIndex("openbot_channel_conversations_session").on(t.session),
+	],
+)
+
+/**
+ * Events from platforms that wait to be handled. The key drops an event that the platform
+ * sends again. A worker takes the oldest open event of each chat, so a chat keeps its order.
+ */
+export const channelInbox = table(
+	"openbot_channel_inbox",
+	{
+		organizationId: text("organization_id").notNull(),
+		channelId: text("channel_id").notNull(),
+		eventId: text("event_id").notNull(),
+		conversationKey: text("conversation_key").notNull(),
+		event: text().notNull(),
+		receivedAt: time("received_at").notNull(),
+		attempts: integer().notNull().default(0),
+		nextAt: time("next_at").notNull(),
+		claim: text(),
+		leaseUntil: time("lease_until").notNull().default(0),
+		doneAt: time("done_at"),
+	},
+	(t) => [
+		primaryKey({ columns: [t.channelId, t.eventId] }),
+		foreignKey({
+			columns: [t.organizationId, t.channelId],
+			foreignColumns: [channels.organizationId, channels.id],
+		}).onDelete("cascade"),
+		index("openbot_channel_inbox_open")
+			.on(t.channelId, t.conversationKey, t.receivedAt)
+			.where(sql`${t.doneAt} IS NULL`),
+	],
+)
+
+/**
+ * Messages that the bot must send or change: the answers of Turns and the cards of requests.
+ * `ref` is the message on the platform after the first send.
+ */
+export const channelDeliveries = table(
+	"openbot_channel_deliveries",
+	{
+		id: text().primaryKey(),
+		organizationId: text("organization_id").notNull(),
+		channelId: text("channel_id").notNull(),
+		/** `reply` for the answer of a Turn, `request` for a request card, `notice` otherwise. */
+		kind: text().notNull(),
+		target: text().notNull(),
+		session: text(),
+		turn: text(),
+		request: text(),
+		body: text().notNull(),
+		ref: text(),
+		/** `live` while a Turn still writes, `pending` while it waits to go out, then `done`. */
+		state: text().notNull(),
+		attempts: integer().notNull().default(0),
+		nextAt: time("next_at").notNull(),
+		claim: text(),
+		leaseUntil: time("lease_until").notNull().default(0),
+		updatedAt: time("updated_at").notNull(),
+	},
+	(t) => [
+		foreignKey({
+			columns: [t.organizationId, t.channelId],
+			foreignColumns: [channels.organizationId, channels.id],
+		}).onDelete("cascade"),
+		uniqueIndex("openbot_channel_deliveries_turn").on(t.session, t.turn),
+		uniqueIndex("openbot_channel_deliveries_request").on(
+			t.channelId,
+			t.request,
+		),
+		index("openbot_channel_deliveries_due")
+			.on(t.nextAt)
+			.where(sql`${t.state} = 'pending'`),
+	],
+)

@@ -191,6 +191,16 @@ interface ForOwnerInput {
 	>
 }
 
+/** The member that a Turn works for is not an active member of the organization any more. */
+export class AuthorInactive extends Schema.TaggedError<AuthorInactive>()(
+	"AuthorInactive",
+	{ userId: Schema.String },
+) {
+	override get message() {
+		return `The member ${this.userId} that this Turn works for is not active`
+	}
+}
+
 /** Builds the Agent plugin for the Sessions of one member. */
 export class AgentPlugin extends Context.Service<
 	AgentPlugin,
@@ -325,7 +335,8 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 								result?: AgentsApi.DelegationResult,
 							) =>
 								delegations.propose(organizationId, {
-									userId: current.caller.userId,
+									// The parent Session and the child Session belong to this member.
+									userId: SessionHost.ownerOf(current.chain),
 									parent: {
 										session: current.session,
 										turn: current.turn,
@@ -796,26 +807,38 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 								const turn = yield* context.turn
 								const view = yield* input.read(at.session)
 								const state = SessionHost.hostState(view.session)
-								const organizationId = state.chain.organizationId
+								const chain = SessionHost.turnChain(view.session, turn)
+								const organizationId = chain.organizationId
 								const agent = yield* agents
 									.find(organizationId, state.agent)
 									.pipe(Effect.flatMap(Effect.fromOption))
 								const memory = yield* memories.get(organizationId, agent.id)
+								// The author of a Turn is not the owner of the Session, so it must
+								// still be an active member when the Turn runs.
+								if (chain !== state.chain)
+									yield* organization
+										.activeMember(organizationId, chain.userId)
+										.pipe(
+											Effect.flatMap(Effect.fromOption),
+											Effect.mapError(() =>
+												AuthorInactive.make({ userId: chain.userId }),
+											),
+										)
 								const member = yield* organization
-									.member(organizationId, state.chain.userId)
+									.member(organizationId, chain.userId)
 									.pipe(Effect.orElseSucceed(() => Option.none()))
 								const person = Option.match(member, {
-									onNone: () => `the member ${state.chain.userId}`,
+									onNone: () => `the member ${chain.userId}`,
 									onSome: (member) =>
 										`${member.name ?? member.email ?? "a member"} (member id ${member.userId})`,
 								})
 								const current = Work.of({
-									caller: callerOf(state.chain),
+									caller: callerOf(chain),
 									namespace: input.namespace,
 									agent,
-									chain: state.chain,
+									chain,
 									deciders: yield* agents.ownerChain(
-										{ organizationId, userId: state.chain.userId },
+										{ organizationId, userId: chain.userId },
 										agent,
 									),
 									session: at.session,

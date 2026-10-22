@@ -12,6 +12,8 @@ import type * as SessionHost from "../../sessions/SessionHost.ts"
 export const approvalFor = (input: {
 	readonly settings: typeof Settings.Service
 	readonly state: SessionHost.SessionHostState
+	/** Who the current Turn works for. Their own setting counts, not the owner's. */
+	readonly chain: SessionHost.Chain
 	readonly agent: AgentsApi.Agent
 }) =>
 	Effect.gen(function* () {
@@ -19,13 +21,13 @@ export const approvalFor = (input: {
 		if (input.agent.planApproval !== undefined) return input.agent.planApproval
 		const settings = input.settings
 		const member = yield* settings.member(
-			input.state.chain.organizationId,
-			input.state.chain.userId,
+			input.chain.organizationId,
+			input.chain.userId,
 		)
 		if (member.document.planApproval !== null)
 			return member.document.planApproval
 		const organization = yield* settings.organization(
-			input.state.chain.organizationId,
+			input.chain.organizationId,
 		)
 		return organization.document.planApproval
 	}).pipe(
