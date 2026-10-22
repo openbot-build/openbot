@@ -2,7 +2,6 @@ import { Authorization, Store } from "@openbot-build/protocol"
 import type { PgClient } from "@effect/sql-pg"
 import { Context, Effect, Layer, Match, Schema } from "effect"
 import { and, eq } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import {
 	appAuthorizations,
 	appConnections,
@@ -11,6 +10,7 @@ import {
 import { IndexNamespace } from "./IndexNamespace.ts"
 import * as StoredConnections from "./StoredConnections.ts"
 import { Secrets } from "../secrets/Secrets.ts"
+import * as Db from "../database/Database.ts"
 
 export interface OwnedStores {
 	readonly apps: typeof Store.AppStore.Service
@@ -52,7 +52,7 @@ export const make: Effect.Effect<
 > = Effect.gen(function* () {
 	const namespace = yield* IndexNamespace
 	const secrets = yield* Secrets
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	return ProtocolStores.of({
 		bind: (owner) => {
 			const owned = (key: Store.ConnectionKey) =>

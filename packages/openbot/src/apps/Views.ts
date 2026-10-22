@@ -21,7 +21,6 @@ import { Backend } from "../app/Backend.ts"
 import { Capabilities } from "./Capabilities.ts"
 import { ConnectionLocks } from "./ConnectionLocks.ts"
 import { eq } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { appSecrets } from "../database/Schema.ts"
 import { Secrets } from "../secrets/Secrets.ts"
 import * as StoredConnections from "./StoredConnections.ts"
@@ -30,6 +29,7 @@ import * as StoredInvocations from "./StoredInvocations.ts"
 import * as StoredViews from "./StoredViews.ts"
 import { type Action, type View } from "./StoredViews.ts"
 import { json } from "./AppResults.ts"
+import * as Db from "../database/Database.ts"
 
 const unavailable = (reason: Api.AppViewUnavailable["reason"] = "Protocol") =>
 	Api.AppViewUnavailable.make({
@@ -46,7 +46,7 @@ export const make = Effect.gen(function* () {
 	const backend = yield* Backend
 	const capabilities = yield* Capabilities
 	const locks = yield* ConnectionLocks
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const secrets = yield* Secrets
 	// A view that was open when the host stopped can not continue.
 	yield* db

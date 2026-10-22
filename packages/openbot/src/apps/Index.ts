@@ -14,11 +14,11 @@ import {
 } from "effect"
 import { eq } from "drizzle-orm"
 import type { PgClient } from "@effect/sql-pg"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { appIndexEntries } from "../database/Schema.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
 import * as IndexStore from "./IndexStore.ts"
 import { Governance } from "./Governance.ts"
+import * as Db from "../database/Database.ts"
 
 export type Error =
 	| Api.IndexInputInvalid
@@ -98,7 +98,7 @@ export const make = (
 	PgClient.PgClient | Governance
 > =>
 	Effect.gen(function* () {
-		const db = yield* makeWithDefaults()
+		const db = yield* Db.make
 		const namespace = yield* IndexNamespace
 		const governance = yield* Governance
 		const local: Api.Source = {

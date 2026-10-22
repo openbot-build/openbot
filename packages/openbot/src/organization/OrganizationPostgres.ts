@@ -7,7 +7,6 @@ import {
 import type { PgClient } from "@effect/sql-pg"
 import { Clock, DateTime, Effect, Layer, Option, Schema } from "effect"
 import { and, asc, eq, gt, isNotNull, like, sql } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { randomUUID } from "node:crypto"
 import {
 	members,
@@ -24,6 +23,7 @@ import {
 	Organization,
 	OrganizationUnavailable,
 } from "./Organization.ts"
+import * as Db from "../database/Database.ts"
 
 const Roles = Schema.fromJsonString(OrganizationApi.Roles)
 const PolicyList = Schema.fromJsonString(Permissions.Policies)
@@ -63,7 +63,7 @@ export const make: Effect.Effect<
 	never,
 	PgClient.PgClient | AuditLog | Settings
 > = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 	const audit = yield* AuditLog
 	const settings = yield* Settings

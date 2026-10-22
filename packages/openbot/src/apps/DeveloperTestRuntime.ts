@@ -24,12 +24,12 @@ import {
 } from "effect"
 import { AppNetwork } from "./AppHost.ts"
 import { PgClient } from "@effect/sql-pg"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import * as Rows from "./DeveloperRows.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
 import { DeveloperTestStores } from "./DeveloperTestStores.ts"
 import { pages } from "./Capabilities.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
+import * as Db from "../database/Database.ts"
 
 export type Execution =
 	| {
@@ -109,7 +109,7 @@ export const make = (
 > =>
 	Effect.gen(function* () {
 		const stores = yield* DeveloperTestStores
-		const db = yield* makeWithDefaults()
+		const db = yield* Db.make
 		const inTransaction = Rows.transaction(yield* PgClient.PgClient)
 		const namespace = yield* IndexNamespace
 		const network = yield* AppNetwork

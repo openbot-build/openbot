@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { ChannelsApi } from "@openbot-build/api"
 import { and, asc, eq, lt, lte, sql } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { Clock, Context, Effect, Layer } from "effect"
 import { channelDeliveries, channelInbox } from "../database/Schema.ts"
 import type {
@@ -10,6 +9,7 @@ import type {
 	OutboundMessage,
 	Target,
 } from "./Channel.ts"
+import * as Db from "../database/Database.ts"
 
 /** How long a worker holds a claimed item before another worker may take it. */
 const leaseMs = 60_000
@@ -153,7 +153,7 @@ const deliveryOf = (
 })
 
 export const make = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 		effect.pipe(Effect.mapError(unavailable))
 	const eventWhere = (event: ClaimedEvent) =>

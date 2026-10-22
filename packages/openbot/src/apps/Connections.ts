@@ -19,7 +19,6 @@ import {
 	Schema,
 } from "effect"
 import type { PgClient } from "@effect/sql-pg"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import * as DiscoveryService from "./Discovery.ts"
 import * as ManualConnection from "./ManualConnection.ts"
 import { Governance } from "./Governance.ts"
@@ -29,6 +28,7 @@ import { appDrafts } from "../database/Schema.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
 import * as StoredConnections from "./StoredConnections.ts"
 import { ownerKey, type StoredConnection } from "./StoredConnections.ts"
+import * as Db from "../database/Database.ts"
 
 export type Error =
 	| ExperienceInputInvalid
@@ -76,7 +76,7 @@ export const make: Effect.Effect<
 	| Governance
 > = Effect.gen(function* () {
 	const governance = yield* Governance
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const namespace = yield* IndexNamespace
 	const discovery = yield* Discovery.Discovery

@@ -8,7 +8,6 @@ import {
 import { Store } from "@openbot-build/protocol"
 import { Clock, Effect, Schema } from "effect"
 import { and, eq, sql } from "drizzle-orm"
-import type { EffectPgDatabase } from "drizzle-orm/effect-postgres"
 import {
 	appConnections,
 	appDrafts,
@@ -16,6 +15,7 @@ import {
 	appRecords,
 } from "../database/Schema.ts"
 import type { Secrets } from "../secrets/Secrets.ts"
+import * as Db from "../database/Database.ts"
 
 /** The App connections of each owner, with their App records and drafts, kept in Postgres. */
 export type Error =
@@ -75,7 +75,7 @@ export const draftCodec = Schema.fromJsonString(Api.ConnectionDraft)
 const conflict = (reason: Api.ConnectionConflict["reason"], message: string) =>
 	Api.ConnectionConflict.make({ reason, message })
 
-type Database = EffectPgDatabase
+type Database = Db.Database
 type Sealer = typeof Secrets.Service
 
 const binding = (owner: string, id: string) =>

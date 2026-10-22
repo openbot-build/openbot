@@ -2,19 +2,19 @@ import { Identity, OpenBotApi, SessionConflict } from "@openbot-build/api"
 import { Session } from "@openbot-build/core"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { Secrets } from "../secrets/Secrets.ts"
 import * as StoredInvocations from "./StoredInvocations.ts"
 import { Operations } from "./Operations.ts"
 import { ownerKey } from "./StoredConnections.ts"
 import { Backend } from "../app/Backend.ts"
+import * as Db from "../database/Database.ts"
 
 export const layer = HttpApiBuilder.group(
 	OpenBotApi,
 	"appOperations",
 	(handlers) =>
 		Effect.gen(function* () {
-			const db = yield* makeWithDefaults()
+			const db = yield* Db.make
 			const secrets = yield* Secrets
 			const operations = yield* Operations
 			const backend = yield* Backend

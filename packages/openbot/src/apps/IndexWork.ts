@@ -13,13 +13,10 @@ import {
 	Schema,
 } from "effect"
 import { and, asc, eq, lte } from "drizzle-orm"
-import {
-	makeWithDefaults,
-	type EffectPgDatabase,
-} from "drizzle-orm/effect-postgres"
 import { appIndexJobs, appIndexResults } from "../database/Schema.ts"
 import { Governance } from "./Governance.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
+import * as Db from "../database/Database.ts"
 
 export interface Options {
 	readonly intervalMs?: number
@@ -90,7 +87,7 @@ const jobWhere = (namespace: string, cardUrl: string) =>
  * generation and gets the new sources.
  */
 export const enqueue = (
-	db: EffectPgDatabase,
+	db: Db.Database,
 	namespace: string,
 	cardUrl: string,
 	sources: ReadonlyArray<Discovery.Source>,
@@ -141,7 +138,7 @@ export const enqueue = (
 
 /** Read the job of an App, or the saved result of one of its generations. */
 export const job = (
-	db: EffectPgDatabase,
+	db: Db.Database,
 	namespace: string,
 	cardUrl: string,
 	generation?: string,
@@ -181,7 +178,7 @@ export const layer = (options: Options = {}) =>
 	Layer.effect(
 		IndexWork,
 		Effect.gen(function* () {
-			const db = yield* makeWithDefaults()
+			const db = yield* Db.make
 			const namespace = yield* IndexNamespace
 			const indexing = yield* Indexing.Indexing
 			const governance = yield* Governance
@@ -362,7 +359,7 @@ export const layer = (options: Options = {}) =>
 export const layerWorker = (options: Options = {}) =>
 	Layer.effectDiscard(
 		Effect.gen(function* () {
-			const db = yield* makeWithDefaults()
+			const db = yield* Db.make
 			const namespace = yield* IndexNamespace
 			const work = yield* IndexWork
 			const { retryMs } = settings(options)

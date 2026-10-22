@@ -10,7 +10,6 @@ import * as Governance from "../src/apps/Governance.ts"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
 import * as Connections from "../src/apps/Connections.ts"
 import { eq } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { appRecords } from "../src/database/Schema.ts"
 import * as StoredConnections from "../src/apps/StoredConnections.ts"
 import { ownerKey } from "../src/apps/StoredConnections.ts"
@@ -19,6 +18,7 @@ import * as Database from "../src/database/DatabasePostgres.ts"
 import * as Postgres from "./PostgresTest.ts"
 import * as Fixture from "./AppFixture.ts"
 import * as BrowserHost from "./BrowserHost.ts"
+import * as Db from "../src/database/Database.ts"
 
 const encryptionKey = Redacted.make("test:" + "11".repeat(32))
 const alice = { organizationId: "organization", userId: "alice" }
@@ -131,7 +131,7 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 				)
 				assert.equal(failure._tag, "ConnectionConflict")
 				const expired = { ...draft, id: "expired", expiresAt: 0 }
-				const db = yield* makeWithDefaults()
+				const db = yield* Db.make
 				yield* StoredConnections.saveDraft(db, ownerKey(alice), expired)
 				const expiredResult = yield* Effect.flip(
 					asOwner(
@@ -211,7 +211,7 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 					(yield* asOwner(connections.getConnection(id))).enabled,
 					true,
 				)
-				const db = yield* makeWithDefaults()
+				const db = yield* Db.make
 				const secrets = yield* Secrets.Secrets
 				assert.equal(
 					Redacted.value(
@@ -243,7 +243,7 @@ test("connection limits stay atomic across concurrent database pools and storage
 		const save = (runtime: typeof first, id: string) =>
 			runtime.runPromise(
 				Effect.gen(function* () {
-					const db = yield* makeWithDefaults()
+					const db = yield* Db.make
 					const secrets = yield* Secrets.Secrets
 					const connection = yield* Store.UserConnection.decode({
 						owner: ownerKey(alice),

@@ -8,10 +8,10 @@ import {
 	SessionConflict,
 } from "@openbot-build/api"
 import { and, eq, isNull, lt, or } from "drizzle-orm"
-import type { EffectPgDatabase } from "drizzle-orm/effect-postgres"
 import { Effect, Option, Schema } from "effect"
 import { codeRuns } from "../database/Schema.ts"
 import type { Secrets } from "../secrets/Secrets.ts"
+import * as Db from "../database/Database.ts"
 
 /** One App call as the host keeps it. The hash of the arguments finds a program that changed. */
 export const StoredCall = Schema.Struct({
@@ -96,7 +96,7 @@ const open = (secrets: Sealer, row: typeof codeRuns.$inferSelect) =>
 		.pipe(Effect.flatMap(Schema.decodeEffect(codec)))
 
 export const get = (
-	db: EffectPgDatabase,
+	db: Db.Database,
 	secrets: Sealer,
 	owner: string,
 	id: string,
@@ -108,7 +108,7 @@ export const get = (
 	}).pipe(Effect.mapError(readFailure))
 
 export const list = (
-	db: EffectPgDatabase,
+	db: Db.Database,
 	secrets: Sealer,
 	owner: string,
 	session: string,
@@ -127,7 +127,7 @@ export const list = (
 
 /** The program of a tool call in a Session, if the call is a Code Mode call. */
 export const forCall = (
-	db: EffectPgDatabase,
+	db: Db.Database,
 	secrets: Sealer,
 	owner: string,
 	session: string,
@@ -157,7 +157,7 @@ export const forCall = (
  * the same tool call never makes two programs.
  */
 export const insert = (
-	db: EffectPgDatabase,
+	db: Db.Database,
 	secrets: Sealer,
 	owner: string,
 	value: Run,
@@ -187,7 +187,7 @@ export const insert = (
  * answers the new run with its new lease, or none to leave the row as it is.
  */
 export const change = (
-	db: EffectPgDatabase,
+	db: Db.Database,
 	secrets: Sealer,
 	owner: string,
 	id: string,
@@ -225,7 +225,7 @@ export const change = (
 
 /** Runs whose host stopped while it ran them. Another host may take them over. */
 export const stale = (
-	db: EffectPgDatabase,
+	db: Db.Database,
 	now: number,
 ): Effect.Effect<
 	ReadonlyArray<{

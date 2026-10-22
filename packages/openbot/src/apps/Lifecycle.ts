@@ -23,10 +23,10 @@ import { Capabilities } from "./Capabilities.ts"
 import { Governance } from "./Governance.ts"
 import { Probe } from "./Probe.ts"
 import type { PgClient } from "@effect/sql-pg"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { Secrets } from "../secrets/Secrets.ts"
 import * as StoredConnections from "./StoredConnections.ts"
 import { ownerKey } from "./StoredConnections.ts"
+import * as Db from "../database/Database.ts"
 
 export type Error = ConnectionError | Api.ConnectionCleanupPending
 /** Private lifecycle operations need the identity of the current request. @effect-expect-leaking Identity */
@@ -113,7 +113,7 @@ export const make: Effect.Effect<
 > = Effect.gen(function* () {
 	const capabilities = yield* Capabilities
 	const connections = yield* Connections
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const factory = yield* AppHost
 	const locks = yield* ConnectionLocks

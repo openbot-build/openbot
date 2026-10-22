@@ -25,7 +25,6 @@ import { TestClock } from "effect/testing"
 import * as PublicIndex from "../src/apps/Index.ts"
 import { Index } from "@openbot-build/protocol"
 import { eq } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import * as IndexStorage from "../src/apps/IndexStore.ts"
 import { IndexNamespace } from "../src/apps/IndexNamespace.ts"
 import { appIndexJobs } from "../src/database/Schema.ts"
@@ -41,6 +40,7 @@ import { AppHost } from "../src/apps/AppHost.ts"
 import * as StoredConnections from "../src/apps/StoredConnections.ts"
 import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
+import * as Db from "../src/database/Database.ts"
 
 test("stored public verification updates and withdraws with a test clock and recovers interrupted claims", async () => {
 	const database = await Postgres.start()
@@ -77,7 +77,7 @@ test("stored public verification updates and withdraws with a test clock and rec
 		await runtime.runPromise(
 			Effect.gen(function* () {
 				yield* Database.migrate
-				const db = yield* makeWithDefaults()
+				const db = yield* Db.make
 				const enqueue = Work.enqueue(db, "public", cardUrl, [])
 				const work = yield* IndexWork
 				const index = yield* PublicIndex.PublicIndex
@@ -154,7 +154,7 @@ test("stored public verification updates and withdraws with a test clock and rec
 		await runtime.runPromise(
 			Effect.gen(function* () {
 				// The worker of the new process releases the claims of the old process.
-				yield* (yield* makeWithDefaults())
+				yield* (yield* Db.make)
 					.update(appIndexJobs)
 					.set({ claim: null, leaseUntil: 0 })
 					.where(eq(appIndexJobs.namespace, "public"))
@@ -251,7 +251,7 @@ test("standard clients see independently indexed Apps, and withdrawal keeps priv
 		await host.runtime.runPromise(
 			Effect.gen(function* () {
 				yield* Work.enqueue(
-					yield* makeWithDefaults(),
+					yield* Db.make,
 					yield* IndexNamespace,
 					connection.cardUrl,
 					[],
@@ -308,7 +308,7 @@ test("public restrictions show appeals and block existing App clients and new co
 		await storage.runPromise(
 			Effect.gen(function* () {
 				return yield* StoredConnections.save(
-					yield* makeWithDefaults(),
+					yield* Db.make,
 					yield* Secrets.Secrets,
 					"public",
 					owner,

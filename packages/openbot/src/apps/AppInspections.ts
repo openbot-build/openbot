@@ -7,10 +7,10 @@ import {
 } from "@openbot-build/protocol"
 import { Clock, Context, Effect, HashMap, Layer, Match, Option } from "effect"
 import type { PgClient } from "@effect/sql-pg"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { discover } from "./Discovery.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
 import * as IndexStore from "./IndexStore.ts"
+import * as Db from "../database/Database.ts"
 
 export class AppInspections extends Context.Service<
 	AppInspections,
@@ -31,7 +31,7 @@ export const make: Effect.Effect<
 > = Effect.gen(function* () {
 	const inspection = yield* Indexing.PublicationInspection
 	const index = yield* Index.IndexStore
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const namespace = yield* IndexNamespace
 	const discovery = yield* Discovery.Discovery
 	return AppInspections.of({

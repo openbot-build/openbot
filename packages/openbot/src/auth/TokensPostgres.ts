@@ -10,7 +10,6 @@ import {
 	Schema,
 } from "effect"
 import { and, count, eq, sql } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { createHash, randomBytes, randomUUID } from "node:crypto"
 import { tokens } from "../database/Schema.ts"
 import {
@@ -19,6 +18,7 @@ import {
 } from "../authorization/Policy.ts"
 import { Tokens } from "./Tokens.ts"
 import { AuthUnavailable, CredentialRejected } from "./Model.ts"
+import * as Db from "../database/Database.ts"
 
 const day = 24 * 60 * 60 * 1000
 /** Do not write on every request, but keep the usage information useful. */
@@ -45,7 +45,7 @@ export const make: Effect.Effect<
 	never,
 	PgClient.PgClient
 > = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const unavailable = () => UserTokensApi.TokenStorageUnavailable.make({})
 	const owned = (owner: {
 		readonly organizationId: string

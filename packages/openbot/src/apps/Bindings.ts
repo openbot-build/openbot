@@ -1,6 +1,5 @@
 // These are plain functions that take the services first. A pipeable form does not help here.
 // @effect-diagnostics missingPipeableSignature:off
-import type { EffectPgDatabase } from "drizzle-orm/effect-postgres"
 import { createHash } from "node:crypto"
 import { AppExecution, AppViewsApi } from "@openbot-build/api"
 import { Client } from "@openbot-build/protocol"
@@ -24,6 +23,7 @@ import { organizationOf } from "./StoredConnections.ts"
 import type { Gate } from "../capabilities/Gate.ts"
 import type { Secrets } from "../secrets/Secrets.ts"
 import type { CodeRunsApi } from "@openbot-build/api"
+import * as Db from "../database/Database.ts"
 
 /**
  * The live capabilities of the App connections of an owner, as plain bindings.
@@ -32,7 +32,7 @@ import type { CodeRunsApi } from "@openbot-build/api"
  */
 
 export interface Services {
-	readonly db: EffectPgDatabase
+	readonly db: Db.Database
 	readonly secrets: typeof Secrets.Service
 	readonly capabilities: typeof Capabilities.Service
 	readonly invocations: typeof Invocations.Service

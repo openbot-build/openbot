@@ -24,7 +24,6 @@ import {
 import { ProtocolStores } from "./ProtocolStores.ts"
 import type { PgClient } from "@effect/sql-pg"
 import { eq } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { appRecords } from "../database/Schema.ts"
 import { Secrets } from "../secrets/Secrets.ts"
 import * as StoredConnections from "./StoredConnections.ts"
@@ -65,6 +64,7 @@ export type BoundApp = HostApp.Service & {
 }
 import * as HostApp from "./HostApp.ts"
 import { Probe } from "./Probe.ts"
+import * as Db from "../database/Database.ts"
 
 export class AppNetwork extends Context.Service<
 	AppNetwork,
@@ -113,7 +113,7 @@ export const make: Effect.Effect<
 > = Effect.gen(function* () {
 	const governance = yield* Governance
 	const persistent = yield* ProtocolStores
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const discovery = yield* Discovery.Discovery
 	const rules = yield* Discovery.Rules

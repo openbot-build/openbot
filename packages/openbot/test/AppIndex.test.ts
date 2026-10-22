@@ -9,7 +9,6 @@ import { OpenApi } from "effect/http-api"
 import * as Governance from "../src/apps/Governance.ts"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
 import * as PublicIndex from "../src/apps/Index.ts"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import * as IndexStore from "../src/apps/IndexStore.ts"
 import { appIndexEntries } from "../src/database/Schema.ts"
 import * as Database from "../src/database/DatabasePostgres.ts"
@@ -18,6 +17,7 @@ import * as Server from "../dist/app/Server.js"
 import { HttpServer } from "effect/http"
 import * as PostgresTest from "./PostgresTest.ts"
 import * as Client from "@openbot-build/client"
+import * as Db from "../src/database/Database.ts"
 
 const entry = (path: string, name = "example.test/documents") =>
 	Index.Entry.decode({
@@ -154,9 +154,7 @@ test("the stored public Index searches, merges sources and pages results without
 			assert.equal(
 				(
 					await restarted.runPromise(
-						Effect.flatMap(makeWithDefaults(), (db) =>
-							db.select().from(appIndexEntries),
-						),
+						Effect.flatMap(Db.make, (db) => db.select().from(appIndexEntries)),
 					)
 				).length,
 				2,

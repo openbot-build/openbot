@@ -6,12 +6,12 @@ import {
 	TriggersApi,
 } from "@openbot-build/api"
 import { and, eq, isNull, lte, or } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { Clock, Context, Cron, Effect, Layer, Option, Result } from "effect"
 import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
 import { can } from "../authorization/Check.ts"
 import { triggerKey, triggerPlace } from "../authorization/Policy.ts"
 import { triggers } from "../database/Schema.ts"
+import * as Db from "../database/Database.ts"
 
 type Trigger = TriggersApi.Trigger
 type Row = typeof triggers.$inferSelect
@@ -154,7 +154,7 @@ const nextOf = (trigger: Pick<Trigger, "schedule" | "enabled">, now: number) =>
 		: Result.getOrNull(nextRun({ schedule: trigger.schedule, now }))
 
 export const make = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 		effect.pipe(Effect.mapError(unavailable))
 	const where = (organizationId: string, id: string) =>

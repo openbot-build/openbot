@@ -5,12 +5,12 @@ import { Context, Effect, Layer, Match, Schema } from "effect"
 import { failed, json } from "./AppResults.ts"
 import { Capabilities } from "./Capabilities.ts"
 import type { PgClient } from "@effect/sql-pg"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { Secrets } from "../secrets/Secrets.ts"
 import * as StoredInvocations from "./StoredInvocations.ts"
 import type { Error } from "./StoredInvocations.ts"
 import { Invocations } from "./Invocations.ts"
 import { ActionPolicy } from "./ActionPolicy.ts"
+import * as Db from "../database/Database.ts"
 
 export class Operations extends Context.Service<
 	Operations,
@@ -35,7 +35,7 @@ export const make: Effect.Effect<
 	Capabilities | PgClient.PgClient | Secrets | Invocations | ActionPolicy
 > = Effect.gen(function* () {
 	const capabilities = yield* Capabilities
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const invocations = yield* Invocations
 	const actions = yield* ActionPolicy

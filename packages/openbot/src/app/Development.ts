@@ -4,7 +4,6 @@ import type * as Configuration from "../configuration/Configuration.ts"
 import type { Configuration as AuthConfiguration } from "../auth/Model.ts"
 import { createHmac } from "node:crypto"
 import * as Server from "./Server.ts"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { IndexNamespace } from "../apps/IndexNamespace.ts"
 import * as IndexJobs from "../apps/IndexWork.ts"
 import { IndexWork } from "../apps/IndexWork.ts"
@@ -14,6 +13,7 @@ import * as DevelopmentAuthorization from "./DevelopmentAuthorization.ts"
 import * as DevelopmentScenarios from "./DevelopmentScenarios.ts"
 import * as DevelopmentBusiness from "./DevelopmentBusiness.ts"
 import * as DevelopmentProofs from "./DevelopmentProofs.ts"
+import * as Db from "../database/Database.ts"
 
 const cardUrl = "https://app.development.test/card.json"
 const catalogUrl = "https://app.development.test/.well-known/ai-catalog.json"
@@ -129,7 +129,7 @@ export const layer = (
 					Effect.gen(function* () {
 						const work = yield* IndexWork
 						yield* IndexJobs.enqueue(
-							yield* makeWithDefaults(),
+							yield* Db.make,
 							yield* IndexNamespace,
 							cardUrl,
 							[],

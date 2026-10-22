@@ -1,10 +1,10 @@
 import { OrganizationApi, Permissions } from "@openbot-build/api"
 import { Clock, Effect, Layer, Option, Schema } from "effect"
 import { and, asc, eq } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { randomUUID } from "node:crypto"
 import { roles } from "../database/Schema.ts"
 import { builtin, Roles, RolesUnavailable } from "./Roles.ts"
+import * as Db from "../database/Database.ts"
 
 const PolicyList = Schema.fromJsonString(Permissions.Policies)
 const decodePolicies = Schema.decodeUnknownSync(PolicyList)
@@ -18,7 +18,7 @@ const view = (row: typeof roles.$inferSelect): Permissions.Role => ({
 })
 
 export const make = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const unavailable = () => RolesUnavailable.make({})
 	const where = (organizationId: string, roleId: string) =>
 		and(eq(roles.organizationId, organizationId), eq(roles.id, roleId))

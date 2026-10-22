@@ -26,7 +26,6 @@ import { getTableName, is, Table } from "drizzle-orm"
 import * as Migration from "../src/database/Migrations.ts"
 import * as AuthSchema from "../src/database/AuthSchema.ts"
 import * as DatabaseSchema from "../src/database/Schema.ts"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import * as StoredSessions from "../src/sessions/StoredSessions.ts"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
@@ -58,7 +57,7 @@ test(
 					Effect.gen(function* () {
 						yield* Migration.initialize
 						yield* Migration.check
-						const db = yield* makeWithDefaults(),
+						const db = yield* Db.make,
 							definition = yield* Store.define({
 								stores: {},
 								schemaVersion: "timeline/1",
@@ -178,6 +177,7 @@ test(
 	},
 )
 import { Session } from "@openbot-build/core"
+import * as Db from "../src/database/Database.ts"
 
 test(
 	"database initialization creates the required tables and can run twice",

@@ -3,7 +3,6 @@
 import { createHash, randomBytes } from "node:crypto"
 import { type AgentsApi, ChannelsApi } from "@openbot-build/api"
 import { and, eq, isNull } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { Clock, Context, Effect, Layer, Option } from "effect"
 import {
 	channelConversations,
@@ -12,6 +11,7 @@ import {
 	channels,
 } from "../database/Schema.ts"
 import { hint, Secrets } from "../secrets/Secrets.ts"
+import * as Db from "../database/Database.ts"
 
 /** The secrets of a Channel, opened. Only the server sees them. */
 export type Credentials =
@@ -298,7 +298,7 @@ export class Channels extends Context.Service<
 >()("@openbot-build/openbot/channels/Channels") {}
 
 export const make = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 		effect.pipe(Effect.mapError(unavailable))

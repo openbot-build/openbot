@@ -15,10 +15,10 @@ import { PgClient } from "@effect/sql-pg"
 import { and, eq } from "drizzle-orm"
 import { developerIndexRequests } from "../database/Schema.ts"
 import * as Rows from "./DeveloperRows.ts"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { IndexNamespace } from "./IndexNamespace.ts"
 import * as IndexWork from "./IndexWork.ts"
 import { Governance } from "./Governance.ts"
+import * as Db from "../database/Database.ts"
 
 export class DeveloperIndexing extends Context.Service<
 	DeveloperIndexing,
@@ -44,7 +44,7 @@ export const make: Effect.Effect<
 > = Effect.gen(function* () {
 	const access = yield* DeveloperAccess
 	const inspections = yield* AppInspections
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const namespace = yield* IndexNamespace
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
 	const requestWhere = (owner: string, cardUrl?: string) =>

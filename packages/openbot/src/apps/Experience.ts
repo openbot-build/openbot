@@ -8,14 +8,14 @@ import {
 } from "@openbot-build/api"
 import { Array as Arr, Context, Effect, Layer } from "effect"
 import { and, eq, inArray } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { appDrafts, appSecrets } from "../database/Schema.ts"
 import { Connections } from "./Connections.ts"
 import { Lifecycle } from "./Lifecycle.ts"
+import * as Db from "../database/Database.ts"
 export const make = Effect.gen(function* () {
 	const connections = yield* Connections
 	const lifecycle = yield* Lifecycle
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	return {
 		export: (identity: typeof Identity.Service) =>
 			connections.listConnections.pipe(

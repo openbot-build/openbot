@@ -25,7 +25,6 @@ import {
 import { AppHost } from "./AppHost.ts"
 import type { PgClient } from "@effect/sql-pg"
 import { and, eq } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import {
 	appAuthorizations,
 	appConnections,
@@ -38,6 +37,7 @@ import { ownerKey } from "./StoredConnections.ts"
 import { Governance } from "./Governance.ts"
 import * as ClientMetadata from "./ClientMetadata.ts"
 import { ConnectionLocks } from "./ConnectionLocks.ts"
+import * as Db from "../database/Database.ts"
 
 export type Error =
 	| ExperienceNotFound
@@ -197,7 +197,7 @@ export const make = (
 		const governance = yield* Governance
 		const locks = yield* ConnectionLocks
 		const metadata = yield* ClientMetadata.metadata(publicOrigin)
-		const db = yield* makeWithDefaults()
+		const db = yield* Db.make
 		const secrets = yield* Secrets
 		const callbackBinding = (owner: string, id: string) =>
 			JSON.stringify(["app-authorization", owner, id])

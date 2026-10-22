@@ -28,7 +28,6 @@ import { Business } from "../src/app/DevelopmentBusiness.ts"
 import * as TestStoresLayer from "../src/apps/DeveloperTestStores.ts"
 import { DeveloperTestStores } from "../src/apps/DeveloperTestStores.ts"
 import { eq } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import * as Rows from "../src/apps/DeveloperRows.ts"
 import { IndexNamespace } from "../src/apps/IndexNamespace.ts"
 import {
@@ -47,6 +46,7 @@ import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Postgres from "./PostgresTest.ts"
 import { OpenBot } from "@openbot-build/openbot"
 import { Settings } from "../src/settings/Settings.ts"
+import * as Db from "../src/database/Database.ts"
 
 const cardUrl = "https://app.development.test/card.json"
 test(
@@ -573,7 +573,7 @@ test(
 				"Withdrawn",
 			)
 			// Make the App due for its next monitor check.
-			const dueNow = Effect.flatMap(makeWithDefaults(), (db) =>
+			const dueNow = Effect.flatMap(Db.make, (db) =>
 				db
 					.update(developerApps)
 					.set({ nextCheckAt: 0 })
@@ -693,7 +693,7 @@ test(
 			assert.ok(restricted._tag === "DeveloperRestricted")
 			assert.equal(restricted.restriction.appealUrl, restriction.appealUrl)
 			let restartedApp = await server.runPromise(
-				Effect.flatMap(makeWithDefaults(), (db) =>
+				Effect.flatMap(Db.make, (db) =>
 					Rows.getApp(db, "development", cardUrl),
 				),
 			)
@@ -704,7 +704,7 @@ test(
 			) {
 				await new Promise((resolve) => setTimeout(resolve, 10))
 				restartedApp = await server.runPromise(
-					Effect.flatMap(makeWithDefaults(), (db) =>
+					Effect.flatMap(Db.make, (db) =>
 						Rows.getApp(db, "development", cardUrl),
 					),
 				)
@@ -714,7 +714,7 @@ test(
 			assert.equal(
 				(
 					await server.runPromise(
-						Effect.flatMap(makeWithDefaults(), (db) =>
+						Effect.flatMap(Db.make, (db) =>
 							Rows.getTest(db, "development", protectedTest.id),
 						),
 					)
@@ -724,7 +724,7 @@ test(
 			assert.equal(
 				(
 					await server.runPromise(
-						Effect.flatMap(makeWithDefaults(), (db) =>
+						Effect.flatMap(Db.make, (db) =>
 							db
 								.select()
 								.from(developerProofs)
@@ -735,9 +735,7 @@ test(
 				2,
 			)
 			const persistedNotices = await server.runPromise(
-				Effect.flatMap(makeWithDefaults(), (db) =>
-					db.select().from(developerNotices),
-				),
+				Effect.flatMap(Db.make, (db) => db.select().from(developerNotices)),
 			)
 			assert.ok(
 				persistedNotices.some(
@@ -745,7 +743,7 @@ test(
 				),
 			)
 			const persistedSubscriptions = await server.runPromise(
-				Effect.flatMap(makeWithDefaults(), (db) =>
+				Effect.flatMap(Db.make, (db) =>
 					db.select().from(developerSubscriptions),
 				),
 			)

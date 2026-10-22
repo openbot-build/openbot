@@ -1,5 +1,4 @@
 import type { PgClient } from "@effect/sql-pg"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import * as StoredInvocations from "../../apps/StoredInvocations.ts"
 import * as StoredViews from "../../apps/StoredViews.ts"
 import { Secrets } from "../../secrets/Secrets.ts"
@@ -30,6 +29,7 @@ import { Invocations, type Position } from "../../apps/Invocations.ts"
 import { ActionPolicy } from "../../apps/ActionPolicy.ts"
 import { Gate } from "../../capabilities/Gate.ts"
 import { ownerKey } from "../../apps/StoredConnections.ts"
+import * as Db from "../../database/Database.ts"
 
 export const pluginId = Plugin.Id.make("@openbot-build/openbot/k-apps")
 export type Tools = Record<
@@ -172,7 +172,7 @@ export const make: Effect.Effect<
 > = Effect.gen(function* () {
 	const index = yield* PublicIndex
 	const connections = yield* Connections
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const codeRuns = yield* Effect.serviceOption(CodeRuns)
 	const services = {

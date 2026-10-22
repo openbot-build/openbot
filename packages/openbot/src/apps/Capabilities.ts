@@ -13,13 +13,13 @@ import {
 import { AppHost } from "./AppHost.ts"
 import { Governance } from "./Governance.ts"
 import type { PgClient } from "@effect/sql-pg"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { Secrets } from "../secrets/Secrets.ts"
 import * as StoredConnections from "./StoredConnections.ts"
 import type {
 	Error as StorageError,
 	StoredConnection,
 } from "./StoredConnections.ts"
+import * as Db from "../database/Database.ts"
 
 export class Unavailable extends Data.TaggedError(
 	"AppCapabilitiesUnavailable",
@@ -102,7 +102,7 @@ export const make: Effect.Effect<
 	| App.ConnectionScopes
 > = Effect.gen(function* () {
 	const factory = yield* AppHost
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const governance = yield* Governance
 	const discovery = yield* Discovery.Discovery

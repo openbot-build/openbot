@@ -4,7 +4,6 @@ import { test } from "node:test"
 import { NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
 import { Effect, Layer, ManagedRuntime, Redacted } from "effect"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { eq } from "drizzle-orm"
 import {
 	appDrafts,
@@ -17,6 +16,7 @@ import {
 } from "../src/database/Schema.ts"
 import * as Database from "../src/database/DatabasePostgres.ts"
 import * as Postgres from "./PostgresTest.ts"
+import * as Db from "../src/database/Database.ts"
 
 test("Drizzle writes join the surrounding SQL transaction and roll back with it", async () => {
 	const database = await Postgres.start()
@@ -30,7 +30,7 @@ test("Drizzle writes join the surrounding SQL transaction and roll back with it"
 			Effect.gen(function* () {
 				yield* Database.migrate
 				const sql = yield* PgClient.PgClient
-				const db = yield* makeWithDefaults()
+				const db = yield* Db.make
 				const failed = yield* sql
 					.withTransaction(
 						Effect.gen(function* () {
@@ -68,7 +68,7 @@ test("the Developer tables keep one membership for each account and remove depen
 		await runtime.runPromise(
 			Effect.gen(function* () {
 				yield* Database.migrate
-				const db = yield* makeWithDefaults()
+				const db = yield* Db.make
 				const scope = JSON.stringify({
 					_tag: "AppCard",
 					cardUrl: "https://a.test",

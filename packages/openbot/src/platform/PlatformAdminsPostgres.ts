@@ -1,13 +1,13 @@
 import { PlatformApi } from "@openbot-build/api"
 import { Clock, DateTime, Effect, Layer } from "effect"
 import { and, asc, eq, isNull, sql } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { platformAdmins } from "../database/Schema.ts"
 import {
 	normalizeEmail,
 	PlatformAdmins,
 	PlatformAdminsUnavailable,
 } from "./PlatformAdmins.ts"
+import * as Db from "../database/Database.ts"
 
 const iso = (millis: number) => DateTime.formatIso(DateTime.makeUnsafe(millis))
 const view = (
@@ -19,7 +19,7 @@ const view = (
 })
 
 export const make = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const unavailable = () => PlatformAdminsUnavailable.make({})
 	const byEmail = (email: string) => eq(platformAdmins.email, email)
 

@@ -8,7 +8,6 @@ import {
 import { Context, Effect, Layer, Match, Option, Schema } from "effect"
 import type { PgClient } from "@effect/sql-pg"
 import { and, eq, inArray } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { appInvocations } from "../database/Schema.ts"
 import { Secrets } from "../secrets/Secrets.ts"
 import { ActionPolicy } from "./ActionPolicy.ts"
@@ -16,6 +15,7 @@ import * as StoredConnections from "./StoredConnections.ts"
 import { organizationOf } from "./StoredConnections.ts"
 import * as StoredInvocations from "./StoredInvocations.ts"
 import type { Error } from "./StoredInvocations.ts"
+import * as Db from "../database/Database.ts"
 
 export interface Position {
 	readonly owner: string
@@ -61,7 +61,7 @@ export const make: Effect.Effect<
 	ExperienceStorageUnavailable,
 	PgClient.PgClient | Secrets | ActionPolicy
 > = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const policy = yield* ActionPolicy
 	// An operation that was sending when the host stopped may or may not have reached the App.

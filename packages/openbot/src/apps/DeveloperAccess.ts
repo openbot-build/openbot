@@ -4,7 +4,6 @@ import { DeveloperApi as Api } from "@openbot-build/api"
 import { Discovery, Document, Network, Robots } from "@openbot-build/protocol"
 import { PgClient } from "@effect/sql-pg"
 import { and, eq, gt, inArray, ne } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { Clock, Context, Effect, Layer, Match, Option, Schema } from "effect"
 import {
 	developerApps,
@@ -17,6 +16,7 @@ import * as Rows from "./DeveloperRows.ts"
 import type { ProofRecord } from "./DeveloperRows.ts"
 import { DomainControl } from "./DomainControl.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
+import * as Db from "../database/Database.ts"
 
 export const scopeKey = (scope: Api.ManagementScope): string =>
 	Match.value(scope).pipe(
@@ -143,7 +143,7 @@ export const make: Effect.Effect<
 	| Robots.Robots
 	| AppInspections
 > = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
 	const namespace = yield* IndexNamespace
 	const domains = yield* DomainControl

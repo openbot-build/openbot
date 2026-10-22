@@ -7,10 +7,10 @@ import {
 	SessionConflict,
 } from "@openbot-build/api"
 import { and, eq } from "drizzle-orm"
-import type { EffectPgDatabase } from "drizzle-orm/effect-postgres"
 import { Effect, Schema } from "effect"
 import { appInvocations } from "../database/Schema.ts"
 import type { Secrets } from "../secrets/Secrets.ts"
+import * as Db from "../database/Database.ts"
 
 /** The App operations of each owner, kept sealed in Postgres. */
 export type Error =
@@ -62,7 +62,7 @@ export const open = (
 	})
 
 export const get = (
-	db: EffectPgDatabase,
+	db: Db.Database,
 	secrets: Sealer,
 	owner: string,
 	id: string,
@@ -78,7 +78,7 @@ export const get = (
 	}).pipe(Effect.mapError(failure))
 
 export const list = (
-	db: EffectPgDatabase,
+	db: Db.Database,
 	secrets: Sealer,
 	owner: string,
 	session: string,

@@ -2,9 +2,9 @@ import { Caller, OrganizationApi } from "@openbot-build/api"
 import type { PgClient } from "@effect/sql-pg"
 import { Clock, DateTime, Effect, Layer, Schema } from "effect"
 import { and, desc, eq, lt } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { auditLogs } from "../database/Schema.ts"
 import { AuditLog, AuditUnavailable } from "./AuditLog.ts"
+import * as Db from "../database/Database.ts"
 
 const decodeActor = Schema.decodeUnknownSync(Schema.fromJsonString(Caller))
 const decodeDetails = Schema.decodeUnknownSync(
@@ -17,7 +17,7 @@ export const make: Effect.Effect<
 	never,
 	PgClient.PgClient
 > = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const unavailable = () => AuditUnavailable.make({})
 	return AuditLog.of({
 		record: (entry) =>

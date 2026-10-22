@@ -1,12 +1,12 @@
 import { DeveloperApi as Api } from "@openbot-build/api"
 import { PgClient } from "@effect/sql-pg"
 import { and, desc, eq, lt, or } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { Clock, Context, Effect, Layer } from "effect"
 import { developerNotices, developerSubscriptions } from "../database/Schema.ts"
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "./DeveloperRows.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
+import * as Db from "../database/Database.ts"
 
 const pageSize = 50
 export class DeveloperNotifications extends Context.Service<
@@ -34,7 +34,7 @@ export const make: Effect.Effect<
 	never,
 	PgClient.PgClient | DeveloperAccess
 > = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
 	const namespace = yield* IndexNamespace
 	const access = yield* DeveloperAccess

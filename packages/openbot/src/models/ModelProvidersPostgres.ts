@@ -1,7 +1,6 @@
 import { ModelProvidersApi } from "@openbot-build/api"
 import { Clock, Effect, Layer, Option, Redacted, Schema } from "effect"
 import { and, asc, eq, inArray, or } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { randomUUID } from "node:crypto"
 import { modelProviders, models, providerModels } from "../database/Schema.ts"
 import { hint, Secrets } from "../secrets/Secrets.ts"
@@ -14,6 +13,7 @@ import {
 	type Stored,
 	usableBy,
 } from "./ModelProviders.ts"
+import * as Db from "../database/Database.ts"
 
 const Options = Schema.fromJsonString(Schema.Array(Schema.String))
 const AvailabilityJson = Schema.fromJsonString(ModelProvidersApi.Availability)
@@ -120,7 +120,7 @@ const servesType = (
 	}
 }
 
-type Database = Effect.Success<ReturnType<typeof makeWithDefaults>>
+type Database = Db.Database
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0]
 /** A database or a transaction. Both can read. */
 type Reader = Pick<Transaction, "select">
@@ -137,7 +137,7 @@ const isKnown = (error: unknown): error is KnownError =>
 	error instanceof ModelProvidersApi.ModelProviderInvalid
 
 export const make = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const unavailable = () => ModelProvidersApi.ModelProvidersUnavailable.make({})
 	const where = (owner: Owner, id: string) => {

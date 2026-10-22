@@ -1,7 +1,6 @@
 import { createHash, randomInt } from "node:crypto"
 import type { PgClient } from "@effect/sql-pg"
 import { CodeRunsApi, Settings as SettingsApi } from "@openbot-build/api"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import {
 	Array as Arr,
 	Clock,
@@ -24,6 +23,7 @@ import { Settings } from "../settings/Settings.ts"
 import type { Call, Settled } from "./Protocol.ts"
 import { Sandbox } from "./Sandbox.ts"
 import * as Stored from "./StoredCodeRuns.ts"
+import * as Db from "../database/Database.ts"
 
 /** What the Agent gets back from a program. */
 export const ToolResult = Schema.Struct({
@@ -260,7 +260,7 @@ export const make: Effect.Effect<
 	| ActionPolicy
 	| Gate
 > = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const shared = yield* Settings
 	const sandbox = yield* Sandbox

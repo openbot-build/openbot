@@ -1,7 +1,6 @@
 import { ModelProvidersApi } from "@openbot-build/api"
 import { Clock, Effect, Layer, Option, Schema } from "effect"
 import { and, asc, eq, or } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { modelProviders, models, providerModels } from "../database/Schema.ts"
 import {
 	ownerColumns,
@@ -10,6 +9,7 @@ import {
 	usableBy,
 } from "./ModelProviders.ts"
 import { Models, type StoredModel } from "./Models.ts"
+import * as Db from "../database/Database.ts"
 
 const Options = Schema.fromJsonString(Schema.Array(Schema.String))
 const AvailabilityJson = Schema.fromJsonString(ModelProvidersApi.Availability)
@@ -43,7 +43,7 @@ const isKnown = (error: unknown): error is KnownError =>
 	error instanceof ModelProvidersApi.ModelInUse
 
 export const make = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const unavailable = () => ModelProvidersApi.ModelProvidersUnavailable.make({})
 	const where = (owner: Owner, id: string) => {
 		const columns = ownerColumns(owner)

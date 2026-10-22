@@ -17,7 +17,6 @@ import {
 import { DeveloperAccess } from "./DeveloperAccess.ts"
 import { PgClient } from "@effect/sql-pg"
 import { and, asc, eq, isNotNull, lte, ne, or } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { developerTestFlows, developerTests } from "../database/Schema.ts"
 import * as Rows from "./DeveloperRows.ts"
 import type { TestRecord } from "./DeveloperRows.ts"
@@ -25,6 +24,7 @@ import { IndexNamespace } from "./IndexNamespace.ts"
 import { DeveloperTestStores } from "./DeveloperTestStores.ts"
 import { DeveloperTestRuntime } from "./DeveloperTestRuntime.ts"
 import { Secrets } from "../secrets/Secrets.ts"
+import * as Db from "../database/Database.ts"
 
 export class DeveloperTests extends Context.Service<
 	DeveloperTests,
@@ -121,7 +121,7 @@ export const make = (
 	| Scope.Scope
 > =>
 	Effect.gen(function* () {
-		const db = yield* makeWithDefaults()
+		const db = yield* Db.make
 		const inTransaction = Rows.transaction(yield* PgClient.PgClient)
 		const namespace = yield* IndexNamespace
 		/**

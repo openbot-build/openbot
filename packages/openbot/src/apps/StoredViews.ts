@@ -8,10 +8,10 @@ import {
 } from "@openbot-build/api"
 import { Item, Session, Turn } from "@openbot-build/core"
 import { and, eq, like } from "drizzle-orm"
-import type { EffectPgDatabase } from "drizzle-orm/effect-postgres"
 import { Array as Arr, Effect, Option, Schema } from "effect"
 import { appSecrets } from "../database/Schema.ts"
 import type { Secrets } from "../secrets/Secrets.ts"
+import * as Db from "../database/Database.ts"
 
 /** The open App views, their actions and their confirmed interaction state, kept sealed in Postgres. */
 export type Error =
@@ -90,7 +90,7 @@ export const open = <S extends Schema.Top>(
 
 /** The confirmed interaction context of each App operation in a Session. */
 export const contexts = (
-	db: EffectPgDatabase,
+	db: Db.Database,
 	secrets: Sealer,
 	owner: string,
 	session: string,

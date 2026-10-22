@@ -6,11 +6,11 @@ import { test } from "node:test"
 import { fileURLToPath } from "node:url"
 import { NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { migrate } from "drizzle-orm/effect-postgres/migrator"
 import { Effect, Layer, ManagedRuntime, Redacted } from "effect"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
+import * as Db from "../src/database/Database.ts"
 
 /** A later migration gives every organization the default plan approval. */
 const planApproval = {
@@ -61,7 +61,7 @@ test("models in old providers move to their own table, and their IDs stay the sa
 				})
 		await runtime.runPromise(
 			Effect.gen(function* () {
-				const db = yield* makeWithDefaults()
+				const db = yield* Db.make
 				yield* migrate(db, { migrationsFolder: before })
 				const sql = yield* PgClient.PgClient
 				const rows = [
@@ -228,7 +228,7 @@ test("old models become language models, and old organization settings get no de
 				})
 		await runtime.runPromise(
 			Effect.gen(function* () {
-				const db = yield* makeWithDefaults()
+				const db = yield* Db.make
 				yield* migrate(db, { migrationsFolder: before })
 				const sql = yield* PgClient.PgClient
 				yield* sql`insert into openbot_models ${sql.insert({
@@ -337,7 +337,7 @@ test("the old default model moves to Agents without a model, and the old helper 
 				})
 		await runtime.runPromise(
 			Effect.gen(function* () {
-				const db = yield* makeWithDefaults()
+				const db = yield* Db.make
 				yield* migrate(db, { migrationsFolder: before })
 				const sql = yield* PgClient.PgClient
 				const settings = [

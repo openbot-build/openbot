@@ -2,7 +2,6 @@ import { randomBytes, randomUUID } from "node:crypto"
 import { DeveloperApi as Api } from "@openbot-build/api"
 import { PgClient } from "@effect/sql-pg"
 import { and, eq } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { Clock, Context, Effect, Layer, Schema } from "effect"
 import {
 	developerInvitations,
@@ -13,6 +12,7 @@ import { DeveloperAccess } from "./DeveloperAccess.ts"
 import * as Rows from "./DeveloperRows.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
 import { ownerKey } from "./StoredConnections.ts"
+import * as Db from "../database/Database.ts"
 
 export class DeveloperMembers extends Context.Service<
 	DeveloperMembers,
@@ -68,7 +68,7 @@ export const make: Effect.Effect<
 	never,
 	PgClient.PgClient | DeveloperAccess
 > = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
 	const namespace = yield* IndexNamespace
 	const access = yield* DeveloperAccess

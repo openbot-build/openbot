@@ -4,12 +4,9 @@ import { AppIndexApi } from "@openbot-build/api"
 import { Index } from "@openbot-build/protocol"
 import { Effect, HashMap, Layer, Schema } from "effect"
 import { and, eq } from "drizzle-orm"
-import {
-	makeWithDefaults,
-	type EffectPgDatabase,
-} from "drizzle-orm/effect-postgres"
 import { appIndexEntries, appIndexJobs } from "../database/Schema.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
+import * as Db from "../database/Database.ts"
 
 /** The public Index entries in Postgres. It holds only entries that were checked independently. */
 const unavailable = () =>
@@ -22,7 +19,7 @@ export const decode = Schema.decodeUnknownEffect(
 )
 
 /** The last check of each App in the namespace. An App that was never checked is pending. */
-export const checks = (db: EffectPgDatabase, namespace: string) =>
+export const checks = (db: Db.Database, namespace: string) =>
 	db
 		.select()
 		.from(appIndexJobs)
@@ -44,7 +41,7 @@ export const checks = (db: EffectPgDatabase, namespace: string) =>
 export const layer = Layer.effect(
 	Index.IndexStore,
 	Effect.gen(function* () {
-		const db = yield* makeWithDefaults()
+		const db = yield* Db.make
 		const namespace = yield* IndexNamespace
 		const where = (cardUrl: string) =>
 			and(

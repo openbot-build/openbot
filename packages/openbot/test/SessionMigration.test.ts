@@ -7,10 +7,10 @@ import { fileURLToPath } from "node:url"
 import { PgClient } from "@effect/sql-pg"
 import { NodeServices } from "@effect/platform-node"
 import { DatabasePostgres } from "@openbot-build/openbot"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { migrate } from "drizzle-orm/effect-postgres/migrator"
 import { Effect, Layer, ManagedRuntime, Redacted } from "effect"
 import * as PostgresTest from "./PostgresTest.ts"
+import * as Db from "../src/database/Database.ts"
 
 const migrations = fileURLToPath(new URL("../migrations", import.meta.url))
 /** The first migration after the Workflows. */
@@ -60,7 +60,7 @@ test("old Sessions get the mode build, Sessions of Runs become direct, Workflow 
 				})
 		await runtime.runPromise(
 			Effect.gen(function* () {
-				const db = yield* makeWithDefaults()
+				const db = yield* Db.make
 				yield* migrate(db, { migrationsFolder: before })
 				const sql = yield* PgClient.PgClient
 				for (const row of [

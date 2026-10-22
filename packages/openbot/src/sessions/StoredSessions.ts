@@ -13,8 +13,8 @@ import * as SessionEncoding from "./SessionEncoding.ts"
 import { agentFields } from "./SessionHost.ts"
 import { Array, Match, Effect, Equal, Schema, Option } from "effect"
 import { and, eq, inArray } from "drizzle-orm"
-import type { EffectPgDatabase } from "drizzle-orm/effect-postgres"
 import { refs, versions, contents } from "../database/Schema.ts"
+import * as Db from "../database/Database.ts"
 
 /** The Sessions of each namespace, kept in Postgres. */
 const { decode, databaseError, conflict, responseSummary } = SessionEncoding
@@ -22,7 +22,7 @@ const json = <S extends Schema.ConstraintDecoder<unknown>>(
 	schema: S,
 	value: string,
 ) => decode(Schema.fromJsonString(schema))(value)
-type Database = EffectPgDatabase
+type Database = Db.Database
 const readers = (
 	db: Database,
 	namespace: string,

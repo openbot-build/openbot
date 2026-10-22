@@ -9,7 +9,6 @@ import {
 	Schema,
 } from "effect"
 import { and, asc, eq, isNotNull, ne } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { randomBytes, randomUUID } from "node:crypto"
 import { DomainControl } from "../apps/DomainControl.ts"
 import { openbot_auth_account } from "../database/AuthSchema.ts"
@@ -18,6 +17,7 @@ import { hint, Secrets } from "../secrets/Secrets.ts"
 import { signInScope } from "../settings/Documents.ts"
 import { Settings } from "../settings/Settings.ts"
 import { type Connection, recordName, Sso } from "./Sso.ts"
+import * as Db from "../database/Database.ts"
 
 const Domains = Schema.fromJsonString(Schema.Array(Schema.String))
 const decodeDomains = Schema.decodeUnknownSync(Domains)
@@ -50,7 +50,7 @@ const connection = (row: typeof ssoConnections.$inferSelect): Connection => ({
 })
 
 export const make = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const control = yield* DomainControl
 	const settings = yield* Settings

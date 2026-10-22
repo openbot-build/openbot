@@ -4,7 +4,6 @@ import type { PgClient } from "@effect/sql-pg"
 import { DeveloperApi as Api } from "@openbot-build/api"
 import { Discovery } from "@openbot-build/protocol"
 import { and, eq } from "drizzle-orm"
-import type { EffectPgDatabase } from "drizzle-orm/effect-postgres"
 import { Array as Arr, Effect, Option, Schema } from "effect"
 import {
 	developerApps,
@@ -14,13 +13,14 @@ import {
 	developerTestFlows,
 	developerTests,
 } from "../database/Schema.ts"
+import * as Db from "../database/Database.ts"
 
 /**
  * The Developer Center tables in Postgres: the codecs between rows and API
  * values, and the queries that more than one Developer module uses.
  * Every table has a `namespace` column, so the development host keeps its own rows.
  */
-export type Database = EffectPgDatabase
+export type Database = Db.Database
 
 export const unavailable = () => Api.DeveloperUnavailable.make({})
 /** Every storage failure becomes one error. */
@@ -30,7 +30,7 @@ export const stored = <A, E, R>(
 	effect.pipe(Effect.mapError(unavailable))
 /**
  * Run the effect in one database transaction. Drizzle queries on the `db` of
- * `makeWithDefaults()` join this transaction. A nested call becomes a savepoint.
+ * `Db.make` join this transaction. A nested call becomes a savepoint.
  */
 export const transaction =
 	(sql: PgClient.PgClient) =>

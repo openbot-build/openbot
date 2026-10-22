@@ -13,7 +13,6 @@ import { Effect, Layer, ManagedRuntime, Redacted, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import * as Database from "../src/database/DatabasePostgres.ts"
 import * as Migration from "../src/database/Migrations.ts"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import * as Rows from "../src/apps/DeveloperRows.ts"
 import * as AccessLayer from "../src/apps/DeveloperAccess.ts"
 import { DeveloperAccess } from "../src/apps/DeveloperAccess.ts"
@@ -28,6 +27,7 @@ import {
 } from "../src/apps/DomainControl.ts"
 import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Postgres from "./PostgresTest.ts"
+import * as Db from "../src/database/Database.ts"
 
 const alice = ownerKey({
 	organizationId: "alice-organization",
@@ -150,7 +150,7 @@ test("developer proofs, members and report history stay saved without sharing ac
 				const access = yield* DeveloperAccess
 				const members = yield* DeveloperMembers
 				const reports = yield* DeveloperReports
-				const db = yield* makeWithDefaults()
+				const db = yield* Db.make
 				const seedApp = (app: {
 					readonly candidate: Discovery.Candidate
 					readonly nextCheckAt: number

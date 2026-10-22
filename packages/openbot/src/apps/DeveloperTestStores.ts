@@ -2,12 +2,12 @@ import { randomUUID } from "node:crypto"
 import { Authorization, Store } from "@openbot-build/protocol"
 import { PgClient } from "@effect/sql-pg"
 import { and, eq } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { Clock, Context, Effect, Layer, Schema } from "effect"
 import { developerTestFlows, developerTests } from "../database/Schema.ts"
 import { Secrets } from "../secrets/Secrets.ts"
 import * as Rows from "./DeveloperRows.ts"
 import { IndexNamespace } from "./IndexNamespace.ts"
+import * as Db from "../database/Database.ts"
 
 const PrivateState = Schema.Struct({
 	connection: Schema.NullOr(Store.UserConnection),
@@ -34,7 +34,7 @@ export const make: Effect.Effect<
 	never,
 	PgClient.PgClient | Secrets
 > = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const inTransaction = Rows.transaction(yield* PgClient.PgClient)
 	const namespace = yield* IndexNamespace
 	const secrets = yield* Secrets

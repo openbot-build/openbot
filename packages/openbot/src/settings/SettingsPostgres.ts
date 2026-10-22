@@ -14,7 +14,6 @@ import {
 	Stream,
 } from "effect"
 import { and, eq, sql } from "drizzle-orm"
-import { makeWithDefaults } from "drizzle-orm/effect-postgres"
 import { settings } from "../database/Schema.ts"
 import {
 	MemberDocument,
@@ -32,6 +31,7 @@ import {
 	type Snapshot,
 } from "./Documents.ts"
 import { Settings } from "./Settings.ts"
+import * as Db from "../database/Database.ts"
 
 /** Every instance listens on this channel. The payload is the key of the scope that changed. */
 export const channel = "openbot_settings"
@@ -46,7 +46,7 @@ const columns = (scope: DocumentScope) =>
 		: { scopeKind: scope.kind, scopeId: scope.id }
 
 export const make = Effect.gen(function* () {
-	const db = yield* makeWithDefaults()
+	const db = yield* Db.make
 	const client = yield* PgClient.PgClient
 	const unavailable = () => Api.SettingsUnavailable.make({})
 	const where = (scope: DocumentScope) => {
