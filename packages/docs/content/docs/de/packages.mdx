@@ -171,6 +171,10 @@ const plugin = MemoryPlugin.make({
 
 ### Turn-Limits
 
+Drei Plugins setzen jedem Turn eine Grenze. Du kannst eines davon nutzen oder sie mit `PluginComposition.merge` verbinden. Jedes Plugin zählt nur seinen eigenen Turn.
+
+#### Model-Schritte
+
 `TurnLimiter` hält einen Turn nach einer festen Zahl von Model-Schritten an. Die erste Model-Anfrage zählt als ein Schritt.
 
 ```ts
@@ -190,6 +194,36 @@ Er schlägt mit einem von zwei Fehlern fehl:
 | ------------------------ | --------------------------------------------------------------------------------------------------- |
 | `InvalidMaxSteps`        | `maxSteps` ist keine positive ganze Zahl.                                                           |
 | `ModelStepLimitExceeded` | Der Turn braucht nach der Grenze noch einen Model-Schritt. Der Fehler hat `maxSteps` und `history`. |
+
+#### Tokens
+
+`TokenLimiter` hält einen Turn an, wenn er eine feste Zahl von Tokens verbraucht hat. Ein Token ist ein kleines Stück Text, das das Model liest oder schreibt. Das Plugin zählt die Eingabe- und Ausgabe-Tokens jedes Model-Schritts zusammen. Ein Model-Schritt, der schon begonnen hat, darf fertig laufen. Der nächste Model-Schritt schlägt fehl, wenn die Summe `maxTokens` erreicht.
+
+```ts
+import { TokenLimiter } from "@openbot-build/openbot"
+
+const plugin = TokenLimiter.make({ maxTokens: 100_000 })
+```
+
+| Fehler               | Wann                                                                                                               |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `InvalidMaxTokens`   | `maxTokens` ist keine positive ganze Zahl.                                                                         |
+| `TokenLimitExceeded` | Der Turn braucht nach der Grenze noch einen Model-Schritt. Der Fehler hat `maxTokens`, `usedTokens` und `history`. |
+
+#### Zeit
+
+`TimeLimiter` hält einen Turn nach einer festen Zeit an. `maxDuration` ist eine Zahl von Millisekunden oder ein Text wie `"5 minutes"`. Wenn die Zeit um ist, hält das Plugin den Turn sofort an. Es hält auch einen Model-Schritt oder einen Tool-Aufruf mitten im Lauf an.
+
+```ts
+import { TimeLimiter } from "@openbot-build/openbot"
+
+const plugin = TimeLimiter.make({ maxDuration: "5 minutes" })
+```
+
+| Fehler               | Wann                                                                              |
+| -------------------- | --------------------------------------------------------------------------------- |
+| `InvalidMaxDuration` | `maxDuration` ist keine positive, endliche Zeit.                                  |
+| `TimeLimitExceeded`  | Der Turn läuft länger als die Grenze. Der Fehler hat `maxDuration` und `history`. |
 
 ---
 

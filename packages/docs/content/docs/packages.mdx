@@ -171,6 +171,10 @@ const plugin = MemoryPlugin.make({
 
 ### Turn limits
 
+Three plugins put a limit on each Turn. You can use one of them, or merge them with `PluginComposition.merge`. Each one counts only its own Turn.
+
+#### Model steps
+
 `TurnLimiter` stops a Turn after a set number of model steps. The first model request counts as one step.
 
 ```ts
@@ -190,6 +194,36 @@ It fails with one of two errors:
 | ------------------------ | ----------------------------------------------------------------------------------- |
 | `InvalidMaxSteps`        | `maxSteps` is not a positive whole number.                                          |
 | `ModelStepLimitExceeded` | The Turn needs another model step after the limit. It has `maxSteps` and `history`. |
+
+#### Tokens
+
+`TokenLimiter` stops a Turn after it uses a set number of tokens. A token is a small piece of text that the model reads or writes. The plugin adds the input and output tokens of each model step. A model step that has started can finish. The next model step fails when the total reaches `maxTokens`.
+
+```ts
+import { TokenLimiter } from "@openbot-build/openbot"
+
+const plugin = TokenLimiter.make({ maxTokens: 100_000 })
+```
+
+| Error                | When                                                                                                |
+| -------------------- | --------------------------------------------------------------------------------------------------- |
+| `InvalidMaxTokens`   | `maxTokens` is not a positive whole number.                                                         |
+| `TokenLimitExceeded` | The Turn needs another model step after the limit. It has `maxTokens`, `usedTokens`, and `history`. |
+
+#### Time
+
+`TimeLimiter` stops a Turn after a set time. `maxDuration` takes a number of milliseconds or a text such as `"5 minutes"`. When the time is up, the plugin stops the Turn at once. It also stops a model step or a tool call in the middle.
+
+```ts
+import { TimeLimiter } from "@openbot-build/openbot"
+
+const plugin = TimeLimiter.make({ maxDuration: "5 minutes" })
+```
+
+| Error                | When                                                                     |
+| -------------------- | ------------------------------------------------------------------------ |
+| `InvalidMaxDuration` | `maxDuration` is not a positive, finite time.                            |
+| `TimeLimitExceeded`  | The Turn runs longer than the limit. It has `maxDuration` and `history`. |
 
 ---
 

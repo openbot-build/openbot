@@ -171,6 +171,10 @@ const plugin = MemoryPlugin.make({
 
 ### Turn 限制
 
+有三个插件可以限制每个 Turn。你可以只用其中一个，也可以用 `PluginComposition.merge` 把它们合在一起。每个插件只计算自己的 Turn。
+
+#### 模型步骤
+
 `TurnLimiter` 在达到设定的模型步骤数后停止 Turn。第一次模型请求算作一步。
 
 ```ts
@@ -190,6 +194,36 @@ const runtime =
 | ------------------------ | ------------------------------------------------------------------------- |
 | `InvalidMaxSteps`        | `maxSteps` 不是正整数。                                                   |
 | `ModelStepLimitExceeded` | 达到限制后，Turn 还需要再走一个模型步骤。它带有 `maxSteps` 和 `history`。 |
+
+#### Token
+
+`TokenLimiter` 在 Turn 用掉设定数量的 token 后停止它。token 是模型读或写的一小段文字。插件把每个模型步骤的输入和输出 token 加在一起。已经开始的模型步骤可以完成。当总数达到 `maxTokens` 时，下一个模型步骤会失败。
+
+```ts
+import { TokenLimiter } from "@openbot-build/openbot"
+
+const plugin = TokenLimiter.make({ maxTokens: 100_000 })
+```
+
+| 错误                 | 何时发生                                                                                 |
+| -------------------- | ---------------------------------------------------------------------------------------- |
+| `InvalidMaxTokens`   | `maxTokens` 不是正整数。                                                                 |
+| `TokenLimitExceeded` | 达到限制后，Turn 还需要再走一个模型步骤。它带有 `maxTokens`、`usedTokens` 和 `history`。 |
+
+#### 时间
+
+`TimeLimiter` 在设定的时间过后停止 Turn。`maxDuration` 可以是毫秒数，也可以是 `"5 minutes"` 这样的文字。时间一到，插件会马上停止 Turn。模型步骤或工具调用进行到一半时也会被停止。
+
+```ts
+import { TimeLimiter } from "@openbot-build/openbot"
+
+const plugin = TimeLimiter.make({ maxDuration: "5 minutes" })
+```
+
+| 错误                 | 何时发生                                                       |
+| -------------------- | -------------------------------------------------------------- |
+| `InvalidMaxDuration` | `maxDuration` 不是一个有限的正时间。                           |
+| `TimeLimitExceeded`  | Turn 运行的时间超过了限制。它带有 `maxDuration` 和 `history`。 |
 
 ---
 
