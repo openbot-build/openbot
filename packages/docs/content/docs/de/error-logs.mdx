@@ -1,0 +1,67 @@
+---
+title: Fehler-Logs
+description: Wie OpenBot Fehler protokolliert und wie du sie an deinen eigenen Dienst schickst.
+---
+
+OpenBot schreibt eine Log-Zeile mit der Stufe `Error`, wenn auf dem Server etwas fehlschlägt.
+OpenBot schickt diese Logs nicht an andere Dienste. Das kannst du selbst mit einem Effect-Logger hinzufügen.
+
+---
+
+## Was OpenBot protokolliert
+
+| Quelle    | Wann                                                                    |
+| --------- | ----------------------------------------------------------------------- |
+| `http`    | Ein Request endet mit dem Status `500` oder höher.                      |
+| `turn`    | Ein Turn endet mit dem Status `Failed`.                                 |
+| `startup` | OpenBot startet nicht, zum Beispiel wegen einer falschen Konfiguration. |
+
+Normale Fehler bei Requests, wie `400`, `401`, `404` oder `409`, werden nicht als Fehler protokolliert. Arbeit, die eine Person absichtlich unterbricht, wird auch nicht protokolliert.
+
+Jedes Fehler-Log hat die Nachricht `OpenBot operation failed` und diese Annotationen. Eine Annotation ist ein benannter Wert, der an einer Log-Zeile hängt.
+
+| Annotation                               | Bedeutung                                                                |
+| ---------------------------------------- | ------------------------------------------------------------------------ |
+| `source`, `operation`                    | Welcher Teil von OpenBot fehlgeschlagen ist.                             |
+| `errorType`                              | Ein kurzer Name für den Fehler, wenn OpenBot einen kennt.                |
+| `requestId`, `method`, `route`, `status` | Für HTTP-Fehler. `route` ist das Muster der Route, nicht der echte Pfad. |
+| `sessionId`, `turnId`                    | Für Fehler in einem Turn.                                                |
+
+Das Log enthält auch die Ursache des Fehlers. Die Ursache kann Fehlermeldungen und andere private Daten enthalten.
+
+---
+
+## Fehler an deinen eigenen Dienst schicken
+
+Wenn du OpenBot aus deinem eigenen Code startest, füge mit `Logger.layer` einen Logger hinzu. Nutze `mergeWithExisting: true`, damit die anderen Logger bleiben.
+Stelle ihn außerhalb des Servers bereit. So bleibt er offen, bis der Server geschlossen ist.
+
+```ts
+import { NodeRuntime } from "@effect/platform-node"
+import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
+import { Effect, Layer, Logger, References } from "effect"
+import { FetchHttpClient } from "effect/http"
+
+const alerts = Logger.layer(
+	[
+		Logger.make((log) => {
+			if (log.logLevel !== "Error" && log.logLevel !== "Fatal") return
+			const annotations = log.fiber.getRef(References.CurrentLogAnnotations)
+			// Schicke nur die Werte, die du brauchst, zum Beispiel an einen Chat-Bot.
+			console.log("alert", annotations["source"], annotations["operation"])
+		}),
+	],
+	{ mergeWithExisting: true },
+)
+
+NodeRuntime.runMain(
+	Effect.gen(function* () {
+		const settings = yield* EnvironmentConfiguration.load
+		return yield* Layer.launch(
+			Server.layer(settings).pipe(Layer.provide(FetchHttpClient.layer)),
+		)
+	}).pipe(Effect.provide(alerts)),
+)
+```
+
+Ein Logger darf nicht blockieren. Wenn du einen langsamen Dienst aufrufen willst, lege jedes Ereignis in eine Warteschlange. Schicke es dann von einer Fiber im Hintergrund. Eine Fiber ist ein leichter Thread, den Effect ausführt.

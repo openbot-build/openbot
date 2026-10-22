@@ -1,0 +1,245 @@
+---
+title: Konfiguration
+description: Was jede OpenBot-Instanz aus ihrer Umgebung liest und wo alle anderen Einstellungen liegen.
+---
+
+OpenBot kann als viele Instanzen laufen. Eine Instanz ist ein laufender Prozess des OpenBot-Servers. Alle Instanzen einer Installation nutzen dieselbe Datenbank.
+Diese Seite listet die wenigen Werte, die jede Instanz beim Start liest. Sie zeigt auch, wo alle anderen Einstellungen liegen.
+
+---
+
+## Die Regel
+
+Es gibt zwei Arten von Einstellungen:
+
+- **Instanz-Einstellungen** gehören zu einer Instanz. Keine andere Instanz braucht denselben Wert. Sie kommen aus Umgebungsvariablen oder aus Dateien in `/run/secrets`.
+- **Geteilte Einstellungen** müssen auf jeder Instanz gleich sein. Sie liegen in PostgreSQL. Du änderst sie über die API, und jede Instanz nutzt die Änderung sofort.
+
+Es gibt eine Ausnahme: `OPENBOT_SECRET_KEYS`. Jede Instanz braucht dieselben Schlüssel. Aber diese Schlüssel verschlüsseln die Geheimnisse in der Datenbank. Darum können sie nicht in der Datenbank liegen. Jede Instanz liest sie aus ihrer Umgebung.
+
+Wenn ein nötiger Wert fehlt oder falsch ist, startet OpenBot nicht. Es schreibt einen Fehler zur Konfiguration ins Log.
+
+---
+
+## Instanz-Einstellungen
+
+Das ist die vollständige Liste der Umgebungsvariablen, die der Server liest.
+
+| Variable               | Pflicht | Standard    | Bedeutung                                                                   |
+| ---------------------- | ------- | ----------- | --------------------------------------------------------------------------- |
+| `OPENBOT_HOST`         | Nein    | `127.0.0.1` | Die Netzwerk-Adresse, auf der der Server lauscht.                           |
+| `OPENBOT_PORT`         | Nein    | `3000`      | Der Port, auf dem der Server lauscht.                                       |
+| `OPENBOT_DATABASE_URL` | Ja      |             | Eine URL für die Verbindung zu PostgreSQL.                                  |
+| `OPENBOT_SECRET_KEYS`  | Ja      |             | Die Schlüssel, die Geheimnisse in der Datenbank verschlüsseln. Siehe unten. |
+| `OPENBOT_TLS_CERT`     | Nein    |             | Der Pfad zu einer PEM-Zertifikatsdatei.                                     |
+| `OPENBOT_TLS_KEY`      | Nein    |             | Der Pfad zur PEM-Datei mit dem privaten Schlüssel für dieses Zertifikat.    |
+
+Das Docker-Image setzt `OPENBOT_HOST=0.0.0.0` und `OPENBOT_PORT=3000`. So kann der Server Verkehr von außerhalb des Containers annehmen.
+
+### Datenbank
+
+`OPENBOT_DATABASE_URL` sieht so aus: `postgres://openbot:secret@db.example.com:5432/openbot`.
+Der Server, das Migrations-Programm und das Setup-Programm lesen sie alle.
+
+Wenn der Server startet, prüft er, ob alle Tabellen da sind. Wenn sie fehlen, hört er auf. Führe zuerst das Migrations-Programm aus. Siehe [Deploy](/de/docs/deploy).
+
+### TLS
+
+Setze `OPENBOT_TLS_CERT` und `OPENBOT_TLS_KEY` beide, damit OpenBot selbst HTTPS anbietet. Setze keinen der beiden, um einfaches HTTP anzubieten.
+Wenn du nur einen setzt, startet OpenBot nicht.
+
+Im Betrieb kümmert sich meistens ein Reverse Proxy um HTTPS. Dann lässt du beide Werte leer. Siehe [Deploy](/de/docs/deploy).
+
+---
+
+## Geheime Schlüssel
+
+OpenBot speichert manche Geheimnisse in der Datenbank. Es verschlüsselt sie mit den Schlüsseln in `OPENBOT_SECRET_KEYS`. Diese Geheimnisse sind:
+
+- die privaten Daten von App-Connections, zum Beispiel Zugangsdaten von Apps, private Einstellungen und der Zustand der Anmeldung,
+- die API-Schlüssel von [Model Providers](/de/docs/models),
+- die Client-Secrets von [SSO-Verbindungen](/de/docs/sso),
+- das Anmelde-Geheimnis der Platform, das die Anmelde-Cookies signiert,
+- das Client-Secret des OpenID-Connect-Anbieters der Platform.
+
+`OPENBOT_SECRET_KEYS` ist eine Liste von Schlüsseln, getrennt durch Kommas:
+
+```sh
+OPENBOT_SECRET_KEYS=k2:<64 hexadecimal characters>,k1:<64 hexadecimal characters>
+```
+
+- Jeder Eintrag ist `<id>:<key>`.
+- Der Schlüssel hat genau 64 hexadezimale Zeichen (32 Bytes).
+- Die ID hat 1 bis 32 Zeichen. Sie kann Kleinbuchstaben, Ziffern, `_` und `-` enthalten.
+- Der **erste** Schlüssel verschlüsselt neue Geheimnisse.
+- **Jeder** Schlüssel in der Liste kann entschlüsseln. OpenBot speichert die ID des Schlüssels neben jedem Geheimnis. So weiß es, welchen Schlüssel es nutzen muss.
+
+Erstelle einmal einen Schlüssel:
+
+```sh
+echo "k1:$(openssl rand -hex 32)"
+```
+
+Gib jeder Instanz dieselbe Liste.
+Bewahre die Schlüssel zusammen mit deinen Backups der Datenbank auf. Wenn du sie verlierst, kann OpenBot die Geheimnisse in der Datenbank nicht lesen.
+
+### Die Schlüssel wechseln
+
+Du kannst einen neuen Schlüssel hinzufügen, ohne die alten Geheimnisse zu verlieren:
+
+1. Erstelle einen neuen Schlüssel, zum Beispiel `k2`.
+2. Setze ihn an den Anfang der Liste und behalte den alten Schlüssel dahinter: `k2:<new>,k1:<old>`.
+3. Gib die neue Liste jeder Instanz und starte sie neu.
+
+OpenBot verschließt neue Geheimnisse jetzt mit `k2`. Geheimnisse, die `k1` verschlossen hat, lassen sich weiter öffnen.
+Behalte den alten Schlüssel in der Liste, solange die Datenbank Geheimnisse enthält, die er verschlossen hat.
+
+<Callout type="warn">
+	Halte `OPENBOT_SECRET_KEYS` aus der Versionsverwaltung heraus. Jeder mit den
+	Schlüsseln und einer Kopie der Datenbank kann jedes gespeicherte Geheimnis
+	lesen.
+</Callout>
+
+---
+
+## Geheimnisse als Dateien
+
+Wenn eine Umgebungsvariable nicht gesetzt ist, liest OpenBot stattdessen die Datei `/run/secrets/<NAME>`. Zum Beispiel liest es `OPENBOT_SECRET_KEYS` aus `/run/secrets/OPENBOT_SECRET_KEYS`. Docker und Compose legen Geheimnisse in diesen Ordner.
+
+- Eine Umgebungsvariable kommt immer zuerst, auch wenn die Datei da ist.
+- OpenBot entfernt Leerzeichen und Zeilenumbrüche am Anfang und Ende der Datei.
+- Eine leere Datei zählt als nicht gesetzt. Eine fehlende Datei oder ein fehlender Ordner zählt auch als nicht gesetzt.
+
+Das funktioniert für jede Variable auf dieser Seite. Am nützlichsten ist es für Geheimnisse. Denn Umgebungsvariablen erscheinen in `docker inspect`, Dateien nicht.
+
+---
+
+## Erstes Setup
+
+Eine neue Datenbank hat keine geteilten Einstellungen. Bevor Menschen OpenBot nutzen können, führst du einmal das Setup-Programm aus. Es schreibt die ersten Einstellungen der Platform und die ersten Admins der Platform.
+
+Bis dahin startet der Server, aber jede Route außer `/health` antwortet mit `503` und diesem Body:
+
+```json
+{ "_tag": "SetupRequired" }
+```
+
+Das Log sagt dir auch, dass du das Setup ausführen sollst. Alle Flags findest du unter [Platform](/de/docs/platform#setup), die Befehle unter [Deploy](/de/docs/deploy).
+
+---
+
+## Wo alle anderen Einstellungen liegen
+
+Jede andere Einstellung ist eine geteilte Einstellung in der Datenbank. Zwei Dokumente enthalten die meisten davon:
+
+- Die **Einstellungen der Platform** unter `/v1/platform/settings`. Nur Admins der Platform können sie ändern. Siehe [Platform](/de/docs/platform).
+- Die **Einstellungen der Organization** unter `/v1/organization/settings`. Jede Organization hat ihre eigenen. Siehe [Organization](/de/docs/organization#einstellungen).
+
+Ältere Versionen von OpenBot haben mehr Umgebungsvariablen gelesen. OpenBot ignoriert sie jetzt. Diese Tabelle zeigt, wohin jeder Wert gewandert ist:
+
+| Alte Variable                   | Neuer Ort                                                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `OPENBOT_PUBLIC_ORIGIN`         | `publicOrigin` in den Einstellungen der Platform. Das Setup schreibt ihn mit `--public-origin`.                                      |
+| `OPENBOT_OIDC_ISSUER`           | `identityProvider.issuer` in den Einstellungen der Platform. Das Setup schreibt ihn mit `--oidc-issuer`.                             |
+| `OPENBOT_OIDC_CLIENT_ID`        | `identityProvider.clientId` in den Einstellungen der Platform. Das Setup schreibt ihn mit `--oidc-client-id`.                        |
+| `OPENBOT_OIDC_CLIENT_SECRET`    | `identityProvider.clientSecret` in den Einstellungen der Platform, verschlüsselt. Das Setup schreibt ihn mit `--oidc-client-secret`. |
+| `BETTER_AUTH_SECRET`            | Das Anmelde-Geheimnis. Das Setup erstellt ein zufälliges und speichert es verschlüsselt. Du setzt es nie.                            |
+| `OPENBOT_APP_ENCRYPTION_KEY`    | `OPENBOT_SECRET_KEYS`.                                                                                                               |
+| `OPENBOT_OWNER_EMAILS`          | Admins der Platform. Das Setup fügt sie mit `--admin-email` hinzu. Ändere sie mit `/v1/platform/admins`.                             |
+| `OPENBOT_ALLOWED_EMAIL_DOMAINS` | Bestätigte Domains jeder Organization, mit `joinByDomain` in ihren Einstellungen. Siehe [SSO](/de/docs/sso#bestätigte-domains).      |
+| `OPENBOT_MODEL_ENDPOINT`        | Model Providers einer Organization oder der Platform. Siehe [Models](/de/docs/models).                                               |
+| `OPENBOT_MODEL_API_KEY`         | Model Providers, verschlüsselt.                                                                                                      |
+| `OPENBOT_MODEL_ID`              | Ein Model, das ein Model Provider verknüpft, und das `model` jedes Agents.                                                           |
+| `OPENBOT_DEV_MODE`              | Der Einstiegspunkt für die Entwicklung entscheidet. Siehe [Entwicklung](#entwicklung).                                               |
+
+Manche Werte waren früher Optionen im Code. Sie sind jetzt auch Einstellungen:
+
+| Alte Option                                 | Neuer Ort                                                                     |
+| ------------------------------------------- | ----------------------------------------------------------------------------- |
+| `appRestrictions`                           | `appRestrictions` in den Einstellungen der Platform.                          |
+| `appReadRules`                              | `appReadRules` in den Einstellungen der Organization.                         |
+| `agents.helperModel`                        | `rulesModel` und `agentMemoryModel` in den Einstellungen der Organization.    |
+| `agents.requestTimeout`                     | `requestTimeoutMs` in den Einstellungen der Organization.                     |
+| `agents.memory`                             | `agentMemory` in den Einstellungen der Organization.                          |
+| `sessions.memory.defaults`                  | `memory` in den Einstellungen der Organization.                               |
+| `allowedEmailDomains`, `defaultRoles` (API) | Bestätigte Domains, und `defaultRoles` in den Einstellungen der Organization. |
+
+### Wie eine Änderung jede Instanz erreicht
+
+Jede Instanz hält die Einstellungen in einem Cache. Das ist eine kurzlebige Kopie im Speicher. Eine Änderung läuft so ab:
+
+1. Die API schreibt die neuen Einstellungen in die Datenbank.
+2. Sie schickt eine PostgreSQL-Nachricht `NOTIFY` auf dem Kanal `openbot_settings`.
+3. Jede Instanz hört auf diesem Kanal. Sie liest die neuen Einstellungen sofort.
+
+Jeder Eintrag im Cache läuft außerdem nach 30 Sekunden ab. So bekommt auch eine Instanz, die eine Nachricht verpasst, die Änderung bald.
+
+Eine Änderung an `publicOrigin`, am Identitäts-Anbieter der Platform oder am Anmelde-Geheimnis ändert, wie die Anmeldung funktioniert. Dann startet jede Instanz eine neue App im selben Prozess. Die neue App nimmt zuerst Requests an, und dann hört die alte auf. Kein Request geht verloren.
+
+---
+
+## Compose für den Betrieb
+
+Die Compose-Datei `deploy/docker/compose.production.yaml` liest diese Variablen. Nur die ersten drei kommen bei OpenBot an.
+
+| Variable                        | Pflicht | Standard                      | Bedeutung                                                                              |
+| ------------------------------- | ------- | ----------------------------- | -------------------------------------------------------------------------------------- |
+| `POSTGRES_PASSWORD`             | Ja      |                               | Das Passwort des PostgreSQL-Nutzers `openbot`. Nutze Zeichen, die in URLs sicher sind. |
+| `OPENBOT_DATABASE_URL`          | Ja      |                               | Die Vorlage füllt sie aus `POSTGRES_PASSWORD` aus.                                     |
+| `OPENBOT_SECRET_KEYS`           | Ja      |                               | Die geheimen Schlüssel. Siehe [Geheime Schlüssel](#geheime-schlüssel).                 |
+| `OPENBOT_RELEASE`               | Ja      |                               | Das Tag des Image, das laufen soll.                                                    |
+| `OPENBOT_PUBLISHED_PORT`        | Nein    | `8080`                        | Der Port auf `127.0.0.1`, an dem dein Reverse Proxy OpenBot findet.                    |
+| `PROTOCOL_TEST_PUBLIC_ORIGIN`   | Ja      |                               | Der öffentliche HTTPS-Ursprung des Test-Dienstes für das Protokoll.                    |
+| `PROTOCOL_TEST_ALLOWED_ORIGINS` | Nein    | `PROTOCOL_TEST_PUBLIC_ORIGIN` | Browser-Ursprünge, die der Test-Dienst für das Protokoll annimmt.                      |
+
+Die Compose-Datei gibt `OPENBOT_DATABASE_URL` und `OPENBOT_SECRET_KEYS` als Dateien in `/run/secrets` an OpenBot. Der Dienst `openbot` hat keine anderen Umgebungsvariablen. Siehe [Deploy](/de/docs/deploy#mit-compose-starten).
+Eine vollständige Vorlage liegt in `deploy/docker/production.env.example`.
+
+---
+
+## Entwicklung
+
+`devenv shell -- pnpm dev:setup` erstellt die Datei `.env.development` aus `.env.development.example`. Es füllt `OPENBOT_SECRET_KEYS` mit einem neuen zufälligen Schlüssel namens `dev`.
+
+| Variable                    | Standard  | Bedeutung                                           |
+| --------------------------- | --------- | --------------------------------------------------- |
+| `OPENBOT_SECRET_KEYS`       |           | `dev:<random key>`. `dev:setup` füllt ihn aus.      |
+| `OPENBOT_DEV_HTTPS_PORT`    | `8443`    | Der HTTPS-Port des lokalen OpenBot.                 |
+| `OPENBOT_DEV_DATABASE_PORT` | `5433`    | Der lokale Port des PostgreSQL für die Entwicklung. |
+| `OPENBOT_DEV_DATABASE_NAME` | `openbot` | Der Name der Datenbank für die Entwicklung.         |
+
+<Callout type="info">
+	Wenn deine `.env.development` aus einer älteren Version stammt, lösche sie und
+	führe `devenv shell -- pnpm dev:setup` noch einmal aus. Du kannst auch die
+	Datenbank für die Entwicklung zurücksetzen.
+</Callout>
+
+devenv setzt dann diese Werte für dich:
+
+| Variable                    | Wert                                                        |
+| --------------------------- | ----------------------------------------------------------- |
+| `OPENBOT_DEV_PUBLIC_ORIGIN` | `https://localhost:8443`                                    |
+| `OPENBOT_HOST`              | `127.0.0.1`                                                 |
+| `OPENBOT_PORT`              | der Wert von `OPENBOT_DEV_HTTPS_PORT`                       |
+| `OPENBOT_DATABASE_URL`      | `postgres://openbot_dev:openbot_dev@127.0.0.1:5433/openbot` |
+| `OPENBOT_TLS_CERT`          | `.devenv/dev/cert.pem`, erstellt von mkcert                 |
+| `OPENBOT_TLS_KEY`           | `.devenv/dev/key.pem`, erstellt von mkcert                  |
+
+Nur der Einstiegspunkt für die Entwicklung liest `OPENBOT_DEV_PUBLIC_ORIGIN`. Er braucht keinen Setup-Schritt. Bei jedem Start schreibt er die Einstellungen der Platform für diesen Ursprung selbst. Er macht das lokale Konto `developer@localhost.test` zum Admin der Platform und schaltet die lokale Test-Anmeldung ein. Siehe [Authentifizierung](/de/docs/authentication#entwicklungskonto).
+
+Das Programm für den Betrieb nutzt nie das lokale Test-Konto. Es gibt keinen Schalter dafür.
+
+Um eine andere Datenbank zu nutzen, setze `OPENBOT_DATABASE_URL` in `.env.development`. Siehe [Mitmachen](/de/docs/contributing).
+
+---
+
+## Beispiel
+
+Das ist eine vollständige Umgebungsdatei für den Betrieb einer Instanz:
+
+```sh
+OPENBOT_DATABASE_URL=postgres://openbot:secret@db.example.com:5432/openbot
+OPENBOT_SECRET_KEYS=k1:<output of openssl rand -hex 32>
+```
+
+Jede andere Einstellung kommt aus dem Setup-Programm und der API.

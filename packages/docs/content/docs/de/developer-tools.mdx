@@ -1,0 +1,201 @@
+---
+title: Entwickler-Tools
+description: Prüfe, teste und verwalte die Apps, die du veröffentlichst.
+---
+
+Diese Tools sind für Menschen, die Apps veröffentlichen. Du kannst deine App prüfen, beweisen, dass du sie kontrollierst, den Zugang mit deinem Team teilen, private Tests ausführen, die Aufnahme in den Index anfordern und Hinweise bekommen, wenn etwas kaputtgeht.
+
+Nur der Aufruf zur Prüfung ist öffentlich. Alle anderen Aufrufe brauchen ein Nutzer-Token oder das Session-Cookie, und die Berechtigung `apps.publish`. Siehe [Authentifizierung](/de/docs/authentication).
+
+---
+
+## Eine App prüfen
+
+Jeder kann eine App prüfen. Du musst dich nicht anmelden. Die Prüfung liest nur öffentliche Dokumente. Sie speichert nichts und verbindet sich nicht mit der App.
+
+```sh
+curl -X POST https://api.example.com/v1/developer/inspect \
+  -H "Content-Type: application/json" \
+  -d '{ "input": "apps.example.com" }'
+```
+
+`input` kann eine Domain oder ein HTTPS-Link sein, bis zu 8192 Zeichen. Der Bericht hat:
+
+| Feld     | Beschreibung                                                                                                                                                                                 |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps`   | Jede gefundene App. `eligibility` ist `Eligible`, `Excluded` oder `Unconfirmed` für den öffentlichen Index. `stored` zeigt die letzte gespeicherte Prüfung für den Index, wenn es eine gibt. |
+| `issues` | Probleme, die du beheben sollst. Jedes hat einen `code`, eine `stage`, eine `severity` (`blocking` oder `suggestion`), eine `message` und einen Hinweis `repair` zur Reparatur.              |
+| `stages` | Jeder Prüfschritt: `Input`, `Discovery`, `CardRead`, `CardSchema`, `Compatibility`, `PublisherAssociation` und `Eligibility`. Jeder ist `Passed`, `Failed`, `Unconfirmed` oder `NotChecked`. |
+
+Ein Ergebnis `Eligible` heißt nicht, dass die App schon im Index ist. Siehe [App Index](/de/docs/app-index#wie-apps-in-den-index-kommen).
+
+---
+
+## Beweisen, dass du eine App kontrollierst
+
+Die meisten Tools brauchen einen Beweis, dass du die App kontrollierst. Du kannst die Kontrolle auf zwei Arten beweisen:
+
+| Umfang              | Was er abdeckt                                                                                               | Wo du das Token hinlegst |
+| ------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------ |
+| `PublisherHostname` | Jede App, deren Card auf diesem Host-Namen liegt und in einem Catalog auf demselben Host-Namen gelistet ist. | Ein DNS-TXT-Eintrag      |
+| `AppCard`           | Eine App, über ihre genaue Card URL.                                                                         | Die Server Card          |
+
+<Steps>
+<Step>
+
+### Einen Anspruch starten
+
+```sh
+curl -X POST https://api.example.com/v1/developer/claims \
+  -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "_tag": "PublisherHostname", "hostname": "apps.example.com" }'
+```
+
+Für eine einzelne App schickst du `{ "_tag": "AppCard", "cardUrl": "https://apps.example.com/mcp/server-card" }`. Der Host-Name muss genau ein öffentlicher Name sein, ohne Port, Pfad oder Platzhalter.
+
+Die Antwort hat eine `id` und ein `token` wie `openbot-verification=...`. Der Anspruch (Claim) gilt 24 Stunden.
+
+</Step>
+<Step>
+
+### Das Token veröffentlichen
+
+Für einen Host-Namen fügst du einen DNS-TXT-Eintrag bei `_openbot-verification.<hostname>` hinzu. Nutze das ganze Token als Wert:
+
+```txt
+_openbot-verification.apps.example.com.  TXT  "openbot-verification=abc123..."
+```
+
+Für eine einzelne Card fügst du das Token zur Card hinzu:
+
+```json
+{
+	"_meta": {
+		"openbot/developer-verification": {
+			"version": 1,
+			"tokens": ["openbot-verification=abc123..."]
+		}
+	}
+}
+```
+
+OpenBot liest die Card an ihrer genauen URL, ohne Weiterleitungen. Deine `robots.txt` muss den User-Agent `OpenBot` erlauben.
+
+</Step>
+<Step>
+
+### Bestätigen
+
+```sh
+curl -X POST https://api.example.com/v1/developer/claims/<claim id>/verify \
+  -H "Authorization: Bearer $OPENBOT_TOKEN"
+```
+
+Bei Erfolg bekommst du einen **Beweis** (Proof). Du wirst `administrator` für diesen Umfang. Bei einem Fehler bekommst du 409 `DeveloperConflict`. Sein `reason` kann `ProofMismatch`, `ClaimExpired`, `VerificationUnavailable`, `RobotsDenied`, `RobotsUnconfirmed` oder `CardUnconfirmed` sein.
+
+</Step>
+</Steps>
+
+Lass das Token an seinem Platz. Ein Beweis gilt 7 Tage, und OpenBot prüft ihn jeden Tag noch einmal:
+
+- Wenn das Token weg ist, wird der Beweis sofort `Suspended`.
+- Wenn die Prüfung nicht laufen kann, wird der Beweis `Unconfirmed`. Er funktioniert weiter, bis er abläuft. OpenBot versucht es nach etwa einer Minute noch einmal.
+- Ein Beweis mit `Suspended` gibt keinen Zugang.
+
+Um jetzt zu prüfen, rufe `POST /v1/developer/proofs/:id/verify` auf. Um einen Beweis aufzugeben, rufe `POST /v1/developer/proofs/:id/relinquish` auf. Um einen Anspruch abzubrechen, rufe `POST /v1/developer/claims/:id/revoke` auf.
+
+`GET /v1/developer` gibt deine Apps, deine Beweise und deine Zugänge in `grants` zurück.
+
+---
+
+## Mitglieder und Rollen
+
+Der Administrator kann andere Konten einladen.
+
+| Rolle           | Was sie tun können                                                           |
+| --------------- | ---------------------------------------------------------------------------- |
+| `administrator` | Das Konto, das den Beweis erbracht hat. Alles, auch Mitglieder verwalten.    |
+| `maintainer`    | Berichte speichern, Tests ausführen und die Aufnahme in den Index anfordern. |
+| `viewer`        | Apps, Berichte und Anfragen zur Aufnahme lesen. Keine Änderungen.            |
+
+1. Einladen: `POST /v1/developer/proofs/:id/invitations` mit `{ "role": "maintainer" }` oder `"viewer"`. Die Einladung gilt 7 Tage.
+2. Schicke die `id` der Einladung an die Person. Sie liest sie mit `GET /v1/developer/invitations/:id` und nimmt sie mit `POST /v1/developer/invitations/:id/accept` an.
+3. Verwalten: `GET /v1/developer/proofs/:id/members`, `PUT /v1/developer/members/:id` mit einer neuen `role` und `DELETE /v1/developer/members/:id`. Mitglieder können sich auch selbst entfernen.
+
+Um eine Einladung abzubrechen, rufe `POST /v1/developer/invitations/:id/revoke` auf. Wenn ein Beweis endet, verlieren auch seine Mitglieder den Zugang.
+
+---
+
+## Berichte
+
+Ein Bericht ist eine gespeicherte Prüfung. Nutze Berichte, um zu sehen, wie sich deine App mit der Zeit ändert.
+
+| Aufgabe                                        | Request                                                                                     |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Einen neuen Bericht speichern                  | `POST /v1/developer/reports` mit `{ "cardUrl" }`                                            |
+| Berichte für eine App auflisten                | `GET /v1/developer/reports?cardUrl=...` (neueste zuerst, 50 pro Seite, Seiten mit `before`) |
+| Einen Bericht lesen                            | `GET /v1/developer/reports/:id`                                                             |
+| Zwei Berichte vergleichen                      | `GET /v1/developer/reports/:id/compare?other=<id>`                                          |
+| Einen Bericht löschen, den du gespeichert hast | `DELETE /v1/developer/reports/:id`                                                          |
+| Berichte auflisten, die du gespeichert hast    | `GET /v1/developer/personal-reports`                                                        |
+
+Ein Vergleich listet die Probleme, die `introduced` (neu), `resolved` (behoben) und `persisting` (geblieben) sind.
+
+---
+
+## Private Tests der Verbindung
+
+Ein Test verbindet sich von OpenBot aus mit deiner App, so wie ein Nutzer. Er ist privat. Er speichert keine Connection eines Nutzers und fügt die App nicht zum Index hinzu. Ein Test endet nach einer Stunde.
+
+1. Erstelle einen Test mit deiner eigenen UUID: `POST /v1/developer/tests` mit `{ "id", "cardUrl", "remoteIndex" }`.
+2. Wenn der Endpoint Einstellungen braucht, schicke sie: `PUT /v1/developer/tests/:id/configuration` mit einem Objekt aus Keys und Werten. Die Keys sind dieselben wie bei [Connections](/de/docs/apps#die-connection-prüfen-und-erstellen).
+3. Führe ihn aus: `POST /v1/developer/tests/:id/run`. Lies das Ergebnis mit `GET /v1/developer/tests/:id`.
+
+Jeder Lauf hat `stages`: `configuration`, `negotiation`, `tools`, `resources`, `resourceTemplates` und `prompts`. Jede Stufe ist `Passed`, `Failed`, `NotAdvertised` oder `NotChecked`. Der `status` des Tests endet als `Succeeded` oder `Failed`.
+
+### Während eines Tests anmelden
+
+Wenn die App ein Konto braucht, wird der Status des Tests `AwaitingAuthorization`.
+
+1. Starte die Anmeldung: `POST /v1/developer/tests/:id/authorization` mit `{ "scopes": [] }`. Füge `issuer` hinzu, wenn die App mehr als einen Anbieter hat.
+2. Öffne `authorization.authorizationUrl` in deinem Browser und melde dich an.
+3. Der Anbieter schickt dich zu `/auth/developer/apps/callback`. OpenBot schickt dich dann zu `/?developerTest=<testId>`.
+4. Beende es: `POST /v1/developer/tests/:id/authorization/complete`. Führe den Test dann noch einmal aus.
+
+Wenn du fertig bist, rufe `POST /v1/developer/tests/:id/cleanup` auf. OpenBot zieht die Anmeldung des Tests zurück, wo der Anbieter das erlaubt, und löscht die gespeicherten Tokens. Du kannst einen laufenden Test auch mit `cancel` abbrechen oder mit `DELETE` löschen.
+
+---
+
+## Die Aufnahme in den Index anfordern
+
+Du musst nicht warten, bis ein Nutzer deine App verbindet. Bitte OpenBot, sie zu prüfen:
+
+```sh
+curl -X POST https://api.example.com/v1/developer/indexing \
+  -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "cardUrl": "https://apps.example.com/mcp/server-card" }'
+```
+
+OpenBot prüft die App zuerst. Wenn sie nicht geeignet ist, bekommst du 409 mit dem `reason`. Wenn die Installation die App sperrt, bekommst du 403 `DeveloperRestricted`.
+
+Der `status` der Anfrage geht von `Accepted` zu `Waiting`, `Verifying` und `Completed`. Wenn sie fertig ist, enthält `check` das Ergebnis. Liste Anfragen mit `GET /v1/developer/indexing` auf, oder lies eine mit `GET /v1/developer/indexing/:id`.
+
+---
+
+## Benachrichtigungen
+
+OpenBot prüft die Apps, die du verwaltest, etwa jede Stunde. Es schickt dir einen Hinweis, wenn sich etwas ändert.
+
+| Art             | Wann                                                                         |
+| --------------- | ---------------------------------------------------------------------------- |
+| `IssueAppeared` | Ein neues blockierendes Problem erscheint.                                   |
+| `IssueResolved` | Ein blockierendes Problem verschwindet.                                      |
+| `AccessChanged` | Ein Beweis ändert seinen Zustand, oder du verlierst den Zugang als Mitglied. |
+
+Lies Hinweise mit `GET /v1/developer/notifications`. Nutze `before`, um ältere Seiten zu lesen. Markiere einen als gelesen mit `POST /v1/developer/notifications/:id/read`.
+
+Hinweise zu Problemen sind für jede App an. Um sie für eine App auszuschalten, schicke `PUT /v1/developer/subscriptions` mit `{ "cardUrl": "...", "enabled": false }`. Liste deine Einstellungen mit `GET /v1/developer/subscriptions` auf.
+
+Die vollständigen Formen findest du in der [API-Referenz](/docs/api/operations/tags/developer-tools/).

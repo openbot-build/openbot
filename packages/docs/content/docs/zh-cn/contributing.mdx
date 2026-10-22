@@ -1,0 +1,174 @@
+---
+title: 参与贡献
+description: 准备代码，运行检查，并遵守项目规则。
+---
+
+本页写给修改 OpenBot 本身的人。它介绍如何准备你的电脑，如何运行服务器和检查，以及如何在代码中找到方向。
+
+---
+
+## 准备环境
+
+你需要 [devenv](https://devenv.sh)。devenv 为项目提供确切版本的工具：Node.js、pnpm、PostgreSQL、mkcert 等。只有在构建和检查镜像时，你才需要 [Docker](https://docs.docker.com/get-docker/)。请看[部署](/zh-cn/docs/deploy#构建镜像)。
+每条命令都通过 `devenv shell -- <command>` 运行，这样你用的总是这些工具。
+
+<Steps>
+<Step>
+
+### 获取代码
+
+```sh
+git clone <repository-url> openbot
+cd openbot
+```
+
+</Step>
+<Step>
+
+### 创建本地设置
+
+```sh
+devenv shell -- pnpm dev:setup
+devenv shell -- mkcert -install
+```
+
+`dev:setup` 创建 `.env.development`，并在 `OPENBOT_SECRET_KEYS` 中放入一个新的随机密钥。它还会在 `.devenv/dev/` 中创建一个本地 TLS 证书。
+如果你的 `.env.development` 来自旧版本，请删除它，然后再次运行 `dev:setup`。你也可以重置开发数据库。请看[配置](/zh-cn/docs/configuration#开发)。
+`mkcert -install` 让你的电脑信任这个证书。
+
+</Step>
+<Step>
+
+### 启动开发服务器
+
+```sh
+devenv shell -- pnpm dev
+```
+
+`pnpm dev` 运行 `devenv up`。它执行以下步骤：
+
+1. 在 `127.0.0.1:5433` 上启动 PostgreSQL 18，用户为 `openbot_dev`。devenv 把它当作普通进程运行。它的数据存放在 `.devenv/state/postgres` 中。
+2. 用 `pnpm install --frozen-lockfile` 安装包。
+3. 构建 OpenBot 及其需要的包。
+4. 运行数据库迁移。
+5. 在 `https://localhost:8443` 启动开发服务器。服务器会自己为这个源写入平台设置，所以不需要设置步骤。
+
+当你修改 `packages/*/src` 中的文件时，devenv 会重新启动 OpenBot。
+
+</Step>
+</Steps>
+
+开发服务器使用本地测试账户、测试模型和一个测试 App。不需要任何外部服务。
+如何登录并创建用户令牌，请看[快速开始](/zh-cn/docs/quickstart)。
+
+---
+
+## 检查
+
+| 命令                                                     | 作用                               |
+| -------------------------------------------------------- | ---------------------------------- |
+| `devenv shell -- pnpm install`                           | 安装所有包。                       |
+| `devenv shell -- pnpm build`                             | 用 tsdown 构建每个包。             |
+| `devenv shell -- pnpm typecheck`                         | 检查每个包的类型。                 |
+| `devenv shell -- pnpm -r test`                           | 运行每个包的测试。                 |
+| `devenv shell -- pnpm --filter @openbot-build/core test` | 运行一个包的测试。                 |
+| `devenv shell -- treefmt`                                | 用 Prettier 和 nixfmt 格式化代码。 |
+
+先运行 `pnpm build`，再运行 `pnpm typecheck`。包之间通过构建出的文件互相导入。
+
+测试使用 Node.js 自带的测试运行器。OpenBot 的测试会用 devenv 中的工具启动自己的临时 PostgreSQL 服务器。它们不需要密钥，也不需要外部服务。
+GitHub Actions 运行同样的 `build`、`typecheck` 和 `test` 命令。请看[部署](/zh-cn/docs/deploy#github-actions)。
+
+---
+
+## 仓库结构
+
+| 路径                       | 内容                                                                          |
+| -------------------------- | ----------------------------------------------------------------------------- |
+| `packages/`                | 工作区中的包。请看[包](/zh-cn/docs/packages)。                                |
+| `packages/docs/`           | 本文档网站。                                                                  |
+| `packages/template/`       | 新包的起点。它不属于工作区。                                                  |
+| `protocol-test/`           | App Protocol 的公开测试服务。请看[协议测试](/zh-cn/docs/protocol-test)。      |
+| `deploy/`                  | 部署 OpenBot 的文件。每个目标有自己的文件夹。请看[部署](/zh-cn/docs/deploy)。 |
+| `deploy/docker/`           | Dockerfile、Bake 文件、Compose 文件、生产环境模板和镜像检查。                 |
+| `.env.development.example` | `.env.development` 的模板。                                                   |
+| `patches/`                 | 针对外部包特定版本的修复。                                                    |
+| `references/`              | 其他开源项目的源代码，以 Git 子模块的形式存在。只供阅读。                     |
+| `devenv.nix`               | 开发工具、设置和进程。                                                        |
+
+`references/` 文件夹不参与构建。要阅读其中的代码，请用 `git submodule update --init` 获取它。
+
+要新建一个包，请把 `packages/template/` 复制到 `packages/<name>/`。然后修改它的名称、入口和依赖。
+
+---
+
+## 文档网站
+
+文档网站是一个用 [Starlight](https://starlight.astro.build) 构建的 [Astro](https://astro.build) 网站。构建只生成静态文件。用以下命令启动它：
+
+```sh
+devenv shell -- pnpm --filter @openbot-build/docs dev
+```
+
+然后打开 `http://localhost:4321`。
+
+| `packages/docs/` 中的路径   | 是什么                                                   |
+| --------------------------- | -------------------------------------------------------- |
+| `content/docs/*.mdx`        | 页面。文件名就是 URL：`deploy.mdx` 对应 `/docs/deploy`。 |
+| `content/docs/<locale>/`    | 翻译：`zh-cn` 是简体中文，`de` 是德语。                  |
+| `astro.config.ts`           | 网站设置，以及页面在侧边栏中的顺序。                     |
+| `src/components/`           | 页面不用导入就能使用的组件：`Callout`、`Steps` 等。      |
+| `src/landing/`              | 首页。`messages/` 存放它的文字，每种语言一个文件。       |
+| `src/i18n.ts`               | 文档和首页支持的语言。                                   |
+| `src/pages/openapi.json.ts` | 在 `/openapi.json` 提供 `openapi.json`，方便大家下载。   |
+| `scripts/api.ts`            | 根据 API 契约生成 `openapi.json`。                       |
+
+`/docs/api` 上的 API 参考由 [starlight-openapi](https://github.com/HiDeoo/starlight-openapi) 插件根据 `openapi.json` 生成。不要手写它。
+这个脚本在每次 `dev` 和 `build` 之前运行。当你修改 `@openbot-build/api` 中的 API 契约时，参考也会随之改变。
+当你在契约中添加一个分组时，请在 `scripts/api.ts` 中为它写一个标题和描述。在你写好之前，脚本会报错停止。
+构建还会生成 `/llms.txt` 和 `/llms-full.txt`，以纯文本形式为 AI 工具提供文档。
+要检查每个页面都能构建，请运行 `devenv shell -- pnpm --filter @openbot-build/docs build`。
+
+每次推送到 `main`，都会把网站发布到 [openbot.build](https://openbot.build)。请看[发布文档网站](/zh-cn/docs/deploy#发布文档网站)。
+
+---
+
+## 项目规则
+
+### Simple English
+
+所有文字都用 [Simple English](https://en.wikipedia.org/wiki/Simple_English)（简明英语）书写。这包括文档、代码注释、错误消息、日志、提示词和测试文字。
+使用短句和常用词。每个技术词第一次出现时，都要解释它。
+
+英文是所有文字的源头。文档还有简体中文和德语版本，首页还有更多语言的版本。
+修改英文页面时，请在同一次改动中修改它的翻译。翻译要保留相同的标题，顺序也相同，并且它的链接要指向同一语言的页面，例如 `/de/docs/deploy`。
+修改首页的文字时，请修改 `src/landing/messages/` 中的每个文件。
+API 参考只有英文版。
+
+### 无界面
+
+OpenBot 没有用户界面。不要向仓库添加页面、前端或客户端应用。文档网站是唯一的例外。
+每个新功能都从 `@openbot-build/api` 契约中的一个操作开始。然后由服务器处理它。
+每个操作都必须既能用用户令牌，也能用登录 cookie。它还必须用 `Required` 或 `GroupRequired` 注解说明自己需要哪项权限。请看[权限](/zh-cn/docs/permissions)。
+
+### 只有一个当前模型
+
+不要为旧的调用方、旧的客户端或旧的数据保留旧路径。当契约或存储必须改变时，就直接改。
+唯一的例外是为外部包或工具的 bug 做的小修复。
+
+### 优先使用 Effect 数据
+
+使用 Effect 的不可变数据类型，例如 `HashMap`、`Chunk` 和 `Option`。只有真正需要时，才使用 JavaScript 的可变类型。
+
+### 小而真实的改动
+
+只构建能带来真正价值的东西。让每次改动保持专注，并测试那些真的可能出错的部分。
+
+给贡献者的完整规则在仓库根目录的 `AGENTS.md` 中。
+
+---
+
+## 许可证
+
+OpenBot 使用 GNU Affero 通用公共许可证第 3 版，且仅限该版本（`AGPL-3.0-only`）。全文在仓库根目录的 `LICENSE` 文件中。
+当你提交改动时，即表示你同意它使用相同的许可证。

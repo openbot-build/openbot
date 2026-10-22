@@ -1,0 +1,265 @@
+---
+title: 权限
+description: 权限组、策略、角色和资源键。
+---
+
+本页说明 OpenBot 如何决定调用者是否可以做某件事。
+每次调用 `/v1` 都需要一个或多个权限。OpenBot 在调用运行之前检查这些权限。
+
+这个模型有四个部分：
+
+| 部分                       | 含义                                                                     |
+| -------------------------- | ------------------------------------------------------------------------ |
+| 权限组（Permission group） | 针对某一类资源的一组有名字的操作，例如 `sessions.read`。                 |
+| 资源键（Resource key）     | 某一个资源的名字，例如某一个 Session。                                   |
+| Policy（策略）             | 对某些资源上的某些权限组，给出 `allow`（允许）或 `deny`（拒绝）。        |
+| Role（角色）               | 一组有名字的策略，例如 Member 或 Administrator。组织可以添加自己的角色。 |
+
+成员得到其角色的策略，再加上自己的额外策略。用户令牌得到其成员的策略，同时还有它自己的策略。平台可以为每个组织添加拒绝策略。见 [检查顺序](#检查顺序)。
+
+---
+
+## 权限组
+
+用 `GET /v1/organization/permission_groups` 列出权限组。
+
+| ID                      | 资源         | 允许什么                                                                 |
+| ----------------------- | ------------ | ------------------------------------------------------------------------ |
+| `responses.run`         | Session      | 在 Session 中启动、引导（steer）、排队（queue）和恢复工作。              |
+| `sessions.read`         | Session      | 读取 Sessions，以及它们的历史、记忆和委派。                              |
+| `sessions.write`        | Session      | 创建、修改、分叉、恢复、中断和删除 Sessions。                            |
+| `requests.resolve`      | Request      | 回答你的 Agents 对新能力提出的 request。                                 |
+| `agents.read`           | Agent        | 读取 Agents，以及它们的记忆、Rules 和 Grants。                           |
+| `agents.write`          | Agent        | 创建和修改 Agents，以及它们的记忆、Rules 和 Grants。                     |
+| `agents.delegate`       | Agent        | 从客户端或另一个 Agent，把工作交给某个 Agent。                           |
+| `workflows.read`        | Workflow     | 读取 Workflows，以及它们的 Runs、报告和记录下来的工具调用。              |
+| `workflows.write`       | Workflow     | 创建和修改 Workflows，以及它们的计划时间、webhook 和记录下来的工具调用。 |
+| `workflows.run`         | Workflow     | 从客户端或 Agent 启动和取消 Workflow 的 Runs。                           |
+| `connections.read`      | Connection   | 读取 App 连接和 App 账户。                                               |
+| `connections.write`     | Connection   | 创建、修改和删除 App 连接，并登录 App 账户。                             |
+| `apps.use`              | Apps         | 查找 Apps，并使用 App 操作和 App 视图。                                  |
+| `apps.publish`          | Apps         | 为你发布的 Apps 使用开发者工具。                                         |
+| `models.use`            | Model        | 为 Session 选择模型。                                                    |
+| `tokens.read`           | User         | 列出 API 令牌。                                                          |
+| `tokens.write`          | User         | 创建和撤销 API 令牌。                                                    |
+| `organization.read`     | Organization | 读取组织设置。                                                           |
+| `organization.write`    | Organization | 修改组织设置。                                                           |
+| `members.read`          | Organization | 列出成员、他们的角色和策略。                                             |
+| `members.write`         | Organization | 修改成员的角色、策略和状态，以及移除成员。                               |
+| `roles.write`           | Organization | 创建、修改和删除组织的自定义角色。                                       |
+| `model_providers.read`  | Organization | 读取组织的模型和模型提供方。密钥永远不会显示。                           |
+| `model_providers.write` | Organization | 添加、修改和移除组织的模型、模型提供方和密钥。                           |
+| `sso.read`              | Organization | 读取邮箱域名和 SSO 连接。                                                |
+| `sso.write`             | Organization | 添加和验证邮箱域名，以及修改 SSO 连接。                                  |
+| `audit_logs.read`       | Organization | 读取审计日志。                                                           |
+| `platform.read`         | Platform     | 读取平台设置、组织、管理员，以及共享的模型和模型提供方。                 |
+| `platform.write`        | Platform     | 修改平台设置、组织、管理员，以及共享的模型和模型提供方。                 |
+
+`organization.read` 和 `organization.write` 也涵盖 [组织设置](/zh-cn/docs/organization#设置)。
+`platform.read` 和 `platform.write` 只对资源 `openbot.platform` 有效，并且只对平台管理员有效。见 [平台权限组](#平台权限组)。
+
+[API 参考](/docs/api) 列出了所有路由。`@openbot-build/api` 中的契约说明了每个路由需要哪个权限。
+
+---
+
+## 资源键
+
+资源键是一个名字，由点分隔成几个部分：
+
+| 资源                | 键                                                      |
+| ------------------- | ------------------------------------------------------- |
+| 组织                | `openbot.org.<org>`                                     |
+| 一个成员            | `openbot.org.<org>.user.<user>`                         |
+| 一个 Session        | `openbot.org.<org>.user.<user>.session.<session>`       |
+| 成员的一个 Agent    | `openbot.org.<org>.user.<user>.agent.<agent>`           |
+| 一个共享的 Agent    | `openbot.org.<org>.agent.<agent>`                       |
+| 成员的一个 Workflow | `openbot.org.<org>.user.<user>.workflow.<workflow>`     |
+| 一个共享的 Workflow | `openbot.org.<org>.workflow.<workflow>`                 |
+| 成员的 requests     | `openbot.org.<org>.user.<user>.request`                 |
+| 一个连接            | `openbot.org.<org>.user.<user>.connection.<connection>` |
+| 成员的 Apps         | `openbot.org.<org>.user.<user>.apps`                    |
+| 一个模型提供方      | `openbot.org.<org>.model.<provider>`                    |
+| 整个平台            | `openbot.platform`                                      |
+
+由另一个 Agent 拥有的 Agent，使用其所有者树最顶层的成员或组织的键。所以 `openbot.org.<org>.user.<user>.agent.<agent>` 也是该成员的 Main Agent 所拥有的 Agent 的键。当一个 Agent 创建或提升另一个 Agent 时，它所服务的成员需要在那个位置上拥有 `agents.write`。由 Agent 拥有的 Workflow 也在同一个位置，只是把 `agent` 换成 `workflow`。成员的 Runs 位于 `openbot.org.<org>.user.<user>.workflow` 之下。
+
+一个键涵盖它自己，以及它下面的所有键。所以 `openbot.org.<org>` 涵盖组织中的一切，`openbot.org.<org>.user.<user>` 涵盖一个成员的一切。
+
+在策略中，你可以写两个占位符：
+
+- `{org}` 是组织的 ID。
+- `{self}` 是调用者的用户 ID。对于令牌，它是令牌所属的成员。
+
+ID 中的点写作 `%2E`，这样它永远不会被当成新的部分。
+
+---
+
+## 策略
+
+一个策略是这样的：
+
+```json
+{
+	"effect": "allow",
+	"permissionGroups": ["sessions.read", "sessions.write"],
+	"resources": ["openbot.org.{org}.user.{self}"]
+}
+```
+
+OpenBot 按这个顺序做决定：
+
+1. 如果有匹配的策略说 `deny`，答案就是否。
+2. 如果有匹配的策略说 `allow`，答案就是是。
+3. 如果没有策略匹配，答案就是否。
+
+当一个策略列出了这个权限组，并且它的某个资源涵盖了请求的键时，这个策略就匹配。
+
+策略只能指定它自己组织中的资源。否则 OpenBot 返回 `400`。只有令牌的策略还可以指定 `openbot.platform`。
+
+### 限制模型
+
+`openbot.org.<org>.model.<provider>` 上的 `models.use` 涵盖某一个 [模型提供方](/zh-cn/docs/models) 的模型。用它来限制成员可以选择哪些提供方。下面的策略禁止成员使用某一个提供方：
+
+```json
+{
+	"effect": "deny",
+	"permissionGroups": ["models.use"],
+	"resources": ["openbot.org.{org}.model.prov_4c1e..."]
+}
+```
+
+### 检查顺序
+
+OpenBot 按以下顺序检查三组策略：
+
+1. 平台的**策略上限**（policy ceiling）。它只有 `deny` 策略，并且对每个组织都生效。见 [Platform](/zh-cn/docs/platform#策略上限)。
+2. **成员策略**：成员角色的策略，加上成员的额外策略。
+3. **令牌策略**，当调用者使用用户令牌时。
+
+任何地方出现 `deny`，答案都是否。在策略上限之后的每一组，也都必须允许这次调用。
+
+### 令牌永远不会超过它的成员
+
+用户令牌有两组策略：它的成员的策略，以及它自己的策略。两组都必须说是。所以令牌能做的可以比它的成员少，但永远不会更多。如果管理员拿走了成员的某个角色，这个成员的每个令牌也会失去它。
+
+创建时没有 `policies` 的令牌会得到下面这个策略。它允许组织中的一切，但不能管理令牌。它从不包括 `platform.read` 或 `platform.write`：
+
+```json
+{
+	"effect": "allow",
+	"permissionGroups": [
+		"responses.run",
+		"sessions.read",
+		"...",
+		"audit_logs.read"
+	],
+	"resources": ["openbot.org.{org}"]
+}
+```
+
+下面的例子创建一个只能读取你的 Sessions 的令牌：
+
+```sh
+curl -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Dashboard","policies":[{"effect":"allow","permissionGroups":["sessions.read"],"resources":["openbot.org.{org}.user.{self}"]}]}' \
+  https://api.example.com/v1/user/tokens
+```
+
+---
+
+## 角色
+
+用 `GET /v1/organization/roles` 列出角色。列表中有内置角色和组织的自定义角色。每个角色有 `builtin: true` 或 `builtin: false`。
+
+### 内置角色
+
+每个组织都有这些角色。它们不能修改。修改会返回 `409` 和 `RoleReadOnly`。
+
+| 角色                      | 能做什么                                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `super_administrator`     | 组织中的一切。只有 Super Administrator 能给出或拿走这个角色。                                                 |
+| `administrator`           | 管理组织、成员、共享的 Agents 和共享的 Workflows，并读取审计日志。只能操作自己的 Sessions 和连接。            |
+| `administrator_read_only` | 读取组织、成员和审计日志，并使用共享的 Agents 和 Workflows。只能操作自己的 Sessions 和连接。                  |
+| `member`                  | 操作自己的 Agents、Sessions、Workflows、连接和令牌，使用组织共享的 Agents、Workflows 和模型，并读取组织设置。 |
+| `auditor`                 | 读取组织、成员和审计日志。不能做其他事。                                                                      |
+
+一些内置角色还拥有角色、模型提供方和 SSO 相关的权限组：
+
+| 角色                      | 组织功能的额外权限组                                                                      |
+| ------------------------- | ----------------------------------------------------------------------------------------- |
+| `super_administrator`     | 所有权限组，但 `platform.read` 和 `platform.write` 除外。                                 |
+| `administrator`           | `roles.write`、`model_providers.read`、`model_providers.write`、`sso.read`、`sso.write`。 |
+| `administrator_read_only` | `model_providers.read`、`sso.read`。                                                      |
+
+要让成员的权限比角色少，请给成员添加一个 `deny` 策略。下面的例子禁止成员运行工作，但允许他们读取自己的 Sessions：
+
+```sh
+curl -X PATCH -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"policies":[{"effect":"deny","permissionGroups":["responses.run"],"resources":["openbot.org.{org}"]}]}' \
+  https://api.example.com/v1/organization/members/u_456
+```
+
+### 自定义角色
+
+组织可以添加自己的角色。自定义角色有名称、描述和策略。它的 ID 以 `role_` 开头。
+创建、修改和删除自定义角色需要 `roles.write`。
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Reviewer","description":"Reads Sessions and answers requests.","policies":[{"effect":"allow","permissionGroups":["sessions.read","requests.resolve"],"resources":["openbot.org.{org}.user.{self}"]}]}' \
+  https://api.example.com/v1/organization/roles
+```
+
+| 路由                                    | 作用                 |
+| --------------------------------------- | -------------------- |
+| `POST /v1/organization/roles`           | 创建一个自定义角色。 |
+| `GET /v1/organization/roles/:roleId`    | 读取一个角色。       |
+| `PATCH /v1/organization/roles/:roleId`  | 修改一个自定义角色。 |
+| `DELETE /v1/organization/roles/:roleId` | 删除一个自定义角色。 |
+
+- 角色的 `allow` 策略不能给出你自己做不到的事。否则 OpenBot 返回 `403` 和 `PermissionDenied`。
+- 修改会立即对拥有该角色的每个成员生效。
+- 当某个成员或组织的 `defaultRoles` 正在使用一个角色时，你不能删除它。OpenBot 返回 `409` 和 `RoleInUse`。
+
+用 `PATCH /v1/organization/members/:userId` 把自定义角色给成员。见 [组织](/zh-cn/docs/organization#修改成员)。
+
+---
+
+## 平台权限组
+
+`platform.read` 和 `platform.write` 供平台管理员使用。它们只对资源 `openbot.platform` 有效。
+
+- 组织中的任何角色都不会给出它们，即使是 `super_administrator` 也不会。
+- 策略上限或成员策略都不能给出它们。
+- 平台管理员的用户令牌，只有在它自己的策略中对 `openbot.platform` 指定了它们时，才会得到它们。
+
+令牌示例见 [Platform](/zh-cn/docs/platform#调用平台-api)。
+
+---
+
+## 错误
+
+| 状态码 | 错误                       | 何时出现                                                   |
+| ------ | -------------------------- | ---------------------------------------------------------- |
+| `403`  | `PermissionDenied`         | 没有策略允许这次调用，或者有策略拒绝了它。见下面的响应体。 |
+| `404`  | `RoleNotFound`             | 组织没有这个 ID 的角色。                                   |
+| `409`  | `RoleReadOnly`             | 你试图修改或删除内置角色。                                 |
+| `409`  | `RoleInUse`                | 某个成员或默认角色仍在使用这个角色。                       |
+| `503`  | `AuthorizationUnavailable` | OpenBot 现在无法读取调用者的角色和策略。                   |
+
+`PermissionDenied` 的响应体会写出权限和资源键：
+
+```json
+{
+	"_tag": "PermissionDenied",
+	"permission": "sessions.write",
+	"resource": "openbot.org.org_8f3a.user.u_123.session"
+}
+```
+
+你只能访问自己的 Sessions 和连接。另一个成员的 Session 会返回 `404`，就像它不存在一样。

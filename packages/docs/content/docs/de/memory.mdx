@@ -1,0 +1,251 @@
+---
+title: Memory
+description: Behalte nützliche Fakten aus einer Session und nutze sie in späteren Turns.
+---
+
+**Gelerntes Memory** (gelerntes Gedächtnis) ist eine kurze Liste von Fakten, die der Agent für eine Session behält. Jeder Fakt hat eine Quelle im Gespräch.
+OpenBot fügt nach jedem Turn Fakten hinzu und zeigt sie dem Modell in späteren Turns. Du kannst Fakten auch selbst hinzufügen, entfernen und abschalten.
+Diese Seite zeigt dir, wie gelerntes Memory funktioniert und wie du es mit der API änderst.
+
+Gelerntes Memory gehört zu einer Session. Es ist Teil des Verlaufs der Session. Darum nimmt ein [Fork](/de/docs/sessions#fork-von-einer-version) eine Kopie davon mit. Andere Sessions sehen es nicht.
+
+Jeder [Agent](/de/docs/agents) hat außerdem ein Langzeit-Memory über alle seine Sessions. Siehe [Agent Memory](#agent-memory).
+
+---
+
+## Memory lesen
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/sessions/$SESSION/memory
+```
+
+```json
+{
+	"entries": {
+		"budget": {
+			"key": "budget",
+			"content": "The trip budget is 1500 EUR.",
+			"kind": "fact",
+			"sources": ["i-02"],
+			"updatedAt": 1792486800000,
+			"status": "active"
+		}
+	},
+	"processed": ["i-01", "i-02"],
+	"settings": { "use": true, "generate": false },
+	"overrides": { "generate": false }
+}
+```
+
+| Feld        | Bedeutung                                                        |
+| ----------- | ---------------------------------------------------------------- |
+| `key`       | Ein fester Name für den Fakt. Ein Key enthält einen Fakt.        |
+| `content`   | Der Fakt als normaler Text.                                      |
+| `kind`      | `fact`, `decision`, `preference`, `procedure` oder `hypothesis`. |
+| `sources`   | Die IDs der Items, die den Fakt stützen.                         |
+| `status`    | `active`, oder `retracted`, wenn der Fakt entfernt wurde.        |
+| `processed` | Die Items, die OpenBot für das Memory schon gelesen hat.         |
+| `settings`  | Die Schalter, die für diese Session gelten. Siehe unten.         |
+| `overrides` | Die Schalter, die diese Session selbst setzt.                    |
+
+---
+
+## Schalter
+
+Zwei Schalter steuern das Memory:
+
+- `use`: OpenBot fügt die aktiven Fakten zu den Anweisungen des Modells hinzu.
+- `generate`: OpenBot lernt nach jedem Turn neue Fakten.
+
+Die Organization setzt für jeden Schalter einen Standard, mit `memory` in ihren [Einstellungen](/de/docs/organization#einstellungen). Beide sind an, außer die Organization ändert sie.
+Eine Session kann jeden Schalter mit `Configure` überschreiben. Ein Schalter, den die Session nicht setzt, folgt dem Standard der Organization.
+`settings` zeigt das Ergebnis, und `overrides` zeigt, was die Session gesetzt hat. Ein Fork behält die Überschreibungen seiner Quell-Session.
+
+---
+
+## Wie OpenBot das Memory nutzt
+
+### In einem Turn
+
+Wenn `use` an ist, fügt OpenBot die aktiven Fakten zu den Anweisungen des Modells hinzu, wenn der Turn läuft. Der Text sagt dem Modell: Memory ist ein Beleg aus der Vergangenheit, und aktuelle Anweisungen gewinnen.
+Zurückgezogene Fakten werden nicht geschickt.
+
+Der Memory-Text hat eine Grenze von 8000 Zeichen. Die neuesten Fakten kommen zuerst. OpenBot hört vor dem ersten Fakt auf, der nicht mehr passt. So fallen ältere Fakten weg. Ein Fakt wird nie in der Mitte abgeschnitten.
+Um die Grenze zu ändern, gib auf dem Server deine eigene Policy an: `sessions.memory.policy: MemoryRules.make({ maxLength: 4000 })`.
+
+### Nach einem Turn
+
+Wenn ein Turn fertig ist, konsolidiert OpenBot das Memory. Konsolidieren heißt: die neuen Items lesen und die Liste der Fakten aktualisieren. Das passiert auch, wenn ein Turn nach einer Freigabe fertig wird. OpenBot bittet das Modell des Turn, Fakten zu finden, die es wert sind, behalten zu werden. Das Modell muss für jede Änderung die Quell-Items nennen.
+OpenBot wendet die Änderungen auf das neueste Memory an. So bleibt eine Änderung erhalten, die du machst, während das Modell arbeitet.
+Ein Turn, der nur eine Aktion einer App ausführt, ändert das Memory nicht, weil darin kein Modell läuft.
+
+OpenBot prüft diese Regeln für jede Änderung:
+
+- OpenBot liest nur Items, die es noch nicht verarbeitet hat.
+- Jede Änderung muss mindestens eines dieser Items als Quelle nennen.
+- Eine Änderung pro Key. Ein zurückgezogener Fakt bleibt zurückgezogen. Nur ein direktes Remember kann ihn zurückholen.
+
+OpenBot sagt dem Modell außerdem: Nutze denselben Key für denselben Fakt. Zähle nur klare Aussagen des Nutzers als Vorlieben. Behalte nie Passwörter, Schlüssel oder Links, die Zugang geben.
+
+Wenn das Modell fehlschlägt, wird der Turn trotzdem fertig. OpenBot speichert den Fehler und versucht es beim nächsten Turn noch einmal.
+Schalte `generate` aus, um diesen Schritt zu stoppen.
+
+---
+
+## Memory ändern
+
+Alle Änderungen nutzen eine Route: `POST /v1/sessions/:sessionId/memory`.
+
+```json
+{
+	"expected": "v-7d21",
+	"revision": 5,
+	"command": {
+		"_tag": "Remember",
+		"key": "budget",
+		"content": "The trip budget is 1500 EUR.",
+		"kind": "fact"
+	}
+}
+```
+
+| Feld       | Bedeutung                                                                                   |
+| ---------- | ------------------------------------------------------------------------------------------- |
+| `expected` | Der Kopf der Timeline, den du zuletzt gesehen hast: `session.head` aus der Session-Ansicht. |
+| `revision` | Die Revision der Session, die du zuletzt gesehen hast: `session.revision`.                  |
+| `command`  | Was passieren soll. Siehe die Befehle unten.                                                |
+
+Wenn sich die Session oder ihr Verlauf geändert hat, seit du sie gelesen hast, gibt OpenBot `409` mit `SessionConflict` zurück. Lies die Session noch einmal und versuche es erneut.
+Bei Erfolg gibt OpenBot die neue Ansicht der Session zurück. Sie hat eine neue `session.revision`. Remember und Forget erzeugen auch einen neuen `session.head`.
+
+### Befehle
+
+| `_tag`      | Felder                             | Was er tut                                                                           |
+| ----------- | ---------------------------------- | ------------------------------------------------------------------------------------ |
+| `Remember`  | `key`, `content`, `kind`           | Fügt einen Fakt hinzu oder ersetzt den Fakt mit diesem Key. Er macht den Fakt aktiv. |
+| `Forget`    | `key`                              | Markiert den Fakt als zurückgezogen. Ein unbekannter Key gibt `409` zurück.          |
+| `Configure` | `use`, `generate` (beide optional) | Setzt die Schalter dieser Session. Siehe unten.                                      |
+| `Refresh`   | keine                              | Konsolidiert jetzt, mit dem Modell der Session.                                      |
+
+Für jedes Feld von `Configure` gilt:
+
+- `true` oder `false` setzt den Schalter für diese Session.
+- `null` entfernt die Einstellung. Der Schalter folgt dann dem Standard der Organization.
+- Ein fehlendes Feld lässt den Schalter, wie er ist.
+
+Configure ändert den Verlauf nicht. Darum bleibt `session.head` gleich.
+
+Remember und Forget fügen auch ein kleines Item zum Verlauf hinzu, das deine Änderung festhält. Dieses Item wird die Quelle der Änderung.
+
+### Beispiele
+
+Einen Fakt vergessen:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expected":"v-8e02","revision":6,"command":{"_tag":"Forget","key":"budget"}}' \
+  https://api.example.com/v1/sessions/$SESSION/memory
+```
+
+Die Fakten weiter nutzen, aber keine neuen mehr lernen:
+
+```json
+{
+	"expected": "v-9f13",
+	"revision": 7,
+	"command": { "_tag": "Configure", "generate": false }
+}
+```
+
+Beim Lernen wieder dem Standard der Organization folgen:
+
+```json
+{
+	"expected": "v-9f13",
+	"revision": 8,
+	"command": { "_tag": "Configure", "generate": null }
+}
+```
+
+Jetzt aus dem Verlauf lernen:
+
+```json
+{ "expected": "v-9f13", "revision": 9, "command": { "_tag": "Refresh" } }
+```
+
+<Callout type="info">
+	Refresh tut nichts, wenn `generate` aus ist. Sonst braucht es ein Modell. Wenn
+	OpenBot kein Modell hat, gibt es `409` mit `SessionConflict` zurück. Refresh
+	prüft `expected` und `revision` nicht, aber du musst sie trotzdem schicken.
+</Callout>
+
+Alle Felder findest du in der [Sessions-Referenz](/docs/api/operations/tags/sessions/).
+
+---
+
+## Agent Memory
+
+**Agent Memory** ist, was ein Agent über viele Sessions lernt. Es behält nur dauerhafte Erfahrung:
+
+| Art          | Beispiel                                                             |
+| ------------ | -------------------------------------------------------------------- |
+| `procedure`  | "Führe die Tests aus, bevor du meldest, dass die Arbeit fertig ist." |
+| `preference` | "Ana mag kurze Antworten mit einer Liste der Änderungen."            |
+| `decision`   | "Das Team nutzt Effect für alle neuen Dienste."                      |
+
+Fakten, die nur für eine Aufgabe wichtig sind, bleiben im Memory der Session.
+
+### Wie es lernt
+
+Wenn ein Turn des Agent fertig ist und seine Queue leer ist, fragt OpenBot das Agent-Memory-Model, welche dauerhafte Erfahrung es behalten soll. Dieses Model ist `agentMemoryModel` in den [Einstellungen der Organization](/de/docs/organization#einstellungen). Es hat keinen Standardwert. Wenn es `null` ist, lernen Agents nichts. Um dieses Lernen zu stoppen, setze dort `agentMemory` auf `false`. Prüf-Sessions lehren nichts. Eine Session, deren Schalter `generate` aus ist, lehrt ihren Agent auch nichts.
+
+- Jeder Eintrag nennt seine Quellen: IDs von Session und Item.
+- Tool-Ergebnisse von Apps sind Daten von außen. Ein Eintrag, den nur Ergebnisse von Apps stützen, wird nie behalten.
+- Der Agent weiß immer, mit welcher Person er arbeitet. Das Memory-Modell weiß es auch. So können Einträge sagen, wer was gesagt hat.
+- Zurückgezogene Einträge bleiben zurückgezogen. Nur eine Person kann einen zurückholen.
+
+Agent Memory folgt keiner Timeline. Ein Fork ändert es nie, und der Weg zurück zu einer alten Version macht es nicht rückgängig. Um einen Eintrag zu entfernen, vergiss ihn.
+
+OpenBot fügt die aktiven Einträge zu den Anweisungen jedes Turn des Agent hinzu, die neuesten zuerst, bis zu 8000 Zeichen. Der Text sagt, dass aktuelle Anweisungen gegen das Memory gewinnen.
+
+### Geteilte Agents
+
+Ein geteilter Agent hat ein Memory für jeden Member, der ihn nutzt. Der Agent entscheidet, was er teilt: Er bekommt in jedem Turn feste Regeln zur Privatsphäre. Was er von einer Person gelernt hat, kann privat sein. Darum sagt er einer anderen Person nur, was klar geteilte Arbeit ist.
+
+### Lesen und ändern
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/agents/$AGENT/memory
+```
+
+```json
+{
+	"entries": {
+		"tests-first": {
+			"key": "tests-first",
+			"content": "Run the tests before you report that work is done.",
+			"kind": "procedure",
+			"sources": [{ "session": "c81d…", "item": "i-12" }],
+			"updatedAt": 1792486800000,
+			"status": "active"
+		}
+	},
+	"version": 4
+}
+```
+
+Ändere es mit einem Befehl `Remember` oder `Forget`. `expected` ist die aktuelle `version`:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expected":4,"command":{"_tag":"Forget","key":"tests-first"}}' \
+  https://api.example.com/v1/agents/$AGENT/memory
+```
+
+`GET /v1/agents/:agentId/memory/log` listet jede Änderung mit ihrer `version`, der Zeit, dem Auslöser (`consolidation`, `person` oder `promotion`) und den geänderten Keys.
+
+Wenn du oder ein Agent einen Session Agent [befördert](/de/docs/agents#einen-session-agent-dauerhaft-machen), werden die dauerhaften Einträge seines Session-Memory zu seinem Agent Memory.

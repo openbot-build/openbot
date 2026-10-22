@@ -1,0 +1,413 @@
+---
+title: 部署
+description: 在你自己的服务器上运行 OpenBot。
+---
+
+本页介绍如何在生产环境中运行 OpenBot。你要构建 Docker 镜像，准备数据库，设置平台，然后在反向代理后面启动服务器。
+每个设置项的说明，请看[配置](/zh-cn/docs/configuration)。
+
+---
+
+## 你需要什么
+
+- 一台装有 Docker 和 Docker Compose 的 Linux 服务器。
+- 一个给 OpenBot 用的域名，例如 `api.example.com`，以及它的 TLS 证书。
+- 一个给平台用的 OpenID Connect 提供方，例如 `https://id.example.com`。在其中注册一个客户端，重定向 URI 为 `https://api.example.com/auth/callback/oidc`。如果用户只通过组织的 [SSO 连接](/zh-cn/docs/sso)登录，可以跳过这一项。
+- 一个模型服务，如果你想让 Agent（智能体）干活的话。设置完成后，通过 API 添加它。请看[模型](/zh-cn/docs/models)。
+
+## 构建镜像
+
+所有 Docker 文件都在 `deploy/docker/` 中。一个 `Dockerfile` 生成两个镜像。每个镜像是一个构建目标（文件中一个有名字的最终阶段）：
+
+| 目标            | 镜像                    | 运行什么                                                             |
+| --------------- | ----------------------- | -------------------------------------------------------------------- |
+| `openbot`       | `openbot`               | OpenBot 和它的迁移程序。                                             |
+| `protocol-test` | `openbot-protocol-test` | App Protocol 的测试服务。请看[协议测试](/zh-cn/docs/protocol-test)。 |
+
+文件 `docker-bake.hcl` 告诉 [Docker Bake](https://docs.docker.com/build/bake/) 如何构建它们。在仓库根目录运行：
+
+```sh
+export OPENBOT_RELEASE=$(git rev-parse HEAD)
+TAG=$OPENBOT_RELEASE docker buildx bake -f deploy/docker/docker-bake.hcl --load
+```
+
+这会为 `linux/amd64` 构建 `openbot:$OPENBOT_RELEASE` 和 `openbot-protocol-test:$OPENBOT_RELEASE`。`--load` 把它们放进你本地的 Docker。不设 `TAG` 时，标签是 `local`。如果只想构建一个镜像，就加上它的目标名，例如 `openbot`。
+
+如果电脑不是 `x86_64`，Docker 需要 QEMU（一个能运行其他处理器代码的程序）来构建镜像。用 `docker run --privileged --rm tonistiigi/binfmt --install amd64` 安装一次即可。
+
+两个镜像都基于 [distroless](https://github.com/GoogleContainerTools/distroless)，Node.js 版本和开发环境相同。distroless 镜像没有 shell，也没有包管理器，所以你不能用 `docker exec` 进入它们的 shell。它们以用户 `nonroot`（65532）运行。
+
+OpenBot 镜像包含 Node.js、打包好的服务器、打包好的迁移程序和设置程序，以及数据库迁移文件。它不含构建工具，也不含任何密钥。
+
+| 镜像中的路径                | 是什么                           |
+| --------------------------- | -------------------------------- |
+| `/app/dist/app/Main.mjs`    | 服务器。镜像默认运行它。         |
+| `/app/dist/app/Migrate.mjs` | 迁移程序。它负责准备数据库。     |
+| `/app/dist/app/Setup.mjs`   | 设置程序。它写入最初的平台设置。 |
+| `/app/migrations`           | 数据库迁移文件。                 |
+
+镜像中的服务器监听 `0.0.0.0:3000`。镜像带有健康检查，每五秒调用一次 `/health`。
+
+### 用文件提供密钥
+
+OpenBot 先从环境变量读取每个设置。如果没有设置该变量，OpenBot 就改读文件 `/run/secrets/<NAME>`，例如 `/run/secrets/OPENBOT_SECRET_KEYS`。Docker 和 Compose 就把密钥放在这里。空文件视为未设置。请看[配置](/zh-cn/docs/configuration#以文件形式提供机密)。
+
+环境变量会出现在 `docker inspect` 中。`/run/secrets` 中的文件不会。Compose 对所有密钥都使用文件。
+
+## 用 Docker 运行
+
+把设置写进一个文件，例如 `openbot.env`。它只需要 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS`。可以从 `deploy/docker/production.env.example` 开始。`docker run` 不会替换 `${POSTGRES_PASSWORD}`，所以请自己写出完整的 `OPENBOT_DATABASE_URL`。
+
+生成一次密钥：
+
+```sh
+echo "OPENBOT_SECRET_KEYS=k1:$(openssl rand -hex 32)" >> openbot.env
+```
+
+请看[密钥](/zh-cn/docs/configuration#机密密钥)。
+
+<Steps>
+<Step>
+
+### 准备数据库
+
+迁移程序只需要 `OPENBOT_DATABASE_URL`。在启动服务器之前运行它。每次发布新版本之前，也要再运行一次：
+
+```sh
+docker run --rm --env-file openbot.env \
+  openbot:$OPENBOT_RELEASE /app/dist/app/Migrate.mjs
+```
+
+多次运行它是安全的。它只应用数据库还没有的迁移。它还会创建前缀为 `openbot_cluster_` 的表。这些表保存 [Workflow Run](/zh-cn/docs/workflows) 的持久状态，所以 Run 在重启后可以继续。
+迁移只能向前。没有办法撤销迁移，所以请先做备份。
+
+</Step>
+<Step>
+
+### 设置平台
+
+在新数据库上运行一次设置程序：
+
+```sh
+docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
+  /app/dist/app/Setup.mjs \
+  --public-origin=https://api.example.com \
+  --oidc-issuer=https://id.example.com \
+  --oidc-client-id=openbot \
+  --admin-email=alice@example.com
+```
+
+它把公开源、平台提供方和最初的平台管理员写入数据库。客户端密钥请用 `-e OPENBOT_SETUP_OIDC_CLIENT_SECRET=...` 传入，不要写在命令行参数里。所有参数请看[平台](/zh-cn/docs/platform#设置)。
+
+你也可以在服务器启动后再运行设置。在那之前，除 `/health` 外的每个路由都返回 `503` 和 `SetupRequired`。
+
+</Step>
+<Step>
+
+### 启动服务器
+
+```sh
+docker run -d --name openbot --env-file openbot.env \
+  -p 127.0.0.1:8080:3000 openbot:$OPENBOT_RELEASE
+```
+
+服务器启动时，会检查数据库是否有全部的表。如果没有，它会停止，你会在日志中看到错误。
+
+</Step>
+<Step>
+
+### 检查
+
+```sh
+curl http://127.0.0.1:8080/health
+```
+
+```json
+{ "status": "ok" }
+```
+
+`/health` 只说明 HTTP 服务器能够应答。它不检查数据库、设置或模型。
+
+现在 Alice 可以登录了。她是平台管理员。下一步，添加一个模型，以及一个关联它的模型提供方。请看[模型](/zh-cn/docs/models)。
+
+</Step>
+</Steps>
+
+### 不用 Docker
+
+你也可以在服务器上直接用 Node.js 运行这些程序：
+
+```sh
+pnpm install --frozen-lockfile
+pnpm --filter-prod @openbot-build/openbot... build
+pnpm --filter @openbot-build/openbot migrate
+pnpm --filter @openbot-build/openbot setup --public-origin=https://api.example.com --admin-email=alice@example.com
+pnpm --filter @openbot-build/openbot start
+```
+
+包 `@openbot-build/openbot` 还提供命令 `openbot-migrate`、`openbot-setup` 和 `openbot`。
+
+---
+
+## 用 Compose 运行
+
+文件 `deploy/docker/compose.production.yaml` 运行以下服务：
+
+| 服务            | 镜像                                         | 主机上的端口                                  |
+| --------------- | -------------------------------------------- | --------------------------------------------- |
+| `postgres`      | `postgres:18-alpine`，数据在卷 `postgres` 中 | 无                                            |
+| `migrate`       | `openbot:$OPENBOT_RELEASE`                   | 无                                            |
+| `openbot`       | `openbot:$OPENBOT_RELEASE`                   | `127.0.0.1:8080`，或 `OPENBOT_PUBLISHED_PORT` |
+| `protocol-test` | `openbot-protocol-test:$OPENBOT_RELEASE`     | `127.0.0.1:3001`                              |
+
+`migrate` 在 PostgreSQL 健康之后运行一次迁移程序。只有 `migrate` 成功，`openbot` 才会启动。所以 `up` 总是先迁移数据库。
+
+`protocol-test` 服务是 App Protocol 的公开测试服务。请看[协议测试](/zh-cn/docs/protocol-test)。
+即使你只用 OpenBot，这个文件也需要 `PROTOCOL_TEST_PUBLIC_ORIGIN`。
+
+Compose 以 `/run/secrets` 中文件的形式把密钥交给容器，而不是用环境变量。这些密钥是 `POSTGRES_PASSWORD`、`OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS`。Compose 从 `.env.production` 读取它们的值。
+`openbot` 服务只拿到 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS`。它没有其他环境变量，因为其他所有设置都存放在数据库中。`migrate` 服务只拿到 `OPENBOT_DATABASE_URL`。
+
+在模板中，`OPENBOT_DATABASE_URL` 使用 `${POSTGRES_PASSWORD}`，所以密码只需要设置一次。
+
+<Steps>
+<Step>
+
+### 准备设置
+
+```sh
+cp deploy/docker/production.env.example .env.production
+openssl rand -hex 32           # 把输出用作 POSTGRES_PASSWORD
+echo "k1:$(openssl rand -hex 32)"  # 把输出用作 OPENBOT_SECRET_KEYS
+```
+
+在 `.env.production` 中填写这些值。
+
+</Step>
+<Step>
+
+### 构建两个镜像
+
+```sh
+export OPENBOT_RELEASE=$(git rev-parse HEAD)
+TAG=$OPENBOT_RELEASE docker buildx bake -f deploy/docker/docker-bake.hcl --load
+```
+
+</Step>
+<Step>
+
+### 检查设置
+
+```sh
+docker compose --env-file .env.production -f deploy/docker/compose.production.yaml config --quiet
+```
+
+缺少必需的设置时，它会显示错误。不加 `--quiet` 时，它会打印填好所有值的完整配置。
+
+</Step>
+<Step>
+
+### 启动全部服务
+
+```sh
+docker compose --env-file .env.production -f deploy/docker/compose.production.yaml up -d --wait
+```
+
+`--wait` 会等到所有服务都健康后才返回。镜像每五秒检查一次健康状态。服务进程停止时，Compose 会重新启动它。
+
+</Step>
+<Step>
+
+### 设置平台
+
+在第一次 `up` 之后，运行一次设置程序：
+
+```sh
+docker compose --env-file .env.production -f deploy/docker/compose.production.yaml \
+  run --rm openbot /app/dist/app/Setup.mjs \
+  --public-origin=https://api.example.com \
+  --oidc-issuer=https://id.example.com \
+  --oidc-client-id=openbot \
+  --admin-email=alice@example.com
+```
+
+在完成这一步之前，除 `/health` 外的每个路由都返回 `503` 和 `SetupRequired`。请看[平台](/zh-cn/docs/platform#设置)。
+
+</Step>
+</Steps>
+
+要发布新版本，请构建新镜像，设置新的 `OPENBOT_RELEASE`，备份数据库，然后再次运行 `up -d --wait`。新的 OpenBot 启动前，`migrate` 会再次运行。
+不要删除 `postgres` 卷。它保存着你的全部数据。
+
+## 多个实例
+
+你可以在一个负载均衡器后面运行多个 OpenBot 实例。给每个实例：
+
+- 相同的 `OPENBOT_DATABASE_URL`，
+- 相同的 `OPENBOT_SECRET_KEYS`。
+
+其他什么都不需要。所有共享设置都存放在数据库中。管理员修改设置后，每个实例会立即使用新设置。请看[配置](/zh-cn/docs/configuration#修改如何到达每个实例)。
+迁移程序和设置程序只运行一次，不要在每个实例上都运行。
+
+---
+
+## TLS 和反向代理
+
+在生产环境中，由反向代理处理 HTTPS，并把流量转发给 `127.0.0.1:8080` 上的 OpenBot。
+`OPENBOT_TLS_CERT` 和 `OPENBOT_TLS_KEY` 留空。
+
+代理必须：
+
+- 把 `Origin`、`Cookie` 和 `Authorization` 头原样转发给 OpenBot，
+- 不缓冲响应，因为 Turn 可以用服务器发送事件（SSE）流式输出，
+- 允许长时间的响应。`GET /v1/sessions/:id/wait` 最多可以等待 30 秒，而一个流会持续到它的 Turn 结束。
+
+<Tabs items={["nginx", "Caddy"]}>
+<Tab value="nginx">
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name api.example.com;
+    ssl_certificate /etc/ssl/api.example.com.pem;
+    ssl_certificate_key /etc/ssl/api.example.com.key;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 1h;
+    }
+}
+```
+
+</Tab>
+<Tab value="Caddy">
+
+```txt
+api.example.com {
+    reverse_proxy 127.0.0.1:8080 {
+        flush_interval -1
+    }
+}
+```
+
+</Tab>
+</Tabs>
+
+## 同源的自有客户端
+
+与 OpenBot 同源的浏览器客户端可以使用登录 cookie。它不需要用户令牌。
+为此，你的代理把一部分路径转发给 OpenBot，其余路径转发给你的客户端。
+
+| 路径            | 转发给     | 是什么                          |
+| --------------- | ---------- | ------------------------------- |
+| `/auth/*`       | OpenBot    | 登录、退出，以及 App 授权回调。 |
+| `/v1/*`         | OpenBot    | API。                           |
+| `/health`       | OpenBot    | 健康检查。                      |
+| `/openapi.json` | OpenBot    | OpenAPI 文档。                  |
+| `/docs`         | OpenBot    | 交互式 API 参考。可选。         |
+| 其他所有路径    | 你的客户端 | 你的页面，包括 `/`。            |
+
+当你把客户端挂在 `/` 上时，`GET /` 的服务文档就不再公开。这没有问题。客户端可以直接使用上面的路径。
+
+登录后，OpenBot 会把浏览器送回你客户端上的某个路径。默认是 `/`。你的客户端还必须处理这些返回地址：
+
+- App 授权之后的 `/?authorization=<flowId>`。接下来调用 `completeAppAuthorization`。请看 [App](/zh-cn/docs/apps)。
+- 开发者测试授权之后的 `/?developerTest=<testId>`。请看[开发者工具](/zh-cn/docs/developer-tools)。
+
+返回路径可以是同源上的任意路径，但 `/auth/`、`/v1/` 和 `/development/` 下的路径除外。
+
+---
+
+## 备份
+
+备份两样东西，并把它们放在一起：
+
+1. **数据库。** 它保存平台和组织的设置、账户、组织及其成员、用户令牌、模型和模型提供方、SSO 连接、审计日志、Session 及其 Timeline，以及 App 连接。
+2. **`OPENBOT_SECRET_KEYS`。** 这些密钥用来解密数据库中的机密：App 密钥、模型提供方密钥、SSO 客户端密钥和登录密钥。没有这些密钥，数据库备份无法恢复这些机密。
+
+使用 Compose 时，这样备份数据库：
+
+```sh
+docker compose --env-file .env.production -f deploy/docker/compose.production.yaml \
+  exec -T postgres pg_dump -U openbot -Fc openbot > openbot-$(date +%F).dump
+```
+
+恢复时，先用 `docker compose --env-file .env.production -f deploy/docker/compose.production.yaml stop openbot` 停止 OpenBot。然后运行 `pg_restore`：
+
+```sh
+docker compose --env-file .env.production -f deploy/docker/compose.production.yaml \
+  exec -T postgres pg_restore -U openbot -d openbot --clean < openbot-2026-10-20.dump
+```
+
+---
+
+## GitHub Actions
+
+工作流 `.github/workflows/ci.yml` 有两个作业。第一个作业通过后，第二个作业才会运行。
+
+| 作业     | 做什么                                                                      |
+| -------- | --------------------------------------------------------------------------- |
+| `check`  | 在 `devenv shell` 中运行 `pnpm build`、`pnpm typecheck` 和 `pnpm -r test`。 |
+| `images` | 构建、检查、扫描并发布 Docker 镜像。                                        |
+
+两个作业都在 `ubuntu-latest` 上运行。它们先用 Determinate Nix 安装器安装 Nix，再安装 devenv 2.4.0。[Magic Nix Cache](https://github.com/DeterminateSystems/magic-nix-cache-action) 把 Nix 的构建结果存进 GitHub Actions 缓存，所以之后的运行不必再构建它们。作业还会从 `devenv.cachix.org` 下载预先构建好的 devenv 包。`check` 作业把 pnpm 存储放在缓存中。
+
+`images` 作业执行以下步骤：
+
+1. [hadolint](https://github.com/hadolint/hadolint) 和 `docker buildx bake lint` 检查 `Dockerfile`。后者运行 [Docker 构建检查](https://docs.docker.com/build/checks/)。
+2. Docker Bake 构建两个镜像。构建层保存在 GitHub Actions 缓存中，每个镜像一份缓存，所以之后的运行只构建有变化的部分。
+3. `deploy/docker/check.sh` 检查镜像。请看[检查镜像](#检查镜像)。
+4. [dive](https://github.com/wagoodman/dive) 检查镜像层没有浪费空间。
+5. [Trivy](https://trivy.dev) 扫描两个镜像。如果镜像有已知的、已有修复的 `HIGH` 或 `CRITICAL` 漏洞，作业就会失败。Trivy 看不到 Node.js 的版本，因为 Node.js 是复制进镜像的，不是作为软件包安装的。
+6. 作业把两个镜像保存为 `images-<commit-sha>` 制品，保留七天。
+7. 对于推送，作业会发布镜像。它使用构建缓存，所以不会再构建一次。
+
+工作流在拉取请求、推送到 `main` 以及 `v1.2.3` 这样的标签时运行。它只在推送时发布镜像：
+
+| 事件                | 发布的标签                 |
+| ------------------- | -------------------------- |
+| 推送到 `main`       | `<commit-sha>` 和 `latest` |
+| `v1.2.3` 这样的标签 | `<commit-sha>` 和 `v1.2.3` |
+
+镜像发布到 GitHub 容器仓库，地址是 `ghcr.io/openbot-build/openbot` 和 `ghcr.io/openbot-build/openbot/protocol-test`。工作流不会部署 OpenBot。要在 Compose 中使用已发布的镜像，请拉取它，并打上 `openbot:<tag>` 标签。
+
+### 发布文档网站
+
+工作流 `.github/workflows/docs.yml` 把文档网站发布到 [GitHub Pages](https://docs.github.com/pages)，地址是 [openbot.build](https://openbot.build)。每次推送到 `main` 时它都会运行。你也可以在 Actions 标签页中手动启动它。
+
+| 作业     | 做什么                                                                                              |
+| -------- | --------------------------------------------------------------------------------------------------- |
+| `build`  | 在 `devenv shell` 中运行 `pnpm --filter "@openbot-build/docs..." build`。这会构建文档及其需要的包。 |
+| `deploy` | 把 `packages/docs/dist` 发送到 GitHub Pages。                                                       |
+
+`build` 作业把 `DOCS_URL` 设为 `https://openbot.build`。Astro 用它生成完整的页面链接，例如站点地图。同一时间只运行一个部署。
+
+仓库设置必须把 Pages 的来源设为 **GitHub Actions**，并把 `openbot.build` 设为自定义域名。`openbot.build` 的 DNS 必须指向 GitHub Pages。请看 [Manage a custom domain](https://docs.github.com/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site)。
+
+### 检查镜像
+
+`deploy/docker/check.sh` 用测试设置启动 `compose.production.yaml`。额外的文件 `compose.check.yaml` 去掉主机端口，并添加两个服务。`setup` 服务在 `migrate` 之后、`openbot` 启动之前，用测试值运行设置程序。`check` 服务运行检查。`check.env` 保存测试设置。其中没有任何真实的密钥。
+
+`check` 服务在 OpenBot 和协议测试服务都健康之后，在 Compose 网络中运行 `check.mjs`。它检查：
+
+- 不带密钥和带错误密钥时，`/v1/sessions` 都返回 `401`，
+- `/openapi.json` 正常工作，
+- 协议测试的 Catalog 有正确的公开源，
+- 协议测试服务上的 MCP 发现正常工作。
+
+所以这项检查也证明，迁移、设置程序、密钥文件和健康检查在真实的生产配置中都能正常工作。最后，脚本会删除容器和测试数据库。
+
+在你的电脑上运行同样的检查：
+
+```sh
+devenv shell -- pnpm images
+devenv shell -- pnpm images:check
+devenv shell -- hadolint deploy/docker/Dockerfile
+devenv shell -- dive --ci --source docker openbot:local
+devenv shell -- trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed openbot:local
+```

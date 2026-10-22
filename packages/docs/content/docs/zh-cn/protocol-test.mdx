@@ -1,0 +1,152 @@
+---
+title: 协议测试
+description: 一个公开的测试服务，供 App Protocol 的宿主和客户端使用。
+---
+
+**协议测试服务**是 [OpenBot App Protocol](/zh-cn/docs/protocol) 的公开测试伙伴。它发布一些编造的 App，覆盖每一种连接和登录方式。用它来测试宿主、客户端或 OpenBot 本身。
+
+这个服务位于仓库的 `protocol-test` 文件夹中。它的包名是 `@openbot-build/protocol-test`。它使用 MCP `2026-07-28`、基于 HTTPS 的 Streamable HTTP，以及 MCP Apps `2026-01-26`。示例中用 `https://protocol-test.example.com` 作为它的源。
+
+运行中的服务还在 `/guide` 提供一份完整的纯文本指南。
+
+<Callout type="warn">
+	本页上的所有账户和密钥都是公开的、编造的。不要发送私密信息。重启会清除所有数据。
+</Callout>
+
+---
+
+## 场景
+
+| App ID                     | MCP 路径                        | 凭据                                                                    |
+| -------------------------- | ------------------------------- | ----------------------------------------------------------------------- |
+| `anonymous`                | `/mcp/anonymous`                | 无                                                                      |
+| `api-key`                  | `/mcp/api-key`                  | `X-API-Key: protocol-test-api-key`                                      |
+| `bearer`                   | `/mcp/bearer`                   | `Authorization: Bearer protocol-test-bearer-token`                      |
+| `basic`                    | `/mcp/basic`                    | `Authorization: Basic cHJvdG9jb2wtdGVzdDpwcm90b2NvbC10ZXN0LXBhc3N3b3Jk` |
+| `oauth-cimd`               | `/mcp/oauth-cimd`               | Client ID Metadata Document 和公开 PKCE                                 |
+| `oauth-dcr`                | `/mcp/oauth-dcr`                | 动态客户端注册，公开或机密 PKCE                                         |
+| `oauth-preregistered`      | `/mcp/oauth-preregistered`      | 已注册的公开或机密客户端，使用 PKCE                                     |
+| `oauth-client-credentials` | `/mcp/oauth-client-credentials` | 一个机密的机器客户端                                                    |
+
+每个 App 都有一个页面 `/apps/<id>`、一个 Catalog `/apps/<id>/catalog.json` 和一个 Card `/apps/<id>/server-card.json`。根 Catalog `/.well-known/ai-catalog.json` 列出了全部 App。`/scenarios.json` 以 JSON 列出每个场景和测试夹具。`/healthz` 和 `/readyz` 报告状态。
+
+要在 OpenBot 中试用，请按 [App](/zh-cn/docs/apps#连接-app) 中的说明连接 `protocol-test.example.com`。
+
+### 数据有效期
+
+| 数据     | 保留时间 |
+| -------- | -------- |
+| 工作区   | 30 分钟  |
+| 访问令牌 | 5 分钟   |
+| 刷新授权 | 1 小时   |
+| 授权码   | 1 分钟   |
+| 同意请求 | 10 分钟  |
+
+每个场景都有自己的工作区。在 OAuth 场景中，每个账户也有自己的工作区。其他场景共享数据，所以请选一个没人用的工作区 ID。
+
+---
+
+## 公开的测试凭据
+
+| 客户端 ID                                               | 认证方式              | 回调地址                                                                               |
+| ------------------------------------------------------- | --------------------- | -------------------------------------------------------------------------------------- |
+| `https://protocol-test.example.com/clients/public.json` | `none`，CIMD          | `https://protocol-test.example.com/callback`                                           |
+| `protocol-test-public`                                  | `none`                | 公开的 `/callback`、`http://127.0.0.1:8765/callback`、`http://localhost:8765/callback` |
+| `protocol-test-confidential-basic`                      | `client_secret_basic` | 公开的 `/callback`                                                                     |
+| `protocol-test-confidential-post`                       | `client_secret_post`  | 公开的 `/callback`                                                                     |
+
+两个机密客户端都使用密钥 `protocol-test-client-secret`。如果需要其他回调地址，请使用你自己的公开 CIMD 文档，或在 `/oauth/dcr/register` 进行动态注册。
+
+在登录页面上，你可以以 **Alice** 或 **Bob** 的身份允许或拒绝访问。
+
+| 权限范围     | 允许                                                   |
+| ------------ | ------------------------------------------------------ |
+| `test:read`  | 发现和读取。                                           |
+| `test:write` | 另外允许 `write_note` 和 `delete_note`。请两者都申请。 |
+
+---
+
+## OAuth 流程
+
+每种模式（`cimd`、`dcr`、`preregistered`、`client-credentials`）在 `/oauth/<mode>` 都有自己的签发方。签发方元数据在 `/.well-known/oauth-authorization-server/oauth/<mode>`。Protected Resource Metadata 在 `/.well-known/oauth-protected-resource/mcp/oauth-<mode>`。
+
+浏览器登录时，打开 `/oauth/<mode>/authorize`，带上 `response_type=code`、`client_id`、确切的 `redirect_uri`、`resource`、`scope`、`state` 和一个 S256 的 `code_challenge`。然后在 `/oauth/<mode>/token` 用 PKCE verifier 把授权码换成令牌，只能换一次。每个请求都必须发送确切的 `resource`，例如 `https://protocol-test.example.com/mcp/oauth-cimd`。
+
+获取一个机器令牌：
+
+```sh
+curl https://protocol-test.example.com/oauth/client-credentials/token \
+  --data-urlencode grant_type=client_credentials \
+  --data-urlencode client_id=protocol-test-confidential-post \
+  --data-urlencode client_secret=protocol-test-client-secret \
+  --data-urlencode resource=https://protocol-test.example.com/mcp/oauth-client-credentials \
+  --data-urlencode scope='test:read test:write'
+```
+
+只读令牌看不到写工具。没有 `test:write` 的写操作会得到 403。错误的、过期的、已撤销的或 resource 不对的令牌会得到 401。刷新永远不会增加权限范围。`/oauth/<mode>/revoke` 会撤销这次授权的所有令牌。
+
+---
+
+## 你可以测试什么
+
+- **工具。** `echo`、`add`、`identity`、`content_samples`、`read_workspace`、`write_note`（带 `idempotencyKey`）、`delete_note`（带 `expectedRevision`）、`ui_read_workspace`（仅限 App）、`test_error`、`wait` 和 `notify`。
+- **后续输入。** `request_form`、`request_url`、`request_sampling` 和 `request_roots` 接受 `{ "text": "..." }`，并向客户端请求更多输入。
+- **资源。** `protocol-test://about`、`protocol-test://binary`、`protocol-test://workspace/<workspace>`，以及 110 个用于分页的测试夹具。
+- **提示词。** `summarize_workspace`，支持补全。
+- **视图。** `ui://protocol-test/workspace.html`，一个显示工作区的 MCP Apps 视图。
+
+### 发现和索引的测试夹具
+
+每个测试夹具在 `/fixtures/<id>/server-card.json` 都有一个 Card。
+
+| ID              | 你应该看到什么                                   |
+| --------------- | ------------------------------------------------ |
+| `noindex`       | 一个已列出、带有 `X-Robots-Tag: noindex` 的 Card |
+| `robots-denied` | 一个已列出、但被 `/robots.txt` 阻止的 Card       |
+| `unlisted`      | 一个有效、但没有任何 Catalog 列出的 Card         |
+| `withdrawn`     | 410 Gone                                         |
+| `malformed`     | 损坏的 JSON                                      |
+| `incompatible`  | 只有不受支持的协议版本和传输方式                 |
+| `redirect`      | 重定向到 anonymous 的 Card                       |
+| `unavailable`   | 503，带 `Retry-After`                            |
+
+---
+
+## 在本地运行
+
+在仓库根目录运行：
+
+```sh
+devenv shell -- pnpm --filter @openbot-build/protocol build
+devenv shell -- pnpm --filter @openbot-build/protocol-test build
+devenv shell -- pnpm --filter @openbot-build/protocol-test test
+PROTOCOL_TEST_PUBLIC_ORIGIN=https://protocol-test.example.com \
+  devenv shell -- pnpm --filter @openbot-build/protocol-test start
+```
+
+服务默认使用 HTTP。它期望前面有一个 TLS 代理。要在你的电脑上直接提供 HTTPS，请把源设为 `https://localhost:7445`，端口设为 `7445`，并设置两个 TLS 路径。然后让你的宿主信任这个证书。
+
+## 用 Docker 运行
+
+`deploy/docker/Dockerfile` 中的 `protocol-test` 目标生成这个镜像。构建并启动它：
+
+```sh
+devenv shell -- docker buildx bake -f deploy/docker/docker-bake.hcl --load protocol-test
+devenv shell -- docker run -d --name protocol-test -p 127.0.0.1:3001:3001 \
+  -e PROTOCOL_TEST_PUBLIC_ORIGIN=https://protocol-test.example.com \
+  openbot-protocol-test:local
+```
+
+服务只监听 `127.0.0.1:3001`。请在它前面放一个支持流式传输的 TLS 代理。`deploy/docker/protocol-test.nginx.conf` 是一个示例。`deploy/docker/compose.production.yaml` 用同样的方式运行 `openbot-protocol-test` 镜像，不需要数据库。只运行一份，因为所有数据都在一个进程中。
+
+## 配置
+
+| 变量                                              | 默认值    | 用途                                     |
+| ------------------------------------------------- | --------- | ---------------------------------------- |
+| `PROTOCOL_TEST_PUBLIC_ORIGIN`                     | 必需      | 确切的公开 HTTPS 源，不带路径。          |
+| `PROTOCOL_TEST_HOST`                              | `0.0.0.0` | 监听的地址。                             |
+| `PROTOCOL_TEST_PORT`                              | `3001`    | 监听的端口。                             |
+| `PROTOCOL_TEST_ALLOWED_ORIGINS`                   | 公开源    | 允许调用它的浏览器源，用逗号分隔。       |
+| `PROTOCOL_TEST_TLS_KEY`、`PROTOCOL_TEST_TLS_CERT` | 未设置    | 文件路径。两个都设置后，直接提供 HTTPS。 |
+
+服务器端客户端不发送 `Origin` 头，所以它们总能正常工作。浏览器客户端只有在它的确切源位于 `PROTOCOL_TEST_ALLOWED_ORIGINS` 中时才能工作。

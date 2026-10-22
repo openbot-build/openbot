@@ -1,0 +1,251 @@
+---
+title: Memory
+description: 保存 Session 中有用的事实，并在之后的 Turn 中使用它们。
+---
+
+**学到的记忆**（learned memory）是 Agent 为一个 Session 保存的一小份事实列表。每条事实在对话中都有来源。
+OpenBot 在每个 Turn 之后添加事实，并在之后的 Turn 中把它们展示给模型。你也可以自己添加、删除和关闭事实。
+本页介绍学到的记忆如何工作，以及如何用 API 修改它。
+
+学到的记忆属于一个 Session。它是 Session 历史的一部分，所以 [Fork](/zh-cn/docs/sessions#从某个-version-分叉)（分叉）会得到它的一份副本。其他 Session 看不到它。
+
+每个 [Agent](/zh-cn/docs/agents) 还有一份跨越它所有 Session 的长期记忆。参见 [Agent 记忆](#agent-记忆)。
+
+---
+
+## 读取记忆
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/sessions/$SESSION/memory
+```
+
+```json
+{
+	"entries": {
+		"budget": {
+			"key": "budget",
+			"content": "The trip budget is 1500 EUR.",
+			"kind": "fact",
+			"sources": ["i-02"],
+			"updatedAt": 1792486800000,
+			"status": "active"
+		}
+	},
+	"processed": ["i-01", "i-02"],
+	"settings": { "use": true, "generate": false },
+	"overrides": { "generate": false }
+}
+```
+
+| 字段        | 含义                                                            |
+| ----------- | --------------------------------------------------------------- |
+| `key`       | 事实的稳定名称。一个 key 对应一条事实。                         |
+| `content`   | 用纯文本写的事实。                                              |
+| `kind`      | `fact`、`decision`、`preference`、`procedure` 或 `hypothesis`。 |
+| `sources`   | 支持这条事实的 Item 的 ID。                                     |
+| `status`    | `active`，或者在事实被删除后为 `retracted`。                    |
+| `processed` | OpenBot 已经为记忆读过的 Item。                                 |
+| `settings`  | 这个 Session 正在使用的开关。见下文。                           |
+| `overrides` | 这个 Session 自己设置的开关。                                   |
+
+---
+
+## 开关
+
+两个开关控制记忆：
+
+- `use`：OpenBot 把有效的事实加入模型的指令中。
+- `generate`：OpenBot 在每个 Turn 之后学习新的事实。
+
+组织在[设置](/zh-cn/docs/organization#设置)中用 `memory` 为每个开关设置默认值。除非组织修改，两个开关都是打开的。
+Session 可以用 `Configure` 覆盖每个开关。Session 没有设置的开关会沿用组织的默认值。
+`settings` 显示最终结果，`overrides` 显示 Session 设置了什么。Fork 会保留源 Session 的覆盖设置。
+
+---
+
+## OpenBot 如何使用记忆
+
+### 在 Turn 中
+
+当 `use` 打开时，OpenBot 会在 Turn 运行时把有效的事实加入模型的指令中。这段文字告诉模型：记忆是过去的证据，当前的指令优先。
+已撤回的事实不会发送。
+
+记忆文字的长度上限是 8000 个字符。最新的事实排在前面。OpenBot 在第一条放不下的事实之前停止，所以较旧的事实会被略去。事实永远不会从中间截断。
+要修改上限，请在服务器上提供你自己的策略：`sessions.memory.policy: MemoryRules.make({ maxLength: 4000 })`。
+
+### Turn 之后
+
+Turn 完成后，OpenBot 会整合记忆。整合（consolidate）的意思是读取新的 Item，并更新事实列表。在批准之后完成的 Turn 也会这样做。OpenBot 让这个 Turn 的模型找出值得保存的事实。模型必须为每处修改指明来源 Item。
+OpenBot 把修改应用到最新的记忆上。所以，你在模型工作时做的编辑会被保留。
+只运行 App 动作的 Turn 不会改变记忆，因为其中没有模型运行。
+
+OpenBot 对每处修改检查下面这些规则：
+
+- OpenBot 只读取它还没有处理过的 Item。
+- 每处修改必须至少指明其中一个 Item 作为来源。
+- 每个 key 只能有一处修改。已撤回的事实保持撤回状态。只有直接的 Remember 才能把它恢复。
+
+OpenBot 还会告诉模型：同一条事实要重用同一个 key；只有用户明确的表述才算作偏好；永远不要保存密码、密钥或能提供访问权限的链接。
+
+如果模型出错，Turn 仍然会完成。OpenBot 记录错误，并在下一个 Turn 时重试。
+关闭 `generate` 可以停止这一步。
+
+---
+
+## 修改记忆
+
+所有修改都使用同一个路由：`POST /v1/sessions/:sessionId/memory`。
+
+```json
+{
+	"expected": "v-7d21",
+	"revision": 5,
+	"command": {
+		"_tag": "Remember",
+		"key": "budget",
+		"content": "The trip budget is 1500 EUR.",
+		"kind": "fact"
+	}
+}
+```
+
+| 字段       | 含义                                                          |
+| ---------- | ------------------------------------------------------------- |
+| `expected` | 你最后看到的 Timeline 头部：Session 视图中的 `session.head`。 |
+| `revision` | 你最后看到的 Session 修订版本：`session.revision`。           |
+| `command`  | 要做什么。见下面的命令。                                      |
+
+如果 Session 或它的历史在你读取之后发生了变化，OpenBot 会返回 `409` 和 `SessionConflict`。请重新读取 Session 再重试。
+成功时，OpenBot 返回新的 Session 视图。它有新的 `session.revision`。Remember 和 Forget 还会生成新的 `session.head`。
+
+### 命令
+
+| `_tag`      | 字段                        | 作用                                                      |
+| ----------- | --------------------------- | --------------------------------------------------------- |
+| `Remember`  | `key`、`content`、`kind`    | 添加一条事实，或替换这个 key 的事实。它会让事实变为有效。 |
+| `Forget`    | `key`                       | 把事实标记为已撤回。未知的 key 会返回 `409`。             |
+| `Configure` | `use`、`generate`（都可选） | 设置这个 Session 的开关。见下文。                         |
+| `Refresh`   | 无                          | 立刻用 Session 的模型运行整合。                           |
+
+对于 `Configure` 的每个字段：
+
+- `true` 或 `false` 为这个 Session 设置开关。
+- `null` 删除这个设置。开关随后沿用组织的默认值。
+- 缺少的字段保持开关不变。
+
+Configure 不会改变历史，所以 `session.head` 保持不变。
+
+Remember 和 Forget 还会在历史中添加一个小的 Item，用来记录你的编辑。这个 Item 会成为修改的来源。
+
+### 示例
+
+忘记一条事实：
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expected":"v-8e02","revision":6,"command":{"_tag":"Forget","key":"budget"}}' \
+  https://api.example.com/v1/sessions/$SESSION/memory
+```
+
+继续使用事实，但停止学习新的事实：
+
+```json
+{
+	"expected": "v-9f13",
+	"revision": 7,
+	"command": { "_tag": "Configure", "generate": false }
+}
+```
+
+重新沿用组织关于学习的默认值：
+
+```json
+{
+	"expected": "v-9f13",
+	"revision": 8,
+	"command": { "_tag": "Configure", "generate": null }
+}
+```
+
+现在就从历史中学习：
+
+```json
+{ "expected": "v-9f13", "revision": 9, "command": { "_tag": "Refresh" } }
+```
+
+<Callout type="info">
+	当 `generate` 关闭时，Refresh 什么也不做。否则它需要一个模型。如果 OpenBot
+	没有模型，它会返回 `409` 和 `SessionConflict`。Refresh 不检查 `expected` 和
+	`revision`，但你仍然必须发送它们。
+</Callout>
+
+在 [Sessions 参考](/docs/api/operations/tags/sessions/)中查看所有字段。
+
+---
+
+## Agent 记忆
+
+**Agent 记忆**（Agent memory）是一个 Agent 在许多 Session 中学到的东西。它只保存长期有用的经验：
+
+| 类型         | 示例                                                 |
+| ------------ | ---------------------------------------------------- |
+| `procedure`  | "Run the tests before you report that work is done." |
+| `preference` | "Ana likes short answers with a list of changes."    |
+| `decision`   | "The team uses Effect for all new services."         |
+
+只对某一项任务有用的事实留在 Session 记忆中。
+
+### 它如何学习
+
+当 Agent 的一个 Turn 完成并且它的队列为空时，OpenBot 会询问 Agent 记忆模型要保存哪些长期经验。这个模型是[组织设置](/zh-cn/docs/organization#设置)中的 `agentMemoryModel`。它没有默认值。它为 `null` 时，Agent 什么都不学。要停止这种学习，请在那里把 `agentMemory` 设为 `false`。审查 Session 不会教任何东西。`generate` 开关关闭的 Session 也不会教它的 Agent。
+
+- 每个条目都指明它的来源：Session 和 Item 的 ID。
+- 来自 App 的工具结果是外部数据。只有 App 结果支持的条目永远不会被保存。
+- Agent 总是知道它在和哪个人一起工作。记忆模型也知道，所以条目可以说明谁说了什么。
+- 已撤回的条目保持撤回状态。只有人才能把它恢复。
+
+Agent 记忆不跟随 Timeline。Fork 永远不会改变它，回到旧的 Version 也不会撤销它。要删除一个条目，请忘记它。
+
+OpenBot 把有效的条目加入该 Agent 每个 Turn 的指令中，最新的在前，最多 8000 个字符。这段文字说明当前的指令优先于记忆。
+
+### 共享的 Agent
+
+共享的 Agent 对所有使用它的成员只有一份记忆。由 Agent 决定分享什么：它在每个 Turn 中都会得到关于隐私的固定规则。它从某个人那里学到的东西可能是私密的，所以它只把明确属于共享工作的内容告诉另一个人。
+
+### 读取和修改
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/agents/$AGENT/memory
+```
+
+```json
+{
+	"entries": {
+		"tests-first": {
+			"key": "tests-first",
+			"content": "Run the tests before you report that work is done.",
+			"kind": "procedure",
+			"sources": [{ "session": "c81d…", "item": "i-12" }],
+			"updatedAt": 1792486800000,
+			"status": "active"
+		}
+	},
+	"version": 4
+}
+```
+
+用 `Remember` 或 `Forget` 命令修改它。`expected` 是当前的 `version`：
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expected":4,"command":{"_tag":"Forget","key":"tests-first"}}' \
+  https://api.example.com/v1/agents/$AGENT/memory
+```
+
+`GET /v1/agents/:agentId/memory/log` 列出每一次修改，包括它的 `version`、时间、由什么引起（`consolidation`、`person` 或 `promotion`），以及被修改的 key。
+
+当你或某个 Agent [提升](/zh-cn/docs/agents#提升-session-agent)一个 Session Agent 时，它 Session 记忆中的长期条目会成为它的 Agent 记忆。

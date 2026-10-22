@@ -1,0 +1,307 @@
+---
+title: Pakete
+description: Die Pakete im Workspace und wofür jedes da ist.
+---
+
+OpenBot ist ein pnpm-Workspace. Jedes Paket hat eine Aufgabe. `openbot` setzt die Teile zum Server zusammen. Die anderen Bibliotheken kannst du auch einzeln nutzen.
+
+Alle Pakete heißen `@openbot-build/<name>`, haben die Version `0.1.0` und nutzen `effect@4.0.5`. Sie sind noch nicht auf npm. Nutze sie aus dem Workspace mit `"workspace:*"`.
+
+---
+
+## Überblick
+
+| Paket           | Wofür es da ist                                                                                  |
+| --------------- | ------------------------------------------------------------------------------------------------ |
+| `openbot`       | Der Server, seine Plugins und seine Model Providers. Siehe [Aus Code starten](/de/docs/server).  |
+| `api`           | Der typisierte HTTP-Vertrag. Der Server, der Client und die API-Referenz nutzen ihn.             |
+| `client`        | Der TypeScript-Client. Siehe [Client](/de/docs/client).                                          |
+| `core`          | Der Agent-Kern: Agents, Sessions, Turns, Timelines, Speicher, Plugins und Skills.                |
+| `protocol`      | Das OpenBot App Protocol: Apps veröffentlichen, finden, verbinden und indizieren.                |
+| `protocol-test` | Ein öffentlicher Testdienst für das App Protocol. Siehe [Protokolltest](/de/docs/protocol-test). |
+| `docs`          | Diese Doku-Seite.                                                                                |
+
+Die Beispiele unten lassen das Model weg. Um sie auszuführen, gib einen `LanguageModel`-Layer an, zum Beispiel von einem [Model Provider](#model-providers) in `openbot`.
+
+---
+
+## core
+
+`@openbot-build/core` führt Agents aus. Es hat diese Hauptteile:
+
+| Modul                                        | Was es tut                                                                                                       |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `Agent`                                      | Eine Agent-Definition: Werkzeuge, Plugins, Provider und Compaction. Eine Definition kann vielen Sessions dienen. |
+| `SessionRuntime`                             | Führt Turns aus: `execute`, `stream`, `start`, `steer`, `approve`, `interrupt` und mehr.                         |
+| `SessionStore`, `Store`                      | Speichert Sessions und ihre Timelines.                                                                           |
+| `SessionStoreMemory`                         | Ein Speicher, der alles im Arbeitsspeicher hält, für Tests und Skripte.                                          |
+| `Timeline`, `Item`, `Turn`, `Session`        | Die Datentypen.                                                                                                  |
+| `Plugin`, `PluginComposition`, `PluginState` | Plugins erstellen und kombinieren und ihnen gespeicherten Zustand geben.                                         |
+| `Skill`, `SkillMap`                          | Skills beschreiben und eine Liste davon führen.                                                                  |
+
+Eine **Session** (Sitzung) ist ein Arbeitsstrang. Jede Eingabe startet einen **Turn** (Durchgang). Ein Turn kann viele Model-Schritte und Werkzeug-Aufrufe haben.
+Die **Timeline** (Zeitleiste) ist der gespeicherte Verlauf einer Session. Jede Änderung erzeugt eine neue Version der Timeline. So kannst du von einem früheren Punkt lesen oder einen Fork erstellen.
+
+```ts
+import { SessionRuntime, SessionStoreMemory, Store } from "@openbot-build/core"
+import { Effect } from "effect"
+import { Toolkit } from "effect/ai"
+
+const program = Effect.scoped(
+	Effect.gen(function* () {
+		const definition = yield* Store.define({
+			stores: {},
+			schemaVersion: "timeline/1",
+		})
+		const store = yield* SessionStoreMemory.make(definition)
+		const runtime = yield* SessionRuntime.make({
+			store,
+			agent: { toolkit: Toolkit.empty },
+		})
+		const view = yield* store.create({ metadata: { title: "Closures" } })
+		return yield* runtime.execute({
+			base: { session: view.session.id, revision: view.session.revision },
+			input: "Explain closures",
+		})
+	}),
+)
+```
+
+`execute` wartet, bis der Turn endet, und gibt die gespeicherte Session zurück. `stream` liefert Ereignisse, während der Turn läuft.
+Jede Änderung braucht die aktuelle `revision`. Das verhindert, dass zwei Schreiber dieselbe Session gleichzeitig ändern.
+
+Der Speicher kann Sessions auch ohne Model forken, umbenennen, exportieren und importieren:
+
+```ts
+const fork =
+	yield *
+	store.fork({
+		source: view.session.id,
+		metadata: { title: "Another try" },
+	})
+const record = yield * store.export(fork.session.id)
+```
+
+### Plugins
+
+Ein Plugin legt sich um die Model-Schleife. `Plugin.make` erstellt eines. Sein Konstruktor läuft einmal. Die Middleware, die er zurückgibt, legt sich um den Ereignis-Stream jedes Turns:
+
+```ts
+import { Plugin } from "@openbot-build/core"
+import { Effect, Stream } from "effect"
+
+const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
+	Effect.succeed((next, options) =>
+		next(options).pipe(
+			Stream.tap((event) =>
+				event._tag === "ModelStepStarted"
+					? Effect.log("A model step started")
+					: Effect.void,
+			),
+		),
+	),
+)
+```
+
+`PluginComposition.merge(a, b)` kombiniert zwei Plugins. `a` läuft außen um `b`.
+Ein Plugin kann auch eigene Daten in der Session oder in der Timeline speichern. Gib `plugin.stores` an `Store.define` und nutze dann `PluginState.make`.
+
+### Skills
+
+`Skill.Descriptor` beschreibt einen Skill. `SkillMap.Catalog` ist eine Liste von Skills. Wenn zwei Listen dieselbe Skill-ID haben, gewinnt die spätere.
+Dein Programm findet, lädt und führt die Skills aus.
+
+---
+
+## Plugins in openbot
+
+`@openbot-build/openbot` enthält alle Plugins von OpenBot. Der Server nutzt die Plugins für Agent, App und Memory in jedem Turn. Die Plugins für Memory und für das Turn-Limit kannst du auch mit deiner eigenen `SessionRuntime` nutzen. Goals und Plans sind Teil von [Workflows](/de/docs/workflows).
+
+### Memory
+
+Das Memory-Plugin hält gelerntes Memory (Gedächtnis): kurze Fakten, die der Agent in einer Session lernt und in späteren Turns nutzt.
+Der Server nutzt es für die Memory-API. Siehe [Memory](/de/docs/memory). Die Schemas der Memory-API liegen in `api`, als `Memory` und `AgentMemory`.
+
+```ts
+import { SessionStoreMemory, Store } from "@openbot-build/core"
+import {
+	LanguageModelMemory,
+	Memory,
+	MemoryOperations,
+	MemoryRules,
+} from "@openbot-build/openbot"
+import { Effect } from "effect"
+
+const program = Effect.scoped(
+	Effect.gen(function* () {
+		const definition = yield* Store.define({
+			stores: Memory.stores,
+			schemaVersion: "timeline/1",
+		})
+		const store = yield* SessionStoreMemory.make(definition)
+		const memory = MemoryOperations.make({
+			store,
+			policy: MemoryRules.policy,
+			model: LanguageModelMemory.model,
+		})
+		return yield* memory.read(sessionId)
+	}),
+)
+```
+
+`read` gibt die gelernten Einträge zurück. `update` führt eine Änderung `Remember` oder `Forget` aus. `consolidate` bittet das Model, aus neuem Verlauf neue Einträge zu lernen.
+`MemoryRules` und `LanguageModelMemory` sind die Standard-Regeln und das Standard-Model. Du kannst sie ersetzen.
+`MemoryRules.policy` begrenzt den Memory-Text auf 8000 Zeichen. Nutze `MemoryRules.make({ maxLength })` für eine andere Grenze.
+
+`MemoryPlugin.make` gibt das Plugin, das Memory in jedem Turn nutzt. Es fügt die aktiven Einträge zu den Anweisungen hinzu. Nach einem abgeschlossenen Turn lernt es neue Einträge. Du gibst ihm zwei Effects, die in jedem Turn laufen:
+
+- `settings` gibt `{ use, generate }` zurück. `use` schaltet die Anweisungen ein. `generate` schaltet das Lernen ein.
+- `languageModel` gibt das Model zurück, das die Einträge lernt.
+
+Der Host entscheidet, woher diese Werte kommen. Gib `plugin.stores` an `Store.define` und stelle `plugin.store` mit `PluginState.make` bereit.
+
+Hier ist `learner` ein `LanguageModel`-Dienst, den du vorher gebaut hast:
+
+```ts
+const plugin = MemoryPlugin.make({
+	settings: Effect.succeed({ use: true, generate: true }),
+	languageModel: Effect.succeed(learner),
+})
+```
+
+### Turn-Limits
+
+`TurnLimiter` hält einen Turn nach einer festen Zahl von Model-Schritten an. Die erste Model-Anfrage zählt als ein Schritt.
+
+```ts
+import { TurnLimiter } from "@openbot-build/openbot"
+
+const runtime =
+	yield *
+	SessionRuntime.make({
+		store,
+		agent: { plugin: TurnLimiter.make({ maxSteps: 4 }) },
+	})
+```
+
+Er schlägt mit einem von zwei Fehlern fehl:
+
+| Fehler                   | Wann                                                                                                |
+| ------------------------ | --------------------------------------------------------------------------------------------------- |
+| `InvalidMaxSteps`        | `maxSteps` ist keine positive ganze Zahl.                                                           |
+| `ModelStepLimitExceeded` | Der Turn braucht nach der Grenze noch einen Model-Schritt. Der Fehler hat `maxSteps` und `history`. |
+
+---
+
+## Model Providers
+
+`@openbot-build/openbot` hat drei Model Providers. Jeder macht aus einer Model-Auswahl einen `LanguageModel`-Layer. Du gibst den API-Schlüssel an. Wie OpenBot sie nutzt, steht unter [Models](/de/docs/models).
+
+### OpenAiCompatProvider
+
+```ts
+import { Config, Model, Provider } from "@openbot-build/core"
+import { OpenAiCompatProvider } from "@openbot-build/openbot"
+import { Effect, Layer, Redacted } from "effect"
+import { LanguageModel } from "effect/ai"
+import { FetchHttpClient } from "effect/http"
+
+const selection = Config.Selection.make({
+	provider: Provider.Id.make("openai-compat"),
+	model: Model.Id.make("gpt-4.1"),
+})
+const model = Layer.unwrap(
+	OpenAiCompatProvider.make({ max_output_tokens: 1024 }).model(selection),
+).pipe(
+	Layer.provide(
+		OpenAiCompatProvider.layerClient({
+			apiKey: Redacted.make(process.env.OPENAI_API_KEY ?? ""),
+			apiUrl: "https://api.openai.com/v1",
+		}),
+	),
+	Layer.provide(FetchHttpClient.layer),
+)
+
+const program = LanguageModel.generateText({ prompt: "Hello" }).pipe(
+	Effect.provide(model),
+)
+```
+
+Lass `apiUrl` weg, um `https://api.openai.com/v1` zu nutzen. `reasoningEffort` und `serviceTier` einer Auswahl ersetzen `reasoning_effort` und `service_tier` in den Standardwerten.
+
+### OpenAiProvider
+
+Dasselbe Muster, mit `OpenAiProvider` und der Provider-ID `openai`. Er nutzt die Responses API.
+Er hat auch `ResponsesCompaction.layer()`. Das macht lange Verläufe kürzer, mit der eingebauten Compaction der Responses API.
+
+```ts
+import { OpenAiProvider, ResponsesCompaction } from "@openbot-build/openbot"
+
+const services = Layer.merge(
+	Layer.unwrap(OpenAiProvider.make().model(selection)),
+	ResponsesCompaction.layer(),
+).pipe(
+	Layer.provide(OpenAiProvider.layerClient({ apiKey })),
+	Layer.provide(FetchHttpClient.layer),
+)
+```
+
+### AnthropicProvider
+
+Dasselbe Muster, mit `AnthropicProvider` und der Provider-ID `anthropic`. Er nutzt die Messages API.
+
+```ts
+import { AnthropicProvider } from "@openbot-build/openbot"
+
+const provider = AnthropicProvider.make({ max_tokens: 1024 })
+```
+
+`reasoningEffort` kann `low`, `medium` oder `high` sein. `serviceTier` kann `auto` oder `standard_only` sein. Andere Werte schlagen fehl, bevor eine Anfrage gesendet wird.
+
+---
+
+## protocol
+
+`@openbot-build/protocol` setzt das OpenBot App Protocol um. Herausgeber nutzen es, um eine App ins Web zu bringen. Hosts nutzen es, um Apps zu finden, sich mit ihnen zu verbinden und sie aufzurufen.
+
+```ts
+import { Document, McpPublisher } from "@openbot-build/protocol"
+import { Effect, Schema } from "effect"
+import { McpServer, Tool, Toolkit } from "effect/ai"
+
+const tools = Toolkit.make(
+	Tool.make("Hello", {
+		parameters: Schema.Struct({ name: Schema.String }),
+		success: Schema.Struct({ greeting: Schema.String }),
+	}),
+)
+const handlers = tools.toLayer({
+	Hello: ({ name }) => Effect.succeed({ greeting: `Hello, ${name}` }),
+})
+const origin = "https://apps.example.com"
+
+const publisher = McpPublisher.layer({
+	publication: {
+		card: {
+			$schema: Document.cardSchemaUrl,
+			name: "com.example/hello",
+			version: "1.0.0",
+			description: "Say hello",
+			remotes: [
+				{
+					type: "streamable-http",
+					url: origin + "/mcp",
+					supportedProtocolVersions: [Document.protocolVersion],
+				},
+			],
+		},
+		cardUrl: origin + "/mcp/server-card",
+		catalogUrl: origin + "/.well-known/ai-catalog.json",
+		mcpUrl: origin + "/mcp",
+		allowedOrigins: ["https://host.example.com"],
+	},
+	register: McpServer.registerToolkit(tools).pipe(Effect.provide(handlers)),
+})
+```
+
+Stelle `publisher` mit `HttpRouter.serve` und einem HTTP-Server-Layer bereit. Die vollständige Anleitung findest du unter [Protokoll](/de/docs/protocol).

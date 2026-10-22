@@ -1,0 +1,288 @@
+---
+title: Workflows
+description: Graphen aus Nodes, die Agents planen und ausführen, mit genauen Werkzeugaufrufen, Zielen, Prüfungen und Plänen.
+---
+
+Ein **Workflow** (Arbeitsablauf) ist ein Graph aus Nodes (Knoten). Ein Graph ist eine Menge von Nodes und den Verbindungen zwischen ihnen. Jeder Node sagt, welche anderen Nodes enden müssen, bevor er beginnt. Nodes, die nicht aufeinander warten, laufen gleichzeitig.
+Manche Nodes sind genau: Sie rufen ein Werkzeug mit festen Argumenten auf, oder sie vergleichen zwei Werte. Andere Nodes geben einem Agent ein Ziel, eine Frage oder eine Planungsaufgabe. Ein Workflow kann all das mischen.
+Jeder Start eines Workflows ist ein **Run** (Durchlauf). Ein Run läuft im Hintergrund weiter. Er läuft auch nach einem Neustart des Servers weiter, und er kann lange warten, zum Beispiel darauf, dass eine Person einen Werkzeugaufruf genehmigt.
+
+Planen funktioniert genauso. Wenn ein Agent plant, schreibt er keinen Plan als Text. Er schreibt einen Workflow-Graphen. OpenBot speichert diesen Plan als Workflow des Agents und führt ihn aus. So ist ein Plan sichtbar, er läuft, und ein Plan, der funktioniert hat, läuft später noch einmal ohne Model. Ziele, Pläne und Erkundungen sind alle Nodes eines Graphen.
+
+---
+
+## Einen Workflow erstellen
+
+`POST /v1/workflows` erstellt einen Workflow:
+
+```json
+{
+	"name": "Paint the door",
+	"graph": {
+		"nodes": [
+			{
+				"_tag": "Call",
+				"id": "set-mode",
+				"tool": "SetValue",
+				"arguments": { "key": "mode", "value": "{{input.mode}}" }
+			},
+			{
+				"_tag": "Task",
+				"id": "paint",
+				"needs": ["set-mode"],
+				"goal": "set color to blue"
+			},
+			{
+				"_tag": "Task",
+				"id": "size",
+				"needs": ["set-mode"],
+				"goal": "set size to big",
+				"check": "size is big"
+			},
+			{
+				"_tag": "Check",
+				"id": "painted",
+				"needs": ["paint"],
+				"condition": "color is blue",
+				"output": { "type": "string" }
+			},
+			{
+				"_tag": "Expect",
+				"id": "done",
+				"needs": ["painted", "size"],
+				"value": "{{nodes.painted.output}}",
+				"operator": "equals",
+				"expected": "blue"
+			}
+		]
+	}
+}
+```
+
+Hier brauchen `paint` und `size` beide `set-mode`. Sie beginnen also danach gleichzeitig. `done` wartet auf beide Zweige.
+
+| Feld          | Bedeutung                                                                                                                                                                                                        |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | Ein kurzer Name. Er hat 1 bis 100 Zeichen.                                                                                                                                                                       |
+| `description` | Optionaler Text für Menschen.                                                                                                                                                                                    |
+| `agent`       | Optional. Der [Agent](/de/docs/agents), der die Nodes erledigt. Ohne dieses Feld erledigt sie der Main Agent des Members, für das ein Run arbeitet. Du brauchst `agents.delegate` für jeden Agent des Workflows. |
+| `judge`       | Optional. Ein [Model](/de/docs/models) für Prüfungen. Ohne dieses Feld arbeitet das Model des Agents.                                                                                                            |
+| `graph`       | Die Nodes. Jeder Node hat eine `id`, die im Workflow nur einmal vorkommt. Eine `id` beginnt mit einem Kleinbuchstaben und hat nur Kleinbuchstaben, Ziffern, `-` und `_`.                                         |
+| `schedule`    | Optional. Startet einen Run zu festen Zeiten. Siehe [Zeitpläne](#zeitpläne).                                                                                                                                     |
+| `shared`      | Optional. `true` erstellt einen gemeinsamen Workflow der Organisation.                                                                                                                                           |
+| `owner`       | Optional. Die ID eines Agents, dem der Workflow gehört. Dieser Agent darf ihn immer mit seinem Werkzeug ausführen. Du kannst es nicht zusammen mit `shared` nutzen.                                              |
+
+OpenBot prüft den Graphen, wenn du ihn speicherst. Zwei Nodes dürfen nicht dieselbe `id` haben. Jedes `needs` muss einen Node des Graphen nennen. Die `needs` dürfen keinen Kreis bilden.
+
+`GET /v1/workflows` listet die Workflows auf, die du lesen kannst. Geplante Workflows stehen nicht in dieser Liste. Füge `planned=true` hinzu, um nur geplante Workflows aufzulisten. `PATCH /v1/workflows/:workflowId` ändert einen. Es braucht `expected`, die aktuelle `revision`. Jede Änderung erstellt eine neue Revision, und OpenBot behält jede Revision. Um einen Workflow zu archivieren, sende `"archived": true`.
+
+---
+
+## Die Nodes
+
+| `_tag`     | Felder                                  | Was passiert                                                                                                                                                 | Model         |
+| ---------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------- |
+| `Call`     | `tool`, `arguments`                     | OpenBot ruft das Werkzeug einmal mit diesen Argumenten auf. Das Ergebnis des Werkzeugs ist die Ausgabe des Nodes.                                            | Nein          |
+| `Expect`   | `value`, `operator`, `expected`         | OpenBot vergleicht zwei Texte. `operator` ist `equals`, `contains`, `matches` (ein regulärer Ausdruck) oder `not_empty`.                                     | Nein          |
+| `Task`     | `goal`, `agent`, `check`                | Der Agent erreicht das Ziel mit seinen Werkzeugen und ruft dann `openbot_node_result` auf. Mit `check` prüft der Agent danach, ob diese Bedingung wahr ist.  | Aufgezeichnet |
+| `Check`    | `condition`, `agent`, `output`, `until` | Der Agent schaut mit seinen Werkzeugen nach, ändert aber nichts. Er ruft `openbot_check` mit `passed` und seinen Belegen auf. Siehe [Prüfungen](#prüfungen). | Ja            |
+| `Plan`     | `goal`, `agent`                         | Der Agent schreibt einen Plan als Workflow-Graphen. OpenBot speichert ihn und führt ihn als Kind-Run aus. Siehe [Pläne und Ziele](#pläne-und-ziele).         | Aufgezeichnet |
+| `Goal`     | `goal`, `check`, `agent`, `budget`      | Wie `Plan`, aber nach dem Kind-Run prüft der Agent das Ergebnis. Wenn die Prüfung fehlschlägt, plant der Agent neu, bis die Prüfung besteht.                 | Aufgezeichnet |
+| `Workflow` | `workflow`, `input`                     | OpenBot führt einen anderen Workflow als Kind-Run aus. Das Member des Runs braucht `workflows.run` dafür.                                                    | Nein          |
+| `Wait`     | `seconds`                               | OpenBot wartet.                                                                                                                                              | Nein          |
+
+Ein Node mit `agent` nutzt diesen Agent statt des Agents des Workflows. Agents arbeiten in [Sessions](/de/docs/sessions) mit `kind: "workflow"`. Ein Node nutzt eine freie Session seines Agents im Run. So teilen Nodes, die nacheinander laufen, was sie gelernt haben. Nodes, die gleichzeitig laufen, bekommen ihre eigenen Sessions.
+
+Ein Werkzeug, das um Genehmigung bittet, zum Beispiel ein App-Werkzeug, funktioniert in einem Node wie überall sonst. Dieser Node wartet, bis der [Request](/de/docs/requests) beantwortet ist. Die anderen Zweige laufen weiter.
+
+In jedem Agent-Node kann der Agent mit `openbot_report_finding` ein Problem melden: eine `severity` (`low`, `medium`, `high` oder `critical`), einen `title`, was er erwartet hat (`expected`), was er beobachtet hat (`observed`), und die Schritte zum Nachstellen (`reproduction`). Die Befunde gehören zum Run. Um etwas zu erkunden, gib einem `Task`- oder `Plan`-Node ein Ziel wie "look for problems in the sign-up flow".
+
+### Wie Nodes voneinander abhängen
+
+Jeder Node hat diese optionalen Felder:
+
+| Feld       | Bedeutung                                                                                                                           |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `needs`    | Die IDs der Nodes, die zuerst enden müssen. Ein Node ohne `needs` beginnt, wenn der Run beginnt.                                    |
+| `when`     | Eine Bedingung wie bei einem `Expect`-Node: `value`, `operator`, `expected`. Wenn sie falsch ist, wird der Node übersprungen.       |
+| `onFail`   | `fail` (der Standard), `continue` oder `replan`. Siehe unten.                                                                       |
+| `attempts` | Wie oft der Node laufen darf, bevor er fehlschlägt. Der Standard ist 1. Bei einem `Goal`-Node ist es die Anzahl der Planungsrunden. |
+
+Wenn ein Node fehlschlägt, sagt `onFail`, was passiert:
+
+- `fail`: Keine neuen Nodes beginnen. Nodes, die schon laufen, werden fertig. Jeder andere Node ist `skipped`, und der Run schlägt fehl.
+- `continue`: Die Nodes danach laufen trotzdem. Der Fehler lässt den Run nicht fehlschlagen.
+- `replan`: Der Run schlägt fehl, und der `Plan`- oder `Goal`-Node, der diesen Workflow erstellt hat, plant neu. Siehe [Pläne und Ziele](#pläne-und-ziele).
+
+Ein Node, der übersprungen wird, weil sein `when` falsch ist, hält die Nodes danach nicht auf. Ein Node, der übersprungen wird, weil ein Node davor fehlgeschlagen ist, ist auch `skipped`, und die Nodes danach ebenso.
+
+### Prüfungen
+
+Ein `Check`-Node ändert nie etwas.
+
+- Mit `output`, einem JSON Schema, gibt der Agent auch den Wert, den er gefunden hat, als `value` an. Der Wert muss zum Schema passen. Er ist die Ausgabe des Nodes, zum Beispiel `{{nodes.painted.output}}`.
+- Mit `until`, `{ "timeoutSeconds": 600, "intervalSeconds": 10 }`, prüft der Agent immer wieder, mit einer Pause zwischen den Prüfungen, bis die Bedingung wahr ist oder die Zeit vorbei ist.
+
+### Vorlagen
+
+Textfelder und die `arguments` eines `Call` können Werte aus dem Run nutzen:
+
+| Vorlage               | Wert                                                                                                      |
+| --------------------- | --------------------------------------------------------------------------------------------------------- |
+| `{{input.name}}`      | Ein Feld der Eingabe des Runs.                                                                            |
+| `{{nodes.id.output}}` | Die Ausgabe eines früheren Nodes. Du kannst tiefer gehen, zum Beispiel `{{nodes.set-mode.output.value}}`. |
+
+Ein Text, der nur aus einer Vorlage besteht, zum Beispiel `"{{input.count}}"`, behält den Typ des Werts. Eine Zahl bleibt also eine Zahl. Eine Vorlage ohne Wert lässt den Node fehlschlagen.
+
+---
+
+## Pläne und Ziele
+
+Ein `Plan`-Node gibt einem Agent ein Ziel und bittet um einen Plan. Der Agent muss `openbot_plan` mit einem Workflow-Graphen aufrufen: mit denselben Nodes wie auf dieser Seite. Text ist kein Plan. Dann macht OpenBot Folgendes:
+
+1. Es speichert den Graphen als Workflow, der dem Agent gehört. Sein `origin` ist `{ "_tag": "Plan", "workflow", "run", "node" }`.
+2. Es führt ihn als Kind-Run des Nodes aus. Der Kind-Run hat `trigger: "plan"` und `parent: { "run", "node" }`.
+3. Es beendet den Node, wenn der Kind-Run endet. Der Node besteht, wenn der Kind-Run besteht.
+
+Ein Plan kann eigene `Plan`- und `Goal`-Nodes haben, für Teile, die mehr Planung brauchen. So können Agents große Arbeit in kleinere Pläne aufteilen, so tief, wie die Arbeit es braucht.
+
+Wenn ein Node des Kind-Runs mit `onFail: replan` fehlschlägt, plant der Agent neu. Er liest, warum der letzte Plan fehlgeschlagen ist. Der neue Plan ist eine neue Revision desselben Workflows. Nodes, die bestanden haben und sich nicht geändert haben, behalten ihre Ergebnisse. Sie laufen also nicht noch einmal.
+
+Ein `Goal`-Node ist ein `Plan`-Node, der sein Ergebnis prüft. Nach jedem Kind-Run prüft der Agent die Bedingung `check`. Wenn sie falsch ist oder der Kind-Run fehlgeschlagen ist, plant der Agent mit dem Gelernten neu. `round` im Ergebnis des Nodes zählt die Planungsrunden. Mit `attempts` stoppt das Goal nach so vielen Runden.
+
+`budget`, zum Beispiel `{ "tokens": 20000 }`, ist die Anzahl der Model-Tokens, die ein Goal mit seinen Kind-Runs nutzen darf. Es ist keine harte Grenze. Wenn ein Goal sein Budget verbraucht hat und neu planen muss, fragt es, ob es weitermachen darf. Die Fähigkeit ist `workflows.budget` mit der Workflow-ID als Ziel. Sie geht wie jeder [Request](/de/docs/requests) die Besitzer-Kette hinauf. Wenn die entscheidende Stelle zustimmt, bekommt das Goal noch ein Budget. Wenn sie nein sagt, schlägt das Goal fehl.
+
+### Pläne, die noch einmal laufen
+
+Ein Plan, der bestanden hat, läuft noch einmal ohne Model. Wenn ein Run eines geplanten Workflows besteht, speichert OpenBot seine Revision als `passedRevision`. In einem späteren Run führt ein `Plan`- oder `Goal`-Node mit einer `passedRevision` diese Revision sofort aus. Sein `mode` ist `replayed`. Seine `Task`-Nodes spielen auch ihre aufgezeichneten Werkzeugaufrufe ab. Mit `cache: "off"` plant der Agent immer live.
+
+---
+
+## Aufzeichnen und Abspielen
+
+Ein `Task`-Node, der live läuft, kostet Model-Aufrufe. Darum zeichnet OpenBot die Werkzeugaufrufe eines `Task`-Nodes auf, der bestanden hat, aber nur, nachdem eine Prüfung sie bestätigt hat. Eine Prüfung bestätigt die Nodes vor ihr: die Nodes in ihrem `needs`, die Nodes, die diese brauchen, und so weiter. Ein `Check`, ein `Expect` oder das `check` des `Task` selbst kann bestätigen. Die Prüfung zeigt, dass die Aufrufe die richtige Wirkung hatten.
+
+Der nächste Run spielt die aufgezeichneten Aufrufe einen nach dem anderen ab, ohne Model. Wenn ein Aufruf nicht funktioniert, zum Beispiel weil sich etwas geändert hat, gibt OpenBot das Ziel an den Agent. Es sagt dem Agent, welche Aufrufe schon gelaufen sind. Der Agent macht vom aktuellen Stand aus weiter. Die neuen Aufrufe ersetzen die alte Aufzeichnung.
+
+Eine Aufzeichnung gehört zur `id` des Nodes, zum Ziel mit ausgefüllten Vorlagen und zum Agent. Eine Änderung an einem davon startet eine neue Aufzeichnung. `Check`-Nodes laufen immer live.
+
+`cache` in einer Start-Anfrage sagt, wie ein Run Aufzeichnungen und bestandene Pläne nutzt:
+
+| `cache` | Spielt ab | Zeichnet auf |
+| ------- | --------- | ------------ |
+| `use`   | Ja        | Ja           |
+| `read`  | Ja        | Nein         |
+| `off`   | Nein      | Nein         |
+
+Nutze `read` in CI, damit CI die Aufzeichnungen nie ändert. `GET /v1/workflows/:workflowId/recordings` listet die Aufzeichnungen auf, und `DELETE` auf demselben Pfad entfernt sie. Ein Kind-Run nutzt den `cache` seines Eltern-Runs.
+
+---
+
+## Einen Run starten
+
+`POST /v1/workflows/:workflowId/runs` startet einen Run und antwortet mit `202` und dem Run. Du brauchst `workflows.run` für den Workflow.
+
+```json
+{ "input": { "mode": "fast" }, "cache": "use" }
+```
+
+`GET /v1/workflow-runs/:runId` liest einen Run:
+
+| Feld       | Bedeutung                                                                                                                               |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`   | `queued`, `running`, `passed`, `failed` oder `cancelled`.                                                                               |
+| `trigger`  | `manual`, `schedule`, `webhook`, `agent`, `plan` oder `workflow`.                                                                       |
+| `revision` | Die Revision des Workflows, die der Run nutzt.                                                                                          |
+| `nodes`    | Ein Ergebnis für jeden Node, mit `needs`, `status`, `mode`, `attempts`, `round`, `turns`, `output`, `message`, `tokens` und `children`. |
+| `summary`  | Die Anzahl der Nodes nach Status und nach Modus.                                                                                        |
+| `usage`    | `tokens`: die Model-Tokens, die der Run mit seinen Kind-Runs genutzt hat.                                                               |
+| `parent`   | Der Node eines anderen Runs, der diesen Run gestartet hat, oder `null`.                                                                 |
+| `findings` | Die Probleme, die Agents gemeldet haben.                                                                                                |
+| `sessions` | Die Sessions, in denen die Agents des Runs arbeiten. Öffne sie, um jeden Turn zu lesen.                                                 |
+| `error`    | Warum der Run gestoppt hat, wenn er aus einem anderen Grund als einem fehlgeschlagenen Node gestoppt hat.                               |
+
+Der `mode` eines Node-Ergebnisses ist `deterministic` (kein Model), `live` (der Agent hat es gemacht), `replayed` (aufgezeichnete Arbeit lief noch einmal) oder `handed_off` (ein Abspielen hat nicht funktioniert, darum hat der Agent es fertig gemacht). `children` listet die Kind-Runs eines `Plan`-, `Goal`- oder `Workflow`-Nodes auf.
+
+`GET /v1/workflow-runs` listet deine Runs auf, die neuesten zuerst. Füge `workflow=<id>` oder `status=<status>` hinzu, um sie zu filtern. `POST /v1/workflow-runs/:runId/cancel` stoppt einen Run, die Turns, die er gestartet hat, und seine Kind-Runs.
+
+`POST /v1/workflow-runs/:runId/revise` setzt einen laufenden Run auf eine andere Revision seines Workflows. Sende `{ "revision": 3 }` oder `{}` für die neueste Revision. Nodes, die sich nicht geändert haben, behalten ihren Zustand, auch während sie laufen. Ein laufender Node, der sich geändert hat, stoppt und beginnt neu mit seiner neuen Definition. Neue Nodes kommen zum Run dazu.
+
+Ein Run arbeitet für ein Member. Nur dieses Member kann ihn lesen.
+
+---
+
+## Berichte
+
+| Route                                          | Format                                                      |
+| ---------------------------------------------- | ----------------------------------------------------------- |
+| `GET /v1/workflow-runs/:runId/report/markdown` | Ein kurzer Markdown-Bericht für Menschen und Coding-Agents. |
+| `GET /v1/workflow-runs/:runId/report/junit`    | JUnit-XML für CI-Systeme. Jeder Node ist ein Testfall.      |
+
+---
+
+## Auslöser
+
+### Zeitpläne
+
+```json
+{ "schedule": { "cron": "0 9 * * 1-5", "timeZone": "Europe/Berlin" } }
+```
+
+`cron` hat fünf Felder: Minute, Stunde, Tag im Monat, Monat und Wochentag. Ohne `timeZone` ist die Zeitzone UTC. Ein geplanter Run arbeitet für den **Actor** (Handelnden) des Workflows: das letzte Member, das seinen Zeitplan oder seinen Webhook geändert hat. Der Actor muss `workflows.run` noch haben, wenn der Run startet.
+
+### Webhooks
+
+`PUT /v1/workflows/:workflowId/webhook` erstellt ein neues Secret und gibt es einmal zurück:
+
+```json
+{
+	"url": "https://openbot.example.com/v1/hooks/workflows/wfl_…",
+	"secret": "owh_…"
+}
+```
+
+Ein anderes System startet einen Run mit einem `POST` an die `url`, mit `Authorization: Bearer <secret>`. Der JSON-Body ist die Eingabe des Runs. Die Antwort ist `202` mit `{ "run": "run_…" }`. Ein falsches Secret bekommt `401`. Ein neues Secret ersetzt das alte. `DELETE` auf demselben Pfad entfernt den Webhook. Ein Webhook-Run arbeitet auch für den Actor.
+
+### Agents
+
+Jeder Agent hat diese Werkzeuge:
+
+| Werkzeug                 | Was es tut                                                                                                     |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `openbot_list_workflows` | Listet die Workflows auf, die er ausführen kann.                                                               |
+| `openbot_run_workflow`   | Startet einen Run. Der Run läuft im Hintergrund weiter. Sein Ergebnis kommt als neue Nachricht in die Session. |
+| `openbot_plan`           | Plant Arbeit als Workflow-Graphen. Siehe unten.                                                                |
+| `openbot_get_run`        | Liest einen Run des Members: seinen Status und das Ergebnis jedes Nodes.                                       |
+
+Wenn ein Agent in einer normalen Session einen Plan braucht, ruft er `openbot_plan` mit einem `name` und den `nodes` eines Graphen auf. OpenBot speichert den Plan als Workflow des Agents, mit `origin: { "_tag": "Session", "session" }`, und startet sofort einen Run. Das Ergebnis kommt als neue Nachricht in die Session. Um den Plan zu ändern, ruft der Agent `openbot_plan` noch einmal mit der `workflow`-ID auf. Das erstellt eine neue Revision. Ein laufender Run davon wechselt zur neuen Revision. Sonst startet ein neuer Run, und die Nodes, die bestanden haben und sich nicht geändert haben, behalten ihre Ergebnisse.
+
+Um dem Agent ein Ziel zu geben, an dem OpenBot weiterarbeitet, plant der Agent einen Graphen mit einem `Goal`-Node. Das Goal plant, läuft und prüft, bis seine Bedingung wahr ist.
+
+Wenn ein Agent zum ersten Mal einen Workflow ausführt, muss die Stelle über ihm zustimmen. Die Fähigkeit ist `workflows.run` mit der Workflow-ID als Ziel. Siehe [Requests](/de/docs/requests). Ein Agent darf die Workflows, die ihm gehören, und seine eigenen Pläne immer ausführen. Ein Plan, der andere Agents nutzt, braucht `agents.delegate` für sie. Ein neuer Plan für einen Workflow, der dem Agent nicht gehört, braucht `workflows.edit` und `workflows.run`.
+
+In einer Workflow-Session hat der Agent auch die Werkzeuge, die einen Node beantworten: `openbot_node_result`, `openbot_check`, `openbot_report_finding`, und `openbot_plan` für `Plan`- und `Goal`-Nodes.
+
+---
+
+## Berechtigungen
+
+| Berechtigung      | Damit kannst du                                                                    |
+| ----------------- | ---------------------------------------------------------------------------------- |
+| `workflows.read`  | Workflows lesen, mit ihren Runs, Berichten und Aufzeichnungen.                     |
+| `workflows.write` | Workflows erstellen und ändern, mit ihren Zeitplänen, Webhooks und Aufzeichnungen. |
+| `workflows.run`   | Runs starten, umstellen und abbrechen, von einem Client oder von einem Agent aus.  |
+
+Die Fähigkeiten von Agents passen zu diesen Berechtigungen: `workflows.run` und `workflows.budget` brauchen `workflows.run`, und `workflows.edit` braucht `workflows.write`.
+
+Deine eigenen Workflows liegen unter `openbot.org.<org>.user.<user>.workflow`. Gemeinsame Workflows liegen unter `openbot.org.<org>.workflow`. Members dürfen gemeinsame Workflows lesen und ausführen. Administratoren dürfen sie auch ändern. Siehe [Berechtigungen](/de/docs/permissions).
+
+## Fehler
+
+| Status | Fehler                       | Wann                                                                                                |
+| ------ | ---------------------------- | --------------------------------------------------------------------------------------------------- |
+| `400`  | `WorkflowInvalid`            | Der Graph, der Zeitplan oder ein Agent ist ungültig, oder der Run ist schon beendet.                |
+| `401`  | `WorkflowHookDenied`         | Das Webhook-Secret ist falsch, oder der Workflow hat keinen Webhook.                                |
+| `403`  | `PermissionDenied`           | Du darfst den Workflow lesen, aber nicht ändern oder ausführen.                                     |
+| `404`  | `WorkflowNotFound`           | Es gibt keinen Workflow oder Run mit dieser ID, den du lesen darfst.                                |
+| `409`  | `WorkflowConflict`           | Der Workflow hat sich geändert, seit du ihn gelesen hast. Lies ihn neu und versuche es noch einmal. |
+| `503`  | `WorkflowStorageUnavailable` | OpenBot erreicht seine Datenbank gerade nicht.                                                      |

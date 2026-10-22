@@ -1,0 +1,134 @@
+---
+title: Schnellstart
+description: Starte OpenBot auf deinem Computer und mach deinen ersten Aufruf.
+---
+
+Diese Seite startet OpenBot auf deinem Computer mit einem Testkonto und Testmodellen.
+Du brauchst keinen Identitätsanbieter und keinen Modell-Schlüssel.
+
+---
+
+## Voraussetzungen
+
+Du brauchst:
+
+1. [devenv](https://devenv.sh) 2.0 oder neuer. Es gibt dir die richtigen Versionen von Node.js, pnpm, PostgreSQL und mkcert. devenv führt auch die Datenbank für die Entwicklung aus. Du brauchst also kein Docker.
+2. Eine Kopie des Codes:
+
+```sh
+git clone https://github.com/openbot-build/openbot.git
+cd openbot
+```
+
+Führe jeden Befehl im obersten Ordner des Codes aus, innerhalb von `devenv shell --`.
+
+---
+
+## OpenBot starten
+
+<Steps>
+
+<Step>
+
+### Die lokalen Einstellungen erstellen
+
+```sh
+devenv shell -- pnpm dev:setup
+devenv shell -- mkcert -install
+```
+
+Der erste Befehl erstellt `.env.development` mit einem neuen geheimen Schlüssel und ein Zertifikat für `localhost`.
+Wenn du eine `.env.development` von einer älteren Version hast, lösche sie zuerst.
+Der zweite Befehl sorgt dafür, dass dein Computer diesem Zertifikat vertraut. Er kann nach deinem Passwort fragen.
+
+</Step>
+
+<Step>
+
+### Den Server starten
+
+```sh
+devenv shell -- pnpm dev
+```
+
+Das startet PostgreSQL, baut OpenBot, aktualisiert die Datenbank und startet OpenBot unter `https://localhost:8443`.
+Der Entwicklungsserver richtet die Platform selbst ein. Du führst das Einrichtungsprogramm also nicht aus.
+Der erste Start kann ein paar Minuten dauern. Drücke **Strg+C**, um zu stoppen. Deine Daten bleiben in der Datenbank.
+
+</Step>
+
+<Step>
+
+### Anmelden
+
+```sh
+curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
+  -H "Origin: https://localhost:8443" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+In der Entwicklung meldet dich das sofort beim lokalen Testkonto `developer@localhost.test` an. Das Anmelde-Cookie landet in `cookies.txt`.
+Dieses Konto ist ein Platform-Admin. Es bekommt auch eine eigene Organisation mit dem Namen "Personal".
+
+</Step>
+
+<Step>
+
+### Ein User-Token erstellen
+
+```sh
+curl -b cookies.txt \
+  -H 'Origin: https://localhost:8443' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"local"}' \
+  https://localhost:8443/v1/user/tokens
+```
+
+Du bist der Super Administrator deiner Organisation "Personal", und das Token gehört zu ihr. Die Antwort enthält ein `secret`, das mit `obut_` beginnt. Du siehst es nur einmal. Bewahre es also auf:
+
+```sh
+export OPENBOT_TOKEN=obut_...
+```
+
+</Step>
+
+<Step>
+
+### Eine Session und einen Turn starten
+
+Erstelle eine Session:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"My first Session"}' \
+  https://localhost:8443/v1/sessions
+```
+
+Nimm `session.id` und `session.revision` aus der Antwort. Dann gib der Session etwas Arbeit:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"expected":0,"input":"Hello"}' \
+  https://localhost:8443/v1/sessions/<sessionId>/turns
+```
+
+Der Turn läuft im Hintergrund, und du bekommst sofort `202`. Füge `"stream": true` hinzu, um die Antwort als Live-Stream zu bekommen.
+
+</Step>
+
+</Steps>
+
+Das Testmodell `mock-text` antwortet mit `Development response:` und deiner Eingabe.
+Die anderen Testmodelle findest du unter [Models](/de/docs/models).
+
+---
+
+## Nächste Schritte
+
+- Lies, wie [Sessions](/de/docs/sessions) und Turns funktionieren.
+- Nutze einen echten Identitätsanbieter: [Authentifizierung](/de/docs/authentication) und [Platform](/de/docs/platform).
+- Füge ein echtes Model hinzu: [Models](/de/docs/models).
+- Betreibe OpenBot auf einem Server: [Bereitstellung](/de/docs/deploy).

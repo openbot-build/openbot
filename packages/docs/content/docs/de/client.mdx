@@ -1,0 +1,227 @@
+---
+title: Client
+description: Rufe OpenBot aus TypeScript auf, mit typisierten Anfragen und Fehlern.
+---
+
+`@openbot-build/client` ist der TypeScript-Client für OpenBot. Er entsteht aus demselben API-Vertrag wie der Server.
+Jede Anfrage, jede Antwort und jeder Fehler hat einen Typ. Dein Editor zeigt Fehler, bevor du den Code ausführst.
+
+Der Client nutzt [Effect](https://effect.website), eine TypeScript-Bibliothek für typisierte Programme. Er läuft in Node.js, Deno, Bun, Workern und Browsern.
+
+---
+
+## Installieren
+
+Die OpenBot-Pakete sind noch nicht auf npm. Nutze sie aus dem OpenBot-Workspace:
+
+```json
+{
+	"dependencies": {
+		"@openbot-build/client": "workspace:*",
+		"effect": "4.0.5"
+	}
+}
+```
+
+## Einen Client erstellen
+
+`layer` erstellt einen Layer, der dir den Dienst `Client` gibt. Ein Layer ist ein Rezept in Effect, das einen Dienst baut.
+
+```ts
+import { Client, layer } from "@openbot-build/client"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+	const client = yield* Client
+	const view = yield* client.api.sessions.createSession({
+		payload: { title: "Release notes" },
+	})
+	return view.session.id
+})
+
+const id = await Effect.runPromise(
+	program.pipe(
+		Effect.provide(
+			layer({
+				baseUrl: "https://api.example.com",
+				token: process.env.OPENBOT_TOKEN,
+			}),
+		),
+	),
+)
+```
+
+| Option           | Pflicht | Was sie tut                                                                                                                 |
+| ---------------- | ------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `baseUrl`        | Ja      | Der Origin von OpenBot, zum Beispiel `https://api.example.com`.                                                             |
+| `token`          | Nein    | Ein User Token, als String oder als `Redacted`-Wert von Effect. Er wird als `Authorization: Bearer <token>` gesendet.       |
+| `organization`   | Nein    | Eine Organisations-ID. Mit dem Session-Cookie wird sie als Header `OpenBot-Organization` gesendet. Ein Token ignoriert sie. |
+| `onUnauthorized` | Nein    | Eine Funktion, die läuft, wenn eine geschützte Anfrage `401` zurückgibt.                                                    |
+
+Wie du ein User Token erstellst, steht unter [Authentifizierung](/de/docs/authentication).
+
+Der Client speichert das Token nie und setzt es nie in eine URL. `onUnauthorized` meldet nicht an und versucht die Anfrage nicht noch einmal. Nutze die Funktion, um den Benutzer zu informieren, zum Beispiel wenn ein Token abläuft oder jemand es widerruft.
+
+## Eine Operation aufrufen
+
+Jede Operation liegt unter `client.api.<group>.<operation>`. Die Namen sind dieselben wie in der [API-Referenz](/docs/api/).
+Jeder Aufruf nimmt ein Objekt mit diesen optionalen Feldern:
+
+| Feld      | Was es enthält                           |
+| --------- | ---------------------------------------- |
+| `params`  | Werte im Pfad, zum Beispiel `sessionId`. |
+| `query`   | Werte im Query-String.                   |
+| `payload` | Den JSON-Body.                           |
+
+```ts
+const sessions = yield * client.api.sessions.listSessions({ query: {} })
+
+const view =
+	yield *
+	client.api.sessions.getSession({
+		params: { sessionId: id },
+	})
+
+const archived =
+	yield *
+	client.api.sessions.listSessions({
+		query: { archived: "true" },
+	})
+```
+
+Einige Gruppen und ihre Seiten:
+
+| Gruppe           | Nutze sie, um                                                             | Referenz                                                      |
+| ---------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `sessions`       | Sessions zu erstellen, Turns zu starten und Ergebnisse zu lesen.          | [Sessions](/docs/api/operations/tags/sessions/)               |
+| `agents`         | Agents zu erstellen und zu verwalten.                                     | [Agents](/docs/api/operations/tags/agents/)                   |
+| `requests`       | Die Requests deiner Agents zu beantworten.                                | [Requests](/docs/api/operations/tags/requests/)               |
+| `apps`           | Eine App unter einer Adresse zu finden.                                   | [App discovery](/docs/api/operations/tags/app-discovery/)     |
+| `connections`    | App-Verbindungen hinzuzufügen und zu verwalten.                           | [Connections](/docs/api/operations/tags/connections/)         |
+| `appIndex`       | Den öffentlichen App Index zu durchsuchen.                                | [App Index](/docs/api/operations/tags/app-index/)             |
+| `userTokens`     | User Tokens aufzulisten, zu erstellen, zu widerrufen und zu prüfen.       | [User tokens](/docs/api/operations/tags/user-tokens/)         |
+| `organizations`  | Deine Organisationen aufzulisten und zu erstellen.                        | [Organizations](/docs/api/operations/tags/organizations/)     |
+| `organization`   | Die Organisation, ihre Mitglieder, Rollen und Einstellungen zu verwalten. | [Organization](/docs/api/operations/tags/organization/)       |
+| `modelProviders` | Model Providers zu verwalten und Models aufzulisten.                      | [Model providers](/docs/api/operations/tags/model-providers/) |
+| `sso`            | E-Mail-Domains zu bestätigen und SSO-Verbindungen zu verwalten.           | [SSO](/docs/api/operations/tags/sso/)                         |
+| `platform`       | Die Plattform zu verwalten. Nur für Plattform-Admins.                     | [Platform](/docs/api/operations/tags/platform/)               |
+| `health`         | Das Dienstdokument und den Zustand zu lesen.                              | [Health](/docs/api/operations/tags/service-and-health/)       |
+
+Jede Operation braucht eine Berechtigung. Ein Aufruf ohne sie schlägt mit `PermissionDenied` fehl. Siehe [Berechtigungen](/de/docs/permissions).
+
+## Fehler behandeln
+
+Jeder fehlgeschlagene Aufruf gibt einen typisierten Fehler. Der Typ `ClientError` listet sie alle auf:
+
+- **API-Fehler** aus dem Vertrag. Jeder hat einen `_tag`, zum Beispiel `SessionNotFound` oder `SessionConflict`.
+- **Schema-Fehler** (`SchemaError`), wenn eine Antwort nicht zum Vertrag passt.
+- **HTTP-Client-Fehler**, wenn das Netzwerk ausfällt.
+
+Nutze `Effect.catchTag`, um eine Art von Fehler zu behandeln:
+
+```ts
+const view =
+	yield *
+	client.api.sessions
+		.getSession({ params: { sessionId: id } })
+		.pipe(Effect.catchTag("SessionNotFound", () => Effect.succeed(undefined)))
+```
+
+Häufige Fehler bei der Anmeldung:
+
+| Tag                         | Status | Bedeutung                                                                                      |
+| --------------------------- | ------ | ---------------------------------------------------------------------------------------------- |
+| `AuthenticationRequired`    | `401`  | Kein Schlüssel und kein Cookie, oder der Schlüssel ist widerrufen oder abgelaufen.             |
+| `OrganizationRequired`      | `400`  | Eine Cookie-Anfrage ohne `organization`, und die Person gehört zu mehr als einer Organisation. |
+| `MembershipRequired`        | `403`  | Das Konto ist kein aktives Mitglied der Organisation.                                          |
+| `ForbiddenOrigin`           | `403`  | Eine Cookie-Anfrage, die Daten ändert, hat den falschen `Origin`.                              |
+| `AuthenticationUnavailable` | `503`  | OpenBot kann Zugangsdaten gerade nicht prüfen.                                                 |
+
+Alle Fehler-Schemas werden aus `@openbot-build/api` exportiert.
+
+---
+
+## Den Client im Browser nutzen
+
+Eine Web-App auf demselben Origin wie OpenBot kann das Anmelde-Cookie statt eines Tokens nutzen. Lass `token` weg:
+
+```ts
+import { layer } from "@openbot-build/client"
+
+const ClientLive = layer({
+	baseUrl: window.location.origin,
+	// Nötig, wenn die Person zu mehr als einer Organisation gehört.
+	organization: "org_8f3a",
+	onUnauthorized: async () => {
+		// OpenBot wählt den Anbieter und antwortet mit seiner Adresse.
+		const response = await fetch("/auth/sign-in", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ returnTo: "/" }),
+		})
+		const { url } = await response.json()
+		window.location.assign(url)
+	},
+})
+```
+
+Der Client sendet Anfragen mit `credentials: "same-origin"`. So fügt der Browser das Cookie hinzu.
+Der Browser fügt auch den Header `Origin` hinzu. Bei Anfragen, die Daten ändern, prüft OpenBot, dass er genau `publicOrigin` aus den Plattform-Einstellungen ist.
+Die Organisationen der Person liest du mit `GET /auth/session`. Siehe [Authentifizierung](/de/docs/authentication#die-anmeldung-lesen-und-beenden).
+
+Wie du deine Web-App auf demselben Origin bereitstellst, steht unter [Betrieb](/de/docs/deploy#dein-eigener-client-auf-demselben-origin).
+
+<Callout type="warn">
+	Schreibe kein User Token in Browser-Code. Jeder, der die Seite öffnet, kann es
+	lesen.
+</Callout>
+
+## Eigene Einrichtung
+
+`make({ baseUrl })` baut den Dienst `Client` ohne die Standard-Teile. Du gibst ihm dann:
+
+- einen Dienst `HttpClient`,
+- Client-Middleware für `AgentAuth`, genutzt von Token-Routen,
+- Client-Middleware für `AccountAuth`, genutzt von Routen, die nicht in einer einzelnen Organisation handeln, zum Beispiel `/v1/organizations` und `/v1/platform`,
+- Client-Middleware für `SessionAuth`, genutzt von Routen nur mit Cookie.
+
+Nutze das, wenn du deinen eigenen HTTP-Client, eigenes Logging oder eigene Header brauchst. Wie `layer` das macht, siehst du in `packages/client/src/Client.ts`.
+
+---
+
+## App-Ansichten zeigen
+
+Manche App-Werkzeuge haben eine kleine Benutzeroberfläche, eine sogenannte MCP-Apps-Ansicht. MCP ist das Model Context Protocol, ein Standardweg, auf dem Agents mit Werkzeugen sprechen.
+OpenBot hält die Ansicht auf dem Server. Dein Client zeigt sie nur an.
+
+Öffne zuerst die Ansicht für eine App-Operation. Erstelle dann mit `AppViews.make` einen Ansichts-Client:
+
+```ts
+import { AppViews, Client } from "@openbot-build/client"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+	const client = yield* Client
+	const opened = yield* client.api.appViews.open({
+		params: { operationId },
+		payload: { sessionId, itemId },
+	})
+	return yield* AppViews.make(opened, accountId, () => refresh())
+})
+```
+
+| Argument   | Was es ist                                                                                                                |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `opened`   | Die Ansicht, die `appViews.open` zurückgegeben hat.                                                                       |
+| `owner`    | Eine feste ID des angemeldeten Kontos. Sie hält Ansichten verschiedener Konten getrennt.                                  |
+| `onChange` | Optional. Läuft, wenn eine Aktion in der Ansicht ihren Status ändert. Nutze es, um Requests und die Session neu zu laden. |
+
+Das Ergebnis funktioniert mit `mount` aus `@openbot-build/protocol/McpApps`. Das zeigt die Ansicht in einem iframe. Siehe [Protokoll](/de/docs/protocol).
+
+Der Ansichts-Client hält keine Zugangsdaten. Jede Anfrage geht über OpenBot. Darum gelten die normalen Prüfungen der Fähigkeiten:
+
+- Er prüft, dass jede Antwort ein gültiges MCP-Ergebnis ist.
+- Er sendet jede Aktion einmal, mit einer neuen Anfrage-ID.
+- Danach prüft er die gespeicherte Aktion alle 250 Millisekunden, bis sie ein Endergebnis hat. Er sendet die Aktion nie noch einmal.
+
+Wenn du die Ansicht schließt, hört der Client mit dem Prüfen auf. Eine Aktion, die OpenBot schon angenommen hat, läuft trotzdem bis zum Ende.

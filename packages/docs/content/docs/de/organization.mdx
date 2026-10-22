@@ -1,0 +1,280 @@
+---
+title: Organisation
+description: Organisationen, Members, Einstellungen, Roles und das Audit-Log.
+---
+
+Diese Seite zeigt, wie viele Menschen OpenBot gemeinsam nutzen. Eine Organization (Organisation) ist eine Gruppe von Menschen, die Agents, Models und Einstellungen teilen.
+Eine Platform hat viele Organisationen. Ein Konto kann Member (Mitglied) in vielen davon sein. Eine Person, die OpenBot allein nutzt, hat eine Organisation mit einem Member.
+
+Die Routen der aktuellen Organisation liegen unter `/v1/organization`. Sie nehmen ein User-Token oder das Session-Cookie an. Mit dem Cookie sendest du den Header `OpenBot-Organization`, wenn du zu mehr als einer Organisation gehörst. Siehe [Authentifizierung](/de/docs/authentication#eine-organisation-wählen).
+
+---
+
+## Wer beitreten kann
+
+Jedes Mal, wenn sich ein Konto anmeldet, prüft OpenBot, wohin es gehört. Es prüft das auch bei jeder Anfrage mit dem Session-Cookie.
+
+| Weg                      | Role, die es bekommt                                                       | Voraussetzung                                                                                                             |
+| ------------------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Bestätigte Domain        | Die `defaultRoles` der Organisation                                        | Die Organisation hat die Domain der E-Mail bestätigt, `joinByDomain` ist `true`, und der Anbieter hat die E-Mail geprüft. |
+| SSO-Verbindung           | Die `defaultRoles` der Organisation                                        | Das Konto hat sich über die SSO-Verbindung der Organisation angemeldet.                                                   |
+| Persönliche Organisation | `super_administrator` in einer neuen Organisation mit dem Namen "Personal" | Das Konto hat keine Organisation, und `organizationCreation` in den Platform-Einstellungen ist `anyone`.                  |
+| Neue Organisation        | `super_administrator`                                                      | Das Konto ruft `POST /v1/organizations` auf. Siehe [Eine Organisation erstellen](#eine-organisation-erstellen).           |
+
+Ein Konto ohne Organisation bekommt von Routen einer Organisation `403` mit `MembershipRequired`.
+Wie du eine Domain bestätigst, steht unter [SSO und Domains](/de/docs/sso). Zu `organizationCreation` siehe [Platform](/de/docs/platform#organizations-erstellen).
+
+---
+
+## Deine Organisationen
+
+`GET /v1/organizations` listet die Organisationen auf, in denen du Member bist. Ein User-Token sieht nur seine eigene Organisation.
+
+```sh
+curl -b cookies.txt https://api.example.com/v1/organizations
+```
+
+```json
+{
+	"items": [
+		{
+			"id": "org_8f3a",
+			"name": "Example",
+			"status": "active",
+			"createdAt": "2026-10-21T09:00:00.000Z"
+		}
+	]
+}
+```
+
+`status` ist `active` oder `suspended`. Ein Platform-Admin kann eine Organisation sperren. Dann kann niemand sie nutzen, und ihre Tokens funktionieren nicht mehr. Siehe [Platform](/de/docs/platform#organizations).
+
+### Eine Organisation erstellen
+
+`POST /v1/organizations` erstellt eine Organisation. Du wirst ihr Super Administrator.
+
+```sh
+curl -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Research"}' \
+  https://api.example.com/v1/organizations
+```
+
+Wenn `organizationCreation` in den Platform-Einstellungen `platform_admins` ist, können das nur Platform-Admins. Andere Aufrufer bekommen `403` mit `OrganizationCreationDisabled`.
+
+---
+
+## Die Organisation lesen und ändern
+
+`GET /v1/organization` liest die aktuelle Organisation. Es gibt dasselbe Objekt wie oben zurück.
+`PATCH /v1/organization` ändert ihren `name`. Es braucht `organization.write`.
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Example Inc."}' \
+  https://api.example.com/v1/organization
+```
+
+---
+
+## Einstellungen
+
+Jede Organisation hat ihre eigenen Einstellungen. Sie liegen in der Datenbank. So nutzt jede OpenBot-Instanz dieselben Werte.
+`GET /v1/organization/settings` liest sie. Es braucht `organization.read`.
+
+```json
+{
+	"version": 2,
+	"rulesModel": {
+		"_tag": "Config.Selection",
+		"provider": "prov_4c1e...",
+		"model": "gpt-4.1-mini"
+	},
+	"agentMemoryModel": null,
+	"decisionModel": null,
+	"memory": { "use": true, "generate": true },
+	"agentMemory": true,
+	"requestTimeoutMs": 86400000,
+	"appReadRules": [],
+	"defaultRoles": ["member"],
+	"joinByDomain": true,
+	"updatedAt": "2026-10-21T09:00:00.000Z"
+}
+```
+
+| Feld               | Standard     | Was es tut                                                                                                                                     |
+| ------------------ | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rulesModel`       | `null`       | Das Model, das [Rules](/de/docs/rules) beurteilt. `null` heißt: Kein Model beurteilt sie. Siehe [Models](/de/docs/models#ein-model-auswählen). |
+| `agentMemoryModel` | `null`       | Das Model, das [Agent-Memory](/de/docs/memory#agent-memory) lernt. `null` heißt: Agents lernen nichts.                                         |
+| `decisionModel`    | `null`       | Das Decision-Model, zum Beispiel Jev. Es muss ein `decision`-Model sein. `null` heißt: keins. Siehe [Models](/de/docs/models#decision-model).  |
+| `memory`           | beide an     | Die Memory-Schalter `use` und `generate` einer neuen Session. Siehe [Memory](/de/docs/memory#schalter).                                        |
+| `agentMemory`      | `true`       | Agent-Memory nach jedem Turn lernen.                                                                                                           |
+| `requestTimeoutMs` | 24 Stunden   | Wie lange ein [Request](/de/docs/requests) auf eine Antwort wartet, bevor OpenBot ihn ablehnt. Von 1 Sekunde bis 7 Tage.                       |
+| `appReadRules`     | `[]`         | App-Werkzeuge, die nur lesen: `{ cardUrl, tool }`. Siehe [Requests](/de/docs/requests).                                                        |
+| `defaultRoles`     | `["member"]` | Die Roles eines neuen Members.                                                                                                                 |
+| `joinByDomain`     | `true`       | Menschen mit einer geprüften E-Mail in einer bestätigten Domain der Organisation treten bei, wenn sie sich anmelden.                           |
+
+`PATCH /v1/organization/settings` ändert sie. Es braucht `organization.write`. Der Body braucht `expectedVersion`, also die `version`, die du gelesen hast. Füge nur die Felder hinzu, die du ändern willst.
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":2,"requestTimeoutMs":3600000,"joinByDomain":false}' \
+  https://api.example.com/v1/organization/settings
+```
+
+- Wenn jemand die Einstellungen nach deinem Lesen geändert hat, antwortet OpenBot mit `409`, `SettingsConflict` und der aktuellen `version`. Lies sie neu und versuche es dann noch einmal.
+- Eine Role, die es nicht gibt, ergibt `400` mit `SettingsInvalid`.
+- Nur ein Super Administrator kann `super_administrator` in `defaultRoles` eintragen.
+
+Jede Instanz nutzt eine Änderung sofort. Siehe [Konfiguration](/de/docs/configuration#wie-eine-änderung-jede-instanz-erreicht).
+
+---
+
+## Members
+
+`GET /v1/organization/members` listet Members seitenweise auf. Es braucht `members.read`. Nutze `limit` (1 bis 100, Standard 50) und `after` mit dem Wert `next` der letzten Seite.
+
+```json
+{
+	"items": [
+		{
+			"userId": "u_123",
+			"email": "ada@example.com",
+			"name": "Ada",
+			"status": "active",
+			"roles": ["super_administrator"],
+			"policies": [],
+			"joinedAt": "2026-10-21T09:00:00.000Z"
+		}
+	],
+	"next": null
+}
+```
+
+`GET /v1/organization/members/:userId` liest ein Member.
+
+### Ein Member ändern
+
+`PATCH /v1/organization/members/:userId` ändert `status`, `roles` oder `policies`. Es braucht `members.write`.
+
+- `status` ist `active` oder `suspended`. Ein gesperrtes Member kann diese Organisation nicht nutzen. Seine Tokens für sie funktionieren sofort nicht mehr.
+- `roles` ist eine Liste von Role-IDs: eingebaute Roles und eigene Roles. Siehe [Berechtigungen](/de/docs/permissions#roles).
+- `policies` sind zusätzliche Policies für das Member, zusätzlich zu seinen Roles.
+
+```sh
+curl -X PATCH -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"roles":["administrator"]}' \
+  https://api.example.com/v1/organization/members/u_456
+```
+
+### Ein Member entfernen
+
+`DELETE /v1/organization/members/:userId` entfernt das Member und widerruft seine Tokens. Es braucht `members.write`.
+Wenn seine E-Mail-Domain noch bestätigt ist und `joinByDomain` an ist, oder wenn es sich über eine SSO-Verbindung anmeldet, tritt es bei der nächsten Anmeldung wieder bei. Um es draußen zu halten, sperre es.
+
+### Regeln für Super Administrators
+
+- Nur ein Super Administrator kann einen Super Administrator ändern oder entfernen oder jemandem diese Role geben.
+- Nur ein Super Administrator kann einem Member zusätzliche `allow`-Policies geben oder `super_administrator` in die Standard-Roles eintragen. Andere Administratoren können nur `deny`-Policies hinzufügen. So kann niemand mehr vergeben, als er selbst hat.
+- Die Organisation behält immer mindestens einen aktiven Super Administrator. Eine Änderung, die das verletzt, ergibt `409` mit `LastSuperAdministrator`.
+
+---
+
+## Audit-Log
+
+Das Audit-Log zeichnet wichtige Änderungen auf. Nichts kann einen Eintrag ändern oder entfernen.
+`GET /v1/organization/audit_logs` listet Einträge auf, die neuesten zuerst. Es braucht `audit_logs.read`.
+
+| Query    | Was es tut                                   |
+| -------- | -------------------------------------------- |
+| `limit`  | 1 bis 100. Der Standard ist 50.              |
+| `after`  | Der Wert `next` der letzten Seite.           |
+| `action` | Nur Einträge mit dieser Aktion.              |
+| `actor`  | Nur Einträge des Members mit dieser User-ID. |
+
+```json
+{
+	"items": [
+		{
+			"id": "42",
+			"createdAt": "2026-10-21T09:05:00.000Z",
+			"action": "member.updated",
+			"actor": {
+				"kind": "member",
+				"userId": "u_123",
+				"organizationId": "org_8f3a"
+			},
+			"resource": "openbot.org.org_8f3a.user.u_456",
+			"details": {
+				"before": { "status": "active", "roles": ["member"], "policies": 0 },
+				"after": {
+					"status": "active",
+					"roles": ["administrator"],
+					"policies": 0
+				}
+			}
+		}
+	],
+	"next": "42"
+}
+```
+
+| Aktion                   | Wann                                                                 |
+| ------------------------ | -------------------------------------------------------------------- |
+| `member.joined`          | Ein Konto tritt der Organisation bei.                                |
+| `member.updated`         | Ein Member bekommt einen neuen Status, Roles oder Policies.          |
+| `member.removed`         | Ein Member wird entfernt.                                            |
+| `organization.created`   | Jemand erstellt eine Organisation.                                   |
+| `organization.updated`   | Die Organisation bekommt einen neuen Namen.                          |
+| `settings.updated`       | Die Einstellungen der Organisation ändern sich.                      |
+| `role.created`           | Ein Member erstellt eine eigene Role.                                |
+| `role.updated`           | Ein Member ändert eine eigene Role.                                  |
+| `role.deleted`           | Ein Member löscht eine eigene Role.                                  |
+| `model.created`          | Ein Member fügt ein Model hinzu.                                     |
+| `model.updated`          | Ein Member ändert ein Model.                                         |
+| `model.deleted`          | Ein Member entfernt ein Model.                                       |
+| `model_provider.created` | Ein Member fügt einen Model Provider hinzu.                          |
+| `model_provider.updated` | Ein Member ändert einen Model Provider.                              |
+| `model_provider.deleted` | Ein Member entfernt einen Model Provider.                            |
+| `domain.added`           | Ein Member fügt eine E-Mail-Domain hinzu.                            |
+| `domain.verified`        | Eine E-Mail-Domain wird bestätigt.                                   |
+| `domain.removed`         | Ein Member entfernt eine E-Mail-Domain.                              |
+| `sso_connection.created` | Ein Member fügt eine SSO-Verbindung hinzu.                           |
+| `sso_connection.updated` | Ein Member ändert eine SSO-Verbindung.                               |
+| `sso_connection.deleted` | Ein Member entfernt eine SSO-Verbindung.                             |
+| `token.created`          | Ein Member erstellt ein User-Token.                                  |
+| `token.revoked`          | Ein Member widerruft ein User-Token.                                 |
+| `agent.created`          | Ein Member erstellt einen Agent.                                     |
+| `agent.updated`          | Ein Member ändert einen Agent.                                       |
+| `agent.promoted`         | Ein Member macht einen Session-Agent dauerhaft.                      |
+| `agent.memory.updated`   | Ein Member ändert Agent-Memory.                                      |
+| `delegation.started`     | Ein Agent gibt Arbeit an einen anderen Agent.                        |
+| `delegation.completed`   | Abgegebene Arbeit endet.                                             |
+| `capability.decided`     | Eine Person beantwortet einen Request.                               |
+| `request.resolved`       | Ein Request wird geschlossen. `details.chain` listet die Agents auf. |
+| `grant.created`          | Ein Member erstellt einen Grant.                                     |
+| `grant.revoked`          | Ein Member widerruft einen Grant.                                    |
+| `rule.created`           | Ein Member fügt eine Rule hinzu.                                     |
+| `rule.updated`           | Ein Member ändert eine Rule.                                         |
+
+---
+
+## Fehler
+
+| Status | Fehler                           | Wann                                                                                         |
+| ------ | -------------------------------- | -------------------------------------------------------------------------------------------- |
+| `400`  | `PolicyInvalid`                  | Eine Policy nennt eine Ressource außerhalb der Organisation.                                 |
+| `403`  | `PermissionDenied`               | Der Aufrufer hat die Berechtigung nicht. Siehe [Berechtigungen](/de/docs/permissions).       |
+| `400`  | `OrganizationRequired`           | Eine Anfrage mit Cookie ohne `OpenBot-Organization`, und du hast mehr als eine Organisation. |
+| `400`  | `SettingsInvalid`                | Ein Wert in den Einstellungen ist ungültig, zum Beispiel eine Role, die es nicht gibt.       |
+| `403`  | `MembershipRequired`             | Du bist kein aktives Member der Organisation.                                                |
+| `403`  | `OrganizationCreationDisabled`   | Auf dieser Platform können nur Platform-Admins Organisationen erstellen.                     |
+| `404`  | `MemberNotFound`                 | Kein Member hat diese User-ID.                                                               |
+| `409`  | `SettingsConflict`               | Jemand hat die Einstellungen geändert, nachdem du sie gelesen hast.                          |
+| `409`  | `LastSuperAdministrator`         | Nach der Änderung gäbe es keinen aktiven Super Administrator mehr.                           |
+| `503`  | `OrganizationStorageUnavailable` | OpenBot erreicht seine Datenbank nicht.                                                      |

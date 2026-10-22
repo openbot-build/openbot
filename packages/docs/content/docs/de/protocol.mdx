@@ -1,0 +1,321 @@
+---
+title: App Protocol
+description: Veröffentliche eine App im Web, damit jeder Agent-Host sie finden und nutzen kann.
+---
+
+Das **OpenBot App Protocol** ist ein offener Weg, eine App im Web zu veröffentlichen. Jeder Agent-Host kann die App dann finden, sich mit ihr verbinden und sie nutzen. Du brauchst kein Entwicklerkonto, keine Registry und keine Prüfung. Eine HTTPS-Adresse, die du kontrollierst, reicht.
+
+Diese Seite beschreibt den Entwurf **V1.1**. Auf dieser Seite bedeutet „muss“ eine Regel, „sollte“ einen starken Rat und „darf“ eine Möglichkeit. Alle Domains sind Beispiele.
+
+---
+
+## Standards, die es nutzt
+
+Das Protokoll fügt sehr wenig Eigenes hinzu. Es wählt bestehende Standards aus und setzt sie zusammen.
+
+| Teil                                  | Frage, die es beantwortet    |
+| ------------------------------------- | ---------------------------- |
+| AI Catalog 1.0                        | Welche Dienste gibt es hier? |
+| MCP Server Card v1                    | Wie verbinde ich mich?       |
+| MCP `2026-07-28` over Streamable HTTP | Was kann die App tun?        |
+| MCP Apps `2026-01-26`                 | Wie zeigt sie eine Ansicht?  |
+
+MCP (Model Context Protocol) ist ein Standardweg, auf dem KI-Hosts Werkzeuge auf einem Server aufrufen. Das Protokoll hat keine eigenen RPC-Methoden, keine festen Werkzeugnamen und keine eigene UI-Sprache.
+
+---
+
+## Eine App veröffentlichen
+
+### AI Catalog
+
+Damit deine App über die Domain gefunden wird, lege einen AI Catalog unter `/.well-known/ai-catalog.json` ab. Liefere ihn als `application/ai-catalog+json` aus.
+
+```json
+{
+	"specVersion": "1.0",
+	"entries": [
+		{
+			"identifier": "urn:air:apps.example.com:mcp:calendar",
+			"type": "application/mcp-server-card+json",
+			"url": "https://apps.example.com/mcp/calendar/server-card"
+		}
+	]
+}
+```
+
+Ein Catalog darf auf Cards auf anderen Domains zeigen. So kann jemand anderes den Dienst für dich betreiben.
+
+### Server Card
+
+Jede App muss ihre eigene feste Card-URL haben. Liefere die Card als `application/mcp-server-card+json` aus. Sie muss mindestens einen HTTPS-Endpunkt nennen, der MCP `2026-07-28` unterstützt.
+
+```json
+{
+	"$schema": "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json",
+	"name": "com.example/calendar",
+	"title": "Example Calendar",
+	"version": "1.0.0",
+	"description": "Look up schedules and create calendar events.",
+	"websiteUrl": "https://apps.example.com/apps/calendar",
+	"remotes": [
+		{
+			"type": "streamable-http",
+			"url": "https://apps.example.com/mcp/calendar",
+			"supportedProtocolVersions": ["2026-07-28"]
+		}
+	]
+}
+```
+
+Die **Card-URL ist die Identität der App**. Der `name` und der `identifier` im Catalog beschreiben die App nur. Zwei Apps mit demselben Namen werden nie zusammengelegt.
+
+Ein Remote darf nach Einstellungen fragen, zum Beispiel nach `headers` oder URL-`variables`. Markiere Geheimnisse mit `isSecret: true`. Hosts halten diese Werte für jeden Benutzer privat.
+
+Liefere den Catalog und die Card mit `ETag` oder `Last-Modified` aus. Hosts senden bedingte Anfragen und erwarten `304 Not Modified`, wenn sich nichts geändert hat.
+
+### Icons und Nutzungsbeispiele
+
+Nutze die Standard-Liste `icons` der Card (`src`, `mimeType`, `sizes`, `theme`). Hosts müssen deine App auch zeigen, wenn ein Icon fehlt. Hosts führen SVG-Dateien nie als HTML aus.
+
+Du darfst Nutzungsbeispiele unter `_meta["openbot/presentation"]` hinzufügen:
+
+```json
+{
+	"_meta": {
+		"openbot/presentation": {
+			"version": "1",
+			"examples": [
+				{
+					"id": "meeting-plan",
+					"title": "Plan the next team meeting",
+					"prompt": "Find a free 30-minute slot next week and draft an agenda.",
+					"description": "A sample week with one proposed meeting.",
+					"preview": {
+						"src": "https://apps.example.com/assets/meeting.webp",
+						"alt": "A sample week with one proposed meeting",
+						"width": 1200,
+						"height": 800,
+						"mimeType": "image/webp"
+					}
+				}
+			]
+		}
+	}
+}
+```
+
+| Feld          | Regel                                                                                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `version`     | Muss `"1"` sein.                                                                                                                           |
+| `examples`    | 1 bis 12 Einträge.                                                                                                                         |
+| `id`          | Eindeutig. Bis zu 100 Buchstaben, Ziffern, `.`, `_` oder `-`. Beginnt mit einem Buchstaben oder einer Ziffer.                              |
+| `title`       | Bis zu 100 Zeichen.                                                                                                                        |
+| `prompt`      | Bis zu 2000 Zeichen.                                                                                                                       |
+| `description` | Optional. Bis zu 500 Zeichen.                                                                                                              |
+| `preview`     | Optional. HTTPS-`src`, `alt` bis zu 500 Zeichen, `width` und `height` von 1 bis 8192, `mimeType` eines von PNG, JPEG, WebP, AVIF oder SVG. |
+
+Beispiele dürfen nur öffentliche oder erfundene Daten enthalten. Hosts zeigen sie als reinen Text. Ein Beispiel ansehen oder auswählen fügt nie eine App hinzu, meldet nie an und führt nie ein Werkzeug aus. Hosts ignorieren einen fehlerhaften Präsentationsblock und nutzen die Card weiter.
+
+---
+
+## Erkennung über eine Domain oder einen Link
+
+Ein Host muss vier Arten von Eingaben annehmen: eine Domain, die URL einer App-Seite, eine Catalog-URL oder eine Card-URL.
+
+- **Domain.** Der Host liest `https://<domain>/.well-known/ai-catalog.json`.
+- **App-Seite.** Die Seite zeigt mit einem Link-Tag oder einem HTTP-Header `Link` auf ihren Catalog:
+
+  ```html
+  <link
+  	rel="ai-catalog"
+  	type="application/ai-catalog+json"
+  	href="/apps/calendar/catalog.json"
+  />
+  ```
+
+  Der Host liest nur diese statischen Links. Er führt nie Skripte der Seite aus. Er behält den ganzen Pfad. So wird eine Seite für eine App nicht zur ganzen Domain.
+
+- **Catalog mit vielen Cards.** Der Host bittet den Benutzer, eine auszuwählen. Er fügt nie einen ganzen Catalog hinzu.
+
+Ein **App Link** ist eine normale HTTPS-URL, am besten eine App-Seite. Ein **QR-Code** enthält dieselbe URL. Es gibt kein besonderes QR-Format und kein URI-Schema. Links dürfen keine Tokens und keine privaten Daten enthalten. Einen Link öffnen startet nur eine Prüfung. Es gibt keinen Zugriff und führt nichts aus.
+
+---
+
+## Verbinden und aufrufen
+
+Hinzufügen, Anmelden und Ausführen sind drei getrennte Schritte. Hinzufügen speichert die Verbindung. Anmelden gibt klaren Zugriff. Ausführen braucht die Absicht des Benutzers, eine gültige Anmeldung und die eigenen Regeln des Hosts.
+
+Nachdem der Benutzer die App hinzugefügt hat, macht der Host Folgendes:
+
+1. Er ruft `server/discover` auf, um die aktuelle Version und die Fähigkeiten zu lesen.
+2. Er ruft `tools/list`, `resources/list` und `prompts/list` auf.
+3. Er erledigt die Arbeit mit `tools/call`, `resources/read` und `prompts/get`.
+
+Alle Nachrichten, Ergebnisse und Fehler folgen MCP. Benenne deine Werkzeuge nach dem, was sie tun, zum Beispiel `create_event`. Beschreibe die Eingabe mit `inputSchema`. Gib strukturierte Ausgabe mit `outputSchema` und `structuredContent` zurück. Gib immer auch ein klares Text-Ergebnis zurück.
+
+### Anmeldung mit Konto
+
+Eine App, die ein Benutzerkonto braucht, muss die MCP-Autorisierung nutzen. Das ist OAuth 2.1:
+
+- **Protected Resource Metadata.** Die App antwortet mit 401 oder 403 und einer Aufforderung, die auf ihre Metadaten zeigt. Die Metadaten nennen die Autorisierungsserver und Scopes.
+- **Client ID Metadata Document.** Die Client-ID des Hosts ist eine HTTPS-URL zu einem öffentlichen JSON-Dokument. Autorisierungsserver lesen es. Niemand muss den Host von Hand registrieren. Beide Seiten müssen das unterstützen.
+- **PKCE mit S256.** Es schützt den Anmelde-Code. Anfragen senden auch die genaue `resource`.
+
+Deine App darf trotzdem nach einem Login, einem Tarif oder einer geschäftlichen Erlaubnis fragen. Das ist kein Registry-Schritt.
+
+---
+
+## MCP-Apps-Ansichten
+
+Eine App darf eine interaktive Ansicht zeigen. Ein Werkzeug verweist in seinen Metadaten auf eine UI-Ressource:
+
+```json
+{
+	"_meta": {
+		"ui": {
+			"resourceUri": "ui://calendar/planner.html",
+			"visibility": ["model", "app"]
+		}
+	}
+}
+```
+
+Die Ressource muss eine `ui://`-URI und den Typ `text/html;profile=mcp-app` nutzen. Der Host liest sie mit `resources/read`. Der Host gibt `io.modelcontextprotocol/ui` in seinen Client-Fähigkeiten an.
+
+| Zweck                                   | Standardmethode                                                          | Richtung                       |
+| --------------------------------------- | ------------------------------------------------------------------------ | ------------------------------ |
+| Starten und Bereitschaft melden         | `ui/initialize`, `ui/notifications/initialized`                          | Ansicht an Host                |
+| Werkzeug-Eingabe und -Ergebnis bekommen | `ui/notifications/tool-input`, `ui/notifications/tool-result`            | Host an Ansicht                |
+| Arbeit erledigen oder Daten lesen       | `tools/call`, `resources/read`                                           | Ansicht, über den Host, an App |
+| Den Model-Kontext aktualisieren         | `ui/update-model-context`                                                | Ansicht an Host                |
+| Eine Chat-Nachricht senden              | `ui/message`                                                             | Ansicht an Host                |
+| Einen Link öffnen                       | `ui/open-link`                                                           | Ansicht an Host                |
+| Theme und Größe teilen                  | `ui/notifications/host-context-changed`, `ui/notifications/size-changed` | In beide Richtungen            |
+| Aufräumen                               | `ui/resource-teardown`                                                   | Host an Ansicht                |
+
+Regeln für Ansichten:
+
+- Der Host wartet, bis die Ansicht bereit ist, bevor er Werkzeug-Daten sendet.
+- Ein Werkzeug mit `visibility: ["app"]` ist nur für die Ansicht. Sichtbarkeit ist keine Zugriffskontrolle. Dein Server muss trotzdem Berechtigungen prüfen.
+- Wenn eine Ansicht nicht lädt, darf der Host das Werkzeug nicht noch einmal ausführen. Das Text-Ergebnis ist trotzdem da.
+
+---
+
+## App-Einträge, Index-Einträge und Verbindungen
+
+Ein Host hält drei getrennte Dinge:
+
+| Ding                | Enthält                                                                | Geteilt?                |
+| ------------------- | ---------------------------------------------------------------------- | ----------------------- |
+| App-Eintrag         | Die Card und woher sie kam.                                            | Pro Konto               |
+| Index-Eintrag       | Die öffentliche Card und den Nachweis des Herausgebers. Für die Suche. | Öffentlich              |
+| Benutzer-Verbindung | Die Einstellungen, die Anmeldung und den Zugriff des Benutzers.        | Privat für den Benutzer |
+
+Viele Benutzer können dieselbe App verbinden. Wenn du eine Verbindung entfernst, betrifft das nie einen anderen Benutzer oder den Index. Ein öffentlicher Index, der nicht erreichbar ist, darf eine bekannte Verbindung nicht blockieren.
+
+---
+
+## Öffentliche Indizierung
+
+**Wenn du eine Card in deinem öffentlichen AI Catalog aufführst, erlaubst du ihre öffentliche Indizierung.** Der Host muss das aus deinen eigenen Dokumenten bestätigen. Eine Kopie im Catalog von jemand anderem ist nur ein Hinweis.
+
+Der Crawler arbeitet ohne Benutzerdaten. Er nutzt das User-Agent-Token `OpenBot` und folgt `robots.txt` (RFC 9309). Er nimmt Nachweise des Herausgebers aus diesen Quellen an:
+
+- dem Catalog unter `/.well-known/ai-catalog.json` am Origin der Card;
+- einem Catalog, den ein `ai-catalog`-Header `Link` in der Antwort der Card nennt;
+- einem Catalog, auf den die Seite in `websiteUrl` der Card verlinkt.
+
+Um dich abzumelden, sende `X-Robots-Tag: noindex` mit der Card. `noindex` ist keine Zugriffskontrolle. Wenn du die Card aus deinem Catalog entfernst, entfernt der Host den Index-Eintrag bei seiner nächsten Prüfung. Ein Catalog, der nicht erreichbar ist, zählt nicht als Entfernung.
+
+Du brauchst keine Registry, um eine App zu veröffentlichen, hinzuzufügen oder aufzurufen. Ein Host darf auch andere Registries lesen. Wie OpenBot das macht, siehst du unter [App Index](/de/docs/app-index).
+
+---
+
+## Sicherheitsregeln
+
+- Alle Verbindungen nutzen HTTPS. Hosts zeigen die echte Quelle jeder App.
+- Namen, Icons, Index-Einträge und Werkzeug-Hinweise sind keine Vertrauenszeichen. Inhalte von Apps sind Daten, nie Anweisungen für den Host.
+- Öffentliche Crawler begrenzen Größe, Zeit und Weiterleitungen. Sie prüfen jedes Ziel und erreichen nie private, Loopback- oder Cloud-Metadaten-Adressen. Die Standardwerte der Bibliothek sind 1 MiB, 10 Sekunden und 5 Weiterleitungen.
+- Schreibvorgänge brauchen eine Berechtigungsprüfung. Schreibvorgänge, die wiederholt werden können, brauchen einen geschäftlichen Idempotenz-Schlüssel.
+- Wenn das Ergebnis eines Aufrufs unbekannt ist, darf der Host ihn nicht blind wiederholen.
+- Ein Wechsel von Endpunkt, Anbieter oder Scopes braucht eine neue Prüfung. Alte Tokens gehen nie auf ein neues Ziel über.
+- Eine Verbindung entfernen stoppt alle Aufrufe und löscht ihre Tokens.
+
+---
+
+## Die Bibliothek nutzen
+
+`@openbot-build/protocol` setzt dieses Protokoll mit Effect 4 um. Es hat die Version 0.1.0 und ist noch nicht auf npm. Nutze es im pnpm-Workspace dieses Repositorys.
+
+| Einstiegspunkt                               | Nutzung                                                      |
+| -------------------------------------------- | ------------------------------------------------------------ |
+| `McpPublisher`                               | Eine Card, einen Catalog und einen MCP-Endpunkt ausliefern.  |
+| `McpPublisher.layerProtected`, `Protection`  | Einen Endpunkt mit OAuth schützen.                           |
+| `Discovery`, `CatalogDiscovery`              | Apps über eine Domain oder einen Link finden.                |
+| `AppConnections`, `McpClient`                | Verbindungen hinzufügen, aufrufen, neu prüfen und entfernen. |
+| `OAuthAuthorization`                         | Die Host-Seite der Anmeldung mit Konto ausführen.            |
+| `Indexing`, `PublicIndexing`, `RobotsPolicy` | Öffentliche Apps prüfen und indizieren.                      |
+| `@openbot-build/protocol/NodeHttpServer`     | Node-Netzwerk-Layer mit den Regeln für das öffentliche Netz. |
+| `@openbot-build/protocol/McpApps`            | Browser-Host für MCP-Apps-Ansichten.                         |
+
+Eine kleine App veröffentlichen:
+
+```ts
+import { Document, McpPublisher } from "@openbot-build/protocol"
+import { Effect, Schema } from "effect"
+import { McpServer, Tool, Toolkit } from "effect/ai"
+
+const tools = Toolkit.make(
+	Tool.make("hello", {
+		parameters: Schema.Struct({ name: Schema.String }),
+		success: Schema.Struct({ greeting: Schema.String }),
+	}),
+)
+const handlers = tools.toLayer({
+	hello: ({ name }) => Effect.succeed({ greeting: `Hello, ${name}` }),
+})
+const origin = "https://apps.example.com"
+
+export const publisher = McpPublisher.layer({
+	publication: {
+		card: {
+			$schema: Document.cardSchemaUrl,
+			name: "com.example/hello",
+			version: "1.0.0",
+			description: "Say hello.",
+			remotes: [
+				{
+					type: "streamable-http",
+					url: origin + "/mcp",
+					supportedProtocolVersions: [Document.protocolVersion],
+				},
+			],
+		},
+		cardUrl: origin + "/mcp/server-card",
+		catalogUrl: origin + "/.well-known/ai-catalog.json",
+		mcpUrl: origin + "/mcp",
+		allowedOrigins: ["https://host.example.com"],
+	},
+	register: McpServer.registerToolkit(tools).pipe(Effect.provide(handlers)),
+})
+```
+
+Liefere `publisher` mit `HttpRouter.serve` von Effect aus. Den Layer zu bauen macht kein I/O. Die `publication` nimmt auch `etag`, `lastModified`, `cacheControl` und `noindex`. Nutze `McpPublisher.registerUi`, um eine `ui://`-Ansichtsressource hinzuzufügen.
+
+Eine App finden:
+
+```ts
+import { CatalogDiscovery, Discovery } from "@openbot-build/protocol"
+import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
+import { Effect, Layer } from "effect"
+
+const discovery = CatalogDiscovery.layer().pipe(
+	Layer.provide(CatalogDiscovery.layerRules),
+	Layer.provide(NodeHttpServer.layerPublicNetwork()),
+)
+const result = await Effect.runPromise(
+	Discovery.resolve("apps.example.com").pipe(Effect.provide(discovery)),
+)
+```
+
+Das Ergebnis ist `Single` oder `Multiple`. Um deine eigene App mit einem echten Host zu testen, nutze den [Protokolltest-Dienst](/de/docs/protocol-test) und die [Entwicklerwerkzeuge](/de/docs/developer-tools).

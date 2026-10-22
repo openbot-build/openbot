@@ -1,0 +1,192 @@
+---
+title: SSO und Domains
+description: Bestätige E-Mail-Domains und melde Menschen mit dem OpenID-Connect-Anbieter deiner Organisation an.
+---
+
+Mit SSO (Single Sign-On, einmalige Anmeldung) melden sich Menschen mit dem Kontoanbieter ihrer eigenen Firma an.
+Eine Organisation kann ihren eigenen OpenID-Connect-Anbieter für die E-Mail-Domains hinzufügen, die ihr gehören. OpenID Connect (OIDC) ist ein Standard. Damit prüft ein anderer Dienst, wer eine Person ist.
+
+Diese Seite zeigt, wie du eine Domain bestätigst, wie du eine SSO-Verbindung hinzufügst und wie die Anmeldung einen Anbieter wählt.
+Alle Routen liegen unter `/v1/organization`. Lesen braucht `sso.read`. Änderungen brauchen `sso.write`. Siehe [Berechtigungen](/de/docs/permissions).
+
+---
+
+## Bestätigte Domains
+
+Eine E-Mail-Domain ist der Teil einer E-Mail-Adresse nach dem `@`, zum Beispiel `example.com`. Bevor eine Domain etwas bewirkt, muss die Organisation beweisen, dass sie ihr gehört. Das macht sie mit einem DNS-TXT-Eintrag.
+
+<Steps>
+<Step>
+
+### Die Domain hinzufügen
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"domain":"example.com"}' \
+  https://api.example.com/v1/organization/domains
+```
+
+```json
+{
+	"domain": "example.com",
+	"recordName": "_openbot-verification.example.com",
+	"recordValue": "openbot-verification=4f7d...",
+	"verifiedAt": null,
+	"createdAt": "2026-10-21T09:00:00.000Z"
+}
+```
+
+</Step>
+<Step>
+
+### Den TXT-Eintrag hinzufügen
+
+Füge bei deinem DNS-Anbieter einen TXT-Eintrag hinzu. Nutze `recordName` als Namen und `recordValue` als Wert.
+
+</Step>
+<Step>
+
+### Die Domain bestätigen
+
+```sh
+curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/organization/domains/example.com/verify
+```
+
+OpenBot sucht den TXT-Eintrag. Wenn er stimmt, enthält die Antwort eine Zeit in `verifiedAt`.
+Wenn OpenBot den Eintrag nicht findet, antwortet es mit `409` und `DomainNotVerified`. DNS-Änderungen können etwas dauern. Versuche es also später noch einmal.
+
+</Step>
+</Steps>
+
+Nur eine Organisation kann eine Domain bestätigen. Wenn eine andere Organisation sie zuerst bestätigt hat, antwortet OpenBot mit `409` und `DomainTaken`.
+
+`GET /v1/organization/domains` listet die Domains auf. `DELETE /v1/organization/domains/:domain` entfernt eine. Solange eine SSO-Verbindung die Domain nutzt, antwortet das Entfernen mit `409` und `DomainInUse`.
+
+### Beitritt über die Domain
+
+Eine bestätigte Domain bestimmt auch, wer der Organisation beitritt. Wenn `joinByDomain` in den [Einstellungen der Organisation](/de/docs/organization#einstellungen) `true` ist, tritt eine Person mit einer geprüften E-Mail in der Domain bei, wenn sie sich anmeldet. Sie bekommt die `defaultRoles` der Organisation. `joinByDomain` ist standardmäßig `true`.
+
+---
+
+## SSO-Verbindungen
+
+Eine SSO-Verbindung ist ein OpenID-Connect-Anbieter der Organisation. Sie meldet Menschen an, deren E-Mail zu ihren Domains gehört.
+
+### Einen Client registrieren
+
+Registriere OpenBot zuerst als Client bei deinem Anbieter. OpenBot fragt nach den Scopes `openid profile email`.
+Nachdem du die Verbindung erstellt hast, füge ihre `redirectUri` zu den erlaubten Redirect-URIs des Clients hinzu.
+
+### Eine Verbindung erstellen
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Example SSO",
+    "issuer": "https://login.example.com",
+    "clientId": "openbot",
+    "clientSecret": "your-client-secret",
+    "domains": ["example.com"],
+    "enforce": true
+  }' \
+  https://api.example.com/v1/organization/sso_connections
+```
+
+| Feld           | Regeln                                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `name`         | Pflicht. 1 bis 120 Zeichen.                                                                                              |
+| `issuer`       | Pflicht. Die HTTPS-Adresse des Anbieters, ohne Schrägstrich am Ende.                                                     |
+| `clientId`     | Pflicht. Die Client-ID vom Anbieter.                                                                                     |
+| `clientSecret` | Optional. Lass es bei einem öffentlichen Client weg. OpenBot nutzt dann PKCE, eine Prüfung, die den Anmeldecode schützt. |
+| `domains`      | Pflicht. 1 bis 50 bestätigte Domains der Organisation. Keine andere Verbindung darf sie nutzen.                          |
+| `enforce`      | Pflicht. Siehe [SSO erzwingen](#sso-erzwingen).                                                                          |
+
+```json
+{
+	"id": "sso_2b9c...",
+	"name": "Example SSO",
+	"issuer": "https://login.example.com",
+	"clientId": "openbot",
+	"clientSecret": { "set": true, "hint": "…cret" },
+	"domains": ["example.com"],
+	"enforce": true,
+	"redirectUri": "https://api.example.com/auth/callback/sso_2b9c...",
+	"version": 0,
+	"createdAt": "2026-10-21T09:00:00.000Z",
+	"updatedAt": "2026-10-21T09:00:00.000Z"
+}
+```
+
+Die `redirectUri` ist `<publicOrigin>/auth/callback/<connectionId>`. Registriere sie beim Anbieter.
+Das Client-Secret kommt nie zurück. Die Antwort zeigt stattdessen `{ set, hint }`. Siehe [Platform](/de/docs/platform#geheimnisse-kommen-nie-zurück).
+
+### Eine Verbindung ändern oder entfernen
+
+| Route                                                   | Was sie tut                  |
+| ------------------------------------------------------- | ---------------------------- |
+| `GET /v1/organization/sso_connections`                  | Listet die Verbindungen auf. |
+| `GET /v1/organization/sso_connections/:connectionId`    | Liest eine Verbindung.       |
+| `PATCH /v1/organization/sso_connections/:connectionId`  | Ändert eine Verbindung.      |
+| `DELETE /v1/organization/sso_connections/:connectionId` | Entfernt eine Verbindung.    |
+
+Der Body von `PATCH` braucht `expectedVersion`, also die `version`, die du gelesen hast. Wenn jemand die Verbindung nach deinem Lesen geändert hat, antwortet OpenBot mit `409` und `SsoConnectionConflict`.
+Bei `clientSecret` gilt: Lass es weg, um das aktuelle Secret zu behalten. Sende `null`, um einen öffentlichen Client daraus zu machen.
+
+Jede Instanz nutzt eine neue oder geänderte Verbindung sofort. Wenn eine Instanz die Änderungsmeldung verpasst, übernimmt sie die Änderung trotzdem innerhalb von 30 Sekunden.
+
+### SSO erzwingen
+
+Mit `enforce: true` müssen sich Menschen mit einer E-Mail in den Domains der Verbindung über diese Verbindung anmelden. Sie können den Platform-Anbieter nicht nutzen.
+Mit `enforce: false` können sie sich auch über den Platform-Anbieter anmelden.
+
+### Regeln
+
+- Eine Verbindung meldet nur Menschen an, deren E-Mail zu ihren eigenen Domains gehört.
+- Eine Person, die sich über eine Verbindung anmeldet, tritt deren Organisation bei. Das gilt auch, wenn `joinByDomain` `false` ist.
+- OpenBot verknüpft nie Konten. Jedes Konto hat genau einen Anmeldeanbieter. Wer sich also mit dem Platform-Anbieter und dann mit einer SSO-Verbindung anmeldet, bekommt zwei verschiedene Konten.
+
+---
+
+## Mit dem richtigen Anbieter anmelden
+
+`POST /auth/sign-in` startet eine Anmeldung im Browser. Es braucht keine Zugangsdaten. Es prüft den Header `Origin`, wie jeder Schreibzugriff mit Cookie. Siehe [Authentifizierung](/de/docs/authentication#die-origin-regel).
+
+```sh
+curl -X POST https://api.example.com/auth/sign-in \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"ada@example.com","returnTo":"/"}'
+```
+
+```json
+{ "url": "https://login.example.com/authorize?..." }
+```
+
+Beide Felder sind optional. OpenBot wählt den Anbieter so:
+
+1. Wenn die Domain von `email` eine SSO-Verbindung hat, führt die `url` zu dieser Verbindung.
+2. Sonst führt die `url` zum Platform-Anbieter.
+3. Wenn es keins von beiden gibt, antwortet OpenBot mit `503` und `SignInUnavailable`.
+
+Schick den Browser zu `url`. Die Antwort setzt auch das Cookie für den Anmeldestatus. Better Auth braucht es, um die Anmeldung abzuschließen. Nach der Anmeldung geht der Browser zu `returnTo`. Siehe [Rückkehrpfade](/de/docs/authentication#rückkehrpfade).
+
+---
+
+## Fehler
+
+| Status | Fehler                  | Wann                                                                                        |
+| ------ | ----------------------- | ------------------------------------------------------------------------------------------- |
+| `400`  | `SsoConnectionInvalid`  | Ein Wert ist ungültig, zum Beispiel eine Domain, die nicht bestätigt oder schon belegt ist. |
+| `403`  | `PermissionDenied`      | Der Aufrufer hat `sso.read` oder `sso.write` nicht.                                         |
+| `404`  | `DomainNotFound`        | Die Organisation hat keine solche Domain.                                                   |
+| `404`  | `SsoConnectionNotFound` | Die Organisation hat keine Verbindung mit dieser ID.                                        |
+| `409`  | `DomainNotVerified`     | OpenBot hat den TXT-Eintrag nicht gefunden.                                                 |
+| `409`  | `DomainTaken`           | Eine andere Organisation hat die Domain zuerst bestätigt.                                   |
+| `409`  | `DomainInUse`           | Eine SSO-Verbindung nutzt die Domain noch.                                                  |
+| `409`  | `SsoConnectionConflict` | Jemand hat die Verbindung geändert, nachdem du sie gelesen hast.                            |
+| `503`  | `SsoUnavailable`        | OpenBot erreicht seine Datenbank nicht.                                                     |
+
+Die vollständigen Formen findest du in der [SSO-Referenz](/docs/api/operations/tags/sso/).
