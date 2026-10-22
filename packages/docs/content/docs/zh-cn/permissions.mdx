@@ -23,37 +23,34 @@ description: 权限组、策略、角色和资源键。
 
 用 `GET /v1/organization/permission_groups` 列出权限组。
 
-| ID                      | 资源         | 允许什么                                                                 |
-| ----------------------- | ------------ | ------------------------------------------------------------------------ |
-| `responses.run`         | Session      | 在 Session 中启动、引导（steer）、排队（queue）和恢复工作。              |
-| `sessions.read`         | Session      | 读取 Sessions，以及它们的历史、记忆和委派。                              |
-| `sessions.write`        | Session      | 创建、修改、分叉、恢复、中断和删除 Sessions。                            |
-| `requests.resolve`      | Request      | 回答你的 Agents 对新能力提出的 request。                                 |
-| `agents.read`           | Agent        | 读取 Agents，以及它们的记忆、Rules 和 Grants。                           |
-| `agents.write`          | Agent        | 创建和修改 Agents，以及它们的记忆、Rules 和 Grants。                     |
-| `agents.delegate`       | Agent        | 从客户端或另一个 Agent，把工作交给某个 Agent。                           |
-| `workflows.read`        | Workflow     | 读取 Workflows，以及它们的 Runs、报告和记录下来的工具调用。              |
-| `workflows.write`       | Workflow     | 创建和修改 Workflows，以及它们的计划时间、webhook 和记录下来的工具调用。 |
-| `workflows.run`         | Workflow     | 从客户端或 Agent 启动和取消 Workflow 的 Runs。                           |
-| `connections.read`      | Connection   | 读取 App 连接和 App 账户。                                               |
-| `connections.write`     | Connection   | 创建、修改和删除 App 连接，并登录 App 账户。                             |
-| `apps.use`              | Apps         | 查找 Apps，并使用 App 操作和 App 视图。                                  |
-| `apps.publish`          | Apps         | 为你发布的 Apps 使用开发者工具。                                         |
-| `models.use`            | Model        | 为 Session 选择模型。                                                    |
-| `tokens.read`           | User         | 列出 API 令牌。                                                          |
-| `tokens.write`          | User         | 创建和撤销 API 令牌。                                                    |
-| `organization.read`     | Organization | 读取组织设置。                                                           |
-| `organization.write`    | Organization | 修改组织设置。                                                           |
-| `members.read`          | Organization | 列出成员、他们的角色和策略。                                             |
-| `members.write`         | Organization | 修改成员的角色、策略和状态，以及移除成员。                               |
-| `roles.write`           | Organization | 创建、修改和删除组织的自定义角色。                                       |
-| `model_providers.read`  | Organization | 读取组织的模型和模型提供方。密钥永远不会显示。                           |
-| `model_providers.write` | Organization | 添加、修改和移除组织的模型、模型提供方和密钥。                           |
-| `sso.read`              | Organization | 读取邮箱域名和 SSO 连接。                                                |
-| `sso.write`             | Organization | 添加和验证邮箱域名，以及修改 SSO 连接。                                  |
-| `audit_logs.read`       | Organization | 读取审计日志。                                                           |
-| `platform.read`         | Platform     | 读取平台设置、组织、管理员，以及共享的模型和模型提供方。                 |
-| `platform.write`        | Platform     | 修改平台设置、组织、管理员，以及共享的模型和模型提供方。                 |
+| ID                      | 资源         | 允许什么                                                    |
+| ----------------------- | ------------ | ----------------------------------------------------------- |
+| `responses.run`         | Session      | 在 Session 中启动、引导（steer）、排队（queue）和恢复工作。 |
+| `sessions.read`         | Session      | 读取 Sessions，以及它们的历史、记忆和委派。                 |
+| `sessions.write`        | Session      | 创建、修改、分叉、恢复、中断和删除 Sessions。               |
+| `requests.resolve`      | Request      | 回答你的 Agents 对新能力提出的 request。                    |
+| `agents.read`           | Agent        | 读取 Agents，以及它们的记忆、Rules 和 Grants。              |
+| `agents.write`          | Agent        | 创建和修改 Agents，以及它们的记忆、Rules 和 Grants。        |
+| `agents.delegate`       | Agent        | 从客户端或另一个 Agent，把工作交给某个 Agent。              |
+| `connections.read`      | Connection   | 读取 App 连接和 App 账户。                                  |
+| `connections.write`     | Connection   | 创建、修改和删除 App 连接，并登录 App 账户。                |
+| `apps.use`              | Apps         | 查找 Apps，并使用 App 操作和 App 视图。                     |
+| `apps.publish`          | Apps         | 为你发布的 Apps 使用开发者工具。                            |
+| `models.use`            | Model        | 为 Session 选择模型。                                       |
+| `tokens.read`           | User         | 列出 API 令牌。                                             |
+| `tokens.write`          | User         | 创建和撤销 API 令牌。                                       |
+| `organization.read`     | Organization | 读取组织设置。                                              |
+| `organization.write`    | Organization | 修改组织设置。                                              |
+| `members.read`          | Organization | 列出成员、他们的角色和策略。                                |
+| `members.write`         | Organization | 修改成员的角色、策略和状态，以及移除成员。                  |
+| `roles.write`           | Organization | 创建、修改和删除组织的自定义角色。                          |
+| `model_providers.read`  | Organization | 读取组织的模型和模型提供方。密钥永远不会显示。              |
+| `model_providers.write` | Organization | 添加、修改和移除组织的模型、模型提供方和密钥。              |
+| `sso.read`              | Organization | 读取邮箱域名和 SSO 连接。                                   |
+| `sso.write`             | Organization | 添加和验证邮箱域名，以及修改 SSO 连接。                     |
+| `audit_logs.read`       | Organization | 读取审计日志。                                              |
+| `platform.read`         | Platform     | 读取平台设置、组织、管理员，以及共享的模型和模型提供方。    |
+| `platform.write`        | Platform     | 修改平台设置、组织、管理员，以及共享的模型和模型提供方。    |
 
 `organization.read` 和 `organization.write` 也涵盖 [组织设置](/zh-cn/docs/organization#设置)。
 `platform.read` 和 `platform.write` 只对资源 `openbot.platform` 有效，并且只对平台管理员有效。见 [平台权限组](#平台权限组)。
@@ -66,22 +63,20 @@ description: 权限组、策略、角色和资源键。
 
 资源键是一个名字，由点分隔成几个部分：
 
-| 资源                | 键                                                      |
-| ------------------- | ------------------------------------------------------- |
-| 组织                | `openbot.org.<org>`                                     |
-| 一个成员            | `openbot.org.<org>.user.<user>`                         |
-| 一个 Session        | `openbot.org.<org>.user.<user>.session.<session>`       |
-| 成员的一个 Agent    | `openbot.org.<org>.user.<user>.agent.<agent>`           |
-| 一个共享的 Agent    | `openbot.org.<org>.agent.<agent>`                       |
-| 成员的一个 Workflow | `openbot.org.<org>.user.<user>.workflow.<workflow>`     |
-| 一个共享的 Workflow | `openbot.org.<org>.workflow.<workflow>`                 |
-| 成员的 requests     | `openbot.org.<org>.user.<user>.request`                 |
-| 一个连接            | `openbot.org.<org>.user.<user>.connection.<connection>` |
-| 成员的 Apps         | `openbot.org.<org>.user.<user>.apps`                    |
-| 一个模型提供方      | `openbot.org.<org>.model.<provider>`                    |
-| 整个平台            | `openbot.platform`                                      |
+| 资源             | 键                                                      |
+| ---------------- | ------------------------------------------------------- |
+| 组织             | `openbot.org.<org>`                                     |
+| 一个成员         | `openbot.org.<org>.user.<user>`                         |
+| 一个 Session     | `openbot.org.<org>.user.<user>.session.<session>`       |
+| 成员的一个 Agent | `openbot.org.<org>.user.<user>.agent.<agent>`           |
+| 一个共享的 Agent | `openbot.org.<org>.agent.<agent>`                       |
+| 成员的 requests  | `openbot.org.<org>.user.<user>.request`                 |
+| 一个连接         | `openbot.org.<org>.user.<user>.connection.<connection>` |
+| 成员的 Apps      | `openbot.org.<org>.user.<user>.apps`                    |
+| 一个模型提供方   | `openbot.org.<org>.model.<provider>`                    |
+| 整个平台         | `openbot.platform`                                      |
 
-由另一个 Agent 拥有的 Agent，使用其所有者树最顶层的成员或组织的键。所以 `openbot.org.<org>.user.<user>.agent.<agent>` 也是该成员的 Main Agent 所拥有的 Agent 的键。当一个 Agent 创建或提升另一个 Agent 时，它所服务的成员需要在那个位置上拥有 `agents.write`。由 Agent 拥有的 Workflow 也在同一个位置，只是把 `agent` 换成 `workflow`。成员的 Runs 位于 `openbot.org.<org>.user.<user>.workflow` 之下。
+由另一个 Agent 拥有的 Agent，使用其所有者树最顶层的成员或组织的键。所以 `openbot.org.<org>.user.<user>.agent.<agent>` 也是该成员的 Main Agent 所拥有的 Agent 的键。当一个 Agent 创建或提升另一个 Agent 时，它所服务的成员需要在那个位置上拥有 `agents.write`。
 
 一个键涵盖它自己，以及它下面的所有键。所以 `openbot.org.<org>` 涵盖组织中的一切，`openbot.org.<org>.user.<user>` 涵盖一个成员的一切。
 
@@ -177,13 +172,13 @@ curl -b cookies.txt \
 
 每个组织都有这些角色。它们不能修改。修改会返回 `409` 和 `RoleReadOnly`。
 
-| 角色                      | 能做什么                                                                                                      |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `super_administrator`     | 组织中的一切。只有 Super Administrator 能给出或拿走这个角色。                                                 |
-| `administrator`           | 管理组织、成员、共享的 Agents 和共享的 Workflows，并读取审计日志。只能操作自己的 Sessions 和连接。            |
-| `administrator_read_only` | 读取组织、成员和审计日志，并使用共享的 Agents 和 Workflows。只能操作自己的 Sessions 和连接。                  |
-| `member`                  | 操作自己的 Agents、Sessions、Workflows、连接和令牌，使用组织共享的 Agents、Workflows 和模型，并读取组织设置。 |
-| `auditor`                 | 读取组织、成员和审计日志。不能做其他事。                                                                      |
+| 角色                      | 能做什么                                                                                |
+| ------------------------- | --------------------------------------------------------------------------------------- |
+| `super_administrator`     | 组织中的一切。只有 Super Administrator 能给出或拿走这个角色。                           |
+| `administrator`           | 管理组织、成员和共享的 Agents，并读取审计日志。只能操作自己的 Sessions 和连接。         |
+| `administrator_read_only` | 读取组织、成员和审计日志，并使用共享的 Agents。只能操作自己的 Sessions 和连接。         |
+| `member`                  | 操作自己的 Agents、Sessions、连接和令牌，使用组织共享的 Agents 和模型，并读取组织设置。 |
+| `auditor`                 | 读取组织、成员和审计日志。不能做其他事。                                                |
 
 一些内置角色还拥有角色、模型提供方和 SSO 相关的权限组：
 

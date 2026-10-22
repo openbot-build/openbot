@@ -32,9 +32,6 @@ Liste sie mit `GET /v1/organization/permission_groups` auf.
 | `agents.read`           | Agent        | Agents lesen, mit ihrem Memory, ihren Rules und Grants.                                               |
 | `agents.write`          | Agent        | Agents erstellen und ändern, mit ihrem Memory, ihren Rules und Grants.                                |
 | `agents.delegate`       | Agent        | Einem Agent Arbeit geben, von einem Client oder von einem anderen Agent aus.                          |
-| `workflows.read`        | Workflow     | Workflows lesen, mit ihren Runs, Berichten und aufgezeichneten Werkzeugaufrufen.                      |
-| `workflows.write`       | Workflow     | Workflows erstellen und ändern, mit ihren Zeitplänen, Webhooks und aufgezeichneten Werkzeugaufrufen.  |
-| `workflows.run`         | Workflow     | Runs eines Workflows starten und abbrechen, von einem Client oder von einem Agent aus.                |
 | `connections.read`      | Connection   | App-Verbindungen und App-Konten lesen.                                                                |
 | `connections.write`     | Connection   | App-Verbindungen erstellen, ändern und löschen, und sich bei App-Konten anmelden.                     |
 | `apps.use`              | Apps         | Apps finden und App-Operationen und App-Ansichten nutzen.                                             |
@@ -73,15 +70,13 @@ Ein Ressourcen-Schlüssel ist ein Name aus Teilen, die durch Punkte getrennt sin
 | Eine Session               | `openbot.org.<org>.user.<user>.session.<session>`       |
 | Ein Agent eines Members    | `openbot.org.<org>.user.<user>.agent.<agent>`           |
 | Ein gemeinsamer Agent      | `openbot.org.<org>.agent.<agent>`                       |
-| Ein Workflow eines Members | `openbot.org.<org>.user.<user>.workflow.<workflow>`     |
-| Ein gemeinsamer Workflow   | `openbot.org.<org>.workflow.<workflow>`                 |
 | Die Requests eines Members | `openbot.org.<org>.user.<user>.request`                 |
 | Eine Verbindung            | `openbot.org.<org>.user.<user>.connection.<connection>` |
 | Die Apps eines Members     | `openbot.org.<org>.user.<user>.apps`                    |
 | Ein Model Provider         | `openbot.org.<org>.model.<provider>`                    |
 | Die ganze Platform         | `openbot.platform`                                      |
 
-Ein Agent, der einem anderen Agent gehört, hat den Schlüssel des Members oder der Organisation an der Spitze seines Besitzer-Baums. `openbot.org.<org>.user.<user>.agent.<agent>` ist also auch der Schlüssel eines Agents, der dem Main Agent dieses Members gehört. Wenn ein Agent einen Agent erstellt oder dauerhaft macht, braucht das Member, für das er arbeitet, `agents.write` an dieser Stelle. Ein Workflow, der einem Agent gehört, liegt an derselben Stelle, mit `workflow` statt `agent`. Die Runs eines Members liegen unter `openbot.org.<org>.user.<user>.workflow`.
+Ein Agent, der einem anderen Agent gehört, hat den Schlüssel des Members oder der Organisation an der Spitze seines Besitzer-Baums. `openbot.org.<org>.user.<user>.agent.<agent>` ist also auch der Schlüssel eines Agents, der dem Main Agent dieses Members gehört. Wenn ein Agent einen Agent erstellt oder dauerhaft macht, braucht das Member, für das er arbeitet, `agents.write` an dieser Stelle.
 
 Ein Schlüssel gilt für sich selbst und für jeden Schlüssel darunter. `openbot.org.<org>` gilt also für alles in der Organisation, und `openbot.org.<org>.user.<user>` gilt für alles eines Members.
 
@@ -177,13 +172,13 @@ Liste sie mit `GET /v1/organization/roles` auf. Die Liste enthält die eingebaut
 
 Jede Organisation hat diese Roles. Sie lassen sich nicht ändern. Eine Änderung ergibt `409` mit `RoleReadOnly`.
 
-| Role                      | Was sie kann                                                                                                                                                                      |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `super_administrator`     | Alles in der Organisation. Nur ein Super Administrator kann diese Role geben oder wegnehmen.                                                                                      |
-| `administrator`           | Die Organisation, ihre Members, ihre gemeinsamen Agents und ihre gemeinsamen Workflows verwalten und das Audit-Log lesen. Nur mit den eigenen Sessions und Verbindungen arbeiten. |
-| `administrator_read_only` | Die Organisation, ihre Members und das Audit-Log lesen und die gemeinsamen Agents und Workflows nutzen. Nur mit den eigenen Sessions und Verbindungen arbeiten.                   |
-| `member`                  | Mit den eigenen Agents, Sessions, Workflows, Verbindungen und Tokens arbeiten, die gemeinsamen Agents, Workflows und Models der Organisation nutzen und ihre Einstellungen lesen. |
-| `auditor`                 | Die Organisation, ihre Members und das Audit-Log lesen. Sonst nichts.                                                                                                             |
+| Role                      | Was sie kann                                                                                                                                                |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `super_administrator`     | Alles in der Organisation. Nur ein Super Administrator kann diese Role geben oder wegnehmen.                                                                |
+| `administrator`           | Die Organisation, ihre Members und ihre gemeinsamen Agents verwalten und das Audit-Log lesen. Nur mit den eigenen Sessions und Verbindungen arbeiten.       |
+| `administrator_read_only` | Die Organisation, ihre Members und das Audit-Log lesen und die gemeinsamen Agents nutzen. Nur mit den eigenen Sessions und Verbindungen arbeiten.           |
+| `member`                  | Mit den eigenen Agents, Sessions, Verbindungen und Tokens arbeiten, die gemeinsamen Agents und Models der Organisation nutzen und ihre Einstellungen lesen. |
+| `auditor`                 | Die Organisation, ihre Members und das Audit-Log lesen. Sonst nichts.                                                                                       |
 
 Einige eingebaute Roles haben auch die Gruppen für Roles, Model Providers und SSO:
 

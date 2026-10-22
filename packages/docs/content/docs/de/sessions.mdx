@@ -54,7 +54,7 @@ OpenBot antwortet mit `201` und der Ansicht der Session. Hier ist eine kurze For
 }
 ```
 
-`agent` ist der Agent der Session. `kind` ist `direct` für Arbeit, die ein Client gestartet hat, `delegated` für Arbeit, die ein anderer Agent abgegeben hat, `review` für eine Session, in der ein Agent über einen [Request](/de/docs/requests) entscheidet, und `workflow` für eine Session, in der ein Agent die Nodes eines [Workflow-Runs](/de/docs/workflows) erledigt. `parent` nennt die Session, den Turn und den Werkzeugaufruf, die abgegebene Arbeit gestartet haben. Siehe [Delegation](/de/docs/delegation).
+`agent` ist der Agent der Session. `kind` ist `direct` für Arbeit, die ein Client gestartet hat, `delegated` für Arbeit, die ein anderer Agent abgegeben hat und `review` für eine Session, in der ein Agent über einen [Request](/de/docs/requests) entscheidet. `parent` nennt die Session, den Turn und den Werkzeugaufruf, die abgegebene Arbeit gestartet haben. Siehe [Delegation](/de/docs/delegation).
 
 `response` ist die Antwort des neuesten Turns. `activity` ist `active`, solange ein Turn auf diesem Server läuft, `inactive`, wenn nichts läuft, und `historical`, wenn ein gespeicherter Turn sagt, dass er läuft, aber kein Server ihn ausführt.
 

@@ -10,17 +10,14 @@ Agent 不知道自己有什么限制。当 Agent 尝试使用一项**能力**（
 
 ## 能力
 
-| 动作               | 目标                       | Agent 何时使用                                         |
-| ------------------ | -------------------------- | ------------------------------------------------------ |
-| `apps.call`        | `<connection>/<tool name>` | 调用 App 工具时。                                      |
-| `tools.call`       | 工具名称                   | 调用一个需要批准的宿主工具时。                         |
-| `agents.delegate`  | 另一个 Agent 的 ID         | 把工作交给另一个长期存在的 Agent 时。                  |
-| `agents.spawn`     | `*`                        | 启动一个 Session Agent 时。                            |
-| `agents.create`    | `*`                        | 创建一个归它所有的长期 Agent 时。                      |
-| `agents.promote`   | Session Agent 的 ID        | 把一个 Session Agent 变成归它所有的长期 Agent 时。     |
-| `workflows.run`    | Workflow 的 ID             | 启动一个 [Workflow](/zh-cn/docs/workflows) 的 Run 时。 |
-| `workflows.edit`   | Workflow 的 ID             | 向一个不归它所有的 Workflow 写入新计划时。             |
-| `workflows.budget` | Workflow 的 ID             | Workflow 的某个 Goal 节点用完了 token 预算，想继续时。 |
+| 动作              | 目标                       | Agent 何时使用                                     |
+| ----------------- | -------------------------- | -------------------------------------------------- |
+| `apps.call`       | `<connection>/<tool name>` | 调用 App 工具时。                                  |
+| `tools.call`      | 工具名称                   | 调用一个需要批准的宿主工具时。                     |
+| `agents.delegate` | 另一个 Agent 的 ID         | 把工作交给另一个长期存在的 Agent 时。              |
+| `agents.spawn`    | `*`                        | 启动一个 Session Agent 时。                        |
+| `agents.create`   | `*`                        | 创建一个归它所有的长期 Agent 时。                  |
+| `agents.promote`  | Session Agent 的 ID        | 把一个 Session Agent 变成归它所有的长期 Agent 时。 |
 
 每个能力工具都接受一个 `reason`（理由）。App 工具会多一个 `openbot_reason` 参数来传理由。OpenBot 不会把它发给 App。
 

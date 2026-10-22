@@ -101,11 +101,6 @@ export const CapabilityAction = Schema.Literals([
 	"agents.create",
 	"agents.promote",
 	"agents.delegate",
-	"workflows.run",
-	/** Change a Workflow that the Agent does not own, for example with a new plan. */
-	"workflows.edit",
-	/** Let a Goal node go on after it used its token budget. */
-	"workflows.budget",
 ])
 export type CapabilityAction = typeof CapabilityAction.Type
 export const Capability = Schema.Struct({

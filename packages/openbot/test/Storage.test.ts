@@ -41,15 +41,6 @@ const definedTables = [
 ]
 	.flatMap((value) => (is(value, Table) ? [getTableName(value)] : []))
 	.sort()
-/** The tables of the durable execution of Workflow Runs. Effect defines them, not Drizzle. */
-const clusterTables = [
-	"locks",
-	"messages",
-	"migrations",
-	"replies",
-	"runner_migrations",
-	"runners",
-].map((name) => Migration.clusterPrefix + "_" + name)
 
 test(
 	"PostgreSQL saves independent Session revisions and immutable Timeline versions in one step within each namespace",
@@ -212,7 +203,7 @@ test(
 					}>`SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'`)
 						.map((row) => row.tablename)
 						.sort()
-					assert.deepEqual(tables, [...definedTables, ...clusterTables].sort())
+					assert.deepEqual(tables, definedTables)
 				}),
 			)
 		} finally {

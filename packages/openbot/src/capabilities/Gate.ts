@@ -1,6 +1,6 @@
 import type { Session } from "@openbot-build/core"
 import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
-import type { AgentsApi, AppExecution, WorkflowsApi } from "@openbot-build/api"
+import type { AgentsApi, AppExecution } from "@openbot-build/api"
 import { Context, Effect, Layer, Option } from "effect"
 import { can } from "../authorization/Check.ts"
 import { Signal, Signals } from "../agents/Signals.ts"
@@ -21,8 +21,6 @@ export interface Attempt {
 	readonly toolCallId: string
 	/** The target Agent, for actions on an Agent. */
 	readonly target?: AgentsApi.Agent
-	/** The target Workflow, for actions on a Workflow. */
-	readonly workflow?: Pick<WorkflowsApi.Workflow, "id" | "owner">
 	/** The deployment owner allows this without asking, for example a read-only App tool. */
 	readonly implicit?: boolean
 	readonly app?: AppExecution.Invocation
@@ -148,9 +146,6 @@ export const make: Effect.Effect<
 				session: current.session,
 				self: current.agent,
 				...(attempt.target === undefined ? {} : { agent: attempt.target }),
-				...(attempt.workflow === undefined
-					? {}
-					: { workflow: attempt.workflow }),
 			})
 			const member = yield* can({
 				caller: current.caller,

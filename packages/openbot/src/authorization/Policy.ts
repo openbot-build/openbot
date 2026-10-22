@@ -1,8 +1,4 @@
-import {
-	type AgentsApi,
-	Permissions,
-	type WorkflowsApi,
-} from "@openbot-build/api"
+import { type AgentsApi, Permissions } from "@openbot-build/api"
 import { Option } from "effect"
 
 type PermissionGroupId = Permissions.PermissionGroupId
@@ -48,10 +44,8 @@ export const resourceKey = (target: {
 		case "connection":
 		case "request":
 			return child(userKey(subject))
-		// The key of one Agent or Workflow depends on its owner.
-		// Use agentKey or workflowKey when the Agent or Workflow is known.
+		// The key of one Agent depends on its owner. Use agentKey when the Agent is known.
 		case "agent":
-		case "workflow":
 		case "model":
 			return child(organizationKey(subject.organizationId))
 	}
@@ -99,34 +93,6 @@ export const agentKey = (agent: {
 	}) +
 	"." +
 	segment(agent.id)
-
-/**
- * The place for the Workflows of a member, or for shared Workflows when `root` is `null`.
- * A Workflow of an Agent is below the member at the top of the owner tree of that Agent.
- */
-export const workflowPlace = ({
-	organizationId,
-	root,
-}: {
-	readonly organizationId: string
-	readonly root: string | null
-}) =>
-	(root === null
-		? organizationKey(organizationId)
-		: userKey({ organizationId, userId: root })) + ".workflow"
-
-/** The key of one Workflow. */
-export const workflowKey = (workflow: {
-	readonly organizationId: string
-	readonly id: string
-	readonly owner: WorkflowsApi.WorkflowOwner
-}) =>
-	workflowPlace({
-		organizationId: workflow.organizationId,
-		root: workflow.owner._tag === "Organization" ? null : workflow.owner.userId,
-	}) +
-	"." +
-	segment(workflow.id)
 
 /** Put the organization and the user of the caller into a resource pattern. */
 export const expand = ({

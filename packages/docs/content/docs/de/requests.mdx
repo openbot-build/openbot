@@ -10,17 +10,14 @@ Diese Seite zeigt dir, wie die Prüfung abläuft, wie eine Person Requests beant
 
 ## Fähigkeiten
 
-| Aktion             | Ziel                       | Wann ein Agent sie nutzt                                                           |
-| ------------------ | -------------------------- | ---------------------------------------------------------------------------------- |
-| `apps.call`        | `<connection>/<tool name>` | Er ruft ein Tool einer App auf.                                                    |
-| `tools.call`       | Der Name des Tools         | Er ruft ein Tool des Hosts auf, das um Erlaubnis fragt.                            |
-| `agents.delegate`  | Die ID des anderen Agent   | Er gibt Arbeit an einen anderen dauerhaften Agent.                                 |
-| `agents.spawn`     | `*`                        | Er startet einen Session Agent.                                                    |
-| `agents.create`    | `*`                        | Er erstellt einen dauerhaften Agent, der ihm gehört.                               |
-| `agents.promote`   | Die ID des Session Agent   | Er macht aus einem Session Agent einen dauerhaften Agent, der ihm gehört.          |
-| `workflows.run`    | Die ID des Workflow        | Er startet einen Run eines [Workflow](/de/docs/workflows).                         |
-| `workflows.edit`   | Die ID des Workflow        | Er schreibt einen neuen Plan in einen Workflow, der ihm nicht gehört.              |
-| `workflows.budget` | Die ID des Workflow        | Ein Goal-Node des Workflow hat sein Token-Budget verbraucht und will weitermachen. |
+| Aktion            | Ziel                       | Wann ein Agent sie nutzt                                                  |
+| ----------------- | -------------------------- | ------------------------------------------------------------------------- |
+| `apps.call`       | `<connection>/<tool name>` | Er ruft ein Tool einer App auf.                                           |
+| `tools.call`      | Der Name des Tools         | Er ruft ein Tool des Hosts auf, das um Erlaubnis fragt.                   |
+| `agents.delegate` | Die ID des anderen Agent   | Er gibt Arbeit an einen anderen dauerhaften Agent.                        |
+| `agents.spawn`    | `*`                        | Er startet einen Session Agent.                                           |
+| `agents.create`   | `*`                        | Er erstellt einen dauerhaften Agent, der ihm gehört.                      |
+| `agents.promote`  | Die ID des Session Agent   | Er macht aus einem Session Agent einen dauerhaften Agent, der ihm gehört. |
 
 Jedes Tool für eine Fähigkeit nimmt einen `reason` (einen Grund). Tools einer App bekommen dafür einen zusätzlichen Parameter `openbot_reason`. OpenBot schickt ihn nie an die App.
 

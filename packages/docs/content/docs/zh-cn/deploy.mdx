@@ -78,7 +78,7 @@ docker run --rm --env-file openbot.env \
   openbot:$OPENBOT_RELEASE /app/dist/app/Migrate.mjs
 ```
 
-多次运行它是安全的。它只应用数据库还没有的迁移。它还会创建前缀为 `openbot_cluster_` 的表。这些表保存 [Workflow Run](/zh-cn/docs/workflows) 的持久状态，所以 Run 在重启后可以继续。
+多次运行它是安全的。它只应用数据库还没有的迁移。
 迁移只能向前。没有办法撤销迁移，所以请先做备份。
 
 </Step>

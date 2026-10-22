@@ -208,14 +208,8 @@ export const SessionResponseSseEvent: Schema.Codec<
 /**
  * Why a Session exists. A direct Session is work that a client started.
  * A delegated Session is work that another Agent gave. A review Session decides one request.
- * A workflow Session is where an Agent does the steps of one Workflow Run.
  */
-export const SessionKind = Schema.Literals([
-	"direct",
-	"delegated",
-	"review",
-	"workflow",
-])
+export const SessionKind = Schema.Literals(["direct", "delegated", "review"])
 export type SessionKind = typeof SessionKind.Type
 /** The tool call in another Session that started this Session. */
 export const SessionParent = Schema.Struct({

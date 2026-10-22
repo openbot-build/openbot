@@ -32,8 +32,6 @@ import { ResolvedConfiguration } from "../auth/Configuration.js"
 import * as BackendLayers from "./BackendLayers.ts"
 import * as AgentLayers from "../agents/AgentLayers.ts"
 import * as Coordinator from "../agents/Coordinator.ts"
-import * as WorkflowLayers from "../workflows/WorkflowLayers.ts"
-import type * as WorkflowWorker from "../workflows/Worker.ts"
 import * as Judge from "../capabilities/Judge.ts"
 import * as Sessions from "../sessions/Sessions.ts"
 import { Config } from "@openbot-build/core"
@@ -84,7 +82,6 @@ export interface Options<
 	 * the model providers that the API stores.
 	 */
 	readonly builtinModels?: ModelRegistry.Builtin
-	readonly workflows?: WorkflowWorker.Options
 }
 
 /**
@@ -301,7 +298,6 @@ export const layer = <
 		),
 	).pipe(
 		Layer.provideMerge(apps),
-		Layer.provideMerge(WorkflowLayers.layerServices),
 		Layer.provideMerge(agents),
 		Layer.provideMerge(index),
 		Layer.provideMerge(Governance.layer),
@@ -332,6 +328,5 @@ export const layer = <
 		AppExperience.layer,
 		developer,
 		Coordinator.layer,
-		WorkflowLayers.layerWorkers(options.workflows),
 	).pipe(Layer.provideMerge(base))
 }

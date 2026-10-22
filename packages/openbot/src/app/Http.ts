@@ -12,7 +12,6 @@ import * as ConnectionHandlers from "../apps/ConnectionHttpHandlers.ts"
 import * as SessionHandlers from "../sessions/SessionHandlers.ts"
 import * as AgentHandlers from "../agents/HttpHandlers.ts"
 import * as RequestHandlers from "../capabilities/HttpHandlers.ts"
-import * as WorkflowHandlers from "../workflows/HttpHandlers.ts"
 import * as OrganizationHandlers from "../organization/HttpHandlers.ts"
 import * as ModelProviderHandlers from "../models/HttpHandlers.ts"
 import * as PlatformHandlers from "../platform/HttpHandlers.ts"
@@ -40,8 +39,6 @@ export const layerPlatform = (publicOrigin: string) =>
 					ConnectionHandlers.layer,
 					SessionHandlers.layerPlatform,
 					AgentHandlers.layer,
-					WorkflowHandlers.layer(publicOrigin),
-					WorkflowHandlers.layerHooks,
 					RequestHandlers.layer,
 					OrganizationHandlers.layer,
 					ModelProviderHandlers.layer,

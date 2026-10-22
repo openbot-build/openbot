@@ -38,16 +38,6 @@ const groups = [
 	],
 	["sessions", "Sessions", "Give work to an Agent in Sessions and Turns."],
 	[
-		"workflows",
-		"Workflows",
-		"Make Workflows, start Runs, and read their reports.",
-	],
-	[
-		"workflowHooks",
-		"Workflow webhooks",
-		"Start a Run from another system with a webhook secret.",
-	],
-	[
 		"requests",
 		"Requests",
 		"Answer the requests of your Agents for new capabilities.",
