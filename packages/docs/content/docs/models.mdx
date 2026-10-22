@@ -229,7 +229,10 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H "Content-Type: applic
 
 `GET /v1/organization/model_catalog` shows the setting as `decisionModel`.
 
-OpenBot only stores this setting for now. No part of OpenBot asks the decision model yet.
+OpenBot calls a `typesafe` provider with the TypeSafe client of Effect (`@effect/ai-typesafe`). It sends each request to `<endpoint>/systemone` with the API key as a bearer token, and sends `upstream` as the model name. OpenBot builds the client once for each provider and model, and builds it again when the provider changes.
+OpenBot cannot ask a decision model through an `openai-compat` provider yet. You can link one there, but use a `typesafe` provider to ask it.
+
+No part of OpenBot asks the decision model yet.
 
 ## Run without a model
 

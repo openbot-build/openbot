@@ -157,6 +157,7 @@ export const layerUnusedPlatform = Layer.mergeAll(
 		defaultSelection: () => Effect.die("unused"),
 		resolve: () => Effect.die("unused"),
 		helper: () => Effect.die("unused"),
+		decision: () => Effect.die("unused"),
 	}),
 	Layer.succeed(Sso, {
 		listDomains: () => Effect.die("unused"),

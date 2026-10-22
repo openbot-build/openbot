@@ -116,6 +116,9 @@ importers:
       "@effect/ai-openai-compat":
         specifier: 4.0.5
         version: 4.0.5(effect@4.0.5)
+      "@effect/ai-typesafe":
+        specifier: 4.0.5
+        version: 4.0.5(effect@4.0.5)
       "@effect/platform-node":
         specifier: 4.0.5
         version: 4.0.5(effect@4.0.5)(redis@6.3.0)
@@ -715,6 +718,14 @@ packages:
     resolution:
       {
         integrity: sha512-xJGqOXR10BdLIk3X5rPA8/cXbk7hyvygPK2xjplkc1LxI2VT2wspTT7Nt+BlcN9+REzHM10ve0bbNbk5GIJKuw==,
+      }
+    peerDependencies:
+      effect: ^4.0.5
+
+  "@effect/ai-typesafe@4.0.5":
+    resolution:
+      {
+        integrity: sha512-MyYYzocm5c1JOnpBdu0ZJt4ZrOzfv75NsjqEGnj9gzJPs+oxbkAydIcrSqXSn+2TibvdxszL1bnXTNH2hLhiAg==,
       }
     peerDependencies:
       effect: ^4.0.5
@@ -6412,6 +6423,10 @@ snapshots:
       effect: 4.0.5
 
   "@effect/ai-openai@4.0.5(effect@4.0.5)":
+    dependencies:
+      effect: 4.0.5
+
+  "@effect/ai-typesafe@4.0.5(effect@4.0.5)":
     dependencies:
       effect: 4.0.5
 
