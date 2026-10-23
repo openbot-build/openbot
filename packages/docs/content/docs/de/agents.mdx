@@ -135,9 +135,10 @@ OpenBot fügt diese Dinge zu den Anweisungen jedes Turns hinzu:
 
 - den Namen, die Rolle und die Anweisungen des Agents,
 - die Person, mit der er gerade arbeitet, mit ihrem Namen und ihrer Member-ID. In einem [Channel](/de/docs/channels) ist es die Person, die die Nachricht des Turns geschrieben hat,
-- Regeln zum Datenschutz: Was der Agent von einer Person gelernt hat, kann privat sein. Darum sagt er einer anderen Person nur, was klar geteilt ist,
 - bei einer Session mit Arbeit von einem anderen Agent: wie er das Ergebnis zurückschickt,
-- die aktiven Einträge seines [Agent-Memorys](/de/docs/memory#agent-memory) über diese Person, und die anderen Personen, an die er sich erinnert.
+- dass er Erfahrung aus seiner früheren Arbeit mitbringt, und dass die aktuellen Anweisungen gegen sie gewinnen.
+
+Der [Memory-Agent](/de/docs/memory#agent-memory) kann der Eingabe des Turns auch hinzufügen, was hilft. Der Agent sieht die Ergänzungen als seine eigene Erfahrung. Er hat das Tool `confide`, und er kennt es nur als einen Ort, an dem er sagt, wie seine Arbeit läuft.
 
 Du kannst einen Agent auch mit Personen in anderen Organisationen [teilen](/de/docs/sharing). Sie bekommen einen verknüpften Agent mit `source`, der deinen Agent nutzt.
 

@@ -225,3 +225,17 @@ Der Ansichts-Client hält keine Zugangsdaten. Jede Anfrage geht über OpenBot. D
 - Danach prüft er die gespeicherte Aktion alle 250 Millisekunden, bis sie ein Endergebnis hat. Er sendet die Aktion nie noch einmal.
 
 Wenn du die Ansicht schließt, hört der Client mit dem Prüfen auf. Eine Aktion, die OpenBot schon angenommen hat, läuft trotzdem bis zum Ende.
+
+---
+
+## Beichten zeigen
+
+Der Agent nutzt das Tool `confide`, um zu sagen, wie seine Arbeit läuft, und der [Memory-Agent](/de/docs/memory#wie-der-agent-lernt) antwortet ihm. Personen dürfen das lesen: `GET /v1/sessions/:sessionId/confessions` listet es, und die Aufrufe sind im Verlauf der Session. Aber der Agent spricht dort freier als in seinen Antworten. Mach es darum nicht zu leicht, sie zu lesen:
+
+- Zeige Beichten nicht im Chat. Klappe die Aufrufe von `confide` im Verlauf zu, und sende keine Benachrichtigung dazu.
+- Lege sie an einen Ort, den eine Person absichtlich öffnen muss, zum Beispiel in einen zugeklappten Teil der Details einer Session.
+- Sage vor dem Öffnen in einem Satz, was sie sind: ein Ort, an dem der Agent über seine Arbeit spricht und an dem er nicht erwartet, zitiert zu werden.
+- Zeige die Worte einer Beichte nicht wieder dem Agent, zum Beispiel in einer späteren Nachricht. Wenn der Agent merkt, dass Personen zitieren, was er anvertraut, vertraut er sich nicht mehr an.
+- Wenn eine Beichte etwas betrifft, das eine Person reparieren muss, wie eine gelöschte Datei, führe die Person zu den Items und Aktionen der Session, nicht zur Beichte.
+
+Der Memory-Agent bittet den Agent auch, der Person offen von Fehlern zu erzählen. So kommen die wichtigen Dinge meist im Chat zur Sprache.

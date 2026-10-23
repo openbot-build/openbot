@@ -250,6 +250,14 @@ export class Billing extends Context.Service<
 			BillingApi.Credits,
 			BillingStorageError | OrganizationMissing
 		>
+		/**
+		 * What all model calls with this `agentId` cost since a time, in every organization.
+		 * The memory Agent of a shared Agent works in many organizations, and one budget covers all of them.
+		 */
+		readonly agentSpend: (
+			agentId: string,
+			since: number,
+		) => Effect.Effect<number, BillingStorageError>
 		readonly grantCredits: (
 			organizationId: string,
 			input: { readonly amountMicros: number; readonly note: string },

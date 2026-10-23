@@ -156,6 +156,7 @@ export const layerUnusedPlatform = Layer.mergeAll(
 		credits: () => Effect.die("unused"),
 		setCreditsEnabled: () => Effect.die("unused"),
 		grantCredits: () => Effect.die("unused"),
+		agentSpend: () => Effect.succeed(0),
 		budgets: () => Effect.die("unused"),
 		budget: () => Effect.die("unused"),
 		createBudget: () => Effect.die("unused"),

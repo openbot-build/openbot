@@ -12,6 +12,7 @@ import { Backend } from "../app/Backend.ts"
 import { Agents } from "../agents/Agents.ts"
 import * as DefaultAgent from "../agents/DefaultAgent.ts"
 import { Delegations } from "../agents/Delegations.ts"
+import { MemoryAgent } from "../agents/MemoryAgent.ts"
 
 type Request<K extends keyof typeof SessionsApi.endpoints> = Omit<
 	HttpApiEndpoint.Request<(typeof SessionsApi.endpoints)[K]>,
@@ -29,6 +30,7 @@ const implementations = Effect.gen(function* () {
 	const current = yield* currentSessions
 	const agents = yield* Agents
 	const delegations = yield* Delegations
+	const memoryAgent = yield* MemoryAgent
 	const services = yield* Effect.context<
 		AuthorizationServices | DefaultAgent.Services
 	>()
@@ -64,6 +66,23 @@ const implementations = Effect.gen(function* () {
 			Effect.flatMap(current, (sessions) =>
 				withModel(sessions.updateMemory(params.sessionId, payload)),
 			),
+		// Reading the Session first checks that the caller may see it.
+		sessionConfessions: ({ params }: Request<"sessionConfessions">) =>
+			Effect.gen(function* () {
+				const caller = yield* Identity
+				yield* (yield* current).get(params.sessionId)
+				return yield* memoryAgent
+					.confessions(caller.organizationId, params.sessionId)
+					.pipe(Effect.mapError(() => SessionStorageUnavailable.make({})))
+			}),
+		sessionEnrichments: ({ params }: Request<"sessionEnrichments">) =>
+			Effect.gen(function* () {
+				const caller = yield* Identity
+				yield* (yield* current).get(params.sessionId)
+				return yield* memoryAgent
+					.enrichments(caller.organizationId, params.sessionId)
+					.pipe(Effect.mapError(() => SessionStorageUnavailable.make({})))
+			}),
 		sessionTodos: ({ params }: Request<"sessionTodos">) =>
 			Effect.flatMap(current, (sessions) => sessions.todos(params.sessionId)),
 		updateSessionTodos: ({ params, payload }: Request<"updateSessionTodos">) =>

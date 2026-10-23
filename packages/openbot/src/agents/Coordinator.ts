@@ -1,7 +1,5 @@
-import { Settings } from "../settings/Settings.ts"
 import { type Item, Session, type Turn } from "@openbot-build/core"
 import { AgentsApi, type Identity, type SessionView } from "@openbot-build/api"
-import type * as AgentMemory from "../plugins/memory/AgentMemory.ts"
 import {
 	Cause,
 	Clock,
@@ -17,7 +15,6 @@ import {
 	Schema,
 	Stream,
 } from "effect"
-import { LanguageModel, type Prompt } from "effect/ai"
 import { Backend } from "../app/Backend.ts"
 import { Invocations } from "../apps/Invocations.ts"
 import { CodeRuns, toolResult } from "../code/CodeRuns.ts"
@@ -25,23 +22,21 @@ import type { Run as CodeRun } from "../code/StoredCodeRuns.ts"
 import { ownerKey } from "../apps/StoredConnections.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { Gate } from "../capabilities/Gate.ts"
-import { HelperModel } from "../capabilities/Judge.ts"
 import { Work, callerOf } from "../capabilities/Work.ts"
 import {
 	Requests,
 	type Stored as StoredRequest,
 	sessionOf,
 } from "../capabilities/Requests.ts"
-import { Organization } from "../organization/Organization.ts"
 import * as SessionHost from "../sessions/SessionHost.ts"
-import { AgentMemories, homeOf } from "./AgentMemories.ts"
+import { homeOf } from "./AgentMemories.ts"
+import { MemoryAgent } from "./MemoryAgent.ts"
 import { ReportInput, names } from "../plugins/agents/AgentPlugin.ts"
 import { answersItself } from "../plugins/work/WorkPlugin.ts"
 import { Waits, type Wait as StoredWait } from "../plugins/work/Waits.ts"
 import { Agents } from "./Agents.ts"
 import { Delegations, type Stored as StoredDelegation } from "./Delegations.ts"
 import { Signals, type Signal } from "./Signals.ts"
-import { attribute } from "../billing/MeteredModel.ts"
 
 interface Member {
 	readonly organizationId: string
@@ -85,60 +80,8 @@ export const briefText = ({
 		.filter((line) => line.length > 0)
 		.join("\n\n")
 
-/** The text parts of a message. */
-const textOf = (message: Prompt.Message): string =>
-	typeof message.content === "string"
-		? message.content
-		: message.content
-				.flatMap((part) => (part.type === "text" ? [part.text] : []))
-				.join("\n")
-
 /** OpenBot tools are not outside data. Every other tool result came from outside. */
-const own = new Set<string>(Object.values(names))
-
-/** The Items of one Turn as evidence for Agent memory. */
-export const evidence = ({
-	session,
-	history,
-	turn,
-}: {
-	readonly session: Session.Id
-	readonly history: ReadonlyArray<Item.Record>
-	readonly turn: Turn.Record
-}): ReadonlyArray<AgentMemory.Evidence> =>
-	history
-		.filter(
-			(entry) =>
-				entry.origin?.turn === turn.id || turn.input.includes(entry.id),
-		)
-		.flatMap((entry) =>
-			entry.content.content.flatMap(
-				(message): ReadonlyArray<AgentMemory.Evidence> => {
-					const source = { session, item: entry.id }
-					if (message.role === "user" || message.role === "assistant") {
-						const text = textOf(message)
-						return text.length === 0
-							? []
-							: [{ source, role: message.role, outside: false, text }]
-					}
-					if (message.role === "tool")
-						return message.content.flatMap((part) =>
-							part.type === "tool-result"
-								? [
-										{
-											source,
-											role: "tool" as const,
-											outside: !own.has(part.name),
-											text: JSON.stringify(part.result).slice(0, 2000),
-										},
-									]
-								: [],
-						)
-					return []
-				},
-			),
-		)
-		.slice(-40)
+const own: ReadonlySet<string> = new Set<string>(Object.values(names))
 
 /** The result of delegated work: the report of the Agent, or else its last answer. */
 export const resultOf = (input: {
@@ -215,18 +158,15 @@ const reviewText = (stored: StoredRequest) =>
  */
 export const layer = Layer.effectDiscard(
 	Effect.gen(function* () {
-		const shared = yield* Settings
 		const backend = yield* Backend
 		const agents = yield* Agents
-		const memories = yield* AgentMemories
+		const memoryAgent = yield* MemoryAgent
 		const delegations = yield* Delegations
 		const requests = yield* Requests
 		const waits = yield* Waits
 		const gate = yield* Gate
 		const signals = yield* Signals
 		const audit = yield* AuditLog
-		const organization = yield* Organization
-		const helper = yield* HelperModel
 		const invocations = yield* Effect.serviceOption(Invocations)
 		const codeRuns = yield* Effect.serviceOption(CodeRuns)
 		const scope = yield* Scope.Scope
@@ -805,57 +745,26 @@ export const layer = Layer.effectDiscard(
 				}),
 			)
 
-		/** Learns lasting experience from a finished Turn. */
-		const learn = (member: Member, view: SessionView, turn: Turn.Record) =>
+		/**
+		 * Lets the memory Agent learn from a Session after the Agent confided in it.
+		 * It waits until the queue of the Session is empty, so it reads whole work.
+		 */
+		const learn = (member: Member, view: SessionView) =>
 			Effect.gen(function* () {
 				if (view.kind === "review") return
-				// Each organization says whether its Agents learn memory.
-				const enabled = yield* shared.organization(member.organizationId).pipe(
-					Effect.map((current) => current.document.agentMemory),
-					Effect.orElseSucceed(() => true),
-				)
-				if (!enabled) return
 				if (view.session.pending.length > 0) return
-				// A Session that does not learn does not teach its Agent either.
-				const sessions = yield* sessionsFor(member)
-				const settings = yield* sessions.memory(view.session.id)
-				if (!settings.settings.generate) return
 				const agent = yield* agents.find(member.organizationId, view.agent)
 				if (Option.isNone(agent)) return
-				// The Agent learns about the person that the Turn worked for, into the memory about them.
-				const person = SessionHost.turnChain(view.session, turn.id).userId
-				const found = yield* organization
-					.member(member.organizationId, person)
-					.pipe(Effect.orElseSucceed(() => Option.none()))
-				const model = yield* helper.agentMemory(member.organizationId)
 				const home = homeOf(member.organizationId, agent.value)
-				yield* memories
-					.consolidate(home.organizationId, {
-						agentId: home.agent,
-						agent: { name: agent.value.name, role: agent.value.role },
-						user: {
-							id: person,
-							name: Option.match(found, {
-								onNone: () => person,
-								onSome: (found) => found.name ?? found.email ?? person,
-							}),
-						},
-						evidence: evidence({
-							session: view.session.id,
-							history: view.state.value.conversation.history,
-							turn,
-						}),
-					})
-					.pipe(
-						Effect.provideService(LanguageModel.LanguageModel, model),
-						attribute({
-							source: "agent_memory",
-							sessionId: view.session.id,
-							turnId: turn.id,
-							agentId: agent.value.id,
-							userId: person,
-						}),
-					)
+				const job = yield* memoryAgent.job(home.organizationId, view.session.id)
+				if (Option.isNone(job)) return
+				yield* memoryAgent.learn({
+					job: job.value,
+					agent: agent.value,
+					session: view.session,
+					history: view.state.value.conversation.history,
+					own,
+				})
 			})
 
 		const onTurn = (signal: Extract<Signal, { _tag: "TurnChanged" }>) =>
@@ -949,7 +858,7 @@ export const layer = Layer.effectDiscard(
 						})
 						.pipe(Effect.ignore)
 				}
-				if (signal.status === "Completed") yield* learn(member, view, turn)
+				if (signal.status === "Completed") yield* learn(member, view)
 			})
 
 		const onRequest = (signal: Extract<Signal, { _tag: "RequestChanged" }>) =>
@@ -1095,6 +1004,14 @@ export const layer = Layer.effectDiscard(
 			}
 			for (const entry of yield* requests.pending)
 				yield* review(entry.organizationId, entry.value).pipe(Effect.ignore)
+			for (const job of yield* memoryAgent.jobs) {
+				const member = { organizationId: job.organizationId, userId: job.owner }
+				yield* sessionsFor(member).pipe(
+					Effect.flatMap((sessions) => sessions.get(job.session)),
+					Effect.flatMap((view) => learn(member, view)),
+					Effect.ignore,
+				)
+			}
 		}).pipe(
 			Effect.catchCause((cause) =>
 				Effect.logWarning("Agent work could not be recovered", cause),

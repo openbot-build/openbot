@@ -9,6 +9,7 @@ import {
 	bigserial,
 	uniqueIndex,
 	foreignKey,
+	doublePrecision,
 } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 import { openbot_auth_user } from "./AuthSchema.ts"
@@ -743,6 +744,66 @@ export const agentRecords = table(
 		index("openbot_agent_records_owner").on(t.kind, t.organizationId, t.owner),
 		index("openbot_agent_records_scope").on(t.kind, t.organizationId, t.scope),
 		index("openbot_agent_records_status").on(t.kind, t.status),
+	],
+)
+/**
+ * The entries of Agent memory. Each Agent has one pool: `home_agent` in `organization_id`.
+ * A linked Agent uses the pool of its source. Entries are not deleted when they stop being
+ * true: `invalidated_at` marks them. `sources` is JSON.
+ */
+export const agentMemories = table(
+	"openbot_agent_memories",
+	{
+		organizationId: text("organization_id").notNull(),
+		homeAgent: text("home_agent").notNull(),
+		id: text().notNull(),
+		layer: text().notNull(),
+		content: text().notNull(),
+		sources: text().notNull(),
+		confidence: doublePrecision(),
+		status: text().notNull(),
+		createdAt: time("created_at").notNull(),
+		updatedAt: time("updated_at").notNull(),
+		invalidatedAt: time("invalidated_at"),
+	},
+	(t) => [
+		primaryKey({ columns: [t.organizationId, t.homeAgent, t.id] }),
+		index("openbot_agent_memories_updated").on(
+			t.organizationId,
+			t.homeAgent,
+			t.updatedAt,
+		),
+	],
+)
+/**
+ * The tags of each memory entry. Tags with a colon come from OpenBot, like `from:<userId>`.
+ * Topic tags have no colon.
+ */
+export const agentMemoryTags = table(
+	"openbot_agent_memory_tags",
+	{
+		organizationId: text("organization_id").notNull(),
+		homeAgent: text("home_agent").notNull(),
+		memoryId: text("memory_id").notNull(),
+		tag: text().notNull(),
+	},
+	(t) => [
+		primaryKey({
+			columns: [t.organizationId, t.homeAgent, t.memoryId, t.tag],
+		}),
+		foreignKey({
+			columns: [t.organizationId, t.homeAgent, t.memoryId],
+			foreignColumns: [
+				agentMemories.organizationId,
+				agentMemories.homeAgent,
+				agentMemories.id,
+			],
+		}).onDelete("cascade"),
+		index("openbot_agent_memory_tags_tag").on(
+			t.organizationId,
+			t.homeAgent,
+			t.tag,
+		),
 	],
 )
 /**

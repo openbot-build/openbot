@@ -137,7 +137,7 @@ Jede Organisation hat ihre eigenen Einstellungen. Sie liegen in der Datenbank. S
 | `agentMemoryModel` | `null`                                                           | Das Model, das [Agent-Memory](/de/docs/memory#agent-memory) lernt. `null` heißt: Agents lernen nichts.                                         |
 | `decisionModel`    | `null`                                                           | Das Decision-Model, zum Beispiel Jev. Es muss ein `decision`-Model sein. `null` heißt: keins. Siehe [Models](/de/docs/models#decision-model).  |
 | `memory`           | beide an                                                         | Die Memory-Schalter `use` und `generate` einer neuen Session. Siehe [Memory](/de/docs/memory#schalter).                                        |
-| `agentMemory`      | `true`                                                           | Agent-Memory nach jedem Turn lernen.                                                                                                           |
+| `agentMemory`      | `true`                                                           | Der Memory-Agent lernt aus Sessions und ergänzt die Eingabe von Turns.                                                                         |
 | `requestTimeoutMs` | 24 Stunden                                                       | Wie lange ein [Request](/de/docs/requests) auf eine Antwort wartet, bevor OpenBot ihn ablehnt. Von 1 Sekunde bis 7 Tage.                       |
 | `planApproval`     | den Entscheider darüber fragen, nach 24 Stunden ein Plan bleiben | Wie ein Plan erlaubt wird, wenn kein Member, Agent und keine Session es festlegt. Siehe [Plan-Modus](/de/docs/sessions#plan-modus).            |
 | `appReadRules`     | `[]`                                                             | App-Werkzeuge, die nur lesen: `{ cardUrl, tool }`. Siehe [Requests](/de/docs/requests).                                                        |
@@ -308,48 +308,50 @@ Das Audit-Log zeichnet wichtige Änderungen auf. Nichts kann einen Eintrag ände
 }
 ```
 
-| Aktion                   | Wann                                                                 |
-| ------------------------ | -------------------------------------------------------------------- |
-| `member.joined`          | Ein Konto tritt der Organisation bei.                                |
-| `member.updated`         | Ein Member bekommt einen neuen Status, Roles oder Policies.          |
-| `member.removed`         | Ein Member wird entfernt.                                            |
-| `member.left`            | Ein Member verlässt die Organisation.                                |
-| `invitation.created`     | Ein Member lädt eine E-Mail ein.                                     |
-| `invitation.revoked`     | Ein Member nimmt eine Einladung zurück.                              |
-| `invitation.accepted`    | Die eingeladene Person nimmt an.                                     |
-| `invitation.declined`    | Die eingeladene Person lehnt ab.                                     |
-| `organization.created`   | Jemand erstellt eine Organisation.                                   |
-| `organization.updated`   | Die Organisation bekommt einen neuen Namen.                          |
-| `settings.updated`       | Die Einstellungen der Organisation ändern sich.                      |
-| `role.created`           | Ein Member erstellt eine eigene Role.                                |
-| `role.updated`           | Ein Member ändert eine eigene Role.                                  |
-| `role.deleted`           | Ein Member löscht eine eigene Role.                                  |
-| `model.created`          | Ein Member fügt ein Model hinzu.                                     |
-| `model.updated`          | Ein Member ändert ein Model.                                         |
-| `model.deleted`          | Ein Member entfernt ein Model.                                       |
-| `model_provider.created` | Ein Member fügt einen Model Provider hinzu.                          |
-| `model_provider.updated` | Ein Member ändert einen Model Provider.                              |
-| `model_provider.deleted` | Ein Member entfernt einen Model Provider.                            |
-| `domain.added`           | Ein Member fügt eine E-Mail-Domain hinzu.                            |
-| `domain.verified`        | Eine E-Mail-Domain wird bestätigt.                                   |
-| `domain.removed`         | Ein Member entfernt eine E-Mail-Domain.                              |
-| `sso_connection.created` | Ein Member fügt eine SSO-Verbindung hinzu.                           |
-| `sso_connection.updated` | Ein Member ändert eine SSO-Verbindung.                               |
-| `sso_connection.deleted` | Ein Member entfernt eine SSO-Verbindung.                             |
-| `token.created`          | Ein Member erstellt ein User-Token.                                  |
-| `token.revoked`          | Ein Member widerruft ein User-Token.                                 |
-| `agent.created`          | Ein Member erstellt einen Agent.                                     |
-| `agent.updated`          | Ein Member ändert einen Agent.                                       |
-| `agent.promoted`         | Ein Member macht einen Session-Agent dauerhaft.                      |
-| `agent.memory.updated`   | Ein Member ändert Agent-Memory.                                      |
-| `delegation.started`     | Ein Agent gibt Arbeit an einen anderen Agent.                        |
-| `delegation.completed`   | Abgegebene Arbeit endet.                                             |
-| `capability.decided`     | Eine Person beantwortet einen Request.                               |
-| `request.resolved`       | Ein Request wird geschlossen. `details.chain` listet die Agents auf. |
-| `grant.created`          | Ein Member erstellt einen Grant.                                     |
-| `grant.revoked`          | Ein Member widerruft einen Grant.                                    |
-| `rule.created`           | Ein Member fügt eine Rule hinzu.                                     |
-| `rule.updated`           | Ein Member ändert eine Rule.                                         |
+| Aktion                       | Wann                                                                 |
+| ---------------------------- | -------------------------------------------------------------------- |
+| `member.joined`              | Ein Konto tritt der Organisation bei.                                |
+| `member.updated`             | Ein Member bekommt einen neuen Status, Roles oder Policies.          |
+| `member.removed`             | Ein Member wird entfernt.                                            |
+| `member.left`                | Ein Member verlässt die Organisation.                                |
+| `invitation.created`         | Ein Member lädt eine E-Mail ein.                                     |
+| `invitation.revoked`         | Ein Member nimmt eine Einladung zurück.                              |
+| `invitation.accepted`        | Die eingeladene Person nimmt an.                                     |
+| `invitation.declined`        | Die eingeladene Person lehnt ab.                                     |
+| `organization.created`       | Jemand erstellt eine Organisation.                                   |
+| `organization.updated`       | Die Organisation bekommt einen neuen Namen.                          |
+| `settings.updated`           | Die Einstellungen der Organisation ändern sich.                      |
+| `role.created`               | Ein Member erstellt eine eigene Role.                                |
+| `role.updated`               | Ein Member ändert eine eigene Role.                                  |
+| `role.deleted`               | Ein Member löscht eine eigene Role.                                  |
+| `model.created`              | Ein Member fügt ein Model hinzu.                                     |
+| `model.updated`              | Ein Member ändert ein Model.                                         |
+| `model.deleted`              | Ein Member entfernt ein Model.                                       |
+| `model_provider.created`     | Ein Member fügt einen Model Provider hinzu.                          |
+| `model_provider.updated`     | Ein Member ändert einen Model Provider.                              |
+| `model_provider.deleted`     | Ein Member entfernt einen Model Provider.                            |
+| `domain.added`               | Ein Member fügt eine E-Mail-Domain hinzu.                            |
+| `domain.verified`            | Eine E-Mail-Domain wird bestätigt.                                   |
+| `domain.removed`             | Ein Member entfernt eine E-Mail-Domain.                              |
+| `sso_connection.created`     | Ein Member fügt eine SSO-Verbindung hinzu.                           |
+| `sso_connection.updated`     | Ein Member ändert eine SSO-Verbindung.                               |
+| `sso_connection.deleted`     | Ein Member entfernt eine SSO-Verbindung.                             |
+| `token.created`              | Ein Member erstellt ein User-Token.                                  |
+| `token.revoked`              | Ein Member widerruft ein User-Token.                                 |
+| `agent.created`              | Ein Member erstellt einen Agent.                                     |
+| `agent.updated`              | Ein Member ändert einen Agent.                                       |
+| `agent.promoted`             | Ein Member macht einen Session-Agent dauerhaft.                      |
+| `agent.memory.updated`       | Ein Member ändert Agent-Memory.                                      |
+| `agent.memory.purged`        | Ein Member entfernt Agent-Memory nach einem Tag.                     |
+| `agent.memory_agent.updated` | Ein Member ändert den Memory-Agent.                                  |
+| `delegation.started`         | Ein Agent gibt Arbeit an einen anderen Agent.                        |
+| `delegation.completed`       | Abgegebene Arbeit endet.                                             |
+| `capability.decided`         | Eine Person beantwortet einen Request.                               |
+| `request.resolved`           | Ein Request wird geschlossen. `details.chain` listet die Agents auf. |
+| `grant.created`              | Ein Member erstellt einen Grant.                                     |
+| `grant.revoked`              | Ein Member widerruft einen Grant.                                    |
+| `rule.created`               | Ein Member fügt eine Rule hinzu.                                     |
+| `rule.updated`               | Ein Member ändert eine Rule.                                         |
 
 ---
 

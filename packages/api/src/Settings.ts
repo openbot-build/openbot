@@ -229,13 +229,13 @@ export const OrganizationSettings = Schema.Struct({
 	version: Version,
 	/** The model that judges Rules. Null means that no model judges Rules. */
 	rulesModel: Schema.NullOr(Config.Selection),
-	/** The model that learns Agent memory. Null means that Agents learn no memory. */
+	/** The model of the memory Agent of each Agent. Null means that Agents learn no memory. */
 	agentMemoryModel: Schema.NullOr(Config.Selection),
 	/** The decision model, such as Jev. It must be a model of type `decision`. Null means none. */
 	decisionModel: Schema.NullOr(Config.Selection),
 	/** The memory switches of a new Session. */
 	memory: Memory.Settings,
-	/** Learn Agent memory after each Turn. */
+	/** Let the memory Agent learn from Sessions and add to the input of Turns. */
 	agentMemory: Schema.Boolean,
 	requestTimeoutMs: RequestTimeout,
 	/** How plans are approved when no member, Agent or Session sets it. */

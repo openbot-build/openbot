@@ -242,34 +242,44 @@ test(
 				[],
 			)
 
-			// The Agent keeps one memory for each person, in its own organization.
-			await json(
-				AgentMemory.State,
+			// The pool lives with the shared Agent, but only Carol sees what is for her,
+			// and only in her own organization. The people of the Agent cannot read it.
+			const remembered = await json(
+				AgentMemory.View,
 				send(carol.session, `/v1/agents/${linked.id}/memory`, "POST", {
-					expected: 0,
-					command: {
-						_tag: "Remember",
-						key: "drink",
-						content: "Carol likes tea.",
-						kind: "preference",
-					},
+					command: { _tag: "Remember", content: "Carol likes tea." },
 				}),
 			)
-			const aboutCarol = await json(
-				AgentMemory.State,
-				send(
-					alice.session,
-					`/v1/agents/${guide.id}/memory?person=${carol.identity.userId}`,
-				),
+			assert.deepEqual(
+				remembered.entries.map((entry) => entry.content),
+				["Carol likes tea."],
 			)
-			assert.equal(aboutCarol.entries["drink"]?.content, "Carol likes tea.")
-			assert.equal(
+			const asOwner = await json(
+				AgentMemory.View,
+				send(alice.session, `/v1/agents/${guide.id}/memory`),
+			)
+			assert.deepEqual(asOwner.entries, [])
+			// The owner can remove what Carol left without reading it.
+			const purged = await json(
+				AgentMemory.PurgeResult,
+				send(alice.session, `/v1/agents/${guide.id}/memory/purge`, "POST", {
+					tag: "from:" + carol.identity.userId,
+				}),
+			)
+			assert.equal(purged.removed, 1)
+			assert.deepEqual(
 				(
-					await send(
-						carol.session,
-						`/v1/agents/${linked.id}/memory?person=${alice.identity.userId}`,
+					await json(
+						AgentMemory.View,
+						send(carol.session, `/v1/agents/${linked.id}/memory`),
 					)
-				).status,
+				).entries,
+				[],
+			)
+			// Members do not manage the memory Agent of a shared Agent.
+			assert.equal(
+				(await send(carol.session, `/v1/agents/${linked.id}/memory/agent`))
+					.status,
 				400,
 			)
 

@@ -308,6 +308,14 @@ export interface Options<
 > extends Omit<AgentOptions<Record<string, Tool.Any>>, "toolkit"> {
 	readonly toolkit: Effect.Effect<TK, E, R>
 	readonly instructions: Prompt.Prompt
+	/**
+	 * Changes the conversation that the model sees in each step. The stored history does not change.
+	 * It must keep the number of messages. Otherwise the runtime uses the conversation as it is.
+	 * A plugin that sets it must call the incoming function first, so that all changes add up.
+	 */
+	readonly transformPrompt?: (
+		prompt: Prompt.Prompt,
+	) => Effect.Effect<Prompt.Prompt>
 }
 
 /** Continues with the mapped toolkit and keeps its construction errors and services. */

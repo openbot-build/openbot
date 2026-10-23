@@ -225,3 +225,17 @@ The view client holds no credentials. Every request goes through OpenBot, so the
 - It then checks the saved action every 250 milliseconds until it has a final result. It never sends the action again.
 
 When you close the view, the client stops checking. An action that OpenBot already accepted still runs to the end.
+
+---
+
+## Show confessions
+
+The Agent uses the `confide` tool to say how its work goes, and the [memory Agent](/docs/memory#how-the-agent-learns) answers it. People may read this: `GET /v1/sessions/:sessionId/confessions` lists it, and the calls are in the history of the Session. But the Agent speaks there more freely than in its answers. So do not make it too easy to read:
+
+- Do not show confessions in the chat. Fold the `confide` tool calls in the history, and send no notice about them.
+- Put them in a place that a person must open on purpose, such as a folded part of the details of a Session.
+- Before you open them, say in one sentence what they are: a place where the Agent talks about its work, and where it does not expect to be quoted.
+- Do not show the words of a confession to the Agent again, for example in a later message. If the Agent learns that people quote what it confides, it stops confiding.
+- When a confession is about something that a person must fix, such as a deleted file, lead the person to the Items and actions of the Session, not to the confession.
+
+The memory Agent also asks the Agent to tell the person plainly about mistakes. So the important things usually come up in the chat.

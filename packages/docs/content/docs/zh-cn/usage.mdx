@@ -21,14 +21,14 @@ OpenBot 会记录每一次模型调用。你可以看到每个成员、每个 Ag
 
 OpenBot 会记录每一次得到回答的模型调用。每个用量事件都有一个 `source`：
 
-| `source`         | 是什么发起了调用                                         |
-| ---------------- | -------------------------------------------------------- |
-| `turn`           | Session 中一个 Turn 的一个模型步骤。                     |
-| `compaction`     | 对旧消息的总结，让对话能放进模型。                       |
-| `session_memory` | Session 的[记忆](/zh-cn/docs/memory)。                   |
-| `judge`          | 评判 [Rules](/zh-cn/docs/rules) 的模型。                 |
-| `agent_memory`   | 学习 [Agent 记忆](/zh-cn/docs/memory#agent-记忆)的模型。 |
-| `other`          | 其他任何调用。                                           |
+| `source`         | 是什么发起了调用                                                          |
+| ---------------- | ------------------------------------------------------------------------- |
+| `turn`           | Session 中一个 Turn 的一个模型步骤。                                      |
+| `compaction`     | 对旧消息的总结，让对话能放进模型。                                        |
+| `session_memory` | Session 的[记忆](/zh-cn/docs/memory)。                                    |
+| `judge`          | 评判 [Rules](/zh-cn/docs/rules) 的模型。                                  |
+| `agent_memory`   | [记忆 Agent](/zh-cn/docs/memory#agent-记忆)：它学习、补充和回答时的用量。 |
+| `other`          | 其他任何调用。                                                            |
 
 当调用有这些信息时，用量事件还会带有 Session、Turn、Agent、成员和用户令牌。在 [Channel](/zh-cn/docs/channels) 中，成员是写这条消息的人。
 

@@ -15,6 +15,7 @@ import { agentKey } from "../authorization/Policy.ts"
 import { Grants } from "../capabilities/Grants.ts"
 import { Rules } from "../capabilities/Rules.ts"
 import { AgentMemories, homeOf } from "./AgentMemories.ts"
+import { MemoryAgent } from "./MemoryAgent.ts"
 import { Organization } from "../organization/Organization.ts"
 import { Agents } from "./Agents.ts"
 import * as InvitationLinks from "./InvitationLinks.ts"
@@ -27,6 +28,7 @@ export const layer = (publicOrigin: string) =>
 		Effect.gen(function* () {
 			const agents = yield* Agents
 			const memories = yield* AgentMemories
+			const memoryAgent = yield* MemoryAgent
 			const rules = yield* Rules
 			const grants = yield* Grants
 			const audit = yield* AuditLog
@@ -62,30 +64,31 @@ export const layer = (publicOrigin: string) =>
 					})
 					.pipe(Effect.mapError(unavailable))
 			/**
-			 * The memory about one person. A person may read and change the memory about
-			 * themselves. The memory about another person needs `agents.write`. The memory
-			 * of a shared Agent belongs to its own people, so its members reach only their own.
+			 * The memory pool of an Agent, as the caller sees it. Each person reads only the
+			 * entries for them, in their own organization. Nobody reads another person's memory.
 			 */
-			const memoryOf = (caller: Caller, id: string, person?: string) =>
+			const memoryOf = (caller: Caller, id: string) =>
 				Effect.gen(function* () {
-					const own = person === undefined || person === caller.userId
-					const agent = yield* access(
-						caller,
-						id,
-						own ? "agents.read" : "agents.write",
-					)
-					if (!own && agent.source !== undefined) return yield* sharedMemory()
-					const home = homeOf(caller.organizationId, agent)
+					const agent = yield* access(caller, id, "agents.read")
 					return {
 						agent,
-						organizationId: home.organizationId,
-						whose: { agent: home.agent, person: person ?? caller.userId },
+						home: homeOf(caller.organizationId, agent),
+						viewer: {
+							organizationId: caller.organizationId,
+							person: caller.userId,
+						},
 					}
 				})
-			const sharedMemory = () =>
-				AgentsApi.AgentInvalid.make({
-					message:
-						"This Agent is shared with you. You can read only the memory about you.",
+			/** The memory Agent and the purge belong to the people of the Agent, not to its members. */
+			const ownMemory = (caller: Caller, id: string) =>
+				Effect.gen(function* () {
+					const agent = yield* access(caller, id, "agents.write")
+					if (agent.source !== undefined)
+						return yield* AgentsApi.AgentInvalid.make({
+							message:
+								"This Agent is shared with you. Only its own people manage its memory.",
+						})
+					return { agent, home: homeOf(caller.organizationId, agent) }
 				})
 			return handlers
 				.handle("listAgents", ({ query }) =>
@@ -152,8 +155,11 @@ export const layer = (publicOrigin: string) =>
 								.memory(row.session.id)
 								.pipe(Effect.mapError(unavailable))
 							yield* memories.adopt(
-								caller.organizationId,
-								{ agent: agent.id, person: caller.userId },
+								homeOf(caller.organizationId, agent),
+								{
+									userId: caller.userId,
+									organizationId: caller.organizationId,
+								},
 								row.session.id,
 								memory,
 							)
@@ -165,48 +171,70 @@ export const layer = (publicOrigin: string) =>
 				.handle("agentMemory", ({ params, query }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const { organizationId, whose } = yield* memoryOf(
-							caller,
-							params.agentId,
-							query.person,
-						)
-						return yield* memories.get(organizationId, whose)
+						const { home, viewer } = yield* memoryOf(caller, params.agentId)
+						const tags =
+							query.tags === undefined
+								? []
+								: query.tags
+										.split(",")
+										.map((tag) => tag.trim())
+										.filter((tag) => tag.length > 0)
+						return yield* memories.view(home, viewer, tags)
 					}),
 				)
-				.handle("updateAgentMemory", ({ params, query, payload }) =>
+				.handle("updateAgentMemory", ({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const { agent, organizationId, whose } = yield* memoryOf(
-							caller,
-							params.agentId,
-							query.person,
+						const { agent, home } = yield* memoryOf(caller, params.agentId)
+						const view = yield* memories.edit(
+							home,
+							{ userId: caller.userId, organizationId: caller.organizationId },
+							payload.command,
 						)
-						const state = yield* memories.edit(organizationId, whose, payload)
 						yield* record(caller, "agent.memory.updated", agent, {
-							person: whose.person,
 							command: payload.command._tag,
-							key: payload.command.key,
+							...(payload.command._tag === "Forget"
+								? { id: payload.command.id }
+								: {}),
 						})
-						return state
+						return view
 					}),
 				)
-				.handle("agentMemoryLog", ({ params, query }) =>
+				.handle("agentMemoryLog", ({ params }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const { organizationId, whose } = yield* memoryOf(
-							caller,
-							params.agentId,
-							query.person,
-						)
-						return yield* memories.log(organizationId, whose)
+						const { home, viewer } = yield* memoryOf(caller, params.agentId)
+						return yield* memories.log(home, viewer)
 					}),
 				)
-				.handle("agentMemoryPeople", ({ params }) =>
+				.handle("purgeAgentMemory", ({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const agent = yield* access(caller, params.agentId, "agents.write")
-						if (agent.source !== undefined) return yield* sharedMemory()
-						return yield* memories.people(caller.organizationId, agent.id)
+						const { agent, home } = yield* ownMemory(caller, params.agentId)
+						const removed = yield* memories.purge(home, payload.tag)
+						yield* record(caller, "agent.memory.purged", agent, {
+							tag: payload.tag,
+							removed,
+						})
+						return { removed }
+					}),
+				)
+				.handle("memoryAgent", ({ params }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						const { home } = yield* ownMemory(caller, params.agentId)
+						return yield* memoryAgent.settings(home)
+					}),
+				)
+				.handle("updateMemoryAgent", ({ params, payload }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						const { agent, home } = yield* ownMemory(caller, params.agentId)
+						const settings = yield* memoryAgent.update(home, payload)
+						yield* record(caller, "agent.memory_agent.updated", agent, {
+							revision: settings.revision,
+						})
+						return settings
 					}),
 				)
 				.handle("listRules", ({ params }) =>

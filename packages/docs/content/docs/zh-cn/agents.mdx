@@ -135,9 +135,10 @@ OpenBot 会在每个 Turn 的指令中加入以下内容：
 
 - Agent 的名字、角色和指令，
 - 它现在服务的人，包括这个人的名字和成员 ID。在 [Channel](/zh-cn/docs/channels) 中，这个人是写下这个 Turn 的消息的人，
-- 关于隐私的规则：Agent 从一个人那里学到的内容可能是私密的，所以它只把明确共享的内容告诉另一个人，
 - 对于包含另一个 Agent 分派的工作的 Session，如何把结果发回去，
-- 它的 [Agent memory](/zh-cn/docs/memory#agent-记忆) 中关于这个人的有效条目，以及它记得的其他人。
+- 它带着以前工作中积累的经验，并且当前的指令优先于这些经验。
+
+[记忆 Agent](/zh-cn/docs/memory#agent-记忆) 还可以把有用的内容加入这个 Turn 的输入。Agent 把这些补充当作自己的经验。它有 `confide` 工具，并且只知道这是一个说出工作情况的地方。
 
 你也可以把一个 Agent [分享](/zh-cn/docs/sharing)给其他组织中的人。他们会得到一个带有 `source` 的关联 Agent，它使用你的 Agent。
 

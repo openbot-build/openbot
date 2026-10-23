@@ -746,8 +746,23 @@ export const make = <
 														request,
 													})).view
 											}
-											const window = view.state.value.conversation.context,
-												starting = Prompt.concat(instructions, window.prompt)
+											const window = view.state.value.conversation.context
+											// A changed conversation must keep its messages, because the new
+											// messages of this step are found by their position after it.
+											const shown =
+												inner.transformPrompt === undefined
+													? window.prompt
+													: yield* inner
+															.transformPrompt(window.prompt)
+															.pipe(
+																Effect.map((changed) =>
+																	changed.content.length ===
+																	window.prompt.content.length
+																		? changed
+																		: window.prompt,
+																),
+															)
+											const starting = Prompt.concat(instructions, shown)
 											const chat = yield* Chat.fromPrompt(starting)
 											yield* Ref.set(chatRef, chat)
 											yield* Ref.set(step, action === undefined ? n : 0)

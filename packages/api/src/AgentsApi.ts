@@ -225,26 +225,14 @@ export const UpdateRuleRequest = Schema.Struct({
 })
 export type UpdateRuleRequest = typeof UpdateRuleRequest.Type
 
-export const AgentMemoryView = Schema.Struct({
-	...AgentMemory.State.fields,
-})
+export const AgentMemoryView = AgentMemory.View
 export type AgentMemoryView = typeof AgentMemoryView.Type
 export const UpdateAgentMemoryRequest = Schema.Struct({
-	expected: Schema.Natural,
 	command: AgentMemory.Edit,
 })
 export type UpdateAgentMemoryRequest = typeof UpdateAgentMemoryRequest.Type
-/** Whose memory to read or change. Without it, it is the memory about the caller. */
-const personQuery = { person: Schema.optionalKey(Schema.NonEmptyString) }
-/** One person that an Agent keeps memory about. */
-export const AgentMemoryPerson = Schema.Struct({
-	/** The user id of the person. */
-	person: Schema.String,
-	/** The number of active entries. */
-	entries: Schema.Natural,
-	version: Schema.Natural,
-})
-export type AgentMemoryPerson = typeof AgentMemoryPerson.Type
+/** Only entries with all of these tags. Separate the tags with commas. */
+const memoryQuery = { tags: Schema.optionalKey(Schema.NonEmptyString) }
 
 /** What a delegating Agent sends to another Agent. */
 export const Brief = Schema.Struct({
@@ -456,40 +444,63 @@ export class AgentsApi extends HttpApiGroup.make("agents")
 		),
 		HttpApiEndpoint.get("agentMemory", "/v1/agents/:agentId/memory", {
 			params: agentParams,
-			query: personQuery,
+			query: memoryQuery,
 			success: AgentMemoryView,
 			error: AgentErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Reads what the Agent remembers about one person. Without `person`, it is the caller. Reading the memory about another person needs `agents.write` on the Agent.",
+			"Reads the entries of the Agent memory that the caller may see: entries for the caller, for a Channel group that the caller is in, or for everyone who uses the Agent, in the organization of the caller. Nobody can read the memory about another person.",
 		),
 		HttpApiEndpoint.post("updateAgentMemory", "/v1/agents/:agentId/memory", {
 			params: agentParams,
-			query: personQuery,
 			payload: UpdateAgentMemoryRequest,
 			success: AgentMemoryView,
 			error: AgentErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Changes what the Agent remembers about one person. Without `person`, it is the caller. Changing the memory about another person needs `agents.write` on the Agent.",
+			"Remembers something about the caller, or takes back what the caller gave to an entry.",
 		),
 		HttpApiEndpoint.get("agentMemoryLog", "/v1/agents/:agentId/memory/log", {
 			params: agentParams,
-			query: personQuery,
 			success: Schema.Array(AgentMemory.LogEntry),
 			error: AgentErrors,
-		}),
-		HttpApiEndpoint.get(
-			"agentMemoryPeople",
-			"/v1/agents/:agentId/memory/people",
+		}).annotate(
+			OpenApi.Description,
+			"Lists the changes that touch entries that the caller may see.",
+		),
+		HttpApiEndpoint.post(
+			"purgeAgentMemory",
+			"/v1/agents/:agentId/memory/purge",
 			{
 				params: agentParams,
-				success: Schema.Array(AgentMemoryPerson),
+				payload: AgentMemory.PurgeRequest,
+				success: AgentMemory.PurgeResult,
 				error: AgentErrors,
 			},
 		).annotate(
 			OpenApi.Description,
-			"Lists the people that the Agent keeps memory about. It needs `agents.write` on the Agent.",
+			"Removes every entry with one tag of OpenBot, like `from:<userId>` or `session:<id>`, without showing them. It needs `agents.write` on an Agent that is not linked.",
+		),
+		HttpApiEndpoint.get("memoryAgent", "/v1/agents/:agentId/memory/agent", {
+			params: agentParams,
+			success: AgentMemory.MemoryAgentSettings,
+			error: AgentErrors,
+		}).annotate(
+			OpenApi.Description,
+			"Reads the settings of the memory Agent that keeps the memory of this Agent. It needs `agents.write` on an Agent that is not linked.",
+		),
+		HttpApiEndpoint.patch(
+			"updateMemoryAgent",
+			"/v1/agents/:agentId/memory/agent",
+			{
+				params: agentParams,
+				payload: AgentMemory.UpdateMemoryAgentRequest,
+				success: AgentMemory.MemoryAgentSettings,
+				error: AgentErrors,
+			},
+		).annotate(
+			OpenApi.Description,
+			"Changes the rules, the concurrency and the budget of the memory Agent. It needs `agents.write` on an Agent that is not linked.",
 		),
 	)
 	.add(

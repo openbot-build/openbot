@@ -47,9 +47,16 @@ export const SessionHostState = Schema.Struct({
 	review: Schema.optionalKey(Schema.String),
 	/** The trigger that started a trigger Session. */
 	trigger: Schema.optionalKey(Schema.String),
-	/** The chat of a Channel that a channel Session belongs to. */
+	/**
+	 * The chat of a Channel that a channel Session belongs to. `group` is true for a chat
+	 * with many people. Sessions from before it was kept count as groups, because that is safer.
+	 */
 	channel: Schema.optionalKey(
-		Schema.Struct({ channel: Schema.String, conversation: Schema.String }),
+		Schema.Struct({
+			channel: Schema.String,
+			conversation: Schema.String,
+			group: Schema.optionalKey(Schema.Boolean),
+		}),
 	),
 	/** How plans in this Session are approved, when the Session sets it. */
 	planApproval: Schema.optionalKey(PlanApproval.PlanApproval),

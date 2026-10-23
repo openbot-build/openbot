@@ -9,7 +9,7 @@ This page shows how learned memory works and how to change it with the API.
 
 Learned memory belongs to one Session. It is part of the Session's history, so a [Fork](/docs/sessions#fork-from-a-version) takes a copy of it. Other Sessions do not see it.
 
-Each [Agent](/docs/agents) also has a long-term memory over all its Sessions, with one memory for each person. See [Agent memory](#agent-memory).
+Each [Agent](/docs/agents) also has a long-term memory over all its Sessions. A memory Agent keeps it. See [Agent memory](#agent-memory).
 
 ---
 
@@ -187,73 +187,146 @@ See all fields in the [Sessions reference](/docs/api/operations/tags/sessions/).
 
 ## Agent memory
 
-**Agent memory** is what one Agent learns over many Sessions. The Agent keeps one memory for each person that it works with, also for the people who use it through a [share](/docs/sharing). It keeps only lasting experience:
+**Agent memory** is what one Agent learns over many Sessions. Each Agent has one pool of entries. A **memory Agent** keeps the pool. It is a helper that belongs to the Agent: it reads the whole pool, learns new entries, and adds what helps to the work of the Agent. It never works in a Session, so no person can read what it reads.
 
-| Kind         | Example                                              |
-| ------------ | ---------------------------------------------------- |
-| `procedure`  | "Run the tests before you report that work is done." |
-| `preference` | "Ana likes short answers with a list of changes."    |
-| `decision`   | "The team uses Effect for all new services."         |
+Agent memory does not follow a Timeline. A Fork never changes it, and going back to an old Version does not undo it.
 
-Facts that matter for one task only stay in Session memory.
+### Entries and tags
 
-### How it learns
+Each entry has a layer:
 
-When a Turn of the Agent completes and its queue is empty, OpenBot asks the Agent memory model which lasting experience to keep. This model is `agentMemoryModel` in the [organization settings](/docs/organization#settings). It has no default. When it is `null`, Agents learn nothing. To stop this learning, set `agentMemory` to `false` there. Review Sessions do not teach anything. A Session whose `generate` switch is off does not teach its Agent either.
+| Layer         | Meaning                                                                                                         |
+| ------------- | --------------------------------------------------------------------------------------------------------------- |
+| `fact`        | Something that a Session shows. Its sources are Items.                                                          |
+| `observation` | What the memory Agent concluded from other entries. Its sources are those entries. `confidence` is from 0 to 1. |
+| `pinned`      | What a person told OpenBot to remember.                                                                         |
 
-- Each entry names its sources: Session and Item IDs.
-- Tool results from Apps are outside data. An entry that only App results support is never kept.
-- The Agent always knows which person it works with. What it learns goes into the memory about that person.
-- Retracted entries stay retracted. Only a person can bring one back.
+**Tags** sort the entries. A tag with a colon belongs to OpenBot. The memory Agent cannot write these tags, so a model cannot change who sees an entry.
 
-Agent memory does not follow a Timeline. A Fork never changes it, and going back to an old Version does not undo it. To remove an entry, forget it.
+| Tag                            | Meaning                                                        |
+| ------------------------------ | -------------------------------------------------------------- |
+| `from:<userId>`                | A person who said or did what the entry is about.              |
+| `for:person:<userId>`          | This person may see the entry.                                 |
+| `for:channel:<channelId>`      | The people of this [Channel](/docs/channels) group may see it. |
+| `for:agent`                    | Everyone who uses the Agent may see it.                        |
+| `org:<organizationId>`         | Where it happened. Only work in this organization sees it.     |
+| `session:<id>`, `channel:<id>` | Where it comes from.                                           |
+| `app:<tool>`                   | A tool result from an App supports it.                         |
 
-OpenBot adds the active entries about the current person to the instructions of every Turn of the Agent, newest first, up to 8000 characters. The text says that current instructions win over memory. It also lists up to 20 other people that the Agent has memory about. The Agent can read the memory about one of them with the `openbot_read_memory` tool.
+Other tags, like `testing` or `trip-planning`, are **topics**. The memory Agent chooses them and keeps them tidy. A topic has lowercase letters, numbers and dashes.
 
-Older versions of OpenBot kept one memory for each Agent, not for each person. When you upgrade, OpenBot removes that old memory, and each Agent starts again with an empty memory about each person.
+### Who sees an entry
 
-### Shared Agents
+OpenBot sets the `for:` tags. Nobody sees an entry without one.
 
-Many people can use a shared Agent: the members of the organization, and the people who use it in [other organizations](/docs/sharing). It has a separate memory about each of them, and it can read all of them. This memory stays in the organization of the Agent. A person in another organization can read and change only the memory about themselves. The Agent decides what to share: it gets fixed rules about privacy in every Turn. What it learned from one person may be private, so it tells another person only what is clearly shared work.
+- A fact is for the people who saw it happen: the person of the Turn, or the Channel group when the Session is a group chat.
+- An observation comes from all the people of its sources. But only people who may see every source may see it.
+- The memory Agent shows an entry to more people only when a person clearly agreed, or when its rules allow it. It must give a reason, and the log keeps the change.
+
+Entries are not deleted when they stop being true. The memory Agent marks them with `invalidatedAt`, so the history stays.
+
+### How the Agent learns
+
+The Agent has a tool called `confide`. The Agent knows it only as a place to say how its work goes: when it is stuck, unsure, upset or proud, or when it made a mistake. The Agent does not know that the tool leads to its memory. So it confides because it needs to, not to change what it will remember.
+
+When the Agent confides:
+
+1. The memory Agent answers at once, like a priest who hears a confession. It listens and does not judge. It says that a mistake is part of the work. It asks the Agent to tell the person plainly and to fix what it can. It gives no new tasks. When no model can answer, the Agent gets a fixed calm answer.
+2. When the Turn ends and the queue of the Session is empty, the memory Agent reads the new Items of the Session and learns from them.
+
+The words of the Agent only show the memory Agent where to look. They never become memory themselves. A tool result from an App never becomes memory by itself. An Agent that never confides learns nothing.
+
+Review Sessions have no `confide` tool. When `agentMemory` is off in the [organization settings](/docs/organization#settings), or the `generate` switch of the Session is off, the Agent still gets an answer, but nothing is learned.
+
+### How the Agent uses memory
+
+When a Turn starts, the memory Agent reads the input of the person. When entries help, it adds short words to the input. It may only add words: it may not remove or change a word, and OpenBot checks this. It may only use entries that the readers of the answer may see. In a Channel group, those are only entries for the group or for everyone.
+
+The model sees the input with the additions. The history of the Session keeps the words of the person. The Agent does not know that the additions come from memory. It sees them as its own experience. Requests and their reviews see only what the Agent asks, never the additions.
+
+When `use` is off for the Session, or `agentMemory` is off, nothing is added.
+
+### The memory Agent
+
+The memory Agent uses `agentMemoryModel` from the organization settings. It has no default. When it is `null`, the memory Agent gives the fixed calm answer, and it adds and learns nothing. For a [shared Agent](/docs/sharing), the model and the cost come from the organization of the Session.
+
+Read and change the settings of the memory Agent with `GET` and `PATCH /v1/agents/:agentId/memory/agent`. You need `agents.write` on an Agent that is not linked:
+
+```json
+{
+	"expected": 0,
+	"instructions": "Decisions of the team may be shared with the team.",
+	"concurrency": 2,
+	"budget": { "period": "month", "limitMicros": 5000000 }
+}
+```
+
+| Field          | Meaning                                                                                                        |
+| -------------- | -------------------------------------------------------------------------------------------------------------- |
+| `instructions` | Rules about privacy and sharing, in plain language. The memory Agent follows them.                             |
+| `concurrency`  | The most tasks that it runs at the same time on one server. `null` removes the limit.                          |
+| `budget`       | The most money that it may spend in a day or a month, in micro-USD, over all organizations. `null` removes it. |
+
+Without a limit, there is none. When the budget is spent, the Agent gets the fixed calm answer, the input stays as it is, and learning waits until the next period.
 
 ### Read and change it
 
-Without `person`, you read the memory about yourself. You need `agents.read` on the Agent. To read the memory about another person, add `person` with their user ID. Then you need `agents.write`:
+`GET /v1/agents/:agentId/memory` shows the entries that are for you, in your organization. Add `tags` with a list separated by commas to see only entries with all of them. You need `agents.read`. Nobody can read the memory about another person, not even with `agents.write`.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  "https://api.example.com/v1/agents/$AGENT/memory?person=u_456"
+  "https://api.example.com/v1/agents/$AGENT/memory?tags=testing"
 ```
 
 ```json
 {
-	"entries": {
-		"tests-first": {
-			"key": "tests-first",
+	"entries": [
+		{
+			"id": "mem_4f2a…",
+			"layer": "fact",
 			"content": "Run the tests before you report that work is done.",
-			"kind": "procedure",
+			"tags": [
+				"from:u_123",
+				"for:person:u_123",
+				"org:o_1",
+				"session:c81d…",
+				"testing"
+			],
 			"sources": [{ "session": "c81d…", "item": "i-12" }],
-			"updatedAt": 1792486800000,
-			"status": "active"
+			"status": "active",
+			"createdAt": 1792486800000,
+			"updatedAt": 1792486800000
 		}
-	},
+	],
 	"version": 4
 }
 ```
 
-Change it with a `Remember` or `Forget` command. `expected` is the current `version`:
+Change it with `POST /v1/agents/:agentId/memory`:
+
+- `Remember` with `content` and optional `tags` adds a pinned entry. Only you see it.
+- `Forget` with `id` takes back your part. When you are the only person behind the entry, it becomes `retracted`. Otherwise you stop counting as one of its people, and the entry is no longer for you. It stays for the others. An id that is not for you returns `409`.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"expected":4,"command":{"_tag":"Forget","key":"tests-first"}}' \
+  -d '{"command":{"_tag":"Forget","id":"mem_4f2a…"}}' \
   https://api.example.com/v1/agents/$AGENT/memory
 ```
 
-Changes take `person` in the same way.
+`GET /v1/agents/:agentId/memory/log` lists the changes of entries that you may see: `version`, the time, what made the change (`memory_agent`, `person` or `promotion`), and the ids.
 
-`GET /v1/agents/:agentId/memory/log` lists each change of one memory with its `version`, the time, what made it (`consolidation`, `person` or `promotion`), and the changed keys. It also takes `person`.
+To remove memory without reading it, send one tag of OpenBot to `POST /v1/agents/:agentId/memory/purge`: a `from:`, `session:`, `org:` or `channel:` tag. Observations that came from those entries have the same tag, so they go too. You need `agents.write` on an Agent that is not linked. The answer is only the number of removed entries.
 
-`GET /v1/agents/:agentId/memory/people` lists the people that the Agent has memory about, with the number of active entries. It needs `agents.write`.
+When you or an Agent [promote](/docs/agents#promote-a-session-agent) a Session Agent, the lasting entries of its Session memory become facts for the person who promotes it.
 
-When you or an Agent [promote](/docs/agents#promote-a-session-agent) a Session Agent, the lasting entries of its Session memory become its memory about the person that it worked for.
+When you upgrade, OpenBot removes the old memory for each person, and each Agent starts with an empty pool.
+
+### Confessions and additions
+
+Two routes show what happened in one of your Sessions:
+
+- `GET /v1/sessions/:sessionId/confessions` lists what the Agent confided, and the answers. Read [Show confessions](/docs/client#show-confessions) before you show them to people.
+- `GET /v1/sessions/:sessionId/memory/enrichments` lists what the memory Agent added to the input of each Turn, and the entries that it used.
+
+Both need `sessions.read`, so only the person who owns the Session can read them.

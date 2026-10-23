@@ -21,14 +21,14 @@ OpenBot zeichnet jeden Aufruf eines Model auf. Du siehst, wie viele Tokens jedes
 
 OpenBot zeichnet jeden Aufruf eines Model auf, der eine Antwort bekommt. Jedes Usage event hat eine `source` (Quelle):
 
-| `source`         | Was den Aufruf gemacht hat                                                  |
-| ---------------- | --------------------------------------------------------------------------- |
-| `turn`           | Ein Schritt eines Model in einem Turn einer Session.                        |
-| `compaction`     | Eine Zusammenfassung alter Nachrichten, damit das Gespräch ins Model passt. |
-| `session_memory` | Das [Memory](/de/docs/memory) einer Session.                                |
-| `judge`          | Das Model, das [Rules](/de/docs/rules) prüft.                               |
-| `agent_memory`   | Das Model, das [Agent Memory](/de/docs/memory#agent-memory) lernt.          |
-| `other`          | Jeder andere Aufruf.                                                        |
+| `source`         | Was den Aufruf gemacht hat                                                             |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| `turn`           | Ein Schritt eines Model in einem Turn einer Session.                                   |
+| `compaction`     | Eine Zusammenfassung alter Nachrichten, damit das Gespräch ins Model passt.            |
+| `session_memory` | Das [Memory](/de/docs/memory) einer Session.                                           |
+| `judge`          | Das Model, das [Rules](/de/docs/rules) prüft.                                          |
+| `agent_memory`   | Der [Memory-Agent](/de/docs/memory#agent-memory): was er lernt, ergänzt und antwortet. |
+| `other`          | Jeder andere Aufruf.                                                                   |
 
 Ein Usage event hat auch die Session, den Turn, den Agent, das Member und das User-Token, wenn der Aufruf sie hat. In einem [Channel](/de/docs/channels) ist das Member die Person, die die Nachricht geschrieben hat.
 

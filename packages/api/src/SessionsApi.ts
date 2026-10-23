@@ -7,6 +7,7 @@ import {
 	SessionStore,
 	Turn,
 } from "@openbot-build/core"
+import * as AgentMemory from "./AgentMemory.ts"
 import * as Memory from "./Memory.ts"
 import { Authorize, GroupRequired, Required, requires } from "./Permissions.ts"
 import { AgentErrors, AgentId, Delegation } from "./AgentsApi.ts"
@@ -507,6 +508,30 @@ export class SessionsApi extends HttpApiGroup.make("sessions")
 				success: SessionView,
 				error: SessionOperationErrors,
 			},
+		),
+		HttpApiEndpoint.get(
+			"sessionConfessions",
+			"/v1/sessions/:sessionId/confessions",
+			{
+				params: sessionParams,
+				success: Schema.Array(AgentMemory.Confession),
+				error: SessionOperationErrors,
+			},
+		).annotate(
+			OpenApi.Description,
+			"Lists what the Agent said with `confide` in this Session, and the answers that it got. The Agent uses it to talk about how its work goes. See the client guide before you show it to people.",
+		),
+		HttpApiEndpoint.get(
+			"sessionEnrichments",
+			"/v1/sessions/:sessionId/memory/enrichments",
+			{
+				params: sessionParams,
+				success: Schema.Array(AgentMemory.Enrichment),
+				error: SessionOperationErrors,
+			},
+		).annotate(
+			OpenApi.Description,
+			"Lists what the memory Agent added to the input of each Turn, and the Agent memory entries that it used.",
 		),
 		HttpApiEndpoint.get("sessionTodos", "/v1/sessions/:sessionId/todos", {
 			params: sessionParams,

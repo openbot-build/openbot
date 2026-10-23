@@ -1,0 +1,476 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "ec1bef03-04e3-4a80-ab0e-c85c2827f523",
+	"prevIds": ["c85591dd-62c8-4258-9a7c-ed61aefcca12"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_agent_memories"],
+			"writes": [
+				"s|tbl|public.openbot_agent_memories",
+				"n|tbl|public.openbot_agent_memories",
+				"e|tbl|public.openbot_agent_memories",
+				"n|rel|public.openbot_agent_memories",
+				"n|type|public.openbot_agent_memories",
+				"n|rel|public.openbot_agent_memories_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_agent_memory_tags"],
+			"writes": [
+				"s|tbl|public.openbot_agent_memory_tags",
+				"n|tbl|public.openbot_agent_memory_tags",
+				"e|tbl|public.openbot_agent_memory_tags",
+				"n|rel|public.openbot_agent_memory_tags",
+				"n|type|public.openbot_agent_memory_tags",
+				"n|rel|public.openbot_agent_memory_tags_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_agent_memories",
+				"openbot_agent_memories_updated"
+			],
+			"writes": [
+				"s|idx|public.openbot_agent_memories_updated",
+				"n|idx|public.openbot_agent_memories_updated",
+				"e|idx|public.openbot_agent_memories_updated",
+				"n|rel|public.openbot_agent_memories_updated"
+			],
+			"reads": [
+				"n|tbl|public.openbot_agent_memories",
+				"n|sch|public",
+				"n|col|public.openbot_agent_memories.organization_id",
+				"n|col|public.openbot_agent_memories.home_agent",
+				"n|col|public.openbot_agent_memories.updated_at"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_agent_memory_tags",
+				"openbot_agent_memory_tags_tag"
+			],
+			"writes": [
+				"s|idx|public.openbot_agent_memory_tags_tag",
+				"n|idx|public.openbot_agent_memory_tags_tag",
+				"e|idx|public.openbot_agent_memory_tags_tag",
+				"n|rel|public.openbot_agent_memory_tags_tag"
+			],
+			"reads": [
+				"n|tbl|public.openbot_agent_memory_tags",
+				"n|sch|public",
+				"n|col|public.openbot_agent_memory_tags.organization_id",
+				"n|col|public.openbot_agent_memory_tags.home_agent",
+				"n|col|public.openbot_agent_memory_tags.tag"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_agent_memory_tags"],
+			"writes": [
+				"s|fk|public.openbot_agent_memory_tags.openbot_agent_memory_tags_YrFI5OUT2NzX_fkey",
+				"n|fk|public.openbot_agent_memory_tags.openbot_agent_memory_tags_YrFI5OUT2NzX_fkey",
+				"e|fk|public.openbot_agent_memory_tags.openbot_agent_memory_tags_YrFI5OUT2NzX_fkey",
+				"n|con|public.openbot_agent_memory_tags.openbot_agent_memory_tags_YrFI5OUT2NzX_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_agent_memory_tags",
+				"n|sch|public",
+				"n|tbl|public.openbot_agent_memories",
+				"n|sch|public",
+				"n|col|public.openbot_agent_memory_tags.organization_id",
+				"n|col|public.openbot_agent_memory_tags.home_agent",
+				"n|col|public.openbot_agent_memory_tags.memory_id",
+				"n|col|public.openbot_agent_memories.organization_id",
+				"n|col|public.openbot_agent_memories.home_agent",
+				"n|col|public.openbot_agent_memories.id",
+				"e|uniqueness|public.openbot_agent_memories.home_agent.id.organization_id"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_agent_memories",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_agent_memory_tags",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memories",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memories",
+				"name": "home_agent",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memories",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memories",
+				"name": "layer",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memories",
+				"name": "content",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memories",
+				"name": "sources",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memories",
+				"name": "confidence",
+				"type": "double precision",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memories",
+				"name": "status",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memories",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memories",
+				"name": "updated_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memories",
+				"name": "invalidated_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memory_tags",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memory_tags",
+				"name": "home_agent",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memory_tags",
+				"name": "memory_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memory_tags",
+				"name": "tag",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memories",
+				"name": "openbot_agent_memories_updated",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "organization_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "home_agent",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "updated_at",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memory_tags",
+				"name": "openbot_agent_memory_tags_tag",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "organization_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "home_agent",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "tag",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memory_tags",
+				"name": "openbot_agent_memory_tags_YrFI5OUT2NzX_fkey",
+				"nameExplicit": false,
+				"columns": ["organization_id", "home_agent", "memory_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_agent_memories",
+				"columnsTo": ["organization_id", "home_agent", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memories",
+				"name": "openbot_agent_memories_pkey",
+				"columns": ["organization_id", "home_agent", "id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_agent_memory_tags",
+				"name": "openbot_agent_memory_tags_pkey",
+				"columns": ["organization_id", "home_agent", "memory_id", "tag"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		}
+	]
+}

@@ -394,14 +394,16 @@ test(
 				202,
 			)
 			await wait()
-			// One model call learns Session memory. One more learns Agent memory after the Turn.
+			// One model call learns Session memory. Agent memory learns only after the Agent
+			// confides, and the empty pool gives the memory Agent nothing to add to the input.
 			for (
 				let tries = 0;
-				tries < 200 && host.consolidations() < beforeConsolidations + 2;
+				tries < 200 && host.consolidations() < beforeConsolidations + 1;
 				tries++
 			)
 				await new Promise((resolve) => setTimeout(resolve, 25))
-			assert.equal(host.consolidations(), beforeConsolidations + 2)
+			await new Promise((resolve) => setTimeout(resolve, 100))
+			assert.equal(host.consolidations(), beforeConsolidations + 1)
 			const old = await (
 				await request(alice.session, path + "/turns/" + completed.response!.id)
 			).json()

@@ -137,7 +137,7 @@ Each organization has its own settings. They live in the database, so every Open
 | `agentMemoryModel` | `null`                                            | The model that learns [Agent memory](/docs/memory#agent-memory). `null` means that Agents learn nothing.                           |
 | `decisionModel`    | `null`                                            | The decision model, such as Jev. It must be a `decision` model. `null` means none. See [Models](/docs/models#decision-model).      |
 | `memory`           | both on                                           | The memory switches `use` and `generate` of a new Session. See [Memory](/docs/memory#switches).                                    |
-| `agentMemory`      | `true`                                            | Learn Agent memory after each Turn.                                                                                                |
+| `agentMemory`      | `true`                                            | Let the memory Agent learn from Sessions and add to the input of Turns.                                                            |
 | `requestTimeoutMs` | 24 hours                                          | How long a [request](/docs/requests) waits for an answer before OpenBot denies it. From 1 second to 7 days.                        |
 | `planApproval`     | ask the decider above, stay a plan after 24 hours | How a plan is approved when no member, Agent or Session sets it. See [Plan mode](/docs/sessions#plan-mode).                        |
 | `appReadRules`     | `[]`                                              | App tools that only read: `{ cardUrl, tool }`. See [Requests](/docs/requests).                                                     |
@@ -308,48 +308,50 @@ The audit log records important changes. Nothing can change or remove an entry.
 }
 ```
 
-| Action                   | When                                                |
-| ------------------------ | --------------------------------------------------- |
-| `member.joined`          | An account joins the organization.                  |
-| `member.updated`         | A member gets a new status, roles or policies.      |
-| `member.removed`         | A member is removed.                                |
-| `member.left`            | A member leaves the organization.                   |
-| `invitation.created`     | A member invites an email.                          |
-| `invitation.revoked`     | A member takes back an invitation.                  |
-| `invitation.accepted`    | The invited person accepts.                         |
-| `invitation.declined`    | The invited person declines.                        |
-| `organization.created`   | Someone creates an organization.                    |
-| `organization.updated`   | The organization gets a new name.                   |
-| `settings.updated`       | The organization settings change.                   |
-| `role.created`           | A member makes a custom role.                       |
-| `role.updated`           | A member changes a custom role.                     |
-| `role.deleted`           | A member deletes a custom role.                     |
-| `model.created`          | A member adds a model.                              |
-| `model.updated`          | A member changes a model.                           |
-| `model.deleted`          | A member removes a model.                           |
-| `model_provider.created` | A member adds a model provider.                     |
-| `model_provider.updated` | A member changes a model provider.                  |
-| `model_provider.deleted` | A member removes a model provider.                  |
-| `domain.added`           | A member adds an email domain.                      |
-| `domain.verified`        | An email domain becomes verified.                   |
-| `domain.removed`         | A member removes an email domain.                   |
-| `sso_connection.created` | A member adds an SSO connection.                    |
-| `sso_connection.updated` | A member changes an SSO connection.                 |
-| `sso_connection.deleted` | A member removes an SSO connection.                 |
-| `token.created`          | A member creates a user token.                      |
-| `token.revoked`          | A member revokes a user token.                      |
-| `agent.created`          | A member makes an Agent.                            |
-| `agent.updated`          | A member changes an Agent.                          |
-| `agent.promoted`         | A member promotes a Session Agent.                  |
-| `agent.memory.updated`   | A member changes Agent memory.                      |
-| `delegation.started`     | An Agent gives work to another Agent.               |
-| `delegation.completed`   | Delegated work ends.                                |
-| `capability.decided`     | A person answers a request.                         |
-| `request.resolved`       | A request closes. `details.chain` lists the Agents. |
-| `grant.created`          | A member makes a Grant.                             |
-| `grant.revoked`          | A member revokes a Grant.                           |
-| `rule.created`           | A member adds a Rule.                               |
-| `rule.updated`           | A member changes a Rule.                            |
+| Action                       | When                                                |
+| ---------------------------- | --------------------------------------------------- |
+| `member.joined`              | An account joins the organization.                  |
+| `member.updated`             | A member gets a new status, roles or policies.      |
+| `member.removed`             | A member is removed.                                |
+| `member.left`                | A member leaves the organization.                   |
+| `invitation.created`         | A member invites an email.                          |
+| `invitation.revoked`         | A member takes back an invitation.                  |
+| `invitation.accepted`        | The invited person accepts.                         |
+| `invitation.declined`        | The invited person declines.                        |
+| `organization.created`       | Someone creates an organization.                    |
+| `organization.updated`       | The organization gets a new name.                   |
+| `settings.updated`           | The organization settings change.                   |
+| `role.created`               | A member makes a custom role.                       |
+| `role.updated`               | A member changes a custom role.                     |
+| `role.deleted`               | A member deletes a custom role.                     |
+| `model.created`              | A member adds a model.                              |
+| `model.updated`              | A member changes a model.                           |
+| `model.deleted`              | A member removes a model.                           |
+| `model_provider.created`     | A member adds a model provider.                     |
+| `model_provider.updated`     | A member changes a model provider.                  |
+| `model_provider.deleted`     | A member removes a model provider.                  |
+| `domain.added`               | A member adds an email domain.                      |
+| `domain.verified`            | An email domain becomes verified.                   |
+| `domain.removed`             | A member removes an email domain.                   |
+| `sso_connection.created`     | A member adds an SSO connection.                    |
+| `sso_connection.updated`     | A member changes an SSO connection.                 |
+| `sso_connection.deleted`     | A member removes an SSO connection.                 |
+| `token.created`              | A member creates a user token.                      |
+| `token.revoked`              | A member revokes a user token.                      |
+| `agent.created`              | A member makes an Agent.                            |
+| `agent.updated`              | A member changes an Agent.                          |
+| `agent.promoted`             | A member promotes a Session Agent.                  |
+| `agent.memory.updated`       | A member changes Agent memory.                      |
+| `agent.memory.purged`        | A member removes Agent memory by a tag.             |
+| `agent.memory_agent.updated` | A member changes the memory Agent.                  |
+| `delegation.started`         | An Agent gives work to another Agent.               |
+| `delegation.completed`       | Delegated work ends.                                |
+| `capability.decided`         | A person answers a request.                         |
+| `request.resolved`           | A request closes. `details.chain` lists the Agents. |
+| `grant.created`              | A member makes a Grant.                             |
+| `grant.revoked`              | A member revokes a Grant.                           |
+| `rule.created`               | A member adds a Rule.                               |
+| `rule.updated`               | A member changes a Rule.                            |
 
 ---
 

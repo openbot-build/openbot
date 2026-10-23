@@ -5,6 +5,7 @@ import * as Judge from "../capabilities/Judge.ts"
 import * as Requests from "../capabilities/Requests.ts"
 import * as Rules from "../capabilities/Rules.ts"
 import * as AgentMemories from "./AgentMemories.ts"
+import * as MemoryAgent from "./MemoryAgent.ts"
 import * as AgentPlugin from "../plugins/agents/AgentPlugin.ts"
 import * as WorkPlugin from "../plugins/work/WorkPlugin.ts"
 import * as Waits from "../plugins/work/Waits.ts"
@@ -25,6 +26,7 @@ export const layer = <R>(options: {
 		Layer.provideMerge(Waits.layer),
 		Layer.provideMerge(Gate.layer),
 		Layer.provideMerge(Requests.layer),
+		Layer.provideMerge(MemoryAgent.layer),
 		Layer.provideMerge(
 			Layer.mergeAll(
 				Judge.layer,

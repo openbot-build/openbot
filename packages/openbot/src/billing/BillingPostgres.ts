@@ -352,6 +352,21 @@ export const make = Effect.gen(function* () {
 		})
 
 	return Billing.of({
+		agentSpend: (agentId, since) =>
+			stored(
+				Effect.gen(function* () {
+					const [row] = yield* db
+						.select({ spent: sumOf(usageEvents.costMicros) })
+						.from(usageEvents)
+						.where(
+							and(
+								eq(usageEvents.agentId, agentId),
+								gte(usageEvents.occurredAt, since),
+							),
+						)
+					return row?.spent ?? 0
+				}),
+			),
 		check: (call, attribution) =>
 			stored(
 				Effect.gen(function* () {

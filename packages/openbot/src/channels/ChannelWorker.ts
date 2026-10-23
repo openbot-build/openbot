@@ -300,6 +300,7 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 						channel: {
 							channel: stored.id,
 							conversation: event.conversation.key,
+							group: event.conversation.kind === "group",
 						},
 						title,
 					})

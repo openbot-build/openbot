@@ -21,14 +21,14 @@ OpenBot records each call to a model. You can see how many tokens each member, A
 
 OpenBot records each model call that gets an answer. Each usage event has a `source`:
 
-| `source`         | What made the call                                               |
-| ---------------- | ---------------------------------------------------------------- |
-| `turn`           | A model step of a Turn in a Session.                             |
-| `compaction`     | A summary of old messages, so the conversation fits the model.   |
-| `session_memory` | The [memory](/docs/memory) of a Session.                         |
-| `judge`          | The model that judges [Rules](/docs/rules).                      |
-| `agent_memory`   | The model that learns [Agent memory](/docs/memory#agent-memory). |
-| `other`          | Any other call.                                                  |
+| `source`         | What made the call                                                               |
+| ---------------- | -------------------------------------------------------------------------------- |
+| `turn`           | A model step of a Turn in a Session.                                             |
+| `compaction`     | A summary of old messages, so the conversation fits the model.                   |
+| `session_memory` | The [memory](/docs/memory) of a Session.                                         |
+| `judge`          | The model that judges [Rules](/docs/rules).                                      |
+| `agent_memory`   | The [memory Agent](/docs/memory#agent-memory): what it learns, adds and answers. |
+| `other`          | Any other call.                                                                  |
 
 A usage event also has the Session, the Turn, the Agent, the member and the user token, when the call has them. In a [Channel](/docs/channels), the member is the person who wrote the message.
 

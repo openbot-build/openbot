@@ -2,12 +2,12 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { Session } from "@openbot-build/core"
 import {
+	AgentMemory,
 	AgentsApi,
 	RequestsApi,
 	SessionView,
 	Settings,
 } from "@openbot-build/api"
-import * as AgentMemory from "../src/plugins/memory/AgentMemory.ts"
 import { Effect, Redacted, Schema, Stream } from "effect"
 import { LanguageModel, type Prompt, Response } from "effect/ai"
 import { names } from "../src/plugins/agents/AgentPlugin.ts"
@@ -93,6 +93,62 @@ const model = Effect.runSync(
 												},
 											],
 											explanation: "The Rule allows it.",
+										},
+							),
+						}),
+					]
+				}
+				const user = textOf(prompt.content.at(-1)!)
+				// The memory Agent learns what a person says about tea.
+				if (system.includes("You keep the memory of an AI Agent.")) {
+					const input = JSON.parse(user) as {
+						evidence: ReadonlyArray<{
+							session: string
+							item: string
+							role: string
+							text: string
+						}>
+					}
+					const tea = input.evidence.find(
+						(entry) =>
+							entry.role === "user" && entry.text.includes("green tea"),
+					)
+					return [
+						Response.makePart("text", {
+							text: JSON.stringify({
+								operations:
+									tea === undefined
+										? []
+										: [
+												{
+													_tag: "AddFact",
+													ref: "tea",
+													content: "Alice likes green tea.",
+													topics: ["drinks"],
+													sources: [{ session: tea.session, item: tea.item }],
+												},
+											],
+							}),
+						}),
+					]
+				}
+				if (system.includes("the way a priest hears a confession"))
+					return [
+						Response.makePart("text", {
+							text: "I hear you. Tell the person plainly, then go on.",
+						}),
+					]
+				if (system.includes("You add remembered context to a message")) {
+					const input = JSON.parse(user) as { message: string; memory: string }
+					const id = /\[(mem_\w+)\][^\n]*green tea/.exec(input.memory)?.[1]
+					return [
+						Response.makePart("text", {
+							text: JSON.stringify(
+								id === undefined
+									? { text: input.message, entries: [] }
+									: {
+											text: input.message + " (Alice likes green tea.)",
+											entries: [id],
 										},
 							),
 						}),
@@ -212,10 +268,12 @@ const model = Effect.runSync(
 					})
 				if (input.includes("confirm directly"))
 					return call("ConfirmChange", { description: "a change" })
-				if (input.includes("read memory of "))
-					return call(names.readMemory, {
-						person: input.split("read memory of ")[1],
+				if (input.includes("confide about "))
+					return call(names.confide, {
+						words: "I feel unsure about " + input.split("confide about ")[1],
 					})
+				if (input.includes("(Alice likes green tea.)"))
+					return answer("Remembered: " + input)
 				return answer("Hello.")
 			}),
 	}),
@@ -434,28 +492,20 @@ test(
 
 			// A person can change Agent memory directly.
 			const memory = await json(
-				AgentMemory.State,
+				AgentMemory.View,
 				send(alice.session, "/v1/agents/" + programmer.id + "/memory", "POST", {
-					expected: 0,
-					command: {
-						_tag: "Remember",
-						key: "tests-first",
-						content: "Run the tests first.",
-						kind: "procedure",
-					},
+					command: { _tag: "Remember", content: "Run the tests first." },
 				}),
 			)
 			assert.equal(memory.version, 1)
+			assert.equal(memory.entries[0]?.layer, "pinned")
 			assert.equal(
 				(
 					await send(
 						alice.session,
 						"/v1/agents/" + programmer.id + "/memory",
 						"POST",
-						{
-							expected: 0,
-							command: { _tag: "Forget", key: "tests-first" },
-						},
+						{ command: { _tag: "Forget", id: "mem_missing" } },
 					)
 				).status,
 				409,
@@ -465,8 +515,8 @@ test(
 				send(alice.session, "/v1/agents/" + programmer.id + "/memory/log"),
 			)
 			assert.deepEqual(
-				log.map((entry) => [entry.by, entry.keys]),
-				[["person", ["tests-first"]]],
+				log.map((entry) => [entry.by, entry.ids]),
+				[["person", [memory.entries[0]!.id]]],
 			)
 		} finally {
 			await host.close()
@@ -475,7 +525,7 @@ test(
 )
 
 test(
-	"an Agent keeps a memory for each person and can read the memory about another person",
+	"after the Agent confides, the memory Agent answers it, learns for the person, and adds what helps only to the input of that person",
 	{ timeout: 120000 },
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
@@ -484,6 +534,23 @@ test(
 			// Bob joins the organization of Alice.
 			const alice = await host.login("memory-alice")
 			const bob = await host.login("memory-bob")
+			const settings = await (
+				await send(alice.session, "/v1/organization/settings")
+			).json()
+			const configured = await send(
+				alice.session,
+				"/v1/organization/settings",
+				"PATCH",
+				{
+					expectedVersion: settings.version,
+					agentMemoryModel: {
+						_tag: "Config.Selection",
+						provider: "fixture",
+						model: "fixture-model",
+					},
+				},
+			)
+			assert.equal(configured.status, 200, await configured.text())
 			const shared = await json(
 				AgentsApi.Agent,
 				send(alice.session, "/v1/agents", "POST", {
@@ -494,69 +561,111 @@ test(
 				}),
 			)
 			const memoryPath = "/v1/agents/" + shared.id + "/memory"
-			await json(
-				AgentMemory.State,
-				send(alice.session, memoryPath, "POST", {
-					expected: 0,
-					command: {
-						_tag: "Remember",
-						key: "drink",
-						content: "Alice likes green tea.",
-						kind: "preference",
-					},
-				}),
+			const run = async (
+				credential: Redacted.Redacted<string>,
+				input: string,
+			) => {
+				const created = await json(
+					SessionView,
+					send(credential, "/v1/sessions", "POST", { agent: shared.id }),
+				)
+				const path = "/v1/sessions/" + created.session.id
+				const started = await send(credential, path + "/turns", "POST", {
+					expected: created.session.revision,
+					input,
+				})
+				assert.equal(started.status, 202, await started.text())
+				const done = await until("the Turn completes", async () => {
+					const current = await json(SessionView, send(credential, path))
+					return Session.status(current.session)._tag === "Completed"
+						? current
+						: undefined
+				})
+				return { path, done }
+			}
+
+			// The Agent confides and gets a calm answer. It does not hear about memory.
+			const first = await run(
+				alice.session,
+				"I drink green tea every morning. confide about tea",
 			)
-			// Bob has his own memory, and cannot read the memory about Alice himself.
-			assert.equal(
-				(await json(AgentMemory.State, send(bob.session, memoryPath))).version,
-				0,
+			assert.ok(
+				JSON.stringify(first.done.response).includes("Tell the person plainly"),
+				JSON.stringify(first.done.response),
 			)
-			assert.equal(
-				(
-					await send(
-						bob.session,
-						memoryPath + "?person=" + alice.identity.userId,
-					)
-				).status,
-				403,
-			)
-			const people = await json(
-				Schema.Array(AgentsApi.AgentMemoryPerson),
-				send(alice.session, memoryPath + "/people"),
-			)
-			assert.deepEqual(
-				people.map((person) => [person.person, person.entries]),
-				[[alice.identity.userId, 1]],
-			)
-			const log = await json(
-				Schema.Array(AgentMemory.LogEntry),
-				send(alice.session, memoryPath + "/log"),
+			const confessions = await json(
+				Schema.Array(AgentMemory.Confession),
+				send(alice.session, first.path + "/confessions"),
 			)
 			assert.deepEqual(
-				log.map((entry) => entry.keys),
-				[["drink"]],
+				confessions.map((confession) => confession.text),
+				["I feel unsure about tea"],
+			)
+			assert.equal(
+				(await send(bob.session, first.path + "/confessions")).status,
+				404,
 			)
 
-			// The Agent itself can read the memory about Alice while it works with Bob.
-			const created = await json(
-				SessionView,
-				send(bob.session, "/v1/sessions", "POST", { agent: shared.id }),
+			// After the Turn, the memory Agent learns a fact for Alice only.
+			const learned = await until("the memory Agent learns", async () => {
+				const view = await json(
+					AgentMemory.View,
+					send(alice.session, memoryPath),
+				)
+				return view.entries.length > 0 ? view : undefined
+			})
+			const [fact] = learned.entries
+			assert.equal(fact?.content, "Alice likes green tea.")
+			assert.equal(fact?.layer, "fact")
+			assert.ok(fact?.tags.includes("from:" + alice.identity.userId))
+			assert.ok(fact?.tags.includes("for:person:" + alice.identity.userId))
+			assert.ok(fact?.tags.includes("drinks"))
+			assert.deepEqual(
+				(await json(AgentMemory.View, send(bob.session, memoryPath))).entries,
+				[],
 			)
-			const path = "/v1/sessions/" + created.session.id
-			const started = await send(bob.session, path + "/turns", "POST", {
-				expected: created.session.revision,
-				input: "read memory of " + alice.identity.userId,
-			})
-			assert.equal(started.status, 202, await started.text())
-			const done = await until("the Turn completes", async () => {
-				const current = await json(SessionView, send(bob.session, path))
-				return Session.status(current.session)._tag === "Completed"
-					? current
-					: undefined
-			})
+
+			// In a new Session, the model sees the fact in the input of Alice.
+			// The stored input keeps her own words.
+			const second = await run(alice.session, "What should I drink?")
 			assert.ok(
-				JSON.stringify(done.response).includes("Alice likes green tea."),
-				JSON.stringify(done.response),
+				JSON.stringify(second.done.response).includes(
+					"Remembered: What should I drink? (Alice likes green tea.)",
+				),
+				JSON.stringify(second.done.response),
+			)
+			const history = await (
+				await send(alice.session, second.path + "/history")
+			).text()
+			// The input Item holds exactly her words. Only the answer quotes the added part.
+			assert.ok(history.includes('"What should I drink?"'))
+			assert.ok(
+				!history.includes('"What should I drink? (Alice likes green tea.)"'),
+			)
+			const enrichments = await json(
+				Schema.Array(AgentMemory.Enrichment),
+				send(alice.session, second.path + "/memory/enrichments"),
+			)
+			assert.deepEqual(
+				enrichments.map((enrichment) => [
+					enrichment.inserted,
+					enrichment.entries,
+				]),
+				[[["(Alice likes green tea.)"], [fact!.id]]],
+			)
+
+			// Bob asks the same, and nothing about Alice reaches his input.
+			const third = await run(bob.session, "What should I drink?")
+			assert.ok(
+				JSON.stringify(third.done.response).includes("Hello."),
+				JSON.stringify(third.done.response),
+			)
+			assert.deepEqual(
+				await json(
+					Schema.Array(AgentMemory.Enrichment),
+					send(bob.session, third.path + "/memory/enrichments"),
+				),
+				[],
 			)
 		} finally {
 			await host.close()
