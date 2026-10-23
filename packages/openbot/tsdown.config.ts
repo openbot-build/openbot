@@ -31,7 +31,7 @@ export default defineConfig({
 			)
 		},
 		bin: {
-			openbot: "./src/app/Main.ts",
+			"openbot-server": "./src/app/Main.ts",
 			"openbot-migrate": "./src/app/Migrate.ts",
 			"openbot-setup": "./src/app/Setup.ts",
 		},

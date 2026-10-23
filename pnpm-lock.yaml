@@ -53,6 +53,8 @@ importers:
         specifier: 4.0.6
         version: 4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy)
 
+  packages/cli: {}
+
   packages/client:
     dependencies:
       "@modelcontextprotocol/client":

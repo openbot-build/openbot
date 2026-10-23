@@ -1,0 +1,18 @@
+{
+	"name": "@openbot-build/cli",
+	"version": "0.1.0",
+	"license": "AGPL-3.0-only",
+	"type": "module",
+	"description": "The openbot command. It runs the openbot-<name> commands that it finds.",
+	"files": [
+		"dist",
+		"src"
+	],
+	"bin": {
+		"openbot": "./dist/Main.js"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "pnpm build && tsc -p tsconfig.test.json && node --test test/*.test.ts"
+	}
+}

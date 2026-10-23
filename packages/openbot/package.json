@@ -12,7 +12,7 @@
 		"migrations"
 	],
 	"bin": {
-		"openbot": "./dist/Main.js",
+		"openbot-server": "./dist/Main.js",
 		"openbot-migrate": "./dist/Migrate.js",
 		"openbot-setup": "./dist/Setup.js"
 	},

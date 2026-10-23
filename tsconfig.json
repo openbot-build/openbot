@@ -17,6 +17,9 @@
 			"path": "./packages/client"
 		},
 		{
+			"path": "./packages/cli"
+		},
+		{
 			"path": "./protocol-test"
 		}
 	]
