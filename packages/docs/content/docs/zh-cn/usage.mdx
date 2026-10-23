@@ -334,6 +334,38 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ---
 
+## token 速率
+
+token 速率限制一个范围内的模型工作使用 token 的速度。它把输入 token 和输出 token 一起计数。工作超过这个速率时，OpenBot 会让它变慢。OpenBot 从不拒绝这些工作。
+
+每个范围都有一个**令牌桶**（token bucket）。桶最多装 `burstTokens` 个 token，并按 `tokensPerSecond` 的速度重新装满。满的桶让一小段突发的工作以全速通过。
+
+| 范围           | 一个桶对应                           |
+| -------------- | ------------------------------------ |
+| `organization` | 组织的所有模型调用。                 |
+| `member`       | 为一个成员工作的模型调用。           |
+| `agent`        | 一个 Agent 的模型调用。              |
+| `token`        | 一个用户令牌启动的工作中的模型调用。 |
+
+一次模型调用从它所属的每个范围的桶中取 token：
+
+- **调用之前**，它会等到没有桶处于欠账状态。它不会失败。
+- **模型流式输出时**，OpenBot 把提供方的输出读进一个缓冲区。只有当桶里有足够的空间时，它才把每一段发出去，大约每四个字符算一个 token。所以输出以均匀的速度到来。
+- **调用结束时**，OpenBot 把真实的输入和输出 token 计入桶中。如果这让一个桶欠账，下一次调用会等到这个桶重新装满。
+
+平台管理员在[平台设置](/zh-cn/docs/platform#平台设置)中设置最高的速率。组织可以在自己的[设置](/zh-cn/docs/organization#设置)中设置自己的速率。对每个范围，两个速率中较低的那个生效，所以组织只能把速率调低。`null` 表示这个范围没有限制。默认没有限制。
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":5,"tokenRate":{"organization":{"tokensPerSecond":2000,"burstTokens":20000},"member":{"tokensPerSecond":500,"burstTokens":10000},"agent":null,"token":null}}' \
+  https://api.example.com/v1/platform/settings
+```
+
+每个 OpenBot 实例都在内存中保存自己的桶。有多个实例时，一个范围在每个实例上都可以用到这个速率。一个 Session 的工作通常在一个实例上运行。
+
+---
+
 ## 错误
 
 | 状态  | 错误                   | 何时                                                            |

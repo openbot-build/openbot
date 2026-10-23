@@ -23,6 +23,7 @@ import * as OpenAiProvider from "../providers/openai/OpenAiProvider.ts"
 import * as TypeSafeProvider from "../providers/typesafe/TypeSafeProvider.ts"
 import { Billing, priceKey } from "../billing/Billing.ts"
 import { meter } from "../billing/MeteredModel.ts"
+import { TokenThrottle } from "../billing/TokenThrottle.ts"
 import { Settings } from "../settings/Settings.ts"
 import { linkedOwner, ModelProviders, type Stored } from "./ModelProviders.ts"
 import { type Effective, effective, Models, modelKey } from "./Models.ts"
@@ -214,8 +215,9 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 		const scope = yield* Scope.Scope
 		const services = yield* Effect.context<HttpClient.HttpClient>()
 		const builtin = options.builtin
-		// A registry without Billing, such as in a unit test, does not meter its models.
+		// A registry without Billing or TokenThrottle, such as in a unit test, does not meter its models.
 		const billing = yield* Effect.serviceOption(Billing)
+		const throttle = yield* Effect.serviceOption(TokenThrottle)
 		const metered =
 			(call: {
 				readonly organizationId: string
@@ -224,10 +226,12 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				readonly modelId: string
 			}) =>
 			(model: LanguageModel.LanguageModel) =>
-				Option.match(billing, {
-					onNone: () => model,
-					onSome: (billing) => meter(model, call, billing),
-				})
+				Option.isNone(billing) && Option.isNone(throttle)
+					? model
+					: meter(model, call, {
+							billing: Option.getOrUndefined(billing),
+							throttle: Option.getOrUndefined(throttle),
+						})
 		/**
 		 * One built model for each provider, model and option. A change to the
 		 * provider gives it a new version, so the next call builds it again and

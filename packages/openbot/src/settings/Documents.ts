@@ -25,12 +25,19 @@ export const PlatformDocument = Schema.Struct({
 	codeMode: Schema.optionalKey(Api.CodeMode),
 	/** Missing in documents from before the rate limit. Then there is no limit. */
 	rateLimit: Schema.optionalKey(Api.RateLimit),
+	/** Missing in documents from before token rates. Then there is no limit. */
+	tokenRate: Schema.optionalKey(Api.TokenRateLimits),
 })
 export type PlatformDocument = typeof PlatformDocument.Type
 
 /** The Code Mode settings of the platform. */
 export const codeModeOf = (document: PlatformDocument): Api.CodeMode =>
 	document.codeMode ?? Api.codeModeDefaults
+
+/** The token rates of the platform or of an organization. */
+export const tokenRateOf = (document: {
+	readonly tokenRate?: Api.TokenRateLimits
+}): Api.TokenRateLimits => document.tokenRate ?? Api.tokenRateDefaults
 
 /** The API rate limit of the platform. */
 export const rateLimitOf = (document: PlatformDocument): Api.RateLimit =>
@@ -47,6 +54,8 @@ export const OrganizationDocument = Schema.Struct({
 	appReadRules: Api.AppReadRules,
 	defaultRoles: Api.DefaultRoles,
 	joinByDomain: Schema.Boolean,
+	/** Missing in documents from before token rates. Then there is no limit. */
+	tokenRate: Schema.optionalKey(Api.TokenRateLimits),
 })
 export type OrganizationDocument = typeof OrganizationDocument.Type
 

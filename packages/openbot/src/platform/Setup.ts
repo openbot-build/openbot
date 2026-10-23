@@ -129,6 +129,13 @@ export const run = (input: Input) =>
 						? {}
 						: { rateLimit: current.document.rateLimit },
 			}),
+			...Option.match(current, {
+				onNone: () => ({}),
+				onSome: (current) =>
+					current.document.tokenRate === undefined
+						? {}
+						: { tokenRate: current.document.tokenRate },
+			}),
 		}
 		const outcome: Outcome = Option.isNone(current)
 			? (yield* settings.initializePlatform(document))

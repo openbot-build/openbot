@@ -298,13 +298,17 @@ test(
 			/** Runs one Turn and gives the status that it ends with. */
 			const turn = async (path: string) => {
 				const current = await read(path)
-				await json(
-					send(alice.session, path + "/turns", "POST", {
-						expected: current.revision,
+				// Work after a Turn, such as Session memory, can still run. Then start again.
+				await until("the Turn starts", async () => {
+					const latest = await read(path)
+					const started = await send(alice.session, path + "/turns", "POST", {
+						expected: latest.revision,
 						input: "Say done",
-					}),
-					202,
-				)
+					})
+					if (started.status === 409) return undefined
+					assert.equal(started.status, 202, await started.text())
+					return true
+				})
 				return until("the Turn ends", async () => {
 					const session = await read(path)
 					const last = session.turns.at(-1)
@@ -517,6 +521,43 @@ test(
 				}),
 			)
 			assert.equal((await send(bob.session, "/v1/sessions")).status, 200)
+
+			// Token rates slow the work down. They never make it fail.
+			const platform = await json(send(root.session, "/v1/platform/settings"))
+			assert.deepEqual(platform.tokenRate, {
+				organization: null,
+				member: null,
+				agent: null,
+				token: null,
+			})
+			await json(
+				send(root.session, "/v1/platform/settings", "PATCH", {
+					expectedVersion: platform.version,
+					tokenRate: {
+						organization: { tokensPerSecond: 20_000, burstTokens: 1000 },
+						member: null,
+						agent: null,
+						token: null,
+					},
+				}),
+			)
+			const organizationSettings = await json(
+				send(alice.session, "/v1/organization/settings"),
+			)
+			await json(
+				send(alice.session, "/v1/organization/settings", "PATCH", {
+					expectedVersion: organizationSettings.version,
+					tokenRate: {
+						organization: null,
+						member: { tokensPerSecond: 10_000, burstTokens: 1000 },
+						agent: null,
+						token: null,
+					},
+				}),
+			)
+			// Each call has 1500 tokens, so the bucket goes into debt after each one.
+			assert.equal(await turn(ownSession), "Completed")
+			assert.equal(await turn(ownSession), "Completed")
 		} finally {
 			await host.close()
 		}

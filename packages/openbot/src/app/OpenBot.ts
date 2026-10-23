@@ -60,6 +60,7 @@ import * as RolesPostgres from "../authorization/RolesPostgres.ts"
 import * as ModelRegistry from "../models/ModelRegistry.ts"
 import * as BillingPostgres from "../billing/BillingPostgres.ts"
 import * as RateLimit from "../billing/RateLimit.ts"
+import * as TokenThrottle from "../billing/TokenThrottle.ts"
 import * as ModelProvidersPostgres from "../models/ModelProvidersPostgres.ts"
 import * as ModelsPostgres from "../models/ModelsPostgres.ts"
 import * as SsoPostgres from "../sso/SsoPostgres.ts"
@@ -342,6 +343,7 @@ export const layer = <
 		Layer.provideMerge(ModelsPostgres.layer),
 		Layer.provideMerge(BillingPostgres.layer),
 		Layer.provideMerge(RateLimit.layer),
+		Layer.provideMerge(TokenThrottle.layer),
 		Layer.provideMerge(
 			SsoPostgres.layer.pipe(
 				Layer.provide(options.domainControl ?? DomainControl.layer),

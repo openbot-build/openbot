@@ -105,22 +105,29 @@ Each organization has its own settings. They live in the database, so every Open
 	"appReadRules": [],
 	"defaultRoles": ["member"],
 	"joinByDomain": true,
+	"tokenRate": {
+		"organization": null,
+		"member": null,
+		"agent": null,
+		"token": null
+	},
 	"updatedAt": "2026-10-21T09:00:00.000Z"
 }
 ```
 
-| Field              | Default                                           | What it does                                                                                                                   |
-| ------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `rulesModel`       | `null`                                            | The model that judges [Rules](/docs/rules). `null` means that no model judges them. See [Models](/docs/models#choose-a-model). |
-| `agentMemoryModel` | `null`                                            | The model that learns [Agent memory](/docs/memory#agent-memory). `null` means that Agents learn nothing.                       |
-| `decisionModel`    | `null`                                            | The decision model, such as Jev. It must be a `decision` model. `null` means none. See [Models](/docs/models#decision-model).  |
-| `memory`           | both on                                           | The memory switches `use` and `generate` of a new Session. See [Memory](/docs/memory#switches).                                |
-| `agentMemory`      | `true`                                            | Learn Agent memory after each Turn.                                                                                            |
-| `requestTimeoutMs` | 24 hours                                          | How long a [request](/docs/requests) waits for an answer before OpenBot denies it. From 1 second to 7 days.                    |
-| `planApproval`     | ask the decider above, stay a plan after 24 hours | How a plan is approved when no member, Agent or Session sets it. See [Plan mode](/docs/sessions#plan-mode).                    |
-| `appReadRules`     | `[]`                                              | App tools that only read: `{ cardUrl, tool }`. See [Requests](/docs/requests).                                                 |
-| `defaultRoles`     | `["member"]`                                      | The roles of a new member.                                                                                                     |
-| `joinByDomain`     | `true`                                            | People with a verified email in a verified domain of the organization join when they sign in.                                  |
+| Field              | Default                                           | What it does                                                                                                                       |
+| ------------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `rulesModel`       | `null`                                            | The model that judges [Rules](/docs/rules). `null` means that no model judges them. See [Models](/docs/models#choose-a-model).     |
+| `agentMemoryModel` | `null`                                            | The model that learns [Agent memory](/docs/memory#agent-memory). `null` means that Agents learn nothing.                           |
+| `decisionModel`    | `null`                                            | The decision model, such as Jev. It must be a `decision` model. `null` means none. See [Models](/docs/models#decision-model).      |
+| `memory`           | both on                                           | The memory switches `use` and `generate` of a new Session. See [Memory](/docs/memory#switches).                                    |
+| `agentMemory`      | `true`                                            | Learn Agent memory after each Turn.                                                                                                |
+| `requestTimeoutMs` | 24 hours                                          | How long a [request](/docs/requests) waits for an answer before OpenBot denies it. From 1 second to 7 days.                        |
+| `planApproval`     | ask the decider above, stay a plan after 24 hours | How a plan is approved when no member, Agent or Session sets it. See [Plan mode](/docs/sessions#plan-mode).                        |
+| `appReadRules`     | `[]`                                              | App tools that only read: `{ cardUrl, tool }`. See [Requests](/docs/requests).                                                     |
+| `defaultRoles`     | `["member"]`                                      | The roles of a new member.                                                                                                         |
+| `joinByDomain`     | `true`                                            | People with a verified email in a verified domain of the organization join when they sign in.                                      |
+| `tokenRate`        | no limit                                          | Token rates of each scope. Where the platform sets a lower rate, the lower rate applies. See [Token rate](/docs/usage#token-rate). |
 
 `PATCH /v1/organization/settings` changes them. It needs `organization.write`. The body needs `expectedVersion`, the `version` that you read. Add only the fields that you want to change.
 

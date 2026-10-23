@@ -105,6 +105,12 @@ Jede Organisation hat ihre eigenen Einstellungen. Sie liegen in der Datenbank. S
 	"appReadRules": [],
 	"defaultRoles": ["member"],
 	"joinByDomain": true,
+	"tokenRate": {
+		"organization": null,
+		"member": null,
+		"agent": null,
+		"token": null
+	},
 	"updatedAt": "2026-10-21T09:00:00.000Z"
 }
 ```
@@ -121,6 +127,7 @@ Jede Organisation hat ihre eigenen Einstellungen. Sie liegen in der Datenbank. S
 | `appReadRules`     | `[]`                                                             | App-Werkzeuge, die nur lesen: `{ cardUrl, tool }`. Siehe [Requests](/de/docs/requests).                                                        |
 | `defaultRoles`     | `["member"]`                                                     | Die Roles eines neuen Members.                                                                                                                 |
 | `joinByDomain`     | `true`                                                           | Menschen mit einer geprüften E-Mail in einer bestätigten Domain der Organisation treten bei, wenn sie sich anmelden.                           |
+| `tokenRate`        | keine Grenze                                                     | Token Rates jedes Bereichs. Wo die Platform eine kleinere Rate setzt, gilt die kleinere Rate. Siehe [Token Rate](/de/docs/usage#token-rate).   |
 
 `PATCH /v1/organization/settings` ändert sie. Es braucht `organization.write`. Der Body braucht `expectedVersion`, also die `version`, die du gelesen hast. Füge nur die Felder hinzu, die du ändern willst.
 

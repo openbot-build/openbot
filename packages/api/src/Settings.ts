@@ -133,6 +133,41 @@ export const RateLimit = Schema.Struct({
 export type RateLimit = typeof RateLimit.Type
 export const rateLimitDefaults: RateLimit = { requestsPerMinute: null }
 
+/**
+ * A limit on the model tokens of one scope, as a token bucket. The bucket holds
+ * up to `burstTokens` and fills at `tokensPerSecond`. Model calls take their
+ * input and output tokens from it. When it is empty, OpenBot slows the work
+ * down: it sends the output on more slowly, and the next model call waits.
+ * It never refuses the work.
+ */
+export const TokenRate = Schema.Struct({
+	tokensPerSecond: Schema.Int.check(
+		Schema.isBetween({ minimum: 1, maximum: 10_000_000 }),
+	),
+	burstTokens: Schema.Int.check(
+		Schema.isBetween({ minimum: 1, maximum: 100_000_000 }),
+	),
+})
+export type TokenRate = typeof TokenRate.Type
+/** The token rate limit of each scope. Null means no limit for that scope. */
+export const TokenRateLimits = Schema.Struct({
+	/** All model calls of the organization. */
+	organization: Schema.NullOr(TokenRate),
+	/** The model calls that work for one member. */
+	member: Schema.NullOr(TokenRate),
+	/** The model calls of one Agent. */
+	agent: Schema.NullOr(TokenRate),
+	/** The model calls of work that one user token started. */
+	token: Schema.NullOr(TokenRate),
+})
+export type TokenRateLimits = typeof TokenRateLimits.Type
+export const tokenRateDefaults: TokenRateLimits = {
+	organization: null,
+	member: null,
+	agent: null,
+	token: null,
+}
+
 export const PlatformSettings = Schema.Struct({
 	version: Version,
 	/**
@@ -153,6 +188,8 @@ export const PlatformSettings = Schema.Struct({
 	appRestrictions: Schema.Array(Restriction).check(Schema.isMaxLength(1000)),
 	codeMode: CodeMode,
 	rateLimit: RateLimit,
+	/** The highest token rates. An organization can only set lower ones. */
+	tokenRate: TokenRateLimits,
 	updatedAt: Schema.String,
 })
 export type PlatformSettings = typeof PlatformSettings.Type
@@ -167,6 +204,7 @@ export const UpdatePlatformSettingsRequest = Schema.Struct({
 	),
 	codeMode: Schema.optionalKey(CodeMode),
 	rateLimit: Schema.optionalKey(RateLimit),
+	tokenRate: Schema.optionalKey(TokenRateLimits),
 })
 export type UpdatePlatformSettingsRequest =
 	typeof UpdatePlatformSettingsRequest.Type
@@ -206,6 +244,11 @@ export const OrganizationSettings = Schema.Struct({
 	defaultRoles: DefaultRoles,
 	/** People with a verified email in a verified domain of the organization join when they sign in. */
 	joinByDomain: Schema.Boolean,
+	/**
+	 * The token rates of the organization. Where the platform sets a lower
+	 * rate, the lower rate applies.
+	 */
+	tokenRate: TokenRateLimits,
 	updatedAt: Schema.String,
 })
 export type OrganizationSettings = typeof OrganizationSettings.Type
@@ -221,6 +264,7 @@ export const UpdateOrganizationSettingsRequest = Schema.Struct({
 	appReadRules: Schema.optionalKey(AppReadRules),
 	defaultRoles: Schema.optionalKey(DefaultRoles),
 	joinByDomain: Schema.optionalKey(Schema.Boolean),
+	tokenRate: Schema.optionalKey(TokenRateLimits),
 })
 export type UpdateOrganizationSettingsRequest =
 	typeof UpdateOrganizationSettingsRequest.Type

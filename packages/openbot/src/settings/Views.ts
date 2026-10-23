@@ -3,6 +3,7 @@ import { DateTime } from "effect"
 import {
 	codeModeOf,
 	rateLimitOf,
+	tokenRateOf,
 	type MemberDocument,
 	type OrganizationDocument,
 	type PlatformDocument,
@@ -35,6 +36,7 @@ export const platform = (
 		appRestrictions: document.appRestrictions,
 		codeMode: codeModeOf(document),
 		rateLimit: rateLimitOf(document),
+		tokenRate: tokenRateOf(document),
 		updatedAt: iso(snapshot.updatedAt),
 	}
 }
@@ -43,6 +45,7 @@ export const organization = (
 	snapshot: Snapshot<OrganizationDocument>,
 ): Api.OrganizationSettings => ({
 	...snapshot.document,
+	tokenRate: tokenRateOf(snapshot.document),
 	version: snapshot.version,
 	updatedAt: iso(snapshot.updatedAt),
 })

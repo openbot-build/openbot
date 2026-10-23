@@ -1,6 +1,6 @@
 // `meter` wraps one model object. A pipeable form does not help.
 // @effect-diagnostics missingPipeableSignature:off
-import { Clock, Context, Effect, Stream } from "effect"
+import { Clock, Context, Effect, Ref, Stream } from "effect"
 import { AiError, type LanguageModel, type Response } from "effect/ai"
 import {
 	type Attribution,
@@ -10,6 +10,7 @@ import {
 	tokensOf,
 	type BillingStorageError,
 } from "./Billing.ts"
+import type { TokenThrottle } from "./TokenThrottle.ts"
 
 /**
  * Finds who makes a model call, at the time of the call. The code that gives a
@@ -83,35 +84,70 @@ interface Methods {
 	) => Stream.Stream<Response.StreamPart<{}>, AiError.AiError>
 }
 
+/** A rough count of the tokens in a piece of streamed text: about four characters each. */
+const estimate = (part: Response.StreamPart<{}>) =>
+	part.type === "text-delta" ||
+	part.type === "reasoning-delta" ||
+	part.type === "tool-params-delta"
+		? Math.ceil(part.delta.length / 4)
+		: 0
+
+const totalOf = (tokens: ReturnType<typeof tokensOf>) =>
+	tokens.inputUncached +
+	tokens.inputCacheRead +
+	tokens.inputCacheWrite +
+	tokens.outputText +
+	tokens.outputReasoning
+
+/** How many parts of a stream OpenBot reads ahead from the provider while it slows the output. */
+const readAhead = 4096
+
 /**
  * A model that checks the budgets and credits before each call, and records the
  * usage after each call. A failed record only writes a log, so the answer is not lost.
+ *
+ * With a throttle, each call first waits until its token buckets are out of debt.
+ * A stream then sends each piece of output only when the buckets have room for
+ * it, so the output comes at an even speed. At the end, the real input and output
+ * tokens go into the buckets, and the next call waits for them.
  */
 export const meter = (
 	model: LanguageModel.LanguageModel,
 	call: Call,
-	billing: Billing["Service"],
+	services: {
+		readonly billing?: Billing["Service"] | undefined
+		readonly throttle?: TokenThrottle["Service"] | undefined
+	},
 ): LanguageModel.LanguageModel => {
+	const { billing, throttle } = services
 	const before = (method: "generateText" | "generateObject" | "streamText") =>
 		Effect.gen(function* () {
 			const attribution = refine(yield* yield* CurrentAttribution, method)
 			const startedAt = yield* Clock.currentTimeMillis
-			yield* billing
-				.check(call, attribution)
-				.pipe(Effect.mapError((error) => blocked(method, error)))
-			return { attribution, startedAt }
+			if (billing !== undefined)
+				yield* billing
+					.check(call, attribution)
+					.pipe(Effect.mapError((error) => blocked(method, error)))
+			const scopes =
+				throttle === undefined ? [] : yield* throttle.scopes(call, attribution)
+			if (throttle !== undefined) yield* throttle.take(scopes, 0)
+			return { attribution, startedAt, scopes }
 		})
-	const after = (
-		started: { readonly attribution: Attribution; readonly startedAt: number },
-		usage: Response.Usage,
-	) =>
-		billing
-			.record(call, started.attribution, tokensOf(usage), started.startedAt)
-			.pipe(
-				Effect.catch((error) =>
-					Effect.logWarning("OpenBot could not record model usage", error),
-				),
-			)
+	type Started = Effect.Success<ReturnType<typeof before>>
+	const after = (started: Started, usage: Response.Usage, paced = 0) =>
+		Effect.gen(function* () {
+			const tokens = tokensOf(usage)
+			if (throttle !== undefined)
+				yield* throttle.charge(started.scopes, totalOf(tokens) - paced)
+			if (billing !== undefined)
+				yield* billing
+					.record(call, started.attribution, tokens, started.startedAt)
+					.pipe(
+						Effect.catch((error) =>
+							Effect.logWarning("OpenBot could not record model usage", error),
+						),
+					)
+		})
 	// The methods are generic and overloaded. The wrapper only passes the options
 	// through and returns the same result, so it uses this plain form of them.
 	const plain = model as unknown as Methods
@@ -132,17 +168,37 @@ export const meter = (
 			}),
 		streamText: (options) =>
 			Stream.unwrap(
-				Effect.map(before("streamText"), (started) =>
-					plain
-						.streamText(options)
-						.pipe(
+				Effect.gen(function* () {
+					const started = yield* before("streamText")
+					const stream = plain.streamText(options)
+					if (throttle === undefined || started.scopes.length === 0)
+						return stream.pipe(
 							Stream.tap((part) =>
 								part.type === "finish"
 									? after(started, part.usage)
 									: Effect.void,
 							),
-						),
-				),
+						)
+					// The tokens that the output already took from the buckets.
+					const paced = yield* Ref.make(0)
+					return stream.pipe(
+						// Read on from the provider while the output waits for room.
+						Stream.buffer({ capacity: readAhead }),
+						Stream.tap((part) => {
+							if (part.type === "finish")
+								return Effect.flatMap(Ref.get(paced), (taken) =>
+									after(started, part.usage, taken),
+								)
+							const tokens = estimate(part)
+							return tokens === 0
+								? Effect.void
+								: Effect.andThen(
+										Ref.update(paced, (taken) => taken + tokens),
+										throttle.take(started.scopes, tokens),
+									)
+						}),
+					)
+				}),
 			),
 	}
 	return {

@@ -334,6 +334,38 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ---
 
+## Token Rate
+
+Eine Token Rate begrenzt, wie schnell die Arbeit der Models eines Bereichs Tokens verbraucht. Sie zählt Eingabe-Tokens und Ausgabe-Tokens zusammen. Wenn Arbeit über der Rate liegt, macht OpenBot sie langsamer. Es lehnt die Arbeit nie ab.
+
+Jeder Bereich hat einen **Token Bucket** (Eimer für Tokens). Der Bucket hält bis zu `burstTokens` und füllt sich mit `tokensPerSecond` wieder auf. Ein voller Bucket lässt einen kurzen Schub Arbeit mit voller Geschwindigkeit durch.
+
+| Bereich        | Ein Bucket für                                                       |
+| -------------- | -------------------------------------------------------------------- |
+| `organization` | Alle Aufrufe von Models der Organisation.                            |
+| `member`       | Die Aufrufe von Models, die für ein Member arbeiten.                 |
+| `agent`        | Die Aufrufe von Models eines Agent.                                  |
+| `token`        | Die Aufrufe von Models der Arbeit, die ein User-Token gestartet hat. |
+
+Ein Aufruf eines Model nimmt aus jedem Bucket seiner Bereiche:
+
+- **Vor dem Aufruf** wartet er, bis kein Bucket Schulden hat. Er schlägt nicht fehl.
+- **Während das Model streamt**, liest OpenBot die Ausgabe vom Anbieter in einen Puffer. Es schickt jedes Stück erst weiter, wenn die Buckets Platz dafür haben. Ein Token sind etwa vier Zeichen. So kommt die Ausgabe mit gleichmäßiger Geschwindigkeit.
+- **Wenn der Aufruf endet**, legt OpenBot die echten Eingabe-Tokens und Ausgabe-Tokens in die Buckets. Wenn ein Bucket dadurch Schulden hat, wartet der nächste Aufruf, bis sich der Bucket wieder füllt.
+
+Der Platform-Admin setzt die höchsten Raten in den [Einstellungen der Platform](/de/docs/platform#einstellungen-der-platform). Eine Organisation kann ihre eigenen Raten in ihren [Einstellungen](/de/docs/organization#einstellungen) setzen. Für jeden Bereich gilt die kleinere der beiden Raten. Eine Organisation kann eine Rate also nur kleiner machen. `null` heißt: keine Grenze für diesen Bereich. Das ist der Standard.
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":5,"tokenRate":{"organization":{"tokensPerSecond":2000,"burstTokens":20000},"member":{"tokensPerSecond":500,"burstTokens":10000},"agent":null,"token":null}}' \
+  https://api.example.com/v1/platform/settings
+```
+
+Jede Instanz von OpenBot hält ihre eigenen Buckets im Speicher. Mit mehr als einer Instanz kann ein Bereich auf jeder Instanz bis zur Rate verbrauchen. Die Arbeit einer Session läuft meistens auf einer Instanz.
+
+---
+
 ## Fehler
 
 | Status | Fehler                 | Wann                                                                                     |

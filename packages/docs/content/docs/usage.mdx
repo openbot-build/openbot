@@ -334,6 +334,38 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ---
 
+## Token rate
+
+A token rate limits how fast the model work of a scope uses tokens. It counts input and output tokens together. When work goes over the rate, OpenBot slows it down. It never refuses the work.
+
+Each scope has a **token bucket**. The bucket holds up to `burstTokens` and fills again at `tokensPerSecond`. A full bucket lets a short burst of work through at full speed.
+
+| Scope          | One bucket for                                       |
+| -------------- | ---------------------------------------------------- |
+| `organization` | All model calls of the organization.                 |
+| `member`       | The model calls that work for one member.            |
+| `agent`        | The model calls of one Agent.                        |
+| `token`        | The model calls of work that one user token started. |
+
+A model call takes from every bucket of its scopes:
+
+- **Before the call**, it waits until no bucket is in debt. It does not fail.
+- **While the model streams**, OpenBot reads the output from the provider into a buffer. It sends each piece on only when the buckets have room for it, about one token for every four characters. So the output comes at an even speed.
+- **When the call ends**, OpenBot puts the real input and output tokens into the buckets. When this puts a bucket into debt, the next call waits until the bucket fills again.
+
+The platform admin sets the highest rates in the [platform settings](/docs/platform#platform-settings). An organization can set its own rates in its [settings](/docs/organization#settings). For each scope, the lower of the two rates applies, so an organization can only make a rate lower. `null` means no limit for that scope. The default is no limit.
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":5,"tokenRate":{"organization":{"tokensPerSecond":2000,"burstTokens":20000},"member":{"tokensPerSecond":500,"burstTokens":10000},"agent":null,"token":null}}' \
+  https://api.example.com/v1/platform/settings
+```
+
+Each instance of OpenBot keeps its own buckets in memory. With more than one instance, a scope can use up to the rate on each instance. The work of one Session usually runs on one instance.
+
+---
+
 ## Errors
 
 | Status | Error                  | When                                                                       |

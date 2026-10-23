@@ -108,21 +108,28 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		"outputBytes": 65536
 	},
 	"rateLimit": { "requestsPerMinute": null },
+	"tokenRate": {
+		"organization": null,
+		"member": null,
+		"agent": null,
+		"token": null
+	},
 	"updatedAt": "2026-10-21T09:00:00.000Z"
 }
 ```
 
-| Feld                   | Was es ist                                                                                                                        |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `version`              | Steigt mit jeder Änderung um eins.                                                                                                |
-| `publicOrigin`         | Der öffentliche HTTPS-Ursprung von OpenBot.                                                                                       |
-| `identityProvider`     | Der OpenID-Connect-Anbieter der Platform, oder `null`, wenn sich Menschen nur über SSO-Verbindungen anmelden.                     |
-| `organizationCreation` | Wer eine Organization erstellen kann: `anyone` oder `platform_admins`. Siehe [Organizations erstellen](#organizations-erstellen). |
-| `policyCeiling`        | Policies zum Ablehnen für jede Organization. Siehe [Obergrenze für Policies](#obergrenze-für-policies).                           |
-| `appRestrictions`      | Apps, die der App Index versteckt. Siehe [App Index](/de/docs/app-index#sperren-durch-den-host).                                  |
-| `codeMode`             | Ob Agents Code Mode nutzen können, und seine Grenzen. Siehe [Code Mode](/de/docs/code-mode#code-mode-einschalten).                |
-| `rateLimit`            | Wie viele API-Anfragen jeder Aufrufer in einer Minute senden darf. Siehe [Rate Limit](/de/docs/usage#rate-limit).                 |
-| `updatedAt`            | Wann sich die Einstellungen zuletzt geändert haben.                                                                               |
+| Feld                   | Was es ist                                                                                                                         |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `version`              | Steigt mit jeder Änderung um eins.                                                                                                 |
+| `publicOrigin`         | Der öffentliche HTTPS-Ursprung von OpenBot.                                                                                        |
+| `identityProvider`     | Der OpenID-Connect-Anbieter der Platform, oder `null`, wenn sich Menschen nur über SSO-Verbindungen anmelden.                      |
+| `organizationCreation` | Wer eine Organization erstellen kann: `anyone` oder `platform_admins`. Siehe [Organizations erstellen](#organizations-erstellen).  |
+| `policyCeiling`        | Policies zum Ablehnen für jede Organization. Siehe [Obergrenze für Policies](#obergrenze-für-policies).                            |
+| `appRestrictions`      | Apps, die der App Index versteckt. Siehe [App Index](/de/docs/app-index#sperren-durch-den-host).                                   |
+| `codeMode`             | Ob Agents Code Mode nutzen können, und seine Grenzen. Siehe [Code Mode](/de/docs/code-mode#code-mode-einschalten).                 |
+| `rateLimit`            | Wie viele API-Anfragen jeder Aufrufer in einer Minute senden darf. Siehe [Rate Limit](/de/docs/usage#rate-limit).                  |
+| `tokenRate`            | Die höchsten Token Rates jedes Bereichs. Organisationen können nur kleinere setzen. Siehe [Token Rate](/de/docs/usage#token-rate). |
+| `updatedAt`            | Wann sich die Einstellungen zuletzt geändert haben.                                                                                |
 
 ### Geheimnisse kommen nie zurück
 
