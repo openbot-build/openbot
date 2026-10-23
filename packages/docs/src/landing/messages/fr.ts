@@ -56,8 +56,8 @@ export default {
 		],
 		items: [
 			{
-				title: "Sessions et Timelines",
-				text: "Le travail se fait dans des Sessions et des Turns. La Timeline garde les versions, pour revenir en arrière et réessayer.",
+				title: "Un chat avec chaque Bot",
+				text: "Vous avez un chat avec chaque Bot. Le Bot répond toujours tout de suite, et le travail long avance en parallèle.",
 			},
 			{
 				title: "Validations",

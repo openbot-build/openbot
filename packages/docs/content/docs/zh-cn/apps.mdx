@@ -188,7 +188,7 @@ Turn 运行时，OpenBot 会为你可用连接的每项能力给模型一个工�
 
 ### App 操作
 
-OpenBot 把每次 App 调用记录为一个 App 操作（App operation）。用 `GET /v1/sessions/:sessionId/app-operations` 或 `GET /v1/app-operations/:id` 读取它们。
+OpenBot 把每次 App 调用记录为一个 App 操作（App operation）。用 `GET /v1/chats/:chatId/app-operations` 或 `GET /v1/app-operations/:id` 读取它们。
 
 | 状态                                      | 含义                                       |
 | ----------------------------------------- | ------------------------------------------ |
@@ -220,7 +220,7 @@ curl -X POST https://api.example.com/v1/app-operations/<operation id>/inputs \
 
 有些 App 工具带有一个交互式视图。视图是来自 App 的 HTML 页面，由 MCP Apps 定义。OpenBot 没有用户界面，所以由你的客户端显示视图。你可以跳过这一部分。每个结果也都有文本。
 
-1. 为一个操作打开视图：`POST /v1/app-operations/:operationId/view`，带上 `{ "sessionId", "itemId" }`。响应包含视图的 `id`、HTML `resource`、视图的 `tools`、调用的 `arguments` 和 `result`。
+1. 为一个操作打开视图：`POST /v1/app-operations/:operationId/view`，带上 `{ "chatId", "itemId" }`。响应包含视图的 `id`、HTML `resource`、视图的 `tools`、调用的 `arguments` 和 `result`。
 2. 在 iframe 中显示 HTML。`@openbot-build/protocol/McpApps` 模块有一个浏览器宿主可以做这件事。参见 [Protocol](/zh-cn/docs/protocol)。
 3. 把视图的请求转交给 OpenBot：
 
@@ -233,7 +233,7 @@ curl -X POST https://api.example.com/v1/app-operations/<operation id>/inputs \
 | 发送一条文本消息     | `POST /v1/app-views/:viewId/messages`                       |
 | 关闭                 | `DELETE /v1/app-views/:viewId`                              |
 
-视图动作遵守同样的批准规则。消息会启动一个新的 Turn，而且只在 Session 空闲时才会。如果你用较旧的 Timeline `version` 打开视图，视图是只读的。如果视图无法打开，你会得到 409 `AppViewUnavailable`。文本结果仍然在。
+视图动作遵守同样的批准规则。来自视图的消息作为[通知](/zh-cn/docs/chats#通知)，经过 Chat 的[收件箱](/zh-cn/docs/chats#收件箱)进入这个 Chat。Bot 在下一步读取它，或者它启动一个新的 Turn。如果视图无法打开，你会得到 409 `AppViewUnavailable`。文本结果仍然在。
 
 ---
 

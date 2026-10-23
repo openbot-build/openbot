@@ -76,7 +76,7 @@ The program can catch these errors and go on.
 
 ## When a call needs a decision
 
-Some App calls need a decision, for example a tool that writes. Then the program stops at that call, and the Turn waits. The [request](/docs/requests) has the App call in `app`, and the program in `code`:
+Some App calls need a decision, for example a tool that writes. Then the program stops at that call. The Turn does not wait: the tool call of the program gets a pending result at once, and the Bot goes on. The [request](/docs/requests) has the App call in `app`, and the program in `code`:
 
 ```json
 {
@@ -91,7 +91,7 @@ Some App calls need a decision, for example a tool that writes. Then the program
 }
 ```
 
-After the decision, OpenBot runs the program again from the top. Each call that already ran gives its saved result, and OpenBot does not send it to the App again. The program then goes on past the call that waited. When it ends, the Turn gets the result and goes on.
+After the decision, OpenBot runs the program again from the top, in the background. Each call that already ran gives its saved result, and OpenBot does not send it to the App again. The program then goes on past the call that waited. When it ends, its result comes back to the Chat as a [notice](/docs/chats#notices), and the Bot goes on with it.
 
 This works only when the program makes the same calls in the same order each time. So the program sees a fixed time in `Date.now()`, and `Math.random()` gives the same numbers in each run. If a program makes other calls than before, OpenBot stops it with `ReplayMismatch`. This can happen when a connection changed while the program waited. Nothing is sent by mistake.
 
@@ -99,12 +99,12 @@ This works only when the program makes the same calls in the same order each tim
 
 ## Read code runs
 
-`GET /v1/sessions/:sessionId/code-runs` lists the programs of a Session. `GET /v1/code-runs/:id` reads one. Both need `apps.use`. The list also needs `sessions.read` on the Session. You only see the programs of your own Sessions.
+`GET /v1/chats/:chatId/code-runs` lists the programs of a Chat. `GET /v1/code-runs/:id` reads one. Both need `apps.use`. The list also needs `chats.read` on the Chat. You only see the programs of your own Chats.
 
 ```json
 {
 	"id": "8f1c…",
-	"session": "c81d…",
+	"chat": "chat_c81d…",
 	"turn": "t-77",
 	"callId": "call-9",
 	"status": "Completed",

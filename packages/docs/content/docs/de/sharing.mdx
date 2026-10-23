@@ -16,7 +16,7 @@ Du kannst einen Bot mit Personen außerhalb deiner Organisation teilen. Das ist 
 
 ## Personen einladen
 
-Du brauchst `bots.share` für den Bot. Members können ihre eigenen Bots teilen. Administratoren können auch die gemeinsamen Bots der Organisation teilen. Du kannst nur einen dauerhaften obersten Bot teilen: einen, der einem Member oder der Organisation gehört und der nicht archiviert ist.
+Du brauchst `bots.share` für den Bot. Members können ihre eigenen Bots teilen. Administratoren können auch die gemeinsamen Bots der Organisation teilen. Du kannst nur einen obersten Bot teilen: einen, der einem Member oder der Organisation gehört und der nicht archiviert ist.
 
 Um eine Person einzuladen, sende ihre E-Mail. Die Einladung gilt 7 Tage, wie eine [Einladung in die Organisation](/de/docs/organization#einladungen):
 
@@ -95,7 +95,6 @@ Der verknüpfte Bot ist ein Bot des Bot-Mitglieds, in seiner eigenen Organisatio
 ```json
 {
 	"id": "bot_e40b",
-	"kind": "persistent",
 	"owner": { "_tag": "Member", "userId": "u_456" },
 	"name": "Guide",
 	"source": { "organizationId": "org_3c7e", "bot": "bot_7d2c" }
@@ -104,15 +103,15 @@ Der verknüpfte Bot ist ein Bot des Bot-Mitglieds, in seiner eigenen Organisatio
 
 Das Bot-Mitglied arbeitet damit wie mit seinen eigenen Bots:
 
-- Es startet [Sessions](/de/docs/sessions) damit und kann ihn zu seinem Standard-Bot machen.
+- Es spricht mit ihm in seinem eigenen [Chat](/de/docs/chats), in seiner eigenen Organisation, und kann ihn zu seinem Standard-Bot machen.
 - Der Bot arbeitet mit den Berechtigungen des Bot-Mitglieds, mit seinen verbundenen [Apps](/de/docs/apps) und mit seinen anderen Bots. Er kann den Bots des Bot-Mitglieds Arbeit geben.
 - Seine [Requests](/de/docs/requests) gehen an das Bot-Mitglied. Dessen Entscheidungen, [Grants](/de/docs/requests#einen-request-beantworten) und [Rules](/de/docs/rules) gelten nur in seiner Organisation. Deine gelten nur in deiner.
-- Die Organisation des Bot-Mitglieds bezahlt die Models. Wenn dein Bot ein Model nennt, das seine Organisation nicht hat, nutzt die Session das Standard-Model seiner Organisation.
-- Du siehst nie seine Sessions.
+- Die Organisation des Bot-Mitglieds bezahlt die Models. Wenn dein Bot ein Model nennt, das seine Organisation nicht hat, nutzt sein Chat es nicht. Er nutzt das Standard-Model des Servers, wenn der Server eines hat.
+- Du siehst nie seine Chats.
 
 Name, Rolle, Anweisungen und Model kommen immer von deinem Bot. Wenn du sie änderst, ändert sich auch jeder verknüpfte Bot. Ein Bot-Mitglied kann sie nicht ändern. Ein Bot-Mitglied kann `planApproval` ändern.
 
-Der Bot hat [einen Memory-Pool](/de/docs/memory#bot-memory), in deiner Organisation. Was er in der Organisation eines Bot-Mitglieds lernt, ist für dieses Bot-Mitglied, in dieser Organisation. Niemand liest das Memory über eine andere Person: du nicht, und andere Bot-Mitglieder auch nicht. Du kannst mit einem Purge entfernen, was ein Bot-Mitglied hinterlassen hat, ohne es zu lesen. Nur du verwaltest den Memory-Bot.
+Der Bot hat [einen Memory-Pool](/de/docs/memory), in deiner Organisation. Was er in der Organisation eines Bot-Mitglieds lernt, ist für dieses Bot-Mitglied, in dieser Organisation. Niemand liest das Memory über eine andere Person: du nicht, und andere Bot-Mitglieder auch nicht. Du kannst mit einem Purge entfernen, was ein Bot-Mitglied hinterlassen hat, ohne es zu lesen. Nur du verwaltest den Memory-Bot.
 
 ---
 

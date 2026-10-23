@@ -1,10 +1,11 @@
 ---
 title: 委派
-description: Bots 如何把工作交给其他 Bots，并拿回结果。
+description: Bots 如何把工作交给其他 Bots 或交给自己，并拿回结果。
 ---
 
-**委派**（Delegation）是指一个 Bot 把任务交给另一个 Bot。另一个 Bot 在自己的 Session 中、用自己的上下文工作。向下只传一份简短的说明，向上只返回一个简短的结果。所以每个 Bot 都能专注于自己的工作。
-本页介绍 Bot 工具、任务说明和结果，以及如何查看委派出去的工作。
+**委派**（Delegation）是指一个 Bot 把任务交给一个 Bot。任务可以交给另一个 Bot，也可以交给同一个 Bot。工作在它自己的 **task Chat** 中运行，有自己的上下文，并和其他工作同时进行。交出工作的 Bot 不会等待。它继续做事，或者结束它的回答。工作结束时，结果作为[通知](/zh-cn/docs/chats#通知)回到它的 Chat。
+所以 Bot 总是有空回答人，而且很多工作可以并行运行。
+本页介绍 Bot 工具、工作如何运行和结束，以及如何查看和停止它。
 
 ---
 
@@ -12,104 +13,144 @@ description: Bots 如何把工作交给其他 Bots，并拿回结果。
 
 OpenBot 给每个 Bot 提供这些工具：
 
-| 工具                        | 作用                                                                                         |
-| --------------------------- | -------------------------------------------------------------------------------------------- |
-| `openbot_list_bots`         | 列出它可以分派工作的 Bots，以及它们的角色。其中包括它的 Session Bots。                       |
-| `openbot_bot_details`       | 读取某个 Bot 的角色和指令。                                                                  |
-| `openbot_delegate`          | 把任务交给另一个 Bot，并等待结果。                                                           |
-| `openbot_start_session_bot` | 为它的 Session 启动一个新的 [Session Bot](/zh-cn/docs/bots#三种-bots)。                      |
-| `openbot_create_bot`        | 创建一个归它所有的新的长期 Bot。见 [拥有 Bots 的 Bots](/zh-cn/docs/bots#拥有-bots-的-bots)。 |
-| `openbot_promote_bot`       | 把它 Session 中的 Session Bot 变成一个归它所有的长期 Bot。                                   |
-| `openbot_report`            | 只在委派的工作中使用。把结果发回去。                                                         |
-
-当 Bot 第一次给另一个长期 Bot 分派工作、启动 Session Bot、创建 Bot 或提升 Bot 时，它上面的决策者必须同意。见 [Requests](/zh-cn/docs/requests)。Bot 总是可以给它 Session 中的 Session Bots，以及它拥有的 Bots 分派工作。
+| 工具                        | 作用                                                                                   |
+| --------------------------- | -------------------------------------------------------------------------------------- |
+| `openbot_list_bots`         | 列出它可以分派工作的 Bots，以及它们的角色。                                            |
+| `openbot_bot_details`       | 读取某个 Bot 的角色和指令。                                                            |
+| `openbot_delegate`          | 把任务交给一个 Bot，或者交给它自己。它马上返回。                                       |
+| `openbot_cancel_delegation` | 停止它的 Chat 交出去的工作。                                                           |
+| `openbot_create_bot`        | 创建一个归它所有的新 Bot。见 [拥有 Bots 的 Bots](/zh-cn/docs/bots#拥有-bots-的-bots)。 |
 
 ---
 
-## 任务说明
+## 分派工作
 
-`openbot_delegate` 接收一份任务说明（brief）：
+`openbot_delegate` 接收这些字段：
 
-| 字段             | 含义                                                   |
-| ---------------- | ------------------------------------------------------ |
-| `bot`            | 另一个 Bot 的 ID。                                     |
-| `reason`         | Bot 为什么需要这样做。需要决策者同意时，决策者会读它。 |
-| `task`           | 要做什么。                                             |
-| `userRequest`    | 人的原话，不做修改。任务说明永远不会替代它。           |
-| `context`        | 另一个 Bot 需要的简短事实。                            |
-| `references`     | 另一个 Bot 可以读取的 Session 和 Item ID。             |
-| `constraints`    | 工作的规则。                                           |
-| `expectedOutput` | 好的结果是什么样子。                                   |
-| `session`        | 可选。在这个 Session 中继续那个 Bot 之前的工作。       |
+| 字段         | 含义                                                                                                |
+| ------------ | --------------------------------------------------------------------------------------------------- |
+| `task`       | 必填。要做什么，以及这项工作需要的一切。另一个 Bot 看不到交出工作的那个 Chat。                      |
+| `bot`        | 可选。做这项工作的 Bot 的 ID。不填时，Bot 把工作交给它自己。                                        |
+| `reason`     | Bot 为什么交出这项工作。交给它不拥有的 Bot 时必须填写。决策者会读它。                               |
+| `delegation` | 可选。这个 Chat 之前某项工作的 ID。新的任务接着那项工作继续。见 [接着之前的工作](#接着之前的工作)。 |
 
-另一个 Bot 把任务说明作为一个 Turn 的第一条消息收到。它永远看不到分派工作的那个 Bot 的历史。
-
-### 工作使用哪个 Session
-
-- 有 `session` 时，工作在那个 Session 中继续，前提是它属于另一个 Bot，并且是从同一个 Session 启动的。
-- 对于 Session Bot，工作在它最新的、来自同一个父 Session 的 Session 中继续。所以 Session Bot 会保留它的上下文。
-- 否则，工作会在一个新的 Session 中开始。
-
-如果另一个 Session 正忙，任务说明会在它的队列中等待，接下来运行。
-
-## 结果
-
-另一个 Bot 完成后，调用一次 `openbot_report`。如果它结束时没有报告，OpenBot 使用它的最后一个回答。
+这个工具马上返回：
 
 ```json
 {
-	"status": "completed",
-	"summary": "Added the endpoint and two tests.",
-	"artifacts": [{ "kind": "branch", "ref": "bots-contract" }],
-	"openQuestions": [],
-	"child": { "session": "c81d…", "turn": "t-77" }
+	"delegation": "dlg_9f1e…",
+	"status": "queued",
+	"note": "The work runs on its own. Its result comes back to this Chat as a message. Go on with other work, or end your answer now."
 }
 ```
 
-`status` 是 `completed`、`failed` 或 `cancelled`。结果中从不包含完整的历史。要读取细节，请打开 `child` 中的 Session。
+谁可以接到工作：
+
+- **Bot 自己。** 不填 `bot`。一个角色相同、没有历史的新助手来做这项工作。这不需要决定。
+- **它拥有的 Bot。** 这不需要决定。
+- **任何其他 Bot。** 这是能力 `bots.delegate`，需要一个 `reason`。第一次时，Bot 上方的决策者必须同意。见 [Requests](/zh-cn/docs/requests)。决策者做决定时，状态是 `authorizing`。工作被允许时，它就开始。被拒绝时，状态变成 `failed`，Chat 会收到一条带有原因的通知。
+
+工作能往下走多深，同时能运行多少工作，都没有限制。Bot 可以把工作交给自己，那项工作又可以交出更多工作。Bot A 可以把工作交给 Bot B，B 也可以把工作交回给 A。没有谁在等待，所以不会卡住。只有[预算和速率限制](/zh-cn/docs/usage)会拦住花费太多的工作。
+
+### 接着之前的工作
+
+要在同一个上下文中再交出工作，请把之前那项工作的 ID 作为 `delegation` 发送。那项工作必须来自同一个 Chat。
+
+- 那项工作还在运行时，新的 `task` 会作为一条消息进入它的 task Chat。那里的 Bot 在下一步读取它。ID 保持不变。
+- 那项工作已经结束时，OpenBot 在同一个 task Chat 中创建一个新的委派。所以那里的 Bot 仍然有它全部的历史。
 
 ---
 
-## 父级如何等待
+## 工作在哪里运行
 
-在另一个 Bot 工作时，分派工作的那个 Turn 的状态是 `Waiting`。它不会占用一个正在运行的进程，所以等待可以持续很久，并且在服务器重启后依然有效。工作结束时，OpenBot 把结果交给正在等待的工具调用，然后这个 Turn 继续。当一个 Turn 同时给多个 Bots 分派工作时，它会在最后一个结果到达后继续。
+每个委派都在做这项工作的 Bot 的一个 task Chat 中运行。task Chat 的 `kind` 为 `"task"`，它的 `parent` 指出交出工作的 Chat 和委派。它的第一条输入是一条带着任务的通知，例如 `[OpenBot] Assistant gives you this task: …`。见 [Chats](/zh-cn/docs/chats)。
 
-委派的 Sessions 有 `kind: "delegated"`，以及一个 `parent`，其中包含启动它们的 Session、Turn 和工具调用。它们和其他 Session 使用相同的路由。你可以读取它们、引导它们和中断它们。
+这项工作和交出它的工作为同一个人服务。所以这个人的[权限](/zh-cn/docs/permissions)决定 Bot 可以做什么，请求也会交给同样的决策者。task Chat 属于交出工作的那个 Chat 的所有者。在 [Channel](/zh-cn/docs/channels) 中，所有者是这个 Channel 的 actor。所有者可以像读取自己其他的 Chat 一样读取 task Chat。
 
-## 查看委派的工作
+人也可以用 `POST /v1/chats/:chatId/messages` 给 task Chat 发消息。那里的 Bot 会把它当作这个人发来的消息来读。
 
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  https://api.example.com/v1/sessions/$SESSION/delegations
+---
+
+## 工作何时结束
+
+当 task Chat 的一个 Turn 结束，而且这个 Chat 没有[未完成的工作](/zh-cn/docs/chats#未完成的工作)时，它的工作就结束了。未完成的工作包括这个 task Chat 交出去的工作、它等待决定的请求、它的提醒，以及它收件箱中的输入。只要还有其中一项没完成，工作就保持 `running`。结果作为通知回来，它们会启动新的 Turn，工作接着进行。
+
+最后一个 Turn 的结束方式决定结果：
+
+| Turn 的结束状态 | 工作变成    | `result`                 |
+| --------------- | ----------- | ------------------------ |
+| `Completed`     | `completed` | Bot 最后的回答。         |
+| `Failed`        | `failed`    | 错误。                   |
+| `Interrupted`   | `cancelled` | 一条说明工作已停止的话。 |
+
+然后，交出工作的 Chat 会收到一条通知，例如：
+
+```text
+[OpenBot] The work dlg_9f1e… that you gave to Programmer is done.
+
+Result:
+Added the endpoint and two tests.
 ```
+
+这条通知经过那个 Chat 的[收件箱](/zh-cn/docs/chats#收件箱)。Chat 空闲时，它会启动一个新 Turn，Bot 带着结果继续工作。当 Bot 把工作交给了很多 Bots 时，每个结果一准备好就单独回来。
+
+task Chat 的工作结束后，它还可能得到新的 Turn，例如有人给它发消息，或者一条迟到的通知到来。这时 OpenBot 会为同一个 task Chat 创建一个新的委派。这一轮新的工作结束时，父 Chat 也会收到它的结果。
+
+---
+
+## 查看工作
+
+`GET /v1/chats/:chatId/delegations` 列出一个 Chat 交出去的工作。`GET /v1/delegations/:delegationId` 读取一项工作。你只能看到你自己的 Chat 的工作。其他工作会返回 `404` 和 `DelegationNotFound`。
 
 ```json
-[
-	{
-		"id": "dlg_9f1e…",
-		"parent": { "session": "a41c…", "turn": "t-12", "toolCallId": "call-3" },
-		"bot": "bot_5c0e…",
-		"child": { "session": "c81d…", "turn": "t-77" },
-		"status": "running",
-		"brief": { "task": "…", "userRequest": "…" },
-		"result": null
-	}
-]
+{
+	"id": "dlg_9f1e…",
+	"parent": { "chat": "chat_7d21…", "turn": "t-12", "toolCallId": "call-3" },
+	"bot": "bot_5c0e…",
+	"chat": "chat_c81d…",
+	"status": "running",
+	"task": "Add the endpoint for the trip list, with tests.",
+	"reason": "The Programmer writes the code of this project.",
+	"result": null,
+	"createdAt": 1792486800000,
+	"updatedAt": 1792486805000
+}
 ```
+
+`chat` 是 task Chat。工作开始之前它是 `null`。来自[触发器](/zh-cn/docs/triggers)的工作有 `trigger`，它的 `parent` 没有 `turn` 和 `toolCallId`。
 
 | 状态          | 含义                                                      |
 | ------------- | --------------------------------------------------------- |
 | `authorizing` | 工作在等待一个 [request](/zh-cn/docs/requests) 得到回答。 |
-| `queued`      | 工作可以开始。OpenBot 现在启动它。                        |
-| `running`     | 另一个 Bot 正在处理它。                                   |
-| `completed`   | 工作已完成。`result` 中有结果。                           |
-| `failed`      | 工作失败，或者不被允许。                                  |
+| `queued`      | 工作可以开始了。OpenBot 现在启动它。                      |
+| `running`     | Bot 正在做这项工作。                                      |
+| `completed`   | 工作已完成。`result` 保存最后的回答。                     |
+| `failed`      | 工作失败了，或者没有被允许。`result` 说明原因。           |
 | `cancelled`   | 工作被停止了。                                            |
 
-## 停止委派的工作
+---
 
-当你 [中断](/zh-cn/docs/sessions#引导排队和中断) 一个 Turn 时，OpenBot 也会停止它分派出去的工作，并关闭它未完成的 requests。每条记录都会变成 `cancelled`。
+## 停止工作
 
-## Forks
+有四种方式停止工作：
 
-Session 的 Fork（分叉）是新的直接工作。它保留来源的 Bot，但没有 `parent`。Fork 分派出去的工作会在新的 Sessions 中开始，所以两个分支永远不会共享同一个 Session Bot 的工作。
+- Bot 调用 `openbot_cancel_delegation`，带上 `delegation` ID 和可选的 `reason`。它的 Chat 不会收到通知，因为是 Bot 自己停止了这项工作。
+- 你调用 `POST /v1/delegations/:delegationId/cancel`，请求体为 `{}`。回答是这个委派。交出工作的 Chat 会收到一条通知。
+- 你用 `{ "delegations": true }` [中断](/zh-cn/docs/chats#中断)交出工作的 Chat。
+- 你[删除](/zh-cn/docs/chats#删除历史)交出工作的 Chat。
+
+取消会停止 task Chat 中正在运行的 Turn。它还会一层一层地停止这个 task Chat 交出去的工作，以及它的请求和提醒。每项工作都变成 `cancelled`。
+
+普通的中断只停止正在运行的 Turn。这个 Chat 交出去的工作会继续。
+
+---
+
+## 错误
+
+| 状态码 | 错误                           | 何时出现                           |
+| ------ | ------------------------------ | ---------------------------------- |
+| `404`  | `DelegationNotFound`           | 你的 Chat 中没有这个 ID 的工作。   |
+| `409`  | `DelegationConflict`           | 工作同时发生了变化。请重新读取它。 |
+| `503`  | `DelegationStorageUnavailable` | OpenBot 无法连接到它的数据库。     |
+
+所有字段见 [Delegations 参考](/docs/api/operations/tags/delegations/)。

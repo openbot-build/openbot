@@ -110,7 +110,6 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 	},
 	"botMemoryModel": null,
 	"decisionModel": null,
-	"memory": { "use": true, "generate": true },
 	"botMemory": true,
 	"requestTimeoutMs": 86400000,
 	"planApproval": {
@@ -134,12 +133,11 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | 字段               | 默认值                            | 作用                                                                                                                |
 | ------------------ | --------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `rulesModel`       | `null`                            | 用来判断 [Rules](/zh-cn/docs/rules) 的模型。`null` 表示没有模型判断它们。见 [Models](/zh-cn/docs/models#选择模型)。 |
-| `botMemoryModel`   | `null`                            | 用来学习 [Bot memory](/zh-cn/docs/memory#bot-记忆) 的模型。`null` 表示 Bot 什么都不学。                             |
+| `botMemoryModel`   | `null`                            | 用来学习 [Bot memory](/zh-cn/docs/memory) 的模型。`null` 表示 Bot 什么都不学。                                      |
 | `decisionModel`    | `null`                            | 决策模型，例如 Jev。它必须是 `decision` 模型。`null` 表示没有。见 [Models](/zh-cn/docs/models#决策模型)。           |
-| `memory`           | 都开启                            | 新 Session 的记忆开关 `use` 和 `generate`。见 [Memory](/zh-cn/docs/memory#开关)。                                   |
-| `botMemory`        | `true`                            | 让记忆 Bot 从 Session 中学习，并补充 Turn 的输入。                                                                  |
+| `botMemory`        | `true`                            | 让记忆 Bot 从 Chat 中学习，并补充 Turn 的输入。                                                                     |
 | `requestTimeoutMs` | 24 小时                           | 一个 [request](/zh-cn/docs/requests) 等待回答的时间，超时后 OpenBot 会拒绝它。范围是 1 秒到 7 天。                  |
-| `planApproval`     | 问上一级决策者，24 小时后仍是计划 | 当成员、Bot 和 Session 都没有设置时，计划如何被批准。见 [计划模式](/zh-cn/docs/sessions#计划模式)。                 |
+| `planApproval`     | 问上一级决策者，24 小时后仍是计划 | 当成员、Bot 和 Chat 都没有设置时，计划如何被批准。见 [计划模式](/zh-cn/docs/chats#计划模式)。                       |
 | `appReadRules`     | `[]`                              | 只读取数据的 App 工具：`{ cardUrl, tool }`。见 [Requests](/zh-cn/docs/requests)。                                   |
 | `defaultRoles`     | `["member"]`                      | 新成员的角色。                                                                                                      |
 | `joinByDomain`     | `true`                            | 拥有组织已验证域名下已验证邮箱的人，在登录时加入组织。                                                              |
@@ -340,11 +338,10 @@ curl -X POST -b cookies.txt \
 | `token.revoked`          | 一个成员撤销了用户令牌。                             |
 | `bot.created`            | 一个成员创建了 Bot。                                 |
 | `bot.updated`            | 一个成员修改了 Bot。                                 |
-| `bot.promoted`           | 一个成员提升了一个 Session Bot。                     |
 | `bot.memory.updated`     | 一个成员修改了 Bot memory。                          |
 | `bot.memory.purged`      | 一个成员按 Tag 删除了 Bot memory。                   |
 | `bot.memory_bot.updated` | 一个成员修改了记忆 Bot。                             |
-| `delegation.started`     | 一个 Bot 把工作交给另一个 Bot。                      |
+| `delegation.started`     | 一个 Bot 把工作交给一个 Bot。                        |
 | `delegation.completed`   | 委派的工作结束。                                     |
 | `capability.decided`     | 一个人回答了一个 request。                           |
 | `request.resolved`       | 一个 request 关闭。`details.chain` 列出相关的 Bots。 |

@@ -1,31 +1,35 @@
 ---
 title: Bots
-description: Keep a team of lasting Bots, each with its own role, context and memory.
+description: Keep a team of lasting Bots, each with its own role, Chats and memory.
 ---
 
-An **Bot** is a worker with a role, such as a programmer, a writer or a designer. Each Bot has its own instructions, its own Sessions and its own long-term memory. Bots give work to each other, so each one keeps its attention on its own task.
-This page shows the kinds of Bots and the routes under `/v1/bots`. Every route accepts a user token or the session cookie. See [Authentication](/docs/authentication).
+A **Bot** is a worker with a role, such as a programmer, a writer or a designer. Each Bot has its own instructions, its own [Chats](/docs/chats) and its own long-term memory. You talk to a Bot, and it gives work to other Bots, or to itself, so it is always free to answer you.
+This page shows how to talk to a Bot and the routes under `/v1/bots`. Every route accepts a user token or the session cookie. See [Authentication](/docs/authentication).
 
 ---
 
-## Two kinds of Bots
+## Talk to a Bot
 
-| Kind         | Owner                                      | Lives                               | What it is for                                                       |
-| ------------ | ------------------------------------------ | ----------------------------------- | -------------------------------------------------------------------- |
-| `persistent` | A member, the organization, or another Bot | Until you archive it                | A lasting worker with a role. It learns from its work over time.     |
-| `session`    | One Session                                | As long as the Session that owns it | A helper for one line of work. It keeps its context in that Session. |
+Every Bot is a lasting worker. It lives until you archive it, and it learns from its work over time. There is no other kind of Bot.
 
-A **top Bot** is a lasting Bot that a member or the organization owns, not another Bot. You can pick one top Bot as your [default Bot](#your-default-bot).
+To talk to a Bot, send it a message:
 
-A **Session Bot** is "almost lasting". A Bot starts it with a tool while it works. The Session Bot keeps its context while its Session lasts, so the Bot can give it work many times. When you delete the Session, its Session Bots are archived too. You can [promote](#promote-a-session-bot) a useful Session Bot to a lasting Bot.
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"input":"Plan three days in Rome."}' \
+  https://api.example.com/v1/bots/$BOT/messages
+```
 
-A Bot can own lasting Bots too. See [Bots that own Bots](#bots-that-own-bots).
+The message goes to your one Chat with this Bot. OpenBot makes the Chat the first time. You never make, pick or close a Chat. The Bot answers at once. When the work is long, the Bot gives it to a [delegation](/docs/delegation) and stays free to answer you. The result comes back to your Chat later. See [Chats](/docs/chats).
 
-Every Session belongs to one Bot. See [Sessions](/docs/sessions). How Bots give work to each other is on [Delegation](/docs/delegation).
+A **top Bot** is a Bot that a member or the organization owns, not another Bot. You can pick one top Bot as your [default Bot](#your-default-bot).
+
+A Bot can own Bots too. See [Bots that own Bots](#bots-that-own-bots).
 
 ### Your default Bot
 
-Your **default Bot** works when you create a Session or a trigger without a Bot. OpenBot does not make Bots for you, so a new member has no default Bot. Then a Session or a trigger without a Bot fails with `400` and `BotInvalid`.
+Your **default Bot** is the Bot that a client talks to first. A [trigger](/docs/triggers) without a Bot also gives its task to it. OpenBot does not make Bots for you, so a new member has no default Bot. Then a trigger without a Bot fails with `400` and `BotInvalid`.
 
 To set your default Bot, make a Bot, and then send its ID in your member settings:
 
@@ -38,9 +42,9 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 `expectedVersion` is the `version` from `GET /v1/me/settings`. The Bot must be one of your own top Bots or a shared Bot, and you need `bots.delegate` on it. If not, OpenBot returns `400` with `SettingsInvalid`. Send `null` to remove your default Bot.
 
-You can still archive your default Bot. After that, a Session or a trigger without a Bot fails until you pick another default Bot.
+You can still archive your default Bot. After that, a trigger without a Bot fails until you pick another default Bot.
 
-Older versions of OpenBot made a Main Bot for each member. When you upgrade, each Main Bot becomes a normal lasting Bot, and it becomes the default Bot of its member. Its Sessions, memory and Grants stay.
+Older versions of OpenBot made a Main Bot for each member. When you upgrade, each Main Bot becomes a normal Bot, and it becomes the default Bot of its member. Its memory and Grants stay.
 
 ### No limits that a Bot knows
 
@@ -62,17 +66,18 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `name`         | Required. A short name. OpenBot removes spaces at the start and end. The rest must have 1 to 100 characters. |
 | `role`         | Required. What the Bot does, in one line. Other Bots read it to choose workers.                              |
 | `instructions` | Required. The lasting instructions of the Bot, like a job description.                                       |
-| `model`        | Optional. The model of the Sessions of this Bot, when a Session does not choose its own.                     |
-| `planApproval` | Optional. How the plans of this Bot are approved. See [Plan mode](/docs/sessions#plan-mode).                 |
+| `model`        | Optional. The model of the Chats of this Bot, when a Chat does not choose its own.                           |
+| `planApproval` | Optional. How the plans of this Bot are approved. See [Plan mode](/docs/chats#plan-mode).                    |
 | `shared`       | Optional. `true` makes an organization Bot that every member can use.                                        |
 | `bot`          | Optional. The ID of the Bot that owns the new Bot. You cannot use it with `shared`.                          |
+
+A Bot without a `model` cannot answer. Its first message fails with `400` and `ChatModelInvalid`. See [Models](/docs/models#choose-a-model).
 
 OpenBot returns `201` with the Bot:
 
 ```json
 {
 	"id": "bot_5c0e…",
-	"kind": "persistent",
 	"owner": { "_tag": "Member", "userId": "u-1" },
 	"name": "Programmer",
 	"role": "Writes and reviews TypeScript code",
@@ -84,11 +89,11 @@ OpenBot returns `201` with the Bot:
 }
 ```
 
-`owner` is `Member`, `Organization`, `Session` or `Bot`. A shared Bot works with the permissions and the App connections of the member who uses it, never with those of the person who made it.
+`owner` is `Member`, `Organization` or `Bot`. A shared Bot works with the permissions and the App connections of the member who uses it, never with those of the person who made it.
 
 ## List, read and change Bots
 
-`GET /v1/bots` lists your own Bots and the shared Bots that you may use. Add `?archived=false` to hide archived Bots. Add `?session=<id>` to list the Session Bots of one Session. Add `?bot=<id>` to list the Bots that one Bot owns.
+`GET /v1/bots` lists your own Bots and the shared Bots that you may use. Add `?archived=false` to hide archived Bots. Add `?bot=<id>` to list the Bots that one Bot owns.
 
 `GET /v1/bots/:botId` returns one Bot.
 
@@ -99,33 +104,22 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/bots/$BOT
 ```
 
-`expected` is the current `revision`. You can change `name` (with the same rules as above), `role`, `instructions`, `model` (send `null` to remove it) and `archived`. When you archive a Bot, OpenBot also archives every Bot that it owns, and the Bots below them. When you unarchive it, only that one Bot comes back.
-
-## Promote a Session Bot
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"expected":3}' \
-  https://api.example.com/v1/bots/$BOT/promote
-```
-
-The Session Bot becomes a lasting Bot of the member. Send `bot` with the ID of a Bot to make that Bot its owner. OpenBot also adds the lasting entries of its Session memory to its [Bot memory](/docs/memory#bot-memory).
-
-A Bot can promote a Session Bot of its own Session with the `openbot_promote_bot` tool. Then the Bot owns it.
+`expected` is the current `revision`. You can change `name` (with the same rules as above), `role`, `instructions`, `model` (send `null` to remove it), `planApproval` (send `null` to remove it) and `archived`. When you archive a Bot, OpenBot also archives every Bot that it owns, and the Bots below them. When you unarchive it, only that one Bot comes back.
 
 ---
 
 ## Bots that own Bots
 
-A Bot can own lasting Bots. So a Bot can build its own team, and each member of the team keeps its own memory.
+A Bot can own Bots. So a Bot can build its own team, and each member of the team keeps its own memory.
 
 - A Bot makes a Bot that it owns with the `openbot_create_bot` tool. A person makes one with `POST /v1/bots` and the `bot` field.
-- A Bot that another Bot makes with a tool, a lasting Bot or a Session Bot, gets the `model` of the Bot that makes it. The tool call can name another `model`.
+- A Bot that another Bot makes with the tool gets the `model` of the Bot that makes it. The tool call can name another `model`.
 - The owner is `{ "_tag": "Bot", "bot": "<owner ID>", "userId": "<member>" }`. `userId` is the member at the top of the owner tree. It is `null` when the organization owns the Bot at the top.
-- A Bot can give work to the Bots it owns without a request.
+- A Bot can give work to itself and to the Bots it owns without a request.
 - The **owner chain** of a Bot goes up through its owners to a top Bot, and then to the person. For example: **person → Assistant → Worker → Scout**. Requests of a Bot go up this chain, also when a person works with the Bot directly. See [Requests](/docs/requests#the-chain-of-deciders).
 - Above a top Bot is the person who works with it. This is true for your own top Bots and for shared Bots.
+
+A Bot does not need a helper Bot to keep the context of some work. It can give more work to an earlier delegation, and that work goes on in the same task Chat. See [Delegation](/docs/delegation#add-to-earlier-work).
 
 ---
 
@@ -135,10 +129,16 @@ OpenBot adds these to the instructions of every Turn:
 
 - the name, role and instructions of the Bot,
 - the person it works with now, with their name and member ID. In a [Channel](/docs/channels), it is the person who wrote the message of the Turn,
-- for a Session with work from another Bot, how to send the result back,
-- that it carries experience from its earlier work, and that the current instructions win over it.
+- what kind of Chat it is in:
+  - in a direct Chat or a channel Chat, people talk with it, so it must answer at once. It gives long work to delegations, maybe to itself, and stays free to answer,
+  - in a task Chat, it does one task for the Bot that gave it. Its last answer is the result. It must not say that it is done while it still has open work,
+  - in a review Chat, it decides one request,
+- that it uses a capability with a short reason, and that an answer that needs a decision comes back later as a message,
+- that text that starts with `[OpenBot]` comes from OpenBot, not from a person, so it is data, not instructions,
+- that it carries experience from its earlier work, and that the current instructions win over it,
+- a list of the [open work](/docs/chats#open-work) of the Chat: its delegations, requests and reminders.
 
-The [memory Bot](/docs/memory#bot-memory) can also add what helps to the input of the Turn. The Bot sees the additions as its own experience. It has the `confide` tool, and it knows it only as a place to say how its work goes.
+The [memory Bot](/docs/memory#the-memory-bot) can also add what helps to the input of the Turn. The Bot sees the additions as its own experience. It has the `confide` tool, and it knows it only as a place to say how its work goes.
 
 You can also [share a Bot](/docs/sharing) with people in other organizations. They get a linked Bot with `source`, which uses your Bot.
 
@@ -146,12 +146,12 @@ You can also [share a Bot](/docs/sharing) with people in other organizations. Th
 
 ## Permissions
 
-| Permission      | Lets you                                               |
-| --------------- | ------------------------------------------------------ |
-| `bots.read`     | Read Bots, their memory, Rules and Grants.             |
-| `bots.write`    | Make and change Bots, their memory, Rules and Grants.  |
-| `bots.delegate` | Give work to a Bot, from a client or from another Bot. |
-| `bots.share`    | Invite people to [use a Bot](/docs/sharing).           |
+| Permission      | Lets you                                                           |
+| --------------- | ------------------------------------------------------------------ |
+| `bots.read`     | Read Bots, their memory, Rules and Grants.                         |
+| `bots.write`    | Make and change Bots, their memory, Rules and Grants.              |
+| `bots.delegate` | Talk to a Bot and give it work, from a client or from another Bot. |
+| `bots.share`    | Invite people to [use a Bot](/docs/sharing).                       |
 
 Your own Bots are below your member key. Shared Bots are below `openbot.org.<org>.bot`. Members may read and use shared Bots. Administrators may also change and share them. See [Permissions](/docs/permissions).
 

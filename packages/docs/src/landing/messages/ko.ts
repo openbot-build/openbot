@@ -47,8 +47,8 @@ export default {
 		title: ["원하는 클라이언트를 쓰세요.", "결정은 사람이 합니다."],
 		items: [
 			{
-				title: "Session과 Timeline",
-				text: "일은 Session과 Turn 안에서 진행됩니다. Timeline이 버전을 남기므로 되돌아가서 다시 시도할 수 있습니다.",
+				title: "Bot마다 채팅 하나",
+				text: "Bot마다 채팅이 하나 있습니다. Bot은 언제나 바로 답하고, 긴 일은 병렬로 진행됩니다.",
 			},
 			{
 				title: "승인",

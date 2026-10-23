@@ -77,7 +77,7 @@ This account is a platform admin. It has no organization yet.
 
 ### Make an organization
 
-Bots, Sessions and tokens belong to an [organization](/docs/organization). Make one for yourself:
+Bots, Chats and tokens belong to an [organization](/docs/organization). Make one for yourself:
 
 ```sh
 curl -b cookies.txt \
@@ -115,7 +115,7 @@ export OPENBOT_TOKEN=obut_...
 
 ### Make a Bot
 
-Every Session belongs to an [Bot](/docs/bots). A new account has no Bots, so make one:
+You give work to a [Bot](/docs/bots). A new account has no Bots, so make one:
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -130,27 +130,18 @@ Take `id` from the answer. To use this Bot when you name no Bot, make it your [d
 
 <Step>
 
-### Start a Session and a Turn
+### Talk to your Bot
 
-Make a Session for your Bot:
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"bot":"<botId>","title":"My first Session"}' \
-  https://localhost:8443/v1/sessions
-```
-
-Take `session.id` and `session.revision` from the answer. Then give the Session some work:
+Send your Bot a message:
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"expected":0,"input":"Hello"}' \
-  https://localhost:8443/v1/sessions/<sessionId>/turns
+  -d '{"input":"Hello"}' \
+  https://localhost:8443/v1/bots/<botId>/messages
 ```
 
-The Turn runs in the background and you get `202` at once. Add `"stream": true` to get the answer as a live stream.
+OpenBot makes your Chat with the Bot, and the message starts a Turn. The Turn runs in the background and you get `202` at once, with `delivery: "started"`. Add `"stream": true` to get the answer as a live stream. To read the answer later, take `chat` from the answer and call `GET /v1/chats/<chatId>`.
 
 </Step>
 
@@ -163,7 +154,7 @@ See [Models](/docs/models) for the other test models.
 
 ## Next steps
 
-- Read how [Sessions](/docs/sessions) and Turns work.
+- Read how [Chats](/docs/chats) and Turns work.
 - Use a real identity provider: [Authentication](/docs/authentication) and [Platform](/docs/platform).
 - Add a real model: [Models](/docs/models).
 - Run OpenBot on a server: [Deploy](/docs/deploy).

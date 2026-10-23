@@ -261,7 +261,7 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 
 - 把 `Origin`、`Cookie` 和 `Authorization` 头原样转发给 OpenBot，
 - 不缓冲响应，因为 Turn 可以用服务器发送事件（SSE）流式输出，
-- 允许长时间的响应。`GET /v1/sessions/:id/wait` 最多可以等待 30 秒，而一个流会持续到它的 Turn 结束。
+- 允许长时间的响应。`GET /v1/chats/:id/wait` 最多可以等待 30 秒，而一个流会持续到它的 Turn 结束。
 
 <Tabs items={["nginx", "Caddy"]}>
 <Tab value="nginx">
@@ -328,7 +328,7 @@ api.example.com {
 
 备份两样东西，并把它们放在一起：
 
-1. **数据库。** 它保存平台和组织的设置、账户、组织及其成员、用户令牌、模型和模型提供方、SSO 连接、审计日志、Session 及其 Timeline，以及 App 连接。
+1. **数据库。** 它保存平台和组织的设置、账户、组织及其成员、用户令牌、模型和模型提供方、SSO 连接、审计日志、Bot、Chat 及其历史，以及 App 连接。
 2. **`OPENBOT_SECRET_KEYS`。** 这些密钥用来解密数据库中的机密：App 密钥、模型提供方密钥、SSO 客户端密钥和登录密钥。没有这些密钥，数据库备份无法恢复这些机密。
 
 使用 Compose 时，这样备份数据库：
@@ -396,7 +396,7 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 
 `check` 服务在 OpenBot 和协议测试服务都健康之后，在 Compose 网络中运行 `check.mjs`。它检查：
 
-- 不带密钥和带错误密钥时，`/v1/sessions` 都返回 `401`，
+- 不带密钥和带错误密钥时，`/v1/chats` 都返回 `401`，
 - `/openapi.json` 正常工作，
 - 协议测试的 Catalog 有正确的公开源，
 - 协议测试服务上的 MCP 发现正常工作。

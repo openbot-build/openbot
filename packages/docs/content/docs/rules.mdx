@@ -7,7 +7,7 @@ Decisions about [requests](/docs/requests) do not have to be made again and agai
 
 | Form  | Looks like                                                                                    | Who checks it           |
 | ----- | --------------------------------------------------------------------------------------------- | ----------------------- |
-| Grant | `apps.call` on `conn-7/search_orders`, allow, for this Session                                | OpenBot, by exact match |
+| Grant | `apps.call` on `conn-7/search_orders`, allow, in this Chat                                    | OpenBot, by exact match |
 | Rule  | "The Programmer may read any repository of the openbot organization, but asks before a push." | A judge model           |
 
 A Grant is fast and exact. A Rule covers a whole kind of request.
@@ -22,9 +22,10 @@ A **Grant** is a kept decision about one capability of one Bot. The Bot never se
 | ------------ | ------------------------------------------------------------------------- |
 | `capability` | `action`, `target` (`*` for every target) and optional exact `arguments`. |
 | `effect`     | `allow` or `deny`. A deny wins.                                           |
-| `scope`      | `once` (used up by one call), `session` or `lifetime`.                    |
+| `scope`      | `once` (used up by one call), `chat` (in one Chat) or `lifetime`.         |
 | `grantedBy`  | The person, Bot or Rule that decided.                                     |
 | `parent`     | The Grant of the decider that this Grant came from.                       |
+| `chat`       | The Chat of a Grant with the scope `chat`.                                |
 | `status`     | `active`, `used` or `revoked`.                                            |
 
 OpenBot makes Grants when a decider answers a request. You can also make one yourself:
@@ -32,7 +33,7 @@ OpenBot makes Grants when a decider answers a request. You can also make one you
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"capability":{"action":"bots.spawn","target":"*"},"effect":"allow","scope":"lifetime"}' \
+  -d '{"capability":{"action":"bots.create","target":"*"},"effect":"allow","scope":"lifetime"}' \
   https://api.example.com/v1/bots/$BOT/grants
 ```
 

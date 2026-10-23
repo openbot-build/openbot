@@ -77,7 +77,7 @@ curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
 
 ### 创建组织
 
-Bots、Sessions 和令牌都属于一个[组织](/zh-cn/docs/organization)。为你自己创建一个：
+Bots、Chats 和令牌都属于一个[组织](/zh-cn/docs/organization)。为你自己创建一个：
 
 ```sh
 curl -b cookies.txt \
@@ -115,7 +115,7 @@ export OPENBOT_TOKEN=obut_...
 
 ### 创建 Bot
 
-每个 Session 都属于一个 [Bot](/zh-cn/docs/bots)。新账号没有 Bot，所以先创建一个：
+你把工作交给一个 [Bot](/zh-cn/docs/bots)。新账号没有 Bot，所以先创建一个：
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -130,27 +130,18 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 <Step>
 
-### 启动 Session 和 Turn
+### 和你的 Bot 说话
 
-为你的 Bot 创建一个 Session：
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"bot":"<botId>","title":"My first Session"}' \
-  https://localhost:8443/v1/sessions
-```
-
-从回答中取出 `session.id` 和 `session.revision`。然后给这个 Session 一些工作：
+给你的 Bot 发一条消息：
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"expected":0,"input":"Hello"}' \
-  https://localhost:8443/v1/sessions/<sessionId>/turns
+  -d '{"input":"Hello"}' \
+  https://localhost:8443/v1/bots/<botId>/messages
 ```
 
-Turn 在后台运行，你会立即得到 `202`。加上 `"stream": true`，就能以实时流的形式得到回答。
+OpenBot 会创建你和这个 Bot 的 Chat，这条消息会启动一个 Turn。Turn 在后台运行，你会立即得到 `202`，其中有 `delivery: "started"`。加上 `"stream": true`，就能以实时流的形式得到回答。要在之后读取回答，请从回答中取出 `chat`，然后调用 `GET /v1/chats/<chatId>`。
 
 </Step>
 
@@ -163,7 +154,7 @@ Turn 在后台运行，你会立即得到 `202`。加上 `"stream": true`，就�
 
 ## 下一步
 
-- 阅读 [Sessions](/zh-cn/docs/sessions) 和 Turns 的工作方式。
+- 阅读 [Chats](/zh-cn/docs/chats) 和 Turns 的工作方式。
 - 使用真实的身份提供方：[身份验证](/zh-cn/docs/authentication) 和 [Platform](/zh-cn/docs/platform)。
 - 添加真实的模型：[Models](/zh-cn/docs/models)。
 - 在服务器上运行 OpenBot：[部署](/zh-cn/docs/deploy)。

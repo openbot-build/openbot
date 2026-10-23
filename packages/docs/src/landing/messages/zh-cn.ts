@@ -44,8 +44,8 @@ export default {
 		title: ["用你自己的客户端。", "让人来掌控。"],
 		items: [
 			{
-				title: "Session 和 Timeline",
-				text: "工作在 Session 和 Turn 中进行。Timeline 会保存各个版本，你可以回到之前的版本再试一次。",
+				title: "每个 Bot 一个聊天",
+				text: "你和每个 Bot 只有一个聊天。Bot 总是马上回答，长的工作会并行进行。",
 			},
 			{
 				title: "审批",

@@ -10,8 +10,8 @@ description: 权限组、策略、角色和资源键。
 
 | 部分                       | 含义                                                                     |
 | -------------------------- | ------------------------------------------------------------------------ |
-| 权限组（Permission group） | 针对某一类资源的一组有名字的操作，例如 `sessions.read`。                 |
-| 资源键（Resource key）     | 某一个资源的名字，例如某一个 Session。                                   |
+| 权限组（Permission group） | 针对某一类资源的一组有名字的操作，例如 `chats.read`。                    |
+| 资源键（Resource key）     | 某一个资源的名字，例如某一个 Chat。                                      |
 | Policy（策略）             | 对某些资源上的某些权限组，给出 `allow`（允许）或 `deny`（拒绝）。        |
 | Role（角色）               | 一组有名字的策略，例如 Member 或 Administrator。组织可以添加自己的角色。 |
 
@@ -25,9 +25,9 @@ description: 权限组、策略、角色和资源键。
 
 | ID                         | 资源              | 允许什么                                                                       |
 | -------------------------- | ----------------- | ------------------------------------------------------------------------------ |
-| `responses.run`            | Session           | 在 Session 中启动、引导（steer）、排队（queue）和恢复工作。                    |
-| `sessions.read`            | Session           | 读取 Sessions，以及它们的历史、记忆和委派。                                    |
-| `sessions.write`           | Session           | 创建、修改、分叉、恢复、中断和删除 Sessions。                                  |
+| `responses.run`            | Chat              | 给 Bots 发消息，让它们在一个 Chat 中工作。                                     |
+| `chats.read`               | Chat              | 读取 Chats、它们的历史，以及它们交出去的工作。                                 |
+| `chats.write`              | Chat              | 修改、中断和删除 Chats，并取消它们交出去的工作。                               |
 | `requests.resolve`         | Request           | 回答你的 Bots 对新能力提出的 request。                                         |
 | `bots.read`                | Bot               | 读取 Bots，以及它们的记忆、Rules 和 Grants。                                   |
 | `bots.write`               | Bot               | 创建和修改 Bots，以及它们的记忆、Rules 和 Grants。                             |
@@ -50,7 +50,7 @@ description: 权限组、策略、角色和资源键。
 | `connections.write`        | Connection        | 创建、修改和删除 App 连接，并登录 App 账户。                                   |
 | `apps.use`                 | Apps              | 查找 Apps，并使用 App 操作和 App 视图。                                        |
 | `apps.publish`             | Apps              | 为你发布的 Apps 使用开发者工具。                                               |
-| `models.use`               | Model             | 为 Session 选择模型。                                                          |
+| `models.use`               | Model             | 为 Chat 选择模型。                                                             |
 | `tokens.read`              | User              | 列出 API 令牌。                                                                |
 | `tokens.write`             | User              | 创建和撤销 API 令牌。                                                          |
 | `organization.read`        | Organization      | 读取组织设置。                                                                 |
@@ -84,7 +84,7 @@ description: 权限组、策略、角色和资源键。
 | ---------------- | ------------------------------------------------------- |
 | 组织             | `openbot.org.<org>`                                     |
 | 一个成员         | `openbot.org.<org>.user.<user>`                         |
-| 一个 Session     | `openbot.org.<org>.user.<user>.session.<session>`       |
+| 一个 Chat        | `openbot.org.<org>.user.<user>.chat.<chat>`             |
 | 成员的一个 Bot   | `openbot.org.<org>.user.<user>.bot.<bot>`               |
 | 一个共享的 Bot   | `openbot.org.<org>.bot.<bot>`                           |
 | 成员的一个触发器 | `openbot.org.<org>.user.<user>.trigger.<trigger>`       |
@@ -96,7 +96,7 @@ description: 权限组、策略、角色和资源键。
 | 一个模型提供方   | `openbot.org.<org>.model.<provider>`                    |
 | 整个平台         | `openbot.platform`                                      |
 
-由另一个 Bot 拥有的 Bot，使用其所有者树最顶层的成员或组织的键。所以 `openbot.org.<org>.user.<user>.bot.<bot>` 也是该成员的顶层 Bot 所拥有的 Bot 的键。当一个 Bot 创建或提升另一个 Bot 时，它所服务的成员需要在那个位置上拥有 `bots.write`。
+由另一个 Bot 拥有的 Bot，使用其所有者树最顶层的成员或组织的键。所以 `openbot.org.<org>.user.<user>.bot.<bot>` 也是该成员的顶层 Bot 所拥有的 Bot 的键。当一个 Bot 创建另一个 Bot 时，它所服务的成员需要在那个位置上拥有 `bots.write`。
 
 一个键涵盖它自己，以及它下面的所有键。所以 `openbot.org.<org>` 涵盖组织中的一切，`openbot.org.<org>.user.<user>` 涵盖一个成员的一切。
 
@@ -116,7 +116,7 @@ ID 中的点写作 `%2E`，这样它永远不会被当成新的部分。
 ```json
 {
 	"effect": "allow",
-	"permissionGroups": ["sessions.read", "sessions.write"],
+	"permissionGroups": ["chats.read", "chats.write"],
 	"resources": ["openbot.org.{org}.user.{self}"]
 }
 ```
@@ -162,23 +162,18 @@ OpenBot 按以下顺序检查三组策略：
 ```json
 {
 	"effect": "allow",
-	"permissionGroups": [
-		"responses.run",
-		"sessions.read",
-		"...",
-		"audit_logs.read"
-	],
+	"permissionGroups": ["responses.run", "chats.read", "...", "audit_logs.read"],
 	"resources": ["openbot.org.{org}"]
 }
 ```
 
-下面的例子创建一个只能读取你的 Sessions 的令牌：
+下面的例子创建一个只能读取你的 Chats 的令牌：
 
 ```sh
 curl -b cookies.txt \
   -H "Origin: https://api.example.com" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Dashboard","policies":[{"effect":"allow","permissionGroups":["sessions.read"],"resources":["openbot.org.{org}.user.{self}"]}]}' \
+  -d '{"name":"Dashboard","policies":[{"effect":"allow","permissionGroups":["chats.read"],"resources":["openbot.org.{org}.user.{self}"]}]}' \
   https://api.example.com/v1/user/tokens
 ```
 
@@ -192,13 +187,13 @@ curl -b cookies.txt \
 
 每个组织都有这些角色。它们不能修改。修改会返回 `409` 和 `RoleReadOnly`。
 
-| 角色                      | 能做什么                                                                                                                            |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `super_administrator`     | 组织中的一切。只有 Super Administrator 能给出或拿走这个角色。                                                                       |
-| `administrator`           | 管理组织、成员、共享的 Bots、共享的触发器、共享的 Computers 和 Channels，并读取审计日志。只能操作自己的 Sessions 和连接。           |
-| `administrator_read_only` | 读取组织、成员、用量、预算和审计日志，并读取共享的 Bots、触发器、Computers 和 Channels。只能操作自己的 Sessions 和连接。            |
-| `member`                  | 操作自己的 Bots、Sessions、触发器、Computers、连接和令牌，使用组织共享的 Bots、触发器、Computers、Channels 和模型，并读取组织设置。 |
-| `auditor`                 | 读取组织、成员、用量、预算和审计日志。不能做其他事。                                                                                |
+| 角色                      | 能做什么                                                                                                                         |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `super_administrator`     | 组织中的一切。只有 Super Administrator 能给出或拿走这个角色。                                                                    |
+| `administrator`           | 管理组织、成员、共享的 Bots、共享的触发器、共享的 Computers 和 Channels，并读取审计日志。只能操作自己的 Chats 和连接。           |
+| `administrator_read_only` | 读取组织、成员、用量、预算和审计日志，并读取共享的 Bots、触发器、Computers 和 Channels。只能操作自己的 Chats 和连接。            |
+| `member`                  | 操作自己的 Bots、Chats、触发器、Computers、连接和令牌，使用组织共享的 Bots、触发器、Computers、Channels 和模型，并读取组织设置。 |
+| `auditor`                 | 读取组织、成员、用量、预算和审计日志。不能做其他事。                                                                             |
 
 一些内置角色还拥有角色、模型提供方、SSO、Channels、用量和预算相关的权限组：
 
@@ -209,7 +204,7 @@ curl -b cookies.txt \
 | `administrator_read_only` | `model_providers.read`、`sso.read`、`channels.read`、`usage.read`、`budgets.read`。                                                                                         |
 | `auditor`                 | `usage.read`、`budgets.read`。                                                                                                                                              |
 
-要让成员的权限比角色少，请给成员添加一个 `deny` 策略。下面的例子禁止成员运行工作，但允许他们读取自己的 Sessions：
+要让成员的权限比角色少，请给成员添加一个 `deny` 策略。下面的例子禁止成员运行工作，但允许他们读取自己的 Chats：
 
 ```sh
 curl -X PATCH -b cookies.txt \
@@ -227,7 +222,7 @@ curl -X PATCH -b cookies.txt \
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Reviewer","description":"Reads Sessions and answers requests.","policies":[{"effect":"allow","permissionGroups":["sessions.read","requests.resolve"],"resources":["openbot.org.{org}.user.{self}"]}]}' \
+  -d '{"name":"Reviewer","description":"Reads Chats and answers requests.","policies":[{"effect":"allow","permissionGroups":["chats.read","requests.resolve"],"resources":["openbot.org.{org}.user.{self}"]}]}' \
   https://api.example.com/v1/organization/roles
 ```
 
@@ -273,9 +268,9 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ```json
 {
 	"_tag": "PermissionDenied",
-	"permission": "sessions.write",
-	"resource": "openbot.org.org_8f3a.user.u_123.session"
+	"permission": "chats.write",
+	"resource": "openbot.org.org_8f3a.user.u_123.chat"
 }
 ```
 
-你只能访问自己的 Sessions 和连接。另一个成员的 Session 会返回 `404`，就像它不存在一样。
+你只能访问自己的 Chats 和连接。另一个成员的 Chat 会返回 `404`，就像它不存在一样。

@@ -1,9 +1,9 @@
 ---
 title: Triggers
-description: Start a Session for a Bot with a prompt, on a schedule or from a webhook.
+description: Give a task to a Bot with a prompt, on a schedule or from a webhook.
 ---
 
-A **trigger** starts a new Session for one Bot with one prompt. It fires on a schedule, from a webhook, or both. It does nothing else: the Bot decides how to do the work. It can plan first, keep a [todo list](/docs/sessions#todo-list), and give work to other Bots.
+A **trigger** gives one task with one prompt to one Bot. It fires on a schedule, from a webhook, or both. It does nothing else: the Bot decides how to do the work. It can plan first, keep a [todo list](/docs/chats#todo-list), and give work to other Bots. When the task ends, its result goes to your [Chat](/docs/chats) with the Bot.
 
 ---
 
@@ -18,7 +18,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 | Field      | What it does                                                                                               |
 | ---------- | ---------------------------------------------------------------------------------------------------------- |
-| `prompt`   | The message that starts the work.                                                                          |
+| `prompt`   | The task.                                                                                                  |
 | `bot`      | Optional. The Bot that does the work. Without it, your [default Bot](/docs/bots#your-default-bot) does it. |
 | `schedule` | Optional. When the trigger fires by itself.                                                                |
 | `shared`   | Optional. `true` makes a shared trigger that belongs to the organization.                                  |
@@ -28,7 +28,15 @@ The answer is `201` with the trigger. It has `nextRunAt`, the next time that the
 
 `GET /v1/triggers` lists your triggers and the shared ones. `GET`, `PATCH` and `DELETE /v1/triggers/:triggerId` read, change and delete one. A change needs `expected`, the `revision` that you read. An old revision returns `409` with `TriggerConflict`.
 
-Each firing makes a new Session with `kind: "trigger"`. List them with `GET /v1/sessions?kind=trigger`.
+---
+
+## What a firing does
+
+Each firing gives the task to the Bot as a [delegation](/docs/delegation). The work runs in a new task Chat of the Bot. Its first input is the prompt, from "a trigger". The delegation has `trigger` with the ID of the trigger.
+
+When the work ends, its result goes as a [notice](/docs/chats#notices) to the direct Chat of the actor with the Bot. OpenBot makes that Chat when it does not exist yet. So the Bot reads the result there, and it can tell the actor about it or go on with the work. The [audit log](/docs/organization#audit-log) records `trigger.fired` with the ID of the delegation in `details.delegation`.
+
+To find the work of a trigger, read `GET /v1/chats/:chatId/delegations` for that direct Chat, or list the task Chats of the Bot with `GET /v1/chats?kind=task&bot=<id>`.
 
 ---
 
@@ -60,17 +68,17 @@ curl -H "Authorization: Bearer $WEBHOOK_SECRET" \
   https://api.example.com/v1/hooks/triggers/trg_4c1e...
 ```
 
-The answer is `202` with the `session`. The JSON body goes to the Bot as its own message. OpenBot marks it as data from another system, not as an instruction. A wrong secret, a trigger without a webhook, or a disabled trigger returns `401` with `TriggerHookDenied`.
+The answer is `202` with the `delegation`. The JSON body goes to the Bot with the task. OpenBot marks it as data from another system, not as an instruction. A wrong secret, a trigger without a webhook, or a disabled trigger returns `401` with `TriggerHookDenied`.
 
 A new `PUT` makes a new secret, and the old one stops working. `DELETE /v1/triggers/:triggerId/webhook` removes the webhook.
 
 ---
 
-## Who the Session works for
+## Who the work is for
 
-The Sessions of a trigger work for its **actor**: the last member who created or changed the trigger or its webhook. So a change makes you the actor. The actor must be able to give work to the Bot. If the actor cannot do that any more, the trigger does not fire.
+The work of a trigger is for its **actor**: the last member who created or changed the trigger or its webhook. So a change makes you the actor. The task Chat belongs to the actor, and the result goes to the Chat of the actor. The actor must be able to give work to the Bot. If the actor cannot do that any more, the trigger does not fire.
 
-The Bot works as it does in any Session. It has no extra limits, and it asks for new capabilities with [requests](/docs/requests).
+The Bot works as it does in any task. It has no extra limits, and it asks for new capabilities with [requests](/docs/requests). The requests go to the actor.
 
 ---
 

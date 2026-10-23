@@ -261,7 +261,7 @@ Der Proxy muss:
 
 - die Header `Origin`, `Cookie` und `Authorization` unverändert an OpenBot schicken,
 - Antworten nicht puffern, denn Turns können ihre Ausgabe als Server-Sent Events (SSE) streamen,
-- lange Antworten erlauben. `GET /v1/sessions/:id/wait` kann bis zu 30 Sekunden warten, und ein Stream dauert so lange wie sein Turn.
+- lange Antworten erlauben. `GET /v1/chats/:id/wait` kann bis zu 30 Sekunden warten, und ein Stream dauert so lange wie sein Turn.
 
 <Tabs items={["nginx", "Caddy"]}>
 <Tab value="nginx">
@@ -328,7 +328,7 @@ Ein Rücksprungpfad kann jeder Pfad auf demselben Origin sein, außer Pfaden unt
 
 Sichere zwei Dinge und bewahre sie zusammen auf:
 
-1. **Die Datenbank.** Sie enthält die Einstellungen von Plattform und Organisationen, Konten, Organisationen und ihre Mitglieder, User Tokens, Models und Model Providers, SSO-Verbindungen, das Audit-Log, Sessions und ihre Timelines und App-Verbindungen.
+1. **Die Datenbank.** Sie enthält die Einstellungen von Plattform und Organisationen, Konten, Organisationen und ihre Mitglieder, User Tokens, Models und Model Providers, SSO-Verbindungen, das Audit-Log, Bots, Chats und ihren Verlauf und App-Verbindungen.
 2. **`OPENBOT_SECRET_KEYS`.** Die Schlüssel entschlüsseln die Geheimnisse in der Datenbank: App-Geheimnisse, Schlüssel der Model Provider, SSO-Client-Geheimnisse und das Anmelde-Geheimnis. Eine Datenbank-Sicherung ohne die Schlüssel kann diese Geheimnisse nicht wiederherstellen.
 
 Mit Compose machst du so eine Datenbank-Sicherung:
@@ -396,7 +396,7 @@ Die Einstellungen des Repositorys müssen **GitHub Actions** als Quelle für Pag
 
 Der Dienst `check` führt `check.mjs` im Compose-Netzwerk aus, sobald OpenBot und der Protokolltest-Dienst gesund sind. Er prüft, dass:
 
-- `/v1/sessions` ohne Schlüssel und mit falschem Schlüssel `401` zurückgibt,
+- `/v1/chats` ohne Schlüssel und mit falschem Schlüssel `401` zurückgibt,
 - `/openapi.json` funktioniert,
 - der Catalog des Protokolltests den richtigen öffentlichen Origin hat,
 - die MCP-Erkennung auf dem Protokolltest-Dienst funktioniert.

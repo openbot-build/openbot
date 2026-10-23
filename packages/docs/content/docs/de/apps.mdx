@@ -188,7 +188,7 @@ Wenn die Platform [Code Mode](/de/docs/code-mode) einschaltet, bekommt das Model
 
 ### App operations
 
-OpenBot speichert jeden Aufruf einer App als App operation. Lies sie mit `GET /v1/sessions/:sessionId/app-operations` oder `GET /v1/app-operations/:id`.
+OpenBot speichert jeden Aufruf einer App als App operation. Lies sie mit `GET /v1/chats/:chatId/app-operations` oder `GET /v1/app-operations/:id`.
 
 | Status                                    | Bedeutung                                                            |
 | ----------------------------------------- | -------------------------------------------------------------------- |
@@ -221,7 +221,7 @@ Die Keys in `responses` müssen zu den Keys der Eingabe-Anfragen der App passen.
 
 Manche App-Tools kommen mit einer interaktiven Ansicht. Eine Ansicht ist eine HTML-Seite der App, wie MCP Apps sie festlegt. OpenBot hat keine Benutzeroberfläche. Darum zeigt dein Client die Ansicht. Du kannst diesen Teil überspringen. Jedes Ergebnis hat auch Text.
 
-1. Öffne die Ansicht für eine Operation: `POST /v1/app-operations/:operationId/view` mit `{ "sessionId", "itemId" }`. Die Antwort hat eine `id` der Ansicht, die HTML-`resource`, die `tools` der Ansicht, die `arguments` des Aufrufs und das `result`.
+1. Öffne die Ansicht für eine Operation: `POST /v1/app-operations/:operationId/view` mit `{ "chatId", "itemId" }`. Die Antwort hat eine `id` der Ansicht, die HTML-`resource`, die `tools` der Ansicht, die `arguments` des Aufrufs und das `result`.
 2. Zeige das HTML in einem iframe. Das Modul `@openbot-build/protocol/McpApps` hat einen Browser-Host, der das macht. Siehe [Protocol](/de/docs/protocol).
 3. Gib die Anfragen der Ansicht an OpenBot weiter:
 
@@ -234,7 +234,7 @@ Manche App-Tools kommen mit einer interaktiven Ansicht. Eine Ansicht ist eine HT
 | Eine Text-Nachricht schicken               | `POST /v1/app-views/:viewId/messages`                                 |
 | Schließen                                  | `DELETE /v1/app-views/:viewId`                                        |
 
-Aktionen einer Ansicht gehen durch dieselben Regeln zur Freigabe. Eine Nachricht startet einen neuen Turn, und nur, wenn die Session nichts tut. Wenn du eine Ansicht mit einer älteren `version` der Timeline öffnest, kann man die Ansicht nur lesen. Wenn eine Ansicht nicht öffnen kann, bekommst du 409 `AppViewUnavailable`. Das Text-Ergebnis ist trotzdem da.
+Aktionen einer Ansicht gehen durch dieselben Regeln zur Freigabe. Eine Nachricht aus der Ansicht geht als [Mitteilung](/de/docs/chats#mitteilungen) durch die [Inbox](/de/docs/chats#die-inbox) in den Chat. Der Bot liest sie bei seinem nächsten Schritt, oder sie startet einen neuen Turn. Wenn eine Ansicht nicht öffnen kann, bekommst du 409 `AppViewUnavailable`. Das Text-Ergebnis ist trotzdem da.
 
 ---
 

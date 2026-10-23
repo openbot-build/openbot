@@ -46,7 +46,16 @@ const groups = [
 		"Bots",
 		"Make, manage, and share Bots, with their memory, Rules, Grants, members, and invitations.",
 	],
-	["sessions", "Sessions", "Give work to a Bot in Sessions and Turns."],
+	[
+		"chats",
+		"Chats",
+		"Talk to a Bot. Each Bot has one Chat with each person, and the Bot always answers at once.",
+	],
+	[
+		"delegations",
+		"Delegations",
+		"Read or stop the work that a Bot gave to another Bot or to itself.",
+	],
 	[
 		"botInvitations",
 		"Bot invitations",
@@ -55,7 +64,7 @@ const groups = [
 	[
 		"triggers",
 		"Triggers",
-		"Start a Session for a Bot with a prompt, on a schedule or from a webhook.",
+		"Give a task to a Bot with a prompt, on a schedule or from a webhook.",
 	],
 	[
 		"triggerHooks",
@@ -118,7 +127,7 @@ const groups = [
 	[
 		"codeRuns",
 		"Code runs",
-		"Read the Code Mode programs of a Session and their App calls.",
+		"Read the Code Mode programs of a Chat and their App calls.",
 	],
 	["appViews", "App views", "Read the views that Apps show."],
 	[

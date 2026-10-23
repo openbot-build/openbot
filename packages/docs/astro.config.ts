@@ -69,7 +69,7 @@ export default defineConfig({
 						"docs/permissions",
 						"docs/bots",
 						"docs/sharing",
-						"docs/sessions",
+						"docs/chats",
 						"docs/delegation",
 						"docs/triggers",
 						"docs/channels",

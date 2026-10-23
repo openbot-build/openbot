@@ -7,7 +7,7 @@ Du musst Entscheidungen über [Requests](/de/docs/requests) nicht immer wieder n
 
 | Form  | Sieht so aus                                                                                      | Wer sie prüft                    |
 | ----- | ------------------------------------------------------------------------------------------------- | -------------------------------- |
-| Grant | `apps.call` auf `conn-7/search_orders`, erlauben, für diese Session                               | OpenBot, durch genauen Vergleich |
+| Grant | `apps.call` auf `conn-7/search_orders`, erlauben, in diesem Chat                                  | OpenBot, durch genauen Vergleich |
 | Rule  | "Der Programmer darf jedes Repository der Organisation openbot lesen, fragt aber vor einem Push." | Ein Prüf-Modell                  |
 
 Ein Grant ist schnell und genau. Eine Rule (Regel) deckt eine ganze Art von Requests ab.
@@ -18,21 +18,22 @@ Ein Grant ist schnell und genau. Eine Rule (Regel) deckt eine ganze Art von Requ
 
 Ein **Grant** ist eine gespeicherte Entscheidung über eine Fähigkeit eines Bot. Der Bot sieht seine Grants nie. Er sieht nur, dass manche Aufrufe laufen und manche abgelehnt werden.
 
-| Feld         | Bedeutung                                                                |
-| ------------ | ------------------------------------------------------------------------ |
-| `capability` | `action`, `target` (`*` für jedes Ziel) und optional genaue `arguments`. |
-| `effect`     | `allow` oder `deny`. Ein Ablehnen gewinnt.                               |
-| `scope`      | `once` (durch einen Aufruf verbraucht), `session` oder `lifetime`.       |
-| `grantedBy`  | Die Person, der Bot oder die Rule, die entschieden hat.                  |
-| `parent`     | Der Grant des Entscheiders, aus dem dieser Grant entstanden ist.         |
-| `status`     | `active`, `used` oder `revoked`.                                         |
+| Feld         | Bedeutung                                                                       |
+| ------------ | ------------------------------------------------------------------------------- |
+| `capability` | `action`, `target` (`*` für jedes Ziel) und optional genaue `arguments`.        |
+| `effect`     | `allow` oder `deny`. Ein Ablehnen gewinnt.                                      |
+| `scope`      | `once` (durch einen Aufruf verbraucht), `chat` (in einem Chat) oder `lifetime`. |
+| `grantedBy`  | Die Person, der Bot oder die Rule, die entschieden hat.                         |
+| `parent`     | Der Grant des Entscheiders, aus dem dieser Grant entstanden ist.                |
+| `chat`       | Der Chat eines Grant mit dem Umfang `chat`.                                     |
+| `status`     | `active`, `used` oder `revoked`.                                                |
 
 OpenBot erstellt Grants, wenn ein Entscheider einen Request beantwortet. Du kannst auch selbst einen erstellen:
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"capability":{"action":"bots.spawn","target":"*"},"effect":"allow","scope":"lifetime"}' \
+  -d '{"capability":{"action":"bots.create","target":"*"},"effect":"allow","scope":"lifetime"}' \
   https://api.example.com/v1/bots/$BOT/grants
 ```
 

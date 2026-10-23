@@ -30,12 +30,12 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | 字段          | 作用                                                                                   |
 | ------------- | -------------------------------------------------------------------------------------- |
 | `name`        | 一个简短的名字。                                                                       |
-| `bot`         | 负责回答的 Bot。它必须是组织共享的长期 Bot。                                           |
+| `bot`         | 负责回答的 Bot。它必须是组织的共享 Bot。                                               |
 | `credentials` | 平台的机密。见下文。它们可以写入，但永远不会返回。返回结果只显示 `set` 和一个 `hint`。 |
 | `linkPath`    | 可选。你的公开 origin 上的一个路径，你的客户端在这里让人[关联账户](#关联你的账户)。    |
 | `enabled`     | 可选。`false` 会停用这个 Channel。它的 webhook 之后会返回 `401`。                      |
 
-返回 `201` 和这个 Channel。把它的 `webhookUrl` 交给平台。调用者成为这个 Channel 的 **actor**。Channel 的聊天是 actor 的 Sessions。actor 必须能把工作交给这个 Bot。
+返回 `201` 和这个 Channel。把它的 `webhookUrl` 交给平台。调用者成为这个 Channel 的 **actor**。Channel 的聊天是 actor 的 [Chats](/zh-cn/docs/chats)。actor 必须能把工作交给这个 Bot。
 
 `GET`、`PATCH` 和 `DELETE /v1/organization/channels/:channelId` 读取、修改和删除一个 Channel。修改需要 `expectedVersion`，也就是你读到的 `version`。旧的 version 会返回 `409` 和 `ChannelConflict`。修改会让调用者成为 actor。不填 `credentials` 就会保留原来的机密。Channel 的类型不能修改。
 
@@ -78,14 +78,16 @@ OpenBot 会替你调用 `setWebhook`，并带上它自己的一个密钥。Teleg
 
 ---
 
-## 聊天和 Sessions
+## Channel 的 Chat
 
-每个聊天都是一个 `kind: "channel"` 的长期 Session：每个私聊一个 Session，每个群聊一个 Session。以 actor 的身份用 `GET /v1/sessions?kind=channel` 列出它们。
+平台上的每个聊天都是一个 `kind: "channel"` 的长期 Chat：每个私聊一个 Chat，每个群聊一个 Chat。这个 Chat 把聊天的名字作为它的 `title`。以 actor 的身份用 `GET /v1/chats?kind=channel` 列出它们。
 
 - 在私聊中，每条消息都会交给 Bot。
 - 在群聊中，只有提到机器人的消息才会交给 Bot。每条消息都以写它的人的名字开头，这样 Bot 知道是谁在说话。
-- Bot 还在工作时收到的消息会在[队列](/zh-cn/docs/sessions#引导排队和中断)中等待。它作为单独的 Turn 运行。
+- Bot 正在为某个人工作时，这个人发来的消息会进入正在运行的 Turn。Bot 在下一步读取它。
+- 另一个人发来的消息会在这个 Chat 的[收件箱](/zh-cn/docs/chats#收件箱)中等待。正在运行的 Turn 结束后，它作为单独的 Turn 运行。
 - Turn 运行时，机器人会显示它的文本，并随着文本变长不断修改这条消息。很长的回答会分成几部分发出。
+- 每个 Turn 的回答都会发到这个聊天。由[通知](/zh-cn/docs/chats#通知)启动的 Turn 也是这样，例如 Bot 交出去的工作的结果。所以 Bot 可以先说“我去看看”，之后再发出结果。
 - 如果平台把同一个事件发了第二次，OpenBot 会丢弃它。
 
 ### 每个 Turn 为它的发言人工作
@@ -102,7 +104,7 @@ OpenBot 会替你调用 `setWebhook`，并带上它自己的一个密钥。Teleg
 
 ## 聊天中的批准
 
-当一个 request 在等待某个人时，机器人会发送一张带三个按钮的卡片：**Allow once**（允许一次）、**Allow for this Session**（在这个 Session 中允许）和 **Deny**（拒绝）。在[计划模式](/zh-cn/docs/sessions#计划模式)中等待批准的计划也会收到同样的卡片。如果这个人在这个 Channel 上关联了账户，卡片会发到他的私聊。否则，卡片会发到这项工作所在的聊天。
+当一个 request 在等待某个人时，机器人会发送一张带三个按钮的卡片：**Allow once**（允许一次）、**Allow in this chat**（在这个聊天中允许）和 **Deny**（拒绝）。**Allow in this chat** 会创建一个范围为 `chat` 的 Grant。见 [Requests](/zh-cn/docs/requests#回答请求)。在[计划模式](/zh-cn/docs/chats#计划模式)中等待批准的计划也会收到同样的卡片。如果这个人在这个 Channel 上关联了账户，卡片会发到他的私聊。否则，卡片会发到这项工作所在的聊天。对于 Bot 交出去的工作提出的请求，例如为这个聊天工作的 task Chat 提出的请求，也是这样。
 
 只有 request 在等待的那个人才能按按钮。当 request 发生变化时，卡片会显示这个决定。
 
@@ -154,12 +156,12 @@ Channels 位于 `openbot.org.<org>.channel` 之下。管理员管理它们。每
 
 ## 错误
 
-| 错误                      | 状态 | 何时出现                                                             |
-| ------------------------- | ---- | -------------------------------------------------------------------- |
-| `ChannelInvalid`          | 400  | Bot 不是共享的长期 Bot、类型被修改了，或者平台没有接受这个 webhook。 |
-| `ChannelNotFound`         | 404  | 没有这个 Channel。                                                   |
-| `ChannelLinkInvalid`      | 404  | 关联码未知、已经用过或已经过期。请再向机器人要一次。                 |
-| `ChannelIdentityNotFound` | 404  | 没有这个关联的账户。                                                 |
-| `ChannelConflict`         | 409  | 你读取之后，这个 Channel 已经改变。                                  |
-| `ChannelHookDenied`       | 401  | 签名错误或太旧，或者这个 Channel 已停用。                            |
-| `ChannelsUnavailable`     | 503  | OpenBot 现在无法访问它的存储。                                       |
+| 错误                      | 状态 | 何时出现                                                       |
+| ------------------------- | ---- | -------------------------------------------------------------- |
+| `ChannelInvalid`          | 400  | Bot 不是共享 Bot、类型被修改了，或者平台没有接受这个 webhook。 |
+| `ChannelNotFound`         | 404  | 没有这个 Channel。                                             |
+| `ChannelLinkInvalid`      | 404  | 关联码未知、已经用过或已经过期。请再向机器人要一次。           |
+| `ChannelIdentityNotFound` | 404  | 没有这个关联的账户。                                           |
+| `ChannelConflict`         | 409  | 你读取之后，这个 Channel 已经改变。                            |
+| `ChannelHookDenied`       | 401  | 签名错误或太旧，或者这个 Channel 已停用。                      |
+| `ChannelsUnavailable`     | 503  | OpenBot 现在无法访问它的存储。                                 |

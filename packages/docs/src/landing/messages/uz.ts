@@ -51,8 +51,8 @@ export default {
 		title: ["O‘z mijozingizni olib keling.", "Nazorat odamlar qo‘lida."],
 		items: [
 			{
-				title: "Sessionlar va Timelinelar",
-				text: "Ish Sessionlar va Turnlarda bo‘ladi. Timeline versiyalarni saqlaydi, shuning uchun orqaga qaytib, qayta urinib ko‘rishingiz mumkin.",
+				title: "Har bir Bot bilan bitta chat",
+				text: "Har bir Bot bilan sizda bitta chat bor. Bot doim darhol javob beradi, uzun ishlar esa parallel boradi.",
 			},
 			{
 				title: "Tasdiqlar",

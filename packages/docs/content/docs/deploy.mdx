@@ -261,7 +261,7 @@ The proxy must:
 
 - send the `Origin`, `Cookie`, and `Authorization` headers to OpenBot without changes,
 - not buffer responses, because Turns can stream their output as server-sent events (SSE),
-- allow long responses. `GET /v1/sessions/:id/wait` can wait for up to 30 seconds, and a stream lasts as long as its Turn.
+- allow long responses. `GET /v1/chats/:id/wait` can wait for up to 30 seconds, and a stream lasts as long as its Turn.
 
 <Tabs items={["nginx", "Caddy"]}>
 <Tab value="nginx">
@@ -328,7 +328,7 @@ A return path can be any path on the same origin, except paths under `/auth/`, `
 
 Back up two things, and keep them together:
 
-1. **The database.** It holds the platform and organization settings, accounts, organizations and their members, user tokens, models and model providers, SSO connections, the audit log, Sessions and their Timelines, and App connections.
+1. **The database.** It holds the platform and organization settings, accounts, organizations and their members, user tokens, models and model providers, SSO connections, the audit log, Bots, Chats and their history, and App connections.
 2. **`OPENBOT_SECRET_KEYS`.** The keys decrypt the secrets in the database: App secrets, model provider keys, SSO client secrets, and the sign-in secret. A database backup without the keys cannot restore them.
 
 With Compose, make a database backup like this:
@@ -396,7 +396,7 @@ The repository settings must use **GitHub Actions** as the Pages source, with `o
 
 The `check` service runs `check.mjs` inside the Compose network, after OpenBot and the protocol test service are healthy. It checks that:
 
-- `/v1/sessions` returns `401` with no key and with a bad key,
+- `/v1/chats` returns `401` with no key and with a bad key,
 - `/openapi.json` works,
 - the protocol test Catalog has the right public origin,
 - MCP discovery on the protocol test service works.

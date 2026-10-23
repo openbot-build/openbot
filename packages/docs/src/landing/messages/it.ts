@@ -53,8 +53,8 @@ export default {
 		title: ["Usa il tuo client.", "Il controllo resta alle persone."],
 		items: [
 			{
-				title: "Session e Timeline",
-				text: "Il lavoro avviene in Session e Turn. La Timeline conserva le versioni, così puoi tornare indietro e riprovare.",
+				title: "Una chat con ogni Bot",
+				text: "Hai una chat con ogni Bot. Il Bot risponde sempre subito, e il lavoro lungo va avanti in parallelo.",
 			},
 			{
 				title: "Approvazioni",

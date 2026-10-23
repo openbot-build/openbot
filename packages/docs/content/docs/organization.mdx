@@ -110,7 +110,6 @@ Each organization has its own settings. They live in the database, so every Open
 	},
 	"botMemoryModel": null,
 	"decisionModel": null,
-	"memory": { "use": true, "generate": true },
 	"botMemory": true,
 	"requestTimeoutMs": 86400000,
 	"planApproval": {
@@ -134,12 +133,11 @@ Each organization has its own settings. They live in the database, so every Open
 | Field              | Default                                           | What it does                                                                                                                       |
 | ------------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `rulesModel`       | `null`                                            | The model that judges [Rules](/docs/rules). `null` means that no model judges them. See [Models](/docs/models#choose-a-model).     |
-| `botMemoryModel`   | `null`                                            | The model that learns [Bot memory](/docs/memory#bot-memory). `null` means that Bots learn nothing.                                 |
+| `botMemoryModel`   | `null`                                            | The model that learns [Bot memory](/docs/memory). `null` means that Bots learn nothing.                                            |
 | `decisionModel`    | `null`                                            | The decision model, such as Jev. It must be a `decision` model. `null` means none. See [Models](/docs/models#decision-model).      |
-| `memory`           | both on                                           | The memory switches `use` and `generate` of a new Session. See [Memory](/docs/memory#switches).                                    |
-| `botMemory`        | `true`                                            | Let the memory Bot learn from Sessions and add to the input of Turns.                                                              |
+| `botMemory`        | `true`                                            | Let the memory Bot learn from Chats and add to the input of Turns.                                                                 |
 | `requestTimeoutMs` | 24 hours                                          | How long a [request](/docs/requests) waits for an answer before OpenBot denies it. From 1 second to 7 days.                        |
-| `planApproval`     | ask the decider above, stay a plan after 24 hours | How a plan is approved when no member, Bot or Session sets it. See [Plan mode](/docs/sessions#plan-mode).                          |
+| `planApproval`     | ask the decider above, stay a plan after 24 hours | How a plan is approved when no member, Bot or Chat sets it. See [Plan mode](/docs/chats#plan-mode).                                |
 | `appReadRules`     | `[]`                                              | App tools that only read: `{ cardUrl, tool }`. See [Requests](/docs/requests).                                                     |
 | `defaultRoles`     | `["member"]`                                      | The roles of a new member.                                                                                                         |
 | `joinByDomain`     | `true`                                            | People with a verified email in a verified domain of the organization join when they sign in.                                      |
@@ -340,11 +338,10 @@ The audit log records important changes. Nothing can change or remove an entry.
 | `token.revoked`          | A member revokes a user token.                    |
 | `bot.created`            | A member makes a Bot.                             |
 | `bot.updated`            | A member changes a Bot.                           |
-| `bot.promoted`           | A member promotes a Session Bot.                  |
 | `bot.memory.updated`     | A member changes Bot memory.                      |
 | `bot.memory.purged`      | A member removes Bot memory by a tag.             |
 | `bot.memory_bot.updated` | A member changes the memory Bot.                  |
-| `delegation.started`     | A Bot gives work to another Bot.                  |
+| `delegation.started`     | A Bot gives work to a Bot.                        |
 | `delegation.completed`   | Delegated work ends.                              |
 | `capability.decided`     | A person answers a request.                       |
 | `request.resolved`       | A request closes. `details.chain` lists the Bots. |

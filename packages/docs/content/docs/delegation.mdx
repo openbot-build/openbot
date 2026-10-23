@@ -1,10 +1,11 @@
 ---
 title: Delegation
-description: How Bots give work to other Bots and get the results back.
+description: How Bots give work to other Bots or to themselves, and get the results back.
 ---
 
-**Delegation** means that one Bot gives a task to another Bot. The other Bot works in its own Session, with its own context. Only a short brief goes down, and only a short result comes back. So each Bot keeps its attention on its own work.
-This page shows the Bot tools, the brief and the result, and how to watch delegated work.
+**Delegation** means that a Bot gives a task to a Bot. The task can go to another Bot, or to the same Bot. The work runs in its own **task Chat**, with its own context, at the same time as other work. The Bot that gave the work does not wait. It goes on, or it ends its answer. When the work ends, the result comes back to its Chat as a [notice](/docs/chats#notices).
+So a Bot always stays free to answer people, and much work can run in parallel.
+This page shows the Bot tools, how the work runs and ends, and how to watch it and stop it.
 
 ---
 
@@ -12,104 +13,144 @@ This page shows the Bot tools, the brief and the result, and how to watch delega
 
 OpenBot gives every Bot these tools:
 
-| Tool                        | What it does                                                                                   |
-| --------------------------- | ---------------------------------------------------------------------------------------------- |
-| `openbot_list_bots`         | Lists the Bots it can give work to, with their roles. It includes its Session Bots.            |
-| `openbot_bot_details`       | Reads the role and instructions of one Bot.                                                    |
-| `openbot_delegate`          | Gives a task to another Bot and waits for the result.                                          |
-| `openbot_start_session_bot` | Starts a new [Session Bot](/docs/bots#three-kinds-of-bots) for its Session.                    |
-| `openbot_create_bot`        | Makes a new lasting Bot that it owns. See [Bots that own Bots](/docs/bots#bots-that-own-bots). |
-| `openbot_promote_bot`       | Makes a Session Bot of its Session a lasting Bot that it owns.                                 |
-| `openbot_report`            | Only in delegated work. Sends the result back.                                                 |
-
-The first time a Bot gives work to another lasting Bot, starts a Session Bot, makes a Bot or promotes one, the decider above it must agree. See [Requests](/docs/requests). A Bot can always give work to the Session Bots of its Session and to the Bots that it owns.
+| Tool                        | What it does                                                                           |
+| --------------------------- | -------------------------------------------------------------------------------------- |
+| `openbot_list_bots`         | Lists the Bots it can give work to, with their roles.                                  |
+| `openbot_bot_details`       | Reads the role and instructions of one Bot.                                            |
+| `openbot_delegate`          | Gives a task to a Bot, or to itself. It returns at once.                               |
+| `openbot_cancel_delegation` | Stops work that its Chat gave away.                                                    |
+| `openbot_create_bot`        | Makes a new Bot that it owns. See [Bots that own Bots](/docs/bots#bots-that-own-bots). |
 
 ---
 
-## The brief
+## Give work
 
-`openbot_delegate` takes a brief:
+`openbot_delegate` takes these fields:
 
-| Field            | Meaning                                                          |
-| ---------------- | ---------------------------------------------------------------- |
-| `bot`            | The ID of the other Bot.                                         |
-| `reason`         | Why the Bot wants this. A decider reads it when one must agree.  |
-| `task`           | What to do.                                                      |
-| `userRequest`    | The words of the person, unchanged. A brief never replaces them. |
-| `context`        | Short facts that the other Bot needs.                            |
-| `references`     | Session and Item IDs that the other Bot can read.                |
-| `constraints`    | Rules for the work.                                              |
-| `expectedOutput` | What a good result looks like.                                   |
-| `session`        | Optional. Continue earlier work of that Bot in this Session.     |
+| Field        | Meaning                                                                                                                       |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `task`       | Required. What to do, with everything that the work needs. The other Bot does not see the Chat that gives the work.           |
+| `bot`        | Optional. The ID of the Bot that does the work. Without it, the Bot gives the work to itself.                                 |
+| `reason`     | Why the Bot gives this work. It is required for a Bot that it does not own. A decider reads it.                               |
+| `delegation` | Optional. The ID of earlier work of this Chat. The new task goes on with it. See [Add to earlier work](#add-to-earlier-work). |
 
-The other Bot gets the brief as the first message of a Turn. It never sees the history of the Bot that gave the work.
-
-### Which Session the work uses
-
-- With `session`, the work goes on in that Session, if it belongs to the other Bot and was started from the same Session.
-- For a Session Bot, the work goes on in its latest Session from the same parent Session. So a Session Bot keeps its context.
-- Otherwise the work starts in a new Session.
-
-If the other Session is busy, the brief waits in its queue and runs next.
-
-## The result
-
-The other Bot calls `openbot_report` once when it is done. If it ends without a report, OpenBot uses its last answer.
+The tool returns at once:
 
 ```json
 {
-	"status": "completed",
-	"summary": "Added the endpoint and two tests.",
-	"artifacts": [{ "kind": "branch", "ref": "bots-contract" }],
-	"openQuestions": [],
-	"child": { "session": "c81d…", "turn": "t-77" }
+	"delegation": "dlg_9f1e…",
+	"status": "queued",
+	"note": "The work runs on its own. Its result comes back to this Chat as a message. Go on with other work, or end your answer now."
 }
 ```
 
-`status` is `completed`, `failed` or `cancelled`. The result never holds the full history. To read the details, open the Session in `child`.
+Who can get the work:
+
+- **The Bot itself.** Leave out `bot`. A new helper with the same role and no history does the work. This needs no decision.
+- **A Bot that it owns.** This needs no decision.
+- **Any other Bot.** This is the capability `bots.delegate`, and it needs a `reason`. The first time, the decider above the Bot must agree. See [Requests](/docs/requests). While the decider decides, the status is `authorizing`. When the work is allowed, it starts. When it is denied, the status becomes `failed`, and the Chat gets a notice with the reason.
+
+There is no limit on how deep work goes, or on how much work runs at the same time. A Bot can give work to itself, and that work can give more work. Bot A can give work to Bot B, and B can give work back to A. Nothing waits, so nothing gets stuck. Only [budgets and rate limits](/docs/usage) stop work that costs too much.
+
+### Add to earlier work
+
+To give more work to the same context, send the ID of earlier work as `delegation`. The work must come from the same Chat.
+
+- When that work still runs, the new `task` goes into its task Chat as a message. The Bot there reads it at its next step. The ID stays the same.
+- When that work has ended, OpenBot makes a new delegation in the same task Chat. So the Bot there still has all of its history.
 
 ---
 
-## How the parent waits
+## Where the work runs
 
-While the other Bot works, the Turn that gave the work has the status `Waiting`. It does not hold a running process, so the wait can last long and survives a server restart. When the work ends, OpenBot gives the result to the waiting tool call, and the Turn goes on. When a Turn gives work to several Bots at once, it goes on after the last result.
+Each delegation runs in a task Chat of the Bot that does the work. The task Chat has `kind: "task"` and a `parent` with the Chat and the delegation that gave the work. Its first input is a notice with the task, such as `[OpenBot] Assistant gives you this task: …`. See [Chats](/docs/chats).
 
-Delegated Sessions have `kind: "delegated"` and a `parent` with the Session, Turn and tool call that started them. They have the same routes as every Session. You can read them, steer them and interrupt them.
+The work is for the same person as the work that gave it. So the [permissions](/docs/permissions) of that person decide what the Bot may do, and requests go to the same deciders. A task Chat belongs to the owner of the Chat that gave the work. In a [Channel](/docs/channels), that is the actor of the Channel. The owner can read task Chats like their other Chats.
 
-## Watch delegated work
+A person can also send a message to a task Chat with `POST /v1/chats/:chatId/messages`. The Bot there reads it as a message from the person.
 
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  https://api.example.com/v1/sessions/$SESSION/delegations
+---
+
+## When the work ends
+
+The work of a task Chat ends when one of its Turns ends and the Chat has no [open work](/docs/chats#open-work). Open work is the work that the task Chat gave away, its requests that wait for a decision, its reminders, and input in its inbox. While some of it is open, the work stays `running`. The results come back as notices, they start new Turns, and the work goes on.
+
+The end of the last Turn gives the result:
+
+| The Turn ends as | The work becomes | `result`                      |
+| ---------------- | ---------------- | ----------------------------- |
+| `Completed`      | `completed`      | The last answer of the Bot.   |
+| `Failed`         | `failed`         | The error.                    |
+| `Interrupted`    | `cancelled`      | A note that the work stopped. |
+
+Then the Chat that gave the work gets a notice, such as:
+
+```text
+[OpenBot] The work dlg_9f1e… that you gave to Programmer is done.
+
+Result:
+Added the endpoint and two tests.
 ```
+
+The notice goes through the [inbox](/docs/chats#the-inbox) of that Chat. When the Chat is idle, it starts a new Turn, and the Bot goes on with the result. When the Bot gave work to many Bots, each result comes back on its own, as soon as it is ready.
+
+A task Chat can get a new Turn after its work has ended, for example when a person sends it a message, or when a late notice comes in. Then OpenBot makes a new delegation for the same task Chat. When this new round ends, the parent Chat gets its result too.
+
+---
+
+## Watch the work
+
+`GET /v1/chats/:chatId/delegations` lists the work that one Chat gave away. `GET /v1/delegations/:delegationId` reads one piece of work. You see only the work of your own Chats. Other work returns `404` with `DelegationNotFound`.
 
 ```json
-[
-	{
-		"id": "dlg_9f1e…",
-		"parent": { "session": "a41c…", "turn": "t-12", "toolCallId": "call-3" },
-		"bot": "bot_5c0e…",
-		"child": { "session": "c81d…", "turn": "t-77" },
-		"status": "running",
-		"brief": { "task": "…", "userRequest": "…" },
-		"result": null
-	}
-]
+{
+	"id": "dlg_9f1e…",
+	"parent": { "chat": "chat_7d21…", "turn": "t-12", "toolCallId": "call-3" },
+	"bot": "bot_5c0e…",
+	"chat": "chat_c81d…",
+	"status": "running",
+	"task": "Add the endpoint for the trip list, with tests.",
+	"reason": "The Programmer writes the code of this project.",
+	"result": null,
+	"createdAt": 1792486800000,
+	"updatedAt": 1792486805000
+}
 ```
+
+`chat` is the task Chat. It is `null` until the work starts. Work from a [trigger](/docs/triggers) has `trigger` and a `parent` with no `turn` and no `toolCallId`.
 
 | Status        | Meaning                                                        |
 | ------------- | -------------------------------------------------------------- |
 | `authorizing` | The work waits for a [request](/docs/requests) to be answered. |
 | `queued`      | The work may start. OpenBot starts it now.                     |
-| `running`     | The other Bot works on it.                                     |
-| `completed`   | The work is done. `result` holds the result.                   |
-| `failed`      | The work failed or was not allowed.                            |
+| `running`     | The Bot works on it.                                           |
+| `completed`   | The work is done. `result` holds the last answer.              |
+| `failed`      | The work failed or was not allowed. `result` says why.         |
 | `cancelled`   | The work was stopped.                                          |
 
-## Stop delegated work
+---
 
-When you [interrupt](/docs/sessions#steer-queue-and-interrupt) a Turn, OpenBot also stops the work that it gave away, and closes its open requests. Each record becomes `cancelled`.
+## Stop the work
 
-## Forks
+There are four ways to stop work:
 
-A Fork of a Session is new direct work. It keeps the Bot of its source, but it has no `parent`. Work that a Fork gives away starts in new Sessions, so two branches never share the work of one Session Bot.
+- The Bot calls `openbot_cancel_delegation` with the `delegation` ID and an optional `reason`. Its Chat gets no notice, because the Bot stopped the work itself.
+- You call `POST /v1/delegations/:delegationId/cancel` with the body `{}`. The answer is the delegation. The Chat that gave the work gets a notice.
+- You [interrupt](/docs/chats#interrupt) the Chat that gave the work with `{ "delegations": true }`.
+- You [delete](/docs/chats#delete-the-history) the Chat that gave the work.
+
+A cancel stops the running Turn of the task Chat. It also stops the work that the task Chat gave away, layer by layer, and its requests and reminders. Each piece of work becomes `cancelled`.
+
+A normal interrupt stops only the running Turn. The work that the Chat gave away goes on.
+
+---
+
+## Errors
+
+| Status | Error                          | When                                              |
+| ------ | ------------------------------ | ------------------------------------------------- |
+| `404`  | `DelegationNotFound`           | There is no work with this ID in your Chats.      |
+| `409`  | `DelegationConflict`           | The work changed at the same time. Read it again. |
+| `503`  | `DelegationStorageUnavailable` | OpenBot cannot reach its database.                |
+
+See all fields in the [Delegations reference](/docs/api/operations/tags/delegations/).

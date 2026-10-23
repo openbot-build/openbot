@@ -33,10 +33,11 @@ import { Effect } from "effect"
 
 const program = Effect.gen(function* () {
 	const client = yield* Client
-	const view = yield* client.api.sessions.createSession({
-		payload: { title: "Release notes" },
+	const receipt = yield* client.api.chats.sendBotMessage({
+		params: { botId },
+		payload: { input: "Write the release notes." },
 	})
-	return view.session.id
+	return receipt.chat
 })
 
 const id = await Effect.runPromise(
@@ -67,45 +68,46 @@ const id = await Effect.runPromise(
 每个操作都位于 `client.api.<group>.<operation>`。名称和 [API 参考](/docs/api/)中的相同。
 每次调用接受一个对象，它有以下可选字段：
 
-| 字段      | 内容                           |
-| --------- | ------------------------------ |
-| `params`  | 路径中的值，例如 `sessionId`。 |
-| `query`   | 查询字符串中的值。             |
-| `payload` | JSON 请求体。                  |
+| 字段      | 内容                        |
+| --------- | --------------------------- |
+| `params`  | 路径中的值，例如 `chatId`。 |
+| `query`   | 查询字符串中的值。          |
+| `payload` | JSON 请求体。               |
 
 ```ts
-const sessions = yield * client.api.sessions.listSessions({ query: {} })
+const chats = yield * client.api.chats.listChats({ query: {} })
 
 const view =
 	yield *
-	client.api.sessions.getSession({
-		params: { sessionId: id },
+	client.api.chats.getChat({
+		params: { chatId: id },
 	})
 
-const archived =
+const tasks =
 	yield *
-	client.api.sessions.listSessions({
-		query: { archived: "true" },
+	client.api.chats.listChats({
+		query: { kind: "task" },
 	})
 ```
 
 一些分组及其页面：
 
-| 分组             | 用途                                                | 参考                                                          |
-| ---------------- | --------------------------------------------------- | ------------------------------------------------------------- |
-| `sessions`       | 创建 Session（会话）、启动 Turn（轮次）、读取结果。 | [Sessions](/docs/api/operations/tags/sessions/)               |
-| `bots`           | 创建和管理 Bot。                                    | [Bots](/docs/api/operations/tags/bots/)                       |
-| `requests`       | 回答你的 Bot 发出的 Request。                       | [Requests](/docs/api/operations/tags/requests/)               |
-| `apps`           | 在某个地址上查找 App。                              | [App discovery](/docs/api/operations/tags/app-discovery/)     |
-| `connections`    | 添加和管理 App 连接。                               | [Connections](/docs/api/operations/tags/connections/)         |
-| `appIndex`       | 搜索公开的 App Index。                              | [App Index](/docs/api/operations/tags/app-index/)             |
-| `userTokens`     | 列出、创建、撤销和检查用户令牌。                    | [User tokens](/docs/api/operations/tags/user-tokens/)         |
-| `organizations`  | 列出和创建你的组织。                                | [Organizations](/docs/api/operations/tags/organizations/)     |
-| `organization`   | 管理组织及其成员、角色和设置。                      | [Organization](/docs/api/operations/tags/organization/)       |
-| `modelProviders` | 管理模型提供方，列出模型。                          | [Model providers](/docs/api/operations/tags/model-providers/) |
-| `sso`            | 验证邮箱域名，管理 SSO 连接。                       | [SSO](/docs/api/operations/tags/sso/)                         |
-| `platform`       | 管理平台。仅限平台管理员。                          | [Platform](/docs/api/operations/tags/platform/)               |
-| `health`         | 读取服务文档和健康状态。                            | [Health](/docs/api/operations/tags/service-and-health/)       |
+| 分组             | 用途                             | 参考                                                          |
+| ---------------- | -------------------------------- | ------------------------------------------------------------- |
+| `chats`          | 和 Bot 说话，读取 Chat 和结果。  | [Chats](/docs/api/operations/tags/chats/)                     |
+| `delegations`    | 读取和停止 Bot 交出去的工作。    | [Delegations](/docs/api/operations/tags/delegations/)         |
+| `bots`           | 创建和管理 Bot。                 | [Bots](/docs/api/operations/tags/bots/)                       |
+| `requests`       | 回答你的 Bot 发出的 Request。    | [Requests](/docs/api/operations/tags/requests/)               |
+| `apps`           | 在某个地址上查找 App。           | [App discovery](/docs/api/operations/tags/app-discovery/)     |
+| `connections`    | 添加和管理 App 连接。            | [Connections](/docs/api/operations/tags/connections/)         |
+| `appIndex`       | 搜索公开的 App Index。           | [App Index](/docs/api/operations/tags/app-index/)             |
+| `userTokens`     | 列出、创建、撤销和检查用户令牌。 | [User tokens](/docs/api/operations/tags/user-tokens/)         |
+| `organizations`  | 列出和创建你的组织。             | [Organizations](/docs/api/operations/tags/organizations/)     |
+| `organization`   | 管理组织及其成员、角色和设置。   | [Organization](/docs/api/operations/tags/organization/)       |
+| `modelProviders` | 管理模型提供方，列出模型。       | [Model providers](/docs/api/operations/tags/model-providers/) |
+| `sso`            | 验证邮箱域名，管理 SSO 连接。    | [SSO](/docs/api/operations/tags/sso/)                         |
+| `platform`       | 管理平台。仅限平台管理员。       | [Platform](/docs/api/operations/tags/platform/)               |
+| `health`         | 读取服务文档和健康状态。         | [Health](/docs/api/operations/tags/service-and-health/)       |
 
 每个操作都需要一项权限。没有权限的调用会以 `PermissionDenied` 失败。请看[权限](/zh-cn/docs/permissions)。
 
@@ -113,7 +115,7 @@ const archived =
 
 每次失败的调用都会给出一个带类型的错误。类型 `ClientError` 列出了所有错误：
 
-- 来自契约的 **API 错误**。每个都有一个 `_tag`，例如 `SessionNotFound` 或 `SessionConflict`。
+- 来自契约的 **API 错误**。每个都有一个 `_tag`，例如 `ChatNotFound` 或 `ChatConflict`。
 - 应答与契约不符时的 **Schema 错误**（`SchemaError`）。
 - 网络故障时的 **HTTP 客户端错误**。
 
@@ -122,9 +124,9 @@ const archived =
 ```ts
 const view =
 	yield *
-	client.api.sessions
-		.getSession({ params: { sessionId: id } })
-		.pipe(Effect.catchTag("SessionNotFound", () => Effect.succeed(undefined)))
+	client.api.chats
+		.getChat({ params: { chatId: id } })
+		.pipe(Effect.catchTag("ChatNotFound", () => Effect.succeed(undefined)))
 ```
 
 常见的登录错误：
@@ -203,17 +205,17 @@ const program = Effect.gen(function* () {
 	const client = yield* Client
 	const opened = yield* client.api.appViews.open({
 		params: { operationId },
-		payload: { sessionId, itemId },
+		payload: { chatId, itemId },
 	})
 	return yield* AppViews.make(opened, accountId, () => refresh())
 })
 ```
 
-| 参数       | 是什么                                                                  |
-| ---------- | ----------------------------------------------------------------------- |
-| `opened`   | `appViews.open` 返回的视图。                                            |
-| `owner`    | 已登录账户的稳定 ID。它把不同账户的视图分开。                           |
-| `onChange` | 可选。当视图中某个操作的状态改变时运行。用它来刷新 Request 和 Session。 |
+| 参数       | 是什么                                                               |
+| ---------- | -------------------------------------------------------------------- |
+| `opened`   | `appViews.open` 返回的视图。                                         |
+| `owner`    | 已登录账户的稳定 ID。它把不同账户的视图分开。                        |
+| `onChange` | 可选。当视图中某个操作的状态改变时运行。用它来刷新 Request 和 Chat。 |
 
 结果可以配合 `@openbot-build/protocol/McpApps` 中的 `mount` 使用，`mount` 在 iframe 中显示视图。请看[协议](/zh-cn/docs/protocol)。
 
@@ -229,12 +231,12 @@ const program = Effect.gen(function* () {
 
 ## 展示告解
 
-Bot 用 `confide` 工具说出工作情况，[记忆 Bot](/zh-cn/docs/memory#bot-如何学习) 会回答它。人可以读到这些内容：`GET /v1/sessions/:sessionId/confessions` 会列出它们，这些调用也在 Session 的历史中。但 Bot 在那里说话比在回答中更放得开。所以不要让人太容易读到它们：
+Bot 用 `confide` 工具说出工作情况，[记忆 Bot](/zh-cn/docs/memory#bot-如何学习) 会回答它。人可以读到这些内容：`GET /v1/chats/:chatId/confessions` 会列出它们，这些调用也在 Chat 的历史中。但 Bot 在那里说话比在回答中更放得开。所以不要让人太容易读到它们：
 
-- 不要在聊天中显示告解。在历史中折叠 `confide` 工具调用，也不要为它们发送通知。
-- 把它们放在一个需要人主动打开的地方，比如 Session 详情中一个折叠起来的部分。
+- 不要在对话中显示告解。在历史中折叠 `confide` 工具调用，也不要发消息告诉别人这些内容。
+- 把它们放在一个需要人主动打开的地方，比如 Chat 详情中一个折叠起来的部分。
 - 打开之前，用一句话说明它们是什么：这是 Bot 谈论自己工作的地方，它不希望被引用。
 - 不要再把告解中的话给 Bot 看，比如放进之后的消息里。如果 Bot 发现人们会引用它倾诉的内容，它就不再倾诉了。
-- 当告解涉及某件需要人来处理的事情，比如一个被删除的文件时，请把人引导到 Session 的 Item 和操作，而不是引导到告解。
+- 当告解涉及某件需要人来处理的事情，比如一个被删除的文件时，请把人引导到 Chat 的 Item 和操作，而不是引导到告解。
 
 记忆 Bot 也会请 Bot 把错误直接告诉那个人。所以重要的事情通常会在聊天中说出来。

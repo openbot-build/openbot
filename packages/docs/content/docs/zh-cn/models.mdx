@@ -22,7 +22,7 @@ OpenBot 为此保存两种记录：
 
 每个模型有两种类型之一：
 
-- `language` 模型会写文本、调用工具。它运行 Session、评判 Rule，并学习 Bot 记忆。
+- `language` 模型会写文本、调用工具。它运行 Turn、评判 Rule，并学习 Bot 记忆。
 - `decision` 模型只从固定的列表中选一个答案。它不写文本。TypeSafe 的 Jev 就是一个例子。见[决策模型](#决策模型)。
 
 当你从代码中运行 OpenBot 时，还可以提供内置模型。参见[内置模型](#内置模型)。
@@ -200,11 +200,11 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 OpenBot 从不替你选模型。没有默认模型。每种用途都要指明自己的模型：
 
-- **新 Session** 使用请求中的 `settings.model`。没有它时，Session 使用它的 [Bot](/zh-cn/docs/bots) 的 `model`。两者都没有模型时，OpenBot 返回 `400`、`SessionModelInvalid` 和原因 `missing`。新的 Bot 没有模型，除非你给它一个。所以请在创建时设置它的 `model`，或之后用 `PATCH /v1/bots/:id` 设置。
+- **新的 [Chat](/zh-cn/docs/chats)** 使用它的 [Bot](/zh-cn/docs/bots) 的 `model`。Bot 没有模型时，给它的第一条消息会失败，返回 `400`、`ChatModelInvalid` 和原因 `missing`。新的 Bot 没有模型，除非你给它一个。所以请在创建时设置它的 `model`，或之后用 `PATCH /v1/bots/:id` 设置。
 - **[Rule](/zh-cn/docs/rules) 的评判**使用[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel`。它为 `null` 时，评判不给出答案，由人或 Bot 来决定。
-- **[Bot 记忆](/zh-cn/docs/memory#bot-记忆)**使用同一份设置中的 `botMemoryModel`。它为 `null` 时，Bot 什么都不学。
+- **[Bot 记忆](/zh-cn/docs/memory)**使用同一份设置中的 `botMemoryModel`。它为 `null` 时，Bot 什么都不学。
 
-`rulesModel` 和 `botMemoryModel` 必须是 `language` 模型。目录会给出每个模型的 `type`，Session 只能选择 `language` 模型。
+`rulesModel` 和 `botMemoryModel` 必须是 `language` 模型。目录会给出每个模型的 `type`，Chat 只能选择 `language` 模型。
 
 旧版本的 OpenBot 有 `defaultModel` 和 `helperModel`。升级时，OpenBot 把旧的 `defaultModel` 给每个没有模型的 Bot。`rulesModel` 和 `botMemoryModel` 得到旧的辅助模型：`helperModel`，没有时用 `defaultModel`。如果两者都是 `null`，新的值保持为空，你必须设置它们。
 
@@ -216,15 +216,15 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: applic
   https://api.example.com/v1/bots/$BOT_ID
 ```
 
-Session 可以保存自己的选择。把当前的 Session 修订版本作为 `expected` 发送：
+Chat 可以保存自己的选择。把当前的 Chat 修订版本作为 `expected` 发送：
 
 ```sh
-curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"expected":3,"selection":{"_tag":"Config.Selection","provider":"prov_4c1e...","model":"qwen3-32b"}}' \
-  https://api.example.com/v1/sessions/$SESSION_ID/model
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"expected":3,"model":{"_tag":"Config.Selection","provider":"prov_4c1e...","model":"qwen3-32b"}}' \
+  https://api.example.com/v1/chats/$CHAT_ID
 ```
 
-`GET /v1/sessions/:id/models` 为一个 Session 显示同样的模型。所有字段参见 [Sessions API 参考](/docs/api/operations/tags/sessions/)。
+发送 `"model": null` 可以重新使用 Bot 的模型。`GET /v1/chats/:id/models` 为一个 Chat 显示同样的模型。所有字段参见 [Chats API 参考](/docs/api/operations/tags/chats/)。
 
 要限制成员可以选择哪些提供方，请在 `openbot.org.<org>.model.<providerId>` 上使用 `models.use`。参见[权限](/zh-cn/docs/permissions#限制模型)。
 
@@ -263,17 +263,15 @@ OpenBot 目前还没有任何部分会询问决策模型。
 
 ## 没有模型时运行
 
-没有任何提供方的组织，仍然可以读取、重命名、分叉和删除它已有的 Session。它不能创建新的 Session，因为新的 Session 需要模型。见[选择模型](#选择模型)。
+没有任何提供方的组织，仍然可以读取它已有的 Chat，并删除它们的历史。它不能和 Bot 说话，因为每个 Turn 都需要模型。见[选择模型](#选择模型)。
 
-需要模型的工作会失败，返回状态 `503` 和错误 `SessionExecutionUnavailable`。这包括：
-
-- 用 `POST /v1/sessions/:id/turns` 启动一个 Turn；
-- 用 `PUT /v1/sessions/:id/model` 选择一个模型；
-- 在做出决定或委派工作完成后继续一个 Turn。
+当没有模型能运行一条消息的 Turn 时，发给 Bot 的这条消息会失败，返回状态 `503` 和错误 `ChatExecutionUnavailable`：
 
 ```json
-{ "_tag": "SessionExecutionUnavailable", "session": "..." }
+{ "_tag": "ChatExecutionUnavailable", "chat": "..." }
 ```
+
+OpenBot 的通知，例如一个委派的结果，仍然会进入它所在 Chat 的收件箱。见 [通知](/zh-cn/docs/chats#通知)。
 
 ---
 
@@ -376,14 +374,14 @@ NodeRuntime.runMain(
 | `layerClient(options)`      | 创建 HTTP 客户端。传入 `apiKey`；要用其他地址时传入 `apiUrl`。 |
 | `layer(tag, defaults?)`     | 把提供方放进一个由你命名的服务中。                             |
 
-| 模块                   | 提供方 ID       | API                                                                |
-| ---------------------- | --------------- | ------------------------------------------------------------------ |
-| `OpenAiProvider`       | `openai`        | OpenAI Responses API。`ResponsesCompaction` 增加原生的上下文压缩。 |
-| `OpenAiCompatProvider` | `openai-compat` | OpenAI Chat Completions API，以及仿照它的服务。                    |
-| `AnthropicProvider`    | `anthropic`     | Anthropic Messages API。                                           |
+| 模块                   | 提供方 ID       | API                                                                              |
+| ---------------------- | --------------- | -------------------------------------------------------------------------------- |
+| `OpenAiProvider`       | `openai`        | OpenAI Responses API。`ResponsesCompaction` 为你自己的程序增加原生的上下文压缩。 |
+| `OpenAiCompatProvider` | `openai-compat` | OpenAI Chat Completions API，以及仿照它的服务。                                  |
+| `AnthropicProvider`    | `anthropic`     | Anthropic Messages API。                                                         |
 
 OpenBot 对保存的提供方也使用这些模块。
-上下文压缩（context compaction）会把很长的历史变短，让它能放进模型的上下文窗口。
+上下文压缩（context compaction）会把很长的历史变短，让它能放进模型的上下文窗口。OpenBot 会为每个 Chat 做这件事：由这个 Chat 的模型写一段摘要。它默认不使用 `ResponsesCompaction`。见 [压缩](/zh-cn/docs/chats#压缩)。
 每个提供方的简短示例参见 [Packages](/zh-cn/docs/packages)。
 
 ---
@@ -394,20 +392,20 @@ OpenBot 对保存的提供方也使用这些模块。
 
 提供方 ID 是 `development`。模型 ID 有：
 
-| 模型           | 作用                                                                   |
-| -------------- | ---------------------------------------------------------------------- |
-| `mock-text`    | 默认模型。立刻返回固定的文本。                                         |
-| `mock-slow`    | 在十秒内慢慢返回文本。用它测试流式输出和中断。                         |
-| `mock-tool`    | 调用一个无害的测试工具，该工具会等待一个[请求](/zh-cn/docs/requests)。 |
-| `mock-app`     | 调用测试 App 的一个工具，并返回它的真实内容。                          |
-| `mock-failure` | 先发送一些文本，然后故意以模型错误失败。                               |
+| 模型           | 作用                                                                  |
+| -------------- | --------------------------------------------------------------------- |
+| `mock-text`    | 默认模型。立刻返回固定的文本。                                        |
+| `mock-slow`    | 在十秒内慢慢返回文本。用它测试流式输出和中断。                        |
+| `mock-tool`    | 调用一个需要决定的无害测试工具。见 [Requests](/zh-cn/docs/requests)。 |
+| `mock-app`     | 调用测试 App 的一个工具，并返回它的真实内容。                         |
+| `mock-failure` | 先发送一些文本，然后故意以模型错误失败。                              |
 
-它们回答中的 token 数不是真实的。要选择其中一个，请把它保存到 Session 上：
+它们回答中的 token 数不是真实的。要选择其中一个，请把它保存到 Chat 上：
 
 ```sh
-curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"expected":1,"selection":{"_tag":"Config.Selection","provider":"development","model":"mock-slow"}}' \
-  https://localhost:8443/v1/sessions/$SESSION_ID/model
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"expected":1,"model":{"_tag":"Config.Selection","provider":"development","model":"mock-slow"}}' \
+  https://localhost:8443/v1/chats/$CHAT_ID
 ```
 
 开发入口通过 `builtinModels` 提供这些模型，所以开发平台的每个组织都可以使用它们。生产程序永远不会使用它们。

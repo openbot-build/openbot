@@ -37,16 +37,18 @@ Das Programm braucht trotzdem eine Plattform. Führe das Einrichtungsprogramm ei
 
 ## Was das Paket exportiert
 
-| Export                                                      | Was es ist                                                                                                                     |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `Server.layer(options)`                                     | OpenBot mit eigenem Node.js-Server für HTTP oder HTTPS. Er liest die Anmeldung aus den Plattform-Einstellungen.                |
-| `Server.layerFixed(options)`                                | OpenBot mit einer festen Anmelde-Konfiguration. Für Tests und den Entwicklungsserver.                                          |
-| `Server.layerApi(options)`                                  | Nur die HTTP-Routen, für einen HTTP-Server, den du schon hast.                                                                 |
-| `OpenBot.layerShared(options)`                              | Die Dienste, die so lange leben wie die Instanz: der Datenbank-Pool, die geheimen Schlüssel und die gemeinsamen Einstellungen. |
-| `OpenBot.layer(options)`                                    | Die Dienste hinter den Routen: Anmeldung, Tokens, Berechtigungen, Speicher, Sessions und Apps.                                 |
-| `DatabasePostgres`                                          | Der Datenbank-Layer und das Programm `migrate`.                                                                                |
-| `EnvironmentConfiguration`                                  | Liest die Einstellungen der Instanz aus Umgebungsvariablen.                                                                    |
-| `Auth`, `Sessions`, `AppHost`, `AppPlugin`, `Configuration` | Diensttypen für fortgeschrittene Aufbauten.                                                                                    |
+| Export                                                   | Was es ist                                                                                                                     |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `Server.layer(options)`                                  | OpenBot mit eigenem Node.js-Server für HTTP oder HTTPS. Er liest die Anmeldung aus den Plattform-Einstellungen.                |
+| `Server.layerFixed(options)`                             | OpenBot mit einer festen Anmelde-Konfiguration. Für Tests und den Entwicklungsserver.                                          |
+| `Server.layerApi(options)`                               | Nur die HTTP-Routen, für einen HTTP-Server, den du schon hast.                                                                 |
+| `OpenBot.layerShared(options)`                           | Die Dienste, die so lange leben wie die Instanz: der Datenbank-Pool, die geheimen Schlüssel und die gemeinsamen Einstellungen. |
+| `OpenBot.layer(options)`                                 | Die Dienste hinter den Routen: Anmeldung, Tokens, Berechtigungen, Speicher, Chats und Apps.                                    |
+| `DatabasePostgres`                                       | Der Datenbank-Layer und das Programm `migrate`.                                                                                |
+| `EnvironmentConfiguration`                               | Liest die Einstellungen der Instanz aus Umgebungsvariablen.                                                                    |
+| `Auth`, `Chats`, `AppHost`, `AppPlugin`, `Configuration` | Diensttypen für fortgeschrittene Aufbauten.                                                                                    |
+
+Der Unterpfad `@openbot-build/openbot/Development` exportiert den Entwicklungsserver. Siehe [Den Entwicklungsserver starten](#den-entwicklungsserver-starten).
 
 ---
 
@@ -77,7 +79,7 @@ Das Programm braucht trotzdem eine Plattform. Führe das Einrichtungsprogramm ei
 
 | Option          | Was sie tut                                                                                                      |
 | --------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `sessions`      | Werkzeuge und Memory für Sessions. Siehe unten.                                                                  |
+| `chats`         | Werkzeuge für die Turns von Chats. Siehe unten.                                                                  |
 | `builtinModels` | Models, die jede Organisation nutzen kann, im Code angegeben. Siehe [Models](/de/docs/models#eingebaute-models). |
 | `routes`        | Eine Funktion, die die Anmelde-Konfiguration bekommt und einen Layer mit deinen eigenen HTTP-Routen zurückgibt.  |
 | `discovery`     | Ein Layer, der Apps im Web findet. Standardmäßig liest er öffentliche Catalogs über das Internet.                |
@@ -97,18 +99,17 @@ Einige Werte waren früher Optionen. Jetzt sind sie Einstellungen in der Datenba
 
 ---
 
-## Sessions
+## Chats
 
-Die Option `sessions` legt fest, wie Sessions ihre Arbeit machen.
+Die Option `chats` legt fest, wie die Turns von [Chats](/de/docs/chats) ihre Arbeit machen.
 
 | Feld             | Was es tut                                                                             |
 | ---------------- | -------------------------------------------------------------------------------------- |
 | `runtime`        | Die Bot-Definition: `toolkit`, `plugin`, `providers`, `compaction` und mehr.           |
 | `layerExecution` | Eine Funktion, die für jeden Turn zusätzliche Dienste baut, zum Beispiel Tool-Handler. |
-| `memory`         | Gelerntes Memory: dein eigenes `model` und deine eigene `policy`.                      |
 
 Models kommen von den Model Providers in der Datenbank und aus `builtinModels`. Siehe [Models](/de/docs/models).
-Die Memory-Schalter einer neuen Session kommen aus `memory` in den [Organisations-Einstellungen](/de/docs/organization#einstellungen). Siehe [Memory](/de/docs/memory#schalter).
+[Bot Memory](/de/docs/memory) folgt `botMemory` in den [Organisations-Einstellungen](/de/docs/organization#einstellungen).
 
 ### Ein Werkzeug hinzufügen
 
@@ -132,14 +133,14 @@ const handlers = toolkit.toLayer({
 const server = (settings: Configuration.Settings) =>
 	Server.layer({
 		...settings,
-		sessions: {
+		chats: {
 			runtime: { toolkit },
 			layerExecution: () => handlers,
 		},
 	}).pipe(Layer.provide(handlers))
 ```
 
-Füge `needsApproval: true` zu `Tool.make` hinzu, wenn jeder Aufruf eine Entscheidung braucht. OpenBot erstellt dann dafür einen `tools.call`-Request. Siehe [Requests](/de/docs/requests).
+Füge `needsApproval: true` zu `Tool.make` hinzu, wenn jeder Aufruf eine Entscheidung braucht. OpenBot prüft dann dafür die Fähigkeit `tools.call`. Wenn der Aufruf einen Entscheider braucht, bekommt der Bot ein wartendes Ergebnis, und der Aufruf läuft später, wenn er erlaubt wird. Siehe [Requests](/de/docs/requests).
 
 ---
 
@@ -194,6 +195,40 @@ NodeRuntime.runMain(
 	),
 )
 ```
+
+## Den Entwicklungsserver starten
+
+`pnpm dev` startet den Entwicklungsserver. Er hat ein lokales Testkonto, simulierte Models und eine simulierte App. Ein Projekt, das auf OpenBot aufbaut, kann denselben Server aus seinem eigenen Programm starten:
+
+```ts
+import { NodeRuntime } from "@effect/platform-node"
+import { Settings } from "@openbot-build/api"
+import { EnvironmentConfiguration } from "@openbot-build/openbot"
+import * as Development from "@openbot-build/openbot/Development"
+import { Config, Effect, Layer } from "effect"
+
+NodeRuntime.runMain(
+	Effect.gen(function* () {
+		const settings = yield* EnvironmentConfiguration.load
+		const publicOrigin = yield* Config.schema(
+			Settings.PublicOrigin,
+			"OPENBOT_DEV_PUBLIC_ORIGIN",
+		)
+		return yield* Layer.launch(
+			Development.layer({
+				...settings,
+				auth: {
+					mode: "development",
+					publicOrigin,
+					secret: Development.developmentSecret(settings.secretKeys),
+				},
+			}),
+		)
+	}),
+)
+```
+
+`Development.layer` schreibt die Plattform-Einstellungen selbst. Darum braucht es kein Einrichtungsprogramm. `Development.developmentSecret` macht das Anmelde-Geheimnis aus dem ersten geheimen Schlüssel. So bleibt es nach einem Neustart gleich. Nutze den Entwicklungsserver nie in der Produktion. Jeder, der ihn erreicht, kann sich anmelden.
 
 ## Fehler-Logs an deinen eigenen Dienst senden
 

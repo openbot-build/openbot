@@ -13,11 +13,11 @@ OpenBot 在服务器上运行 Bot 的工作，并保存历史记录。Bot 要使
 
 ## 你可以做什么
 
-- 启动一个 **Session**（会话），并通过 **Turns**（轮次）给它工作。你可以一次读取完整回答，也可以读取实时流。
-- 每次变化都会写入 Session 的 **Timeline**（时间线）。你可以回到之前的某个点，用 Fork（分叉）尝试另一条路径。
+- 在一个 **Chat**（聊天）中和一个 **Bot** 说话。它总是马上回答。你可以一次读取完整回答，也可以读取实时流。
+- 让 Bot 把长的工作交给其他 Bots，或者交给它自己。这些工作并行运行，每个结果都会回到你的 Chat。
 - 让 Bot 使用 **Apps**：这是人们连接到自己账户的外部服务。
-- 维护一个长期存在的 **Bots** 团队，例如一个程序员和一个写作者。每个 Bot 有自己的上下文和记忆，它们之间可以互相分派工作。
-- 让 Bot 在**计划模式**中先做计划，维护**待办列表**，并等待。用**触发器**按计划时间或通过 webhook 启动它的工作。
+- 维护一个长期存在的 **Bots** 团队，例如一个程序员和一个写作者。每个 Bot 有自己的 Chats 和记忆，它们之间可以互相分派工作。
+- 让 Bot 在**计划模式**中先做计划，维护**待办列表**，并请求**提醒**。用**触发器**按计划时间或通过 webhook 启动它的工作。
 - Bots 没有预设的限制。当 Bot 尝试新的事情时，它上面的决策者会回答一个 **request**（请求），这个回答会被保存下来。
 - 在公开的 **App Index**（App 索引）中查找 Apps，并以发布者身份检查你自己的 App。
 
@@ -27,7 +27,7 @@ OpenBot 在服务器上运行 Bot 的工作，并保存历史记录。Bot 要使
 
 | 部分         | 作用                                                                          |
 | ------------ | ----------------------------------------------------------------------------- |
-| OpenBot      | 服务器。它运行 Sessions，把数据存到 PostgreSQL，并提供 HTTP API。             |
+| OpenBot      | 服务器。它运行 Chats，把数据存到 PostgreSQL，并提供 HTTP API。                |
 | Platform     | 一个部署，包含多个组织。平台管理员通过 API 管理它。                           |
 | 登录         | 一个人在浏览器中登录一次，使用平台或其所在组织的 OpenID Connect 提供方。      |
 | 用户令牌     | 程序在每次调用时，都在 `Authorization: Bearer <token>` 请求头中发送一个令牌。 |
@@ -70,8 +70,8 @@ OpenBot 是自由软件，使用 GNU Affero 通用公共许可证第 3 版，且
 	<Card title="身份验证" href="/zh-cn/docs/authentication">
 		登录并创建用户令牌。
 	</Card>
-	<Card title="Sessions" href="/zh-cn/docs/sessions">
-		把工作交给 Bot，并读取结果。
+	<Card title="Chats" href="/zh-cn/docs/chats">
+		和 Bot 说话，并读取结果。
 	</Card>
 	<Card title="部署" href="/zh-cn/docs/deploy">
 		在你自己的服务器上运行 OpenBot。

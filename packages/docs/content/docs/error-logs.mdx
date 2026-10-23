@@ -25,7 +25,7 @@ Each error log has the message `OpenBot operation failed` and these annotations.
 | `source`, `operation`                    | Which part of OpenBot failed.                                       |
 | `errorType`                              | A short name for the error, when OpenBot knows one.                 |
 | `requestId`, `method`, `route`, `status` | For HTTP failures. `route` is the route pattern, not the real path. |
-| `sessionId`, `turnId`                    | For Turn failures.                                                  |
+| `chatId`, `turnId`                       | For Turn failures.                                                  |
 
 The log also has the cause of the failure. The cause can hold error messages and other private data.
 

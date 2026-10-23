@@ -49,8 +49,8 @@ export default {
 		title: ["Kawo abokin hulɗarka.", "Mutane suna da iko."],
 		items: [
 			{
-				title: "Session da Timeline",
-				text: "Aiki yana faruwa a cikin Session da Turn. Timeline tana adana sigogi, don haka za ka iya komawa ka sake gwadawa.",
+				title: "Hira ɗaya da kowane Bot",
+				text: "Kana da hira ɗaya da kowane Bot. Bot yana amsawa nan take koyaushe, kuma dogon aiki yana tafiya a lokaci guda.",
 			},
 			{
 				title: "Amincewa",

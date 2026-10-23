@@ -21,16 +21,15 @@ OpenBot records each call to a model. You can see how many tokens each member, B
 
 OpenBot records each model call that gets an answer. Each usage event has a `source`:
 
-| `source`         | What made the call                                                           |
-| ---------------- | ---------------------------------------------------------------------------- |
-| `turn`           | A model step of a Turn in a Session.                                         |
-| `compaction`     | A summary of old messages, so the conversation fits the model.               |
-| `session_memory` | The [memory](/docs/memory) of a Session.                                     |
-| `judge`          | The model that judges [Rules](/docs/rules).                                  |
-| `bot_memory`     | The [memory Bot](/docs/memory#bot-memory): what it learns, adds and answers. |
-| `other`          | Any other call.                                                              |
+| `source`     | What made the call                                                               |
+| ------------ | -------------------------------------------------------------------------------- |
+| `turn`       | A model step of a Turn in a [Chat](/docs/chats).                                 |
+| `compaction` | A summary of old messages, so the conversation fits the model.                   |
+| `judge`      | The model that judges [Rules](/docs/rules).                                      |
+| `bot_memory` | The [memory Bot](/docs/memory#the-memory-bot): what it learns, adds and answers. |
+| `other`      | Any other call.                                                                  |
 
-A usage event also has the Session, the Turn, the Bot, the member and the user token, when the call has them. In a [Channel](/docs/channels), the member is the person who wrote the message.
+A usage event also has the Chat (`chatId`), the Turn, the Bot, the member and the user token, when the call has them. In a [Channel](/docs/channels), the member is the person who wrote the message.
 
 Some calls are not recorded:
 
@@ -362,7 +361,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/platform/settings
 ```
 
-Each instance of OpenBot keeps its own buckets in memory. With more than one instance, a scope can use up to the rate on each instance. The work of one Session usually runs on one instance.
+Each instance of OpenBot keeps its own buckets in memory. With more than one instance, a scope can use up to the rate on each instance. One Turn runs on one instance, but the Turns of one Chat and the work that it gives away can run on many instances.
 
 ---
 

@@ -188,7 +188,7 @@ When the platform turns on [Code Mode](/docs/code-mode), the model also gets `op
 
 ### App operations
 
-OpenBot records each App call as an App operation. Read them with `GET /v1/sessions/:sessionId/app-operations` or `GET /v1/app-operations/:id`.
+OpenBot records each App call as an App operation. Read them with `GET /v1/chats/:chatId/app-operations` or `GET /v1/app-operations/:id`.
 
 | Status                                    | Meaning                                               |
 | ----------------------------------------- | ----------------------------------------------------- |
@@ -221,7 +221,7 @@ The keys in `responses` must match the keys of the App's input requests. Each an
 
 Some App tools come with an interactive view. A view is an HTML page from the App, defined by MCP Apps. OpenBot has no user interface, so your client shows the view. You can skip this part. Every result also has text.
 
-1. Open the view for an operation: `POST /v1/app-operations/:operationId/view` with `{ "sessionId", "itemId" }`. The answer has a view `id`, the HTML `resource`, the view's `tools`, the call `arguments`, and the `result`.
+1. Open the view for an operation: `POST /v1/app-operations/:operationId/view` with `{ "chatId", "itemId" }`. The answer has a view `id`, the HTML `resource`, the view's `tools`, the call `arguments`, and the `result`.
 2. Show the HTML in an iframe. The `@openbot-build/protocol/McpApps` module has a browser host that does this. See [Protocol](/docs/protocol).
 3. Pass the view's requests to OpenBot:
 
@@ -234,7 +234,7 @@ Some App tools come with an interactive view. A view is an HTML page from the Ap
 | Send a text message              | `POST /v1/app-views/:viewId/messages`                           |
 | Close                            | `DELETE /v1/app-views/:viewId`                                  |
 
-View actions go through the same approval rules. A message starts a new Turn, and only when the Session is idle. If you open a view with an older Timeline `version`, the view is read-only. If a view cannot open, you get 409 `AppViewUnavailable`. The text result is still there.
+View actions go through the same approval rules. A message from the view goes to the Chat as a [notice](/docs/chats#notices) through its [inbox](/docs/chats#the-inbox). The Bot reads it at its next step, or it starts a new Turn. If a view cannot open, you get 409 `AppViewUnavailable`. The text result is still there.
 
 ---
 

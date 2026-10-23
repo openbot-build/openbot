@@ -141,7 +141,7 @@ OpenBot 在每个带 session cookie 的请求上也会做这些检查。见 [组
 ```sh
 curl -b cookies.txt \
   -H "OpenBot-Organization: org_8f3a" \
-  https://api.example.com/v1/sessions
+  https://api.example.com/v1/chats
 ```
 
 - 没有这个请求头时，OpenBot 使用你唯一的活跃组织。
@@ -168,8 +168,8 @@ curl -b cookies.txt \
 curl -b cookies.txt \
   -H "Origin: https://localhost:8443" \
   -H "Content-Type: application/json" \
-  -d '{"title":"Notes"}' \
-  https://localhost:8443/v1/sessions
+  -d '{"input":"Hello"}' \
+  https://localhost:8443/v1/bots/$BOT/messages
 ```
 
 使用用户令牌的请求不需要 `Origin` 请求头。
@@ -213,11 +213,7 @@ OpenBot 返回 `201`：
 		"policies": [
 			{
 				"effect": "allow",
-				"permissionGroups": [
-					"responses.run",
-					"sessions.read",
-					"sessions.write"
-				],
+				"permissionGroups": ["responses.run", "chats.read", "chats.write"],
 				"resources": ["openbot.org.{org}"]
 			}
 		],
@@ -295,15 +291,15 @@ OpenBot 返回 `204` 并删除这个令牌。令牌会立即失效。
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  https://api.example.com/v1/sessions
+  https://api.example.com/v1/chats
 ```
 
 已撤销、已过期或未知的令牌会得到 `401` 和 `AuthenticationRequired`。如果 OpenBot 无法检查令牌，它返回 `503` 和 `AuthenticationUnavailable`。
 
 ### 你自己的空间
 
-在组织内，每个成员都有自己的 Sessions、Apps 和连接。你的令牌和 cookie 只能看到你自己的内容。
-如果你请求另一个成员的 Session，OpenBot 会返回 `404`，就像它不存在一样。
+在组织内，每个成员都有自己的 Chats、Apps 和连接。你的令牌和 cookie 只能看到你自己的内容。
+如果你请求另一个成员的 Chat，OpenBot 会返回 `404`，就像它不存在一样。
 
 ---
 

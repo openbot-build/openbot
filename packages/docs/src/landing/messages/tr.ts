@@ -47,8 +47,8 @@ export default {
 		title: ["Kendi istemcini getir.", "Kontrol insanlarda kalsın."],
 		items: [
 			{
-				title: "Session'lar ve Timeline'lar",
-				text: "İş, Session'lar ve Turn'ler içinde olur. Timeline sürümleri saklar, böylece geri dönüp yeniden deneyebilirsin.",
+				title: "Her Bot ile tek sohbet",
+				text: "Her Bot ile bir sohbetin olur. Bot her zaman hemen cevap verir, uzun işler ise paralel yürür.",
 			},
 			{
 				title: "Onaylar",

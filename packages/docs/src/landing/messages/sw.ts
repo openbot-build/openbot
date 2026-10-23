@@ -48,8 +48,8 @@ export default {
 		title: ["Leta mteja wako mwenyewe.", "Watu wanabaki na udhibiti."],
 		items: [
 			{
-				title: "Session na Timeline",
-				text: "Kazi hufanyika ndani ya Session na Turn. Timeline huhifadhi matoleo, kwa hiyo unaweza kurudi nyuma na kujaribu tena.",
+				title: "Gumzo moja na kila Bot",
+				text: "Una gumzo moja na kila Bot. Bot hujibu mara moja kila wakati, na kazi ndefu huendelea kwa wakati mmoja.",
 			},
 			{
 				title: "Idhini",

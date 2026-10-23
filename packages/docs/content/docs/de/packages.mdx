@@ -16,7 +16,7 @@ Alle Pakete heißen `@openbot-build/<name>`, haben die Version `0.1.0` und nutze
 | `openbot`       | Der Server, seine Plugins und seine Model Providers. Siehe [Aus Code starten](/de/docs/server).        |
 | `api`           | Der typisierte HTTP-Vertrag. Der Server, der Client und die API-Referenz nutzen ihn.                   |
 | `client`        | Der TypeScript-Client. Siehe [Client](/de/docs/client).                                                |
-| `core`          | Der Bot-Kern: Bots, Sessions, Turns, Timelines, Speicher, Plugins und Skills.                          |
+| `core`          | Der Bot-Kern: Bots, Chats, Turns, Speicher, Plugins und Skills.                                        |
 | `protocol`      | Das OpenBot App Protocol: Apps veröffentlichen, finden, verbinden und indizieren.                      |
 | `protocol-test` | Ein öffentlicher Testdienst für das App Protocol. Siehe [Protokolltest](/de/docs/protocol-test).       |
 | `cli`           | Der Befehl `openbot`. Für `openbot <name>` führt er `openbot-<name>` aus.                              |
@@ -31,21 +31,21 @@ Die Beispiele unten lassen das Model weg. Um sie auszuführen, gib einen `Langua
 
 `@openbot-build/core` führt Bots aus. Es hat diese Hauptteile:
 
-| Modul                                        | Was es tut                                                                                                     |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `Bot`                                        | Eine Bot-Definition: Werkzeuge, Plugins, Provider und Compaction. Eine Definition kann vielen Sessions dienen. |
-| `SessionRuntime`                             | Führt Turns aus: `execute`, `stream`, `start`, `steer`, `approve`, `interrupt` und mehr.                       |
-| `SessionStore`, `Store`                      | Speichert Sessions und ihre Timelines.                                                                         |
-| `SessionStoreMemory`                         | Ein Speicher, der alles im Arbeitsspeicher hält, für Tests und Skripte.                                        |
-| `Timeline`, `Item`, `Turn`, `Session`        | Die Datentypen.                                                                                                |
-| `Plugin`, `PluginComposition`, `PluginState` | Plugins erstellen und kombinieren und ihnen gespeicherten Zustand geben.                                       |
-| `Skill`, `SkillMap`                          | Skills beschreiben und eine Liste davon führen.                                                                |
+| Modul                                        | Was es tut                                                                                                             |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `Bot`                                        | Eine Bot-Definition: Werkzeuge, Plugins, Provider, Compaction und Approvals. Eine Definition kann vielen Chats dienen. |
+| `ChatRuntime`                                | Führt Turns aus: `deliver`, `execute`, `stream`, `interrupt`, `drain`, `wait` und mehr.                                |
+| `ChatStore`, `ChatStoreRepository`, `Store`  | Speichern Chats: einen kleinen Eintrag für jeden Chat und ein Log von Items, das nur wächst.                           |
+| `ChatStoreMemory`                            | Ein Speicher, der alles im Arbeitsspeicher hält, für Tests und Skripte.                                                |
+| `Chat`, `Item`, `Turn`, `ChatState`          | Die Datentypen. `Chat` hat auch den Dienst `Approvals`.                                                                |
+| `ContextCompaction`, `SummaryCompaction`     | Machen einen langen Verlauf kürzer, damit er zum Model passt.                                                          |
+| `Plugin`, `PluginComposition`, `PluginState` | Plugins erstellen und kombinieren und ihnen gespeicherten Zustand geben.                                               |
+| `Skill`, `SkillMap`                          | Skills beschreiben und eine Liste davon führen.                                                                        |
 
-Eine **Session** (Sitzung) ist ein Arbeitsstrang. Jede Eingabe startet einen **Turn** (Durchgang). Ein Turn kann viele Model-Schritte und Werkzeug-Aufrufe haben.
-Die **Timeline** (Zeitleiste) ist der gespeicherte Verlauf einer Session. Jede Änderung erzeugt eine neue Version der Timeline. So kannst du von einem früheren Punkt lesen oder einen Fork erstellen.
+Ein **Chat** ist ein Gespräch ohne Ende. Jede Eingabe geht in seine **Inbox** (seinen Eingang). Sie startet einen **Turn** (Durchgang), oder sie lenkt den laufenden Turn. Ein Turn kann viele Model-Schritte und Werkzeug-Aufrufe haben. Ein Turn wartet nie: Er läuft, und dann endet er. Der Speicher hält die Items eines Chats in einem Log, das nur wächst. So bleibt ein langer Chat billig zu speichern.
 
 ```ts
-import { SessionRuntime, SessionStoreMemory, Store } from "@openbot-build/core"
+import { ChatRuntime, ChatStoreMemory, Store } from "@openbot-build/core"
 import { Effect } from "effect"
 import { Toolkit } from "effect/ai"
 
@@ -53,35 +53,67 @@ const program = Effect.scoped(
 	Effect.gen(function* () {
 		const definition = yield* Store.define({
 			stores: {},
-			schemaVersion: "timeline/1",
+			schemaVersion: "chat/1",
 		})
-		const store = yield* SessionStoreMemory.make(definition)
-		const runtime = yield* SessionRuntime.make({
+		const store = yield* ChatStoreMemory.make(definition)
+		const runtime = yield* ChatRuntime.make({
 			store,
 			bot: { toolkit: Toolkit.empty },
 		})
-		const view = yield* store.create({ metadata: { title: "Closures" } })
+		const view = yield* store.create({})
 		return yield* runtime.execute({
-			base: { session: view.session.id, revision: view.session.revision },
+			chat: view.chat.id,
 			input: "Explain closures",
 		})
 	}),
 )
 ```
 
-`execute` wartet, bis der Turn endet, und gibt die gespeicherte Session zurück. `stream` liefert Ereignisse, während der Turn läuft.
-Jede Änderung braucht die aktuelle `revision`. Das verhindert, dass zwei Schreiber dieselbe Session gleichzeitig ändern.
+`execute` startet einen Turn, wartet, bis er endet, und gibt den Chat zurück. `stream` liefert Ereignisse, während der Turn läuft. Beide schlagen fehl, wenn im Chat schon ein Turn läuft.
 
-Der Speicher kann Sessions auch ohne Model forken, umbenennen, exportieren und importieren:
+`deliver` gibt einem Chat eine Eingabe in einem Schritt, nach den Regeln der [Inbox](/de/docs/chats#die-inbox). Es startet einen Turn, wenn der Chat frei ist, lenkt den laufenden Turn, wenn die Eingabe denselben `author` hat, und wartet sonst in der Inbox. Es gibt `started`, `steered` oder `queued` zurück. Nach jedem Turn startet die nächste Eingabe in der Inbox den nächsten Turn.
+
+### Approvals
+
+Ein Werkzeug mit `needsApproval` fragt vor jedem Aufruf. Die Runtime fragt dann den Dienst `Approvals`. Gib ihn als `approvals` in der Bot-Definition an, oder stelle `Chat.Approvals` bereit. Er beantwortet jeden Aufruf mit einer von drei Entscheidungen:
+
+- `Chat.Decision.Allow()` führt den Aufruf jetzt aus.
+- `Chat.Decision.Deny({ reason })` führt den Aufruf nicht aus. Das Model sieht den Grund.
+- `Chat.Decision.Pending({ result })` führt den Aufruf jetzt nicht aus. Das Model bekommt sofort `result`, und der Turn geht weiter.
+
+Ohne den Dienst wartet jeder solche Aufruf auf eine Entscheidung (pending). So wartet ein Turn nie.
+
+Wenn ein Entscheider einen wartenden Aufruf später erlaubt, gib den Aufruf mit `deliver` und `approved` zurück. Die ID des Aufrufs muss neu sein. Der Turn, der die Eingabe liest, führt den Aufruf aus und fragt nicht noch einmal. Markiere Eingaben von deinem Programm mit `notice`, damit das Model weiß, dass sie nicht von einer Person kommen:
 
 ```ts
-const fork =
+import { Chat } from "@openbot-build/core"
+
+const runtime =
 	yield *
-	store.fork({
-		source: view.session.id,
-		metadata: { title: "Another try" },
+	ChatRuntime.make({
+		store,
+		bot: {
+			toolkit,
+			approvals: {
+				decide: (request) =>
+					Effect.succeed(
+						Chat.Decision.Pending({ result: { pending: request.approvalId } }),
+					),
+			},
+		},
 	})
-const record = yield * store.export(fork.session.id)
+
+yield *
+	runtime.deliver({
+		chat: view.chat.id,
+		input: "[Host] A person allowed the email.",
+		notice: { kind: "request", ref: "req-1" },
+		approved: {
+			id: "approved-1",
+			name: "SendEmail",
+			params: { to: "team@example.com" },
+		},
+	})
 ```
 
 ### Plugins
@@ -106,7 +138,7 @@ const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
 ```
 
 `PluginComposition.merge(a, b)` kombiniert zwei Plugins. `a` läuft außen um `b`.
-Ein Plugin kann auch eigene Daten in der Session oder in der Timeline speichern. Gib `plugin.stores` an `Store.define` und nutze dann `PluginState.make`.
+Ein Plugin kann auch eigene Daten im Eintrag des Chats oder in seinem Zustand speichern. Gib `plugin.stores` an `Store.define` und nutze dann `PluginState.make`.
 
 ### Skills
 
@@ -117,59 +149,11 @@ Dein Programm findet, lädt und führt die Skills aus.
 
 ## Plugins in openbot
 
-`@openbot-build/openbot` enthält alle Plugins von OpenBot. Der Server nutzt die Plugins für Bot, App, Arbeit und Memory in jedem Turn. Das Arbeits-Plugin gibt dem Bot seine Todo-Liste. Die Plugins für Memory und für das Turn-Limit kannst du auch mit deiner eigenen `SessionRuntime` nutzen.
+`@openbot-build/openbot` enthält alle Plugins von OpenBot. Der Server nutzt seine Plugins, zum Beispiel die Plugins für Bot, App und Arbeit, in jedem Turn. Das Arbeits-Plugin gibt dem Bot seine Todo-Liste, seine Erinnerungen und den Plan-Modus. Die Plugins für das Turn-Limit kannst du auch mit deiner eigenen `ChatRuntime` nutzen.
 
 ### Memory
 
-Das Memory-Plugin hält gelerntes Memory (Gedächtnis): kurze Fakten, die der Bot in einer Session lernt und in späteren Turns nutzt.
-Der Server nutzt es für die Memory-API. Siehe [Memory](/de/docs/memory). Die Schemas der Memory-API liegen in `api`, als `Memory` und `BotMemory`.
-
-```ts
-import { SessionStoreMemory, Store } from "@openbot-build/core"
-import {
-	LanguageModelMemory,
-	Memory,
-	MemoryOperations,
-	MemoryRules,
-} from "@openbot-build/openbot"
-import { Effect } from "effect"
-
-const program = Effect.scoped(
-	Effect.gen(function* () {
-		const definition = yield* Store.define({
-			stores: Memory.stores,
-			schemaVersion: "timeline/1",
-		})
-		const store = yield* SessionStoreMemory.make(definition)
-		const memory = MemoryOperations.make({
-			store,
-			policy: MemoryRules.policy,
-			model: LanguageModelMemory.model,
-		})
-		return yield* memory.read(sessionId)
-	}),
-)
-```
-
-`read` gibt die gelernten Einträge zurück. `update` führt eine Änderung `Remember` oder `Forget` aus. `consolidate` bittet das Model, aus neuem Verlauf neue Einträge zu lernen.
-`MemoryRules` und `LanguageModelMemory` sind die Standard-Regeln und das Standard-Model. Du kannst sie ersetzen.
-`MemoryRules.policy` begrenzt den Memory-Text auf 8000 Zeichen. Nutze `MemoryRules.make({ maxLength })` für eine andere Grenze.
-
-`MemoryPlugin.make` gibt das Plugin, das Memory in jedem Turn nutzt. Es fügt die aktiven Einträge zu den Anweisungen hinzu. Nach einem abgeschlossenen Turn lernt es neue Einträge. Du gibst ihm zwei Effects, die in jedem Turn laufen:
-
-- `settings` gibt `{ use, generate }` zurück. `use` schaltet die Anweisungen ein. `generate` schaltet das Lernen ein.
-- `languageModel` gibt das Model zurück, das die Einträge lernt.
-
-Der Host entscheidet, woher diese Werte kommen. Gib `plugin.stores` an `Store.define` und stelle `plugin.store` mit `PluginState.make` bereit.
-
-Hier ist `learner` ein `LanguageModel`-Dienst, den du vorher gebaut hast:
-
-```ts
-const plugin = MemoryPlugin.make({
-	settings: Effect.succeed({ use: true, generate: true }),
-	languageModel: Effect.succeed(learner),
-})
-```
+`BotMemory` enthält die Typen und Hilfsfunktionen für [Bot Memory](/de/docs/memory). Der Server nutzt sie für den Memory-Bot und die Memory-API. Die Schemas der Memory-API liegen in `api`, als `BotMemory`.
 
 ### Turn-Limits
 
@@ -184,7 +168,7 @@ import { TurnLimiter } from "@openbot-build/openbot"
 
 const runtime =
 	yield *
-	SessionRuntime.make({
+	ChatRuntime.make({
 		store,
 		bot: { plugin: TurnLimiter.make({ maxSteps: 4 }) },
 	})

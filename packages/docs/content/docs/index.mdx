@@ -13,11 +13,11 @@ You bring the client: a script, a backend service, a chat bot, or your own web o
 
 ## What you can do
 
-- Start a **Session** and give it work in **Turns**. Read the answer as one response or as a live stream.
-- Every change goes into the Session's **Timeline**. Go back to an earlier point and try a different path with a Fork.
+- Talk to a **Bot** in one **Chat**. It always answers at once. Read the answer as one response or as a live stream.
+- Let the Bot give long work to other Bots, or to itself. The work runs in parallel, and each result comes back to your Chat.
 - Let the Bot use **Apps**: outside services that people connect to their account.
-- Keep a team of lasting **Bots**, such as a programmer and a writer. Each has its own context and memory, and they give work to each other.
-- Let a Bot plan first in **plan mode**, keep a **todo list**, and wait. Start its work on a schedule or from a webhook with a **trigger**.
+- Keep a team of lasting **Bots**, such as a programmer and a writer. Each has its own Chats and memory, and they give work to each other.
+- Let a Bot plan first in **plan mode**, keep a **todo list**, and ask for a **reminder**. Start its work on a schedule or from a webhook with a **trigger**.
 - Bots have no preset limits. When a Bot tries something new, the decider above it answers a **request**, and the answer is kept.
 - Find Apps in a public **App Index**, and check your own App as a publisher.
 
@@ -27,7 +27,7 @@ You bring the client: a script, a backend service, a chat bot, or your own web o
 
 | Part         | What it does                                                                                                   |
 | ------------ | -------------------------------------------------------------------------------------------------------------- |
-| OpenBot      | The server. It runs Sessions, stores data in PostgreSQL, and serves the HTTP API.                              |
+| OpenBot      | The server. It runs Chats, stores data in PostgreSQL, and serves the HTTP API.                                 |
 | Platform     | One deployment with many organizations. Platform admins manage it through the API.                             |
 | Sign-in      | A person signs in once in a browser with the OpenID Connect provider of the platform or of their organization. |
 | User tokens  | Programs send a token in the `Authorization: Bearer <token>` header for every call.                            |
@@ -70,8 +70,8 @@ See the [LICENSE](https://github.com/openbot-build/openbot/blob/main/LICENSE) fi
 	<Card title="Authentication" href="/docs/authentication">
 		Sign in and make user tokens.
 	</Card>
-	<Card title="Sessions" href="/docs/sessions">
-		Give work to the Bot and read the results.
+	<Card title="Chats" href="/docs/chats">
+		Talk to a Bot and read the results.
 	</Card>
 	<Card title="Deploy" href="/docs/deploy">
 		Run OpenBot on your own server.

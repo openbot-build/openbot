@@ -22,7 +22,7 @@ Eine Organization kann ein Model eines Anbieters nur nutzen, wenn sie sowohl den
 
 Jedes Model hat einen von zwei Typen:
 
-- Ein `language`-Model schreibt Text und ruft Werkzeuge auf. Es führt Sessions aus, beurteilt Rules und lernt Bot-Memory.
+- Ein `language`-Model schreibt Text und ruft Werkzeuge auf. Es führt Turns aus, beurteilt Rules und lernt Bot-Memory.
 - Ein `decision`-Model wählt nur eine Antwort aus einer festen Liste. Es schreibt keinen Text. Jev von TypeSafe ist ein Beispiel. Siehe [Decision-Model](#decision-model).
 
 Wenn du OpenBot aus Code startest, kannst du auch eingebaute Models angeben. Siehe [Eingebaute Models](#eingebaute-models).
@@ -200,11 +200,11 @@ Eine Auswahl eines Model nennt den Anbieter und die Model-ID:
 
 OpenBot wählt nie ein Model für dich. Es gibt kein Standard-Model. Jede Nutzung nennt ihr eigenes Model:
 
-- **Eine neue Session** nutzt `settings.model` aus der Anfrage. Ohne diesen Wert nutzt die Session das `model` ihres [Bots](/de/docs/bots). Wenn keiner von beiden ein Model gibt, gibt OpenBot `400` mit `SessionModelInvalid` und dem Grund `missing` zurück. Ein neuer Bot hat kein Model, wenn du ihm keines gibst. Setze also sein `model`, wenn du ihn erstellst, oder später mit `PATCH /v1/bots/:id`.
+- **Ein neuer [Chat](/de/docs/chats)** nutzt das `model` seines [Bots](/de/docs/bots). Wenn der Bot kein Model hat, schlägt die erste Nachricht an ihn mit `400`, `ChatModelInvalid` und dem Grund `missing` fehl. Ein neuer Bot hat kein Model, wenn du ihm keines gibst. Setze also sein `model`, wenn du ihn erstellst, oder später mit `PATCH /v1/bots/:id`.
 - **Das Prüf-Modell für [Rules](/de/docs/rules)** nutzt `rulesModel` in den [Einstellungen der Organization](/de/docs/organization#einstellungen). Wenn es `null` ist, gibt das Prüf-Modell keine Antwort. Dann entscheidet eine Person oder ein Bot.
-- **[Bot-Memory](/de/docs/memory#bot-memory)** nutzt `botMemoryModel` in denselben Einstellungen. Wenn es `null` ist, lernen Bots nichts.
+- **[Bot-Memory](/de/docs/memory)** nutzt `botMemoryModel` in denselben Einstellungen. Wenn es `null` ist, lernen Bots nichts.
 
-`rulesModel` und `botMemoryModel` müssen `language`-Models sein. Der Katalog nennt den `type` jedes Model, und eine Session kann nur `language`-Models wählen.
+`rulesModel` und `botMemoryModel` müssen `language`-Models sein. Der Katalog nennt den `type` jedes Model, und ein Chat kann nur `language`-Models wählen.
 
 Ältere Versionen von OpenBot hatten `defaultModel` und `helperModel`. Beim Update gibt OpenBot das alte `defaultModel` jedem Bot, der kein Model hat. `rulesModel` und `botMemoryModel` bekommen das alte Helfer-Modell: `helperModel`, sonst `defaultModel`. Wenn beide `null` waren, bleiben die neuen Werte leer, und du musst sie setzen.
 
@@ -216,15 +216,15 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: applic
   https://api.example.com/v1/bots/$BOT_ID
 ```
 
-Eine Session kann ihre eigene Auswahl speichern. Schicke die aktuelle Revision der Session als `expected`:
+Ein Chat kann seine eigene Auswahl speichern. Schicke die aktuelle Revision des Chats als `expected`:
 
 ```sh
-curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"expected":3,"selection":{"_tag":"Config.Selection","provider":"prov_4c1e...","model":"qwen3-32b"}}' \
-  https://api.example.com/v1/sessions/$SESSION_ID/model
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"expected":3,"model":{"_tag":"Config.Selection","provider":"prov_4c1e...","model":"qwen3-32b"}}' \
+  https://api.example.com/v1/chats/$CHAT_ID
 ```
 
-`GET /v1/sessions/:id/models` zeigt dieselben Models für eine Session. Alle Felder findest du in der [API-Referenz für Sessions](/docs/api/operations/tags/sessions/).
+Sende `"model": null`, um wieder das Model des Bots zu nutzen. `GET /v1/chats/:id/models` zeigt dieselben Models für einen Chat. Alle Felder findest du in der [API-Referenz für Chats](/docs/api/operations/tags/chats/).
 
 Um festzulegen, welche Anbieter ein Member auswählen darf, nutze `models.use` auf `openbot.org.<org>.model.<providerId>`. Siehe [Berechtigungen](/de/docs/permissions#models-begrenzen).
 
@@ -263,17 +263,15 @@ Noch kein Teil von OpenBot fragt das Decision-Model.
 
 ## Ohne Model arbeiten
 
-Eine Organization ohne Anbieter kann ihre Sessions trotzdem lesen, umbenennen, forken und löschen. Sie kann keine neue Session erstellen, weil eine neue Session ein Model braucht. Siehe [Ein Model auswählen](#ein-model-auswählen).
+Eine Organization ohne Anbieter kann ihre Chats trotzdem lesen und ihren Verlauf löschen. Sie kann nicht mit einem Bot sprechen, weil jeder Turn ein Model braucht. Siehe [Ein Model auswählen](#ein-model-auswählen).
 
-Arbeit, die ein Modell braucht, schlägt mit dem Status `503` und dem Fehler `SessionExecutionUnavailable` fehl. Dazu gehört:
-
-- einen Turn starten mit `POST /v1/sessions/:id/turns`,
-- ein Model auswählen mit `PUT /v1/sessions/:id/model`,
-- einen Turn nach einer Entscheidung oder nach delegierter Arbeit fortsetzen.
+Eine Nachricht an einen Bot schlägt mit dem Status `503` und dem Fehler `ChatExecutionUnavailable` fehl, wenn kein Model ihren Turn ausführen kann:
 
 ```json
-{ "_tag": "SessionExecutionUnavailable", "session": "..." }
+{ "_tag": "ChatExecutionUnavailable", "chat": "..." }
 ```
+
+Eine Mitteilung von OpenBot, zum Beispiel das Ergebnis einer Delegation, kommt trotzdem in die Inbox ihres Chats. Siehe [Mitteilungen](/de/docs/chats#mitteilungen).
 
 ---
 
@@ -376,14 +374,14 @@ Ein Anbieter-Modul macht aus einem Modell-Namen ein `LanguageModel` für eine Ar
 | `layerClient(options)`      | Erstellt den HTTP-Client. Gib `apiKey` an, und `apiUrl` für eine andere Adresse. |
 | `layer(tag, defaults?)`     | Legt den Anbieter in einen Service, den du benennst.                             |
 
-| Modul                  | Anbieter-ID     | API                                                                                        |
-| ---------------------- | --------------- | ------------------------------------------------------------------------------------------ |
-| `OpenAiProvider`       | `openai`        | OpenAI Responses API. `ResponsesCompaction` fügt die eingebaute Kontext-Verdichtung hinzu. |
-| `OpenAiCompatProvider` | `openai-compat` | OpenAI Chat Completions API und Dienste, die sie nachbauen.                                |
-| `AnthropicProvider`    | `anthropic`     | Anthropic Messages API.                                                                    |
+| Modul                  | Anbieter-ID     | API                                                                                                                    |
+| ---------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `OpenAiProvider`       | `openai`        | OpenAI Responses API. `ResponsesCompaction` fügt die eingebaute Kontext-Verdichtung für deine eigenen Programme hinzu. |
+| `OpenAiCompatProvider` | `openai-compat` | OpenAI Chat Completions API und Dienste, die sie nachbauen.                                                            |
+| `AnthropicProvider`    | `anthropic`     | Anthropic Messages API.                                                                                                |
 
 OpenBot nutzt diese Module auch für die gespeicherten Anbieter.
-Kontext-Verdichtung (Context Compaction) macht einen langen Verlauf kürzer, damit er in das Kontextfenster des Modells passt.
+Kontext-Verdichtung (Context Compaction) macht einen langen Verlauf kürzer, damit er in das Kontextfenster des Modells passt. OpenBot macht das für jeden Chat mit einer Zusammenfassung, die das Model des Chats schreibt. Standardmäßig nutzt es `ResponsesCompaction` nicht. Siehe [Kompaktierung](/de/docs/chats#kompaktierung).
 Ein kurzes Beispiel für jeden Anbieter findest du unter [Pakete](/de/docs/packages).
 
 ---
@@ -394,20 +392,20 @@ Der Server für die Entwicklung (`devenv shell -- pnpm dev`) ruft kein echtes Mo
 
 Die Anbieter-ID ist `development`. Die Model-IDs sind:
 
-| Model          | Was es tut                                                                                       |
-| -------------- | ------------------------------------------------------------------------------------------------ |
-| `mock-text`    | Der Standard. Gibt sofort einen festen Text zurück.                                              |
-| `mock-slow`    | Gibt Text langsam über zehn Sekunden zurück. Nutze es, um Streams und Unterbrechungen zu testen. |
-| `mock-tool`    | Ruft ein harmloses Test-Tool auf, das auf einen [Request](/de/docs/requests) wartet.             |
-| `mock-app`     | Ruft ein Tool der Test-App auf und gibt ihren echten Inhalt zurück.                              |
-| `mock-failure` | Schickt etwas Text und schlägt dann absichtlich mit einem Fehler des Modells fehl.               |
+| Model          | Was es tut                                                                                            |
+| -------------- | ----------------------------------------------------------------------------------------------------- |
+| `mock-text`    | Der Standard. Gibt sofort einen festen Text zurück.                                                   |
+| `mock-slow`    | Gibt Text langsam über zehn Sekunden zurück. Nutze es, um Streams und Unterbrechungen zu testen.      |
+| `mock-tool`    | Ruft ein harmloses Test-Tool auf, das eine Entscheidung braucht. Siehe [Requests](/de/docs/requests). |
+| `mock-app`     | Ruft ein Tool der Test-App auf und gibt ihren echten Inhalt zurück.                                   |
+| `mock-failure` | Schickt etwas Text und schlägt dann absichtlich mit einem Fehler des Modells fehl.                    |
 
-Die Token-Zahlen in ihren Antworten sind nicht echt. Um eins auszuwählen, speichere es in einer Session:
+Die Token-Zahlen in ihren Antworten sind nicht echt. Um eins auszuwählen, speichere es in einem Chat:
 
 ```sh
-curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"expected":1,"selection":{"_tag":"Config.Selection","provider":"development","model":"mock-slow"}}' \
-  https://localhost:8443/v1/sessions/$SESSION_ID/model
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"expected":1,"model":{"_tag":"Config.Selection","provider":"development","model":"mock-slow"}}' \
+  https://localhost:8443/v1/chats/$CHAT_ID
 ```
 
 Der Einstiegspunkt für die Entwicklung gibt diese Models mit `builtinModels` an. So kann jede Organization der Platform für die Entwicklung sie nutzen. Das Programm für den Betrieb nutzt sie nie.

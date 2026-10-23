@@ -7,7 +7,7 @@ description: 保存关于能力的决定，可以是精确的 Grant，也可以�
 
 | 形式  | 示例                                                                                          | 由谁检查          |
 | ----- | --------------------------------------------------------------------------------------------- | ----------------- |
-| Grant | `apps.call` 作用于 `conn-7/search_orders`，允许，对这个 Session 有效                          | OpenBot，精确匹配 |
+| Grant | `apps.call` 作用于 `conn-7/search_orders`，允许，在这个 Chat 中有效                           | OpenBot，精确匹配 |
 | Rule  | "The Programmer may read any repository of the openbot organization, but asks before a push." | 评判模型          |
 
 Grant 快速而精确。Rule 能覆盖一整类请求。
@@ -22,9 +22,10 @@ Grant 快速而精确。Rule 能覆盖一整类请求。
 | ------------ | -------------------------------------------------------------------- |
 | `capability` | `action`、`target`（`*` 表示所有目标），以及可选的确切 `arguments`。 |
 | `effect`     | `allow` 或 `deny`。拒绝优先。                                        |
-| `scope`      | `once`（一次调用后用完）、`session` 或 `lifetime`。                  |
+| `scope`      | `once`（一次调用后用完）、`chat`（在一个 Chat 中）或 `lifetime`。    |
 | `grantedBy`  | 做出决定的人、Bot 或 Rule。                                          |
 | `parent`     | 这个 Grant 来源于决策者的哪个 Grant。                                |
+| `chat`       | 范围为 `chat` 的 Grant 所属的 Chat。                                 |
 | `status`     | `active`、`used` 或 `revoked`。                                      |
 
 决策者回答请求时，OpenBot 会创建 Grant。你也可以自己创建：
@@ -32,7 +33,7 @@ Grant 快速而精确。Rule 能覆盖一整类请求。
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"capability":{"action":"bots.spawn","target":"*"},"effect":"allow","scope":"lifetime"}' \
+  -d '{"capability":{"action":"bots.create","target":"*"},"effect":"allow","scope":"lifetime"}' \
   https://api.example.com/v1/bots/$BOT/grants
 ```
 

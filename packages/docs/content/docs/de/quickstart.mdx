@@ -77,7 +77,7 @@ Dieses Konto ist ein Platform-Admin. Es hat noch keine Organisation.
 
 ### Eine Organisation erstellen
 
-Bots, Sessions und Tokens gehören zu einer [Organisation](/de/docs/organization). Erstelle eine für dich:
+Bots, Chats und Tokens gehören zu einer [Organisation](/de/docs/organization). Erstelle eine für dich:
 
 ```sh
 curl -b cookies.txt \
@@ -115,7 +115,7 @@ export OPENBOT_TOKEN=obut_...
 
 ### Einen Bot erstellen
 
-Jede Session gehört zu einem [Bot](/de/docs/bots). Ein neues Konto hat keine Bots. Erstelle also einen:
+Du gibst einem [Bot](/de/docs/bots) Arbeit. Ein neues Konto hat keine Bots. Erstelle also einen:
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -130,27 +130,18 @@ Nimm `id` aus der Antwort. Wenn du diesen Bot auch ohne Angabe eines Bots nutzen
 
 <Step>
 
-### Eine Session und einen Turn starten
+### Mit deinem Bot sprechen
 
-Erstelle eine Session für deinen Bot:
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"bot":"<botId>","title":"My first Session"}' \
-  https://localhost:8443/v1/sessions
-```
-
-Nimm `session.id` und `session.revision` aus der Antwort. Dann gib der Session etwas Arbeit:
+Schicke deinem Bot eine Nachricht:
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"expected":0,"input":"Hello"}' \
-  https://localhost:8443/v1/sessions/<sessionId>/turns
+  -d '{"input":"Hello"}' \
+  https://localhost:8443/v1/bots/<botId>/messages
 ```
 
-Der Turn läuft im Hintergrund, und du bekommst sofort `202`. Füge `"stream": true` hinzu, um die Antwort als Live-Stream zu bekommen.
+OpenBot erstellt deinen Chat mit dem Bot, und die Nachricht startet einen Turn. Der Turn läuft im Hintergrund, und du bekommst sofort `202` mit `delivery: "started"`. Füge `"stream": true` hinzu, um die Antwort als Live-Stream zu bekommen. Um die Antwort später zu lesen, nimm `chat` aus der Antwort und rufe `GET /v1/chats/<chatId>` auf.
 
 </Step>
 
@@ -163,7 +154,7 @@ Die anderen Testmodelle findest du unter [Models](/de/docs/models).
 
 ## Nächste Schritte
 
-- Lies, wie [Sessions](/de/docs/sessions) und Turns funktionieren.
+- Lies, wie [Chats](/de/docs/chats) und Turns funktionieren.
 - Nutze einen echten Identitätsanbieter: [Authentifizierung](/de/docs/authentication) und [Platform](/de/docs/platform).
 - Füge ein echtes Model hinzu: [Models](/de/docs/models).
 - Betreibe OpenBot auf einem Server: [Bereitstellung](/de/docs/deploy).

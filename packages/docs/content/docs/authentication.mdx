@@ -141,7 +141,7 @@ A request with the session cookie must say which organization it acts in. Send t
 ```sh
 curl -b cookies.txt \
   -H "OpenBot-Organization: org_8f3a" \
-  https://api.example.com/v1/sessions
+  https://api.example.com/v1/chats
 ```
 
 - Without the header, OpenBot uses your only active organization.
@@ -168,8 +168,8 @@ The header must be exactly equal to `publicOrigin` in the [platform settings](/d
 curl -b cookies.txt \
   -H "Origin: https://localhost:8443" \
   -H "Content-Type: application/json" \
-  -d '{"title":"Notes"}' \
-  https://localhost:8443/v1/sessions
+  -d '{"input":"Hello"}' \
+  https://localhost:8443/v1/bots/$BOT/messages
 ```
 
 Requests with a user token do not need the `Origin` header.
@@ -213,11 +213,7 @@ OpenBot returns `201`:
 		"policies": [
 			{
 				"effect": "allow",
-				"permissionGroups": [
-					"responses.run",
-					"sessions.read",
-					"sessions.write"
-				],
+				"permissionGroups": ["responses.run", "chats.read", "chats.write"],
 				"resources": ["openbot.org.{org}"]
 			}
 		],
@@ -295,15 +291,15 @@ Send the token in the `Authorization` header on any `/v1` route:
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  https://api.example.com/v1/sessions
+  https://api.example.com/v1/chats
 ```
 
 A revoked, expired or unknown token gets `401` with `AuthenticationRequired`. If OpenBot cannot check the token, it returns `503` with `AuthenticationUnavailable`.
 
 ### Your own space
 
-Inside the organization, each member has their own Sessions, Apps and connections. Your tokens and your cookie see only your own.
-If you ask for a Session of another member, OpenBot answers `404`, as if it does not exist.
+Inside the organization, each member has their own Chats, Apps and connections. Your tokens and your cookie see only your own.
+If you ask for a Chat of another member, OpenBot answers `404`, as if it does not exist.
 
 ---
 

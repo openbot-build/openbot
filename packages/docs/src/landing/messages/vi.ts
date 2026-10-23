@@ -50,8 +50,8 @@ export default {
 		title: ["Dùng client của riêng bạn.", "Con người luôn nắm quyền."],
 		items: [
 			{
-				title: "Session và Timeline",
-				text: "Công việc diễn ra trong Session và Turn. Timeline giữ các phiên bản, nên bạn có thể quay lại và thử lại.",
+				title: "Mỗi Bot một cuộc trò chuyện",
+				text: "Bạn có một cuộc trò chuyện với mỗi Bot. Bot luôn trả lời ngay, còn việc dài chạy song song.",
 			},
 			{
 				title: "Phê duyệt",

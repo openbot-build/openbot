@@ -1,9 +1,9 @@
 ---
 title: Trigger
-description: Eine Session für einen Bot mit einem Prompt starten, nach Zeitplan oder über einen Webhook.
+description: Einem Bot eine Aufgabe mit einem Prompt geben, nach Zeitplan oder über einen Webhook.
 ---
 
-Ein **Trigger** (Auslöser) startet eine neue Session für einen Bot mit einem Prompt. Er löst nach einem Zeitplan aus, über einen Webhook oder beides. Mehr tut er nicht: Der Bot entscheidet, wie er die Arbeit macht. Er kann zuerst planen, eine [Todo-Liste](/de/docs/sessions#todo-liste) führen und Arbeit an andere Bots geben.
+Ein **Trigger** (Auslöser) gibt einem Bot eine Aufgabe mit einem Prompt. Er löst nach einem Zeitplan aus, über einen Webhook oder beides. Mehr tut er nicht: Der Bot entscheidet, wie er die Arbeit macht. Er kann zuerst planen, eine [Todo-Liste](/de/docs/chats#todo-liste) führen und Arbeit an andere Bots geben. Wenn die Aufgabe endet, geht ihr Ergebnis in deinen [Chat](/de/docs/chats) mit dem Bot.
 
 ---
 
@@ -18,7 +18,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 | Feld       | Was es tut                                                                                                        |
 | ---------- | ----------------------------------------------------------------------------------------------------------------- |
-| `prompt`   | Die Nachricht, die die Arbeit startet.                                                                            |
+| `prompt`   | Die Aufgabe.                                                                                                      |
 | `bot`      | Optional. Der Bot, der die Arbeit macht. Ohne ihn macht dein [Standard-Bot](/de/docs/bots#dein-standard-bot) sie. |
 | `schedule` | Optional. Wann der Trigger von selbst auslöst.                                                                    |
 | `shared`   | Optional. `true` erstellt einen gemeinsamen Trigger, der der Organisation gehört.                                 |
@@ -28,7 +28,15 @@ Die Antwort ist `201` mit dem Trigger. Er hat `nextRunAt`, die nächste Zeit, zu
 
 `GET /v1/triggers` listet deine Trigger und die gemeinsamen auf. `GET`, `PATCH` und `DELETE /v1/triggers/:triggerId` lesen, ändern und löschen einen. Eine Änderung braucht `expected`, die `revision`, die du gelesen hast. Eine alte Revision gibt `409` mit `TriggerConflict` zurück.
 
-Jedes Auslösen erstellt eine neue Session mit `kind: "trigger"`. Liste sie mit `GET /v1/sessions?kind=trigger` auf.
+---
+
+## Was ein Auslösen tut
+
+Jedes Auslösen gibt die Aufgabe als [Delegation](/de/docs/delegation) an den Bot. Die Arbeit läuft in einem neuen Task-Chat des Bots. Seine erste Eingabe ist der Prompt, von "einem Trigger". Die Delegation hat `trigger` mit der ID des Triggers.
+
+Wenn die Arbeit endet, geht ihr Ergebnis als [Mitteilung](/de/docs/chats#mitteilungen) in den direkten Chat des Actors mit dem Bot. OpenBot erstellt diesen Chat, wenn es ihn noch nicht gibt. So liest der Bot das Ergebnis dort, und er kann dem Actor davon erzählen oder mit der Arbeit weitermachen. Das [Audit-Log](/de/docs/organization#audit-log) zeichnet `trigger.fired` mit der ID der Delegation in `details.delegation` auf.
+
+Um die Arbeit eines Triggers zu finden, lies `GET /v1/chats/:chatId/delegations` für diesen direkten Chat, oder liste die Task-Chats des Bots mit `GET /v1/chats?kind=task&bot=<id>` auf.
 
 ---
 
@@ -60,17 +68,17 @@ curl -H "Authorization: Bearer $WEBHOOK_SECRET" \
   https://api.example.com/v1/hooks/triggers/trg_4c1e...
 ```
 
-Die Antwort ist `202` mit der `session`. Der JSON-Body geht als eigene Nachricht an den Bot. OpenBot markiert ihn als Daten eines anderen Systems, nicht als Anweisung. Ein falsches Geheimnis, ein Trigger ohne Webhook oder ein abgeschalteter Trigger gibt `401` mit `TriggerHookDenied` zurück.
+Die Antwort ist `202` mit der `delegation`. Der JSON-Body geht mit der Aufgabe an den Bot. OpenBot markiert ihn als Daten eines anderen Systems, nicht als Anweisung. Ein falsches Geheimnis, ein Trigger ohne Webhook oder ein abgeschalteter Trigger gibt `401` mit `TriggerHookDenied` zurück.
 
 Ein neues `PUT` erstellt ein neues Geheimnis, und das alte funktioniert nicht mehr. `DELETE /v1/triggers/:triggerId/webhook` entfernt den Webhook.
 
 ---
 
-## Für wen die Session arbeitet
+## Für wen die Arbeit ist
 
-Die Sessions eines Triggers arbeiten für seinen **Actor**: das letzte Member, das den Trigger oder seinen Webhook erstellt oder geändert hat. Eine Änderung macht dich also zum Actor. Der Actor muss dem Bot Arbeit geben können. Wenn er das nicht mehr kann, löst der Trigger nicht aus.
+Die Arbeit eines Triggers ist für seinen **Actor**: das letzte Member, das den Trigger oder seinen Webhook erstellt oder geändert hat. Eine Änderung macht dich also zum Actor. Der Task-Chat gehört dem Actor, und das Ergebnis geht in den Chat des Actors. Der Actor muss dem Bot Arbeit geben können. Wenn er das nicht mehr kann, löst der Trigger nicht aus.
 
-Der Bot arbeitet wie in jeder Session. Er hat keine zusätzlichen Grenzen und fragt mit [Requests](/de/docs/requests) nach neuen Fähigkeiten.
+Der Bot arbeitet wie bei jeder Aufgabe. Er hat keine zusätzlichen Grenzen und fragt mit [Requests](/de/docs/requests) nach neuen Fähigkeiten. Die Requests gehen an den Actor.
 
 ---
 

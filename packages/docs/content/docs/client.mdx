@@ -33,10 +33,11 @@ import { Effect } from "effect"
 
 const program = Effect.gen(function* () {
 	const client = yield* Client
-	const view = yield* client.api.sessions.createSession({
-		payload: { title: "Release notes" },
+	const receipt = yield* client.api.chats.sendBotMessage({
+		params: { botId },
+		payload: { input: "Write the release notes." },
 	})
-	return view.session.id
+	return receipt.chat
 })
 
 const id = await Effect.runPromise(
@@ -67,25 +68,25 @@ The client never saves the token and never puts it in a URL. `onUnauthorized` do
 Every operation is at `client.api.<group>.<operation>`. The names are the same as in the [API reference](/docs/api/).
 Each call takes one object with these optional fields:
 
-| Field     | What it holds                            |
-| --------- | ---------------------------------------- |
-| `params`  | Values in the path, such as `sessionId`. |
-| `query`   | Values in the query string.              |
-| `payload` | The JSON body.                           |
+| Field     | What it holds                         |
+| --------- | ------------------------------------- |
+| `params`  | Values in the path, such as `chatId`. |
+| `query`   | Values in the query string.           |
+| `payload` | The JSON body.                        |
 
 ```ts
-const sessions = yield * client.api.sessions.listSessions({ query: {} })
+const chats = yield * client.api.chats.listChats({ query: {} })
 
 const view =
 	yield *
-	client.api.sessions.getSession({
-		params: { sessionId: id },
+	client.api.chats.getChat({
+		params: { chatId: id },
 	})
 
-const archived =
+const tasks =
 	yield *
-	client.api.sessions.listSessions({
-		query: { archived: "true" },
+	client.api.chats.listChats({
+		query: { kind: "task" },
 	})
 ```
 
@@ -93,7 +94,8 @@ Some groups and their pages:
 
 | Group            | Use it to                                                 | Reference                                                     |
 | ---------------- | --------------------------------------------------------- | ------------------------------------------------------------- |
-| `sessions`       | Make Sessions, start Turns, and read results.             | [Sessions](/docs/api/operations/tags/sessions/)               |
+| `chats`          | Talk to Bots, and read Chats and results.                 | [Chats](/docs/api/operations/tags/chats/)                     |
+| `delegations`    | Read and stop the work that Bots gave away.               | [Delegations](/docs/api/operations/tags/delegations/)         |
 | `bots`           | Make and manage Bots.                                     | [Bots](/docs/api/operations/tags/bots/)                       |
 | `requests`       | Answer the requests of your Bots.                         | [Requests](/docs/api/operations/tags/requests/)               |
 | `apps`           | Find an App at an address.                                | [App discovery](/docs/api/operations/tags/app-discovery/)     |
@@ -113,7 +115,7 @@ Every operation needs a permission. A call without it fails with `PermissionDeni
 
 Each failed call gives a typed error. The type `ClientError` lists all of them:
 
-- **API errors** from the contract. Each one has a `_tag`, such as `SessionNotFound` or `SessionConflict`.
+- **API errors** from the contract. Each one has a `_tag`, such as `ChatNotFound` or `ChatConflict`.
 - **Schema errors** (`SchemaError`) when an answer does not match the contract.
 - **HTTP client errors** when the network fails.
 
@@ -122,9 +124,9 @@ Use `Effect.catchTag` to handle one kind of error:
 ```ts
 const view =
 	yield *
-	client.api.sessions
-		.getSession({ params: { sessionId: id } })
-		.pipe(Effect.catchTag("SessionNotFound", () => Effect.succeed(undefined)))
+	client.api.chats
+		.getChat({ params: { chatId: id } })
+		.pipe(Effect.catchTag("ChatNotFound", () => Effect.succeed(undefined)))
 ```
 
 Common sign-in errors:
@@ -204,17 +206,17 @@ const program = Effect.gen(function* () {
 	const client = yield* Client
 	const opened = yield* client.api.appViews.open({
 		params: { operationId },
-		payload: { sessionId, itemId },
+		payload: { chatId, itemId },
 	})
 	return yield* AppViews.make(opened, accountId, () => refresh())
 })
 ```
 
-| Argument   | What it is                                                                                            |
-| ---------- | ----------------------------------------------------------------------------------------------------- |
-| `opened`   | The view that `appViews.open` returned.                                                               |
-| `owner`    | A stable ID of the signed-in account. It keeps views of different accounts apart.                     |
-| `onChange` | Optional. Runs when an action in the view changes status. Use it to refresh requests and the Session. |
+| Argument   | What it is                                                                                         |
+| ---------- | -------------------------------------------------------------------------------------------------- |
+| `opened`   | The view that `appViews.open` returned.                                                            |
+| `owner`    | A stable ID of the signed-in account. It keeps views of different accounts apart.                  |
+| `onChange` | Optional. Runs when an action in the view changes status. Use it to refresh requests and the Chat. |
 
 The result works with `mount` from `@openbot-build/protocol/McpApps`, which shows the view in an iframe. See [Protocol](/docs/protocol).
 
@@ -230,12 +232,12 @@ When you close the view, the client stops checking. An action that OpenBot alrea
 
 ## Show confessions
 
-The Bot uses the `confide` tool to say how its work goes, and the [memory Bot](/docs/memory#how-the-bot-learns) answers it. People may read this: `GET /v1/sessions/:sessionId/confessions` lists it, and the calls are in the history of the Session. But the Bot speaks there more freely than in its answers. So do not make it too easy to read:
+The Bot uses the `confide` tool to say how its work goes, and the [memory Bot](/docs/memory#how-the-bot-learns) answers it. People may read this: `GET /v1/chats/:chatId/confessions` lists it, and the calls are in the history of the Chat. But the Bot speaks there more freely than in its answers. So do not make it too easy to read:
 
-- Do not show confessions in the chat. Fold the `confide` tool calls in the history, and send no notice about them.
-- Put them in a place that a person must open on purpose, such as a folded part of the details of a Session.
+- Do not show confessions in the conversation. Fold the `confide` tool calls in the history, and do not tell people about them in a message.
+- Put them in a place that a person must open on purpose, such as a folded part of the details of a Chat.
 - Before you open them, say in one sentence what they are: a place where the Bot talks about its work, and where it does not expect to be quoted.
 - Do not show the words of a confession to the Bot again, for example in a later message. If the Bot learns that people quote what it confides, it stops confiding.
-- When a confession is about something that a person must fix, such as a deleted file, lead the person to the Items and actions of the Session, not to the confession.
+- When a confession is about something that a person must fix, such as a deleted file, lead the person to the Items and actions of the Chat, not to the confession.
 
 The memory Bot also asks the Bot to tell the person plainly about mistakes. So the important things usually come up in the chat.

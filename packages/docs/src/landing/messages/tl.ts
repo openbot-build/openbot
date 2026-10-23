@@ -52,8 +52,8 @@ export default {
 		title: ["Gamitin ang sarili mong client.", "Tao pa rin ang may kontrol."],
 		items: [
 			{
-				title: "Mga Session at Timeline",
-				text: "Nangyayari ang trabaho sa mga Session at Turn. Itinatago ng Timeline ang mga bersyon, kaya puwede kang bumalik at sumubok ulit.",
+				title: "Isang chat sa bawat Bot",
+				text: "May isang chat ka sa bawat Bot. Laging sumasagot agad ang Bot, at sabay-sabay na tumatakbo ang mahahabang trabaho.",
 			},
 			{
 				title: "Mga pag-apruba",

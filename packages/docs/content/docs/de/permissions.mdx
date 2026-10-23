@@ -10,8 +10,8 @@ Das Modell hat vier Teile:
 
 | Teil                 | Was es ist                                                                                                         |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Berechtigungsgruppe  | Eine benannte Menge von Aktionen auf einer Art von Ressource, zum Beispiel `sessions.read`.                        |
-| Ressourcen-Schlüssel | Der Name einer Ressource, zum Beispiel einer Session.                                                              |
+| Berechtigungsgruppe  | Eine benannte Menge von Aktionen auf einer Art von Ressource, zum Beispiel `chats.read`.                           |
+| Ressourcen-Schlüssel | Der Name einer Ressource, zum Beispiel eines Chats.                                                                |
 | Policy               | Sagt `allow` (erlauben) oder `deny` (verbieten) für einige Berechtigungsgruppen auf einigen Ressourcen.            |
 | Role                 | Eine benannte Menge von Policies, zum Beispiel Member oder Administrator. Organisationen können eigene hinzufügen. |
 
@@ -25,9 +25,9 @@ Liste sie mit `GET /v1/organization/permission_groups` auf.
 
 | ID                         | Ressource         | Was sie erlaubt                                                                                           |
 | -------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------- |
-| `responses.run`            | Session           | Arbeit in einer Session starten, lenken (Steer), einreihen (Queue) und fortsetzen.                        |
-| `sessions.read`            | Session           | Sessions lesen, mit ihrem Verlauf, Memory und ihren Delegationen.                                         |
-| `sessions.write`           | Session           | Sessions erstellen, ändern, forken, wiederherstellen, unterbrechen und löschen.                           |
+| `responses.run`            | Chat              | Bots Nachrichten schicken, damit sie in einem Chat arbeiten.                                              |
+| `chats.read`               | Chat              | Chats lesen, mit ihrem Verlauf und der Arbeit, die sie abgegeben haben.                                   |
+| `chats.write`              | Chat              | Chats ändern, unterbrechen und löschen und die Arbeit abbrechen, die sie abgegeben haben.                 |
 | `requests.resolve`         | Request           | Die Requests deiner Bots für neue Fähigkeiten beantworten.                                                |
 | `bots.read`                | Bot               | Bots lesen, mit ihrem Memory, ihren Rules und Grants.                                                     |
 | `bots.write`               | Bot               | Bots erstellen und ändern, mit ihrem Memory, ihren Rules und Grants.                                      |
@@ -50,7 +50,7 @@ Liste sie mit `GET /v1/organization/permission_groups` auf.
 | `connections.write`        | Connection        | App-Verbindungen erstellen, ändern und löschen, und sich bei App-Konten anmelden.                         |
 | `apps.use`                 | Apps              | Apps finden und App-Operationen und App-Ansichten nutzen.                                                 |
 | `apps.publish`             | Apps              | Die Entwicklerwerkzeuge für Apps nutzen, die du veröffentlichst.                                          |
-| `models.use`               | Model             | Ein Model für eine Session wählen.                                                                        |
+| `models.use`               | Model             | Ein Model für einen Chat wählen.                                                                          |
 | `tokens.read`              | User              | API-Tokens auflisten.                                                                                     |
 | `tokens.write`             | User              | API-Tokens erstellen und widerrufen.                                                                      |
 | `organization.read`        | Organization      | Die Einstellungen der Organisation lesen.                                                                 |
@@ -84,7 +84,7 @@ Ein Ressourcen-Schlüssel ist ein Name aus Teilen, die durch Punkte getrennt sin
 | -------------------------- | ------------------------------------------------------- |
 | Die Organisation           | `openbot.org.<org>`                                     |
 | Ein Member                 | `openbot.org.<org>.user.<user>`                         |
-| Eine Session               | `openbot.org.<org>.user.<user>.session.<session>`       |
+| Ein Chat                   | `openbot.org.<org>.user.<user>.chat.<chat>`             |
 | Ein Bot eines Members      | `openbot.org.<org>.user.<user>.bot.<bot>`               |
 | Ein gemeinsamer Bot        | `openbot.org.<org>.bot.<bot>`                           |
 | Ein Trigger eines Members  | `openbot.org.<org>.user.<user>.trigger.<trigger>`       |
@@ -96,7 +96,7 @@ Ein Ressourcen-Schlüssel ist ein Name aus Teilen, die durch Punkte getrennt sin
 | Ein Model Provider         | `openbot.org.<org>.model.<provider>`                    |
 | Die ganze Platform         | `openbot.platform`                                      |
 
-Ein Bot, der einem anderen Bot gehört, hat den Schlüssel des Members oder der Organisation an der Spitze seines Besitzer-Baums. `openbot.org.<org>.user.<user>.bot.<bot>` ist also auch der Schlüssel eines Bots, der einem obersten Bot dieses Members gehört. Wenn ein Bot einen Bot erstellt oder dauerhaft macht, braucht das Member, für das er arbeitet, `bots.write` an dieser Stelle.
+Ein Bot, der einem anderen Bot gehört, hat den Schlüssel des Members oder der Organisation an der Spitze seines Besitzer-Baums. `openbot.org.<org>.user.<user>.bot.<bot>` ist also auch der Schlüssel eines Bots, der einem obersten Bot dieses Members gehört. Wenn ein Bot einen Bot erstellt, braucht das Member, für das er arbeitet, `bots.write` an dieser Stelle.
 
 Ein Schlüssel gilt für sich selbst und für jeden Schlüssel darunter. `openbot.org.<org>` gilt also für alles in der Organisation, und `openbot.org.<org>.user.<user>` gilt für alles eines Members.
 
@@ -116,7 +116,7 @@ Eine Policy sieht so aus:
 ```json
 {
 	"effect": "allow",
-	"permissionGroups": ["sessions.read", "sessions.write"],
+	"permissionGroups": ["chats.read", "chats.write"],
 	"resources": ["openbot.org.{org}.user.{self}"]
 }
 ```
@@ -162,23 +162,18 @@ Ein Token, das ohne `policies` erstellt wurde, bekommt diese Policy. Sie erlaubt
 ```json
 {
 	"effect": "allow",
-	"permissionGroups": [
-		"responses.run",
-		"sessions.read",
-		"...",
-		"audit_logs.read"
-	],
+	"permissionGroups": ["responses.run", "chats.read", "...", "audit_logs.read"],
 	"resources": ["openbot.org.{org}"]
 }
 ```
 
-Dieses Beispiel erstellt ein Token, das nur deine Sessions lesen kann:
+Dieses Beispiel erstellt ein Token, das nur deine Chats lesen kann:
 
 ```sh
 curl -b cookies.txt \
   -H "Origin: https://api.example.com" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Dashboard","policies":[{"effect":"allow","permissionGroups":["sessions.read"],"resources":["openbot.org.{org}.user.{self}"]}]}' \
+  -d '{"name":"Dashboard","policies":[{"effect":"allow","permissionGroups":["chats.read"],"resources":["openbot.org.{org}.user.{self}"]}]}' \
   https://api.example.com/v1/user/tokens
 ```
 
@@ -192,13 +187,13 @@ Liste sie mit `GET /v1/organization/roles` auf. Die Liste enthält die eingebaut
 
 Jede Organisation hat diese Roles. Sie lassen sich nicht ändern. Eine Änderung ergibt `409` mit `RoleReadOnly`.
 
-| Role                      | Was sie kann                                                                                                                                                                                                            |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `super_administrator`     | Alles in der Organisation. Nur ein Super Administrator kann diese Role geben oder wegnehmen.                                                                                                                            |
-| `administrator`           | Die Organisation, ihre Members, ihre gemeinsamen Bots, ihre gemeinsamen Trigger, ihre gemeinsamen Computer und ihre Channels verwalten und das Audit-Log lesen. Nur mit den eigenen Sessions und Verbindungen arbeiten. |
-| `administrator_read_only` | Die Organisation, ihre Members, die Nutzung, die Budgets und das Audit-Log lesen und die gemeinsamen Bots, Trigger, Computer und Channels lesen. Nur mit den eigenen Sessions und Verbindungen arbeiten.                |
-| `member`                  | Mit den eigenen Bots, Sessions, Triggern, Computern, Verbindungen und Tokens arbeiten, die gemeinsamen Bots, Trigger, Computer, Channels und Models der Organisation nutzen und ihre Einstellungen lesen.               |
-| `auditor`                 | Die Organisation, ihre Members, die Nutzung, die Budgets und das Audit-Log lesen. Sonst nichts.                                                                                                                         |
+| Role                      | Was sie kann                                                                                                                                                                                                         |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `super_administrator`     | Alles in der Organisation. Nur ein Super Administrator kann diese Role geben oder wegnehmen.                                                                                                                         |
+| `administrator`           | Die Organisation, ihre Members, ihre gemeinsamen Bots, ihre gemeinsamen Trigger, ihre gemeinsamen Computer und ihre Channels verwalten und das Audit-Log lesen. Nur mit den eigenen Chats und Verbindungen arbeiten. |
+| `administrator_read_only` | Die Organisation, ihre Members, die Nutzung, die Budgets und das Audit-Log lesen und die gemeinsamen Bots, Trigger, Computer und Channels lesen. Nur mit den eigenen Chats und Verbindungen arbeiten.                |
+| `member`                  | Mit den eigenen Bots, Chats, Triggern, Computern, Verbindungen und Tokens arbeiten, die gemeinsamen Bots, Trigger, Computer, Channels und Models der Organisation nutzen und ihre Einstellungen lesen.               |
+| `auditor`                 | Die Organisation, ihre Members, die Nutzung, die Budgets und das Audit-Log lesen. Sonst nichts.                                                                                                                      |
 
 Einige eingebaute Roles haben auch die Gruppen für Roles, Model Providers, SSO, Channels, Nutzung und Budgets:
 
@@ -209,7 +204,7 @@ Einige eingebaute Roles haben auch die Gruppen für Roles, Model Providers, SSO,
 | `administrator_read_only` | `model_providers.read`, `sso.read`, `channels.read`, `usage.read`, `budgets.read`.                                                                                         |
 | `auditor`                 | `usage.read`, `budgets.read`.                                                                                                                                              |
 
-Um einem Member weniger zu geben als eine Role, füge dem Member eine `deny`-Policy hinzu. Dieses Beispiel hindert ein Member daran, Arbeit auszuführen. Es kann seine Sessions aber weiter lesen:
+Um einem Member weniger zu geben als eine Role, füge dem Member eine `deny`-Policy hinzu. Dieses Beispiel hindert ein Member daran, Arbeit auszuführen. Es kann seine Chats aber weiter lesen:
 
 ```sh
 curl -X PATCH -b cookies.txt \
@@ -227,7 +222,7 @@ Eigene Roles erstellen, ändern und löschen braucht `roles.write`.
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Reviewer","description":"Reads Sessions and answers requests.","policies":[{"effect":"allow","permissionGroups":["sessions.read","requests.resolve"],"resources":["openbot.org.{org}.user.{self}"]}]}' \
+  -d '{"name":"Reviewer","description":"Reads Chats and answers requests.","policies":[{"effect":"allow","permissionGroups":["chats.read","requests.resolve"],"resources":["openbot.org.{org}.user.{self}"]}]}' \
   https://api.example.com/v1/organization/roles
 ```
 
@@ -273,9 +268,9 @@ Der Body von `PermissionDenied` nennt die Berechtigung und den Ressourcen-Schlü
 ```json
 {
 	"_tag": "PermissionDenied",
-	"permission": "sessions.write",
-	"resource": "openbot.org.org_8f3a.user.u_123.session"
+	"permission": "chats.write",
+	"resource": "openbot.org.org_8f3a.user.u_123.chat"
 }
 ```
 
-Du erreichst nur deine eigenen Sessions und Verbindungen. Eine Session eines anderen Members antwortet mit `404`, als ob es sie nicht gäbe.
+Du erreichst nur deine eigenen Chats und Verbindungen. Ein Chat eines anderen Members antwortet mit `404`, als ob es ihn nicht gäbe.

@@ -21,16 +21,15 @@ OpenBot 会记录每一次模型调用。你可以看到每个成员、每个 Bo
 
 OpenBot 会记录每一次得到回答的模型调用。每个用量事件都有一个 `source`：
 
-| `source`         | 是什么发起了调用                                                      |
-| ---------------- | --------------------------------------------------------------------- |
-| `turn`           | Session 中一个 Turn 的一个模型步骤。                                  |
-| `compaction`     | 对旧消息的总结，让对话能放进模型。                                    |
-| `session_memory` | Session 的[记忆](/zh-cn/docs/memory)。                                |
-| `judge`          | 评判 [Rules](/zh-cn/docs/rules) 的模型。                              |
-| `bot_memory`     | [记忆 Bot](/zh-cn/docs/memory#bot-记忆)：它学习、补充和回答时的用量。 |
-| `other`          | 其他任何调用。                                                        |
+| `source`     | 是什么发起了调用                                                      |
+| ------------ | --------------------------------------------------------------------- |
+| `turn`       | [Chat](/zh-cn/docs/chats) 中一个 Turn 的一个模型步骤。                |
+| `compaction` | 对旧消息的总结，让对话能放进模型。                                    |
+| `judge`      | 评判 [Rules](/zh-cn/docs/rules) 的模型。                              |
+| `bot_memory` | [记忆 Bot](/zh-cn/docs/memory#记忆-bot)：它学习、补充和回答时的用量。 |
+| `other`      | 其他任何调用。                                                        |
 
-当调用有这些信息时，用量事件还会带有 Session、Turn、Bot、成员和用户令牌。在 [Channel](/zh-cn/docs/channels) 中，成员是写这条消息的人。
+当调用有这些信息时，用量事件还会带有 Chat（`chatId`）、Turn、Bot、成员和用户令牌。在 [Channel](/zh-cn/docs/channels) 中，成员是写这条消息的人。
 
 有些调用不会被记录：
 
@@ -362,7 +361,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/platform/settings
 ```
 
-每个 OpenBot 实例都在内存中保存自己的桶。有多个实例时，一个范围在每个实例上都可以用到这个速率。一个 Session 的工作通常在一个实例上运行。
+每个 OpenBot 实例都在内存中保存自己的桶。有多个实例时，一个范围在每个实例上都可以用到这个速率。一个 Turn 在一个实例上运行，但一个 Chat 的多个 Turn 和它交出去的工作可以在多个实例上运行。
 
 ---
 

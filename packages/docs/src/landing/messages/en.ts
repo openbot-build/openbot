@@ -46,8 +46,8 @@ export default {
 		title: ["Bring your own client.", "Keep people in control."],
 		items: [
 			{
-				title: "Sessions and Timelines",
-				text: "Work happens in Sessions and Turns. The Timeline keeps versions, so you can go back and try again.",
+				title: "One chat with each Bot",
+				text: "You have one chat with each Bot. It always answers at once, and long work runs in parallel.",
 			},
 			{
 				title: "Approvals",

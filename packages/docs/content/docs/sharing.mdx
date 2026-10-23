@@ -16,7 +16,7 @@ You can share a Bot with people outside your organization, like you add a member
 
 ## Invite people
 
-You need `bots.share` on the Bot. Members can share their own Bots. Administrators can also share the shared Bots of the organization. Only a lasting top Bot can be shared: one that a member or the organization owns, and that is not archived.
+You need `bots.share` on the Bot. Members can share their own Bots. Administrators can also share the shared Bots of the organization. Only a top Bot can be shared: one that a member or the organization owns, and that is not archived.
 
 To invite one person, send their email. The invitation lasts 7 days, like an [invitation to the organization](/docs/organization#invitations):
 
@@ -95,7 +95,6 @@ The linked Bot is a Bot of the member, in their own organization. It has `source
 ```json
 {
 	"id": "bot_e40b",
-	"kind": "persistent",
 	"owner": { "_tag": "Member", "userId": "u_456" },
 	"name": "Guide",
 	"source": { "organizationId": "org_3c7e", "bot": "bot_7d2c" }
@@ -104,15 +103,15 @@ The linked Bot is a Bot of the member, in their own organization. It has `source
 
 The member works with it like with their own Bots:
 
-- They start [Sessions](/docs/sessions) with it, and can make it their default Bot.
+- They talk to it in their own [Chat](/docs/chats), in their own organization, and can make it their default Bot.
 - It works with their permissions, their connected [Apps](/docs/apps), and their other Bots. It can give work to their Bots.
 - Its [requests](/docs/requests) go to the member. Their decisions, [Grants](/docs/requests#answer-a-request) and [Rules](/docs/rules) count only in their organization. Yours count only in yours.
-- Their organization pays for the models. When your Bot names a model that their organization does not have, the Session uses the default model of their organization.
-- You never see their Sessions.
+- Their organization pays for the models. When your Bot names a model that their organization does not have, their Chat does not use it. It uses the default model of the server, when the server has one.
+- You never see their Chats.
 
 The name, role, instructions and model always come from your Bot. When you change them, every linked Bot changes too. A member cannot change them. A member can change `planApproval`.
 
-The Bot keeps [one memory pool](/docs/memory#bot-memory), in your organization. What it learns in the organization of a member is for that member, in that organization. Nobody reads the memory about another person: not you, and not other members. You can remove what a member left with a purge, without reading it. Only you manage the memory Bot.
+The Bot keeps [one memory pool](/docs/memory), in your organization. What it learns in the organization of a member is for that member, in that organization. Nobody reads the memory about another person: not you, and not other members. You can remove what a member left with a purge, without reading it. Only you manage the memory Bot.
 
 ---
 

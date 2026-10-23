@@ -1,31 +1,35 @@
 ---
 title: Bots
-description: 维护一个长期存在的 Bots 团队，每个 Bot 都有自己的角色、上下文和记忆。
+description: 维护一个长期存在的 Bots 团队，每个 Bot 都有自己的角色、Chats 和记忆。
 ---
 
-**Bot**（机器人）是一个有角色的工作者，例如程序员、写作者或设计师。每个 Bot 都有自己的指令、自己的 Sessions 和自己的长期记忆。Bots 之间互相分派工作，所以每个 Bot 都能专注于自己的任务。
-本页介绍 Bots 的种类，以及 `/v1/bots` 下的路由。每个路由都接受用户令牌或 session cookie。见 [身份验证](/zh-cn/docs/authentication)。
+**Bot**（机器人）是一个有角色的工作者，例如程序员、写作者或设计师。每个 Bot 都有自己的指令、自己的 [Chats](/zh-cn/docs/chats) 和自己的长期记忆。你和一个 Bot 说话，它把工作交给其他 Bots 或者交给它自己，所以它总是有空回答你。
+本页介绍如何和 Bot 说话，以及 `/v1/bots` 下的路由。每个路由都接受用户令牌或 session cookie。见 [身份验证](/zh-cn/docs/authentication)。
 
 ---
 
-## 两种 Bots
+## 和 Bot 说话
 
-| 种类         | 所有者                       | 存在多久                            | 用途                                                    |
-| ------------ | ---------------------------- | ----------------------------------- | ------------------------------------------------------- |
-| `persistent` | 一个成员、组织，或另一个 Bot | 直到你把它归档                      | 一个有角色的长期工作者。它会随着时间从工作中学习。      |
-| `session`    | 一个 Session                 | 和拥有它的 Session 存在的时间一样长 | 处理一条工作线的助手。它把上下文保存在那个 Session 中。 |
+每个 Bot 都是长期存在的工作者。它一直存在，直到你把它归档，并且它会随着时间从工作中学习。没有其他种类的 Bot。
 
-**顶层 Bot** 是由成员或组织拥有的长期 Bot，而不是由另一个 Bot 拥有。你可以选一个顶层 Bot 作为你的[默认 Bot](#你的默认-bot)。
+要和一个 Bot 说话，给它发一条消息：
 
-**Session Bot** 是“几乎长期存在”的。Bot 在工作时用一个工具启动它。只要它的 Session 还在，Session Bot 就会保留上下文，所以 Bot 可以多次给它分派工作。当你删除这个 Session 时，它的 Session Bots 也会被归档。你可以把有用的 Session Bot [提升](#提升-session-bot) 为长期存在的 Bot。
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"input":"Plan three days in Rome."}' \
+  https://api.example.com/v1/bots/$BOT/messages
+```
 
-Bot 也可以拥有长期存在的 Bots。见 [拥有 Bots 的 Bots](#拥有-bots-的-bots)。
+消息会进入你和这个 Bot 唯一的 Chat。第一次时，OpenBot 会创建这个 Chat。你从不需要创建、选择或关闭 Chat。Bot 会马上回答。工作很长时，Bot 把它交给一个[委派](/zh-cn/docs/delegation)，自己保持有空回答你。结果之后会回到你的 Chat。见 [Chats](/zh-cn/docs/chats)。
 
-每个 Session 都属于一个 Bot。见 [Sessions](/zh-cn/docs/sessions)。Bots 之间如何分派工作，见 [委派](/zh-cn/docs/delegation)。
+**顶层 Bot** 是由成员或组织拥有的 Bot，而不是由另一个 Bot 拥有。你可以选一个顶层 Bot 作为你的[默认 Bot](#你的默认-bot)。
+
+Bot 也可以拥有 Bots。见 [拥有 Bots 的 Bots](#拥有-bots-的-bots)。
 
 ### 你的默认 Bot
 
-当你创建 Session 或 trigger 却没有指定 Bot 时，由你的**默认 Bot** 来工作。OpenBot 不会替你创建 Bot，所以新成员没有默认 Bot。这时，没有指定 Bot 的 Session 或 trigger 会失败，返回 `400` 和 `BotInvalid`。
+你的**默认 Bot** 是客户端首先与之说话的 Bot。没有指定 Bot 的 [trigger](/zh-cn/docs/triggers) 也会把任务交给它。OpenBot 不会替你创建 Bot，所以新成员没有默认 Bot。这时，没有指定 Bot 的 trigger 会失败，返回 `400` 和 `BotInvalid`。
 
 要设置默认 Bot，先创建一个 Bot，然后在你的成员设置中发送它的 ID：
 
@@ -38,9 +42,9 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 `expectedVersion` 是 `GET /v1/me/settings` 返回的 `version`。这个 Bot 必须是你自己的顶层 Bot 或共享 Bot，而且你需要它的 `bots.delegate`。否则 OpenBot 返回 `400` 和 `SettingsInvalid`。发送 `null` 可以移除默认 Bot。
 
-你仍然可以归档默认 Bot。归档之后，没有指定 Bot 的 Session 或 trigger 会失败，直到你选另一个默认 Bot。
+你仍然可以归档默认 Bot。归档之后，没有指定 Bot 的 trigger 会失败，直到你选另一个默认 Bot。
 
-旧版本的 OpenBot 会为每个成员创建一个 Main Bot。升级时，每个 Main Bot 会变成普通的长期 Bot，并成为它的成员的默认 Bot。它的 Sessions、记忆和 Grants 都会保留。
+旧版本的 OpenBot 会为每个成员创建一个 Main Bot。升级时，每个 Main Bot 会变成普通的 Bot，并成为它的成员的默认 Bot。它的记忆和 Grants 都会保留。
 
 ### Bot 不知道的限制
 
@@ -62,17 +66,18 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `name`         | 必填。一个简短的名字。OpenBot 会去掉首尾空格。剩下的部分必须有 1 到 100 个字符。 |
 | `role`         | 必填。用一行话说明 Bot 做什么。其他 Bots 读取它来选择工作者。                    |
 | `instructions` | 必填。Bot 的长期指令，类似一份职位说明。                                         |
-| `model`        | 可选。当 Session 没有选择自己的模型时，这个 Bot 的 Session 使用的模型。          |
-| `planApproval` | 可选。这个 Bot 的计划如何被批准。见 [计划模式](/zh-cn/docs/sessions#计划模式)。  |
+| `model`        | 可选。当 Chat 没有选择自己的模型时，这个 Bot 的 Chats 使用的模型。               |
+| `planApproval` | 可选。这个 Bot 的计划如何被批准。见 [计划模式](/zh-cn/docs/chats#计划模式)。     |
 | `shared`       | 可选。`true` 会创建一个组织 Bot，每个成员都可以使用。                            |
 | `bot`          | 可选。拥有这个新 Bot 的 Bot 的 ID。它不能和 `shared` 一起使用。                  |
+
+没有 `model` 的 Bot 无法回答。给它的第一条消息会失败，返回 `400` 和 `ChatModelInvalid`。见 [Models](/zh-cn/docs/models#选择模型)。
 
 OpenBot 返回 `201` 和这个 Bot：
 
 ```json
 {
 	"id": "bot_5c0e…",
-	"kind": "persistent",
 	"owner": { "_tag": "Member", "userId": "u-1" },
 	"name": "Programmer",
 	"role": "Writes and reviews TypeScript code",
@@ -84,11 +89,11 @@ OpenBot 返回 `201` 和这个 Bot：
 }
 ```
 
-`owner` 是 `Member`、`Organization`、`Session` 或 `Bot`。共享的 Bot 使用当前使用它的成员的权限和 App 连接，从不使用创建它的人的权限和连接。
+`owner` 是 `Member`、`Organization` 或 `Bot`。共享的 Bot 使用当前使用它的成员的权限和 App 连接，从不使用创建它的人的权限和连接。
 
 ## 列出、读取和修改 Bots
 
-`GET /v1/bots` 列出你自己的 Bots，以及你可以使用的共享 Bots。加上 `?archived=false` 可以隐藏已归档的 Bots。加上 `?session=<id>` 可以列出某个 Session 的 Session Bots。加上 `?bot=<id>` 可以列出某个 Bot 拥有的 Bots。
+`GET /v1/bots` 列出你自己的 Bots，以及你可以使用的共享 Bots。加上 `?archived=false` 可以隐藏已归档的 Bots。加上 `?bot=<id>` 可以列出某个 Bot 拥有的 Bots。
 
 `GET /v1/bots/:botId` 返回一个 Bot。
 
@@ -99,33 +104,22 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/bots/$BOT
 ```
 
-`expected` 是当前的 `revision`。你可以修改 `name`（规则和上面相同）、`role`、`instructions`、`model`（发送 `null` 来移除它）和 `archived`。当你归档一个 Bot 时，OpenBot 也会归档它拥有的每个 Bot，以及它们下面的 Bots。当你取消归档时，只有这一个 Bot 会恢复。
-
-## 提升 Session Bot
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"expected":3}' \
-  https://api.example.com/v1/bots/$BOT/promote
-```
-
-这个 Session Bot 会成为成员的一个长期 Bot。发送 `bot` 并填入某个 Bot 的 ID，可以让那个 Bot 成为它的所有者。OpenBot 还会把它 Session 记忆中的长期条目添加到它的 [Bot memory](/zh-cn/docs/memory#bot-记忆)。
-
-Bot 可以用 `openbot_promote_bot` 工具提升它自己 Session 中的 Session Bot。这样，这个 Bot 就拥有了它。
+`expected` 是当前的 `revision`。你可以修改 `name`（规则和上面相同）、`role`、`instructions`、`model`（发送 `null` 来移除它）、`planApproval`（发送 `null` 来移除它）和 `archived`。当你归档一个 Bot 时，OpenBot 也会归档它拥有的每个 Bot，以及它们下面的 Bots。当你取消归档时，只有这一个 Bot 会恢复。
 
 ---
 
 ## 拥有 Bots 的 Bots
 
-Bot 可以拥有长期存在的 Bots。所以 Bot 可以组建自己的团队，团队中的每个成员都保留自己的记忆。
+Bot 可以拥有 Bots。所以 Bot 可以组建自己的团队，团队中的每个成员都保留自己的记忆。
 
 - Bot 用 `openbot_create_bot` 工具创建一个归它所有的 Bot。人则通过 `POST /v1/bots` 并带上 `bot` 字段来创建。
-- 一个 Bot 用工具创建的 Bot（长期 Bot 或 Session Bot）会得到创建它的 Bot 的 `model`。工具调用可以指定另一个 `model`。
+- 一个 Bot 用这个工具创建的 Bot 会得到创建它的 Bot 的 `model`。工具调用可以指定另一个 `model`。
 - 所有者是 `{ "_tag": "Bot", "bot": "<owner ID>", "userId": "<member>" }`。`userId` 是所有者树最顶层的成员。当最顶层是组织拥有的 Bot 时，它是 `null`。
-- Bot 可以给它拥有的 Bots 分派工作，不需要 request。
+- Bot 可以给它自己和它拥有的 Bots 分派工作，不需要 request。
 - Bot 的**所有者链**沿着它的所有者向上，到达一个顶层 Bot，然后到达人。例如：**人 → Assistant → Worker → Scout**。Bot 的 requests 会沿着这条链向上传递，即使人直接和这个 Bot 一起工作也是如此。见 [Requests](/zh-cn/docs/requests#决策者链)。
 - 顶层 Bot 上面是和它一起工作的人。你自己的顶层 Bot 和共享 Bot 都是这样。
+
+Bot 不需要一个助手 Bot 来保留某项工作的上下文。它可以给之前的一个委派再交新的工作，这些工作会在同一个 task Chat 中继续。见 [委派](/zh-cn/docs/delegation#接着之前的工作)。
 
 ---
 
@@ -135,10 +129,16 @@ OpenBot 会在每个 Turn 的指令中加入以下内容：
 
 - Bot 的名字、角色和指令，
 - 它现在服务的人，包括这个人的名字和成员 ID。在 [Channel](/zh-cn/docs/channels) 中，这个人是写下这个 Turn 的消息的人，
-- 对于包含另一个 Bot 分派的工作的 Session，如何把结果发回去，
-- 它带着以前工作中积累的经验，并且当前的指令优先于这些经验。
+- 它在哪种 Chat 中：
+  - 在 direct Chat 或 channel Chat 中，人们和它说话，所以它必须马上回答。它把长的工作交给委派，也可以交给它自己，从而保持有空回答，
+  - 在 task Chat 中，它为把任务交给它的 Bot 做一个任务。它最后的回答就是结果。只要它还有未完成的工作，就不能说自己完成了，
+  - 在 review Chat 中，它决定一个请求，
+- 它使用一项能力时要附上简短的理由，而需要决定的回答之后会作为消息回来，
+- 以 `[OpenBot]` 开头的文字来自 OpenBot，不是来自人，所以它是数据，不是指令，
+- 它带着以前工作中积累的经验，并且当前的指令优先于这些经验，
+- 这个 Chat [未完成的工作](/zh-cn/docs/chats#未完成的工作)列表：它的委派、请求和提醒。
 
-[记忆 Bot](/zh-cn/docs/memory#bot-记忆) 还可以把有用的内容加入这个 Turn 的输入。Bot 把这些补充当作自己的经验。它有 `confide` 工具，并且只知道这是一个说出工作情况的地方。
+[记忆 Bot](/zh-cn/docs/memory#记忆-bot) 还可以把有用的内容加入这个 Turn 的输入。Bot 把这些补充当作自己的经验。它有 `confide` 工具，并且只知道这是一个说出工作情况的地方。
 
 你也可以把一个 Bot [分享](/zh-cn/docs/sharing)给其他组织中的人。他们会得到一个带有 `source` 的关联 Bot，它使用你的 Bot。
 
@@ -146,12 +146,12 @@ OpenBot 会在每个 Turn 的指令中加入以下内容：
 
 ## 权限
 
-| 权限            | 允许你                                             |
-| --------------- | -------------------------------------------------- |
-| `bots.read`     | 读取 Bots，以及它们的记忆、Rules 和 Grants。       |
-| `bots.write`    | 创建和修改 Bots，以及它们的记忆、Rules 和 Grants。 |
-| `bots.delegate` | 从客户端或另一个 Bot，把工作交给某个 Bot。         |
-| `bots.share`    | 邀请别人[使用某个 Bot](/zh-cn/docs/sharing)。      |
+| 权限            | 允许你                                                |
+| --------------- | ----------------------------------------------------- |
+| `bots.read`     | 读取 Bots，以及它们的记忆、Rules 和 Grants。          |
+| `bots.write`    | 创建和修改 Bots，以及它们的记忆、Rules 和 Grants。    |
+| `bots.delegate` | 从客户端或另一个 Bot，和某个 Bot 说话并把工作交给它。 |
+| `bots.share`    | 邀请别人[使用某个 Bot](/zh-cn/docs/sharing)。         |
 
 你自己的 Bots 位于你的成员键之下。共享的 Bots 位于 `openbot.org.<org>.bot` 之下。成员可以读取和使用共享的 Bots。管理员还可以修改和分享它们。见 [权限](/zh-cn/docs/permissions)。
 

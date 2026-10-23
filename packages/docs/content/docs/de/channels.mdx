@@ -30,12 +30,12 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | Feld          | Was es tut                                                                                                                               |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `name`        | Ein kurzer Name.                                                                                                                         |
-| `bot`         | Der Bot, der antwortet. Er muss ein gemeinsamer, dauerhafter Bot der Organisation sein.                                                  |
+| `bot`         | Der Bot, der antwortet. Er muss ein gemeinsamer Bot der Organisation sein.                                                               |
 | `credentials` | Die Geheimnisse der Plattform. Siehe unten. Sie gehen hinein, kommen aber nie heraus. Die Antwort zeigt nur `set` und einen `hint`.      |
 | `linkPath`    | Optional. Ein Pfad auf deinem öffentlichen Origin, auf dem dein Client eine Person [ihr Konto verknüpfen](#dein-konto-verknüpfen) lässt. |
 | `enabled`     | Optional. `false` stoppt den Channel. Sein Webhook gibt dann `401` zurück.                                                               |
 
-Die Antwort ist `201` mit dem Channel. Gib seine `webhookUrl` an die Plattform. Der Aufrufer wird der **Actor** des Channel. Die Chats des Channel sind Sessions des Actors. Der Actor muss dem Bot Arbeit geben können.
+Die Antwort ist `201` mit dem Channel. Gib seine `webhookUrl` an die Plattform. Der Aufrufer wird der **Actor** des Channel. Die Chats des Channel sind [Chats](/de/docs/chats) des Actors. Der Actor muss dem Bot Arbeit geben können.
 
 `GET`, `PATCH` und `DELETE /v1/organization/channels/:channelId` lesen, ändern und löschen einen Channel. Eine Änderung braucht `expectedVersion`, die `version`, die du gelesen hast. Eine alte Version gibt `409` mit `ChannelConflict` zurück. Eine Änderung macht den Aufrufer zum Actor. Lass `credentials` weg, um die Geheimnisse zu behalten. Die Art eines Channel lässt sich nicht ändern.
 
@@ -78,14 +78,16 @@ Die Verknüpfung braucht einen `POST`. So kann niemand ein Konto verknüpfen, nu
 
 ---
 
-## Chats und Sessions
+## Chats eines Channel
 
-Jeder Chat ist eine dauerhafte Session mit `kind: "channel"`: eine Session für jeden Direkt-Chat und eine für jeden Gruppen-Chat. Liste sie als Actor mit `GET /v1/sessions?kind=channel` auf.
+Jeder Chat auf der Plattform ist ein dauerhafter Chat mit `kind: "channel"`: ein Chat für jeden Direkt-Chat und einer für jeden Gruppen-Chat. Der Chat hat den Namen des Chats als `title`. Liste sie als Actor mit `GET /v1/chats?kind=channel` auf.
 
 - In einem Direkt-Chat geht jede Nachricht an den Bot.
 - In einem Gruppen-Chat geht nur eine Nachricht an den Bot, die den Bot nennt. Jede Nachricht beginnt mit dem Namen der Person, die sie geschrieben hat. So weiß der Bot, wer spricht.
-- Eine Nachricht, die kommt, während der Bot noch arbeitet, wartet in der [Queue](/de/docs/sessions#steer-queue-und-unterbrechen). Sie läuft als eigener Turn.
+- Eine Nachricht einer Person, während der Bot für dieselbe Person arbeitet, geht in den laufenden Turn. Der Bot liest sie bei seinem nächsten Schritt.
+- Eine Nachricht einer anderen Person wartet in der [Inbox](/de/docs/chats#die-inbox) des Chats. Sie läuft als eigener Turn, nachdem der laufende Turn endet.
 - Während ein Turn läuft, zeigt der Bot seinen Text und ändert die Nachricht, während sie wächst. Eine lange Antwort geht in Teilen hinaus.
+- Die Antwort jedes Turns geht in den Chat. Das gilt auch für einen Turn, den eine [Mitteilung](/de/docs/chats#mitteilungen) startet, zum Beispiel das Ergebnis von Arbeit, die der Bot abgegeben hat. So kann der Bot sagen: "Ich sehe es mir an", und das Ergebnis später schreiben.
 - OpenBot verwirft ein Event, das die Plattform ein zweites Mal schickt.
 
 ### Jeder Turn arbeitet für seinen Sprecher
@@ -102,7 +104,7 @@ Eine Person braucht `channels.use` auf dem Channel, um mit seinem Bot zu spreche
 
 ## Freigaben im Chat
 
-Wenn ein Request auf eine Person wartet, schickt der Bot eine Karte mit drei Buttons: **Allow once** (einmal erlauben), **Allow for this Session** (für diese Session erlauben) und **Deny** (ablehnen). Pläne, die im [Plan-Modus](/de/docs/sessions#plan-modus) auf eine Freigabe warten, bekommen dieselbe Karte. Die Karte geht in den Direkt-Chat der Person, wenn sie auf diesem Channel ein Konto verknüpft hat. Sonst geht sie in den Chat der Arbeit.
+Wenn ein Request auf eine Person wartet, schickt der Bot eine Karte mit drei Buttons: **Allow once** (einmal erlauben), **Allow in this chat** (in diesem Chat erlauben) und **Deny** (ablehnen). **Allow in this chat** erstellt einen Grant mit dem Umfang `chat`. Siehe [Requests](/de/docs/requests#einen-request-beantworten). Pläne, die im [Plan-Modus](/de/docs/chats#plan-modus) auf eine Freigabe warten, bekommen dieselbe Karte. Die Karte geht in den Direkt-Chat der Person, wenn sie auf diesem Channel ein Konto verknüpft hat. Sonst geht sie in den Chat der Arbeit. Das gilt auch für einen Request aus Arbeit, die der Bot abgegeben hat, zum Beispiel aus einem Task-Chat für diesen Chat.
 
 Nur die Person, auf die der Request wartet, kann einen Button drücken. Wenn sich der Request ändert, zeigt die Karte die Entscheidung.
 
@@ -154,12 +156,12 @@ Channels liegen unter `openbot.org.<org>.channel`. Administratoren verwalten sie
 
 ## Fehler
 
-| Fehler                    | Status | Wann                                                                                                                          |
-| ------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| `ChannelInvalid`          | 400    | Der Bot ist kein gemeinsamer dauerhafter Bot, die Art hat sich geändert, oder die Plattform hat den Webhook nicht angenommen. |
-| `ChannelNotFound`         | 404    | Es gibt keinen solchen Channel.                                                                                               |
-| `ChannelLinkInvalid`      | 404    | Der Code ist unbekannt, schon benutzt oder zu alt. Frag den Bot noch einmal.                                                  |
-| `ChannelIdentityNotFound` | 404    | Es gibt kein solches verknüpftes Konto.                                                                                       |
-| `ChannelConflict`         | 409    | Der Channel hat sich geändert, seit du ihn gelesen hast.                                                                      |
-| `ChannelHookDenied`       | 401    | Die Signatur ist falsch oder zu alt, oder der Channel ist abgeschaltet.                                                       |
-| `ChannelsUnavailable`     | 503    | OpenBot erreicht seinen Speicher gerade nicht.                                                                                |
+| Fehler                    | Status | Wann                                                                                                              |
+| ------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------- |
+| `ChannelInvalid`          | 400    | Der Bot ist kein gemeinsamer Bot, die Art hat sich geändert, oder die Plattform hat den Webhook nicht angenommen. |
+| `ChannelNotFound`         | 404    | Es gibt keinen solchen Channel.                                                                                   |
+| `ChannelLinkInvalid`      | 404    | Der Code ist unbekannt, schon benutzt oder zu alt. Frag den Bot noch einmal.                                      |
+| `ChannelIdentityNotFound` | 404    | Es gibt kein solches verknüpftes Konto.                                                                           |
+| `ChannelConflict`         | 409    | Der Channel hat sich geändert, seit du ihn gelesen hast.                                                          |
+| `ChannelHookDenied`       | 401    | Die Signatur ist falsch oder zu alt, oder der Channel ist abgeschaltet.                                           |
+| `ChannelsUnavailable`     | 503    | OpenBot erreicht seinen Speicher gerade nicht.                                                                    |

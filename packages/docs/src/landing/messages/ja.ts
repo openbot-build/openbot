@@ -46,8 +46,8 @@ export default {
 		title: ["クライアントは自由に。", "主導権は人の手に。"],
 		items: [
 			{
-				title: "Session と Timeline",
-				text: "仕事は Session と Turn の中で進みます。Timeline はバージョンを残すので、戻ってやり直せます。",
+				title: "Bot ごとに 1 つのチャット",
+				text: "チャットは Bot ごとに 1 つです。Bot はいつもすぐに答え、長い仕事は並行して進みます。",
 			},
 			{
 				title: "承認",

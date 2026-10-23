@@ -21,16 +21,15 @@ OpenBot zeichnet jeden Aufruf eines Model auf. Du siehst, wie viele Tokens jedes
 
 OpenBot zeichnet jeden Aufruf eines Model auf, der eine Antwort bekommt. Jedes Usage event hat eine `source` (Quelle):
 
-| `source`         | Was den Aufruf gemacht hat                                                         |
-| ---------------- | ---------------------------------------------------------------------------------- |
-| `turn`           | Ein Schritt eines Model in einem Turn einer Session.                               |
-| `compaction`     | Eine Zusammenfassung alter Nachrichten, damit das Gespräch ins Model passt.        |
-| `session_memory` | Das [Memory](/de/docs/memory) einer Session.                                       |
-| `judge`          | Das Model, das [Rules](/de/docs/rules) prüft.                                      |
-| `bot_memory`     | Der [Memory-Bot](/de/docs/memory#bot-memory): was er lernt, ergänzt und antwortet. |
-| `other`          | Jeder andere Aufruf.                                                               |
+| `source`     | Was den Aufruf gemacht hat                                                             |
+| ------------ | -------------------------------------------------------------------------------------- |
+| `turn`       | Ein Schritt eines Model in einem Turn eines [Chats](/de/docs/chats).                   |
+| `compaction` | Eine Zusammenfassung alter Nachrichten, damit das Gespräch ins Model passt.            |
+| `judge`      | Das Model, das [Rules](/de/docs/rules) prüft.                                          |
+| `bot_memory` | Der [Memory-Bot](/de/docs/memory#der-memory-bot): was er lernt, ergänzt und antwortet. |
+| `other`      | Jeder andere Aufruf.                                                                   |
 
-Ein Usage event hat auch die Session, den Turn, den Bot, das Member und das User-Token, wenn der Aufruf sie hat. In einem [Channel](/de/docs/channels) ist das Member die Person, die die Nachricht geschrieben hat.
+Ein Usage event hat auch den Chat (`chatId`), den Turn, den Bot, das Member und das User-Token, wenn der Aufruf sie hat. In einem [Channel](/de/docs/channels) ist das Member die Person, die die Nachricht geschrieben hat.
 
 Manche Aufrufe zeichnet OpenBot nicht auf:
 
@@ -362,7 +361,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/platform/settings
 ```
 
-Jede Instanz von OpenBot hält ihre eigenen Buckets im Speicher. Mit mehr als einer Instanz kann ein Bereich auf jeder Instanz bis zur Rate verbrauchen. Die Arbeit einer Session läuft meistens auf einer Instanz.
+Jede Instanz von OpenBot hält ihre eigenen Buckets im Speicher. Mit mehr als einer Instanz kann ein Bereich auf jeder Instanz bis zur Rate verbrauchen. Ein Turn läuft auf einer Instanz, aber die Turns eines Chats und die Arbeit, die er abgibt, können auf vielen Instanzen laufen.
 
 ---
 

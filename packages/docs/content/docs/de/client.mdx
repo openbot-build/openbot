@@ -33,10 +33,11 @@ import { Effect } from "effect"
 
 const program = Effect.gen(function* () {
 	const client = yield* Client
-	const view = yield* client.api.sessions.createSession({
-		payload: { title: "Release notes" },
+	const receipt = yield* client.api.chats.sendBotMessage({
+		params: { botId },
+		payload: { input: "Write the release notes." },
 	})
-	return view.session.id
+	return receipt.chat
 })
 
 const id = await Effect.runPromise(
@@ -67,25 +68,25 @@ Der Client speichert das Token nie und setzt es nie in eine URL. `onUnauthorized
 Jede Operation liegt unter `client.api.<group>.<operation>`. Die Namen sind dieselben wie in der [API-Referenz](/docs/api/).
 Jeder Aufruf nimmt ein Objekt mit diesen optionalen Feldern:
 
-| Feld      | Was es enthält                           |
-| --------- | ---------------------------------------- |
-| `params`  | Werte im Pfad, zum Beispiel `sessionId`. |
-| `query`   | Werte im Query-String.                   |
-| `payload` | Den JSON-Body.                           |
+| Feld      | Was es enthält                        |
+| --------- | ------------------------------------- |
+| `params`  | Werte im Pfad, zum Beispiel `chatId`. |
+| `query`   | Werte im Query-String.                |
+| `payload` | Den JSON-Body.                        |
 
 ```ts
-const sessions = yield * client.api.sessions.listSessions({ query: {} })
+const chats = yield * client.api.chats.listChats({ query: {} })
 
 const view =
 	yield *
-	client.api.sessions.getSession({
-		params: { sessionId: id },
+	client.api.chats.getChat({
+		params: { chatId: id },
 	})
 
-const archived =
+const tasks =
 	yield *
-	client.api.sessions.listSessions({
-		query: { archived: "true" },
+	client.api.chats.listChats({
+		query: { kind: "task" },
 	})
 ```
 
@@ -93,7 +94,8 @@ Einige Gruppen und ihre Seiten:
 
 | Gruppe           | Nutze sie, um                                                             | Referenz                                                      |
 | ---------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `sessions`       | Sessions zu erstellen, Turns zu starten und Ergebnisse zu lesen.          | [Sessions](/docs/api/operations/tags/sessions/)               |
+| `chats`          | Mit Bots zu sprechen und Chats und Ergebnisse zu lesen.                   | [Chats](/docs/api/operations/tags/chats/)                     |
+| `delegations`    | Die Arbeit zu lesen und zu stoppen, die Bots abgegeben haben.             | [Delegations](/docs/api/operations/tags/delegations/)         |
 | `bots`           | Bots zu erstellen und zu verwalten.                                       | [Bots](/docs/api/operations/tags/bots/)                       |
 | `requests`       | Die Requests deiner Bots zu beantworten.                                  | [Requests](/docs/api/operations/tags/requests/)               |
 | `apps`           | Eine App unter einer Adresse zu finden.                                   | [App discovery](/docs/api/operations/tags/app-discovery/)     |
@@ -113,7 +115,7 @@ Jede Operation braucht eine Berechtigung. Ein Aufruf ohne sie schlägt mit `Perm
 
 Jeder fehlgeschlagene Aufruf gibt einen typisierten Fehler. Der Typ `ClientError` listet sie alle auf:
 
-- **API-Fehler** aus dem Vertrag. Jeder hat einen `_tag`, zum Beispiel `SessionNotFound` oder `SessionConflict`.
+- **API-Fehler** aus dem Vertrag. Jeder hat einen `_tag`, zum Beispiel `ChatNotFound` oder `ChatConflict`.
 - **Schema-Fehler** (`SchemaError`), wenn eine Antwort nicht zum Vertrag passt.
 - **HTTP-Client-Fehler**, wenn das Netzwerk ausfällt.
 
@@ -122,9 +124,9 @@ Nutze `Effect.catchTag`, um eine Art von Fehler zu behandeln:
 ```ts
 const view =
 	yield *
-	client.api.sessions
-		.getSession({ params: { sessionId: id } })
-		.pipe(Effect.catchTag("SessionNotFound", () => Effect.succeed(undefined)))
+	client.api.chats
+		.getChat({ params: { chatId: id } })
+		.pipe(Effect.catchTag("ChatNotFound", () => Effect.succeed(undefined)))
 ```
 
 Häufige Fehler bei der Anmeldung:
@@ -204,17 +206,17 @@ const program = Effect.gen(function* () {
 	const client = yield* Client
 	const opened = yield* client.api.appViews.open({
 		params: { operationId },
-		payload: { sessionId, itemId },
+		payload: { chatId, itemId },
 	})
 	return yield* AppViews.make(opened, accountId, () => refresh())
 })
 ```
 
-| Argument   | Was es ist                                                                                                                |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `opened`   | Die Ansicht, die `appViews.open` zurückgegeben hat.                                                                       |
-| `owner`    | Eine feste ID des angemeldeten Kontos. Sie hält Ansichten verschiedener Konten getrennt.                                  |
-| `onChange` | Optional. Läuft, wenn eine Aktion in der Ansicht ihren Status ändert. Nutze es, um Requests und die Session neu zu laden. |
+| Argument   | Was es ist                                                                                                             |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `opened`   | Die Ansicht, die `appViews.open` zurückgegeben hat.                                                                    |
+| `owner`    | Eine feste ID des angemeldeten Kontos. Sie hält Ansichten verschiedener Konten getrennt.                               |
+| `onChange` | Optional. Läuft, wenn eine Aktion in der Ansicht ihren Status ändert. Nutze es, um Requests und den Chat neu zu laden. |
 
 Das Ergebnis funktioniert mit `mount` aus `@openbot-build/protocol/McpApps`. Das zeigt die Ansicht in einem iframe. Siehe [Protokoll](/de/docs/protocol).
 
@@ -230,12 +232,12 @@ Wenn du die Ansicht schließt, hört der Client mit dem Prüfen auf. Eine Aktion
 
 ## Beichten zeigen
 
-Der Bot nutzt das Tool `confide`, um zu sagen, wie seine Arbeit läuft, und der [Memory-Bot](/de/docs/memory#wie-der-bot-lernt) antwortet ihm. Personen dürfen das lesen: `GET /v1/sessions/:sessionId/confessions` listet es, und die Aufrufe sind im Verlauf der Session. Aber der Bot spricht dort freier als in seinen Antworten. Mach es darum nicht zu leicht, sie zu lesen:
+Der Bot nutzt das Tool `confide`, um zu sagen, wie seine Arbeit läuft, und der [Memory-Bot](/de/docs/memory#wie-der-bot-lernt) antwortet ihm. Personen dürfen das lesen: `GET /v1/chats/:chatId/confessions` listet es, und die Aufrufe sind im Verlauf des Chats. Aber der Bot spricht dort freier als in seinen Antworten. Mach es darum nicht zu leicht, sie zu lesen:
 
-- Zeige Beichten nicht im Chat. Klappe die Aufrufe von `confide` im Verlauf zu, und sende keine Benachrichtigung dazu.
-- Lege sie an einen Ort, den eine Person absichtlich öffnen muss, zum Beispiel in einen zugeklappten Teil der Details einer Session.
+- Zeige Beichten nicht im Gespräch. Klappe die Aufrufe von `confide` im Verlauf zu, und erzähle Personen in keiner Nachricht davon.
+- Lege sie an einen Ort, den eine Person absichtlich öffnen muss, zum Beispiel in einen zugeklappten Teil der Details eines Chats.
 - Sage vor dem Öffnen in einem Satz, was sie sind: ein Ort, an dem der Bot über seine Arbeit spricht und an dem er nicht erwartet, zitiert zu werden.
 - Zeige die Worte einer Beichte nicht wieder dem Bot, zum Beispiel in einer späteren Nachricht. Wenn der Bot merkt, dass Personen zitieren, was er anvertraut, vertraut er sich nicht mehr an.
-- Wenn eine Beichte etwas betrifft, das eine Person reparieren muss, wie eine gelöschte Datei, führe die Person zu den Items und Aktionen der Session, nicht zur Beichte.
+- Wenn eine Beichte etwas betrifft, das eine Person reparieren muss, wie eine gelöschte Datei, führe die Person zu den Items und Aktionen des Chats, nicht zur Beichte.
 
 Der Memory-Bot bittet den Bot auch, der Person offen von Fehlern zu erzählen. So kommen die wichtigen Dinge meist im Chat zur Sprache.

@@ -76,7 +76,7 @@ return busy.filter((event) => event.attendees > 10).map((event) => event.title)
 
 ## 当调用需要决定时
 
-有些 App 调用需要决定，比如会写入数据的工具。这时程序停在这次调用上，Turn 进入等待。[请求](/zh-cn/docs/requests)的 `app` 中是这次 App 调用，`code` 中是这个程序：
+有些 App 调用需要决定，比如会写入数据的工具。这时程序停在这次调用上。Turn 不会等待：程序的工具调用马上得到一个待定的结果，Bot 继续工作。[请求](/zh-cn/docs/requests)的 `app` 中是这次 App 调用，`code` 中是这个程序：
 
 ```json
 {
@@ -91,7 +91,7 @@ return busy.filter((event) => event.attendees > 10).map((event) => event.title)
 }
 ```
 
-做出决定后，OpenBot 从头再运行一次程序。已经运行过的每次调用都会给出保存下来的结果，OpenBot 不会再把它发给 App。然后程序会越过刚才等待的调用继续运行。程序结束时，Turn 得到结果并继续。
+做出决定后，OpenBot 在后台从头再运行一次程序。已经运行过的每次调用都会给出保存下来的结果，OpenBot 不会再把它发给 App。然后程序会越过刚才等待的调用继续运行。程序结束时，它的结果作为[通知](/zh-cn/docs/chats#通知)回到这个 Chat，Bot 带着结果继续工作。
 
 只有程序每次都按相同的顺序做相同的调用，这种方式才行得通。所以程序在 `Date.now()` 中看到的是固定的时间，`Math.random()` 每次运行都给出相同的数字。如果程序做了和上次不同的调用，OpenBot 会以 `ReplayMismatch` 停止它。程序等待期间连接发生变化时，就可能出现这种情况。不会有任何调用被误发。
 
@@ -99,12 +99,12 @@ return busy.filter((event) => event.attendees > 10).map((event) => event.title)
 
 ## 读取 code run
 
-`GET /v1/sessions/:sessionId/code-runs` 列出一个 Session 的程序。`GET /v1/code-runs/:id` 读取一个程序。两者都需要 `apps.use`。列表还需要对该 Session 的 `sessions.read`。你只能看到你自己的 Session 中的程序。
+`GET /v1/chats/:chatId/code-runs` 列出一个 Chat 的程序。`GET /v1/code-runs/:id` 读取一个程序。两者都需要 `apps.use`。列表还需要对该 Chat 的 `chats.read`。你只能看到你自己的 Chat 中的程序。
 
 ```json
 {
 	"id": "8f1c…",
-	"session": "c81d…",
+	"chat": "chat_c81d…",
 	"turn": "t-77",
 	"callId": "call-9",
 	"status": "Completed",

@@ -16,7 +16,7 @@ description: 邀请其他人在他们自己的组织中使用你的某个 Bot，
 
 ## 邀请别人
 
-你需要这个 Bot 上的 `bots.share`。成员可以分享自己的 Bots。管理员还可以分享组织的共享 Bots。只有长期存在的顶层 Bot 才能被分享：它由一个成员或组织拥有，并且没有被归档。
+你需要这个 Bot 上的 `bots.share`。成员可以分享自己的 Bots。管理员还可以分享组织的共享 Bots。只有顶层 Bot 才能被分享：它由一个成员或组织拥有，并且没有被归档。
 
 要邀请一个人，请发送这个人的邮箱。这个邀请的有效期是 7 天，和[组织邀请](/zh-cn/docs/organization#邀请)一样：
 
@@ -95,7 +95,6 @@ curl -X POST -H "Authorization: Bearer $THEIR_TOKEN" \
 ```json
 {
 	"id": "bot_e40b",
-	"kind": "persistent",
 	"owner": { "_tag": "Member", "userId": "u_456" },
 	"name": "Guide",
 	"source": { "organizationId": "org_3c7e", "bot": "bot_7d2c" }
@@ -104,15 +103,15 @@ curl -X POST -H "Authorization: Bearer $THEIR_TOKEN" \
 
 成员像使用自己的 Bots 一样使用它：
 
-- 他们用它启动 [Sessions](/zh-cn/docs/sessions)，并且可以把它设为自己的默认 Bot。
+- 他们在自己的组织中，用自己的 [Chat](/zh-cn/docs/chats) 和它说话，并且可以把它设为自己的默认 Bot。
 - 它使用他们的权限、他们连接的 [Apps](/zh-cn/docs/apps)，以及他们的其他 Bots。它可以把工作交给他们的 Bots。
 - 它的 [requests](/zh-cn/docs/requests) 会发给这个成员。他们的决定、[Grants](/zh-cn/docs/requests#回答请求) 和 [Rules](/zh-cn/docs/rules) 只在他们的组织中有效。你的只在你的组织中有效。
-- 他们的组织为模型付费。如果你的 Bot 指定了一个他们的组织没有的模型，Session 会使用他们组织的默认模型。
-- 你永远看不到他们的 Sessions。
+- 他们的组织为模型付费。如果你的 Bot 指定了一个他们的组织没有的模型，他们的 Chat 不会使用它。服务器有默认模型时，Chat 会使用这个默认模型。
+- 你永远看不到他们的 Chats。
 
 名字、角色、指令和模型总是来自你的 Bot。你修改它们时，每个关联 Bot 也会一起改变。成员不能修改它们。成员可以修改 `planApproval`。
 
-这个 Bot 在你的组织中保存[一个记忆池](/zh-cn/docs/memory#bot-记忆)。它在某个成员的组织中学到的内容属于这个成员，并且只在那个组织中有效。没有人能读取关于另一个人的记忆：你不能，其他成员也不能。你可以用 purge 删除一个成员留下的内容，而不用读取它。只有你能管理记忆 Bot。
+这个 Bot 在你的组织中保存[一个记忆池](/zh-cn/docs/memory)。它在某个成员的组织中学到的内容属于这个成员，并且只在那个组织中有效。没有人能读取关于另一个人的记忆：你不能，其他成员也不能。你可以用 purge 删除一个成员留下的内容，而不用读取它。只有你能管理记忆 Bot。
 
 ---
 

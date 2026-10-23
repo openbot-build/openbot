@@ -48,8 +48,8 @@ export default {
 		title: ["Pakai klienmu sendiri.", "Manusia tetap memegang kendali."],
 		items: [
 			{
-				title: "Session dan Timeline",
-				text: "Pekerjaan berjalan di dalam Session dan Turn. Timeline menyimpan versi, jadi kamu bisa kembali dan mencoba lagi.",
+				title: "Satu chat dengan setiap Bot",
+				text: "Kamu punya satu chat dengan setiap Bot. Bot selalu menjawab saat itu juga, dan pekerjaan panjang berjalan paralel.",
 			},
 			{
 				title: "Persetujuan",

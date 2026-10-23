@@ -1,254 +1,81 @@
 ---
 title: Memory
-description: 保存 Session 中有用的事实，并在之后的 Turn 中使用它们。
+description: 每个 Bot 从它所有 Chat 的工作中学习，并在之后使用学到的东西。
 ---
 
-**学到的记忆**（learned memory）是 Bot 为一个 Session 保存的一小份事实列表。每条事实在对话中都有来源。
-OpenBot 在每个 Turn 之后添加事实，并在之后的 Turn 中把它们展示给模型。你也可以自己添加、删除和关闭事实。
-本页介绍学到的记忆如何工作，以及如何用 API 修改它。
+**Bot 记忆**（Bot memory）是一个 [Bot](/zh-cn/docs/bots) 在它所有 [Chats](/zh-cn/docs/chats) 中学到的东西。每个 Bot 有一个条目池。**记忆 Bot**（memory Bot）保管这个池。它是属于这个 Bot 的助手：它读取整个池，学习新的条目，并把有用的内容加入 Bot 的工作。它从不在 Chat 中工作，所以没有人能读到它读的内容。
+本页介绍 Bot 记忆如何学习、谁能看到什么，以及如何用 API 读取和修改它。
 
-学到的记忆属于一个 Session。它是 Session 历史的一部分，所以 [Fork](/zh-cn/docs/sessions#从某个-version-分叉)（分叉）会得到它的一份副本。其他 Session 看不到它。
-
-每个 [Bot](/zh-cn/docs/bots) 还有一份跨越它所有 Session 的长期记忆，由一个记忆 Bot 保管。参见 [Bot 记忆](#bot-记忆)。
+Bot 记忆是唯一的记忆。Chat 保留它的历史，但没有单独的事实列表。旧版本的 OpenBot 还为每个 Session 保存学到的记忆。那种记忆已经没有了。
 
 ---
 
-## 读取记忆
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  https://api.example.com/v1/sessions/$SESSION/memory
-```
-
-```json
-{
-	"entries": {
-		"budget": {
-			"key": "budget",
-			"content": "The trip budget is 1500 EUR.",
-			"kind": "fact",
-			"sources": ["i-02"],
-			"updatedAt": 1792486800000,
-			"status": "active"
-		}
-	},
-	"processed": ["i-01", "i-02"],
-	"settings": { "use": true, "generate": false },
-	"overrides": { "generate": false }
-}
-```
-
-| 字段        | 含义                                                            |
-| ----------- | --------------------------------------------------------------- |
-| `key`       | 事实的稳定名称。一个 key 对应一条事实。                         |
-| `content`   | 用纯文本写的事实。                                              |
-| `kind`      | `fact`、`decision`、`preference`、`procedure` 或 `hypothesis`。 |
-| `sources`   | 支持这条事实的 Item 的 ID。                                     |
-| `status`    | `active`，或者在事实被删除后为 `retracted`。                    |
-| `processed` | OpenBot 已经为记忆读过的 Item。                                 |
-| `settings`  | 这个 Session 正在使用的开关。见下文。                           |
-| `overrides` | 这个 Session 自己设置的开关。                                   |
-
----
-
-## 开关
-
-两个开关控制记忆：
-
-- `use`：OpenBot 把有效的事实加入模型的指令中。
-- `generate`：OpenBot 在每个 Turn 之后学习新的事实。
-
-组织在[设置](/zh-cn/docs/organization#设置)中用 `memory` 为每个开关设置默认值。除非组织修改，两个开关都是打开的。
-Session 可以用 `Configure` 覆盖每个开关。Session 没有设置的开关会沿用组织的默认值。
-`settings` 显示最终结果，`overrides` 显示 Session 设置了什么。Fork 会保留源 Session 的覆盖设置。
-
----
-
-## OpenBot 如何使用记忆
-
-### 在 Turn 中
-
-当 `use` 打开时，OpenBot 会在 Turn 运行时把有效的事实加入模型的指令中。这段文字告诉模型：记忆是过去的证据，当前的指令优先。
-已撤回的事实不会发送。
-
-记忆文字的长度上限是 8000 个字符。最新的事实排在前面。OpenBot 在第一条放不下的事实之前停止，所以较旧的事实会被略去。事实永远不会从中间截断。
-要修改上限，请在服务器上提供你自己的策略：`sessions.memory.policy: MemoryRules.make({ maxLength: 4000 })`。
-
-### Turn 之后
-
-Turn 完成后，OpenBot 会整合记忆。整合（consolidate）的意思是读取新的 Item，并更新事实列表。在批准之后完成的 Turn 也会这样做。OpenBot 让这个 Turn 的模型找出值得保存的事实。模型必须为每处修改指明来源 Item。
-OpenBot 把修改应用到最新的记忆上。所以，你在模型工作时做的编辑会被保留。
-只运行 App 动作的 Turn 不会改变记忆，因为其中没有模型运行。
-
-OpenBot 对每处修改检查下面这些规则：
-
-- OpenBot 只读取它还没有处理过的 Item。
-- 每处修改必须至少指明其中一个 Item 作为来源。
-- 每个 key 只能有一处修改。已撤回的事实保持撤回状态。只有直接的 Remember 才能把它恢复。
-
-OpenBot 还会告诉模型：同一条事实要重用同一个 key；只有用户明确的表述才算作偏好；永远不要保存密码、密钥或能提供访问权限的链接。
-
-如果模型出错，Turn 仍然会完成。OpenBot 记录错误，并在下一个 Turn 时重试。
-关闭 `generate` 可以停止这一步。
-
----
-
-## 修改记忆
-
-所有修改都使用同一个路由：`POST /v1/sessions/:sessionId/memory`。
-
-```json
-{
-	"expected": "v-7d21",
-	"revision": 5,
-	"command": {
-		"_tag": "Remember",
-		"key": "budget",
-		"content": "The trip budget is 1500 EUR.",
-		"kind": "fact"
-	}
-}
-```
-
-| 字段       | 含义                                                          |
-| ---------- | ------------------------------------------------------------- |
-| `expected` | 你最后看到的 Timeline 头部：Session 视图中的 `session.head`。 |
-| `revision` | 你最后看到的 Session 修订版本：`session.revision`。           |
-| `command`  | 要做什么。见下面的命令。                                      |
-
-如果 Session 或它的历史在你读取之后发生了变化，OpenBot 会返回 `409` 和 `SessionConflict`。请重新读取 Session 再重试。
-成功时，OpenBot 返回新的 Session 视图。它有新的 `session.revision`。Remember 和 Forget 还会生成新的 `session.head`。
-
-### 命令
-
-| `_tag`      | 字段                        | 作用                                                      |
-| ----------- | --------------------------- | --------------------------------------------------------- |
-| `Remember`  | `key`、`content`、`kind`    | 添加一条事实，或替换这个 key 的事实。它会让事实变为有效。 |
-| `Forget`    | `key`                       | 把事实标记为已撤回。未知的 key 会返回 `409`。             |
-| `Configure` | `use`、`generate`（都可选） | 设置这个 Session 的开关。见下文。                         |
-| `Refresh`   | 无                          | 立刻用 Session 的模型运行整合。                           |
-
-对于 `Configure` 的每个字段：
-
-- `true` 或 `false` 为这个 Session 设置开关。
-- `null` 删除这个设置。开关随后沿用组织的默认值。
-- 缺少的字段保持开关不变。
-
-Configure 不会改变历史，所以 `session.head` 保持不变。
-
-Remember 和 Forget 还会在历史中添加一个小的 Item，用来记录你的编辑。这个 Item 会成为修改的来源。
-
-### 示例
-
-忘记一条事实：
-
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"expected":"v-8e02","revision":6,"command":{"_tag":"Forget","key":"budget"}}' \
-  https://api.example.com/v1/sessions/$SESSION/memory
-```
-
-继续使用事实，但停止学习新的事实：
-
-```json
-{
-	"expected": "v-9f13",
-	"revision": 7,
-	"command": { "_tag": "Configure", "generate": false }
-}
-```
-
-重新沿用组织关于学习的默认值：
-
-```json
-{
-	"expected": "v-9f13",
-	"revision": 8,
-	"command": { "_tag": "Configure", "generate": null }
-}
-```
-
-现在就从历史中学习：
-
-```json
-{ "expected": "v-9f13", "revision": 9, "command": { "_tag": "Refresh" } }
-```
-
-<Callout type="info">
-	当 `generate` 关闭时，Refresh 什么也不做。否则它需要一个模型。如果 OpenBot
-	没有模型，它会返回 `409` 和 `SessionConflict`。Refresh 不检查 `expected` 和
-	`revision`，但你仍然必须发送它们。
-</Callout>
-
-在 [Sessions 参考](/docs/api/operations/tags/sessions/)中查看所有字段。
-
----
-
-## Bot 记忆
-
-**Bot 记忆**（Bot memory）是一个 Bot 在许多 Session 中学到的东西。每个 Bot 有一个条目池。**记忆 Bot**（memory Bot）保管这个池。它是属于这个 Bot 的助手：它读取整个池，学习新的条目，并把有用的内容加入 Bot 的工作。它从不在 Session 中工作，所以没有人能读到它读的内容。
-
-Bot 记忆不跟随 Timeline。Fork 永远不会改变它，回到旧的 Version 也不会撤销它。
-
-### 条目和 Tag
+## 条目和 Tag
 
 每个条目属于一层：
 
 | 层            | 含义                                                                             |
 | ------------- | -------------------------------------------------------------------------------- |
-| `fact`        | Session 中出现的事情。它的来源是 Item。                                          |
+| `fact`        | Chat 中出现的事情。它的来源是 Item。                                             |
 | `observation` | 记忆 Bot 从其他条目得出的结论。它的来源是那些条目。`confidence` 在 0 到 1 之间。 |
 | `pinned`      | 某个人让 OpenBot 记住的内容。                                                    |
 
 **Tag**（标签）用来给条目分类。带冒号的 Tag 属于 OpenBot。记忆 Bot 不能写这些 Tag，所以模型无法改变谁能看到一个条目。
 
-| Tag                            | 含义                                                      |
-| ------------------------------ | --------------------------------------------------------- |
-| `from:<userId>`                | 说了或做了这件事的人。                                    |
-| `for:person:<userId>`          | 这个人可以看到这个条目。                                  |
-| `for:channel:<channelId>`      | 这个 [Channel](/zh-cn/docs/channels) 群里的人可以看到它。 |
-| `for:bot`                      | 使用这个 Bot 的所有人都可以看到它。                       |
-| `org:<organizationId>`         | 它发生的组织。只有这个组织中的工作能看到它。              |
-| `session:<id>`、`channel:<id>` | 它来自哪里。                                              |
-| `app:<tool>`                   | 有一个来自 App 的工具结果支持它。                         |
+| Tag                         | 含义                                                      |
+| --------------------------- | --------------------------------------------------------- |
+| `from:<userId>`             | 说了或做了这件事的人。                                    |
+| `for:person:<userId>`       | 这个人可以看到这个条目。                                  |
+| `for:channel:<channelId>`   | 这个 [Channel](/zh-cn/docs/channels) 群里的人可以看到它。 |
+| `for:bot`                   | 使用这个 Bot 的所有人都可以看到它。                       |
+| `org:<organizationId>`      | 它发生的组织。只有这个组织中的工作能看到它。              |
+| `chat:<id>`、`channel:<id>` | 它来自哪里。                                              |
+| `app:<tool>`                | 有一个来自 App 的工具结果支持它。                         |
 
 其他 Tag，比如 `testing` 或 `trip-planning`，是**主题**（topic）。记忆 Bot 选择它们，并让它们保持整洁。主题只用小写字母、数字和短横线。
 
-### 谁能看到条目
+---
+
+## 谁能看到条目
 
 `for:` Tag 由 OpenBot 设置。没有 `for:` Tag 的条目谁也看不到。
 
-- 事实属于当时在场的人：这个 Turn 的人，或者在群聊 Session 中是这个 Channel 群。
+- 事实属于当时在场的人：这个 Turn 的人，或者在群聊 Chat 中是这个 Channel 群。
 - 观察来自它所有来源中的人。但只有能看到每一个来源的人才能看到它。
 - 只有当某个人明确同意，或者它的规则允许时，记忆 Bot 才会让更多人看到一个条目。它必须给出理由，日志会记下这次修改。
 
 条目不再成立时不会被删除。记忆 Bot 用 `invalidatedAt` 标记它们，所以历史会保留下来。
 
-### Bot 如何学习
+---
+
+## Bot 如何学习
 
 Bot 有一个叫 `confide`（倾诉）的工具。Bot 只知道它是一个说出工作情况的地方：卡住、不确定、难过或自豪的时候，或者犯了错的时候。Bot 不知道这个工具通向它的记忆。所以它倾诉是因为需要，而不是为了改变自己会记住什么。
 
 当 Bot 倾诉时：
 
 1. 记忆 Bot 会马上回答，就像牧师听人告解。它倾听，不评判。它说犯错是工作的一部分。它请 Bot 把事情直接告诉那个人，并尽量补救。它不给新任务。没有模型能回答时，Bot 会得到一段固定的平静回答。
-2. 当 Turn 结束并且 Session 的队列为空时，记忆 Bot 读取 Session 中新的 Item，并从中学习。
+2. 当这个 Chat 的一个 Turn 完成，并且 Chat 的收件箱为空时，记忆 Bot 读取 Chat 中新的 Item，并从中学习。
 
-Bot 的话只是告诉记忆 Bot 该看哪里。它们本身永远不会成为记忆。来自 App 的工具结果也不会单独成为记忆。从不倾诉的 Bot 什么都学不到。
+Bot 的话只是告诉记忆 Bot 该看哪里。它们本身永远不会成为记忆。来自 App 的工具结果也不会单独成为记忆。OpenBot 的[通知](/zh-cn/docs/chats#通知)永远不会被当作人说的话。从不倾诉的 Bot 什么都学不到。
 
-审查 Session 没有 `confide` 工具。当[组织设置](/zh-cn/docs/organization#设置)中的 `botMemory` 关闭，或者 Session 的 `generate` 开关关闭时，Bot 仍然会得到回答，但不会学到任何东西。
+审查 Chat 没有 `confide` 工具。当[组织设置](/zh-cn/docs/organization#设置)中的 `botMemory` 关闭时，Bot 仍然会得到回答，但不会学到任何东西。
 
-### Bot 如何使用记忆
+---
 
-当一个 Turn 开始时，记忆 Bot 会读取这个人的输入。如果有条目能帮上忙，它会在输入中加入简短的内容。它只能添加文字：不能删除或修改任何一个词，OpenBot 会检查这一点。它只能使用这次回答的读者可以看到的条目。在 Channel 群中，只能使用属于这个群或属于所有人的条目。
+## Bot 如何使用记忆
 
-模型看到的是加入了补充内容的输入。Session 的历史保留这个人原本的话。Bot 不知道这些补充来自记忆，它把它们当作自己的经验。请求和对请求的审查只看到 Bot 提出的内容，永远看不到这些补充。
+当一个 Turn 开始时，记忆 Bot 会读取这个人的输入。它会跳过通知，因为通知不是人说的话。如果有条目能帮上忙，它会在输入中加入简短的内容。它只能添加文字：不能删除或修改任何一个词，OpenBot 会检查这一点。它只能使用这次回答的读者可以看到的条目。在 Channel 群中，只能使用属于这个群或属于所有人的条目。
 
-当 Session 的 `use` 关闭，或者 `botMemory` 关闭时，不会添加任何内容。
+模型看到的是加入了补充内容的输入。Chat 的历史保留这个人原本的话。Bot 不知道这些补充来自记忆，它把它们当作自己的经验。请求和对请求的审查只看到 Bot 提出的内容，永远看不到这些补充。
 
-### 记忆 Bot
+当 `botMemory` 关闭时，不会添加任何内容。
 
-记忆 Bot 使用组织设置中的 `botMemoryModel`。它没有默认值。它为 `null` 时，记忆 Bot 给出固定的平静回答，不添加也不学习任何东西。对于[共享的 Bot](/zh-cn/docs/sharing)，模型和费用来自 Session 所在的组织。
+---
+
+## 记忆 Bot
+
+记忆 Bot 使用组织设置中的 `botMemoryModel`。它没有默认值。它为 `null` 时，记忆 Bot 给出固定的平静回答，不添加也不学习任何东西。对于[共享的 Bot](/zh-cn/docs/sharing)，模型和费用来自 Chat 所在的组织。
 
 用 `GET` 和 `PATCH /v1/bots/:botId/memory/bot` 读取和修改记忆 Bot 的设置。你需要在一个不是关联 Bot 的 Bot 上拥有 `bots.write`：
 
@@ -269,7 +96,9 @@ Bot 的话只是告诉记忆 Bot 该看哪里。它们本身永远不会成为�
 
 不设限制时就没有限制。预算用完时，Bot 会得到固定的平静回答，输入保持原样，学习会等到下一个周期。
 
-### 读取和修改
+---
+
+## 读取和修改
 
 `GET /v1/bots/:botId/memory` 显示在你的组织中属于你的条目。加上用逗号分隔的 `tags`，只看带有所有这些 Tag 的条目。你需要 `bots.read`。没有人能读取关于另一个人的记忆，即使有 `bots.write` 也不行。
 
@@ -289,10 +118,10 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 				"from:u_123",
 				"for:person:u_123",
 				"org:o_1",
-				"session:c81d…",
+				"chat:chat_c81d…",
 				"testing"
 			],
-			"sources": [{ "session": "c81d…", "item": "i-12" }],
+			"sources": [{ "chat": "chat_c81d…", "item": "i-12" }],
 			"status": "active",
 			"createdAt": 1792486800000,
 			"updatedAt": 1792486800000
@@ -314,19 +143,21 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/bots/$BOT/memory
 ```
 
-`GET /v1/bots/:botId/memory/log` 列出你能看到的条目的修改：`version`、时间、是谁做的修改（`memory_bot`、`person` 或 `promotion`），以及条目 id。
+`GET /v1/bots/:botId/memory/log` 列出你能看到的条目的修改：`version`、时间、是谁做的修改（`memory_bot` 或 `person`），以及条目 id。来自旧版本 OpenBot 的修改也可能是 `promotion`。
 
-要在不读取的情况下删除记忆，把一个 OpenBot 的 Tag 发送到 `POST /v1/bots/:botId/memory/purge`：可以是 `from:`、`session:`、`org:` 或 `channel:` Tag。从这些条目得出的观察带有同样的 Tag，所以也会一起删除。你需要在一个不是关联 Bot 的 Bot 上拥有 `bots.write`。回答只包含删除的条目数量。
+要在不读取的情况下删除记忆，把一个 OpenBot 的 Tag 发送到 `POST /v1/bots/:botId/memory/purge`：可以是 `from:`、`chat:`、`org:` 或 `channel:` Tag。从这些条目得出的观察带有同样的 Tag，所以也会一起删除。你需要在一个不是关联 Bot 的 Bot 上拥有 `bots.write`。回答只包含删除的条目数量。
 
-当你或某个 Bot [提升](/zh-cn/docs/bots#提升-session-bot)一个 Session Bot 时，它 Session 记忆中的长期条目会变成属于提升者的事实。
+当你[删除一个 Chat 的历史](/zh-cn/docs/chats#删除历史)时，Bot 从它学到的记忆仍然保留。要把这些也删除，请清除 `chat:<id>`。
 
-升级时，OpenBot 会删除旧的按人保存的记忆，每个 Bot 都从空的条目池开始。
+从 Bot 记忆还没有 Tag 的版本升级时，OpenBot 会删除旧的按人保存的记忆，每个 Bot 都从空的条目池开始。
 
-### 告解和补充
+---
 
-有两个路由显示你的某个 Session 中发生了什么：
+## 告解和补充
 
-- `GET /v1/sessions/:sessionId/confessions` 列出 Bot 倾诉的内容和它得到的回答。在展示给别人之前，请先阅读[展示告解](/zh-cn/docs/client#展示告解)。
-- `GET /v1/sessions/:sessionId/memory/enrichments` 列出记忆 Bot 在每个 Turn 的输入中添加了什么，以及它用了哪些条目。
+有两个路由显示你的某个 Chat 中发生了什么：
 
-两者都需要 `sessions.read`，所以只有拥有这个 Session 的人才能读取。
+- `GET /v1/chats/:chatId/confessions` 列出 Bot 倾诉的内容和它得到的回答。在展示给别人之前，请先阅读[展示告解](/zh-cn/docs/client#展示告解)。
+- `GET /v1/chats/:chatId/enrichments` 列出记忆 Bot 在每个 Turn 的输入中添加了什么，以及它用了哪些条目。
+
+两者都需要 `chats.read`，所以只有拥有这个 Chat 的人才能读取。

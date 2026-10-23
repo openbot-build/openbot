@@ -1,10 +1,11 @@
 ---
 title: Delegation
-description: Wie Bots anderen Bots Arbeit geben und die Ergebnisse zurückbekommen.
+description: Wie Bots Arbeit an andere Bots oder an sich selbst geben und die Ergebnisse zurückbekommen.
 ---
 
-**Delegation** heißt: Ein Bot gibt eine Aufgabe an einen anderen Bot. Der andere Bot arbeitet in seiner eigenen Session, mit seinem eigenen Kontext. Nur ein kurzer Auftrag geht nach unten, und nur ein kurzes Ergebnis kommt zurück. So bleibt jeder Bot bei seiner eigenen Arbeit.
-Diese Seite zeigt die Bot-Werkzeuge, den Auftrag und das Ergebnis, und wie du abgegebene Arbeit beobachtest.
+**Delegation** heißt, dass ein Bot einem Bot eine Aufgabe gibt. Die Aufgabe kann an einen anderen Bot gehen oder an denselben Bot. Die Arbeit läuft in ihrem eigenen **Task-Chat**, mit ihrem eigenen Kontext, zur selben Zeit wie andere Arbeit. Der Bot, der die Arbeit gegeben hat, wartet nicht. Er macht weiter, oder er beendet seine Antwort. Wenn die Arbeit endet, kommt das Ergebnis als [Mitteilung](/de/docs/chats#mitteilungen) in seinen Chat zurück.
+So bleibt ein Bot immer frei, Menschen zu antworten, und viel Arbeit kann parallel laufen.
+Diese Seite zeigt die Bot-Werkzeuge, wie die Arbeit läuft und endet, und wie du sie beobachtest und stoppst.
 
 ---
 
@@ -12,104 +13,144 @@ Diese Seite zeigt die Bot-Werkzeuge, den Auftrag und das Ergebnis, und wie du ab
 
 OpenBot gibt jedem Bot diese Werkzeuge:
 
-| Werkzeug                    | Was es tut                                                                                                                   |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `openbot_list_bots`         | Listet die Bots auf, denen er Arbeit geben kann, mit ihren Rollen. Seine Session Bots sind dabei.                            |
-| `openbot_bot_details`       | Liest die Rolle und die Anweisungen eines Bots.                                                                              |
-| `openbot_delegate`          | Gibt einem anderen Bot eine Aufgabe und wartet auf das Ergebnis.                                                             |
-| `openbot_start_session_bot` | Startet einen neuen [Session Bot](/de/docs/bots#drei-arten-von-bots) für seine Session.                                      |
-| `openbot_create_bot`        | Erstellt einen neuen dauerhaften Bot, der ihm gehört. Siehe [Bots, die Bots besitzen](/de/docs/bots#bots-die-bots-besitzen). |
-| `openbot_promote_bot`       | Macht einen Session Bot seiner Session zu einem dauerhaften Bot, der ihm gehört.                                             |
-| `openbot_report`            | Nur bei abgegebener Arbeit. Schickt das Ergebnis zurück.                                                                     |
-
-Wenn ein Bot zum ersten Mal einem anderen dauerhaften Bot Arbeit gibt, einen Session Bot startet, einen Bot erstellt oder einen dauerhaft macht, muss die Stelle über ihm zustimmen. Siehe [Requests](/de/docs/requests). Den Session Bots seiner Session und den Bots, die ihm gehören, kann ein Bot immer Arbeit geben.
+| Werkzeug                    | Was es tut                                                                                                       |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `openbot_list_bots`         | Listet die Bots auf, denen er Arbeit geben kann, mit ihren Rollen.                                               |
+| `openbot_bot_details`       | Liest die Rolle und die Anweisungen eines Bots.                                                                  |
+| `openbot_delegate`          | Gibt einem Bot oder sich selbst eine Aufgabe. Es kehrt sofort zurück.                                            |
+| `openbot_cancel_delegation` | Stoppt Arbeit, die sein Chat abgegeben hat.                                                                      |
+| `openbot_create_bot`        | Erstellt einen neuen Bot, der ihm gehört. Siehe [Bots, die Bots besitzen](/de/docs/bots#bots-die-bots-besitzen). |
 
 ---
 
-## Der Auftrag
+## Arbeit abgeben
 
-`openbot_delegate` nimmt einen Auftrag (Brief) an:
+`openbot_delegate` nimmt diese Felder:
 
-| Feld             | Bedeutung                                                                            |
-| ---------------- | ------------------------------------------------------------------------------------ |
-| `bot`            | Die ID des anderen Bots.                                                             |
-| `reason`         | Warum der Bot das will. Eine entscheidende Stelle liest es, wenn sie zustimmen muss. |
-| `task`           | Was zu tun ist.                                                                      |
-| `userRequest`    | Die Worte der Person, unverändert. Ein Auftrag ersetzt sie nie.                      |
-| `context`        | Kurze Fakten, die der andere Bot braucht.                                            |
-| `references`     | Session- und Item-IDs, die der andere Bot lesen kann.                                |
-| `constraints`    | Regeln für die Arbeit.                                                               |
-| `expectedOutput` | Wie ein gutes Ergebnis aussieht.                                                     |
-| `session`        | Optional. Frühere Arbeit dieses Bots in dieser Session fortsetzen.                   |
+| Feld         | Bedeutung                                                                                                                                                   |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `task`       | Pflicht. Was zu tun ist, mit allem, was die Arbeit braucht. Der andere Bot sieht den Chat nicht, der die Arbeit gibt.                                       |
+| `bot`        | Optional. Die ID des Bots, der die Arbeit macht. Ohne dieses Feld gibt der Bot die Arbeit an sich selbst.                                                   |
+| `reason`     | Warum der Bot diese Arbeit gibt. Es ist Pflicht für einen Bot, der ihm nicht gehört. Ein Entscheider liest es.                                              |
+| `delegation` | Optional. Die ID früherer Arbeit dieses Chats. Die neue Aufgabe geht mit ihr weiter. Siehe [Zu früherer Arbeit hinzufügen](#zu-früherer-arbeit-hinzufügen). |
 
-Der andere Bot bekommt den Auftrag als erste Nachricht eines Turns. Er sieht nie den Verlauf des Bots, der die Arbeit abgegeben hat.
-
-### Welche Session die Arbeit nutzt
-
-- Mit `session` geht die Arbeit in dieser Session weiter, wenn sie dem anderen Bot gehört und aus derselben Session gestartet wurde.
-- Bei einem Session Bot geht die Arbeit in seiner neuesten Session aus derselben Eltern-Session weiter. So behält ein Session Bot seinen Kontext.
-- Sonst beginnt die Arbeit in einer neuen Session.
-
-Wenn die andere Session beschäftigt ist, wartet der Auftrag in ihrer Queue (Warteschlange) und läuft als Nächstes.
-
-## Das Ergebnis
-
-Der andere Bot ruft `openbot_report` einmal auf, wenn er fertig ist. Wenn er ohne Bericht endet, nutzt OpenBot seine letzte Antwort.
+Das Werkzeug kehrt sofort zurück:
 
 ```json
 {
-	"status": "completed",
-	"summary": "Added the endpoint and two tests.",
-	"artifacts": [{ "kind": "branch", "ref": "bots-contract" }],
-	"openQuestions": [],
-	"child": { "session": "c81d…", "turn": "t-77" }
+	"delegation": "dlg_9f1e…",
+	"status": "queued",
+	"note": "The work runs on its own. Its result comes back to this Chat as a message. Go on with other work, or end your answer now."
 }
 ```
 
-`status` ist `completed`, `failed` oder `cancelled`. Das Ergebnis enthält nie den ganzen Verlauf. Um die Details zu lesen, öffne die Session in `child`.
+Wer die Arbeit bekommen kann:
+
+- **Der Bot selbst.** Lass `bot` weg. Ein neuer Helfer mit derselben Rolle und ohne Verlauf macht die Arbeit. Das braucht keine Entscheidung.
+- **Ein Bot, der ihm gehört.** Das braucht keine Entscheidung.
+- **Jeder andere Bot.** Das ist die Fähigkeit `bots.delegate`, und sie braucht einen `reason`. Beim ersten Mal muss der Entscheider über dem Bot zustimmen. Siehe [Requests](/de/docs/requests). Solange der Entscheider entscheidet, ist der Status `authorizing`. Wenn die Arbeit erlaubt wird, startet sie. Wenn sie abgelehnt wird, wird der Status `failed`, und der Chat bekommt eine Mitteilung mit dem Grund.
+
+Es gibt keine Grenze dafür, wie tief Arbeit geht oder wie viel Arbeit zur selben Zeit läuft. Ein Bot kann sich selbst Arbeit geben, und diese Arbeit kann wieder Arbeit geben. Bot A kann Bot B Arbeit geben, und B kann A wieder Arbeit geben. Nichts wartet, also bleibt nichts hängen. Nur [Budgets und Rate Limits](/de/docs/usage) stoppen Arbeit, die zu viel kostet.
+
+### Zu früherer Arbeit hinzufügen
+
+Um demselben Kontext mehr Arbeit zu geben, sende die ID früherer Arbeit als `delegation`. Die Arbeit muss aus demselben Chat kommen.
+
+- Wenn diese Arbeit noch läuft, geht die neue `task` als Nachricht in ihren Task-Chat. Der Bot dort liest sie bei seinem nächsten Schritt. Die ID bleibt dieselbe.
+- Wenn diese Arbeit beendet ist, erstellt OpenBot eine neue Delegation im selben Task-Chat. So hat der Bot dort noch seinen ganzen Verlauf.
 
 ---
 
-## Wie die Eltern-Session wartet
+## Wo die Arbeit läuft
 
-Während der andere Bot arbeitet, hat der Turn, der die Arbeit abgegeben hat, den Status `Waiting`. Er hält keinen laufenden Prozess. Darum kann das Warten lange dauern und übersteht einen Neustart des Servers. Wenn die Arbeit endet, gibt OpenBot das Ergebnis an den wartenden Werkzeugaufruf, und der Turn geht weiter. Wenn ein Turn mehreren Bots gleichzeitig Arbeit gibt, geht er nach dem letzten Ergebnis weiter.
+Jede Delegation läuft in einem Task-Chat des Bots, der die Arbeit macht. Der Task-Chat hat `kind: "task"` und einen `parent` mit dem Chat und der Delegation, die die Arbeit gegeben haben. Seine erste Eingabe ist eine Mitteilung mit der Aufgabe, zum Beispiel `[OpenBot] Assistant gives you this task: …`. Siehe [Chats](/de/docs/chats).
 
-Abgegebene Sessions haben `kind: "delegated"` und ein `parent` mit der Session, dem Turn und dem Werkzeugaufruf, die sie gestartet haben. Sie haben dieselben Routen wie jede Session. Du kannst sie lesen, lenken und unterbrechen.
+Die Arbeit ist für dieselbe Person wie die Arbeit, die sie gegeben hat. Also entscheiden die [Berechtigungen](/de/docs/permissions) dieser Person, was der Bot darf, und Requests gehen an dieselben Entscheider. Ein Task-Chat gehört dem Besitzer des Chats, der die Arbeit gegeben hat. In einem [Channel](/de/docs/channels) ist das der Actor des Channel. Der Besitzer kann Task-Chats lesen wie seine anderen Chats.
 
-## Abgegebene Arbeit beobachten
+Eine Person kann einem Task-Chat auch mit `POST /v1/chats/:chatId/messages` eine Nachricht schicken. Der Bot dort liest sie als Nachricht von der Person.
 
-```sh
-curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  https://api.example.com/v1/sessions/$SESSION/delegations
+---
+
+## Wann die Arbeit endet
+
+Die Arbeit eines Task-Chats endet, wenn einer seiner Turns endet und der Chat keine [offene Arbeit](/de/docs/chats#offene-arbeit) hat. Offene Arbeit ist die Arbeit, die der Task-Chat abgegeben hat, seine Requests, die auf eine Entscheidung warten, seine Erinnerungen und Eingaben in seiner Inbox. Solange etwas davon offen ist, bleibt die Arbeit `running`. Die Ergebnisse kommen als Mitteilungen zurück, sie starten neue Turns, und die Arbeit geht weiter.
+
+Das Ende des letzten Turns gibt das Ergebnis:
+
+| Der Turn endet als | Die Arbeit wird | `result`                                   |
+| ------------------ | --------------- | ------------------------------------------ |
+| `Completed`        | `completed`     | Die letzte Antwort des Bots.               |
+| `Failed`           | `failed`        | Der Fehler.                                |
+| `Interrupted`      | `cancelled`     | Ein Hinweis, dass die Arbeit gestoppt hat. |
+
+Dann bekommt der Chat, der die Arbeit gegeben hat, eine Mitteilung, zum Beispiel:
+
+```text
+[OpenBot] The work dlg_9f1e… that you gave to Programmer is done.
+
+Result:
+Added the endpoint and two tests.
 ```
+
+Die Mitteilung geht durch die [Inbox](/de/docs/chats#die-inbox) dieses Chats. Wenn der Chat frei ist, startet sie einen neuen Turn, und der Bot macht mit dem Ergebnis weiter. Wenn der Bot vielen Bots Arbeit gegeben hat, kommt jedes Ergebnis für sich zurück, sobald es fertig ist.
+
+Ein Task-Chat kann einen neuen Turn bekommen, nachdem seine Arbeit beendet ist, zum Beispiel wenn eine Person ihm eine Nachricht schickt oder wenn eine späte Mitteilung ankommt. Dann erstellt OpenBot eine neue Delegation für denselben Task-Chat. Wenn diese neue Runde endet, bekommt der Eltern-Chat auch ihr Ergebnis.
+
+---
+
+## Die Arbeit beobachten
+
+`GET /v1/chats/:chatId/delegations` listet die Arbeit auf, die ein Chat abgegeben hat. `GET /v1/delegations/:delegationId` liest ein Stück Arbeit. Du siehst nur die Arbeit deiner eigenen Chats. Andere Arbeit ergibt `404` mit `DelegationNotFound`.
 
 ```json
-[
-	{
-		"id": "dlg_9f1e…",
-		"parent": { "session": "a41c…", "turn": "t-12", "toolCallId": "call-3" },
-		"bot": "bot_5c0e…",
-		"child": { "session": "c81d…", "turn": "t-77" },
-		"status": "running",
-		"brief": { "task": "…", "userRequest": "…" },
-		"result": null
-	}
-]
+{
+	"id": "dlg_9f1e…",
+	"parent": { "chat": "chat_7d21…", "turn": "t-12", "toolCallId": "call-3" },
+	"bot": "bot_5c0e…",
+	"chat": "chat_c81d…",
+	"status": "running",
+	"task": "Add the endpoint for the trip list, with tests.",
+	"reason": "The Programmer writes the code of this project.",
+	"result": null,
+	"createdAt": 1792486800000,
+	"updatedAt": 1792486805000
+}
 ```
+
+`chat` ist der Task-Chat. Er ist `null`, bis die Arbeit startet. Arbeit von einem [Trigger](/de/docs/triggers) hat `trigger` und einen `parent` ohne `turn` und ohne `toolCallId`.
 
 | Status        | Bedeutung                                                                         |
 | ------------- | --------------------------------------------------------------------------------- |
 | `authorizing` | Die Arbeit wartet darauf, dass ein [Request](/de/docs/requests) beantwortet wird. |
-| `queued`      | Die Arbeit darf beginnen. OpenBot startet sie jetzt.                              |
-| `running`     | Der andere Bot arbeitet daran.                                                    |
-| `completed`   | Die Arbeit ist fertig. `result` enthält das Ergebnis.                             |
-| `failed`      | Die Arbeit ist fehlgeschlagen oder war nicht erlaubt.                             |
+| `queued`      | Die Arbeit darf starten. OpenBot startet sie jetzt.                               |
+| `running`     | Der Bot arbeitet daran.                                                           |
+| `completed`   | Die Arbeit ist fertig. `result` enthält die letzte Antwort.                       |
+| `failed`      | Die Arbeit ist fehlgeschlagen oder wurde nicht erlaubt. `result` sagt, warum.     |
 | `cancelled`   | Die Arbeit wurde gestoppt.                                                        |
 
-## Abgegebene Arbeit stoppen
+---
 
-Wenn du einen Turn [unterbrichst](/de/docs/sessions#steer-queue-und-unterbrechen), stoppt OpenBot auch die Arbeit, die er abgegeben hat, und schließt seine offenen Requests. Jeder Eintrag wird `cancelled`.
+## Die Arbeit stoppen
 
-## Forks
+Es gibt vier Wege, Arbeit zu stoppen:
 
-Ein Fork (Abzweigung) einer Session ist neue direkte Arbeit. Er behält den Bot seiner Quelle, hat aber kein `parent`. Arbeit, die ein Fork abgibt, beginnt in neuen Sessions. So teilen sich zwei Zweige nie die Arbeit eines Session Bots.
+- Der Bot ruft `openbot_cancel_delegation` mit der ID der `delegation` und einem optionalen `reason` auf. Sein Chat bekommt keine Mitteilung, weil der Bot die Arbeit selbst gestoppt hat.
+- Du rufst `POST /v1/delegations/:delegationId/cancel` mit dem Body `{}` auf. Die Antwort ist die Delegation. Der Chat, der die Arbeit gegeben hat, bekommt eine Mitteilung.
+- Du [unterbrichst](/de/docs/chats#unterbrechen) den Chat, der die Arbeit gegeben hat, mit `{ "delegations": true }`.
+- Du [löschst](/de/docs/chats#den-verlauf-löschen) den Chat, der die Arbeit gegeben hat.
+
+Ein Abbruch stoppt den laufenden Turn des Task-Chats. Er stoppt auch die Arbeit, die der Task-Chat abgegeben hat, Schicht für Schicht, und seine Requests und Erinnerungen. Jedes Stück Arbeit wird `cancelled`.
+
+Ein normales Unterbrechen stoppt nur den laufenden Turn. Die Arbeit, die der Chat abgegeben hat, geht weiter.
+
+---
+
+## Fehler
+
+| Status | Fehler                         | Wann                                                        |
+| ------ | ------------------------------ | ----------------------------------------------------------- |
+| `404`  | `DelegationNotFound`           | In deinen Chats gibt es keine Arbeit mit dieser ID.         |
+| `409`  | `DelegationConflict`           | Die Arbeit hat sich zur selben Zeit geändert. Lies sie neu. |
+| `503`  | `DelegationStorageUnavailable` | OpenBot erreicht seine Datenbank nicht.                     |
+
+Alle Felder findest du in der [Delegations-Referenz](/docs/api/operations/tags/delegations/).

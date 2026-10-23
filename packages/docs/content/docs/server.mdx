@@ -37,16 +37,16 @@ The program still needs a platform. Run the setup program once before people use
 
 ## What the package exports
 
-| Export                                                      | What it is                                                                                                   |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `Server.layer(options)`                                     | OpenBot with its own Node.js HTTP or HTTPS server. It reads sign-in from the platform settings.              |
-| `Server.layerFixed(options)`                                | OpenBot with one fixed sign-in configuration. For tests and the development server.                          |
-| `Server.layerApi(options)`                                  | Only the HTTP routes, for an HTTP server that you already have.                                              |
-| `OpenBot.layerShared(options)`                              | The services that live as long as the instance: the database pool, the secret keys, and the shared settings. |
-| `OpenBot.layer(options)`                                    | The services behind the routes: sign-in, tokens, permissions, storage, Sessions, and Apps.                   |
-| `DatabasePostgres`                                          | The database Layer and the `migrate` program.                                                                |
-| `EnvironmentConfiguration`                                  | Reads the instance settings from environment variables.                                                      |
-| `Auth`, `Sessions`, `AppHost`, `AppPlugin`, `Configuration` | Service types for advanced setups.                                                                           |
+| Export                                                   | What it is                                                                                                   |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `Server.layer(options)`                                  | OpenBot with its own Node.js HTTP or HTTPS server. It reads sign-in from the platform settings.              |
+| `Server.layerFixed(options)`                             | OpenBot with one fixed sign-in configuration. For tests and the development server.                          |
+| `Server.layerApi(options)`                               | Only the HTTP routes, for an HTTP server that you already have.                                              |
+| `OpenBot.layerShared(options)`                           | The services that live as long as the instance: the database pool, the secret keys, and the shared settings. |
+| `OpenBot.layer(options)`                                 | The services behind the routes: sign-in, tokens, permissions, storage, Chats, and Apps.                      |
+| `DatabasePostgres`                                       | The database Layer and the `migrate` program.                                                                |
+| `EnvironmentConfiguration`                               | Reads the instance settings from environment variables.                                                      |
+| `Auth`, `Chats`, `AppHost`, `AppPlugin`, `Configuration` | Service types for advanced setups.                                                                           |
 
 The subpath `@openbot-build/openbot/Development` exports the development server. See [Run the development server](#run-the-development-server).
 
@@ -79,7 +79,7 @@ The subpath `@openbot-build/openbot/Development` exports the development server.
 
 | Option          | What it does                                                                                       |
 | --------------- | -------------------------------------------------------------------------------------------------- |
-| `sessions`      | Tools and memory for Sessions. See below.                                                          |
+| `chats`         | Tools for the Turns of Chats. See below.                                                           |
 | `builtinModels` | Models that every organization can use, given in code. See [Models](/docs/models#built-in-models). |
 | `routes`        | A function that gets the sign-in configuration and returns a Layer with your own HTTP routes.      |
 | `discovery`     | A Layer that finds Apps on the web. The default reads public Catalogs over the internet.           |
@@ -99,18 +99,17 @@ Some values were options before. They are settings in the database now, so every
 
 ---
 
-## Sessions
+## Chats
 
-The `sessions` option sets how Sessions do their work.
+The `chats` option sets how the Turns of [Chats](/docs/chats) do their work.
 
 | Field            | What it does                                                                  |
 | ---------------- | ----------------------------------------------------------------------------- |
 | `runtime`        | The Bot definition: `toolkit`, `plugin`, `providers`, `compaction`, and more. |
 | `layerExecution` | A function that builds extra services for each Turn, such as tool handlers.   |
-| `memory`         | Learned memory: your own `model` and `policy`.                                |
 
 Models come from the model providers in the database and from `builtinModels`. See [Models](/docs/models).
-The memory switches of a new Session come from `memory` in the [organization settings](/docs/organization#settings). See [Memory](/docs/memory#switches).
+[Bot memory](/docs/memory) follows `botMemory` in the [organization settings](/docs/organization#settings).
 
 ### Add a tool
 
@@ -134,14 +133,14 @@ const handlers = toolkit.toLayer({
 const server = (settings: Configuration.Settings) =>
 	Server.layer({
 		...settings,
-		sessions: {
+		chats: {
 			runtime: { toolkit },
 			layerExecution: () => handlers,
 		},
 	}).pipe(Layer.provide(handlers))
 ```
 
-Add `needsApproval: true` to `Tool.make` when each call needs a decision. OpenBot then makes a `tools.call` request for it. See [Requests](/docs/requests).
+Add `needsApproval: true` to `Tool.make` when each call needs a decision. OpenBot then checks the capability `tools.call` for it. When the call needs a decider, the Bot gets a pending result, and the call runs later when it is allowed. See [Requests](/docs/requests).
 
 ---
 

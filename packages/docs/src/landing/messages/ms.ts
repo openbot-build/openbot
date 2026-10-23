@@ -49,8 +49,8 @@ export default {
 		title: ["Guna klien anda sendiri.", "Manusia tetap memegang kawalan."],
 		items: [
 			{
-				title: "Session dan Timeline",
-				text: "Kerja berlaku dalam Session dan Turn. Timeline menyimpan versi, jadi anda boleh kembali dan cuba lagi.",
+				title: "Satu sembang dengan setiap Bot",
+				text: "Anda ada satu sembang dengan setiap Bot. Bot sentiasa menjawab serta-merta, dan kerja panjang berjalan serentak.",
 			},
 			{
 				title: "Kelulusan",

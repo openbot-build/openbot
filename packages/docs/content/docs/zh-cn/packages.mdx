@@ -16,7 +16,7 @@ OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot` 把各�
 | `openbot`       | 服务器、它的插件和它的模型提供方。请看[从代码中运行](/zh-cn/docs/server)。          |
 | `api`           | 带类型的 HTTP 契约。服务器、客户端和 API 参考都使用它。                             |
 | `client`        | TypeScript 客户端。请看[客户端](/zh-cn/docs/client)。                               |
-| `core`          | Bot 核心：Bot、Session、Turn、Timeline、存储、插件和技能。                          |
+| `core`          | Bot 核心：Bot、Chat、Turn、存储、插件和技能。                                       |
 | `protocol`      | OpenBot App Protocol：发布、查找、连接 App，并为 App 建立索引。                     |
 | `protocol-test` | App Protocol 的公开测试服务。请看[协议测试](/zh-cn/docs/protocol-test)。            |
 | `cli`           | `openbot` 命令。对于 `openbot <name>`，它会运行 `openbot-<name>`。                  |
@@ -31,21 +31,21 @@ OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot` 把各�
 
 `@openbot-build/core` 负责运行 Bot。它有以下主要部分：
 
-| 模块                                         | 作用                                                                          |
-| -------------------------------------------- | ----------------------------------------------------------------------------- |
-| `Bot`                                        | Bot 定义：工具、插件、提供方和压缩。一个定义可以服务多个 Session。            |
-| `SessionRuntime`                             | 运行 Turn：`execute`、`stream`、`start`、`steer`、`approve`、`interrupt` 等。 |
-| `SessionStore`、`Store`                      | 保存 Session 及其 Timeline。                                                  |
-| `SessionStoreMemory`                         | 把所有内容都放在内存中的存储，用于测试和脚本。                                |
-| `Timeline`、`Item`、`Turn`、`Session`        | 数据类型。                                                                    |
-| `Plugin`、`PluginComposition`、`PluginState` | 创建和组合插件，并为插件提供保存的状态。                                      |
-| `Skill`、`SkillMap`                          | 描述技能，并维护技能列表。                                                    |
+| 模块                                         | 作用                                                                         |
+| -------------------------------------------- | ---------------------------------------------------------------------------- |
+| `Bot`                                        | Bot 定义：工具、插件、提供方、压缩和批准。一个定义可以服务多个 Chat。        |
+| `ChatRuntime`                                | 运行 Turn：`deliver`、`execute`、`stream`、`interrupt`、`drain`、`wait` 等。 |
+| `ChatStore`、`ChatStoreRepository`、`Store`  | 保存 Chat：每个 Chat 一条小记录，再加一个只会增长的 Item 日志。              |
+| `ChatStoreMemory`                            | 把所有内容都放在内存中的存储，用于测试和脚本。                               |
+| `Chat`、`Item`、`Turn`、`ChatState`          | 数据类型。`Chat` 中还有 `Approvals` 服务。                                   |
+| `ContextCompaction`、`SummaryCompaction`     | 让很长的历史变短，好让模型放得下。                                           |
+| `Plugin`、`PluginComposition`、`PluginState` | 创建和组合插件，并为插件提供保存的状态。                                     |
+| `Skill`、`SkillMap`                          | 描述技能，并维护技能列表。                                                   |
 
-一个 **Session**（会话）是一条工作线。每次输入都会启动一个 **Turn**（轮次）。一个 Turn 可以包含多个模型步骤和工具调用。
-**Timeline**（时间线）是 Session 保存下来的历史。每次改变都会生成一个新的 Timeline 版本，所以你可以读取较早的某个时间点，或者从那里分叉。
+一个 **Chat**（聊天）是一段没有终点的对话。每条输入都先进入它的**收件箱**（inbox）。输入会启动一个 **Turn**（轮次），或者引导正在运行的 Turn。一个 Turn 可以包含多个模型步骤和工具调用。Turn 从不等待：它运行，然后结束。存储把 Chat 的 Item 保存在一个只会增长的日志中，所以很长的 Chat 保存起来也不贵。
 
 ```ts
-import { SessionRuntime, SessionStoreMemory, Store } from "@openbot-build/core"
+import { ChatRuntime, ChatStoreMemory, Store } from "@openbot-build/core"
 import { Effect } from "effect"
 import { Toolkit } from "effect/ai"
 
@@ -53,35 +53,67 @@ const program = Effect.scoped(
 	Effect.gen(function* () {
 		const definition = yield* Store.define({
 			stores: {},
-			schemaVersion: "timeline/1",
+			schemaVersion: "chat/1",
 		})
-		const store = yield* SessionStoreMemory.make(definition)
-		const runtime = yield* SessionRuntime.make({
+		const store = yield* ChatStoreMemory.make(definition)
+		const runtime = yield* ChatRuntime.make({
 			store,
 			bot: { toolkit: Toolkit.empty },
 		})
-		const view = yield* store.create({ metadata: { title: "Closures" } })
+		const view = yield* store.create({})
 		return yield* runtime.execute({
-			base: { session: view.session.id, revision: view.session.revision },
+			chat: view.chat.id,
 			input: "Explain closures",
 		})
 	}),
 )
 ```
 
-`execute` 等待 Turn 结束，然后返回保存后的 Session。`stream` 在 Turn 运行时提供事件。
-每次改变都需要当前的 `revision`。这样可以防止两个写入方同时修改同一个 Session。
+`execute` 启动一个 Turn，等待它结束，然后返回这个 Chat。`stream` 在 Turn 运行时提供事件。如果 Chat 中已经有一个 Turn 在运行，两者都会失败。
 
-存储还可以在不使用模型的情况下分叉、重命名、导出和导入 Session：
+`deliver` 按[收件箱](/zh-cn/docs/chats#收件箱)的规则，一步把输入交给一个 Chat。Chat 空闲时，它启动一个 Turn；输入的 `author` 相同时，它引导正在运行的 Turn；否则它在收件箱中等待。它返回 `started`、`steered` 或 `queued`。每个 Turn 结束后，收件箱中的下一条输入启动下一个 Turn。
+
+### 批准
+
+带 `needsApproval` 的工具在每次调用前都会先问。这时运行时会问 `Approvals` 服务。你可以在 Bot 定义中把它作为 `approvals` 提供，也可以提供 `Chat.Approvals`。它对每次调用给出三种决定之一：
+
+- `Chat.Decision.Allow()` 让调用现在运行。
+- `Chat.Decision.Deny({ reason })` 不运行这个调用。模型会看到原因。
+- `Chat.Decision.Pending({ result })` 现在不运行这个调用。模型马上得到 `result`，Turn 继续。
+
+没有这个服务时，每个这样的调用都是待定的。所以 Turn 从不等待。
+
+当决策者之后允许了一个待定的调用时，用 `deliver` 和 `approved` 把这个调用送回去。调用的 ID 必须是新的。读到这条输入的 Turn 会运行这个调用，而且不会再问一次。请用 `notice` 标记来自你的程序的输入，这样模型就知道它不是来自人：
 
 ```ts
-const fork =
+import { Chat } from "@openbot-build/core"
+
+const runtime =
 	yield *
-	store.fork({
-		source: view.session.id,
-		metadata: { title: "Another try" },
+	ChatRuntime.make({
+		store,
+		bot: {
+			toolkit,
+			approvals: {
+				decide: (request) =>
+					Effect.succeed(
+						Chat.Decision.Pending({ result: { pending: request.approvalId } }),
+					),
+			},
+		},
 	})
-const record = yield * store.export(fork.session.id)
+
+yield *
+	runtime.deliver({
+		chat: view.chat.id,
+		input: "[Host] A person allowed the email.",
+		notice: { kind: "request", ref: "req-1" },
+		approved: {
+			id: "approved-1",
+			name: "SendEmail",
+			params: { to: "team@example.com" },
+		},
+	})
 ```
 
 ### 插件
@@ -106,7 +138,7 @@ const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
 ```
 
 `PluginComposition.merge(a, b)` 组合两个插件。`a` 在 `b` 的外层运行。
-插件还可以把自己的数据保存在 Session 或 Timeline 中。把 `plugin.stores` 传给 `Store.define`，然后使用 `PluginState.make`。
+插件还可以把自己的数据保存在 Chat 的记录中，或者保存在它的状态中。把 `plugin.stores` 传给 `Store.define`，然后使用 `PluginState.make`。
 
 ### 技能
 
@@ -117,59 +149,11 @@ const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
 
 ## openbot 中的插件
 
-`@openbot-build/openbot` 包含 OpenBot 的所有插件。服务器在每个 Turn 中都使用 Bot、App、工作和记忆插件。工作插件为 Bot 提供待办列表。你也可以在自己的 `SessionRuntime` 中使用记忆插件和 Turn 限制插件。
+`@openbot-build/openbot` 包含 OpenBot 的所有插件。服务器在每个 Turn 中都使用它的插件，例如 Bot、App 和工作插件。工作插件为 Bot 提供待办列表、提醒和计划模式。你也可以在自己的 `ChatRuntime` 中使用 Turn 限制插件。
 
 ### 记忆
 
-记忆插件保存学到的记忆：Bot 在 Session 中学到、并在之后的 Turn 中使用的简短事实。
-服务器用它实现记忆 API。请看 [Memory](/zh-cn/docs/memory)。记忆 API 的 schema 在 `api` 中，名为 `Memory` 和 `BotMemory`。
-
-```ts
-import { SessionStoreMemory, Store } from "@openbot-build/core"
-import {
-	LanguageModelMemory,
-	Memory,
-	MemoryOperations,
-	MemoryRules,
-} from "@openbot-build/openbot"
-import { Effect } from "effect"
-
-const program = Effect.scoped(
-	Effect.gen(function* () {
-		const definition = yield* Store.define({
-			stores: Memory.stores,
-			schemaVersion: "timeline/1",
-		})
-		const store = yield* SessionStoreMemory.make(definition)
-		const memory = MemoryOperations.make({
-			store,
-			policy: MemoryRules.policy,
-			model: LanguageModelMemory.model,
-		})
-		return yield* memory.read(sessionId)
-	}),
-)
-```
-
-`read` 返回学到的条目。`update` 执行一次 `Remember` 或 `Forget` 编辑。`consolidate` 让模型从新的历史中学习新条目。
-`MemoryRules` 和 `LanguageModelMemory` 是默认的规则和模型。你可以替换它们。
-`MemoryRules.policy` 把记忆文本限制在 8000 个字符以内。要使用其他限制，请用 `MemoryRules.make({ maxLength })`。
-
-`MemoryPlugin.make` 提供在每个 Turn 中使用记忆的插件。它把有效的条目加入指令中。一个 Turn 完成后，它会学习新条目。你需要给它两个在每个 Turn 中运行的 Effect：
-
-- `settings` 返回 `{ use, generate }`。`use` 打开指令功能。`generate` 打开学习功能。
-- `languageModel` 返回用来学习条目的模型。
-
-这些值从哪里来，由宿主决定。把 `plugin.stores` 传给 `Store.define`，并用 `PluginState.make` 提供 `plugin.store`。
-
-这里的 `learner` 是你之前构建好的 `LanguageModel` 服务：
-
-```ts
-const plugin = MemoryPlugin.make({
-	settings: Effect.succeed({ use: true, generate: true }),
-	languageModel: Effect.succeed(learner),
-})
-```
+`BotMemory` 包含 [Bot 记忆](/zh-cn/docs/memory)的类型和辅助函数。服务器用它们实现记忆 Bot 和记忆 API。记忆 API 的 schema 在 `api` 中，名为 `BotMemory`。
 
 ### Turn 限制
 
@@ -184,7 +168,7 @@ import { TurnLimiter } from "@openbot-build/openbot"
 
 const runtime =
 	yield *
-	SessionRuntime.make({
+	ChatRuntime.make({
 		store,
 		bot: { plugin: TurnLimiter.make({ maxSteps: 4 }) },
 	})

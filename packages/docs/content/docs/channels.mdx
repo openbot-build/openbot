@@ -30,12 +30,12 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | Field         | What it does                                                                                                           |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `name`        | A short name.                                                                                                          |
-| `bot`         | The Bot that answers. It must be a shared, lasting Bot of the organization.                                            |
+| `bot`         | The Bot that answers. It must be a shared Bot of the organization.                                                     |
 | `credentials` | The secrets of the platform. See below. They go in, but they never come out. The answer shows only `set` and a `hint`. |
 | `linkPath`    | Optional. A path on your public origin where your client lets a person [link their account](#link-your-account).       |
 | `enabled`     | Optional. `false` stops the Channel. Its webhook then returns `401`.                                                   |
 
-The answer is `201` with the Channel. Give its `webhookUrl` to the platform. The caller becomes the **actor** of the Channel. The chats of the Channel are Sessions of the actor. The actor must be able to give work to the Bot.
+The answer is `201` with the Channel. Give its `webhookUrl` to the platform. The caller becomes the **actor** of the Channel. The chats of the Channel are [Chats](/docs/chats) of the actor. The actor must be able to give work to the Bot.
 
 `GET`, `PATCH` and `DELETE /v1/organization/channels/:channelId` read, change and delete one Channel. A change needs `expectedVersion`, the `version` that you read. An old version returns `409` with `ChannelConflict`. A change makes the caller the actor. Leave out `credentials` to keep the secrets. The kind of a Channel cannot change.
 
@@ -78,14 +78,16 @@ The link needs a `POST`, so nobody can link an account by sending a person a lin
 
 ---
 
-## Chats and Sessions
+## Chats of a Channel
 
-Each chat is one lasting Session with `kind: "channel"`: one Session for each direct chat and one for each group chat. List them with `GET /v1/sessions?kind=channel` as the actor.
+Each chat on the platform is one lasting Chat with `kind: "channel"`: one Chat for each direct chat and one for each group chat. The Chat has the name of the chat as its `title`. List them with `GET /v1/chats?kind=channel` as the actor.
 
 - In a direct chat, every message goes to the Bot.
 - In a group chat, only a message that names the bot goes to the Bot. Each message starts with the name of the person who wrote it, so the Bot knows who speaks.
-- A message that comes while the Bot still works waits in the [queue](/docs/sessions#steer-queue-and-interrupt). It runs as its own Turn.
+- A message from a person while the Bot works for that same person goes into the running Turn. The Bot reads it at its next step.
+- A message from another person waits in the [inbox](/docs/chats#the-inbox) of the Chat. It runs as its own Turn after the running Turn ends.
 - While a Turn runs, the bot shows its text and changes the message as it grows. A long answer goes out in parts.
+- The answer of every Turn goes to the chat. This is also true for a Turn that a [notice](/docs/chats#notices) starts, such as the result of work that the Bot gave away. So the Bot can say "I will look into it", and post the result later.
 - OpenBot drops an event that the platform sends a second time.
 
 ### Each Turn works for its speaker
@@ -102,7 +104,7 @@ A person needs `channels.use` on the Channel to talk with its Bot. A member who 
 
 ## Approvals in chat
 
-When a request waits for a person, the bot sends a card with three buttons: **Allow once**, **Allow for this Session** and **Deny**. Plans that wait for approval in [plan mode](/docs/sessions#plan-mode) get the same card. The card goes to the direct chat of the person when they linked an account on this Channel. Otherwise it goes to the chat of the work.
+When a request waits for a person, the bot sends a card with three buttons: **Allow once**, **Allow in this chat** and **Deny**. **Allow in this chat** makes a Grant with the scope `chat`. See [Requests](/docs/requests#answer-a-request). Plans that wait for approval in [plan mode](/docs/chats#plan-mode) get the same card. The card goes to the direct chat of the person when they linked an account on this Channel. Otherwise it goes to the chat of the work. This is also true for a request from work that the Bot gave away, such as a task Chat for this chat.
 
 Only the person that the request waits for can press a button. When the request changes, the card shows the decision.
 
@@ -154,12 +156,12 @@ Channels are below `openbot.org.<org>.channel`. Administrators manage them. Ever
 
 ## Errors
 
-| Error                     | Status | When                                                                                             |
-| ------------------------- | ------ | ------------------------------------------------------------------------------------------------ |
-| `ChannelInvalid`          | 400    | The Bot is not a shared lasting Bot, the kind changed, or the platform did not take the webhook. |
-| `ChannelNotFound`         | 404    | There is no such Channel.                                                                        |
-| `ChannelLinkInvalid`      | 404    | The code is unknown, used or too old. Ask the bot again.                                         |
-| `ChannelIdentityNotFound` | 404    | There is no such linked account.                                                                 |
-| `ChannelConflict`         | 409    | The Channel changed since you read it.                                                           |
-| `ChannelHookDenied`       | 401    | The signature is wrong or too old, or the Channel is disabled.                                   |
-| `ChannelsUnavailable`     | 503    | OpenBot cannot reach its storage now.                                                            |
+| Error                     | Status | When                                                                                     |
+| ------------------------- | ------ | ---------------------------------------------------------------------------------------- |
+| `ChannelInvalid`          | 400    | The Bot is not a shared Bot, the kind changed, or the platform did not take the webhook. |
+| `ChannelNotFound`         | 404    | There is no such Channel.                                                                |
+| `ChannelLinkInvalid`      | 404    | The code is unknown, used or too old. Ask the bot again.                                 |
+| `ChannelIdentityNotFound` | 404    | There is no such linked account.                                                         |
+| `ChannelConflict`         | 409    | The Channel changed since you read it.                                                   |
+| `ChannelHookDenied`       | 401    | The signature is wrong or too old, or the Channel is disabled.                           |
+| `ChannelsUnavailable`     | 503    | OpenBot cannot reach its storage now.                                                    |

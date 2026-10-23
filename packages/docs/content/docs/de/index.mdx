@@ -13,11 +13,11 @@ Den Client bringst du selbst mit: ein Skript, einen Backend-Dienst, einen Chat-B
 
 ## Was du tun kannst
 
-- Starte eine **Session** (Sitzung) und gib ihr Arbeit in **Turns** (Durchgängen). Lies die Antwort als eine Antwort oder als Live-Stream.
-- Jede Änderung kommt in die **Timeline** (Zeitleiste) der Session. Geh zu einem früheren Punkt zurück und probiere mit einem Fork (Abzweigung) einen anderen Weg aus.
+- Sprich mit einem **Bot** in einem **Chat**. Er antwortet immer sofort. Lies die Antwort als eine Antwort oder als Live-Stream.
+- Lass den Bot lange Arbeit an andere Bots oder an sich selbst geben. Die Arbeit läuft parallel, und jedes Ergebnis kommt in deinen Chat zurück.
 - Lass den Bot **Apps** nutzen. Das sind externe Dienste, die Menschen mit ihrem Konto verbinden.
-- Halte ein Team aus dauerhaften **Bots**, zum Beispiel einen Programmierer und einen Autor. Jeder hat seinen eigenen Kontext und sein eigenes Gedächtnis. Sie geben sich gegenseitig Arbeit.
-- Lass einen Bot im **Plan-Modus** zuerst planen, eine **Todo-Liste** führen und warten. Starte seine Arbeit nach Zeitplan oder über einen Webhook mit einem **Trigger** (Auslöser).
+- Halte ein Team aus dauerhaften **Bots**, zum Beispiel einen Programmierer und einen Autor. Jeder hat seine eigenen Chats und sein eigenes Gedächtnis. Sie geben sich gegenseitig Arbeit.
+- Lass einen Bot im **Plan-Modus** zuerst planen, eine **Todo-Liste** führen und um eine **Erinnerung** bitten. Starte seine Arbeit nach Zeitplan oder über einen Webhook mit einem **Trigger** (Auslöser).
 - Bots haben keine festen Grenzen. Wenn ein Bot etwas Neues versucht, beantwortet die Stelle über ihm, die entscheidet, eine **Anfrage** (Request). Die Antwort wird gespeichert.
 - Finde Apps in einem öffentlichen **App Index** (App-Verzeichnis). Als Herausgeber kannst du dort deine eigene App prüfen.
 
@@ -27,7 +27,7 @@ Den Client bringst du selbst mit: ein Skript, einen Backend-Dienst, einen Chat-B
 
 | Teil           | Was es tut                                                                                                                      |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| OpenBot        | Der Server. Er führt Sessions aus, speichert Daten in PostgreSQL und stellt die HTTP-API bereit.                                |
+| OpenBot        | Der Server. Er führt Chats aus, speichert Daten in PostgreSQL und stellt die HTTP-API bereit.                                   |
 | Platform       | Eine Installation mit vielen Organisationen. Platform-Admins verwalten sie über die API.                                        |
 | Anmeldung      | Eine Person meldet sich einmal im Browser an. Sie nutzt dafür den OpenID-Connect-Anbieter der Platform oder ihrer Organisation. |
 | User-Tokens    | Programme senden bei jedem Aufruf ein Token im Header `Authorization: Bearer <token>`.                                          |
@@ -70,8 +70,8 @@ Den vollen Text findest du in der Datei [LICENSE](https://github.com/openbot-bui
 	<Card title="Authentifizierung" href="/de/docs/authentication">
 		Melde dich an und erstelle User-Tokens.
 	</Card>
-	<Card title="Sessions" href="/de/docs/sessions">
-		Gib dem Bot Arbeit und lies die Ergebnisse.
+	<Card title="Chats" href="/de/docs/chats">
+		Sprich mit einem Bot und lies die Ergebnisse.
 	</Card>
 	<Card title="Bereitstellung" href="/de/docs/deploy">
 		Betreibe OpenBot auf deinem eigenen Server.

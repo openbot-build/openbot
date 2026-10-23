@@ -76,7 +76,7 @@ Das Programm kann diese Fehler abfangen und weitermachen.
 
 ## Wenn ein Aufruf eine Entscheidung braucht
 
-Manche Aufrufe einer App brauchen eine Entscheidung, zum Beispiel ein Tool, das schreibt. Dann hält das Programm bei diesem Aufruf an, und der Turn wartet. Der [Request](/de/docs/requests) hat den Aufruf der App in `app` und das Programm in `code`:
+Manche Aufrufe einer App brauchen eine Entscheidung, zum Beispiel ein Tool, das schreibt. Dann hält das Programm bei diesem Aufruf an. Der Turn wartet nicht: Der Werkzeugaufruf des Programms bekommt sofort ein wartendes Ergebnis, und der Bot macht weiter. Der [Request](/de/docs/requests) hat den Aufruf der App in `app` und das Programm in `code`:
 
 ```json
 {
@@ -91,7 +91,7 @@ Manche Aufrufe einer App brauchen eine Entscheidung, zum Beispiel ein Tool, das 
 }
 ```
 
-Nach der Entscheidung führt OpenBot das Programm noch einmal von oben aus. Jeder Aufruf, der schon lief, gibt sein gespeichertes Ergebnis. OpenBot schickt ihn nicht noch einmal an die App. Dann läuft das Programm nach dem Aufruf weiter, der gewartet hat. Wenn es endet, bekommt der Turn das Ergebnis und macht weiter.
+Nach der Entscheidung führt OpenBot das Programm im Hintergrund noch einmal von oben aus. Jeder Aufruf, der schon lief, gibt sein gespeichertes Ergebnis. OpenBot schickt ihn nicht noch einmal an die App. Dann läuft das Programm nach dem Aufruf weiter, der gewartet hat. Wenn es endet, kommt sein Ergebnis als [Mitteilung](/de/docs/chats#mitteilungen) in den Chat zurück, und der Bot macht damit weiter.
 
 Das klappt nur, wenn das Programm jedes Mal dieselben Aufrufe in derselben Reihenfolge macht. Darum sieht das Programm in `Date.now()` eine feste Zeit, und `Math.random()` gibt in jedem Lauf dieselben Zahlen. Wenn ein Programm andere Aufrufe macht als vorher, stoppt OpenBot es mit `ReplayMismatch`. Das kann passieren, wenn sich eine Connection geändert hat, während das Programm gewartet hat. Nichts wird aus Versehen geschickt.
 
@@ -99,12 +99,12 @@ Das klappt nur, wenn das Programm jedes Mal dieselben Aufrufe in derselben Reihe
 
 ## Code runs lesen
 
-`GET /v1/sessions/:sessionId/code-runs` listet die Programme einer Session. `GET /v1/code-runs/:id` liest eines. Beide brauchen `apps.use`. Die Liste braucht auch `sessions.read` für die Session. Du siehst nur die Programme deiner eigenen Sessions.
+`GET /v1/chats/:chatId/code-runs` listet die Programme eines Chats. `GET /v1/code-runs/:id` liest eines. Beide brauchen `apps.use`. Die Liste braucht auch `chats.read` für den Chat. Du siehst nur die Programme deiner eigenen Chats.
 
 ```json
 {
 	"id": "8f1c…",
-	"session": "c81d…",
+	"chat": "chat_c81d…",
 	"turn": "t-77",
 	"callId": "call-9",
 	"status": "Completed",

@@ -51,8 +51,8 @@ export default {
 		title: ["Gawanen klien dhewe.", "Manungsa tetep sing ngatur."],
 		items: [
 			{
-				title: "Session lan Timeline",
-				text: "Gawean ana ing Session lan Turn. Timeline nyimpen versi, dadi kowe bisa bali lan nyoba maneh.",
+				title: "Siji chat karo saben Bot",
+				text: "Kowe duwe siji chat karo saben Bot. Bot tansah mangsuli langsung, lan gawean sing dawa mlaku bebarengan.",
 			},
 			{
 				title: "Persetujuan",

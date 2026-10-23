@@ -37,16 +37,18 @@ NodeRuntime.runMain(
 
 ## 包导出了什么
 
-| 导出                                                        | 是什么                                                                          |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `Server.layer(options)`                                     | 带有自己的 Node.js HTTP 或 HTTPS 服务器的 OpenBot。它从平台设置中读取登录配置。 |
-| `Server.layerFixed(options)`                                | 使用一份固定登录配置的 OpenBot。用于测试和开发服务器。                          |
-| `Server.layerApi(options)`                                  | 只有 HTTP 路由，用于你已有的 HTTP 服务器。                                      |
-| `OpenBot.layerShared(options)`                              | 与实例同生命周期的服务：数据库连接池、密钥和共享设置。                          |
-| `OpenBot.layer(options)`                                    | 路由背后的服务：登录、令牌、权限、存储、Session 和 App。                        |
-| `DatabasePostgres`                                          | 数据库 Layer 和 `migrate` 程序。                                                |
-| `EnvironmentConfiguration`                                  | 从环境变量读取实例设置。                                                        |
-| `Auth`、`Sessions`、`AppHost`、`AppPlugin`、`Configuration` | 用于高级配置的服务类型。                                                        |
+| 导出                                                     | 是什么                                                                          |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `Server.layer(options)`                                  | 带有自己的 Node.js HTTP 或 HTTPS 服务器的 OpenBot。它从平台设置中读取登录配置。 |
+| `Server.layerFixed(options)`                             | 使用一份固定登录配置的 OpenBot。用于测试和开发服务器。                          |
+| `Server.layerApi(options)`                               | 只有 HTTP 路由，用于你已有的 HTTP 服务器。                                      |
+| `OpenBot.layerShared(options)`                           | 与实例同生命周期的服务：数据库连接池、密钥和共享设置。                          |
+| `OpenBot.layer(options)`                                 | 路由背后的服务：登录、令牌、权限、存储、Chat 和 App。                           |
+| `DatabasePostgres`                                       | 数据库 Layer 和 `migrate` 程序。                                                |
+| `EnvironmentConfiguration`                               | 从环境变量读取实例设置。                                                        |
+| `Auth`、`Chats`、`AppHost`、`AppPlugin`、`Configuration` | 用于高级配置的服务类型。                                                        |
+
+子路径 `@openbot-build/openbot/Development` 导出开发服务器。见 [运行开发服务器](#运行开发服务器)。
 
 ---
 
@@ -77,7 +79,7 @@ NodeRuntime.runMain(
 
 | 选项            | 作用                                                                            |
 | --------------- | ------------------------------------------------------------------------------- |
-| `sessions`      | Session 的工具和记忆。见下文。                                                  |
+| `chats`         | Chat 中 Turn 的工具。见下文。                                                   |
 | `builtinModels` | 在代码中给出、每个组织都能使用的模型。请看[模型](/zh-cn/docs/models#内置模型)。 |
 | `routes`        | 一个函数，接收登录配置，返回一个带有你自己 HTTP 路由的 Layer。                  |
 | `discovery`     | 一个在网上查找 App 的 Layer。默认通过互联网读取公开的 Catalog。                 |
@@ -97,18 +99,17 @@ NodeRuntime.runMain(
 
 ---
 
-## Session
+## Chats
 
-`sessions` 选项决定 Session（会话）如何完成工作。
+`chats` 选项决定 [Chats](/zh-cn/docs/chats) 中的 Turn 如何完成工作。
 
 | 字段             | 作用                                                            |
 | ---------------- | --------------------------------------------------------------- |
 | `runtime`        | Bot 的定义：`toolkit`、`plugin`、`providers`、`compaction` 等。 |
 | `layerExecution` | 一个函数，为每个 Turn 构建额外的服务，例如工具处理器。          |
-| `memory`         | 学到的记忆：你自己的 `model` 和 `policy`。                      |
 
 模型来自数据库中的模型提供方和 `builtinModels`。请看[模型](/zh-cn/docs/models)。
-新 Session 的记忆开关来自[组织设置](/zh-cn/docs/organization#设置)中的 `memory`。请看 [Memory](/zh-cn/docs/memory#开关)。
+[Bot 记忆](/zh-cn/docs/memory)遵循[组织设置](/zh-cn/docs/organization#设置)中的 `botMemory`。
 
 ### 添加工具
 
@@ -132,14 +133,14 @@ const handlers = toolkit.toLayer({
 const server = (settings: Configuration.Settings) =>
 	Server.layer({
 		...settings,
-		sessions: {
+		chats: {
 			runtime: { toolkit },
 			layerExecution: () => handlers,
 		},
 	}).pipe(Layer.provide(handlers))
 ```
 
-如果每次调用都需要一个决定，就在 `Tool.make` 中加上 `needsApproval: true`。这样 OpenBot 会为它创建一个 `tools.call` Request。请看 [Request](/zh-cn/docs/requests)。
+如果每次调用都需要一个决定，就在 `Tool.make` 中加上 `needsApproval: true`。这样 OpenBot 会为它检查能力 `tools.call`。当这次调用需要决策者时，Bot 会得到一个待定的结果，调用会在之后被允许时运行。请看 [Request](/zh-cn/docs/requests)。
 
 ---
 
@@ -194,6 +195,40 @@ NodeRuntime.runMain(
 	),
 )
 ```
+
+## 运行开发服务器
+
+`pnpm dev` 运行开发服务器。它有一个本地测试账户、模拟的模型和一个模拟的 App。基于 OpenBot 构建的项目可以在自己的程序中运行同样的服务器：
+
+```ts
+import { NodeRuntime } from "@effect/platform-node"
+import { Settings } from "@openbot-build/api"
+import { EnvironmentConfiguration } from "@openbot-build/openbot"
+import * as Development from "@openbot-build/openbot/Development"
+import { Config, Effect, Layer } from "effect"
+
+NodeRuntime.runMain(
+	Effect.gen(function* () {
+		const settings = yield* EnvironmentConfiguration.load
+		const publicOrigin = yield* Config.schema(
+			Settings.PublicOrigin,
+			"OPENBOT_DEV_PUBLIC_ORIGIN",
+		)
+		return yield* Layer.launch(
+			Development.layer({
+				...settings,
+				auth: {
+					mode: "development",
+					publicOrigin,
+					secret: Development.developmentSecret(settings.secretKeys),
+				},
+			}),
+		)
+	}),
+)
+```
+
+`Development.layer` 自己写入平台设置，所以它不需要设置程序。`Development.developmentSecret` 用第一个机密密钥生成登录密钥，所以重启后它保持不变。永远不要在生产环境中使用开发服务器。任何能访问它的人都可以登录。
 
 ## 把错误日志发送到你自己的服务
 
