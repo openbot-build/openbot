@@ -121,6 +121,49 @@ export const openApprovals = (
 }
 
 /**
+ * The allowed calls in a prompt that have no result yet and whose tool is not in
+ * `tools`. Effect AI would fail the whole step on such a call, so it gets a result
+ * that says that it did not run.
+ */
+export const withoutTool = (
+	prompt: Prompt.Prompt,
+	tools: ReadonlyArray<string>,
+): ReadonlyArray<Prompt.ToolCallPart> => {
+	const messages = prompt.content
+	const assistant = messages.flatMap((message) =>
+		message.role === "assistant" ? message.content : [],
+	)
+	const tool = messages.flatMap((message) =>
+		message.role === "tool" ? message.content : [],
+	)
+	const allowed = HashSet.fromIterable(
+		tool.flatMap((part) =>
+			part.type === "tool-approval-response" && part.approved
+				? [part.approvalId]
+				: [],
+		),
+	)
+	const results = HashSet.fromIterable(
+		tool.flatMap((part) => (part.type === "tool-result" ? [part.id] : [])),
+	)
+	return assistant.flatMap((part) => {
+		if (
+			part.type !== "tool-approval-request" ||
+			!HashSet.has(allowed, part.approvalId) ||
+			HashSet.has(results, part.toolCallId)
+		)
+			return []
+		const toolCall = assistant.find(
+			(call): call is Prompt.ToolCallPart =>
+				call.type === "tool-call" && call.id === part.toolCallId,
+		)
+		return toolCall === undefined || tools.includes(toolCall.name)
+			? []
+			: [toolCall]
+	})
+}
+
+/**
  * Puts the results of earlier tool calls first. Effect AI runs an approved call before the
  * model answers, but it gives the result after the answer. A provider needs each result
  * right after its call, so such a result moves in front of the new messages.

@@ -513,7 +513,7 @@ export const make = <
 					},
 					beforeTokens = yield* compaction.count(request)
 				if (
-					model?.contextWindow !== undefined &&
+					model !== undefined &&
 					beforeTokens >
 						(ConfigurationOperations.contextLimits(model).inputTokens ??
 							Infinity)
@@ -763,10 +763,13 @@ export const make = <
 															inner.instructions,
 														)
 											const compaction = yield* compactionService
+											// The window of a model can come from its own setting or from its limit.
 											if (
 												action === undefined &&
 												selection !== undefined &&
-												model?.contextWindow !== undefined &&
+												model !== undefined &&
+												ConfigurationOperations.contextLimits(model)
+													.contextWindow !== undefined &&
 												Option.isSome(compaction)
 											) {
 												const request = {
@@ -794,14 +797,26 @@ export const make = <
 													model.compaction !== undefined &&
 													autoCompactTokens !== undefined &&
 													tokens >= autoCompactTokens
-												)
-													view = (yield* compact({
+												) {
+													const before = view
+													view = yield* compact({
 														chat: chatId,
 														expected: view.chat.revision,
 														targetTokens: autoCompactTokens,
 														selection,
 														request,
-													})).view
+													}).pipe(
+														Effect.map((result) => result.view),
+														// The context is still under the input limit, so the step can
+														// go on without a smaller context.
+														Effect.catchTag("ContextCompactionError", (error) =>
+															Effect.logWarning(
+																"The context of a Chat could not get smaller",
+																error,
+															).pipe(Effect.as(before)),
+														),
+													)
+												}
 											}
 											const window = view.state.conversation.context
 											// A changed conversation must keep its messages, because the new
@@ -821,6 +836,38 @@ export const make = <
 															)
 											const starting = Prompt.concat(instructions, shown)
 											const chat = yield* AiChat.fromPrompt(starting)
+											// An allowed call whose tool is not open in this step, for example
+											// after a change to plan mode, does not run. Its result says so, and
+											// the result is saved with the step.
+											const missing =
+												action === undefined
+													? ChatState.withoutTool(
+															shown,
+															Object.keys(toolkit.tools),
+														)
+													: []
+											if (missing.length > 0)
+												yield* Ref.update(chat.history, (history) =>
+													Prompt.concat(
+														history,
+														Prompt.make([
+															{
+																role: "tool",
+																content: missing.map((call) =>
+																	Prompt.toolResultPart({
+																		id: call.id,
+																		name: call.name,
+																		isFailure: true,
+																		result: {
+																			error: `The call did not run, because the tool ${call.name} is not open now.`,
+																		},
+																		providerExecuted: false,
+																	}),
+																),
+															},
+														]),
+													),
+												)
 											yield* Ref.set(chatRef, chat)
 											yield* Ref.set(step, action === undefined ? n : 0)
 											const item = Item.Id.make(yield* id()),

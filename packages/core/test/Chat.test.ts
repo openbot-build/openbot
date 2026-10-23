@@ -522,6 +522,37 @@ test("an allowed call that comes back later runs in the Turn that reads it, with
 	)
 })
 
+test("an allowed call whose tool is not open does not run, and the Turn goes on", async () => {
+	const calls = { value: 0 },
+		prompts = { value: [] as ReadonlyArray<Prompt.Prompt> }
+	await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const { runtime, runtimeStore, chat } = yield* ChatTest({
+					toolkit: approved,
+				})
+				// The host allows a call of a tool that this Bot does not have now.
+				const delivery = yield* runtime.deliver({
+					chat,
+					input: "A person allowed the call.",
+					approved: {
+						id: "gone-allowed",
+						name: "Gone",
+						params: { text: "never" },
+					},
+				})
+				const view = yield* settled(runtime, chat)
+				assert.equal(Chat.status(view.chat)._tag, "Completed")
+				assert.equal(calls.value, 0)
+				const items = yield* runtimeStore.items(chat, { turn: delivery.turn! })
+				assert.match(JSON.stringify(items), /did not run/)
+				// The saved history has a result for the call, so a provider takes it.
+				assert.equal(HashMap.size(ChatState.unansweredCalls(items)), 0)
+			}),
+		).pipe(Effect.provide(Layer.merge(approvalModel(prompts), counted(calls)))),
+	)
+})
+
 test(
 	"interrupt keeps an external receipt while another tool is still running",
 	{ timeout: 5000 },

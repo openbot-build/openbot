@@ -194,6 +194,8 @@ export interface Options<S extends Plugin.Stores> {
 	readonly persistence: Persistence
 	readonly onCommit?: (input: {
 		readonly delta: Delta
+		/** The record before the change, or `null` for a new Chat. */
+		readonly previous: Chat.Ref | null
 		readonly view: Chat.View<Plugins<S>>
 	}) => Effect.Effect<void, ChatStoreError>
 	readonly onRemove?: (

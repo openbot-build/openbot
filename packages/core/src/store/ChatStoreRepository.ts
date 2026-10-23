@@ -113,7 +113,7 @@ export const make = <S extends Plugin.Stores>(
 				restore(
 					options.onCommit === undefined
 						? storage.save(delta)
-						: options.onCommit({ delta, view }),
+						: options.onCommit({ delta, previous, view }),
 				).pipe(
 					Effect.andThen(publish({ _tag: "Committed", previous, view, items })),
 				),
