@@ -41,6 +41,13 @@ import * as ChannelQueue from "../channels/ChannelQueue.ts"
 import * as ChannelRegistry from "../channels/ChannelRegistry.ts"
 import * as ChannelWorker from "../channels/ChannelWorker.ts"
 import * as ChannelPlugin from "../plugins/channels/ChannelPlugin.ts"
+import * as ComputerProviders from "../computers/ComputerProviders.ts"
+import * as Computers from "../computers/Computers.ts"
+import * as Connectors from "../computers/connector/Connectors.ts"
+import * as Drivers from "../computers/Drivers.ts"
+import * as Pairings from "../computers/Pairings.ts"
+import * as ComputerWorker from "../computers/Worker.ts"
+import * as ComputerPlugin from "../plugins/computers/ComputerPlugin.ts"
 import * as Judge from "../capabilities/Judge.ts"
 import * as Sessions from "../sessions/Sessions.ts"
 import { Config } from "@openbot-build/core"
@@ -96,6 +103,9 @@ export interface Options<
 	readonly builtinModels?: ModelRegistry.Builtin
 	readonly triggers?: TriggerWorker.Options
 	readonly channels?: ChannelWorker.Options
+	readonly computers?: ComputerWorker.Options
+	/** The drivers of the Computer providers. Tests give fake ones. */
+	readonly computerDrivers?: Layer.Layer<Drivers.Drivers>
 }
 
 /**
@@ -242,6 +252,14 @@ export const layer = <
 		Layer.provide(options.appNetwork ?? AppHost.layerNetwork),
 	)
 
+	const computers = ComputerPlugin.layer.pipe(
+		Layer.provideMerge(Pairings.layer),
+		Layer.provideMerge(Computers.layer),
+		Layer.provideMerge(Connectors.layer),
+		Layer.provideMerge(ComputerProviders.layer),
+		Layer.provideMerge(options.computerDrivers ?? Drivers.layer),
+	)
+
 	const indexNamespace = options.indexNamespace ?? "public"
 	const apps = Layer.mergeAll(
 		Lifecycle.layer,
@@ -324,7 +342,7 @@ export const layer = <
 	).pipe(
 		Layer.provideMerge(apps),
 		Layer.provideMerge(Triggers.layer),
-		Layer.provideMerge(channels),
+		Layer.provideMerge(Layer.merge(channels, computers)),
 		Layer.provideMerge(agents),
 		Layer.provideMerge(index),
 		Layer.provideMerge(Governance.layer),
@@ -359,6 +377,7 @@ export const layer = <
 		developer,
 		Coordinator.layer,
 		TriggerWorker.layer(options.triggers),
+		ComputerWorker.layer(options.computers),
 		ChannelWorker.layer({
 			publicOrigin: options.auth.publicOrigin,
 			...options.channels,

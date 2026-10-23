@@ -1,0 +1,953 @@
+import { createHash, randomBytes } from "node:crypto"
+import {
+	type AgentsApi,
+	type Caller,
+	ComputersApi,
+	Permissions,
+} from "@openbot-build/api"
+import { and, desc, eq, inArray, isNull, or } from "drizzle-orm"
+import { Clock, Context, Effect, Layer, Option } from "effect"
+import { Agents } from "../agents/Agents.ts"
+import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
+import { can } from "../authorization/Check.ts"
+import { computerKey, computerPlace } from "../authorization/Policy.ts"
+import * as Db from "../database/Database.ts"
+import { computerAccess, computers, computerUsage } from "../database/Schema.ts"
+import type { ComputerError, Machine } from "./Computer.ts"
+import { ComputerProviders, unavailable } from "./ComputerProviders.ts"
+import * as ConnectorMachine from "./connector/ConnectorMachine.ts"
+import { Connectors } from "./connector/Connectors.ts"
+import { Drivers } from "./Drivers.ts"
+
+type Computer = ComputersApi.Computer
+type Row = typeof computers.$inferSelect
+
+const notFound = (id: string) => ComputersApi.ComputerNotFound.make({ id })
+const invalid = (message: string) =>
+	ComputersApi.ComputerInvalid.make({ message })
+
+export const hashToken = (token: string) =>
+	createHash("sha256").update(token).digest("hex")
+
+/** A new connector token. Only its hash is stored. */
+export const newToken = () => "oct_" + randomBytes(32).toString("base64url")
+
+export type Failure =
+	| ComputersApi.ComputerNotFound
+	| ComputersApi.ComputerProviderNotFound
+	| ComputersApi.ComputerConflict
+	| ComputersApi.ComputerInvalid
+	| ComputersApi.ComputerUnsupported
+	| ComputersApi.ComputerNotReady
+	| ComputersApi.ComputerProviderFailed
+	| ComputersApi.ComputersUnavailable
+	| Permissions.PermissionDenied
+	| Permissions.AuthorizationUnavailable
+
+/** A Computer is idle this long before OpenBot pauses it, unless it says otherwise. */
+export const defaultPauseAfter = 10 * 60
+
+const fromRow = (row: Row): Computer => ({
+	id: ComputersApi.ComputerId.make(row.id),
+	name: row.name,
+	owner:
+		row.ownerUserId === null
+			? { _tag: "Organization" }
+			: { _tag: "Member", userId: row.ownerUserId },
+	source:
+		row.source === "connector"
+			? { _tag: "Connector" }
+			: {
+					_tag: "Provider",
+					provider: ComputersApi.ComputerProviderId.make(row.providerId ?? ""),
+					template: row.template,
+				},
+	state: row.state as ComputersApi.ComputerState,
+	features: JSON.parse(row.features) as ComputersApi.ComputerFeatures,
+	pauseAfter: row.pauseAfter,
+	createdBy: row.createdBy,
+	version: row.version,
+	createdAt: row.createdAt,
+	updatedAt: row.updatedAt,
+	lastActiveAt: row.lastActiveAt,
+})
+
+/** Maps an error of a driver or a connector to an error of the API. */
+const fromDriver = (error: ComputerError) =>
+	error._tag === "ComputerGone"
+		? ComputersApi.ComputerNotReady.make({ state: "offline" })
+		: ComputersApi.ComputerProviderFailed.make({ message: error.message })
+
+/** Which permission a caller needs on a Computer. */
+export type Need = "computers.read" | "computers.use" | "computers.write"
+
+/** The Computers of an organization, and the rights of Agents to use them. */
+export class Computers extends Context.Service<
+	Computers,
+	{
+		/** The Computers that the caller can read. With `agent`, only those that Agent may use. */
+		readonly list: (
+			caller: Caller,
+			agent?: AgentsApi.AgentId,
+		) => Effect.Effect<ReadonlyArray<Computer>, Failure, AuthorizationServices>
+		readonly get: (
+			caller: Caller,
+			id: string,
+			need?: Need,
+		) => Effect.Effect<Computer, Failure, AuthorizationServices>
+		/**
+		 * Creates a Computer. `createdBy` is the Agent that made it for the caller.
+		 * That Agent gets the right to use it.
+		 */
+		readonly create: (
+			caller: Caller,
+			input: ComputersApi.CreateComputerRequest,
+			agent?: AgentsApi.AgentId,
+		) => Effect.Effect<Computer, Failure, AuthorizationServices>
+		readonly update: (
+			caller: Caller,
+			id: string,
+			input: ComputersApi.UpdateComputerRequest,
+		) => Effect.Effect<Computer, Failure, AuthorizationServices>
+		/** Deletes a Computer, its sandbox, and every right to use it. */
+		readonly remove: (
+			caller: Caller,
+			id: string,
+		) => Effect.Effect<void, Failure, AuthorizationServices>
+		readonly pause: (
+			caller: Caller,
+			id: string,
+		) => Effect.Effect<Computer, Failure, AuthorizationServices>
+		readonly resume: (
+			caller: Caller,
+			id: string,
+		) => Effect.Effect<Computer, Failure, AuthorizationServices>
+		/**
+		 * Reads a Computer that the caller may use, and gets its machine ready.
+		 * A paused Computer resumes first. Work marks the Computer as active.
+		 */
+		readonly machine: (
+			caller: Caller,
+			id: string,
+		) => Effect.Effect<
+			{ readonly computer: Computer; readonly machine: Machine },
+			Failure,
+			AuthorizationServices
+		>
+		/** Maps an error of the machine to an error of the API. */
+		readonly work: <A>(
+			effect: Effect.Effect<A, ComputerError>,
+		) => Effect.Effect<A, Failure>
+		readonly setConnectorToken: (
+			caller: Caller,
+			id: string,
+		) => Effect.Effect<string, Failure, AuthorizationServices>
+		/** The connector Computer that a token opens. */
+		readonly byToken: (
+			token: string,
+		) => Effect.Effect<
+			Option.Option<{ readonly organizationId: string; readonly id: string }>,
+			ComputersApi.ComputersUnavailable
+		>
+		/** Marks a connector Computer as connected or not. */
+		readonly connected: (
+			organizationId: string,
+			id: string,
+			hello: Option.Option<ComputersApi.ConnectorHello>,
+		) => Effect.Effect<void>
+		/**
+		 * Makes or finds the connector Computer of a machine that a person approved.
+		 * The same machine in the same organization keeps its Computer.
+		 */
+		readonly pair: (
+			caller: Caller,
+			input: {
+				readonly machineId: string
+				readonly name: string
+				readonly shared: boolean
+				readonly desktop: boolean
+			},
+		) => Effect.Effect<
+			{ readonly computer: Computer; readonly token: string },
+			Failure,
+			AuthorizationServices
+		>
+		readonly agents: (
+			caller: Caller,
+			id: string,
+		) => Effect.Effect<
+			ReadonlyArray<ComputersApi.ComputerAccess>,
+			Failure,
+			AuthorizationServices
+		>
+		/** Gives an Agent the right to use a Computer. The caller decides for the Agent. */
+		readonly grant: (
+			caller: Caller,
+			id: string,
+			agent: AgentsApi.AgentId,
+		) => Effect.Effect<
+			ComputersApi.ComputerAccess,
+			Failure,
+			AuthorizationServices
+		>
+		readonly revoke: (
+			caller: Caller,
+			id: string,
+			agent: AgentsApi.AgentId,
+		) => Effect.Effect<void, Failure, AuthorizationServices>
+		/** The Agent gives up its own right to use the Computer. The Computer stays. */
+		readonly release: (
+			organizationId: string,
+			agent: AgentsApi.AgentId,
+			id: string,
+		) => Effect.Effect<void, ComputersApi.ComputersUnavailable>
+		/** Gives an Agent the right after its request was approved. It checks no permission. */
+		readonly grantApproved: (
+			organizationId: string,
+			id: string,
+			agent: AgentsApi.AgentId,
+			grantedBy: string,
+		) => Effect.Effect<
+			ComputersApi.ComputerAccess,
+			ComputersApi.ComputersUnavailable
+		>
+		/** True when the Agent has the right to use the Computer and is not archived. */
+		readonly holds: (
+			organizationId: string,
+			agent: AgentsApi.AgentId,
+			id: string,
+		) => Effect.Effect<boolean, ComputersApi.ComputersUnavailable>
+		/** The Computers of an Agent that it may use. */
+		readonly heldBy: (
+			organizationId: string,
+			agent: AgentsApi.AgentId,
+		) => Effect.Effect<
+			ReadonlyArray<Computer>,
+			ComputersApi.ComputersUnavailable
+		>
+		readonly usage: (
+			caller: Caller,
+			id: string,
+		) => Effect.Effect<
+			ReadonlyArray<ComputersApi.ComputerUsage>,
+			Failure,
+			AuthorizationServices
+		>
+		/** Pauses the Computers that had no work for longer than their `pauseAfter`. */
+		readonly pauseIdle: Effect.Effect<void>
+		/** Removes the rights of archived Agents. */
+		readonly forgetArchived: Effect.Effect<void>
+	}
+>()("@openbot-build/openbot/computers/Computers") {}
+
+export const make = Effect.gen(function* () {
+	const db = yield* Db.make
+	const providers = yield* ComputerProviders
+	const drivers = yield* Drivers
+	const connectors = yield* Connectors
+	const agentsService = yield* Agents
+	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+		effect.pipe(Effect.mapError(unavailable))
+	const where = (organizationId: string, id: string) =>
+		and(eq(computers.organizationId, organizationId), eq(computers.id, id))
+	const row = (organizationId: string, id: string) =>
+		stored(db.select().from(computers).where(where(organizationId, id))).pipe(
+			Effect.map((rows) => Option.fromNullishOr(rows[0])),
+		)
+	const keyOf = (
+		organizationId: string,
+		computer: Pick<Computer, "id" | "owner">,
+	) =>
+		computerKey({
+			organizationId,
+			id: computer.id,
+			owner: computer.owner,
+			kind: "computer",
+		})
+	/** A caller who cannot read a Computer does not learn that it exists. */
+	const access = (caller: Caller, id: string, need: Need) =>
+		Effect.gen(function* () {
+			const found = yield* row(caller.organizationId, id)
+			if (Option.isNone(found)) return yield* notFound(id)
+			const computer = fromRow(found.value)
+			const key = keyOf(caller.organizationId, computer)
+			if (!(yield* can({ caller, permission: "computers.read", key })))
+				return yield* notFound(id)
+			if (
+				need !== "computers.read" &&
+				!(yield* can({ caller, permission: need, key }))
+			)
+				return yield* Permissions.PermissionDenied.make({
+					permission: need,
+					resource: key,
+				})
+			return { computer, row: found.value }
+		})
+
+	/** Changes the stored state, and opens or closes a usage record with it. */
+	const setState = (
+		organizationId: string,
+		current: Row,
+		state: ComputersApi.ComputerState,
+	) =>
+		Effect.gen(function* () {
+			const now = yield* Clock.currentTimeMillis
+			yield* stored(
+				db
+					.update(computers)
+					.set({ state, updatedAt: now, lastActiveAt: now })
+					.where(where(organizationId, current.id)),
+			)
+			const running = state === "running"
+			const wasRunning = current.state === "running"
+			if (running && !wasRunning)
+				yield* stored(
+					db.insert(computerUsage).values({
+						organizationId,
+						computerId: current.id,
+						ownerUserId: current.ownerUserId,
+						startedAt: now,
+					}),
+				)
+			if (!running && wasRunning)
+				yield* stored(
+					db
+						.update(computerUsage)
+						.set({ endedAt: now })
+						.where(
+							and(
+								eq(computerUsage.computerId, current.id),
+								isNull(computerUsage.endedAt),
+							),
+						),
+				)
+		})
+
+	/** The machine behind a stored Computer. */
+	const machineOf = (current: Row) =>
+		Effect.gen(function* () {
+			if (current.source === "connector") {
+				const features = JSON.parse(
+					current.features,
+				) as ComputersApi.ComputerFeatures
+				return ConnectorMachine.make({
+					computerId: current.id,
+					desktop: features.desktop,
+					connectors,
+					online: current.state === "running",
+				})
+			}
+			if (current.providerId === null || current.ref === null)
+				return yield* ComputersApi.ComputerNotReady.make({ state: "failed" })
+			const { credentials } = yield* providers.credentials(
+				current.organizationId,
+				current.providerId,
+			)
+			const provider = yield* drivers.make(credentials)
+			return yield* provider
+				.attach(current.ref)
+				.pipe(Effect.mapError(fromDriver))
+		})
+
+	const work = <A>(effect: Effect.Effect<A, ComputerError>) =>
+		effect.pipe(Effect.mapError(fromDriver))
+
+	const insert = (values: typeof computers.$inferInsert) =>
+		stored(db.insert(computers).values(values))
+
+	const grantRow = (
+		organizationId: string,
+		computerId: string,
+		agent: AgentsApi.AgentId,
+		grantedBy: string,
+	) =>
+		Effect.gen(function* () {
+			const now = yield* Clock.currentTimeMillis
+			yield* stored(
+				db
+					.insert(computerAccess)
+					.values({
+						organizationId,
+						computerId,
+						agent,
+						grantedBy,
+						grantedAt: now,
+					})
+					.onConflictDoNothing(),
+			)
+			const rows = yield* stored(
+				db
+					.select()
+					.from(computerAccess)
+					.where(
+						and(
+							eq(computerAccess.computerId, computerId),
+							eq(computerAccess.agent, agent),
+						),
+					),
+			)
+			const saved = rows[0]!
+			return {
+				computer: ComputersApi.ComputerId.make(computerId),
+				agent,
+				grantedBy: saved.grantedBy,
+				grantedAt: saved.grantedAt,
+			} satisfies ComputersApi.ComputerAccess
+		})
+
+	const placeFor = (caller: Caller, shared: boolean) =>
+		computerPlace({
+			organizationId: caller.organizationId,
+			userId: shared ? null : caller.userId,
+			kind: "computer",
+		})
+
+	const mayCreate = (caller: Caller, shared: boolean) =>
+		Effect.gen(function* () {
+			const place = placeFor(caller, shared)
+			if (!(yield* can({ caller, permission: "computers.write", key: place })))
+				return yield* Permissions.PermissionDenied.make({
+					permission: "computers.write",
+					resource: place,
+				})
+		})
+
+	const service: Computers["Service"] = {
+		list: (caller, agent) =>
+			Effect.gen(function* () {
+				const readable: Array<string | null> = []
+				for (const userId of [caller.userId, null])
+					if (
+						yield* can({
+							caller,
+							permission: "computers.read",
+							key: computerPlace({
+								organizationId: caller.organizationId,
+								userId,
+								kind: "computer",
+							}),
+						})
+					)
+						readable.push(userId)
+				if (readable.length === 0) return []
+				const held =
+					agent === undefined
+						? undefined
+						: (yield* stored(
+								db
+									.select({ id: computerAccess.computerId })
+									.from(computerAccess)
+									.where(
+										and(
+											eq(computerAccess.organizationId, caller.organizationId),
+											eq(computerAccess.agent, agent),
+										),
+									),
+							)).map((entry) => entry.id)
+				if (held !== undefined && held.length === 0) return []
+				const rows = yield* stored(
+					db
+						.select()
+						.from(computers)
+						.where(
+							and(
+								eq(computers.organizationId, caller.organizationId),
+								or(
+									...readable.map((userId) =>
+										userId === null
+											? isNull(computers.ownerUserId)
+											: eq(computers.ownerUserId, userId),
+									),
+								),
+								held === undefined ? undefined : inArray(computers.id, held),
+							),
+						)
+						.orderBy(computers.createdAt),
+				)
+				return rows.map(fromRow)
+			}),
+		get: (caller, id, need = "computers.read") =>
+			Effect.map(access(caller, id, need), (found) => found.computer),
+		create: (caller, input, agent) =>
+			Effect.gen(function* () {
+				const shared = input.shared === true
+				yield* mayCreate(caller, shared)
+				const now = yield* Clock.currentTimeMillis
+				const id = "cmp_" + randomBytes(16).toString("hex")
+				const base = {
+					organizationId: caller.organizationId,
+					id,
+					ownerUserId: shared ? null : caller.userId,
+					name: input.name,
+					pauseAfter:
+						input.pauseAfter === undefined
+							? defaultPauseAfter
+							: input.pauseAfter,
+					createdBy: agent ?? caller.userId,
+					version: 0,
+					createdAt: now,
+					updatedAt: now,
+					lastActiveAt: null,
+				}
+				if (input.source._tag === "Connector") {
+					yield* insert({
+						...base,
+						source: "connector",
+						state: "offline",
+						features: JSON.stringify({
+							pause: false,
+							desktop: false,
+							ports: false,
+						}),
+						pauseAfter: null,
+					})
+				} else {
+					const provider = yield* providers.get(
+						caller,
+						input.source.provider,
+						"computer_providers.use",
+					)
+					const { credentials } = yield* providers.credentials(
+						caller.organizationId,
+						provider.id,
+					)
+					const driver = yield* drivers.make(credentials)
+					const desktop = input.desktop === true
+					const created = yield* driver
+						.create({
+							...(input.source.template === null
+								? {}
+								: { template: input.source.template }),
+							desktop,
+							labels: {
+								openbot_computer: id,
+								openbot_organization: caller.organizationId,
+							},
+						})
+						.pipe(Effect.mapError(fromDriver))
+					yield* insert({
+						...base,
+						source: "provider",
+						providerId: provider.id,
+						template: input.source.template,
+						ref: created.ref,
+						state: "starting",
+						features: JSON.stringify({ pause: true, desktop, ports: true }),
+					})
+					const stored_ = Option.getOrThrow(
+						yield* row(caller.organizationId, id),
+					)
+					yield* setState(caller.organizationId, stored_, "running")
+				}
+				if (agent !== undefined)
+					yield* grantRow(caller.organizationId, id, agent, caller.userId)
+				return fromRow(Option.getOrThrow(yield* row(caller.organizationId, id)))
+			}),
+		update: (caller, id, input) =>
+			Effect.gen(function* () {
+				const { computer } = yield* access(caller, id, "computers.write")
+				if (input.expectedVersion !== computer.version)
+					return yield* ComputersApi.ComputerConflict.make({
+						version: computer.version,
+					})
+				if (
+					computer.source._tag === "Connector" &&
+					input.pauseAfter !== undefined &&
+					input.pauseAfter !== null
+				)
+					return yield* invalid("A connected machine cannot pause.")
+				const now = yield* Clock.currentTimeMillis
+				const changed = yield* stored(
+					db
+						.update(computers)
+						.set({
+							...(input.name === undefined ? {} : { name: input.name }),
+							...(input.pauseAfter === undefined
+								? {}
+								: { pauseAfter: input.pauseAfter }),
+							version: computer.version + 1,
+							updatedAt: now,
+						})
+						.where(
+							and(
+								where(caller.organizationId, id),
+								eq(computers.version, computer.version),
+							),
+						)
+						.returning(),
+				)
+				const next = changed[0]
+				if (next === undefined)
+					return yield* ComputersApi.ComputerConflict.make({
+						version: computer.version,
+					})
+				return fromRow(next)
+			}),
+		remove: (caller, id) =>
+			Effect.gen(function* () {
+				const { row: current } = yield* access(caller, id, "computers.write")
+				const machine = yield* machineOf(current).pipe(Effect.option)
+				if (Option.isSome(machine))
+					yield* machine.value.destroy.pipe(Effect.mapError(fromDriver))
+				yield* setState(caller.organizationId, current, "offline")
+				yield* stored(
+					db.delete(computers).where(where(caller.organizationId, id)),
+				)
+			}),
+		pause: (caller, id) =>
+			Effect.gen(function* () {
+				const { row: current } = yield* access(caller, id, "computers.use")
+				const machine = yield* machineOf(current)
+				if (machine.pausable === undefined)
+					return yield* ComputersApi.ComputerUnsupported.make({
+						feature: "pause",
+					})
+				if (current.state === "running") {
+					yield* work(machine.pausable.pause)
+					yield* setState(caller.organizationId, current, "paused")
+				}
+				return fromRow(Option.getOrThrow(yield* row(caller.organizationId, id)))
+			}),
+		resume: (caller, id) =>
+			Effect.gen(function* () {
+				const { row: current } = yield* access(caller, id, "computers.use")
+				const machine = yield* machineOf(current)
+				if (current.state === "paused" && machine.pausable !== undefined) {
+					yield* work(machine.pausable.resume)
+					yield* setState(caller.organizationId, current, "running")
+				}
+				return fromRow(Option.getOrThrow(yield* row(caller.organizationId, id)))
+			}),
+		machine: (caller, id) =>
+			Effect.gen(function* () {
+				const { row: current } = yield* access(caller, id, "computers.use")
+				if (current.state === "failed" || current.state === "offline")
+					return yield* ComputersApi.ComputerNotReady.make({
+						state: current.state,
+					})
+				const machine = yield* machineOf(current)
+				if (current.state === "paused" && machine.pausable !== undefined) {
+					yield* work(machine.pausable.resume)
+					yield* setState(caller.organizationId, current, "running")
+				} else {
+					const now = yield* Clock.currentTimeMillis
+					yield* stored(
+						db
+							.update(computers)
+							.set({ lastActiveAt: now })
+							.where(where(caller.organizationId, id)),
+					)
+				}
+				const computer = fromRow(
+					Option.getOrThrow(yield* row(caller.organizationId, id)),
+				)
+				return { computer, machine }
+			}),
+		work,
+		setConnectorToken: (caller, id) =>
+			Effect.gen(function* () {
+				const { computer } = yield* access(caller, id, "computers.write")
+				if (computer.source._tag !== "Connector")
+					return yield* invalid("Only a connector Computer has a token.")
+				const token = newToken()
+				yield* stored(
+					db
+						.update(computers)
+						.set({ tokenHash: hashToken(token) })
+						.where(where(caller.organizationId, id)),
+				)
+				// The old connection used the old token, so it must go.
+				yield* connectors.close(id)
+				return token
+			}),
+		byToken: (token) =>
+			stored(
+				db
+					.select({
+						organizationId: computers.organizationId,
+						id: computers.id,
+					})
+					.from(computers)
+					.where(eq(computers.tokenHash, hashToken(token))),
+			).pipe(Effect.map((rows) => Option.fromNullishOr(rows[0]))),
+		connected: (organizationId, id, hello) =>
+			Effect.gen(function* () {
+				const current = yield* row(organizationId, id)
+				if (Option.isNone(current)) return
+				if (Option.isSome(hello)) {
+					const features = JSON.parse(
+						current.value.features,
+					) as ComputersApi.ComputerFeatures
+					yield* stored(
+						db
+							.update(computers)
+							.set({
+								features: JSON.stringify({
+									...features,
+									desktop: hello.value.desktop,
+								}),
+							})
+							.where(where(organizationId, id)),
+					)
+				}
+				yield* setState(
+					organizationId,
+					current.value,
+					Option.isSome(hello) ? "running" : "offline",
+				)
+			}).pipe(Effect.ignore),
+		pair: (caller, input) =>
+			Effect.gen(function* () {
+				const token = newToken()
+				const existing = (yield* stored(
+					db
+						.select()
+						.from(computers)
+						.where(
+							and(
+								eq(computers.organizationId, caller.organizationId),
+								eq(computers.machineId, input.machineId),
+							),
+						),
+				))[0]
+				if (existing !== undefined) {
+					// The person must be able to change the Computer to give it a new token.
+					yield* access(caller, existing.id, "computers.write")
+					yield* stored(
+						db
+							.update(computers)
+							.set({ tokenHash: hashToken(token) })
+							.where(where(caller.organizationId, existing.id)),
+					)
+					yield* connectors.close(existing.id)
+					return { computer: fromRow(existing), token }
+				}
+				yield* mayCreate(caller, input.shared)
+				const now = yield* Clock.currentTimeMillis
+				const id = "cmp_" + randomBytes(16).toString("hex")
+				yield* insert({
+					organizationId: caller.organizationId,
+					id,
+					ownerUserId: input.shared ? null : caller.userId,
+					name: input.name,
+					source: "connector",
+					machineId: input.machineId,
+					tokenHash: hashToken(token),
+					state: "offline",
+					features: JSON.stringify({
+						pause: false,
+						desktop: input.desktop,
+						ports: false,
+					}),
+					pauseAfter: null,
+					createdBy: caller.userId,
+					version: 0,
+					createdAt: now,
+					updatedAt: now,
+					lastActiveAt: null,
+				})
+				return {
+					computer: fromRow(
+						Option.getOrThrow(yield* row(caller.organizationId, id)),
+					),
+					token,
+				}
+			}),
+		agents: (caller, id) =>
+			Effect.gen(function* () {
+				yield* access(caller, id, "computers.read")
+				const rows = yield* stored(
+					db
+						.select()
+						.from(computerAccess)
+						.where(
+							and(
+								eq(computerAccess.organizationId, caller.organizationId),
+								eq(computerAccess.computerId, id),
+							),
+						)
+						.orderBy(computerAccess.grantedAt),
+				)
+				return rows.map((entry) => ({
+					computer: ComputersApi.ComputerId.make(entry.computerId),
+					agent: entry.agent as AgentsApi.AgentId,
+					grantedBy: entry.grantedBy,
+					grantedAt: entry.grantedAt,
+				}))
+			}),
+		grant: (caller, id, agent) =>
+			Effect.gen(function* () {
+				yield* access(caller, id, "computers.use")
+				const target = yield* agentsService
+					.access(caller, agent, "agents.write")
+					.pipe(
+						Effect.catchTags({
+							AgentNotFound: () => invalid("The Agent does not exist."),
+							AgentStorageUnavailable: () => Effect.fail(unavailable()),
+							AgentConflict: () => invalid("The Agent changed. Try again."),
+							AgentInvalid: (error) => invalid(error.message),
+						}),
+					)
+				if (target.archived)
+					return yield* invalid("An archived Agent cannot use a Computer.")
+				return yield* grantRow(caller.organizationId, id, agent, caller.userId)
+			}),
+		revoke: (caller, id, agent) =>
+			Effect.gen(function* () {
+				yield* access(caller, id, "computers.use")
+				yield* stored(
+					db
+						.delete(computerAccess)
+						.where(
+							and(
+								eq(computerAccess.organizationId, caller.organizationId),
+								eq(computerAccess.computerId, id),
+								eq(computerAccess.agent, agent),
+							),
+						),
+				)
+			}),
+		release: (organizationId, agent, id) =>
+			stored(
+				db
+					.delete(computerAccess)
+					.where(
+						and(
+							eq(computerAccess.organizationId, organizationId),
+							eq(computerAccess.computerId, id),
+							eq(computerAccess.agent, agent),
+						),
+					),
+			).pipe(Effect.asVoid),
+		grantApproved: grantRow,
+		holds: (organizationId, agent, id) =>
+			Effect.gen(function* () {
+				const rows = yield* stored(
+					db
+						.select({ agent: computerAccess.agent })
+						.from(computerAccess)
+						.where(
+							and(
+								eq(computerAccess.organizationId, organizationId),
+								eq(computerAccess.computerId, id),
+								eq(computerAccess.agent, agent),
+							),
+						),
+				)
+				if (rows.length === 0) return false
+				const found = yield* agentsService
+					.find(organizationId, agent)
+					.pipe(Effect.mapError(unavailable))
+				return Option.isSome(found) && !found.value.archived
+			}),
+		heldBy: (organizationId, agent) =>
+			Effect.gen(function* () {
+				const rows = yield* stored(
+					db
+						.select({ computer: computers })
+						.from(computerAccess)
+						.innerJoin(
+							computers,
+							and(
+								eq(computers.organizationId, computerAccess.organizationId),
+								eq(computers.id, computerAccess.computerId),
+							),
+						)
+						.where(
+							and(
+								eq(computerAccess.organizationId, organizationId),
+								eq(computerAccess.agent, agent),
+							),
+						)
+						.orderBy(computers.createdAt),
+				)
+				return rows.map((entry) => fromRow(entry.computer))
+			}),
+		usage: (caller, id) =>
+			Effect.gen(function* () {
+				yield* access(caller, id, "computers.read")
+				const now = yield* Clock.currentTimeMillis
+				const rows = yield* stored(
+					db
+						.select()
+						.from(computerUsage)
+						.where(
+							and(
+								eq(computerUsage.organizationId, caller.organizationId),
+								eq(computerUsage.computerId, id),
+							),
+						)
+						.orderBy(desc(computerUsage.startedAt))
+						.limit(500),
+				)
+				return rows.map((entry) => ({
+					computer: ComputersApi.ComputerId.make(entry.computerId),
+					startedAt: entry.startedAt,
+					endedAt: entry.endedAt,
+					seconds: Math.round(
+						((entry.endedAt ?? now) - entry.startedAt) / 1000,
+					),
+				}))
+			}),
+		pauseIdle: Effect.gen(function* () {
+			const now = yield* Clock.currentTimeMillis
+			const running = yield* stored(
+				db
+					.select()
+					.from(computers)
+					.where(
+						and(
+							eq(computers.state, "running"),
+							eq(computers.source, "provider"),
+						),
+					),
+			)
+			for (const current of running) {
+				if (current.pauseAfter === null) continue
+				const last = current.lastActiveAt ?? current.updatedAt
+				if (now - last < current.pauseAfter * 1000) continue
+				yield* Effect.gen(function* () {
+					const machine = yield* machineOf(current)
+					if (machine.pausable === undefined) return
+					yield* work(machine.pausable.pause)
+					yield* setState(current.organizationId, current, "paused")
+				}).pipe(
+					Effect.catch((error) =>
+						Effect.logWarning("OpenBot could not pause an idle Computer.", {
+							computer: current.id,
+							error,
+						}),
+					),
+				)
+			}
+		}).pipe(Effect.ignore),
+		forgetArchived: Effect.gen(function* () {
+			const rows = yield* stored(
+				db
+					.selectDistinct({
+						organizationId: computerAccess.organizationId,
+						agent: computerAccess.agent,
+					})
+					.from(computerAccess),
+			)
+			for (const entry of rows) {
+				const found = yield* agentsService
+					.find(entry.organizationId, entry.agent)
+					.pipe(Effect.mapError(unavailable))
+				if (Option.isSome(found) && !found.value.archived) continue
+				yield* stored(
+					db
+						.delete(computerAccess)
+						.where(
+							and(
+								eq(computerAccess.organizationId, entry.organizationId),
+								eq(computerAccess.agent, entry.agent),
+							),
+						),
+				)
+			}
+		}).pipe(Effect.ignore),
+	}
+	return Computers.of(service)
+})
+export const layer = Layer.effect(Computers, make)

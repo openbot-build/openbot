@@ -1,5 +1,6 @@
 import {
 	type AgentsApi,
+	type ComputersApi,
 	Permissions,
 	type TriggersApi,
 } from "@openbot-build/api"
@@ -48,10 +49,12 @@ export const resourceKey = (target: {
 		case "connection":
 		case "request":
 			return child(userKey(subject))
-		// The key of one Agent or trigger depends on its owner.
-		// Use agentKey or triggerKey when the Agent or trigger is known.
+		// The key of one Agent, trigger or Computer depends on its owner.
+		// Use agentKey, triggerKey or computerKey when it is known.
 		case "agent":
 		case "trigger":
+		case "computer":
+		case "computer_provider":
 		case "model":
 		case "channel":
 			return child(organizationKey(subject.organizationId))
@@ -123,6 +126,36 @@ export const triggerKey = (trigger: {
 	}) +
 	"." +
 	segment(trigger.id)
+
+/**
+ * The place for the Computers of a member, or for shared Computers when `userId` is `null`.
+ * `kind` is `computer` or `computer_provider`.
+ */
+export const computerPlace = (input: {
+	readonly organizationId: string
+	readonly userId: string | null
+	readonly kind: "computer" | "computer_provider"
+}) =>
+	(input.userId === null
+		? organizationKey(input.organizationId)
+		: userKey({ organizationId: input.organizationId, userId: input.userId })) +
+	"." +
+	input.kind
+
+/** The key of one Computer or Computer provider. */
+export const computerKey = (input: {
+	readonly organizationId: string
+	readonly id: string
+	readonly owner: ComputersApi.ComputerOwner
+	readonly kind: "computer" | "computer_provider"
+}) =>
+	computerPlace({
+		organizationId: input.organizationId,
+		userId: input.owner._tag === "Member" ? input.owner.userId : null,
+		kind: input.kind,
+	}) +
+	"." +
+	segment(input.id)
 
 /** Put the organization and the user of the caller into a resource pattern. */
 export const expand = ({

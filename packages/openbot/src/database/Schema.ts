@@ -912,6 +912,163 @@ export const channelLinks = table(
 )
 
 /**
+ * An account at a service that runs Computers. `owner_user_id` is null when it is shared.
+ * `credentials` is the sealed JSON of its secrets. `hints` shows their last characters.
+ */
+export const computerProviders = table(
+	"openbot_computer_providers",
+	{
+		organizationId: text("organization_id").notNull(),
+		id: text().notNull(),
+		ownerUserId: text("owner_user_id"),
+		kind: text().notNull(),
+		name: text().notNull(),
+		credentials: text().notNull(),
+		hints: text().notNull(),
+		version: integer().notNull(),
+		createdAt: time("created_at").notNull(),
+		updatedAt: time("updated_at").notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.organizationId, t.id] }),
+		index("openbot_computer_providers_owner").on(
+			t.organizationId,
+			t.ownerUserId,
+		),
+	],
+)
+
+/**
+ * A machine where Agents work. `owner_user_id` is null when it is shared.
+ * A provider Computer has `provider_id` and `ref`, the ID of its sandbox at the provider.
+ * A connector Computer has `machine_id` and the hash of its connector token.
+ * `features` is JSON text.
+ */
+export const computers = table(
+	"openbot_computers",
+	{
+		organizationId: text("organization_id").notNull(),
+		id: text().notNull(),
+		ownerUserId: text("owner_user_id"),
+		name: text().notNull(),
+		source: text().notNull(),
+		providerId: text("provider_id"),
+		template: text(),
+		ref: text(),
+		machineId: text("machine_id"),
+		tokenHash: text("token_hash"),
+		state: text().notNull(),
+		features: text().notNull(),
+		pauseAfter: integer("pause_after"),
+		createdBy: text("created_by").notNull(),
+		version: integer().notNull(),
+		createdAt: time("created_at").notNull(),
+		updatedAt: time("updated_at").notNull(),
+		lastActiveAt: time("last_active_at"),
+	},
+	(t) => [
+		primaryKey({ columns: [t.organizationId, t.id] }),
+		// The connector socket names only the token, and a call names only the Computer.
+		uniqueIndex("openbot_computers_id").on(t.id),
+		uniqueIndex("openbot_computers_token").on(t.tokenHash),
+		uniqueIndex("openbot_computers_machine").on(t.organizationId, t.machineId),
+		index("openbot_computers_owner").on(t.organizationId, t.ownerUserId),
+		foreignKey({
+			columns: [t.organizationId, t.providerId],
+			foreignColumns: [computerProviders.organizationId, computerProviders.id],
+		}),
+	],
+)
+
+/** The right of one Agent to use one Computer. */
+export const computerAccess = table(
+	"openbot_computer_access",
+	{
+		organizationId: text("organization_id").notNull(),
+		computerId: text("computer_id").notNull(),
+		agent: text().notNull(),
+		grantedBy: text("granted_by").notNull(),
+		grantedAt: time("granted_at").notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.computerId, t.agent] }),
+		foreignKey({
+			columns: [t.organizationId, t.computerId],
+			foreignColumns: [computers.organizationId, computers.id],
+		}).onDelete("cascade"),
+		index("openbot_computer_access_agent").on(t.organizationId, t.agent),
+	],
+)
+
+/**
+ * A machine that waits for a person to approve it. Only the hashes of the code and
+ * the secret are stored. The token waits sealed until the machine takes it once.
+ */
+export const computerPairings = table(
+	"openbot_computer_pairings",
+	{
+		id: text().primaryKey(),
+		codeHash: text("code_hash").notNull(),
+		secretHash: text("secret_hash").notNull(),
+		machineId: text("machine_id").notNull(),
+		hostname: text().notNull(),
+		os: text().notNull(),
+		arch: text().notNull(),
+		desktop: boolean().notNull(),
+		version: text().notNull(),
+		status: text().notNull(),
+		organizationId: text("organization_id"),
+		computerId: text("computer_id"),
+		token: text(),
+		expiresAt: time("expires_at").notNull(),
+		createdAt: time("created_at").notNull(),
+	},
+	(t) => [
+		uniqueIndex("openbot_computer_pairings_code").on(t.codeHash),
+		index("openbot_computer_pairings_expires").on(t.expiresAt),
+	],
+)
+
+/**
+ * A call to a connector, so any instance can reach the instance that holds the
+ * connection. `call` and `reply` are JSON text.
+ */
+export const computerCalls = table(
+	"openbot_computer_calls",
+	{
+		id: text().primaryKey(),
+		computerId: text("computer_id").notNull(),
+		call: text().notNull(),
+		reply: text(),
+		createdAt: time("created_at").notNull(),
+	},
+	(t) => [index("openbot_computer_calls_created").on(t.createdAt)],
+)
+
+/** A time when a Computer ran. `ended_at` is null while it runs. */
+export const computerUsage = table(
+	"openbot_computer_usage",
+	{
+		id: bigserial({ mode: "number" }).primaryKey(),
+		organizationId: text("organization_id").notNull(),
+		computerId: text("computer_id").notNull(),
+		ownerUserId: text("owner_user_id"),
+		startedAt: time("started_at").notNull(),
+		endedAt: time("ended_at"),
+	},
+	(t) => [
+		index("openbot_computer_usage_computer").on(
+			t.organizationId,
+			t.computerId,
+			t.startedAt,
+		),
+		index("openbot_computer_usage_open")
+			.on(t.computerId)
+			.where(sql`${t.endedAt} IS NULL`),
+	],
+)
+
+/**
  * Each chat of a Channel is one long-lived Session. `owner` is the actor of the Channel when
  * the chat began. The Session stays with that member when the actor changes.
  */

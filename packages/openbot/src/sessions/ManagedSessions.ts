@@ -22,6 +22,7 @@ import * as MemoryPlugin from "../plugins/memory/MemoryPlugin.ts"
 import * as Todos from "../plugins/work/Todos.ts"
 import { WorkPlugin } from "../plugins/work/WorkPlugin.ts"
 import { ChannelPlugin } from "../plugins/channels/ChannelPlugin.ts"
+import { ComputerPlugin } from "../plugins/computers/ComputerPlugin.ts"
 import {
 	Array,
 	Cause,
@@ -126,6 +127,7 @@ export const make = <
 		const agentPlugin = yield* Effect.serviceOption(AgentPlugin)
 		const workPlugin = yield* Effect.serviceOption(WorkPlugin)
 		const channelPlugin = yield* Effect.serviceOption(ChannelPlugin)
+		const computerPlugin = yield* Effect.serviceOption(ComputerPlugin)
 		const modelFor = (view: Session.View, turn?: Turn.Record) =>
 			options.resolveModel === undefined
 				? Effect.serviceOption(LanguageModel.LanguageModel).pipe(
@@ -405,7 +407,7 @@ export const make = <
 					),
 			})
 		// The Agent plugin runs inside the App plugin, so it sees every tool of the Turn.
-		// The work and Channel plugins run inside the Agent plugin, so they see the current Agent.
+		// The work, Channel and Computer plugins run inside the Agent plugin, so they see the current Agent.
 		// The plugins add tools at run time with JSON Schema parameters. TypeScript cannot see
 		// that their merged tool types fit the type of the plugin they join.
 		const withInner = (agent: ReturnType<typeof agentPluginFor>) => {
@@ -419,6 +421,11 @@ export const make = <
 				inner = PluginComposition.merge(
 					inner,
 					channelPlugin.value.forOwner({ read: (id) => store.read(id) }),
+				) as unknown as typeof inner
+			if (Option.isSome(computerPlugin))
+				inner = PluginComposition.merge(
+					inner,
+					computerPlugin.value.plugin,
 				) as unknown as typeof inner
 			return inner
 		}

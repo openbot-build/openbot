@@ -20,6 +20,7 @@ import * as SsoHandlers from "../sso/HttpHandlers.ts"
 import * as SettingsHandlers from "../settings/HttpHandlers.ts"
 import * as TriggerHandlers from "../triggers/HttpHandlers.ts"
 import * as ChannelHandlers from "../channels/HttpHandlers.ts"
+import * as ComputerHandlers from "../computers/HttpHandlers.ts"
 import * as BillingHandlers from "../billing/HttpHandlers.ts"
 
 const cloudHealth = HttpApiBuilder.group(OpenBotApi, "health", (handlers) =>
@@ -53,6 +54,9 @@ export const layerPlatform = (publicOrigin: string) =>
 					ChannelHandlers.layer(publicOrigin),
 					ChannelHandlers.layerLinks,
 					ChannelHandlers.layerHooks,
+					ComputerHandlers.layerProviders,
+					ComputerHandlers.layer,
+					ComputerHandlers.layerHooks,
 					BillingHandlers.layer,
 					OrganizationHandlers.layer,
 					ModelProviderHandlers.layer,

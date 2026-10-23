@@ -69,6 +69,7 @@ export default defineConfig({
 						"docs/delegation",
 						"docs/triggers",
 						"docs/channels",
+						"docs/computers",
 						"docs/requests",
 						"docs/rules",
 						"docs/memory",

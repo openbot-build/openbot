@@ -27,6 +27,7 @@ import { TokenThrottle } from "../billing/TokenThrottle.ts"
 import { Settings } from "../settings/Settings.ts"
 import { linkedOwner, ModelProviders, type Stored } from "./ModelProviders.ts"
 import { type Effective, effective, Models, modelKey } from "./Models.ts"
+import * as ToolImages from "../providers/ToolImages.ts"
 
 /**
  * Models that the program itself gives, such as the simulated model of the
@@ -174,13 +175,27 @@ const modelLayer = (
 				const model = yield* OpenAiProvider.make({ upstreamModel }).model(
 					selection,
 				)
-				return model.pipe(Layer.provide(OpenAiProvider.layerClient(client)))
+				return model.pipe(
+					Layer.provide(
+						OpenAiProvider.layerClient({
+							...client,
+							transformClient: ToolImages.transformClient("openai"),
+						}),
+					),
+				)
 			}
 			case "anthropic": {
 				const model = yield* AnthropicProvider.make({ upstreamModel }).model(
 					selection,
 				)
-				return model.pipe(Layer.provide(AnthropicProvider.layerClient(client)))
+				return model.pipe(
+					Layer.provide(
+						AnthropicProvider.layerClient({
+							...client,
+							transformClient: ToolImages.transformClient("anthropic"),
+						}),
+					),
+				)
 			}
 			case "openai-compat": {
 				const model = yield* OpenAiCompatProvider.make({ upstreamModel }).model(

@@ -10,16 +10,20 @@ This page shows how the check works, how a person answers requests, and what eac
 
 ## Capabilities
 
-| Action            | Target                      | When an Agent uses it                                                      |
-| ----------------- | --------------------------- | -------------------------------------------------------------------------- |
-| `apps.call`       | `<connection>/<tool name>`  | It calls an App tool.                                                      |
-| `tools.call`      | The tool name               | It calls a tool of the host that asks for approval.                        |
-| `agents.delegate` | The ID of the other Agent   | It gives work to another lasting Agent.                                    |
-| `agents.spawn`    | `*`                         | It starts a Session Agent.                                                 |
-| `agents.create`   | `*`                         | It makes a lasting Agent that it owns.                                     |
-| `agents.promote`  | The ID of the Session Agent | It makes a Session Agent a lasting Agent that it owns.                     |
-| `plans.run`       | The ID of the Session       | It wants to carry out its plan. See [Plan mode](/docs/sessions#plan-mode). |
-| `channels.send`   | The ID of the Channel       | It posts to another chat of a [Channel](/docs/channels).                   |
+| Action              | Target                      | When an Agent uses it                                                      |
+| ------------------- | --------------------------- | -------------------------------------------------------------------------- |
+| `apps.call`         | `<connection>/<tool name>`  | It calls an App tool.                                                      |
+| `tools.call`        | The tool name               | It calls a tool of the host that asks for approval.                        |
+| `agents.delegate`   | The ID of the other Agent   | It gives work to another lasting Agent.                                    |
+| `agents.spawn`      | `*`                         | It starts a Session Agent.                                                 |
+| `agents.create`     | `*`                         | It makes a lasting Agent that it owns.                                     |
+| `agents.promote`    | The ID of the Session Agent | It makes a Session Agent a lasting Agent that it owns.                     |
+| `plans.run`         | The ID of the Session       | It wants to carry out its plan. See [Plan mode](/docs/sessions#plan-mode). |
+| `channels.send`     | The ID of the Channel       | It posts to another chat of a [Channel](/docs/channels).                   |
+| `computers.acquire` | The ID of the Computer      | It asks for the right to use a [Computer](/docs/computers).                |
+| `computers.create`  | The ID of the provider      | It makes a new sandbox at a Computer provider.                             |
+| `computers.delete`  | The ID of the Computer      | It deletes a Computer with its files.                                      |
+| `computers.expose`  | The ID of the Computer      | It gives a port of a Computer a public address.                            |
 
 Each capability tool takes a `reason`. App tools get an extra `openbot_reason` parameter for it. OpenBot never sends it to the App.
 

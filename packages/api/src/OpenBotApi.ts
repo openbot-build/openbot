@@ -21,6 +21,11 @@ import { RequestsApi } from "./RequestsApi.ts"
 import { MemberSettingsApi } from "./MemberSettingsApi.ts"
 import { TriggerHooksApi, TriggersApi } from "./TriggersApi.ts"
 import { ChannelHooksApi, ChannelLinksApi, ChannelsApi } from "./ChannelsApi.ts"
+import {
+	ComputerHooksApi,
+	ComputerProvidersApi,
+	ComputersApi,
+} from "./ComputersApi.ts"
 import { AppOperationsApi } from "./AppOperationsApi.ts"
 import { CodeRunsApi } from "./CodeRunsApi.ts"
 import { AppViewsApi } from "./AppViewsApi.ts"
@@ -66,6 +71,9 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 		ChannelsApi,
 		ChannelLinksApi,
 		ChannelHooksApi,
+		ComputerProvidersApi,
+		ComputersApi,
+		ComputerHooksApi,
 		UsageApi,
 		BudgetsApi,
 		AppOperationsApi.annotate(GroupRequired, { read: apps, write: apps })

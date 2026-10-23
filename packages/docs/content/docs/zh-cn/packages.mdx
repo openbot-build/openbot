@@ -11,15 +11,17 @@ OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot` 把各�
 
 ## 概览
 
-| 包              | 用途                                                                       |
-| --------------- | -------------------------------------------------------------------------- |
-| `openbot`       | 服务器、它的插件和它的模型提供方。请看[从代码中运行](/zh-cn/docs/server)。 |
-| `api`           | 带类型的 HTTP 契约。服务器、客户端和 API 参考都使用它。                    |
-| `client`        | TypeScript 客户端。请看[客户端](/zh-cn/docs/client)。                      |
-| `core`          | Agent 核心：Agent、Session、Turn、Timeline、存储、插件和技能。             |
-| `protocol`      | OpenBot App Protocol：发布、查找、连接 App，并为 App 建立索引。            |
-| `protocol-test` | App Protocol 的公开测试服务。请看[协议测试](/zh-cn/docs/protocol-test)。   |
-| `docs`          | 本文档网站。                                                               |
+| 包              | 用途                                                                                |
+| --------------- | ----------------------------------------------------------------------------------- |
+| `openbot`       | 服务器、它的插件和它的模型提供方。请看[从代码中运行](/zh-cn/docs/server)。          |
+| `api`           | 带类型的 HTTP 契约。服务器、客户端和 API 参考都使用它。                             |
+| `client`        | TypeScript 客户端。请看[客户端](/zh-cn/docs/client)。                               |
+| `core`          | Agent 核心：Agent、Session、Turn、Timeline、存储、插件和技能。                      |
+| `protocol`      | OpenBot App Protocol：发布、查找、连接 App，并为 App 建立索引。                     |
+| `protocol-test` | App Protocol 的公开测试服务。请看[协议测试](/zh-cn/docs/protocol-test)。            |
+| `cli`           | `openbot` 命令。对于 `openbot <name>`，它会运行 `openbot-<name>`。                  |
+| `computer`      | `openbot computer` 命令，用来配对和连接你自己的 [Computer](/zh-cn/docs/computers)。 |
+| `docs`          | 本文档网站。                                                                        |
 
 下面的示例省略了模型。要运行它们，请提供一个 `LanguageModel` Layer，例如来自 `openbot` 中的某个[模型提供方](#模型提供方)。
 

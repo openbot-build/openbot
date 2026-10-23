@@ -140,6 +140,14 @@ export const CapabilityAction = Schema.Literals([
 	"plans.run",
 	/** An Agent posts to a chat of a Channel. The target is the Channel. */
 	"channels.send",
+	/** An Agent gets the right to use a Computer that exists. The target is the Computer. */
+	"computers.acquire",
+	/** An Agent makes a new Computer at a provider. The target is the Computer provider. */
+	"computers.create",
+	/** An Agent deletes a Computer with its sandbox. The target is the Computer. */
+	"computers.delete",
+	/** An Agent gives a port of a Computer a public address. The target is the Computer. */
+	"computers.expose",
 ])
 export type CapabilityAction = typeof CapabilityAction.Type
 export const Capability = Schema.Struct({

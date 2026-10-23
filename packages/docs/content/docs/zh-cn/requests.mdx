@@ -10,16 +10,20 @@ Agent 不知道自己有什么限制。当 Agent 尝试使用一项**能力**（
 
 ## 能力
 
-| 动作              | 目标                       | Agent 何时使用                                                   |
-| ----------------- | -------------------------- | ---------------------------------------------------------------- |
-| `apps.call`       | `<connection>/<tool name>` | 调用 App 工具时。                                                |
-| `tools.call`      | 工具名称                   | 调用一个需要批准的宿主工具时。                                   |
-| `agents.delegate` | 另一个 Agent 的 ID         | 把工作交给另一个长期存在的 Agent 时。                            |
-| `agents.spawn`    | `*`                        | 启动一个 Session Agent 时。                                      |
-| `agents.create`   | `*`                        | 创建一个归它所有的长期 Agent 时。                                |
-| `agents.promote`  | Session Agent 的 ID        | 把一个 Session Agent 变成归它所有的长期 Agent 时。               |
-| `plans.run`       | Session 的 ID              | 想执行它的计划时。见 [计划模式](/zh-cn/docs/sessions#计划模式)。 |
-| `channels.send`   | Channel 的 ID              | 向 [Channel](/zh-cn/docs/channels) 的另一个聊天发消息时。        |
+| 动作                | 目标                       | Agent 何时使用                                                   |
+| ------------------- | -------------------------- | ---------------------------------------------------------------- |
+| `apps.call`         | `<connection>/<tool name>` | 调用 App 工具时。                                                |
+| `tools.call`        | 工具名称                   | 调用一个需要批准的宿主工具时。                                   |
+| `agents.delegate`   | 另一个 Agent 的 ID         | 把工作交给另一个长期存在的 Agent 时。                            |
+| `agents.spawn`      | `*`                        | 启动一个 Session Agent 时。                                      |
+| `agents.create`     | `*`                        | 创建一个归它所有的长期 Agent 时。                                |
+| `agents.promote`    | Session Agent 的 ID        | 把一个 Session Agent 变成归它所有的长期 Agent 时。               |
+| `plans.run`         | Session 的 ID              | 想执行它的计划时。见 [计划模式](/zh-cn/docs/sessions#计划模式)。 |
+| `channels.send`     | Channel 的 ID              | 向 [Channel](/zh-cn/docs/channels) 的另一个聊天发消息时。        |
+| `computers.acquire` | Computer 的 ID             | 请求使用一台 [Computer](/zh-cn/docs/computers) 的权利时。        |
+| `computers.create`  | 提供方的 ID                | 在 Computer 提供方那里创建一个新沙箱时。                         |
+| `computers.delete`  | Computer 的 ID             | 删除一台 Computer 和它的文件时。                                 |
+| `computers.expose`  | Computer 的 ID             | 给 Computer 的一个端口一个公开地址时。                           |
 
 每个能力工具都接受一个 `reason`（理由）。App 工具会多一个 `openbot_reason` 参数来传理由。OpenBot 不会把它发给 App。
 

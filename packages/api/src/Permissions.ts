@@ -15,6 +15,8 @@ export const ResourceKind = Schema.Literals([
 	"connection",
 	"apps",
 	"model",
+	"computer",
+	"computer_provider",
 ])
 export type ResourceKind = typeof ResourceKind.Type
 
@@ -154,6 +156,44 @@ const permissionTree = {
 			publish: {
 				name: "Apps Publish",
 				description: "Use the developer tools for Apps that you publish.",
+			},
+		},
+	},
+	computers: {
+		scope: "computer",
+		actions: {
+			read: {
+				name: "Computers Read",
+				description:
+					"Read Computers, the Agents that may use them, and their usage.",
+			},
+			write: {
+				name: "Computers Write",
+				description:
+					"Create, change and delete Computers, pair machines, and make connector tokens.",
+			},
+			use: {
+				name: "Computers Use",
+				description:
+					"Run commands, change files, open ports and use the desktop of Computers, and let your Agents use them.",
+			},
+		},
+	},
+	computer_providers: {
+		scope: "computer_provider",
+		actions: {
+			read: {
+				name: "Computer Providers Read",
+				description: "Read the accounts at Computer providers.",
+			},
+			write: {
+				name: "Computer Providers Write",
+				description:
+					"Add, change and delete accounts at Computer providers, and their keys.",
+			},
+			use: {
+				name: "Computer Providers Use",
+				description: "Create Computers with an account at a Computer provider.",
 			},
 		},
 	},
@@ -389,6 +429,10 @@ const sharedAgents = "openbot.org.{org}.agent"
 const sharedTriggers = "openbot.org.{org}.trigger"
 /** The Channels of the organization. */
 const channels = "openbot.org.{org}.channel"
+/** The shared Computers of the organization. */
+const sharedComputers = "openbot.org.{org}.computer"
+/** The shared Computer providers of the organization. */
+const sharedComputerProviders = "openbot.org.{org}.computer_provider"
 const own: ReadonlyArray<PermissionGroupId> = [
 	"responses.run",
 	"sessions.read",
@@ -404,6 +448,12 @@ const own: ReadonlyArray<PermissionGroupId> = [
 	"channel_identities.write",
 	"connections.read",
 	"connections.write",
+	"computers.read",
+	"computers.write",
+	"computers.use",
+	"computer_providers.read",
+	"computer_providers.write",
+	"computer_providers.use",
 	"apps.use",
 	"apps.publish",
 	"tokens.read",
@@ -428,6 +478,21 @@ const useChannels: Policy = {
 	effect: "allow",
 	permissionGroups: ["channels.use"],
 	resources: [channels],
+}
+const useSharedComputers: Policy = {
+	effect: "allow",
+	permissionGroups: [
+		"computers.read",
+		"computers.use",
+		"computer_providers.read",
+		"computer_providers.use",
+	],
+	resources: [sharedComputers, sharedComputerProviders],
+}
+const readSharedComputers: Policy = {
+	effect: "allow",
+	permissionGroups: ["computers.read", "computer_providers.read"],
+	resources: [sharedComputers, sharedComputerProviders],
 }
 
 /**
@@ -454,16 +519,22 @@ export const builtinRoles = [
 		id: "administrator",
 		name: "Administrator",
 		description:
-			"Manage the organization, its members, its shared Agents, its shared triggers and its Channels. Work only with your own Sessions and connections.",
+			"Manage the organization, its members, its shared Agents, its shared triggers, its shared Computers and its Channels. Work only with your own Sessions and connections.",
 		policies: [
 			ownWork,
 			useSharedAgents,
 			readSharedTriggers,
 			useChannels,
+			useSharedComputers,
 			{
 				effect: "allow",
 				permissionGroups: ["agents.write", "agents.share"],
 				resources: [sharedAgents],
+			},
+			{
+				effect: "allow",
+				permissionGroups: ["computers.write", "computer_providers.write"],
+				resources: [sharedComputers, sharedComputerProviders],
 			},
 			{
 				effect: "allow",
@@ -504,6 +575,7 @@ export const builtinRoles = [
 			useSharedAgents,
 			readSharedTriggers,
 			useChannels,
+			readSharedComputers,
 			{
 				effect: "allow",
 				permissionGroups: [
@@ -525,12 +597,13 @@ export const builtinRoles = [
 		id: "member",
 		name: "Member",
 		description:
-			"Work with your own Agents, Sessions, triggers, connections and tokens, and use the shared Agents, triggers, Channels and models of the organization.",
+			"Work with your own Agents, Sessions, triggers, Computers, connections and tokens, and use the shared Agents, triggers, Computers, Channels and models of the organization.",
 		policies: [
 			ownWork,
 			useSharedAgents,
 			readSharedTriggers,
 			useChannels,
+			useSharedComputers,
 			{
 				effect: "allow",
 				permissionGroups: ["models.use", "organization.read"],

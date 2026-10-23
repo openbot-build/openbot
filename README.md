@@ -62,6 +62,8 @@ Then open `http://localhost:4321`. Start with the Intro and the Quick start.
 | `@openbot-build/core`          | The Agent core                                       |
 | `@openbot-build/protocol`      | The OpenBot App Protocol library                     |
 | `@openbot-build/protocol-test` | A public test service for the App Protocol           |
+| `@openbot-build/cli`           | The `openbot` command                                |
+| `@openbot-build/computer`      | Pairs and connects your own machine as a Computer    |
 | `@openbot-build/docs`          | The docs site                                        |
 
 ## Work on the code

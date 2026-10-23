@@ -26,6 +26,7 @@ import type { DomainControl } from "../src/apps/DomainControl.ts"
 import { organizationDomains } from "../src/database/Schema.ts"
 import { Settings } from "../src/settings/Settings.ts"
 import * as Db from "../src/database/Database.ts"
+import type { Drivers } from "../src/computers/Drivers.ts"
 
 /** A disposable OpenBot host with real PostgreSQL and signed OIDC test identities. */
 export async function start(options: {
@@ -67,6 +68,8 @@ export async function start(options: {
 	readonly channelIntervalMs?: number
 	/** Answers the HTTP calls of the server to other places, such as Slack. */
 	readonly platformFetch?: typeof fetch
+	/** The drivers of the Computer providers. */
+	readonly computerDrivers?: Layer.Layer<Drivers>
 	/** Organization settings for the Agents of each new organization. */
 	readonly agents?: {
 		readonly memory?: boolean
@@ -304,6 +307,9 @@ export async function start(options: {
 		...(options.channelIntervalMs === undefined
 			? {}
 			: { channels: { interval: options.channelIntervalMs } }),
+		...(options.computerDrivers === undefined
+			? {}
+			: { computerDrivers: options.computerDrivers }),
 		...(options.discovery === undefined
 			? {}
 			: { discovery: options.discovery }),

@@ -1,6 +1,11 @@
 import type { Session } from "@openbot-build/core"
 import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
-import type { AgentsApi, AppExecution, CodeRunsApi } from "@openbot-build/api"
+import type {
+	AgentsApi,
+	AppExecution,
+	CodeRunsApi,
+	ComputersApi,
+} from "@openbot-build/api"
 import { Context, Effect, Layer, Option } from "effect"
 import { can } from "../authorization/Check.ts"
 import { Signal, Signals } from "../agents/Signals.ts"
@@ -21,6 +26,8 @@ export interface Attempt {
 	readonly toolCallId: string
 	/** The target Agent, for actions on an Agent. */
 	readonly target?: AgentsApi.Agent
+	/** The owner of the target Computer or Computer provider, for actions on Computers. */
+	readonly computerOwner?: ComputersApi.ComputerOwner
 	/** The deployment owner allows this without asking, for example a read-only App tool. */
 	readonly implicit?: boolean
 	readonly app?: AppExecution.Invocation
@@ -152,6 +159,9 @@ export const make: Effect.Effect<
 				session: current.session,
 				self: current.agent,
 				...(attempt.target === undefined ? {} : { agent: attempt.target }),
+				...(attempt.computerOwner === undefined
+					? {}
+					: { computerOwner: attempt.computerOwner }),
 			})
 			const member = yield* can({
 				caller: current.caller,

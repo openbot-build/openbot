@@ -70,6 +70,25 @@ importers:
         specifier: 4.0.6
         version: 4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy)
 
+  packages/computer:
+    dependencies:
+      "@effect/platform-node":
+        specifier: 4.0.6
+        version: 4.0.6(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))(redis@6.3.0)
+      "@openbot-build/api":
+        specifier: workspace:*
+        version: link:../api
+      effect:
+        specifier: 4.0.6
+        version: 4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy)
+    devDependencies:
+      "@types/ws":
+        specifier: 8.18.2
+        version: 8.18.2
+      ws:
+        specifier: 8.22.0
+        version: 8.22.0
+
   packages/core:
     devDependencies:
       effect:

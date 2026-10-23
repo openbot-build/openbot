@@ -1,0 +1,137 @@
+---
+title: Computers
+description: Give Agents machines where they run commands, change files and use a desktop.
+---
+
+A **Computer** is a machine where an Agent works. The Agent runs shell commands, reads and writes files, opens ports and uses a desktop there. A Computer is one of two kinds:
+
+- A **sandbox** at a Computer provider, such as E2B or Daytona. You bring your own account at the provider. The provider bills you directly.
+- **Your own machine**, such as a laptop or a server. You pair it with OpenBot once. Then a small program on it keeps a connection to OpenBot.
+
+A Computer belongs to a member or to the organization, like a [trigger](/docs/triggers). Agents never own a Computer. An Agent gets the **right to use** a Computer. Many Agents can use the same Computer.
+
+---
+
+## Add a Computer provider
+
+A **Computer provider** is your account at a service that runs sandboxes.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Sandboxes","credentials":{"kind":"e2b","apiKey":"e2b_..."}}' \
+  https://api.example.com/v1/computer-providers
+```
+
+| Kind      | Fields                              | What it is                                                                                                                                                   |
+| --------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `e2b`     | `apiKey`, `apiUrl`, `sandboxDomain` | Any service that speaks the E2B API: E2B, PPIO, Alibaba Cloud Agent Sandbox, or your own E2B. Set `apiUrl` and `sandboxDomain` for a service other than E2B. |
+| `daytona` | `apiKey`, `apiUrl`, `target`        | Daytona, hosted or your own. `target` is the region, such as `us` or `eu`.                                                                                   |
+
+OpenBot checks the key with the provider before it stores it. The key never comes out again. The API only shows its last characters. Send `"shared": true` to make a shared provider of the organization.
+
+`GET /v1/computer-providers` lists your providers and the shared ones. `GET`, `PATCH` and `DELETE /v1/computer-providers/:providerId` read, change and delete one. You cannot delete a provider while Computers use it.
+
+---
+
+## Create and use a Computer
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Build box","source":{"_tag":"Provider","provider":"cpp_...","template":null},"desktop":true}' \
+  https://api.example.com/v1/computers
+```
+
+| Field        | What it does                                                                                                        |
+| ------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `source`     | `{"_tag":"Provider","provider":"<id>","template":null}` for a sandbox. A `template` picks an image of the provider. |
+| `desktop`    | Optional. `true` asks for a desktop, for screenshots, the mouse and the keyboard.                                   |
+| `pauseAfter` | Optional. Seconds without work before OpenBot pauses the Computer. The default is 600. `null` never pauses it.      |
+| `shared`     | Optional. `true` makes a shared Computer of the organization.                                                       |
+
+A Computer has a `state`: `starting`, `running`, `paused`, `offline` (your machine is not connected) or `failed`.
+
+| Route                                                  | What it does                                                                 |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| `POST /v1/computers/:computerId/commands`              | Runs a shell command with `bash -lc` and waits for it to end.                |
+| `GET`, `PUT`, `DELETE /v1/computers/:computerId/files` | Reads, writes and removes a file. `utf8` for text, `base64` for other bytes. |
+| `GET /v1/computers/:computerId/directory?path=`        | Lists a directory.                                                           |
+| `PUT /v1/computers/:computerId/ports/:port`            | Gives a port a public HTTPS address. Anyone with the address can use it.     |
+| `POST /v1/computers/:computerId/desktop/screenshot`    | Takes a screenshot.                                                          |
+| `POST /v1/computers/:computerId/desktop/actions`       | Clicks, types, presses keys and scrolls, then takes a screenshot.            |
+| `POST /v1/computers/:computerId/desktop/stream`        | Gives an address where a person can watch and use the desktop.               |
+| `POST /v1/computers/:computerId/pause`, `/resume`      | Pauses or resumes the Computer.                                              |
+
+A command on a paused Computer resumes it first. `DELETE /v1/computers/:computerId` deletes the Computer and its sandbox. Its files are gone.
+
+---
+
+## Pair your own machine
+
+Install the command line tools, then pair the machine:
+
+```sh
+npm install -g @openbot-build/cli @openbot-build/computer
+openbot computer pair --url https://api.example.com
+```
+
+The command shows a code, such as `KDTW-7Q3M`. It works for 10 minutes. Check the machine and approve it:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/computer-pairings/KDTW-7Q3M
+
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" -d '{}' \
+  https://api.example.com/v1/computer-pairings/KDTW-7Q3M/approve
+```
+
+Only a person can approve a machine. `POST /v1/computer-pairings/:code/deny` stops the pairing. After you approve it, the command saves its token in `~/.config/openbot/computer.json` and ends. Then connect the machine:
+
+```sh
+openbot computer connect
+```
+
+It keeps a connection open to OpenBot, so the machine needs no open port. It connects again by itself after a break. `openbot computer status` shows the saved address and machine ID.
+
+When the same machine pairs again in the same organization, it keeps its Computer and gets a new token. For servers and scripts, create a Computer with `"source":{"_tag":"Connector"}`, then make a token with `PUT /v1/computers/:computerId/connector-token`. A new token closes the old connection.
+
+---
+
+## Agents and the right to use a Computer
+
+Give your Agent the right to use a Computer:
+
+```sh
+curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/computers/cmp_.../agents/agt_...
+```
+
+You must be able to use the Computer and to change the Agent. `GET /v1/computers/:computerId/agents` lists the Agents with the right. `DELETE /v1/computers/:computerId/agents/:agentId` takes the right away. The right also ends when the Agent is archived. The Computer stays.
+
+An Agent has tools for Computers. It lists them with `openbot_computers_list`. Then it can:
+
+- Ask for the right to use a Computer that exists, with `openbot_computers_acquire`. A child Agent can ask for a Computer of the Agent that gave it work.
+- Make a new sandbox with `openbot_computers_create`. The Computer belongs to its person, and the Agent gets the right to use it.
+- Give up its right with `openbot_computers_release`. With `destroy`, it also deletes the Computer.
+- Run commands, change files, open ports and use the desktop. A screenshot comes back as an image that the model sees.
+
+These four actions are [capabilities](/docs/requests#capabilities). The [chain of deciders](/docs/requests#the-chain-of-deciders) decides them, as for any other capability:
+
+| Action              | Target                 | When an Agent uses it                    |
+| ------------------- | ---------------------- | ---------------------------------------- |
+| `computers.acquire` | The ID of the Computer | It asks for the right to use a Computer. |
+| `computers.create`  | The ID of the provider | It makes a new sandbox.                  |
+| `computers.delete`  | The ID of the Computer | It deletes a Computer with its files.    |
+| `computers.expose`  | The ID of the Computer | It gives a port a public address.        |
+
+All other work on a Computer needs no decision. The Computer is the boundary: an Agent with the right can do anything inside it.
+
+---
+
+## Pause and usage
+
+OpenBot pauses a sandbox when it had no work for `pauseAfter` seconds. E2B keeps its files, memory and running programs. Daytona keeps its files and starts it again from them. Your own machines never pause.
+
+`GET /v1/computers/:computerId/usage` lists the times when a Computer ran. The provider bills you for them. OpenBot only records them. It does not set a price, and budgets do not stop a Computer.

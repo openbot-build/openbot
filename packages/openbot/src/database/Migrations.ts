@@ -48,6 +48,12 @@ import {
 	channelConversations,
 	channelInbox,
 	channelDeliveries,
+	computerProviders,
+	computers,
+	computerAccess,
+	computerPairings,
+	computerCalls,
+	computerUsage,
 	codeRuns,
 	usageEvents,
 	modelPrices,
@@ -113,6 +119,12 @@ export const check = Effect.gen(function* () {
 	yield* db.select().from(channels).limit(0)
 	yield* db.select().from(channelIdentities).limit(0)
 	yield* db.select().from(channelLinks).limit(0)
+	yield* db.select().from(computerProviders).limit(0)
+	yield* db.select().from(computers).limit(0)
+	yield* db.select().from(computerAccess).limit(0)
+	yield* db.select().from(computerPairings).limit(0)
+	yield* db.select().from(computerCalls).limit(0)
+	yield* db.select().from(computerUsage).limit(0)
 	yield* db.select().from(channelConversations).limit(0)
 	yield* db.select().from(channelInbox).limit(0)
 	yield* db.select().from(channelDeliveries).limit(0)

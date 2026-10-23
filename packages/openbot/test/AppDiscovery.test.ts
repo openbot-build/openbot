@@ -1,6 +1,11 @@
 import * as AgentFixture from "./AgentFixture.ts"
 import * as TriggerStore from "../src/triggers/Triggers.ts"
 import * as Channels from "../src/channels/Channels.ts"
+import { ComputerProviders } from "../src/computers/ComputerProviders.ts"
+import { Computers } from "../src/computers/Computers.ts"
+import { Connectors } from "../src/computers/connector/Connectors.ts"
+import { Drivers } from "../src/computers/Drivers.ts"
+import { Pairings } from "../src/computers/Pairings.ts"
 import * as ChannelQueue from "../src/channels/ChannelQueue.ts"
 import * as ChannelRegistry from "../src/channels/ChannelRegistry.ts"
 import * as DeveloperLayers from "../src/apps/DeveloperLayers.ts"
@@ -519,6 +524,12 @@ const startApi = async (
 				),
 				Layer.succeed(Auth.Auth, auth),
 				Layer.succeed(Backend, { get: unused, forCaller: unused }),
+				// Discovery never uses Computers. Their handlers only need the services to exist.
+				Layer.succeed(ComputerProviders, {} as ComputerProviders["Service"]),
+				Layer.succeed(Computers, {} as Computers["Service"]),
+				Layer.succeed(Connectors, {} as Connectors["Service"]),
+				Layer.succeed(Drivers, {} as Drivers["Service"]),
+				Layer.succeed(Pairings, {} as Pairings["Service"]),
 			]),
 			Layer.provideMerge(
 				DatabasePostgres.layer({

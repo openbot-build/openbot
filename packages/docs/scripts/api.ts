@@ -78,6 +78,21 @@ const groups = [
 		"Take the events of chat platforms. The signature of the platform is the only credential.",
 	],
 	[
+		"computerProviders",
+		"Computer providers",
+		"Add your accounts at services that run Computers, such as E2B and Daytona.",
+	],
+	[
+		"computers",
+		"Computers",
+		"Make and use machines where Agents run commands, change files and use a desktop.",
+	],
+	[
+		"computerHooks",
+		"Computer connectors",
+		"Pair your own machine and keep it connected. The token is the only credential.",
+	],
+	[
 		"memberSettings",
 		"Your settings",
 		"Read and change your own settings, such as how your plans are approved.",

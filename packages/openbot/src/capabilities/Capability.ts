@@ -2,12 +2,14 @@ import { createHash } from "node:crypto"
 import {
 	type AgentsApi,
 	type Caller,
+	type ComputersApi,
 	type Permissions,
 } from "@openbot-build/api"
 import { Option } from "effect"
 import {
 	agentKey,
 	agentPlace,
+	computerKey,
 	resourceKey,
 	rootOf,
 } from "../authorization/Policy.ts"
@@ -55,6 +57,11 @@ export const permission = (input: {
 	readonly agent?: AgentsApi.Agent
 	/** The Agent that tries the action. The Agents it makes go below its owner tree. */
 	readonly self: AgentsApi.Agent
+	/**
+	 * The owner of the target Computer, or of the Computer provider for `computers.create`.
+	 * Without it, OpenBot uses the place of the member, so a shared target is denied.
+	 */
+	readonly computerOwner?: ComputersApi.ComputerOwner
 }): {
 	readonly permission: Permissions.PermissionGroupId
 	readonly key: string
@@ -62,6 +69,10 @@ export const permission = (input: {
 	const subject = {
 		organizationId: input.caller.organizationId,
 		userId: input.caller.userId,
+	}
+	const personal: ComputersApi.ComputerOwner = {
+		_tag: "Member",
+		userId: subject.userId,
 	}
 	const onAgent = (permission: Permissions.PermissionGroupId) => ({
 		permission,
@@ -102,6 +113,33 @@ export const permission = (input: {
 					subject,
 					kind: "session",
 					id: Option.some(input.session),
+				}),
+			}
+		// An Agent makes a Computer with an account at a provider, for its member.
+		case "computers.create":
+			return {
+				permission: "computer_providers.use",
+				key: computerKey({
+					organizationId: subject.organizationId,
+					id: input.capability.target,
+					owner: input.computerOwner ?? personal,
+					kind: "computer_provider",
+				}),
+			}
+		// The Agent can only get or use a Computer that its member can use.
+		case "computers.acquire":
+		case "computers.expose":
+		case "computers.delete":
+			return {
+				permission:
+					input.capability.action === "computers.delete"
+						? "computers.write"
+						: "computers.use",
+				key: computerKey({
+					organizationId: subject.organizationId,
+					id: input.capability.target,
+					owner: input.computerOwner ?? personal,
+					kind: "computer",
 				}),
 			}
 		// Posting to a Channel needs the same permission as talking in it.
