@@ -1,5 +1,3 @@
-// The helpers here take plain data. A pipeable form does not help.
-// @effect-diagnostics missingPipeableSignature:off
 import type { BillingApi } from "@openbot-build/api"
 import { Context, Data, DateTime, type Effect } from "effect"
 import type { Response } from "effect/ai"

@@ -1,5 +1,3 @@
-// The helpers here take plain data. A pipeable form does not help.
-// @effect-diagnostics missingPipeableSignature:off
 import type { Services as AuthorizationServices } from "../../authorization/Authorize.ts"
 import {
 	Agent,

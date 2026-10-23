@@ -1,5 +1,3 @@
-// The helpers here take plain data. A pipeable form does not help.
-// @effect-diagnostics missingPipeableSignature:off
 import { randomUUID } from "node:crypto"
 import { type Item, Session, type Turn } from "@openbot-build/core"
 import { AgentMemory as Api, AgentsApi } from "@openbot-build/api"

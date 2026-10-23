@@ -1,5 +1,3 @@
-// The helpers here take plain data. A pipeable form does not help.
-// @effect-diagnostics missingPipeableSignature:off
 import { randomUUID } from "node:crypto"
 import { PgClient } from "@effect/sql-pg"
 import type { Session } from "@openbot-build/core"

@@ -1,5 +1,3 @@
-// This is a plain function. A pipeable form does not help here.
-// @effect-diagnostics missingPipeableSignature:off
 import type { JsonSchema } from "effect"
 import type { Named } from "./CodeRuns.ts"
 

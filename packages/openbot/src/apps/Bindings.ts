@@ -1,5 +1,3 @@
-// These are plain functions that take the services first. A pipeable form does not help here.
-// @effect-diagnostics missingPipeableSignature:off
 import { createHash } from "node:crypto"
 import { AppExecution, AppViewsApi } from "@openbot-build/api"
 import { Client } from "@openbot-build/protocol"

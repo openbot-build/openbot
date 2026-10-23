@@ -1,5 +1,3 @@
-// `make` builds a Channel from its secrets and a way to call the platform. A pipeable form does not help here.
-// @effect-diagnostics missingPipeableSignature:off
 import { createDecipheriv, createHash } from "node:crypto"
 import type { ChannelsApi } from "@openbot-build/api"
 import { Clock, Effect, Predicate, Ref } from "effect"

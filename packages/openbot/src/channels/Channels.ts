@@ -1,5 +1,3 @@
-// Credentials are plain data. A pipeable form of their helpers does not help here.
-// @effect-diagnostics missingPipeableSignature:off
 import { createHash, randomBytes } from "node:crypto"
 import { type AgentsApi, ChannelsApi } from "@openbot-build/api"
 import { and, eq, isNull } from "drizzle-orm"

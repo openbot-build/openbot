@@ -1,5 +1,3 @@
-// These are plain query functions that take the database first. A pipeable form does not help here.
-// @effect-diagnostics missingPipeableSignature:off
 import type { PgClient } from "@effect/sql-pg"
 import { DeveloperApi as Api } from "@openbot-build/api"
 import { Discovery } from "@openbot-build/protocol"

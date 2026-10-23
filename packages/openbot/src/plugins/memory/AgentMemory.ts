@@ -1,5 +1,3 @@
-// The helpers here take plain data. A pipeable form does not help.
-// @effect-diagnostics missingPipeableSignature:off
 import { AgentMemory as Api } from "@openbot-build/api"
 import { Array as Arr, HashMap, HashSet, Option, Schema } from "effect"
 import * as Audience from "./Audience.ts"

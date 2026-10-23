@@ -1,5 +1,3 @@
-// `meter` wraps one model object. A pipeable form does not help.
-// @effect-diagnostics missingPipeableSignature:off
 import { Clock, Context, Effect, Ref, Stream } from "effect"
 import { AiError, type LanguageModel, type Response } from "effect/ai"
 import {

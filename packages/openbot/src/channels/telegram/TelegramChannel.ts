@@ -1,5 +1,3 @@
-// `make` builds a Channel from its secrets and a way to call the platform. A pipeable form does not help here.
-// @effect-diagnostics missingPipeableSignature:off
 import { Effect, Predicate } from "effect"
 import { HttpClientRequest } from "effect/http"
 import {

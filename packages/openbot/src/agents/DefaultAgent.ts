@@ -1,5 +1,3 @@
-// These functions take the caller first, like the HTTP handlers that call them. A pipeable form does not help here.
-// @effect-diagnostics missingPipeableSignature:off
 import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
 import { AgentsApi, type Caller } from "@openbot-build/api"
 import { Effect } from "effect"

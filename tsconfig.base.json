@@ -79,7 +79,7 @@
 					"matchEffectToMatch": "error",
 					"missedPipeableOpportunity": "warning",
 					"missingEffectServiceDependency": "warning",
-					"missingPipeableSignature": "warning",
+					"missingPipeableSignature": "off",
 					"multipleCatchTag": "error",
 					"multipleEffectProvide": "error",
 					"nestedEffectGenYield": "warning",

@@ -1,5 +1,3 @@
-// The helpers here take plain data. A pipeable form does not help.
-// @effect-diagnostics missingPipeableSignature:off
 import { createHash, randomBytes } from "node:crypto"
 import { AgentsApi } from "@openbot-build/api"
 import { Effect } from "effect"
