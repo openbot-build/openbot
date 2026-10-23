@@ -4,6 +4,7 @@ import { EntryStatus, Kind as SessionKind } from "./Memory.ts"
 
 /**
  * Agent memory is what one Agent learns over many Sessions.
+ * The Agent keeps one memory for each person that it works with.
  * It keeps only lasting experience: how to do things, what people like, and what was decided.
  * It does not follow a Timeline, so a Fork never changes it.
  */
@@ -21,7 +22,7 @@ export const Entry = Schema.Struct({
 	status: EntryStatus,
 })
 export type Entry = typeof Entry.Type
-/** The entries of one Agent. `version` grows by one with each change. */
+/** The entries of one Agent about one person. `version` grows by one with each change. */
 export const State = Schema.Struct({
 	entries: Schema.Record(Schema.String, Entry),
 	version: Schema.Natural,
@@ -39,7 +40,7 @@ export const Edit = Schema.TaggedUnion({
 })
 export type Edit = typeof Edit.Type
 
-/** One change in the log of an Agent memory. */
+/** One change in the log of the memory of an Agent about one person. */
 export const LogEntry = Schema.Struct({
 	version: Schema.Natural,
 	at: Schema.Finite,

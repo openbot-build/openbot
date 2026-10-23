@@ -137,7 +137,9 @@ OpenBot adds these to the instructions of every Turn:
 - the person it works with now, with their name and member ID. In a [Channel](/docs/channels), it is the person who wrote the message of the Turn,
 - rules about privacy: what the Agent learned from one person may be private, so it tells another person only what is clearly shared,
 - for a Session with work from another Agent, how to send the result back,
-- the active entries of its [Agent memory](/docs/memory#agent-memory).
+- the active entries of its [Agent memory](/docs/memory#agent-memory) about this person, and the other people it remembers.
+
+You can also [share an Agent](/docs/sharing) with people in other organizations. They get a linked Agent with `source`, which uses your Agent.
 
 ---
 
@@ -148,8 +150,9 @@ OpenBot adds these to the instructions of every Turn:
 | `agents.read`     | Read Agents, their memory, Rules and Grants.                |
 | `agents.write`    | Make and change Agents, their memory, Rules and Grants.     |
 | `agents.delegate` | Give work to an Agent, from a client or from another Agent. |
+| `agents.share`    | Invite people to [use an Agent](/docs/sharing).             |
 
-Your own Agents are below your member key. Shared Agents are below `openbot.org.<org>.agent`. Members may read and use shared Agents. Administrators may also change them. See [Permissions](/docs/permissions).
+Your own Agents are below your member key. Shared Agents are below `openbot.org.<org>.agent`. Members may read and use shared Agents. Administrators may also change and share them. See [Permissions](/docs/permissions).
 
 ## Errors
 

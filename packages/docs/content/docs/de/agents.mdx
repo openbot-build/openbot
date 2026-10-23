@@ -137,7 +137,9 @@ OpenBot fügt diese Dinge zu den Anweisungen jedes Turns hinzu:
 - die Person, mit der er gerade arbeitet, mit ihrem Namen und ihrer Member-ID. In einem [Channel](/de/docs/channels) ist es die Person, die die Nachricht des Turns geschrieben hat,
 - Regeln zum Datenschutz: Was der Agent von einer Person gelernt hat, kann privat sein. Darum sagt er einer anderen Person nur, was klar geteilt ist,
 - bei einer Session mit Arbeit von einem anderen Agent: wie er das Ergebnis zurückschickt,
-- die aktiven Einträge seines [Agent-Memorys](/de/docs/memory#agent-memory).
+- die aktiven Einträge seines [Agent-Memorys](/de/docs/memory#agent-memory) über diese Person, und die anderen Personen, an die er sich erinnert.
+
+Du kannst einen Agent auch mit Personen in anderen Organisationen [teilen](/de/docs/sharing). Sie bekommen einen verknüpften Agent mit `source`, der deinen Agent nutzt.
 
 ---
 
@@ -148,8 +150,9 @@ OpenBot fügt diese Dinge zu den Anweisungen jedes Turns hinzu:
 | `agents.read`     | Agents lesen, mit ihrem Memory, ihren Rules und Grants.                      |
 | `agents.write`    | Agents erstellen und ändern, mit ihrem Memory, ihren Rules und Grants.       |
 | `agents.delegate` | Einem Agent Arbeit geben, von einem Client oder von einem anderen Agent aus. |
+| `agents.share`    | Personen einladen, einen [Agent zu nutzen](/de/docs/sharing).                |
 
-Deine eigenen Agents liegen unter deinem Member-Schlüssel. Gemeinsame Agents liegen unter `openbot.org.<org>.agent`. Members dürfen gemeinsame Agents lesen und nutzen. Administratoren dürfen sie auch ändern. Siehe [Berechtigungen](/de/docs/permissions).
+Deine eigenen Agents liegen unter deinem Member-Schlüssel. Gemeinsame Agents liegen unter `openbot.org.<org>.agent`. Members dürfen gemeinsame Agents lesen und nutzen. Administratoren dürfen sie auch ändern und teilen. Siehe [Berechtigungen](/de/docs/permissions).
 
 ## Fehler
 

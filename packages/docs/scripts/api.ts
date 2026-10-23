@@ -44,9 +44,14 @@ const groups = [
 	[
 		"agents",
 		"Agents",
-		"Make and manage Agents, their memory, Rules, and Grants.",
+		"Make, manage, and share Agents, with their memory, Rules, Grants, members, and invitations.",
 	],
 	["sessions", "Sessions", "Give work to an Agent in Sessions and Turns."],
+	[
+		"agentInvitations",
+		"Agent invitations",
+		"Accept an invitation to use an Agent in your own organization.",
+	],
 	[
 		"triggers",
 		"Triggers",

@@ -247,13 +247,15 @@ curl -b cookies.txt \
 - Eine Einladung gilt 7 Tage. Danach ist ihr `status` `expired`.
 - Eine E-Mail kann in einer Organisation nur eine offene Einladung haben. OpenBot gibt `400` mit `InvitationInvalid` zurück, wenn es schon eine gibt oder wenn ein Member diese E-Mail schon hat.
 
+Du kannst auch Personen einladen, einen Agent zu nutzen. Siehe [Agents teilen](/de/docs/sharing).
+
 `GET /v1/organization/invitations` listet die Einladungen auf, die neuesten zuerst. Es braucht `members.read`. Füge `?status=pending` hinzu, um nur die offenen zu sehen. `DELETE /v1/organization/invitations/:invitationId` nimmt eine offene Einladung zurück. Es braucht `members.write`.
 
 ### Auf eine Einladung antworten
 
 Diese Routen sind für die eingeladene Person. Sie brauchen keine Mitgliedschaft.
 
-- `GET /v1/invitations` listet die offenen Einladungen für deine geprüfte E-Mail auf.
+- `GET /v1/invitations` listet die offenen Einladungen für deine geprüfte E-Mail auf. Eine Einladung, einen Agent zu nutzen, hat `agent` und keine `roles`. Nimm sie mit `POST /v1/agent-invitations/accept` an. Siehe [Agents teilen](/de/docs/sharing#eine-einladung-annehmen).
 - `POST /v1/invitations/:invitationId/accept` macht dich zum Member mit den Roles der Einladung. Es gibt die Organisation zurück.
 - `POST /v1/invitations/:invitationId/decline` lehnt ab.
 

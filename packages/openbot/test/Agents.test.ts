@@ -212,6 +212,10 @@ const model = Effect.runSync(
 					})
 				if (input.includes("confirm directly"))
 					return call("ConfirmChange", { description: "a change" })
+				if (input.includes("read memory of "))
+					return call(names.readMemory, {
+						person: input.split("read memory of ")[1],
+					})
 				return answer("Hello.")
 			}),
 	}),
@@ -463,6 +467,96 @@ test(
 			assert.deepEqual(
 				log.map((entry) => [entry.by, entry.keys]),
 				[["person", ["tests-first"]]],
+			)
+		} finally {
+			await host.close()
+		}
+	},
+)
+
+test(
+	"an Agent keeps a memory for each person and can read the memory about another person",
+	{ timeout: 120000 },
+	async () => {
+		const host = await BrowserHost.start({ publicOrigin, model })
+		try {
+			const { send, json, until } = client(host)
+			// Bob joins the organization of Alice.
+			const alice = await host.login("memory-alice")
+			const bob = await host.login("memory-bob")
+			const shared = await json(
+				AgentsApi.Agent,
+				send(alice.session, "/v1/agents", "POST", {
+					name: "Concierge",
+					role: "Helps everyone",
+					instructions: "Help the team.",
+					shared: true,
+				}),
+			)
+			const memoryPath = "/v1/agents/" + shared.id + "/memory"
+			await json(
+				AgentMemory.State,
+				send(alice.session, memoryPath, "POST", {
+					expected: 0,
+					command: {
+						_tag: "Remember",
+						key: "drink",
+						content: "Alice likes green tea.",
+						kind: "preference",
+					},
+				}),
+			)
+			// Bob has his own memory, and cannot read the memory about Alice himself.
+			assert.equal(
+				(await json(AgentMemory.State, send(bob.session, memoryPath))).version,
+				0,
+			)
+			assert.equal(
+				(
+					await send(
+						bob.session,
+						memoryPath + "?person=" + alice.identity.userId,
+					)
+				).status,
+				403,
+			)
+			const people = await json(
+				Schema.Array(AgentsApi.AgentMemoryPerson),
+				send(alice.session, memoryPath + "/people"),
+			)
+			assert.deepEqual(
+				people.map((person) => [person.person, person.entries]),
+				[[alice.identity.userId, 1]],
+			)
+			const log = await json(
+				Schema.Array(AgentMemory.LogEntry),
+				send(alice.session, memoryPath + "/log"),
+			)
+			assert.deepEqual(
+				log.map((entry) => entry.keys),
+				[["drink"]],
+			)
+
+			// The Agent itself can read the memory about Alice while it works with Bob.
+			const created = await json(
+				SessionView,
+				send(bob.session, "/v1/sessions", "POST", { agent: shared.id }),
+			)
+			const path = "/v1/sessions/" + created.session.id
+			const started = await send(bob.session, path + "/turns", "POST", {
+				expected: created.session.revision,
+				input: "read memory of " + alice.identity.userId,
+			})
+			assert.equal(started.status, 202, await started.text())
+			const done = await until("the Turn completes", async () => {
+				const current = await json(SessionView, send(bob.session, path))
+				return Session.status(current.session)._tag === "Completed"
+					? current
+					: undefined
+			})
+			assert.ok(
+				JSON.stringify(done.response).includes("Alice likes green tea."),
+				JSON.stringify(done.response),
 			)
 		} finally {
 			await host.close()

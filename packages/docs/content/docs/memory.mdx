@@ -9,7 +9,7 @@ This page shows how learned memory works and how to change it with the API.
 
 Learned memory belongs to one Session. It is part of the Session's history, so a [Fork](/docs/sessions#fork-from-a-version) takes a copy of it. Other Sessions do not see it.
 
-Each [Agent](/docs/agents) also has a long-term memory over all its Sessions. See [Agent memory](#agent-memory).
+Each [Agent](/docs/agents) also has a long-term memory over all its Sessions, with one memory for each person. See [Agent memory](#agent-memory).
 
 ---
 
@@ -187,7 +187,7 @@ See all fields in the [Sessions reference](/docs/api/operations/tags/sessions/).
 
 ## Agent memory
 
-**Agent memory** is what one Agent learns over many Sessions. It keeps only lasting experience:
+**Agent memory** is what one Agent learns over many Sessions. The Agent keeps one memory for each person that it works with, also for the people who use it through a [share](/docs/sharing). It keeps only lasting experience:
 
 | Kind         | Example                                              |
 | ------------ | ---------------------------------------------------- |
@@ -203,22 +203,26 @@ When a Turn of the Agent completes and its queue is empty, OpenBot asks the Agen
 
 - Each entry names its sources: Session and Item IDs.
 - Tool results from Apps are outside data. An entry that only App results support is never kept.
-- The Agent always knows which person it works with. The memory model also knows it, so entries can say who said what.
+- The Agent always knows which person it works with. What it learns goes into the memory about that person.
 - Retracted entries stay retracted. Only a person can bring one back.
 
 Agent memory does not follow a Timeline. A Fork never changes it, and going back to an old Version does not undo it. To remove an entry, forget it.
 
-OpenBot adds the active entries to the instructions of every Turn of the Agent, newest first, up to 8000 characters. The text says that current instructions win over memory.
+OpenBot adds the active entries about the current person to the instructions of every Turn of the Agent, newest first, up to 8000 characters. The text says that current instructions win over memory. It also lists up to 20 other people that the Agent has memory about. The Agent can read the memory about one of them with the `openbot_read_memory` tool.
+
+Older versions of OpenBot kept one memory for each Agent, not for each person. When you upgrade, OpenBot removes that old memory, and each Agent starts again with an empty memory about each person.
 
 ### Shared Agents
 
-A shared Agent has one memory for every member who uses it. The Agent decides what to share: it gets fixed rules about privacy in every Turn. What it learned from one person may be private, so it tells another person only what is clearly shared work.
+Many people can use a shared Agent: the members of the organization, and the people who use it in [other organizations](/docs/sharing). It has a separate memory about each of them, and it can read all of them. This memory stays in the organization of the Agent. A person in another organization can read and change only the memory about themselves. The Agent decides what to share: it gets fixed rules about privacy in every Turn. What it learned from one person may be private, so it tells another person only what is clearly shared work.
 
 ### Read and change it
 
+Without `person`, you read the memory about yourself. You need `agents.read` on the Agent. To read the memory about another person, add `person` with their user ID. Then you need `agents.write`:
+
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  https://api.example.com/v1/agents/$AGENT/memory
+  "https://api.example.com/v1/agents/$AGENT/memory?person=u_456"
 ```
 
 ```json
@@ -246,6 +250,10 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/agents/$AGENT/memory
 ```
 
-`GET /v1/agents/:agentId/memory/log` lists each change with its `version`, the time, what made it (`consolidation`, `person` or `promotion`), and the changed keys.
+Changes take `person` in the same way.
 
-When you or an Agent [promote](/docs/agents#promote-a-session-agent) a Session Agent, the lasting entries of its Session memory become its Agent memory.
+`GET /v1/agents/:agentId/memory/log` lists each change of one memory with its `version`, the time, what made it (`consolidation`, `person` or `promotion`), and the changed keys. It also takes `person`.
+
+`GET /v1/agents/:agentId/memory/people` lists the people that the Agent has memory about, with the number of active entries. It needs `agents.write`.
+
+When you or an Agent [promote](/docs/agents#promote-a-session-agent) a Session Agent, the lasting entries of its Session memory become its memory about the person that it worked for.

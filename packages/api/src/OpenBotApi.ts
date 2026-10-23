@@ -16,7 +16,7 @@ import {
 	AppAuthorizationApi,
 	AppAuthorizationPublicApi,
 } from "./AppAuthorizationApi.ts"
-import { AgentsApi } from "./AgentsApi.ts"
+import { AgentInvitationsApi, AgentsApi } from "./AgentsApi.ts"
 import { RequestsApi } from "./RequestsApi.ts"
 import { MemberSettingsApi } from "./MemberSettingsApi.ts"
 import { TriggerHooksApi, TriggersApi } from "./TriggersApi.ts"
@@ -58,6 +58,7 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 			.middleware(AgentAuth),
 		SessionsApi,
 		AgentsApi,
+		AgentInvitationsApi,
 		RequestsApi,
 		MemberSettingsApi,
 		TriggersApi,

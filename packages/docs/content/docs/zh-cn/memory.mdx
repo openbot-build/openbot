@@ -9,7 +9,7 @@ OpenBot 在每个 Turn 之后添加事实，并在之后的 Turn 中把它们展
 
 学到的记忆属于一个 Session。它是 Session 历史的一部分，所以 [Fork](/zh-cn/docs/sessions#从某个-version-分叉)（分叉）会得到它的一份副本。其他 Session 看不到它。
 
-每个 [Agent](/zh-cn/docs/agents) 还有一份跨越它所有 Session 的长期记忆。参见 [Agent 记忆](#agent-记忆)。
+每个 [Agent](/zh-cn/docs/agents) 还有一份跨越它所有 Session 的长期记忆，每个人各有一份。参见 [Agent 记忆](#agent-记忆)。
 
 ---
 
@@ -187,7 +187,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ## Agent 记忆
 
-**Agent 记忆**（Agent memory）是一个 Agent 在许多 Session 中学到的东西。它只保存长期有用的经验：
+**Agent 记忆**（Agent memory）是一个 Agent 在许多 Session 中学到的东西。Agent 为和它一起工作的每个人保存一份记忆，也包括通过[分享](/zh-cn/docs/sharing)使用它的人。它只保存长期有用的经验：
 
 | 类型         | 示例                                                 |
 | ------------ | ---------------------------------------------------- |
@@ -203,22 +203,26 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 - 每个条目都指明它的来源：Session 和 Item 的 ID。
 - 来自 App 的工具结果是外部数据。只有 App 结果支持的条目永远不会被保存。
-- Agent 总是知道它在和哪个人一起工作。记忆模型也知道，所以条目可以说明谁说了什么。
+- Agent 总是知道它在和哪个人一起工作。它学到的东西会进入关于这个人的记忆。
 - 已撤回的条目保持撤回状态。只有人才能把它恢复。
 
 Agent 记忆不跟随 Timeline。Fork 永远不会改变它，回到旧的 Version 也不会撤销它。要删除一个条目，请忘记它。
 
-OpenBot 把有效的条目加入该 Agent 每个 Turn 的指令中，最新的在前，最多 8000 个字符。这段文字说明当前的指令优先于记忆。
+OpenBot 把关于当前这个人的有效条目加入该 Agent 每个 Turn 的指令中，最新的在前，最多 8000 个字符。这段文字说明当前的指令优先于记忆。它还会列出 Agent 有记忆的其他人，最多 20 个。Agent 可以用 `openbot_read_memory` 工具读取关于其中某个人的记忆。
+
+旧版本的 OpenBot 为每个 Agent 只保存一份记忆，而不是为每个人保存一份。升级时，OpenBot 会删除这份旧记忆。之后每个 Agent 对每个人都从空的记忆重新开始。
 
 ### 共享的 Agent
 
-共享的 Agent 对所有使用它的成员只有一份记忆。由 Agent 决定分享什么：它在每个 Turn 中都会得到关于隐私的固定规则。它从某个人那里学到的东西可能是私密的，所以它只把明确属于共享工作的内容告诉另一个人。
+很多人可以使用一个共享的 Agent：组织的成员，以及在[其他组织](/zh-cn/docs/sharing)中使用它的人。它对其中每个人都有一份单独的记忆，并且可以读取所有这些记忆。这些记忆保存在这个 Agent 所在的组织中。其他组织中的人只能读取和修改关于自己的记忆。由 Agent 决定分享什么：它在每个 Turn 中都会得到关于隐私的固定规则。它从某个人那里学到的东西可能是私密的，所以它只把明确属于共享工作的内容告诉另一个人。
 
 ### 读取和修改
 
+不带 `person` 时，你读取的是关于你自己的记忆。你需要这个 Agent 上的 `agents.read`。要读取关于另一个人的记忆，请加上 `person` 和这个人的用户 ID。这时你需要 `agents.write`：
+
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  https://api.example.com/v1/agents/$AGENT/memory
+  "https://api.example.com/v1/agents/$AGENT/memory?person=u_456"
 ```
 
 ```json
@@ -246,6 +250,10 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/agents/$AGENT/memory
 ```
 
-`GET /v1/agents/:agentId/memory/log` 列出每一次修改，包括它的 `version`、时间、由什么引起（`consolidation`、`person` 或 `promotion`），以及被修改的 key。
+修改也用同样的方式接受 `person`。
 
-当你或某个 Agent [提升](/zh-cn/docs/agents#提升-session-agent)一个 Session Agent 时，它 Session 记忆中的长期条目会成为它的 Agent 记忆。
+`GET /v1/agents/:agentId/memory/log` 列出一份记忆的每一次修改，包括它的 `version`、时间、由什么引起（`consolidation`、`person` 或 `promotion`），以及被修改的 key。它也接受 `person`。
+
+`GET /v1/agents/:agentId/memory/people` 列出 Agent 有记忆的人，以及每个人的有效条目数量。它需要 `agents.write`。
+
+当你或某个 Agent [提升](/zh-cn/docs/agents#提升-session-agent)一个 Session Agent 时，它 Session 记忆中的长期条目会成为它关于它所服务的那个人的记忆。

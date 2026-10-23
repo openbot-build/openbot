@@ -85,6 +85,29 @@ export class Agents extends Context.Service<
 			input: AgentsApi.UpdateAgentRequest,
 		) => Effect.Effect<Agent, Failure, AuthorizationServices>
 		/**
+		 * Lets the caller use a shared Agent: it makes a linked Agent in the organization of the
+		 * caller, and makes the caller a member of the shared Agent. A member keeps one linked
+		 * Agent. When they already have one, it gives that one back.
+		 */
+		readonly link: (
+			caller: Caller,
+			source: { readonly organizationId: string; readonly agent: Agent },
+		) => Effect.Effect<Agent, Failure, AuthorizationServices>
+		/** The people who use a shared Agent in their own organizations. */
+		readonly members: (
+			organizationId: string,
+			agent: AgentId,
+		) => Effect.Effect<
+			ReadonlyArray<AgentsApi.AgentMember>,
+			AgentsApi.AgentStorageUnavailable
+		>
+		/** Takes a person off a shared Agent. Their linked Agent stops working. */
+		readonly removeMember: (
+			organizationId: string,
+			agent: AgentId,
+			userId: string,
+		) => Effect.Effect<boolean, AgentsApi.AgentStorageUnavailable>
+		/**
 		 * Makes a Session Agent a lasting Agent.
 		 * The owner is the Agent `owner`, or the member of its Session without it.
 		 */
@@ -122,6 +145,12 @@ export class Agents extends Context.Service<
 	}
 >()("@openbot-build/openbot/agents/Agents") {}
 
+/** A person who uses a shared Agent, with the shared Agent. */
+const Membership = Schema.Struct({
+	agent: AgentsApi.AgentId,
+	...AgentsApi.AgentMember.fields,
+})
+
 /** The status key of an Agent record: its kind, or `archived`. */
 const RecordStatus = Schema.Literals([
 	"archived",
@@ -147,10 +176,61 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 	Effect.gen(function* () {
 		const records = yield* AgentRecords
 		const agents = records.collection("agent", AgentsApi.Agent, RecordStatus)
+		/** The members of shared Agents, kept in the organization of each shared Agent. */
+		const memberships = records.collection("agent_member", Membership)
+		const membershipId = (agent: AgentId, userId: string) =>
+			agent + "/" + encodeURIComponent(userId)
 		const put = (organizationId: string, agent: Agent) =>
 			agents.put(keys(organizationId, agent), agent).pipe(Effect.as(agent))
+		/**
+		 * A linked Agent takes its name, role, instructions and model from its source.
+		 * It works only while the source is not archived and its owner is still a member
+		 * of the source. Otherwise it does not exist.
+		 */
+		const resolve = (agent: Agent) =>
+			Effect.gen(function* () {
+				const source = agent.source
+				if (source === undefined) return Option.some(agent)
+				const found = yield* agents.find(source.organizationId, source.agent)
+				const owner = rootOf(agent.owner)
+				const member =
+					owner === null
+						? Option.none()
+						: yield* memberships.find(
+								source.organizationId,
+								membershipId(source.agent, owner),
+							)
+				if (
+					Option.isNone(found) ||
+					found.value.archived ||
+					Option.isNone(member) ||
+					member.value.linked !== agent.id
+				)
+					return Option.none<Agent>()
+				const { model: _model, ...rest } = agent
+				return Option.some<Agent>({
+					...rest,
+					name: found.value.name,
+					role: found.value.role,
+					instructions: found.value.instructions,
+					...(found.value.model === undefined
+						? {}
+						: { model: found.value.model }),
+				})
+			})
+		const resolveAll = (list: ReadonlyArray<Agent>) =>
+			Effect.forEach(list, resolve).pipe(
+				Effect.map((found) => found.flatMap(Option.toArray)),
+			)
 		const find: typeof Agents.Service.find = (organizationId, id) =>
-			agents.find(organizationId, id)
+			agents.find(organizationId, id).pipe(
+				Effect.flatMap(
+					Option.match({
+						onNone: () => Effect.succeedNone,
+						onSome: resolve,
+					}),
+				),
+			)
 		const notFound = (id: string) => AgentsApi.AgentNotFound.make({ agent: id })
 		const access: typeof Agents.Service.access = (caller, id, permission) =>
 			Effect.gen(function* () {
@@ -328,9 +408,9 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 				Effect.gen(function* () {
 					if (input.agent !== undefined) {
 						yield* access(caller, input.agent, "agents.read")
-						const below = yield* agents.list(caller.organizationId, {
-							scope: input.agent,
-						})
+						const below = yield* agents
+							.list(caller.organizationId, { scope: input.agent })
+							.pipe(Effect.flatMap(resolveAll))
 						return (yield* visible(
 							caller,
 							below.filter((agent) => agent.owner._tag === "Agent"),
@@ -340,10 +420,12 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 								agent.archived === input.archived,
 						)
 					}
-					const own = yield* agents.list(caller.organizationId, {
-						owner: caller.userId,
-						...(input.session === undefined ? {} : { scope: input.session }),
-					})
+					const own = yield* agents
+						.list(caller.organizationId, {
+							owner: caller.userId,
+							...(input.session === undefined ? {} : { scope: input.session }),
+						})
+						.pipe(Effect.flatMap(resolveAll))
 					const shared =
 						input.session === undefined
 							? yield* agents.list(caller.organizationId, { owner: "" })
@@ -418,6 +500,20 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 						"agents.write",
 						input.expected,
 						(agent) => {
+							// The people of the shared Agent change these fields, not its members.
+							if (
+								agent.source !== undefined &&
+								(input.name !== undefined ||
+									input.role !== undefined ||
+									input.instructions !== undefined ||
+									input.model !== undefined)
+							)
+								return Effect.fail(
+									AgentsApi.AgentInvalid.make({
+										message:
+											"This Agent is shared with you. Only its own people can change its name, role, instructions and model.",
+									}),
+								)
 							const { model: _model, planApproval: _approval, ...rest } = agent
 							const model =
 								input.model === undefined
@@ -446,6 +542,12 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 					// The Agents that an archived Agent owns are archived with it.
 					if (input.archived === true)
 						yield* archiveTree(caller.organizationId, [agent], agent.updatedAt)
+					// Archiving a linked Agent ends the membership of its owner.
+					if (input.archived === true && agent.source !== undefined)
+						yield* memberships.remove(
+							agent.source.organizationId,
+							membershipId(agent.source.agent, caller.userId),
+						)
 					return agent
 				}),
 			promote: (caller, id, expected, owner) =>
@@ -486,6 +588,77 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 						},
 					)
 					return agent
+				}),
+			link: (caller, source) =>
+				records.transaction(
+					"agent_member:" +
+						source.organizationId +
+						":" +
+						membershipId(source.agent.id, caller.userId),
+					Effect.gen(function* () {
+						const id = membershipId(source.agent.id, caller.userId)
+						const existing = yield* memberships.find(source.organizationId, id)
+						if (Option.isSome(existing)) {
+							const linked = yield* find(
+								existing.value.organizationId,
+								existing.value.linked,
+							)
+							if (Option.isSome(linked) && !linked.value.archived)
+								return linked.value
+						}
+						const now = yield* Clock.currentTimeMillis
+						const agent: Agent = {
+							...fresh({
+								owner: { _tag: "Member", userId: caller.userId },
+								name: source.agent.name,
+								role: source.agent.role,
+								instructions: source.agent.instructions,
+								kind: "persistent",
+								now,
+							}),
+							source: {
+								organizationId: source.organizationId,
+								agent: source.agent.id,
+							},
+						}
+						yield* writable(caller, agent)
+						yield* put(caller.organizationId, agent)
+						yield* memberships.put(
+							{
+								organizationId: source.organizationId,
+								id,
+								owner: source.agent.id,
+								scope: caller.userId,
+								status: "",
+							},
+							{
+								agent: source.agent.id,
+								userId: caller.userId,
+								organizationId: caller.organizationId,
+								linked: agent.id,
+								joinedAt: now,
+							},
+						)
+						return yield* find(caller.organizationId, agent.id).pipe(
+							Effect.map(Option.getOrElse(() => agent)),
+						)
+					}),
+				),
+			members: (organizationId, agent) =>
+				memberships
+					.list(organizationId, { owner: agent })
+					.pipe(
+						Effect.map((list) =>
+							list.map(({ agent: _agent, ...member }) => member),
+						),
+					),
+			removeMember: (organizationId, agent, userId) =>
+				Effect.gen(function* () {
+					const id = membershipId(agent, userId)
+					const found = yield* memberships.find(organizationId, id)
+					if (Option.isNone(found)) return false
+					yield* memberships.remove(organizationId, id)
+					return true
 				}),
 			ownerChain: (subject, agent) =>
 				climb(subject, agent, [agent.id], [agent.id]),

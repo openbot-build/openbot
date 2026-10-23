@@ -1,4 +1,5 @@
 import {
+	type AgentsApi,
 	type AuthApi,
 	OrganizationApi,
 	Permissions,
@@ -70,24 +71,46 @@ const memberView = (
 const decodeInvitationStatus = Schema.decodeUnknownSync(
 	OrganizationApi.InvitationStatus,
 )
-/** An invitation lasts 7 days. */
+/** An email invitation lasts 7 days. */
 const invitationLifetime = 7 * 24 * 60 * 60 * 1000
+type InvitationRow = typeof invitations.$inferSelect
+/** A pending invitation past its end counts as expired. A link without an end never expires. */
+const statusOf = (row: InvitationRow, now: number) =>
+	row.status === "pending" && row.expiresAt !== null && row.expiresAt <= now
+		? "expired"
+		: decodeInvitationStatus(row.status)
 const invitationView = (
-	row: typeof invitations.$inferSelect & { readonly organizationName: string },
+	row: InvitationRow & { readonly organizationName: string },
 	now: number,
 ): OrganizationApi.Invitation => ({
 	id: row.id,
 	organizationId: row.organizationId,
 	organizationName: row.organizationName,
-	email: row.email,
-	roles: decodeRoles(row.roles),
-	status:
-		row.status === "pending" && row.expiresAt <= now
-			? "expired"
-			: decodeInvitationStatus(row.status),
+	// Only Agent links have no email, and this view never shows them.
+	email: row.email ?? "",
+	// An invitation to an Agent gives no roles in the organization.
+	roles: row.target === "agent" ? [] : decodeRoles(row.roles),
+	status: statusOf(row, now),
 	invitedBy: row.invitedBy,
 	createdAt: iso(row.createdAt),
-	expiresAt: iso(row.expiresAt),
+	expiresAt: iso(row.expiresAt ?? row.createdAt),
+	...(row.target === "agent" && row.agentId !== null
+		? { agent: { id: row.agentId, name: row.agentName ?? "" } }
+		: {}),
+})
+const agentInvitationView = (
+	row: InvitationRow,
+	now: number,
+): AgentsApi.AgentInvitation => ({
+	id: row.id,
+	agent: (row.agentId ?? "") as AgentsApi.AgentId,
+	email: row.email,
+	prefix: row.prefix,
+	path: row.path,
+	status: statusOf(row, now),
+	invitedBy: row.invitedBy,
+	createdAt: iso(row.createdAt),
+	expiresAt: row.expiresAt === null ? null : iso(row.expiresAt),
 })
 const isActiveSuperAdministrator = (member: OrganizationApi.Member) =>
 	member.status === "active" && member.roles.includes("super_administrator")
@@ -292,6 +315,20 @@ export const make: Effect.Effect<
 				eq(organizations.id, invitations.organizationId),
 			)
 			.where(where)
+			.orderBy(desc(invitations.createdAt), desc(invitations.id))
+			.pipe(Effect.mapError(unavailable))
+	/** The invitations to use one Agent, newest first. */
+	const agentInvitationRows = (organizationId: string, agent: string) =>
+		db
+			.select()
+			.from(invitations)
+			.where(
+				and(
+					eq(invitations.organizationId, organizationId),
+					eq(invitations.target, "agent"),
+					eq(invitations.agentId, agent),
+				),
+			)
 			.orderBy(desc(invitations.createdAt), desc(invitations.id))
 			.pipe(Effect.mapError(unavailable))
 	/** The account of a user, with its email in lower case. */
@@ -533,7 +570,10 @@ export const make: Effect.Effect<
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
 				const rows = yield* invitationRows(
-					eq(invitations.organizationId, organizationId),
+					and(
+						eq(invitations.organizationId, organizationId),
+						eq(invitations.target, "organization"),
+					),
 				)
 				return rows
 					.map((row) => invitationView(row, now))
@@ -580,6 +620,7 @@ export const make: Effect.Effect<
 								.where(
 									and(
 										eq(invitations.organizationId, input.organizationId),
+										eq(invitations.target, "organization"),
 										eq(invitations.email, email),
 										eq(invitations.status, "pending"),
 										gt(invitations.expiresAt, now),
@@ -608,6 +649,7 @@ export const make: Effect.Effect<
 				const [row] = yield* invitationRows(
 					and(
 						eq(invitations.organizationId, organizationId),
+						eq(invitations.target, "organization"),
 						eq(invitations.id, invitationId),
 					),
 				)
@@ -664,6 +706,11 @@ export const make: Effect.Effect<
 					return yield* OrganizationApi.InvitationInvalid.make({
 						message: "Verify your email address first.",
 					})
+				if (row.target === "agent" && answer === "accepted")
+					return yield* OrganizationApi.InvitationInvalid.make({
+						message:
+							"This invitation is for an Agent. Accept it with POST /v1/agent-invitations/accept.",
+					})
 				const now = yield* Clock.currentTimeMillis
 				const roles = decodeRoles(row.roles)
 				const joined = yield* db
@@ -712,6 +759,203 @@ export const make: Effect.Effect<
 				if (joined)
 					yield* recordJoin(row.organizationId, { id: account.value.id }, roles)
 				return { ...invitationView(row, now), status: answer }
+			}),
+		listAgentInvitations: (organizationId, agent, status) =>
+			Effect.gen(function* () {
+				const now = yield* Clock.currentTimeMillis
+				const rows = yield* agentInvitationRows(organizationId, agent)
+				return rows
+					.map((row) => agentInvitationView(row, now))
+					.filter(
+						(invitation) =>
+							status === undefined || invitation.status === status,
+					)
+			}),
+		createAgentInvitation: (input) =>
+			Effect.gen(function* () {
+				const now = yield* Clock.currentTimeMillis
+				const email = input.email?.trim().toLowerCase() ?? null
+				const row: InvitationRow = {
+					id: newInvitationId(),
+					organizationId: input.organizationId,
+					target: "agent",
+					agentId: input.agent.id,
+					agentName: input.agent.name,
+					email,
+					roles: "[]",
+					status: "pending",
+					invitedBy: input.invitedBy,
+					prefix: input.link?.prefix ?? null,
+					secretHash: input.link?.hash ?? null,
+					secret: input.link?.sealed ?? null,
+					path: input.path ?? null,
+					createdAt: now,
+					// An email invitation lasts 7 days, like an invitation to the organization.
+					expiresAt:
+						email === null
+							? (input.expiresAt ?? null)
+							: now + invitationLifetime,
+				}
+				yield* db
+					.transaction((tx) =>
+						Effect.gen(function* () {
+							yield* lockMembers(tx, input.organizationId)
+							// One email has at most one pending invitation to an Agent.
+							if (email !== null) {
+								const pending = yield* tx
+									.select({ id: invitations.id })
+									.from(invitations)
+									.where(
+										and(
+											eq(invitations.organizationId, input.organizationId),
+											eq(invitations.target, "agent"),
+											eq(invitations.agentId, input.agent.id),
+											eq(invitations.email, email),
+											eq(invitations.status, "pending"),
+											gt(invitations.expiresAt, now),
+										),
+									)
+									.limit(1)
+								if (pending.length > 0)
+									return yield* OrganizationApi.InvitationInvalid.make({
+										message: "This email already has a pending invitation.",
+									})
+							}
+							yield* tx.insert(invitations).values(row)
+						}),
+					)
+					.pipe(
+						Effect.mapError((error) =>
+							error._tag === "InvitationInvalid" ? error : unavailable(),
+						),
+					)
+				return agentInvitationView(row, now)
+			}),
+		agentInvitation: (organizationId, agent, invitationId) =>
+			Effect.gen(function* () {
+				const now = yield* Clock.currentTimeMillis
+				const row = (yield* agentInvitationRows(organizationId, agent)).find(
+					(row) => row.id === invitationId,
+				)
+				if (row === undefined)
+					return yield* OrganizationApi.InvitationNotFound.make({
+						invitationId,
+					})
+				return {
+					invitation: agentInvitationView(row, now),
+					link:
+						row.secretHash === null ||
+						row.secret === null ||
+						row.prefix === null
+							? null
+							: {
+									hash: row.secretHash,
+									sealed: row.secret,
+									prefix: row.prefix,
+								},
+				}
+			}),
+		revokeAgentInvitation: (organizationId, agent, invitationId) =>
+			Effect.gen(function* () {
+				const now = yield* Clock.currentTimeMillis
+				const row = (yield* agentInvitationRows(organizationId, agent)).find(
+					(row) => row.id === invitationId,
+				)
+				if (row === undefined)
+					return yield* OrganizationApi.InvitationNotFound.make({
+						invitationId,
+					})
+				const current = agentInvitationView(row, now)
+				if (current.status !== "pending")
+					return yield* OrganizationApi.InvitationInvalid.make({
+						message: `The invitation is ${current.status}.`,
+					})
+				yield* db
+					.update(invitations)
+					.set({ status: "revoked" })
+					.where(
+						and(
+							eq(invitations.id, invitationId),
+							eq(invitations.status, "pending"),
+						),
+					)
+					.pipe(Effect.mapError(unavailable))
+				return { ...current, status: "revoked" as const }
+			}),
+		takeAgentInvitation: (userId, by) =>
+			Effect.gen(function* () {
+				const now = yield* Clock.currentTimeMillis
+				const id = by._tag === "Email" ? by.invitationId : ""
+				const notFound = OrganizationApi.InvitationNotFound.make({
+					invitationId: id,
+				})
+				const [row] = yield* db
+					.select()
+					.from(invitations)
+					.where(
+						and(
+							eq(invitations.target, "agent"),
+							by._tag === "Email"
+								? eq(invitations.id, by.invitationId)
+								: eq(invitations.secretHash, by.secretHash),
+						),
+					)
+					.pipe(Effect.mapError(unavailable))
+				if (row === undefined || row.agentId === null) return yield* notFound
+				const taken = {
+					invitationId: row.id,
+					organizationId: row.organizationId,
+					agent: row.agentId,
+				}
+				if (by._tag === "Link") {
+					// A link stays open, so many people can use it.
+					if (row.email !== null) return yield* notFound
+					const status = statusOf(row, now)
+					if (status !== "pending")
+						return yield* OrganizationApi.InvitationInvalid.make({
+							message: `The invitation is ${status}.`,
+						})
+					return taken
+				}
+				// An invitation for another email stays hidden.
+				const account = yield* accountOf(userId)
+				if (Option.isNone(account) || account.value.email !== row.email)
+					return yield* notFound
+				if (!account.value.emailVerified)
+					return yield* OrganizationApi.InvitationInvalid.make({
+						message: "Verify your email address first.",
+					})
+				yield* db
+					.transaction((tx) =>
+						Effect.gen(function* () {
+							yield* lockMembers(tx, row.organizationId)
+							const [locked] = yield* tx
+								.select()
+								.from(invitations)
+								.where(eq(invitations.id, row.id))
+							const status =
+								locked === undefined ? "revoked" : statusOf(locked, now)
+							if (status !== "pending")
+								return yield* OrganizationApi.InvitationInvalid.make({
+									message: `The invitation is ${status}.`,
+								})
+							yield* tx
+								.update(invitations)
+								.set({ status: "accepted" })
+								.where(
+									and(
+										eq(invitations.id, row.id),
+										eq(invitations.status, "pending"),
+									),
+								)
+						}),
+					)
+					.pipe(
+						Effect.mapError((error) =>
+							error._tag === "InvitationInvalid" ? error : unavailable(),
+						),
+					)
+				return taken
 			}),
 		roleInUse: (organizationId, roleId) =>
 			Effect.gen(function* () {

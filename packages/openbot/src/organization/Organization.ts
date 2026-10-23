@@ -1,10 +1,22 @@
-import type { AuthApi, OrganizationApi, PlatformApi } from "@openbot-build/api"
+import type {
+	AgentsApi,
+	AuthApi,
+	OrganizationApi,
+	PlatformApi,
+} from "@openbot-build/api"
 import { Context, type Effect, type Option, Schema } from "effect"
 
 export class OrganizationUnavailable extends Schema.TaggedError<OrganizationUnavailable>()(
 	"OrganizationUnavailable",
 	{},
 ) {}
+
+/** The secret of an invitation link: its SHA-256 hash, the sealed secret and its first characters. */
+export interface LinkSecret {
+	readonly hash: string
+	readonly sealed: string
+	readonly prefix: string
+}
 
 export interface Account {
 	readonly id: string
@@ -165,6 +177,73 @@ export class Organization extends Context.Service<
 			answer: "accepted" | "declined",
 		) => Effect.Effect<
 			OrganizationApi.Invitation,
+			| OrganizationApi.InvitationNotFound
+			| OrganizationApi.InvitationInvalid
+			| OrganizationUnavailable
+		>
+		/** The invitations to use one Agent of an organization, newest first. */
+		readonly listAgentInvitations: (
+			organizationId: string,
+			agent: string,
+			status?: OrganizationApi.InvitationStatus,
+		) => Effect.Effect<
+			ReadonlyArray<AgentsApi.AgentInvitation>,
+			OrganizationUnavailable
+		>
+		/**
+		 * Invites an email, or makes an invitation link, to use one Agent.
+		 * A link has `link`: the hash of its secret, its sealed secret and its prefix.
+		 */
+		readonly createAgentInvitation: (input: {
+			readonly organizationId: string
+			readonly agent: { readonly id: string; readonly name: string }
+			readonly email?: string
+			readonly link?: LinkSecret
+			readonly expiresAt?: number
+			readonly path?: string
+			readonly invitedBy: string
+		}) => Effect.Effect<
+			AgentsApi.AgentInvitation,
+			OrganizationApi.InvitationInvalid | OrganizationUnavailable
+		>
+		/** One invitation to use an Agent, with the secret of a link. */
+		readonly agentInvitation: (
+			organizationId: string,
+			agent: string,
+			invitationId: string,
+		) => Effect.Effect<
+			{
+				readonly invitation: AgentsApi.AgentInvitation
+				readonly link: LinkSecret | null
+			},
+			OrganizationApi.InvitationNotFound | OrganizationUnavailable
+		>
+		readonly revokeAgentInvitation: (
+			organizationId: string,
+			agent: string,
+			invitationId: string,
+		) => Effect.Effect<
+			AgentsApi.AgentInvitation,
+			| OrganizationApi.InvitationNotFound
+			| OrganizationApi.InvitationInvalid
+			| OrganizationUnavailable
+		>
+		/**
+		 * Uses an invitation to an Agent for a user: an email invitation for their verified
+		 * email, which then counts as accepted, or a link by the hash of its secret, which
+		 * stays open for other people. Gives back the Agent and its organization.
+		 */
+		readonly takeAgentInvitation: (
+			userId: string,
+			by:
+				| { readonly _tag: "Email"; readonly invitationId: string }
+				| { readonly _tag: "Link"; readonly secretHash: string },
+		) => Effect.Effect<
+			{
+				readonly invitationId: string
+				readonly organizationId: string
+				readonly agent: string
+			},
 			| OrganizationApi.InvitationNotFound
 			| OrganizationApi.InvitationInvalid
 			| OrganizationUnavailable

@@ -6,6 +6,12 @@ import {
 	OpenApi,
 } from "effect/http-api"
 import { Caller } from "./Identity.ts"
+import {
+	InvitationId,
+	InvitationInvalid,
+	InvitationNotFound,
+	InvitationStatus,
+} from "./Invitation.ts"
 import { AccountAuth, NoStore } from "./AuthApi.ts"
 import {
 	CreateRoleRequest,
@@ -68,32 +74,30 @@ export const UpdateMemberRequest = Schema.Struct({
 })
 export type UpdateMemberRequest = typeof UpdateMemberRequest.Type
 
-export const InvitationId = Schema.String.check(
-	Schema.isMinLength(1),
-	Schema.isMaxLength(128),
-)
-/** `revoked` means that an administrator took it back. An invitation that is too old is `expired`. */
-export const InvitationStatus = Schema.Literals([
-	"pending",
-	"accepted",
-	"declined",
-	"revoked",
-	"expired",
-])
-export type InvitationStatus = typeof InvitationStatus.Type
-/** An invitation to join an organization. The person with this verified email can accept it. */
+export { InvitationId, InvitationInvalid, InvitationNotFound, InvitationStatus }
+/**
+ * An invitation to join an organization, or to use one shared Agent of it.
+ * The person with this verified email can accept it.
+ */
 export const Invitation = Schema.Struct({
 	id: InvitationId,
 	organizationId: Schema.String,
 	organizationName: Schema.String,
 	email: Schema.String,
-	/** The roles that the person gets when they accept. */
-	roles: Roles,
+	/** The roles that the person gets when they accept. An invitation to an Agent has none. */
+	roles: Schema.Array(RoleId),
 	status: InvitationStatus,
 	/** The user ID of the person who made the invitation. */
 	invitedBy: Schema.String,
 	createdAt: Schema.String,
 	expiresAt: Schema.String,
+	/**
+	 * Only for an invitation to use one Agent. Accept it with
+	 * `POST /v1/agent-invitations/accept`. `roles` is empty then.
+	 */
+	agent: Schema.optionalKey(
+		Schema.Struct({ id: Schema.String, name: Schema.String }),
+	),
 })
 export type Invitation = typeof Invitation.Type
 export const CreateInvitationRequest = Schema.Struct({
@@ -113,6 +117,7 @@ export type CreateInvitationRequest = typeof CreateInvitationRequest.Type
 const auditActionTree = {
 	member: ["joined", "updated", "removed", "left"],
 	invitation: ["created", "revoked", "accepted", "declined"],
+	agent_member: ["joined", "removed"],
 	organization: ["created", "updated"],
 	settings: ["updated"],
 	role: ["created", "updated", "deleted"],
@@ -188,15 +193,6 @@ export class RoleInUse extends Schema.TaggedError<RoleInUse>()("RoleInUse", {
 export class RoleReadOnly extends Schema.TaggedError<RoleReadOnly>()(
 	"RoleReadOnly",
 	{ roleId: Schema.String },
-) {}
-export class InvitationNotFound extends Schema.TaggedError<InvitationNotFound>()(
-	"InvitationNotFound",
-	{ invitationId: Schema.String },
-) {}
-/** The invitation cannot be used now, for example because it is too old or is for another email. */
-export class InvitationInvalid extends Schema.TaggedError<InvitationInvalid>()(
-	"InvitationInvalid",
-	{ message: Schema.String },
 ) {}
 /** Only platform admins can create organizations on this platform. */
 export class OrganizationCreationDisabled extends Schema.TaggedError<OrganizationCreationDisabled>()(
@@ -453,7 +449,7 @@ export class OrganizationsApi extends HttpApiGroup.make("organizations")
 			},
 		).annotate(
 			OpenApi.Description,
-			"Joins the organization of the invitation. You need the session cookie, and your verified email must be the email of the invitation.",
+			"Joins the organization of the invitation. You need the session cookie, and your verified email must be the email of the invitation. An invitation to use an Agent needs `POST /v1/agent-invitations/accept` instead.",
 		),
 		HttpApiEndpoint.post(
 			"declineInvitation",

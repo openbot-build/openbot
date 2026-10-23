@@ -11,24 +11,52 @@ const isLastingKind = Schema.is(AgentMemory.Kind)
 
 const Stored = Schema.Struct({
 	agent: AgentsApi.AgentId,
+	person: Schema.String,
 	state: AgentMemory.State,
 })
 const Logged = Schema.Struct({
 	agent: AgentsApi.AgentId,
+	person: Schema.String,
 	entry: AgentMemory.LogEntry,
 })
 
-/** The long-term memory of each Agent. It does not follow any Timeline. */
+/**
+ * Where the memory of an Agent lives. A linked Agent shares the memory of its source,
+ * so every person who uses a shared Agent adds to one memory, one part for each person.
+ */
+// It reads two plain values, like the helpers of SessionHost. A pipeable form does not help.
+// @effect-diagnostics-next-line missingPipeableSignature:off
+export const homeOf = (organizationId: string, agent: AgentsApi.Agent) =>
+	agent.source ?? { organizationId, agent: agent.id }
+
+/** One memory: what one Agent remembers about one person. `person` is a user id. */
+export interface Whose {
+	readonly agent: AgentsApi.AgentId
+	readonly person: string
+}
+
+/**
+ * The long-term memory of each Agent, with one memory for each person.
+ * It does not follow any Timeline.
+ */
 export class AgentMemories extends Context.Service<
 	AgentMemories,
 	{
 		readonly get: (
 			organizationId: string,
-			agent: AgentsApi.AgentId,
+			whose: Whose,
 		) => Effect.Effect<AgentMemory.State, AgentsApi.AgentStorageUnavailable>
-		readonly edit: (
+		/** The people that an Agent has memory about, the most recently changed first. */
+		readonly people: (
 			organizationId: string,
 			agent: AgentsApi.AgentId,
+		) => Effect.Effect<
+			ReadonlyArray<AgentsApi.AgentMemoryPerson>,
+			AgentsApi.AgentStorageUnavailable
+		>
+		readonly edit: (
+			organizationId: string,
+			whose: Whose,
 			input: AgentsApi.UpdateAgentMemoryRequest,
 		) => Effect.Effect<
 			AgentMemory.State,
@@ -36,12 +64,15 @@ export class AgentMemories extends Context.Service<
 		>
 		readonly log: (
 			organizationId: string,
-			agent: AgentsApi.AgentId,
+			whose: Whose,
 		) => Effect.Effect<
 			ReadonlyArray<AgentMemory.LogEntry>,
 			AgentsApi.AgentStorageUnavailable
 		>
-		/** Learns from finished work. The model runs before the write, so a person's edit is kept. */
+		/**
+		 * Learns from finished work, into the memory about `user`.
+		 * The model runs before the write, so a person's edit is kept.
+		 */
 		readonly consolidate: (
 			organizationId: string,
 			input: Omit<AgentMemory.ExtractionInput, "state"> & {
@@ -52,10 +83,13 @@ export class AgentMemories extends Context.Service<
 			AgentsApi.AgentStorageUnavailable,
 			LanguageModel.LanguageModel
 		>
-		/** Adds the lasting entries of a Session memory, when a Session Agent is promoted. */
+		/**
+		 * Adds the lasting entries of a Session memory, when a Session Agent is promoted.
+		 * They go into the memory about the person that promotes it.
+		 */
 		readonly adopt: (
 			organizationId: string,
-			agent: AgentsApi.AgentId,
+			whose: Whose,
 			session: Session.Id,
 			memory: Memory.State,
 		) => Effect.Effect<AgentMemory.State, AgentsApi.AgentStorageUnavailable>
@@ -68,10 +102,13 @@ export const make: Effect.Effect<
 	AgentRecords
 > = Effect.gen(function* () {
 	const records = yield* AgentRecords
-	const memories = records.collection("memory", Stored)
-	const logs = records.collection("memory_log", Logged)
-	const get = (organizationId: string, agent: AgentsApi.AgentId) =>
-		memories.find(organizationId, agent).pipe(
+	const memories = records.collection("person_memory", Stored)
+	const logs = records.collection("person_memory_log", Logged)
+	// The person is a user id. Encoding keeps a slash in it from looking like a new part.
+	const idOf = (whose: Whose) =>
+		whose.agent + "/" + encodeURIComponent(whose.person)
+	const get = (organizationId: string, whose: Whose) =>
+		memories.find(organizationId, idOf(whose)).pipe(
 			Effect.map(
 				Option.match({
 					onNone: () => AgentMemory.empty(),
@@ -82,7 +119,7 @@ export const make: Effect.Effect<
 	/** Writes a new state and its log entry, when something changed. */
 	const write = (
 		organizationId: string,
-		agent: AgentsApi.AgentId,
+		whose: Whose,
 		previous: AgentMemory.State,
 		state: AgentMemory.State,
 		by: AgentMemory.LogEntry["by"],
@@ -91,19 +128,26 @@ export const make: Effect.Effect<
 			if (state.version === previous.version) return state
 			const now = yield* Clock.currentTimeMillis
 			yield* memories.put(
-				{ organizationId, id: agent, owner: agent, scope: "", status: "" },
-				{ agent, state },
+				{
+					organizationId,
+					id: idOf(whose),
+					owner: whose.agent,
+					scope: whose.person,
+					status: "",
+				},
+				{ agent: whose.agent, person: whose.person, state },
 			)
 			yield* logs.put(
 				{
 					organizationId,
-					id: agent + ":" + String(state.version).padStart(12, "0"),
-					owner: agent,
-					scope: "",
+					id: idOf(whose) + ":" + String(state.version).padStart(12, "0"),
+					owner: whose.agent,
+					scope: whose.person,
 					status: "",
 				},
 				{
-					agent,
+					agent: whose.agent,
+					person: whose.person,
 					entry: {
 						version: state.version,
 						at: now,
@@ -120,35 +164,61 @@ export const make: Effect.Effect<
 		})
 	const locked = <A, E, R>(
 		organizationId: string,
-		agent: AgentsApi.AgentId,
+		whose: Whose,
 		operation: Effect.Effect<A, E, R>,
-	) => records.transaction("memory:" + organizationId + ":" + agent, operation)
+	) =>
+		records.transaction(
+			"memory:" + organizationId + ":" + idOf(whose),
+			operation,
+		)
 	return AgentMemories.of({
 		get,
-		edit: (organizationId, agent, input) =>
+		people: (organizationId, agent) =>
+			memories.list(organizationId, { owner: agent }).pipe(
+				Effect.map((list) =>
+					list
+						.map((stored) => ({
+							person: stored.person,
+							entries: Object.values(stored.state.entries).filter(
+								(entry) => entry.status === "active",
+							).length,
+							version: stored.state.version,
+							updatedAt: Math.max(
+								0,
+								...Object.values(stored.state.entries).map(
+									(entry) => entry.updatedAt,
+								),
+							),
+						}))
+						.sort((a, b) => b.updatedAt - a.updatedAt)
+						.map(({ updatedAt: _, ...person }) => person),
+				),
+			),
+		edit: (organizationId, whose, input) =>
 			locked(
 				organizationId,
-				agent,
+				whose,
 				Effect.gen(function* () {
-					const state = yield* get(organizationId, agent)
+					const state = yield* get(organizationId, whose)
 					if (state.version !== input.expected)
 						return yield* AgentsApi.AgentConflict.make({
 							message: "The Agent memory changed. Read it again and retry.",
 						})
 					const now = yield* Clock.currentTimeMillis
 					const next = AgentMemory.edit({ state, change: input.command, now })
-					return yield* write(organizationId, agent, state, next, "person")
+					return yield* write(organizationId, whose, state, next, "person")
 				}),
 			),
-		log: (organizationId, agent) =>
+		log: (organizationId, whose) =>
 			logs
-				.list(organizationId, { owner: agent })
+				.list(organizationId, { owner: whose.agent, scope: whose.person })
 				.pipe(Effect.map((list) => list.map((logged) => logged.entry))),
 		consolidate: (organizationId, input) =>
 			Effect.gen(function* () {
+				const whose = { agent: input.agentId, person: input.user.id }
 				if (input.evidence.length === 0)
-					return yield* get(organizationId, input.agentId)
-				const before = yield* get(organizationId, input.agentId)
+					return yield* get(organizationId, whose)
+				const before = yield* get(organizationId, whose)
 				const extraction = yield* AgentMemory.extract({
 					agent: input.agent,
 					user: input.user,
@@ -164,9 +234,9 @@ export const make: Effect.Effect<
 				if (extraction.changes.length === 0) return before
 				return yield* locked(
 					organizationId,
-					input.agentId,
+					whose,
 					Effect.gen(function* () {
-						const state = yield* get(organizationId, input.agentId)
+						const state = yield* get(organizationId, whose)
 						const now = yield* Clock.currentTimeMillis
 						const next = yield* AgentMemory.apply({
 							state,
@@ -183,7 +253,7 @@ export const make: Effect.Effect<
 						)
 						return yield* write(
 							organizationId,
-							input.agentId,
+							whose,
 							state,
 							next,
 							"consolidation",
@@ -191,12 +261,12 @@ export const make: Effect.Effect<
 					}),
 				)
 			}),
-		adopt: (organizationId, agent, session, memory) =>
+		adopt: (organizationId, whose, session, memory) =>
 			locked(
 				organizationId,
-				agent,
+				whose,
 				Effect.gen(function* () {
-					const state = yield* get(organizationId, agent)
+					const state = yield* get(organizationId, whose)
 					const now = yield* Clock.currentTimeMillis
 					const lasting = Object.values(memory.entries).filter(
 						(entry): entry is typeof entry & { kind: AgentMemory.Kind } =>
@@ -218,7 +288,7 @@ export const make: Effect.Effect<
 							state.entries,
 						),
 					}
-					return yield* write(organizationId, agent, state, next, "promotion")
+					return yield* write(organizationId, whose, state, next, "promotion")
 				}),
 			),
 	})

@@ -247,13 +247,15 @@ curl -b cookies.txt \
 - 邀请的有效期是 7 天。之后它的 `status` 是 `expired`。
 - 在一个组织中，一个邮箱只能有一个待处理的邀请。如果已经有一个，或者已有成员使用这个邮箱，OpenBot 返回 `400` 和 `InvitationInvalid`。
 
+你也可以邀请别人使用一个 Agent。见 [分享 Agents](/zh-cn/docs/sharing)。
+
 `GET /v1/organization/invitations` 按从新到旧列出邀请。它需要 `members.read`。加上 `?status=pending` 只看未处理的邀请。`DELETE /v1/organization/invitations/:invitationId` 收回一个待处理的邀请。它需要 `members.write`。
 
 ### 回答邀请
 
 这些路由给被邀请的人使用。它们不需要成员资格。
 
-- `GET /v1/invitations` 列出发给你已验证邮箱的待处理邀请。
+- `GET /v1/invitations` 列出发给你已验证邮箱的待处理邀请。使用 Agent 的邀请带有 `agent`，没有 `roles`。用 `POST /v1/agent-invitations/accept` 接受它。见 [分享 Agents](/zh-cn/docs/sharing#接受邀请)。
 - `POST /v1/invitations/:invitationId/accept` 让你成为成员，并得到邀请中的角色。它返回这个组织。
 - `POST /v1/invitations/:invitationId/decline` 拒绝邀请。
 

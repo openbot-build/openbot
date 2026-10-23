@@ -34,7 +34,7 @@ import {
 } from "../capabilities/Requests.ts"
 import { Organization } from "../organization/Organization.ts"
 import * as SessionHost from "../sessions/SessionHost.ts"
-import { AgentMemories } from "./AgentMemories.ts"
+import { AgentMemories, homeOf } from "./AgentMemories.ts"
 import { ReportInput, names } from "../plugins/agents/AgentPlugin.ts"
 import { answersItself } from "../plugins/work/WorkPlugin.ts"
 import { Waits, type Wait as StoredWait } from "../plugins/work/Waits.ts"
@@ -822,15 +822,16 @@ export const layer = Layer.effectDiscard(
 				if (!settings.settings.generate) return
 				const agent = yield* agents.find(member.organizationId, view.agent)
 				if (Option.isNone(agent)) return
-				// The Agent learns about the person that the Turn worked for.
+				// The Agent learns about the person that the Turn worked for, into the memory about them.
 				const person = SessionHost.turnChain(view.session, turn.id).userId
 				const found = yield* organization
 					.member(member.organizationId, person)
 					.pipe(Effect.orElseSucceed(() => Option.none()))
 				const model = yield* helper.agentMemory(member.organizationId)
+				const home = homeOf(member.organizationId, agent.value)
 				yield* memories
-					.consolidate(member.organizationId, {
-						agentId: agent.value.id,
+					.consolidate(home.organizationId, {
+						agentId: home.agent,
 						agent: { name: agent.value.name, role: agent.value.role },
 						user: {
 							id: person,

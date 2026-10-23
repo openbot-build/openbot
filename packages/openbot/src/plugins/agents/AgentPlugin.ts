@@ -26,7 +26,7 @@ import { Rules } from "../../capabilities/Rules.ts"
 import { Work, callerOf } from "../../capabilities/Work.ts"
 import { Organization } from "../../organization/Organization.ts"
 import * as SessionHost from "../../sessions/SessionHost.ts"
-import { AgentMemories } from "../../agents/AgentMemories.ts"
+import { AgentMemories, homeOf } from "../../agents/AgentMemories.ts"
 import { Agents } from "../../agents/Agents.ts"
 import { Delegations } from "../../agents/Delegations.ts"
 import { Signal, Signals } from "../../agents/Signals.ts"
@@ -116,6 +116,7 @@ const modelOf = (
 			? {}
 			: { model: creator.model }
 const AgentInput = Schema.Struct({ agent: Schema.String })
+const PersonInput = Schema.Struct({ person: Schema.String })
 const PromoteInput = Schema.Struct({
 	agent: Schema.String,
 	reason: Schema.String,
@@ -155,10 +156,14 @@ export const names = {
 	ask: "openbot_ask",
 	escalate: "openbot_escalate",
 	proposeRule: "openbot_propose_rule",
+	readMemory: "openbot_read_memory",
 } as const
 
 const privacy =
-	"Several people can work with you. Each Turn says who works with you now. What you learned from one person can be private to them. Tell another person only what is clearly shared work or clearly meant to be shared. Never tell one person what another person said in private."
+	"Several people can work with you. Each Turn says who works with you now. You keep a separate memory about each person. You may read the memory about other people when it helps your work, but what you learned from one person can be private to them. Tell another person only what is clearly shared work or clearly meant to be shared. Never tell one person what another person said in private."
+
+/** The most people that the instructions list. The Agent can still read any memory by id. */
+const maxPeople = 20
 
 /** OpenBot services that the tools use. */
 type Services =
@@ -505,7 +510,10 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 						yield* Effect.forEach(worked, (row) =>
 							memories.adopt(
 								current.caller.organizationId,
-								agent.id,
+								{
+									agent: agent.id,
+									person: current.chain.userId,
+								},
 								row.session,
 								row.memory,
 							),
@@ -581,6 +589,35 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 										owner: agent.owner,
 										instructions: agent.instructions,
 									}),
+							})
+						}),
+				),
+			),
+			reading(
+				entry(
+					names.readMemory,
+					"Read what you remember about one person, by their user id. Your instructions list the people you remember.",
+					{
+						type: "object",
+						properties: { person: text },
+						required: ["person"],
+					},
+					(input) =>
+						Effect.gen(function* () {
+							const current = yield* work
+							const { person } = yield* decode(PersonInput)(input)
+							const home = homeOf(current.caller.organizationId, current.agent)
+							const memory = yield* memories.get(home.organizationId, {
+								agent: home.agent,
+								person,
+							})
+							const projected = AgentMemory.project({ state: memory })
+							return json({
+								person,
+								memory:
+									projected.length === 0
+										? "You remember nothing about this person."
+										: projected,
 							})
 						}),
 				),
@@ -776,6 +813,8 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 			readonly state: SessionHost.SessionHostState
 			readonly memory: AgentMemory.State
 			readonly person: string
+			/** The other people that the Agent has memory about. */
+			readonly others: ReadonlyArray<AgentsApi.AgentMemoryPerson>
 		}) =>
 			[
 				`You are ${input.agent.name}. Your role: ${input.agent.role}.`,
@@ -791,8 +830,18 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 				"Do not guess what you may do. When you need a capability, use it with a short reason. When it needs a decision, you get the answer as the tool result.",
 				Object.keys(input.memory.entries).length === 0
 					? ""
-					: "Your long-term memory. It is what you learned before. Current instructions win over it:\n" +
+					: "Your long-term memory about this person. It is what you learned before. Current instructions win over it:\n" +
 						AgentMemory.project({ state: input.memory }),
+				input.others.length === 0
+					? ""
+					: `You also remember these people. Read the memory about one of them with ${names.readMemory}:\n` +
+						input.others
+							.slice(0, maxPeople)
+							.map(
+								(other) =>
+									`- ${other.person} (${String(other.entries)} entries)`,
+							)
+							.join("\n"),
 			]
 				.filter((line) => line.length > 0)
 				.join("\n\n")
@@ -812,7 +861,16 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 								const agent = yield* agents
 									.find(organizationId, state.agent)
 									.pipe(Effect.flatMap(Effect.fromOption))
-								const memory = yield* memories.get(organizationId, agent.id)
+								const self = chain.userId
+								const home = homeOf(organizationId, agent)
+								const memory = yield* memories.get(home.organizationId, {
+									agent: home.agent,
+									person: self,
+								})
+								const others = (yield* memories.people(
+									home.organizationId,
+									home.agent,
+								)).filter((other) => other.person !== self && other.entries > 0)
 								// The author of a Turn is not the owner of the Session, so it must
 								// still be an active member when the Turn runs.
 								if (chain !== state.chain)
@@ -863,7 +921,13 @@ export const make: Effect.Effect<typeof AgentPlugin.Service, never, Services> =
 									Prompt.make([
 										{
 											role: "system",
-											content: profile({ agent, state, memory, person }),
+											content: profile({
+												agent,
+												state,
+												memory,
+												person,
+												others,
+											}),
 										},
 									]),
 								)

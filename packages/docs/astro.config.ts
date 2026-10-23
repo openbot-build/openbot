@@ -64,6 +64,7 @@ export default defineConfig({
 						"docs/organization",
 						"docs/permissions",
 						"docs/agents",
+						"docs/sharing",
 						"docs/sessions",
 						"docs/delegation",
 						"docs/triggers",

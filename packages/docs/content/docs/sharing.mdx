@@ -1,0 +1,148 @@
+---
+title: Share Agents
+description: Invite other people to use one of your Agents in their own organization, by email or with a link.
+---
+
+You can share an Agent with people outside your organization, like you add a member to an organization. You invite a person by email, or you make an **invitation link**. Your client can show the link as a QR code. The person accepts the invitation and then uses the Agent in their own organization.
+
+| Word            | Meaning                                                                                         |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| Shared Agent    | Your Agent that other people use.                                                               |
+| Invitation link | An invitation without an email. Everyone who has its secret can accept it, until you revoke it. |
+| Agent member    | A person who accepted an invitation and uses the Agent.                                         |
+| Linked Agent    | The Agent that a member gets in their own organization. It uses your Agent.                     |
+
+---
+
+## Invite people
+
+You need `agents.share` on the Agent. Members can share their own Agents. Administrators can also share the shared Agents of the organization. Only a lasting top Agent can be shared: one that a member or the organization owns, and that is not archived.
+
+To invite one person, send their email. The invitation lasts 7 days, like an [invitation to the organization](/docs/organization#invitations):
+
+```sh
+curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"ana@example.com"}' \
+  https://api.example.com/v1/agents/$AGENT/invitations
+```
+
+To make an invitation link, leave out `email`. Many people can use the same link.
+
+```sh
+curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"path":"/join"}' \
+  https://api.example.com/v1/agents/$AGENT/invitations
+```
+
+| Field       | Meaning                                                                      |
+| ----------- | ---------------------------------------------------------------------------- |
+| `email`     | The email of the person. Leave it out to make a link.                        |
+| `expiresAt` | When a link stops (milliseconds since 1970). Without it, a link never stops. |
+| `path`      | A path on the public origin where your client opens invitation links.        |
+
+```json
+{
+	"invitation": {
+		"id": "inv_51c2…",
+		"agent": "agt_7d2c",
+		"email": null,
+		"prefix": "obai_Xk2pQ9aB",
+		"path": "/join",
+		"status": "pending",
+		"invitedBy": "u_123",
+		"createdAt": "2026-10-23T08:00:00.000Z",
+		"expiresAt": null
+	},
+	"secret": "obai_Xk2pQ9aB…",
+	"url": "https://api.example.com/join#obai_Xk2pQ9aB…"
+}
+```
+
+`url` is the public origin, then `path`, then `#` and the secret. A browser never sends the part after `#` to a server, so the secret never goes into a server log. `url` is `null` when there is no `path`. Show `url` as a QR code, or build your own address from `secret`.
+
+`GET /v1/agents/:agentId/invitations/:invitationId/secret` gives the secret and the `url` of a link again, for example to print the QR code again. OpenBot keeps the secret sealed, and keeps a hash to find the link.
+
+`GET /v1/agents/:agentId/invitations` lists the invitations. `DELETE /v1/agents/:agentId/invitations/:invitationId` revokes one. After that, nobody can accept it. The people who accepted it before stay members.
+
+---
+
+## Accept an invitation
+
+The invited person signs in. They use the session cookie or their own user token.
+
+- An email invitation shows in `GET /v1/invitations`, with `agent`. Accept it with its ID.
+- For a link, send its secret.
+
+```sh
+curl -X POST -H "Authorization: Bearer $THEIR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"secret":"obai_Xk2pQ9aB…","organization":"org_9a1f"}' \
+  https://api.example.com/v1/agent-invitations/accept
+```
+
+`organization` is the organization where the person uses the Agent. They must be an active member of it. They can leave it out when they have only one organization, or when they use a user token. The answer is their new linked Agent.
+
+When the person already uses the Agent, they get their linked Agent back. To say no to an email invitation, use `POST /v1/invitations/:invitationId/decline`.
+
+---
+
+## Use a shared Agent
+
+The linked Agent is an Agent of the member, in their own organization. It has `source`, which names your Agent:
+
+```json
+{
+	"id": "agt_e40b",
+	"kind": "persistent",
+	"owner": { "_tag": "Member", "userId": "u_456" },
+	"name": "Guide",
+	"source": { "organizationId": "org_3c7e", "agent": "agt_7d2c" }
+}
+```
+
+The member works with it like with their own Agents:
+
+- They start [Sessions](/docs/sessions) with it, and can make it their default Agent.
+- It works with their permissions, their connected [Apps](/docs/apps), and their other Agents. It can give work to their Agents.
+- Its [requests](/docs/requests) go to the member. Their decisions, [Grants](/docs/requests#answer-a-request) and [Rules](/docs/rules) count only in their organization. Yours count only in yours.
+- Their organization pays for the models. When your Agent names a model that their organization does not have, the Session uses the default model of their organization.
+- You never see their Sessions.
+
+The name, role, instructions and model always come from your Agent. When you change them, every linked Agent changes too. A member cannot change them. A member can change `planApproval`.
+
+The Agent keeps [one memory for each person](/docs/memory#agent-memory), in your organization. So it remembers each member, and it can read the memory about all of them. A member can read and change only the memory about themselves.
+
+---
+
+## Manage members
+
+| Request                                      | What it does                                                               |
+| -------------------------------------------- | -------------------------------------------------------------------------- |
+| `GET /v1/agents/:agentId/members`            | Lists the members: their user ID and organization, and their linked Agent. |
+| `DELETE /v1/agents/:agentId/members/:userId` | Takes a person off. Their linked Agent stops working at once.              |
+
+Both need `agents.share`. A linked Agent also stops when you archive your Agent.
+
+A member leaves when they archive their linked Agent.
+
+---
+
+## Permissions
+
+| Permission     | Lets you                                               |
+| -------------- | ------------------------------------------------------ |
+| `agents.share` | Invite people to use an Agent, and manage its members. |
+
+See [Permissions](/docs/permissions).
+
+## Errors
+
+| Status | Error                     | When                                                                                 |
+| ------ | ------------------------- | ------------------------------------------------------------------------------------ |
+| `400`  | `AgentInvalid`            | The Agent cannot be shared, or a member tries to change what the shared Agent is.    |
+| `400`  | `InvitationInvalid`       | The invitation is used, revoked or expired, or you must name the organization.       |
+| `404`  | `InvitationNotFound`      | There is no invitation with this ID or secret for you.                               |
+| `404`  | `AgentNotFound`           | There is no Agent with this ID that you may read, or a linked Agent stopped working. |
+| `503`  | `AgentStorageUnavailable` | OpenBot cannot reach its database.                                                   |

@@ -643,8 +643,12 @@ export const members = table(
 )
 
 /**
- * Invitations to join an organization. `email` is lower case. `roles` is JSON text.
- * A pending invitation that is past `expires_at` counts as expired.
+ * Invitations to join an organization, or to use one Agent of it (`target` is `agent`).
+ * `email` is lower case. `roles` is JSON text. A pending invitation that is past
+ * `expires_at` counts as expired.
+ * An Agent invitation without `email` is a link that many people can use. It has the
+ * SHA-256 hash of its secret, to find it, and the sealed secret, to show it again.
+ * A link without `expires_at` never expires.
  */
 export const invitations = table(
 	"openbot_invitations",
@@ -653,16 +657,24 @@ export const invitations = table(
 		organizationId: text("organization_id")
 			.notNull()
 			.references(() => organizations.id, { onDelete: "cascade" }),
-		email: text().notNull(),
+		target: text().notNull().default("organization"),
+		agentId: text("agent_id"),
+		agentName: text("agent_name"),
+		email: text(),
 		roles: text().notNull(),
 		status: text().notNull(),
 		invitedBy: text("invited_by").notNull(),
+		prefix: text(),
+		secretHash: text("secret_hash"),
+		secret: text(),
+		path: text(),
 		createdAt: bigint("created_at", { mode: "number" }).notNull(),
-		expiresAt: bigint("expires_at", { mode: "number" }).notNull(),
+		expiresAt: bigint("expires_at", { mode: "number" }),
 	},
 	(t) => [
 		index("openbot_invitations_organization").on(t.organizationId),
 		index("openbot_invitations_email").on(t.email),
+		uniqueIndex("openbot_invitations_secret").on(t.secretHash),
 	],
 )
 

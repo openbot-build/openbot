@@ -247,13 +247,15 @@ curl -b cookies.txt \
 - An invitation lasts 7 days. Then its `status` is `expired`.
 - An email can have only one pending invitation in an organization. OpenBot returns `400` with `InvitationInvalid` when there is one, or when a member already has the email.
 
+You can also invite people to use one Agent. See [Share Agents](/docs/sharing).
+
 `GET /v1/organization/invitations` lists the invitations, newest first. It needs `members.read`. Add `?status=pending` to see only the open ones. `DELETE /v1/organization/invitations/:invitationId` takes back a pending invitation. It needs `members.write`.
 
 ### Answer an invitation
 
 These routes are for the invited person. They do not need a membership.
 
-- `GET /v1/invitations` lists the pending invitations for your verified email.
+- `GET /v1/invitations` lists the pending invitations for your verified email. An invitation to use an Agent has `agent` and no `roles`. Accept it with `POST /v1/agent-invitations/accept`. See [Share Agents](/docs/sharing#accept-an-invitation).
 - `POST /v1/invitations/:invitationId/accept` makes you a member with the roles of the invitation. It returns the organization.
 - `POST /v1/invitations/:invitationId/decline` says no.
 

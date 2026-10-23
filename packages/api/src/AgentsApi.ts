@@ -1,4 +1,4 @@
-import { AgentAuth } from "./AuthApi.ts"
+import { AccountAuth, AgentAuth, NoStore, ReturnTo } from "./AuthApi.ts"
 import {
 	Authorize,
 	Decision,
@@ -17,6 +17,12 @@ import {
 	OpenApi,
 } from "effect/http-api"
 import { PlanApproval } from "./PlanApproval.ts"
+import {
+	InvitationId,
+	InvitationInvalid,
+	InvitationNotFound,
+	InvitationStatus,
+} from "./Invitation.ts"
 
 export const AgentId = Schema.String.check(
 	Schema.isMinLength(1),
@@ -41,6 +47,24 @@ export const AgentOwner = Schema.TaggedUnion({
 export type AgentOwner = typeof AgentOwner.Type
 
 export const AgentKind = Schema.Literals(["persistent", "session"])
+
+/** An Agent in another organization. */
+export const AgentSource = Schema.Struct({
+	organizationId: Schema.String,
+	agent: AgentId,
+})
+export type AgentSource = typeof AgentSource.Type
+
+/** A person who uses a shared Agent in their own organization. */
+export const AgentMember = Schema.Struct({
+	userId: Schema.String,
+	/** The organization where the person uses the Agent. */
+	organizationId: Schema.String,
+	/** The Agent in that organization that uses this Agent. */
+	linked: AgentId,
+	joinedAt: Schema.Finite,
+})
+export type AgentMember = typeof AgentMember.Type
 export type AgentKind = typeof AgentKind.Type
 
 export const Agent = Schema.Struct({
@@ -55,6 +79,11 @@ export const Agent = Schema.Struct({
 	model: Schema.optionalKey(Config.Selection),
 	/** How the plans of this Agent are approved. Without it, the settings of the member count. */
 	planApproval: Schema.optionalKey(PlanApproval),
+	/**
+	 * The Agent that this Agent uses, when someone shared it with the owner. The name,
+	 * role, instructions and model always come from that Agent, and only its people change them.
+	 */
+	source: Schema.optionalKey(AgentSource),
 	archived: Schema.Boolean,
 	revision: Schema.Natural,
 	createdAt: Schema.Finite,
@@ -205,6 +234,17 @@ export const UpdateAgentMemoryRequest = Schema.Struct({
 	command: AgentMemory.Edit,
 })
 export type UpdateAgentMemoryRequest = typeof UpdateAgentMemoryRequest.Type
+/** Whose memory to read or change. Without it, it is the memory about the caller. */
+const personQuery = { person: Schema.optionalKey(Schema.NonEmptyString) }
+/** One person that an Agent keeps memory about. */
+export const AgentMemoryPerson = Schema.Struct({
+	/** The user id of the person. */
+	person: Schema.String,
+	/** The number of active entries. */
+	entries: Schema.Natural,
+	version: Schema.Natural,
+})
+export type AgentMemoryPerson = typeof AgentMemoryPerson.Type
 
 /** What a delegating Agent sends to another Agent. */
 export const Brief = Schema.Struct({
@@ -302,7 +342,79 @@ export const AgentErrors = [
 	AgentStorageUnavailable.pipe(HttpApiSchema.status(503)),
 ] as const
 
+/** The start of the secret of every Agent invitation link. */
+export const InvitationSecretPrefix = "obai_"
+
+/**
+ * An invitation to use one Agent. With `email`, the person with this verified email can
+ * accept it once. Without `email`, it is a link: everyone who has its secret can accept it,
+ * until someone revokes it or it expires.
+ */
+export const AgentInvitation = Schema.Struct({
+	id: InvitationId,
+	agent: AgentId,
+	email: Schema.NullOr(Schema.String),
+	/** The first characters of the secret of a link, so people can tell links apart. */
+	prefix: Schema.NullOr(Schema.String),
+	/** A same-origin path where a client opens invitation links. */
+	path: Schema.NullOr(ReturnTo),
+	status: InvitationStatus,
+	invitedBy: Schema.String,
+	createdAt: Schema.String,
+	/** A link without it never expires. */
+	expiresAt: Schema.NullOr(Schema.String),
+})
+export type AgentInvitation = typeof AgentInvitation.Type
+export const CreateAgentInvitationRequest = Schema.Struct({
+	/** Without it, the invitation is a link. */
+	email: Schema.optionalKey(
+		Schema.String.check(
+			Schema.isMaxLength(320),
+			Schema.isPattern(/^[^@\s]+@[^@\s]+$/),
+		),
+	),
+	/** Milliseconds since 1970. An email invitation always lasts 7 days. */
+	expiresAt: Schema.optionalKey(Schema.Finite),
+	/**
+	 * A path on the public origin where your client opens invitation links.
+	 * With it, a link has a full `url` that you can show as a QR code.
+	 */
+	path: Schema.optionalKey(ReturnTo),
+})
+export type CreateAgentInvitationRequest =
+	typeof CreateAgentInvitationRequest.Type
+/**
+ * An invitation with the secret of its link. `url` is the public origin, then `path`,
+ * then `#` and the secret, so the secret never reaches a server log.
+ */
+export const AgentInvitationSecret = Schema.Struct({
+	invitation: AgentInvitation,
+	secret: Schema.NullOr(Schema.String),
+	url: Schema.NullOr(Schema.String),
+})
+export type AgentInvitationSecret = typeof AgentInvitationSecret.Type
+export const AcceptAgentInvitationRequest = Schema.Struct({
+	/** The ID of an email invitation. */
+	invitation: Schema.optionalKey(InvitationId),
+	/** The secret of an invitation link. */
+	secret: Schema.optionalKey(
+		Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)),
+	),
+	/**
+	 * The organization where you use the Agent. You must be an active member of it.
+	 * You can leave it out when you have only one organization.
+	 */
+	organization: Schema.optionalKey(Schema.String),
+})
+export type AcceptAgentInvitationRequest =
+	typeof AcceptAgentInvitationRequest.Type
+
 const agentParams = { agentId: AgentId }
+const invitationAgentErrors = [
+	...AgentErrors,
+	InvitationNotFound.pipe(HttpApiSchema.status(404)),
+	InvitationInvalid.pipe(HttpApiSchema.status(400)),
+] as const
 export class AgentsApi extends HttpApiGroup.make("agents")
 	.add(
 		HttpApiEndpoint.get("listAgents", "/v1/agents", {
@@ -344,20 +456,41 @@ export class AgentsApi extends HttpApiGroup.make("agents")
 		),
 		HttpApiEndpoint.get("agentMemory", "/v1/agents/:agentId/memory", {
 			params: agentParams,
+			query: personQuery,
 			success: AgentMemoryView,
 			error: AgentErrors,
-		}),
+		}).annotate(
+			OpenApi.Description,
+			"Reads what the Agent remembers about one person. Without `person`, it is the caller. Reading the memory about another person needs `agents.write` on the Agent.",
+		),
 		HttpApiEndpoint.post("updateAgentMemory", "/v1/agents/:agentId/memory", {
 			params: agentParams,
+			query: personQuery,
 			payload: UpdateAgentMemoryRequest,
 			success: AgentMemoryView,
 			error: AgentErrors,
-		}),
+		}).annotate(
+			OpenApi.Description,
+			"Changes what the Agent remembers about one person. Without `person`, it is the caller. Changing the memory about another person needs `agents.write` on the Agent.",
+		),
 		HttpApiEndpoint.get("agentMemoryLog", "/v1/agents/:agentId/memory/log", {
 			params: agentParams,
+			query: personQuery,
 			success: Schema.Array(AgentMemory.LogEntry),
 			error: AgentErrors,
 		}),
+		HttpApiEndpoint.get(
+			"agentMemoryPeople",
+			"/v1/agents/:agentId/memory/people",
+			{
+				params: agentParams,
+				success: Schema.Array(AgentMemoryPerson),
+				error: AgentErrors,
+			},
+		).annotate(
+			OpenApi.Description,
+			"Lists the people that the Agent keeps memory about. It needs `agents.write` on the Agent.",
+		),
 	)
 	.add(
 		HttpApiEndpoint.get("listRules", "/v1/agents/:agentId/rules", {
@@ -410,9 +543,98 @@ export class AgentsApi extends HttpApiGroup.make("agents")
 			"Revokes a Grant and every Grant that came from it.",
 		),
 	)
+	.add(
+		HttpApiEndpoint.get("listAgentMembers", "/v1/agents/:agentId/members", {
+			params: agentParams,
+			success: Schema.Array(AgentMember),
+			error: AgentErrors,
+		}).annotate(
+			OpenApi.Description,
+			"Lists the people who use this Agent in their own organizations. It needs `agents.share`.",
+		),
+		HttpApiEndpoint.delete(
+			"removeAgentMember",
+			"/v1/agents/:agentId/members/:userId",
+			{
+				params: { ...agentParams, userId: Schema.String },
+				success: HttpApiSchema.NoContent,
+				error: AgentErrors,
+			},
+		).annotate(
+			OpenApi.Description,
+			"Takes a person off this Agent. Their linked Agent stops working at once.",
+		),
+		HttpApiEndpoint.post(
+			"createAgentInvitation",
+			"/v1/agents/:agentId/invitations",
+			{
+				params: agentParams,
+				payload: CreateAgentInvitationRequest,
+				success: AgentInvitationSecret.pipe(HttpApiSchema.status(201)),
+				error: invitationAgentErrors,
+			},
+		).annotate(
+			OpenApi.Description,
+			"Invites a person by email, or makes an invitation link, to use this Agent. It needs `agents.share`. Only a lasting top Agent can be shared.",
+		),
+		HttpApiEndpoint.get(
+			"listAgentInvitations",
+			"/v1/agents/:agentId/invitations",
+			{
+				params: agentParams,
+				query: { status: Schema.optionalKey(InvitationStatus) },
+				success: Schema.Array(AgentInvitation),
+				error: invitationAgentErrors,
+			},
+		),
+		HttpApiEndpoint.get(
+			"agentInvitationSecret",
+			"/v1/agents/:agentId/invitations/:invitationId/secret",
+			{
+				params: { ...agentParams, invitationId: InvitationId },
+				success: AgentInvitationSecret,
+				error: invitationAgentErrors,
+			},
+		).annotate(
+			OpenApi.Description,
+			"Reads the secret and the URL of an invitation link again, for example to print its QR code again.",
+		),
+		HttpApiEndpoint.delete(
+			"revokeAgentInvitation",
+			"/v1/agents/:agentId/invitations/:invitationId",
+			{
+				params: { ...agentParams, invitationId: InvitationId },
+				success: HttpApiSchema.NoContent,
+				error: invitationAgentErrors,
+			},
+		).annotate(
+			OpenApi.Description,
+			"Takes back a pending invitation. People who accepted it stay members.",
+		),
+	)
 	.annotate(HttpApi.PayloadParseOptions, { onExcessProperty: "error" })
 	// The resource key of an Agent depends on its owner, which the path does not show.
 	// So the handlers check the agents permissions themselves.
 	.annotate(GroupRequired, { read: [], write: [] })
 	.middleware(Authorize)
 	.middleware(AgentAuth) {}
+
+/** A person accepts an invitation to use an Agent. Any signed-in account can use it. */
+export class AgentInvitationsApi extends HttpApiGroup.make("agentInvitations")
+	.add(
+		HttpApiEndpoint.post(
+			"acceptAgentInvitation",
+			"/v1/agent-invitations/accept",
+			{
+				payload: AcceptAgentInvitationRequest,
+				success: Agent,
+				error: invitationAgentErrors,
+			},
+		).annotate(
+			OpenApi.Description,
+			"Accepts an email invitation (`invitation`) or an invitation link (`secret`). It makes a linked Agent in your organization and gives it back. When you already use the Agent, it gives back your linked Agent.",
+		),
+	)
+	.annotate(HttpApi.PayloadParseOptions, { onExcessProperty: "error" })
+	.middleware(AccountAuth)
+	.middleware(NoStore) {}

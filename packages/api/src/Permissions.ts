@@ -75,6 +75,11 @@ const permissionTree = {
 				description:
 					"Give work to an Agent, from a client or from another Agent.",
 			},
+			share: {
+				name: "Agents Share",
+				description:
+					"Invite other people to use an Agent, and manage the people who use it.",
+			},
 		},
 	},
 	triggers: {
@@ -392,6 +397,7 @@ const own: ReadonlyArray<PermissionGroupId> = [
 	"agents.read",
 	"agents.write",
 	"agents.delegate",
+	"agents.share",
 	"triggers.read",
 	"triggers.write",
 	"channel_identities.read",
@@ -456,7 +462,7 @@ export const builtinRoles = [
 			useChannels,
 			{
 				effect: "allow",
-				permissionGroups: ["agents.write"],
+				permissionGroups: ["agents.write", "agents.share"],
 				resources: [sharedAgents],
 			},
 			{

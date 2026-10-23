@@ -9,7 +9,7 @@ Diese Seite zeigt dir, wie gelerntes Memory funktioniert und wie du es mit der A
 
 Gelerntes Memory gehört zu einer Session. Es ist Teil des Verlaufs der Session. Darum nimmt ein [Fork](/de/docs/sessions#fork-von-einer-version) eine Kopie davon mit. Andere Sessions sehen es nicht.
 
-Jeder [Agent](/de/docs/agents) hat außerdem ein Langzeit-Memory über alle seine Sessions. Siehe [Agent Memory](#agent-memory).
+Jeder [Agent](/de/docs/agents) hat außerdem ein Langzeit-Memory über alle seine Sessions, mit einem Memory für jede Person. Siehe [Agent Memory](#agent-memory).
 
 ---
 
@@ -187,7 +187,7 @@ Alle Felder findest du in der [Sessions-Referenz](/docs/api/operations/tags/sess
 
 ## Agent Memory
 
-**Agent Memory** ist, was ein Agent über viele Sessions lernt. Es behält nur dauerhafte Erfahrung:
+**Agent Memory** ist, was ein Agent über viele Sessions lernt. Der Agent hat ein Memory für jede Person, mit der er arbeitet, auch für die Personen, die ihn als [geteilten Agent](/de/docs/sharing) nutzen. Es behält nur dauerhafte Erfahrung:
 
 | Art          | Beispiel                                                             |
 | ------------ | -------------------------------------------------------------------- |
@@ -203,22 +203,26 @@ Wenn ein Turn des Agent fertig ist und seine Queue leer ist, fragt OpenBot das A
 
 - Jeder Eintrag nennt seine Quellen: IDs von Session und Item.
 - Tool-Ergebnisse von Apps sind Daten von außen. Ein Eintrag, den nur Ergebnisse von Apps stützen, wird nie behalten.
-- Der Agent weiß immer, mit welcher Person er arbeitet. Das Memory-Modell weiß es auch. So können Einträge sagen, wer was gesagt hat.
+- Der Agent weiß immer, mit welcher Person er arbeitet. Was er lernt, kommt in das Memory über diese Person.
 - Zurückgezogene Einträge bleiben zurückgezogen. Nur eine Person kann einen zurückholen.
 
 Agent Memory folgt keiner Timeline. Ein Fork ändert es nie, und der Weg zurück zu einer alten Version macht es nicht rückgängig. Um einen Eintrag zu entfernen, vergiss ihn.
 
-OpenBot fügt die aktiven Einträge zu den Anweisungen jedes Turn des Agent hinzu, die neuesten zuerst, bis zu 8000 Zeichen. Der Text sagt, dass aktuelle Anweisungen gegen das Memory gewinnen.
+OpenBot fügt die aktiven Einträge über die aktuelle Person zu den Anweisungen jedes Turn des Agent hinzu, die neuesten zuerst, bis zu 8000 Zeichen. Der Text sagt, dass aktuelle Anweisungen gegen das Memory gewinnen. Er nennt auch bis zu 20 andere Personen, über die der Agent ein Memory hat. Der Agent kann das Memory über eine von ihnen mit dem Tool `openbot_read_memory` lesen.
+
+Ältere Versionen von OpenBot hatten ein Memory für jeden Agent, nicht für jede Person. Wenn du OpenBot aktualisierst, entfernt OpenBot dieses alte Memory. Dann beginnt jeder Agent neu, mit einem leeren Memory über jede Person.
 
 ### Geteilte Agents
 
-Ein geteilter Agent hat ein Memory für jeden Member, der ihn nutzt. Der Agent entscheidet, was er teilt: Er bekommt in jedem Turn feste Regeln zur Privatsphäre. Was er von einer Person gelernt hat, kann privat sein. Darum sagt er einer anderen Person nur, was klar geteilte Arbeit ist.
+Viele Personen können einen geteilten Agent nutzen: die Members der Organisation und die Personen, die ihn in [anderen Organisationen](/de/docs/sharing) nutzen. Er hat ein eigenes Memory über jede von ihnen, und er kann sie alle lesen. Dieses Memory bleibt in der Organisation des Agents. Eine Person in einer anderen Organisation kann nur das Memory über sich selbst lesen und ändern. Der Agent entscheidet, was er teilt: Er bekommt in jedem Turn feste Regeln zur Privatsphäre. Was er von einer Person gelernt hat, kann privat sein. Darum sagt er einer anderen Person nur, was klar geteilte Arbeit ist.
 
 ### Lesen und ändern
 
+Ohne `person` liest du das Memory über dich selbst. Dafür brauchst du `agents.read` für den Agent. Um das Memory über eine andere Person zu lesen, füge `person` mit ihrer User-ID hinzu. Dann brauchst du `agents.write`:
+
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  https://api.example.com/v1/agents/$AGENT/memory
+  "https://api.example.com/v1/agents/$AGENT/memory?person=u_456"
 ```
 
 ```json
@@ -246,6 +250,10 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/agents/$AGENT/memory
 ```
 
-`GET /v1/agents/:agentId/memory/log` listet jede Änderung mit ihrer `version`, der Zeit, dem Auslöser (`consolidation`, `person` oder `promotion`) und den geänderten Keys.
+Änderungen nehmen `person` auf dieselbe Weise.
 
-Wenn du oder ein Agent einen Session Agent [befördert](/de/docs/agents#einen-session-agent-dauerhaft-machen), werden die dauerhaften Einträge seines Session-Memory zu seinem Agent Memory.
+`GET /v1/agents/:agentId/memory/log` listet jede Änderung eines Memory mit ihrer `version`, der Zeit, dem Auslöser (`consolidation`, `person` oder `promotion`) und den geänderten Keys. Es nimmt auch `person`.
+
+`GET /v1/agents/:agentId/memory/people` listet die Personen, über die der Agent ein Memory hat, mit der Zahl der aktiven Einträge. Es braucht `agents.write`.
+
+Wenn du oder ein Agent einen Session Agent [befördert](/de/docs/agents#einen-session-agent-dauerhaft-machen), werden die dauerhaften Einträge seines Session-Memory zu seinem Memory über die Person, für die er gearbeitet hat.
