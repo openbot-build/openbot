@@ -23,6 +23,10 @@ export default defineConfig({
 			// name of the locale. See `src/i18n.ts`.
 			defaultLocale: "root",
 			locales: docsLocales,
+			// Starlight adds its Markdown features, such as the links next to
+			// headings, only to pages in `src/content/docs`. Our pages are in
+			// `content/docs`, so we name that folder here.
+			markdown: { processedDirs: ["./content/docs"] },
 			social: [
 				{
 					icon: "github",
