@@ -397,7 +397,7 @@ test("the old default model moves to Agents without a model, and the old helper 
 				const settings = yield* sql<{
 					readonly scope_id: string
 					readonly document: string
-				}>`select scope_id, document from openbot_settings order by scope_id`
+				}>`select scope_id, document from openbot_settings where scope_kind <> 'member' order by scope_id`
 				assert.deepEqual(
 					settings.map((row) => [row.scope_id, JSON.parse(row.document)]),
 					[

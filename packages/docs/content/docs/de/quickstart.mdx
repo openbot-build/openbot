@@ -95,14 +95,31 @@ export OPENBOT_TOKEN=obut_...
 
 <Step>
 
-### Eine Session und einen Turn starten
+### Einen Agent erstellen
 
-Erstelle eine Session:
+Jede Session gehört zu einem [Agent](/de/docs/agents). Ein neues Konto hat keine Agents. Erstelle also einen:
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"title":"My first Session"}' \
+  -d '{"name":"Assistant","role":"Helps me","instructions":"Answer in short sentences."}' \
+  https://localhost:8443/v1/agents
+```
+
+Nimm `id` aus der Antwort. Wenn du diesen Agent auch ohne Angabe eines Agents nutzen willst, mach ihn zu deinem [Standard-Agent](/de/docs/agents#dein-standard-agent).
+
+</Step>
+
+<Step>
+
+### Eine Session und einen Turn starten
+
+Erstelle eine Session für deinen Agent:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"agent":"<agentId>","title":"My first Session"}' \
   https://localhost:8443/v1/sessions
 ```
 

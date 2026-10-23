@@ -184,12 +184,13 @@ const client = (host: Awaited<ReturnType<typeof BrowserHost.start>>) => {
 	return { send, json, until }
 }
 
-/** A new Session of the Main Agent, with helpers to start Turns and read it. */
+/** A new Session of the default Agent, with helpers to start Turns and read it. */
 const session = async (
 	host: Awaited<ReturnType<typeof BrowserHost.start>>,
 	credential: Redacted.Redacted<string>,
 ) => {
 	const { send, json, until } = client(host)
+	await host.defaultAgent(credential)
 	const created = await json(
 		SessionView,
 		send(credential, "/v1/sessions", "POST", {}),
@@ -411,6 +412,7 @@ test(
 				planApproval: null,
 			})
 			assert.equal(stale.status, 409)
+			const defaultAgent = await host.defaultAgent(alice.session)
 
 			const plan = async (body: Record<string, unknown>) => {
 				const created = await json(
@@ -492,11 +494,10 @@ test(
 			assert.equal(stayed.session.turns.length, 1)
 
 			// 4. An Agent setting comes before the member setting.
-			const agents = await json(
-				Schema.Array(AgentsApi.Agent),
-				send(alice.session, "/v1/agents"),
+			const main = await json(
+				AgentsApi.Agent,
+				send(alice.session, "/v1/agents/" + defaultAgent),
 			)
-			const main = agents.find((agent) => agent.kind === "main")!
 			const changed = await send(
 				alice.session,
 				"/v1/agents/" + main.id,

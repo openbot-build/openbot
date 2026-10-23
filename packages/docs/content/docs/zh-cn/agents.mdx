@@ -8,23 +8,39 @@ description: 维护一个长期存在的 Agents 团队，每个 Agent 都有自�
 
 ---
 
-## 三种 Agents
+## 两种 Agents
 
 | 种类         | 所有者                         | 存在多久                            | 用途                                                    |
 | ------------ | ------------------------------ | ----------------------------------- | ------------------------------------------------------- |
-| `main`       | 一个成员                       | 和成员存在的时间一样长              | 代表这个人行动。简单的工作自己做，其他工作分派出去。    |
 | `persistent` | 一个成员、组织，或另一个 Agent | 直到你把它归档                      | 一个有角色的长期工作者。它会随着时间从工作中学习。      |
 | `session`    | 一个 Session                   | 和拥有它的 Session 存在的时间一样长 | 处理一条工作线的助手。它把上下文保存在那个 Session 中。 |
 
-每个成员都正好有一个 **Main Agent**（主 Agent）。OpenBot 在第一次需要它时创建它。你创建 Session 时如果没有指定 Agent，这个 Session 就属于你的 Main Agent。
-
-新的 Main Agent 没有模型。在你创建没有自己模型的 Session 之前，请先设置它的 `model`。见 [Models](/zh-cn/docs/models#选择模型)。
+**顶层 Agent** 是由成员或组织拥有的长期 Agent，而不是由另一个 Agent 拥有。你可以选一个顶层 Agent 作为你的[默认 Agent](#你的默认-agent)。
 
 **Session Agent** 是“几乎长期存在”的。Agent 在工作时用一个工具启动它。只要它的 Session 还在，Session Agent 就会保留上下文，所以 Agent 可以多次给它分派工作。当你删除这个 Session 时，它的 Session Agents 也会被归档。你可以把有用的 Session Agent [提升](#提升-session-agent) 为长期存在的 Agent。
 
 Agent 也可以拥有长期存在的 Agents。见 [拥有 Agents 的 Agents](#拥有-agents-的-agents)。
 
 每个 Session 都属于一个 Agent。见 [Sessions](/zh-cn/docs/sessions)。Agents 之间如何分派工作，见 [委派](/zh-cn/docs/delegation)。
+
+### 你的默认 Agent
+
+当你创建 Session 或 trigger 却没有指定 Agent 时，由你的**默认 Agent** 来工作。OpenBot 不会替你创建 Agent，所以新成员没有默认 Agent。这时，没有指定 Agent 的 Session 或 trigger 会失败，返回 `400` 和 `AgentInvalid`。
+
+要设置默认 Agent，先创建一个 Agent，然后在你的成员设置中发送它的 ID：
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":0,"defaultAgent":"agt_5c0e…"}' \
+  https://openbot.example.com/v1/me/settings
+```
+
+`expectedVersion` 是 `GET /v1/me/settings` 返回的 `version`。这个 Agent 必须是你自己的顶层 Agent 或共享 Agent，而且你需要它的 `agents.delegate`。否则 OpenBot 返回 `400` 和 `SettingsInvalid`。发送 `null` 可以移除默认 Agent。
+
+你仍然可以归档默认 Agent。归档之后，没有指定 Agent 的 Session 或 trigger 会失败，直到你选另一个默认 Agent。
+
+旧版本的 OpenBot 会为每个成员创建一个 Main Agent。升级时，每个 Main Agent 会变成普通的长期 Agent，并成为它的成员的默认 Agent。它的 Sessions、记忆和 Grants 都会保留。
 
 ### Agent 不知道的限制
 
@@ -72,7 +88,7 @@ OpenBot 返回 `201` 和这个 Agent：
 
 ## 列出、读取和修改 Agents
 
-`GET /v1/agents` 列出你的 Main Agent、你自己的 Agents，以及你可以使用的共享 Agents。加上 `?archived=false` 可以隐藏已归档的 Agents。加上 `?session=<id>` 可以列出某个 Session 的 Session Agents。加上 `?agent=<id>` 可以列出某个 Agent 拥有的 Agents。
+`GET /v1/agents` 列出你自己的 Agents，以及你可以使用的共享 Agents。加上 `?archived=false` 可以隐藏已归档的 Agents。加上 `?session=<id>` 可以列出某个 Session 的 Session Agents。加上 `?agent=<id>` 可以列出某个 Agent 拥有的 Agents。
 
 `GET /v1/agents/:agentId` 返回一个 Agent。
 
@@ -83,7 +99,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/agents/$AGENT
 ```
 
-`expected` 是当前的 `revision`。你可以修改 `name`（规则和上面相同）、`role`、`instructions`、`model`（发送 `null` 来移除它）和 `archived`。Main Agent 不能被归档。当你归档一个 Agent 时，OpenBot 也会归档它拥有的每个 Agent，以及它们下面的 Agents。当你取消归档时，只有这一个 Agent 会恢复。
+`expected` 是当前的 `revision`。你可以修改 `name`（规则和上面相同）、`role`、`instructions`、`model`（发送 `null` 来移除它）和 `archived`。当你归档一个 Agent 时，OpenBot 也会归档它拥有的每个 Agent，以及它们下面的 Agents。当你取消归档时，只有这一个 Agent 会恢复。
 
 ## 提升 Session Agent
 
@@ -108,8 +124,8 @@ Agent 可以拥有长期存在的 Agents。所以 Agent 可以组建自己的团
 - 一个 Agent 用工具创建的 Agent（长期 Agent 或 Session Agent）会得到创建它的 Agent 的 `model`。工具调用可以指定另一个 `model`。
 - 所有者是 `{ "_tag": "Agent", "agent": "<owner ID>", "userId": "<member>" }`。`userId` 是所有者树最顶层的成员。当最顶层是组织拥有的 Agent 时，它是 `null`。
 - Agent 可以给它拥有的 Agents 分派工作，不需要 request。
-- Agent 的**所有者链**沿着它的所有者向上，到达一个 Main Agent，然后到达人。例如：**人 → Main → Worker → Scout**。Agent 的 requests 会沿着这条链向上传递，即使人直接和这个 Agent 一起工作也是如此。见 [Requests](/zh-cn/docs/requests#决策者链)。
-- 在这条链中，成员的 Agent 或共享 Agent 的所有者，是和它一起工作的那个人的 Main Agent。
+- Agent 的**所有者链**沿着它的所有者向上，到达一个顶层 Agent，然后到达人。例如：**人 → Assistant → Worker → Scout**。Agent 的 requests 会沿着这条链向上传递，即使人直接和这个 Agent 一起工作也是如此。见 [Requests](/zh-cn/docs/requests#决策者链)。
+- 顶层 Agent 上面是和它一起工作的人。你自己的顶层 Agent 和共享 Agent 都是这样。
 
 ---
 
@@ -139,7 +155,7 @@ OpenBot 会在每个 Turn 的指令中加入以下内容：
 
 | 状态码 | 错误                      | 何时出现                                        |
 | ------ | ------------------------- | ----------------------------------------------- |
-| `400`  | `AgentInvalid`            | 不允许这个修改，例如归档 Main Agent。           |
+| `400`  | `AgentInvalid`            | 不允许这个修改，或者你没有默认 Agent。          |
 | `403`  | `PermissionDenied`        | 你可以读取这个 Agent，但不能修改或使用它。      |
 | `404`  | `AgentNotFound`           | 没有你可以读取的、使用这个 ID 的 Agent。        |
 | `409`  | `AgentConflict`           | `expected` 已过时。请重新读取 Agent，然后再试。 |

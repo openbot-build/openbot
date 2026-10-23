@@ -9,6 +9,7 @@ import {
 import { Effect, Option, type Schema } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Agents } from "../agents/Agents.ts"
+import * as DefaultAgent from "../agents/DefaultAgent.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { triggerKey } from "../authorization/Policy.ts"
 import { fire } from "./Fire.ts"
@@ -22,7 +23,9 @@ export const layer = (publicOrigin: string) =>
 			const triggers = yield* Triggers
 			const agents = yield* Agents
 			const audit = yield* AuditLog
-			const services = yield* Effect.context<AuthorizationServices>()
+			const services = yield* Effect.context<
+				AuthorizationServices | DefaultAgent.Services
+			>()
 			const record = (
 				caller: Caller,
 				action: OrganizationApi.AuditAction,
@@ -44,19 +47,22 @@ export const layer = (publicOrigin: string) =>
 			/** The Sessions of a trigger work for the caller, so the caller must be able to give work to its Agent. */
 			const agentFor = (caller: Caller, agent: string | undefined) =>
 				(agent === undefined
-					? agents.ensureMain(caller)
+					? DefaultAgent.resolve(caller)
 					: agents.access(caller, agent, "agents.delegate")
 				).pipe(
 					Effect.provideContext(services),
 					Effect.catchTags({
-						AgentNotFound: () =>
+						AgentNotFound: (error) =>
 							Effect.fail(
 								TriggersApi.TriggerInvalid.make({
-									message: `There is no Agent ${agent}.`,
+									message: `There is no Agent ${error.agent}.`,
 								}),
 							),
 						AgentConflict: () => Effect.fail(unavailable()),
-						AgentInvalid: () => Effect.fail(unavailable()),
+						AgentInvalid: (error) =>
+							Effect.fail(
+								TriggersApi.TriggerInvalid.make({ message: error.message }),
+							),
 						AgentStorageUnavailable: () => Effect.fail(unavailable()),
 					}),
 				)

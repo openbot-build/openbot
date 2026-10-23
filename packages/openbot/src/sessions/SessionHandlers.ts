@@ -10,6 +10,7 @@ import { LanguageModel } from "effect/ai"
 import { HttpApiBuilder, type HttpApiEndpoint } from "effect/http-api"
 import { Backend } from "../app/Backend.ts"
 import { Agents } from "../agents/Agents.ts"
+import * as DefaultAgent from "../agents/DefaultAgent.ts"
 import { Delegations } from "../agents/Delegations.ts"
 
 type Request<K extends keyof typeof SessionsApi.endpoints> = Omit<
@@ -28,7 +29,9 @@ const implementations = Effect.gen(function* () {
 	const current = yield* currentSessions
 	const agents = yield* Agents
 	const delegations = yield* Delegations
-	const services = yield* Effect.context<AuthorizationServices>()
+	const services = yield* Effect.context<
+		AuthorizationServices | DefaultAgent.Services
+	>()
 	const model = yield* Effect.serviceOption(LanguageModel.LanguageModel)
 	/** Give the host model to operations that may run one. */
 	const withModel = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -71,13 +74,12 @@ const implementations = Effect.gen(function* () {
 			Effect.gen(function* () {
 				const caller = yield* Identity
 				const sessions = yield* current
-				// Work for an Agent needs the delegate permission on it. Main is the default.
-				const agent =
+				// Work for an Agent needs the delegate permission on it.
+				const agent = yield* (
 					payload.agent === undefined
-						? yield* agents.ensureMain(caller)
-						: yield* agents
-								.access(caller, payload.agent, "agents.delegate")
-								.pipe(Effect.provideContext(services))
+						? DefaultAgent.resolve(caller)
+						: agents.access(caller, payload.agent, "agents.delegate")
+				).pipe(Effect.provideContext(services))
 				return yield* sessions.create({
 					agent,
 					kind: "direct",

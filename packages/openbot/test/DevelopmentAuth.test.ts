@@ -16,6 +16,7 @@ import {
 import * as PostgresTest from "./PostgresTest.ts"
 import * as Development from "../dist/Development.js"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
+import * as DefaultAgent from "./DefaultAgent.ts"
 
 const publicOrigin = "https://localhost:8443"
 const authSecret = "DevelopmentIntegrationSecretMustStayStable123456"
@@ -206,6 +207,13 @@ test(
 					_tag: "AuthenticationRequired",
 				})
 			}
+			await DefaultAgent.ensure((path, method, payload) =>
+				request(path, {
+					method,
+					headers: { ...accountHeaders, "content-type": "application/json" },
+					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+				}),
+			)
 			const created = await request("/v1/sessions", {
 				method: "POST",
 				headers: { ...accountHeaders, "content-type": "application/json" },

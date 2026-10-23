@@ -337,6 +337,8 @@ test("Code Mode sends App calls through the same checks, waits for decisions, an
 	try {
 		const alice = await host.login("code-alice")
 		const bob = await host.login("code-bob")
+		await host.defaultAgent(alice.session)
+		await host.defaultAgent(bob.session)
 		const headers = (session = alice.session) => ({
 			cookie:
 				AuthApi.SessionCookie +

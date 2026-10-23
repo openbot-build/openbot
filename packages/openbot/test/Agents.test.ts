@@ -1,7 +1,12 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { Session } from "@openbot-build/core"
-import { AgentsApi, RequestsApi, SessionView } from "@openbot-build/api"
+import {
+	AgentsApi,
+	RequestsApi,
+	SessionView,
+	Settings,
+} from "@openbot-build/api"
 import * as AgentMemory from "../src/plugins/memory/AgentMemory.ts"
 import { Effect, Redacted, Schema, Stream } from "effect"
 import { LanguageModel, type Prompt, Response } from "effect/ai"
@@ -60,7 +65,7 @@ const model = Effect.runSync(
 					.filter((message) => message.role === "system")
 					.map(textOf)
 					.join("\n")
-				// The judge allows when a Rule says that Main may confirm changes.
+				// The judge allows when a Rule says that Assistant may confirm changes.
 				if (
 					system.includes("You decide one request of an AI Agent with Rules")
 				) {
@@ -68,7 +73,7 @@ const model = Effect.runSync(
 						rules: ReadonlyArray<{ id: string; text: string }>
 					}
 					const rule = input.rules.find((rule) =>
-						rule.text.includes("Main may confirm changes"),
+						rule.text.includes("Assistant may confirm changes"),
 					)
 					return [
 						Response.makePart("text", {
@@ -82,7 +87,10 @@ const model = Effect.runSync(
 									: {
 											decision: "allow",
 											citations: [
-												{ rule: rule.id, quote: "Main may confirm changes" },
+												{
+													rule: rule.id,
+													quote: "Assistant may confirm changes",
+												},
 											],
 											explanation: "The Rule allows it.",
 										},
@@ -163,7 +171,7 @@ const model = Effect.runSync(
 				}
 				const done = results.at(-1)
 				if (done !== undefined)
-					return answer("Main got: " + JSON.stringify(done.result))
+					return answer("Assistant got: " + JSON.stringify(done.result))
 				if (input.includes("delegate to programmer"))
 					return call(names.delegate, {
 						agent: known.programmer,
@@ -203,7 +211,7 @@ const model = Effect.runSync(
 						expectedOutput: "Whether it is confirmed.",
 					})
 				if (input.includes("confirm directly"))
-					return call("ConfirmChange", { description: "main change" })
+					return call("ConfirmChange", { description: "a change" })
 				return answer("Hello.")
 			}),
 	}),
@@ -251,24 +259,43 @@ const client = (host: Awaited<ReturnType<typeof BrowserHost.start>>) => {
 		}
 		throw new Error("Timed out: " + label)
 	}
-	return { send, json, until }
+	/** Makes an Agent and sets it as the default Agent of the person. */
+	const defaultAgent = async (credential: Redacted.Redacted<string>) => {
+		const agent = await json(
+			AgentsApi.Agent,
+			send(credential, "/v1/agents", "POST", {
+				name: "Assistant",
+				role: "Helps one person",
+				instructions: "Help the person.",
+			}),
+		)
+		const settings = await json(
+			Settings.MemberSettings,
+			send(credential, "/v1/me/settings"),
+		)
+		const updated = await json(
+			Settings.MemberSettings,
+			send(credential, "/v1/me/settings", "PATCH", {
+				expectedVersion: settings.version,
+				defaultAgent: agent.id,
+			}),
+		)
+		assert.equal(updated.defaultAgent, agent.id)
+		return agent
+	}
+	return { send, json, until, defaultAgent }
 }
 
 test(
-	"a Main Agent gives work to a lasting Agent after the person allows it, and gets only the result back, also after a restart",
+	"the default Agent gives work to a lasting Agent after the person allows it, and gets only the result back, also after a restart",
 	{ timeout: 120000 },
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
 		try {
-			const { send, json, until } = client(host)
+			const { send, json, until, defaultAgent } = client(host)
 			const alice = await host.login("agents-alice")
 			const bob = await host.login("agents-bob")
-			const agents = await json(
-				Schema.Array(AgentsApi.Agent),
-				send(alice.session, "/v1/agents"),
-			)
-			const main = agents[0]!
-			assert.equal(main.kind, "main")
+			const main = await defaultAgent(alice.session)
 			const programmer = await json(
 				AgentsApi.Agent,
 				send(alice.session, "/v1/agents", "POST", {
@@ -449,14 +476,9 @@ test(
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
 		try {
-			const { send, json, until } = client(host)
+			const { send, json, until, defaultAgent } = client(host)
 			const alice = await host.login("agents-carol")
-			const listed = (
-				await json(
-					Schema.Array(AgentsApi.Agent),
-					send(alice.session, "/v1/agents"),
-				)
-			)[0]!
+			const listed = await defaultAgent(alice.session)
 			// A new Agent gets the model of the Agent that makes it.
 			const mainModel = {
 				_tag: "Config.Selection",
@@ -537,7 +559,7 @@ test(
 			})
 			known.helper = helper.id
 
-			// The helper needs a tool. Main reviews it, cannot allow it alone, and passes it up.
+			// The helper needs a tool. Its owner reviews it, cannot allow it alone, and passes it up.
 			const toolsBefore = host.toolCalls()
 			await turn("confirm via helper")
 			const passedUp = await pendingFor(
@@ -592,7 +614,7 @@ test(
 			})
 			assert.equal(reviews.length, 1)
 
-			// Revoking the Grant of Main also revokes the Grant that it gave to the helper.
+			// Revoking the Grant of the owner also revokes the Grant that it gave to the helper.
 			const revoked = await send(
 				alice.session,
 				"/v1/agents/" + main.id + "/grants/" + mainTool!.id,
@@ -629,7 +651,7 @@ test(
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
 		try {
-			const { send, json, until } = client(host)
+			const { send, json, until, defaultAgent } = client(host)
 			const alice = await host.login("agents-dana")
 			// The judge reads Rules only with the Rules model of the organization.
 			const settings = await (
@@ -649,12 +671,7 @@ test(
 				},
 			)
 			assert.equal(configured.status, 200, await configured.clone().text())
-			const main = (
-				await json(
-					Schema.Array(AgentsApi.Agent),
-					send(alice.session, "/v1/agents"),
-				)
-			)[0]!
+			const main = await defaultAgent(alice.session)
 			const created = await json(
 				SessionView,
 				send(alice.session, "/v1/sessions", "POST", {}),
@@ -679,7 +696,7 @@ test(
 			const rule = await json(
 				AgentsApi.Rule,
 				send(alice.session, "/v1/agents/" + main.id + "/rules", "POST", {
-					text: "Main may confirm changes with ConfirmChange.",
+					text: "Assistant may confirm changes with ConfirmChange.",
 				}),
 			)
 			assert.equal(rule.status, "active")
@@ -734,14 +751,9 @@ test(
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
 		try {
-			const { send, json, until } = client(host)
+			const { send, json, until, defaultAgent } = client(host)
 			const dave = await host.login("agents-dave")
-			const main = (
-				await json(
-					Schema.Array(AgentsApi.Agent),
-					send(dave.session, "/v1/agents"),
-				)
-			)[0]!
+			const main = await defaultAgent(dave.session)
 			const open = async (agent?: string) => {
 				const created = await json(
 					SessionView,
@@ -811,7 +823,7 @@ test(
 					send(dave.session, "/v1/agents?agent=" + id),
 				)
 
-			// Main makes a lasting Agent. Main is at the top, so the person decides.
+			// The default Agent makes a lasting Agent. It is at the top, so the person decides.
 			const mainSession = await open()
 			await mainSession.turn("create a worker")
 			const create = await pendingFor(
@@ -835,12 +847,12 @@ test(
 			})
 			known.worker = worker.id
 
-			// Main gives work to the Agent it owns without a request.
+			// The default Agent gives work to the Agent it owns without a request.
 			await mainSession.turn("delegate to worker")
 			const delegated = await mainSession.completed()
 			assert.match(JSON.stringify(delegated.response?.output), /Worker did it/)
 
-			// The person works with the Worker directly. Its owner, Main, still decides first.
+			// The person works with the Worker directly. Its owner still decides first.
 			const workerSession = await open(worker.id)
 			await workerSession.turn("spawn a scout")
 			const passedUp = await pendingFor(
@@ -932,6 +944,90 @@ test(
 			assert.equal((await agent(scout.id)).archived, true)
 			assert.equal((await agent(second.id)).archived, true)
 			assert.equal((await agent(main.id)).archived, false)
+
+			// Only a top Agent can be the default Agent.
+			const settings = await json(
+				Settings.MemberSettings,
+				send(dave.session, "/v1/me/settings"),
+			)
+			const notTop = await send(dave.session, "/v1/me/settings", "PATCH", {
+				expectedVersion: settings.version,
+				defaultAgent: worker.id,
+			})
+			assert.equal(notTop.status, 400, await notTop.clone().text())
+
+			// An archived default Agent does no new work.
+			const top = await agent(main.id)
+			await json(
+				AgentsApi.Agent,
+				send(dave.session, "/v1/agents/" + main.id, "PATCH", {
+					expected: top.revision,
+					archived: true,
+				}),
+			)
+			const archived = await send(dave.session, "/v1/sessions", "POST", {})
+			assert.equal(archived.status, 400, await archived.clone().text())
+		} finally {
+			await host.close()
+		}
+	},
+)
+
+test(
+	"a person without a default Agent must name an Agent, and cannot pick an Agent of someone else",
+	{ timeout: 120000 },
+	async () => {
+		const host = await BrowserHost.start({ publicOrigin, model })
+		try {
+			const { send, json } = client(host)
+			const erin = await host.login("agents-erin")
+			const frank = await host.login("agents-frank")
+			assert.deepEqual(
+				await json(
+					Schema.Array(AgentsApi.Agent),
+					send(erin.session, "/v1/agents"),
+				),
+				[],
+			)
+			const settings = await json(
+				Settings.MemberSettings,
+				send(erin.session, "/v1/me/settings"),
+			)
+			assert.equal(settings.defaultAgent, null)
+			const none = await send(erin.session, "/v1/sessions", "POST", {})
+			assert.equal(none.status, 400, await none.clone().text())
+			const trigger = await send(erin.session, "/v1/triggers", "POST", {
+				prompt: "Say hello.",
+			})
+			assert.equal(trigger.status, 400, await trigger.clone().text())
+
+			const theirs = await json(
+				AgentsApi.Agent,
+				send(frank.session, "/v1/agents", "POST", {
+					name: "Private",
+					role: "Works for Frank",
+					instructions: "Help Frank.",
+				}),
+			)
+			const other = await send(erin.session, "/v1/me/settings", "PATCH", {
+				expectedVersion: settings.version,
+				defaultAgent: theirs.id,
+			})
+			assert.equal(other.status, 400, await other.clone().text())
+
+			const named = await json(
+				AgentsApi.Agent,
+				send(erin.session, "/v1/agents", "POST", {
+					name: "Named",
+					role: "Helps Erin",
+					instructions: "Help Erin.",
+				}),
+			)
+			const created = await json(
+				SessionView,
+				send(erin.session, "/v1/sessions", "POST", { agent: named.id }),
+			)
+			assert.equal(created.agent, named.id)
 		} finally {
 			await host.close()
 		}

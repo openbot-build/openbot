@@ -8,23 +8,39 @@ Diese Seite zeigt die Arten von Agents und die Routen unter `/v1/agents`. Jede R
 
 ---
 
-## Drei Arten von Agents
+## Zwei Arten von Agents
 
 | Art          | Besitzer                                            | Lebt                                    | Wofür er da ist                                                                    |
 | ------------ | --------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------- |
-| `main`       | Ein Member                                          | So lange wie das Member                 | Handelt für die Person. Macht einfache Arbeit selbst und gibt Arbeit ab.           |
 | `persistent` | Ein Member, die Organisation oder ein anderer Agent | Bis du ihn archivierst                  | Ein dauerhafter Arbeiter mit einer Rolle. Er lernt mit der Zeit aus seiner Arbeit. |
 | `session`    | Eine Session                                        | So lange wie die Session, der er gehört | Ein Helfer für einen Arbeitsstrang. Er behält seinen Kontext in dieser Session.    |
 
-Jedes Member hat genau einen **Main Agent** (Haupt-Agent). OpenBot erstellt ihn, wenn er zum ersten Mal gebraucht wird. Eine Session, die du ohne Agent erstellst, gehört deinem Main Agent.
-
-Ein neuer Main Agent hat kein Model. Setze sein `model`, bevor du eine Session ohne eigenes Model erstellst. Siehe [Models](/de/docs/models#ein-model-auswählen).
+Ein **oberster Agent** ist ein dauerhafter Agent, der einem Member oder der Organisation gehört, nicht einem anderen Agent. Du kannst einen obersten Agent als deinen [Standard-Agent](#dein-standard-agent) wählen.
 
 Ein **Session Agent** ist "fast dauerhaft". Ein Agent startet ihn während der Arbeit mit einem Werkzeug. Der Session Agent behält seinen Kontext, solange seine Session besteht. So kann der Agent ihm viele Male Arbeit geben. Wenn du die Session löschst, werden auch ihre Session Agents archiviert. Du kannst einen nützlichen Session Agent zu einem dauerhaften Agent [machen](#einen-session-agent-dauerhaft-machen).
 
 Ein Agent kann auch selbst dauerhafte Agents besitzen. Siehe [Agents, die Agents besitzen](#agents-die-agents-besitzen).
 
 Jede Session gehört zu einem Agent. Siehe [Sessions](/de/docs/sessions). Wie Agents sich gegenseitig Arbeit geben, steht unter [Delegation](/de/docs/delegation).
+
+### Dein Standard-Agent
+
+Dein **Standard-Agent** arbeitet, wenn du eine Session oder einen Trigger ohne Agent erstellst. OpenBot erstellt keine Agents für dich. Ein neues Member hat also keinen Standard-Agent. Dann schlägt eine Session oder ein Trigger ohne Agent mit `400` und `AgentInvalid` fehl.
+
+Um deinen Standard-Agent zu setzen, erstelle einen Agent. Schicke dann seine ID in deinen Member-Einstellungen:
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":0,"defaultAgent":"agt_5c0e…"}' \
+  https://openbot.example.com/v1/me/settings
+```
+
+`expectedVersion` ist die `version` aus `GET /v1/me/settings`. Der Agent muss einer deiner eigenen obersten Agents oder ein gemeinsamer Agent sein, und du brauchst `agents.delegate` für ihn. Sonst gibt OpenBot `400` mit `SettingsInvalid` zurück. Sende `null`, um deinen Standard-Agent zu entfernen.
+
+Du kannst deinen Standard-Agent trotzdem archivieren. Danach schlägt eine Session oder ein Trigger ohne Agent fehl, bis du einen anderen Standard-Agent wählst.
+
+Ältere Versionen von OpenBot haben für jedes Member einen Main Agent erstellt. Beim Update wird jeder Main Agent ein normaler dauerhafter Agent und der Standard-Agent seines Members. Seine Sessions, sein Gedächtnis und seine Grants bleiben.
 
 ### Keine Grenzen, die ein Agent kennt
 
@@ -72,7 +88,7 @@ OpenBot antwortet mit `201` und dem Agent:
 
 ## Agents auflisten, lesen und ändern
 
-`GET /v1/agents` listet deinen Main Agent, deine eigenen Agents und die gemeinsamen Agents auf, die du nutzen darfst. Füge `?archived=false` hinzu, um archivierte Agents auszublenden. Füge `?session=<id>` hinzu, um die Session Agents einer Session aufzulisten. Füge `?agent=<id>` hinzu, um die Agents aufzulisten, die einem Agent gehören.
+`GET /v1/agents` listet deine eigenen Agents und die gemeinsamen Agents auf, die du nutzen darfst. Füge `?archived=false` hinzu, um archivierte Agents auszublenden. Füge `?session=<id>` hinzu, um die Session Agents einer Session aufzulisten. Füge `?agent=<id>` hinzu, um die Agents aufzulisten, die einem Agent gehören.
 
 `GET /v1/agents/:agentId` gibt einen Agent zurück.
 
@@ -83,7 +99,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/agents/$AGENT
 ```
 
-`expected` ist die aktuelle `revision`. Du kannst `name` (mit denselben Regeln wie oben), `role`, `instructions`, `model` (sende `null`, um es zu entfernen) und `archived` ändern. Den Main Agent kann man nicht archivieren. Wenn du einen Agent archivierst, archiviert OpenBot auch jeden Agent, der ihm gehört, und die Agents darunter. Wenn du die Archivierung aufhebst, kommt nur dieser eine Agent zurück.
+`expected` ist die aktuelle `revision`. Du kannst `name` (mit denselben Regeln wie oben), `role`, `instructions`, `model` (sende `null`, um es zu entfernen) und `archived` ändern. Wenn du einen Agent archivierst, archiviert OpenBot auch jeden Agent, der ihm gehört, und die Agents darunter. Wenn du die Archivierung aufhebst, kommt nur dieser eine Agent zurück.
 
 ## Einen Session Agent dauerhaft machen
 
@@ -108,8 +124,8 @@ Ein Agent kann dauerhafte Agents besitzen. So kann ein Agent sein eigenes Team b
 - Ein Agent, den ein anderer Agent mit einem Werkzeug erstellt, also ein dauerhafter Agent oder ein Session Agent, bekommt das `model` des Agents, der ihn erstellt. Der Aufruf des Werkzeugs kann ein anderes `model` nennen.
 - Der Besitzer ist `{ "_tag": "Agent", "agent": "<owner ID>", "userId": "<member>" }`. `userId` ist das Member an der Spitze des Besitzer-Baums. Es ist `null`, wenn die Organisation den obersten Agent besitzt.
 - Ein Agent kann den Agents, die ihm gehören, ohne Request Arbeit geben.
-- Die **Besitzer-Kette** eines Agents geht über seine Besitzer nach oben bis zu einem Main Agent und dann bis zur Person. Zum Beispiel: **Person → Main → Worker → Scout**. Requests eines Agents gehen diese Kette hinauf, auch wenn eine Person direkt mit dem Agent arbeitet. Siehe [Requests](/de/docs/requests#die-kette-der-entscheider).
-- In der Kette ist der Besitzer eines Agents eines Members oder eines gemeinsamen Agents der Main Agent der Person, die mit ihm arbeitet.
+- Die **Besitzer-Kette** eines Agents geht über seine Besitzer nach oben bis zu einem obersten Agent und dann bis zur Person. Zum Beispiel: **Person → Assistant → Worker → Scout**. Requests eines Agents gehen diese Kette hinauf, auch wenn eine Person direkt mit dem Agent arbeitet. Siehe [Requests](/de/docs/requests#die-kette-der-entscheider).
+- Über einem obersten Agent steht die Person, die mit ihm arbeitet. Das gilt für deine eigenen obersten Agents und für gemeinsame Agents.
 
 ---
 
@@ -137,10 +153,10 @@ Deine eigenen Agents liegen unter deinem Member-Schlüssel. Gemeinsame Agents li
 
 ## Fehler
 
-| Status | Fehler                    | Wann                                                                       |
-| ------ | ------------------------- | -------------------------------------------------------------------------- |
-| `400`  | `AgentInvalid`            | Die Änderung ist nicht erlaubt, zum Beispiel einen Main Agent archivieren. |
-| `403`  | `PermissionDenied`        | Du darfst den Agent lesen, aber nicht ändern oder nutzen.                  |
-| `404`  | `AgentNotFound`           | Es gibt keinen Agent mit dieser ID, den du lesen darfst.                   |
-| `409`  | `AgentConflict`           | `expected` ist veraltet. Lies den Agent neu und versuche es noch einmal.   |
-| `503`  | `AgentStorageUnavailable` | OpenBot erreicht seine Datenbank nicht.                                    |
+| Status | Fehler                    | Wann                                                                     |
+| ------ | ------------------------- | ------------------------------------------------------------------------ |
+| `400`  | `AgentInvalid`            | Die Änderung ist nicht erlaubt, oder du hast keinen Standard-Agent.      |
+| `403`  | `PermissionDenied`        | Du darfst den Agent lesen, aber nicht ändern oder nutzen.                |
+| `404`  | `AgentNotFound`           | Es gibt keinen Agent mit dieser ID, den du lesen darfst.                 |
+| `409`  | `AgentConflict`           | `expected` ist veraltet. Lies den Agent neu und versuche es noch einmal. |
+| `503`  | `AgentStorageUnavailable` | OpenBot erreicht seine Datenbank nicht.                                  |

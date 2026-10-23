@@ -65,7 +65,7 @@ export const Trigger = Schema.Struct({
 export type Trigger = typeof Trigger.Type
 
 export const CreateTriggerRequest = Schema.Struct({
-	/** Without it, the Main Agent of the caller does the work. */
+	/** Without it, the default Agent of the caller does the work. */
 	agent: Schema.optionalKey(AgentId),
 	prompt: Prompt,
 	schedule: Schema.optionalKey(Schedule),

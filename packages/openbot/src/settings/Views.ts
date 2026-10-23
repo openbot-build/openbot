@@ -54,6 +54,7 @@ export const member = (
 	snapshot: Snapshot<MemberDocument>,
 ): Api.MemberSettings => ({
 	...snapshot.document,
+	defaultAgent: snapshot.document.defaultAgent ?? null,
 	version: snapshot.version,
 	updatedAt: iso(snapshot.updatedAt),
 })

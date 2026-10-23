@@ -194,6 +194,7 @@ test(
 			const alice = await host.login("alice")
 			const bob = await host.login("bob")
 			const root = await host.login("root")
+			await host.defaultAgent(alice.session)
 			const organizationId = alice.identity.organizationId
 
 			// The platform shares a model that it pays for.

@@ -89,7 +89,7 @@ Ein Ressourcen-Schlüssel ist ein Name aus Teilen, die durch Punkte getrennt sin
 | Ein Model Provider         | `openbot.org.<org>.model.<provider>`                    |
 | Die ganze Platform         | `openbot.platform`                                      |
 
-Ein Agent, der einem anderen Agent gehört, hat den Schlüssel des Members oder der Organisation an der Spitze seines Besitzer-Baums. `openbot.org.<org>.user.<user>.agent.<agent>` ist also auch der Schlüssel eines Agents, der dem Main Agent dieses Members gehört. Wenn ein Agent einen Agent erstellt oder dauerhaft macht, braucht das Member, für das er arbeitet, `agents.write` an dieser Stelle.
+Ein Agent, der einem anderen Agent gehört, hat den Schlüssel des Members oder der Organisation an der Spitze seines Besitzer-Baums. `openbot.org.<org>.user.<user>.agent.<agent>` ist also auch der Schlüssel eines Agents, der einem obersten Agent dieses Members gehört. Wenn ein Agent einen Agent erstellt oder dauerhaft macht, braucht das Member, für das er arbeitet, `agents.write` an dieser Stelle.
 
 Ein Schlüssel gilt für sich selbst und für jeden Schlüssel darunter. `openbot.org.<org>` gilt also für alles in der Organisation, und `openbot.org.<org>.user.<user>` gilt für alles eines Members.
 

@@ -371,6 +371,7 @@ test(
 				},
 			)
 			assert.equal(deny.status, 200, await deny.clone().text())
+			await host.defaultAgent(carol.session)
 			const created = await (
 				await account(carol.session, "/v1/sessions", "POST", { title: "Hi" })
 			).json()

@@ -32,7 +32,7 @@ OpenBot prüft jeden Versuch in dieser Reihenfolge. Der erste Schritt, der entsc
 1. **Die Policy des Member.** Ein Agent tut nie mehr als der Member, für den er arbeitet. Wenn die [Berechtigungen](/de/docs/permissions) des Member es nicht erlauben, wird der Aufruf abgelehnt. Das gilt auch für die Berechtigungen des Tokens, das die Arbeit gestartet hat. Das geht nie an einen Entscheider. In einem [Channel](/de/docs/channels) ist das Member die Person, die die Nachricht des Turns geschrieben hat.
 2. **Grants.** Ein [Grant](/de/docs/rules#grants) ist eine gespeicherte Entscheidung. Ein Grant zum Ablehnen gewinnt gegen einen Grant zum Erlauben.
 3. **Rules.** Ein Prüf-Modell liest die [Rules](/de/docs/rules) (Regeln) für diesen Agent in normaler Sprache. Nur eine Rule, die das Prüf-Modell zitiert, kann erlauben oder ablehnen.
-4. **Der Entscheider darüber.** OpenBot macht einen Request. Der Entscheider ist der Besitzer des Agent in seiner Besitzer-Kette. Für einen Main Agent ist die Person der Entscheider.
+4. **Der Entscheider darüber.** OpenBot macht einen Request. Der Entscheider ist der Besitzer des Agent in seiner Besitzer-Kette. Für einen obersten Agent ist die Person der Entscheider.
 
 Manche Aufrufe brauchen keine Entscheidung: Tool-Aufrufe, die die Organization als Lesen markiert, Arbeit für die Session Agents derselben Session und Arbeit für die Agents, die dem Agent gehören.
 
@@ -40,16 +40,15 @@ Wenn eine Prüfung fehlschlägt, wartet der Aufruf. Er läuft nie ohne Entscheid
 
 ### Die Kette der Entscheider
 
-Jeder Agent hat eine **Besitzer-Kette**. Sie geht von der Person über einen Main Agent hinunter bis zum Agent, zum Beispiel **Person → Main → Programmer → Session Agent**. Die Schritte sind:
+Jeder Agent hat eine **Besitzer-Kette**. Sie geht von der Person über einen obersten Agent hinunter bis zum Agent, zum Beispiel **Person → Assistant → Programmer → Session Agent**. Die Schritte sind:
 
 - Ein Session Agent gehört dem Agent seiner Session.
 - Ein Agent, der einem Agent gehört, gehört diesem Agent.
-- Andere dauerhafte Agents und geteilte Agents gehören dem Main Agent der Person, die mit ihnen arbeitet.
-- Ein Main Agent gehört seiner Person.
+- Ein oberster Agent, also ein dauerhafter Agent eines Members oder ein geteilter Agent, gehört der Person, die mit ihm arbeitet.
 
 Ein Request geht die Besitzer-Kette hinauf, nicht den Weg, auf dem die Arbeit kam. Ein Request vom Session Agent geht also zuerst an den Programmer. Das gilt auch, wenn eine Person dem Session Agent direkt Arbeit gibt. `chain` in einem Request listet die Besitzer-Kette von oben. Sie endet mit dem Agent, der fragt. Archivierte Agents fehlen darin.
 
-Ein Entscheider kann nur erlauben, was er selbst darf. Vielleicht stimmt der Programmer zu, hat die Fähigkeit aber selbst nicht. Dann geht der Request mit der Unterstützung des Programmer hinauf zu Main und dann zur Person. Wenn jemand weiter oben es erlaubt, bekommt jeder Agent auf dem Weg einen Grant. Der Grant hat den Umfang, den dieser Agent gewählt hat.
+Ein Entscheider kann nur erlauben, was er selbst darf. Vielleicht stimmt der Programmer zu, hat die Fähigkeit aber selbst nicht. Dann geht der Request mit der Unterstützung des Programmer hinauf zum Assistant und dann zur Person. Wenn jemand weiter oben es erlaubt, bekommt jeder Agent auf dem Weg einen Grant. Der Grant hat den Umfang, den dieser Agent gewählt hat.
 
 Ein Agent entscheidet in einer kurzen **Prüf-Session** (Review Session). Er liest nur seine Rolle, sein Gedächtnis, den Auftrag, den er gegeben hat, und den Request. Er liest nicht seinen eigenen langen Verlauf. Eine Prüf-Session hat `kind: "review"`. Nach der Entscheidung wird sie archiviert. Wenn eine Prüfung ohne Entscheidung endet, geht der Request zum nächsten Entscheider hinauf.
 
@@ -70,7 +69,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		"capability": { "action": "apps.call", "target": "conn-7/send_email" },
 		"reason": "Send the meeting notes to the team.",
 		"approver": { "_tag": "Person", "userId": "u-1" },
-		"chain": ["agt_main…", "agt_5c0e…"],
+		"chain": ["agt_3a9d…", "agt_5c0e…"],
 		"session": "c81d…",
 		"turn": "t-77",
 		"toolCallId": "call-9",

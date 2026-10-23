@@ -198,7 +198,7 @@ Eine Auswahl eines Model nennt den Anbieter und die Model-ID:
 
 OpenBot wählt nie ein Model für dich. Es gibt kein Standard-Model. Jede Nutzung nennt ihr eigenes Model:
 
-- **Eine neue Session** nutzt `settings.model` aus der Anfrage. Ohne diesen Wert nutzt die Session das `model` ihres [Agents](/de/docs/agents). Wenn keiner von beiden ein Model gibt, gibt OpenBot `400` mit `SessionModelInvalid` und dem Grund `missing` zurück. Dein Main Agent hat am Anfang kein Model. Setze also zuerst sein `model` mit `PATCH /v1/agents/:id`.
+- **Eine neue Session** nutzt `settings.model` aus der Anfrage. Ohne diesen Wert nutzt die Session das `model` ihres [Agents](/de/docs/agents). Wenn keiner von beiden ein Model gibt, gibt OpenBot `400` mit `SessionModelInvalid` und dem Grund `missing` zurück. Ein neuer Agent hat kein Model, wenn du ihm keines gibst. Setze also sein `model`, wenn du ihn erstellst, oder später mit `PATCH /v1/agents/:id`.
 - **Das Prüf-Modell für [Rules](/de/docs/rules)** nutzt `rulesModel` in den [Einstellungen der Organization](/de/docs/organization#einstellungen). Wenn es `null` ist, gibt das Prüf-Modell keine Antwort. Dann entscheidet eine Person oder ein Agent.
 - **[Agent-Memory](/de/docs/memory#agent-memory)** nutzt `agentMemoryModel` in denselben Einstellungen. Wenn es `null` ist, lernen Agents nichts.
 
@@ -206,7 +206,7 @@ OpenBot wählt nie ein Model für dich. Es gibt kein Standard-Model. Jede Nutzun
 
 Ältere Versionen von OpenBot hatten `defaultModel` und `helperModel`. Beim Update gibt OpenBot das alte `defaultModel` jedem Agent, der kein Model hat. `rulesModel` und `agentMemoryModel` bekommen das alte Helfer-Modell: `helperModel`, sonst `defaultModel`. Wenn beide `null` waren, bleiben die neuen Werte leer, und du musst sie setzen.
 
-So gibst du zum Beispiel deinem Main Agent ein Model. Schicke seine aktuelle `revision` als `expected`:
+So gibst du zum Beispiel einem Agent ein Model. Schicke seine aktuelle `revision` als `expected`:
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \

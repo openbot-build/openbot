@@ -27,7 +27,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions
 ```
 
-Alle Felder sind optional. `title` ist ein kurzer Name. OpenBot entfernt Leerzeichen am Anfang und Ende. Der Rest muss 1 bis 100 Zeichen haben. Eine Session ohne Titel hat kein Feld `title` in ihren `metadata`. `agent` ist die ID des Agents, der in der Session arbeitet. Ohne dieses Feld arbeitet dein [Main Agent](/de/docs/agents) darin. Du brauchst `agents.delegate` für den Agent. `settings` kann `mode` und `model` enthalten. Ohne Model nutzt die Session das Model des Agents. Wenn keiner von beiden ein Model gibt, gibt OpenBot `400` mit `SessionModelInvalid` und dem Grund `missing` zurück. Es gibt kein Standard-Model. Siehe [Models](/de/docs/models#ein-model-auswählen). Wie du die Memory-Schalter setzt, steht unter [Memory](/de/docs/memory#schalter). Das Erstellen einer Session ruft kein Model auf.
+Alle Felder sind optional. `title` ist ein kurzer Name. OpenBot entfernt Leerzeichen am Anfang und Ende. Der Rest muss 1 bis 100 Zeichen haben. Eine Session ohne Titel hat kein Feld `title` in ihren `metadata`. `agent` ist die ID des Agents, der in der Session arbeitet. Ohne dieses Feld arbeitet dein [Standard-Agent](/de/docs/agents#dein-standard-agent) darin. Wenn du keinen Standard-Agent hast, gibt OpenBot `400` mit `AgentInvalid` zurück. Du brauchst `agents.delegate` für den Agent. `settings` kann `mode` und `model` enthalten. Ohne Model nutzt die Session das Model des Agents. Wenn keiner von beiden ein Model gibt, gibt OpenBot `400` mit `SessionModelInvalid` und dem Grund `missing` zurück. Es gibt kein Standard-Model. Siehe [Models](/de/docs/models#ein-model-auswählen). Wie du die Memory-Schalter setzt, steht unter [Memory](/de/docs/memory#schalter). Das Erstellen einer Session ruft kein Model auf.
 OpenBot antwortet mit `201` und der Ansicht der Session. Hier ist eine kurze Form davon:
 
 ```json
@@ -285,7 +285,7 @@ Du kannst sie an vier Stellen festlegen. Die genaueste Stelle, die etwas festleg
 
 1. Die Session: `planApproval`, wenn du sie erstellst, oder mit `PATCH /v1/sessions/:sessionId`. Sende `null`, um es zu entfernen.
 2. Der Agent: `planApproval` am [Agent](/de/docs/agents).
-3. Du: `PATCH /v1/me/settings` mit `{ "expectedVersion": 0, "planApproval": { ... } }`. Lies deine Einstellungen mit `GET /v1/me/settings`.
+3. Du: `PATCH /v1/me/settings` mit `{ "expectedVersion": 0, "planApproval": { ... } }`. Lies deine Einstellungen mit `GET /v1/me/settings`. Dieselben Einstellungen enthalten deinen [Standard-Agent](/de/docs/agents#dein-standard-agent).
 4. Die Organisation: `planApproval` in ihren [Einstellungen](/de/docs/organization#einstellungen). Das ist nur der Standard. Es kann eine lockerere Einstellung nicht verbieten.
 
 ---

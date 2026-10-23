@@ -16,13 +16,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/triggers
 ```
 
-| 字段       | 作用                                                     |
-| ---------- | -------------------------------------------------------- |
-| `prompt`   | 启动工作的消息。                                         |
-| `agent`    | 可选。做这项工作的 Agent。不填时由你的 Main Agent 来做。 |
-| `schedule` | 可选。触发器什么时候自己触发。                           |
-| `shared`   | 可选。`true` 表示创建属于组织的共享触发器。              |
-| `enabled`  | 可选。`false` 表示触发器不会触发。默认是 `true`。        |
+| 字段       | 作用                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------- |
+| `prompt`   | 启动工作的消息。                                                                            |
+| `agent`    | 可选。做这项工作的 Agent。不填时由你的[默认 Agent](/zh-cn/docs/agents#你的默认-agent)来做。 |
+| `schedule` | 可选。触发器什么时候自己触发。                                                              |
+| `shared`   | 可选。`true` 表示创建属于组织的共享触发器。                                                 |
+| `enabled`  | 可选。`false` 表示触发器不会触发。默认是 `true`。                                           |
 
 返回 `201` 和这个触发器。它有 `nextRunAt`（计划下一次触发的时间）和 `lastFiredAt`。
 

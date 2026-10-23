@@ -205,7 +205,7 @@ A model selection names both the provider and the model ID:
 
 OpenBot never picks a model for you. There is no default model. Each use names its own model:
 
-- **A new Session** uses `settings.model` from the request. Without it, the Session uses the `model` of its [Agent](/docs/agents). When neither gives a model, OpenBot returns `400` with `SessionModelInvalid` and the reason `missing`. Your Main Agent has no model at first, so set its `model` with `PATCH /v1/agents/:id`.
+- **A new Session** uses `settings.model` from the request. Without it, the Session uses the `model` of its [Agent](/docs/agents). When neither gives a model, OpenBot returns `400` with `SessionModelInvalid` and the reason `missing`. A new Agent has no model unless you give it one, so set its `model` when you make it, or later with `PATCH /v1/agents/:id`.
 - **The judge of [Rules](/docs/rules)** uses `rulesModel` in the [organization settings](/docs/organization#settings). When it is `null`, the judge gives no answer, so a person or an Agent decides.
 - **[Agent memory](/docs/memory#agent-memory)** uses `agentMemoryModel` in the same settings. When it is `null`, Agents learn nothing.
 
@@ -213,7 +213,7 @@ OpenBot never picks a model for you. There is no default model. Each use names i
 
 Older versions of OpenBot had `defaultModel` and `helperModel`. When you upgrade, OpenBot gives the old `defaultModel` to each Agent that has no model. `rulesModel` and `agentMemoryModel` get the old helper model: `helperModel`, or else `defaultModel`. When both were `null`, the new values stay empty, and you must set them.
 
-For example, to give your Main Agent a model, send its current `revision` as `expected`:
+For example, to give an Agent a model, send its current `revision` as `expected`:
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \

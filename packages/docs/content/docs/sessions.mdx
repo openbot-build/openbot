@@ -27,7 +27,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions
 ```
 
-All fields are optional. `title` is a short name. OpenBot removes spaces at the start and end. The rest must have 1 to 100 characters. A Session without a title has no `title` field in its `metadata`. `agent` is the ID of the Agent that works in the Session. Without it, your [Main Agent](/docs/agents) works in it. You need `agents.delegate` on the Agent. `settings` can hold `mode` and `model`. Without a model, the Session uses the model of the Agent. When neither gives a model, OpenBot returns `400` with `SessionModelInvalid` and the reason `missing`. There is no default model. See [Models](/docs/models#choose-a-model). To set the memory switches, see [Memory](/docs/memory#switches). Creating a Session does not call a model.
+All fields are optional. `title` is a short name. OpenBot removes spaces at the start and end. The rest must have 1 to 100 characters. A Session without a title has no `title` field in its `metadata`. `agent` is the ID of the Agent that works in the Session. Without it, your [default Agent](/docs/agents#your-default-agent) works in it. If you have no default Agent, OpenBot returns `400` with `AgentInvalid`. You need `agents.delegate` on the Agent. `settings` can hold `mode` and `model`. Without a model, the Session uses the model of the Agent. When neither gives a model, OpenBot returns `400` with `SessionModelInvalid` and the reason `missing`. There is no default model. See [Models](/docs/models#choose-a-model). To set the memory switches, see [Memory](/docs/memory#switches). Creating a Session does not call a model.
 OpenBot returns `201` with the Session view. Here is a short form of it:
 
 ```json
@@ -285,7 +285,7 @@ You can set it in four places. The most specific one that is set wins, also when
 
 1. The Session: `planApproval` when you create it, or with `PATCH /v1/sessions/:sessionId`. Send `null` to remove it.
 2. The Agent: `planApproval` on the [Agent](/docs/agents).
-3. You: `PATCH /v1/me/settings` with `{ "expectedVersion": 0, "planApproval": { ... } }`. Read your settings with `GET /v1/me/settings`.
+3. You: `PATCH /v1/me/settings` with `{ "expectedVersion": 0, "planApproval": { ... } }`. Read your settings with `GET /v1/me/settings`. The same settings hold your [default Agent](/docs/agents#your-default-agent).
 4. The organization: `planApproval` in its [settings](/docs/organization#settings). It is only the default. It cannot forbid a looser setting.
 
 ---

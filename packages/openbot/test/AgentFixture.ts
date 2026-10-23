@@ -3,13 +3,13 @@ import { Effect, Layer } from "effect"
 import * as AgentLayers from "../src/agents/AgentLayers.ts"
 import * as Judge from "../src/capabilities/Judge.ts"
 
-/** A Main Agent for tests that use Sessions without the Agent services. */
+/** A lasting Agent for tests that use Sessions without the Agent services. */
 export const agent: AgentsApi.Agent = {
 	id: AgentsApi.AgentId.make("agt_test"),
-	kind: "main",
+	kind: "persistent",
 	owner: { _tag: "Member", userId: "test-user" },
-	name: "Main",
-	role: "Main Agent",
+	name: "Assistant",
+	role: "Helps one person",
 	instructions: "",
 	archived: false,
 	revision: 0,

@@ -32,7 +32,7 @@ OpenBot checks each attempt in this order. The first step that decides wins.
 1. **The policy of the member.** An Agent never does more than the member it works for. If the [permissions](/docs/permissions) of the member, or of the token that started the work, do not allow it, the call is denied. This is never sent to a decider. In a [Channel](/docs/channels), the member is the person who wrote the message of the Turn.
 2. **Grants.** A [Grant](/docs/rules#grants) is a kept decision. A deny Grant wins over an allow Grant.
 3. **Rules.** A judge model reads the [Rules](/docs/rules) for this Agent in plain language. Only a Rule that the judge quotes can allow or deny.
-4. **The decider above.** OpenBot makes a request. The decider is the owner of the Agent in its owner chain. For a Main Agent, the decider is the person.
+4. **The decider above.** OpenBot makes a request. The decider is the owner of the Agent in its owner chain. For a top Agent, the decider is the person.
 
 Some calls need no decision: tool calls that the organization marks as reads, work for the Session Agents of the same Session, and work for the Agents that the Agent owns.
 
@@ -40,16 +40,15 @@ When any check fails, the call waits. It never runs without a decision.
 
 ### The chain of deciders
 
-Every Agent has an **owner chain**. It goes from the person, through a Main Agent, down to the Agent, such as **person → Main → Programmer → Session Agent**. The steps are:
+Every Agent has an **owner chain**. It goes from the person, through a top Agent, down to the Agent, such as **person → Assistant → Programmer → Session Agent**. The steps are:
 
 - A Session Agent belongs to the Agent of its Session.
 - An Agent that an Agent owns belongs to that Agent.
-- Other lasting Agents and shared Agents belong to the Main Agent of the person who works with them.
-- A Main Agent belongs to its person.
+- A top Agent, which is a lasting Agent of a member or a shared Agent, belongs to the person who works with it.
 
 A request goes up the owner chain, not the way the work came. So a request from the Session Agent goes to the Programmer first, also when a person gives work to the Session Agent directly. `chain` in a request lists the owner chain from the top, and ends with the Agent that asks. Archived Agents are left out.
 
-A decider can only allow what it may do itself. If the Programmer agrees but does not hold the capability, the request goes up to Main with the support of the Programmer, and then to the person. When someone above allows it, each Agent on the way gets a Grant, with the scope that it chose.
+A decider can only allow what it may do itself. If the Programmer agrees but does not hold the capability, the request goes up to the Assistant with the support of the Programmer, and then to the person. When someone above allows it, each Agent on the way gets a Grant, with the scope that it chose.
 
 An Agent decides in a short **review Session**. It reads only its role, its memory, the brief it gave, and the request. It does not read its own long history. A review Session has `kind: "review"` and is archived after the decision. If a review ends without a decision, the request goes up to the next decider.
 
@@ -70,7 +69,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		"capability": { "action": "apps.call", "target": "conn-7/send_email" },
 		"reason": "Send the meeting notes to the team.",
 		"approver": { "_tag": "Person", "userId": "u-1" },
-		"chain": ["agt_main…", "agt_5c0e…"],
+		"chain": ["agt_3a9d…", "agt_5c0e…"],
 		"session": "c81d…",
 		"turn": "t-77",
 		"toolCallId": "call-9",

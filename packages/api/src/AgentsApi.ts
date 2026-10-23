@@ -26,7 +26,7 @@ export type AgentId = typeof AgentId.Type
 
 /**
  * Who owns an Agent.
- * A member owns their Main Agent and their own Agents. The organization owns shared Agents.
+ * A member owns their own Agents. The organization owns shared Agents.
  * A Session owns a Session Agent: the Session Agent lives as long as that Session.
  * `agent` is the Agent of that Session.
  * An Agent can own lasting Agents too. `userId` is the member at the top of this tree.
@@ -40,7 +40,7 @@ export const AgentOwner = Schema.TaggedUnion({
 })
 export type AgentOwner = typeof AgentOwner.Type
 
-export const AgentKind = Schema.Literals(["main", "persistent", "session"])
+export const AgentKind = Schema.Literals(["persistent", "session"])
 export type AgentKind = typeof AgentKind.Type
 
 export const Agent = Schema.Struct({
@@ -315,7 +315,7 @@ export class AgentsApi extends HttpApiGroup.make("agents")
 			error: AgentErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Lists the Agents that the caller can use: their Main Agent, their own Agents and the shared Agents. With `session`, it lists the Session Agents of that Session. With `agent`, it lists the Agents that this Agent owns.",
+			"Lists the Agents that the caller can use: their own Agents and the shared Agents. With `session`, it lists the Session Agents of that Session. With `agent`, it lists the Agents that this Agent owns.",
 		),
 		HttpApiEndpoint.post("createAgent", "/v1/agents", {
 			payload: CreateAgentRequest,

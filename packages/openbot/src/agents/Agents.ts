@@ -24,19 +24,12 @@ export interface Subject {
 	readonly userId: string
 }
 
-export const mainInstructions =
-	"You are the Main Agent of one person. You act for them. Do simple work yourself. When work needs a special skill or a long effort, give it to one of the person's other Agents with the delegate tool, or start a Session Agent for it. Write a clear brief, and always pass the person's own words unchanged. Read the results, check them, and tell the person what was done."
-
 export const newId = () => "agt_" + randomUUID().replaceAll("-", "")
 
-/** The Agents of an organization: the Main Agents, other lasting Agents and Session Agents. */
+/** The Agents of an organization: lasting Agents and Session Agents. */
 export class Agents extends Context.Service<
 	Agents,
 	{
-		/** The Main Agent of a member. It is made the first time it is needed. */
-		readonly ensureMain: (
-			subject: Subject,
-		) => Effect.Effect<Agent, AgentsApi.AgentStorageUnavailable>
 		readonly find: (
 			organizationId: string,
 			id: string,
@@ -103,7 +96,7 @@ export class Agents extends Context.Service<
 		) => Effect.Effect<Agent, Failure, AuthorizationServices>
 		/**
 		 * The deciders of an Agent: its owner chain from the top, ending with the Agent.
-		 * The top is the Main Agent of a member. Archived Agents are left out.
+		 * The top is an Agent that a member or the organization owns. Archived Agents are left out.
 		 * `subject` is the member who works with the Agent now.
 		 */
 		readonly ownerChain: (
@@ -186,30 +179,6 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 					})
 				return agent
 			})
-		const ensureMain: typeof Agents.Service.ensureMain = (subject) =>
-			records.transaction(
-				"main:" + subject.organizationId + ":" + subject.userId,
-				Effect.gen(function* () {
-					const existing = (yield* agents.list(subject.organizationId, {
-						owner: subject.userId,
-						status: "main",
-					}))[0]
-					if (existing !== undefined) return existing
-					const now = yield* Clock.currentTimeMillis
-					return yield* put(subject.organizationId, {
-						id: AgentsApi.AgentId.make(newId()),
-						kind: "main",
-						owner: { _tag: "Member", userId: subject.userId },
-						name: "Main",
-						role: "Main Agent",
-						instructions: mainInstructions,
-						archived: false,
-						revision: 0,
-						createdAt: now,
-						updatedAt: now,
-					})
-				}),
-			)
 		const change = (
 			caller: Caller,
 			id: string,
@@ -275,21 +244,15 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 					)),
 				]
 			})
-		/** The Agent that decides above an Agent, or none for a Main Agent. */
-		const above = (subject: Subject, agent: Agent) => {
+		/** The Agent that decides above an Agent, or none for a top Agent. Above it is the person. */
+		const above = (organizationId: string, agent: Agent) => {
 			switch (agent.owner._tag) {
 				case "Agent":
 				case "Session":
-					return find(subject.organizationId, agent.owner.agent)
+					return find(organizationId, agent.owner.agent)
 				case "Member":
-					return agent.kind === "main"
-						? Effect.succeedNone
-						: ensureMain({
-								organizationId: subject.organizationId,
-								userId: agent.owner.userId,
-							}).pipe(Effect.asSome)
 				case "Organization":
-					return ensureMain(subject).pipe(Effect.asSome)
+					return Effect.succeedNone
 			}
 		}
 		const climb = (
@@ -301,7 +264,7 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 			ReadonlyArray<AgentId>,
 			AgentsApi.AgentStorageUnavailable
 		> =>
-			above(subject, from).pipe(
+			above(subject.organizationId, from).pipe(
 				Effect.flatMap((next) => {
 					// A loop can only come from broken records. It must not hang the work.
 					if (Option.isNone(next) || seen.includes(next.value.id))
@@ -359,7 +322,6 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 					})
 			})
 		return Agents.of({
-			ensureMain,
 			find,
 			access,
 			list: (caller, input) =>
@@ -378,7 +340,6 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 								agent.archived === input.archived,
 						)
 					}
-					const main = yield* ensureMain(caller)
 					const own = yield* agents.list(caller.organizationId, {
 						owner: caller.userId,
 						...(input.session === undefined ? {} : { scope: input.session }),
@@ -390,15 +351,11 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 					const all = yield* visible(caller, [
 						...own.filter(
 							(agent) =>
-								agent.id !== main.id &&
-								(input.session !== undefined || agent.kind !== "session"),
+								input.session !== undefined || agent.kind !== "session",
 						),
 						...shared,
 					])
-					return [
-						...(input.session === undefined ? [main] : []),
-						...all,
-					].filter(
+					return all.filter(
 						(agent) =>
 							input.archived === undefined || agent.archived === input.archived,
 					)
@@ -461,12 +418,6 @@ export const make: Effect.Effect<typeof Agents.Service, never, AgentRecords> =
 						"agents.write",
 						input.expected,
 						(agent) => {
-							if (agent.kind === "main" && input.archived === true)
-								return Effect.fail(
-									AgentsApi.AgentInvalid.make({
-										message: "The Main Agent cannot be archived.",
-									}),
-								)
 							const { model: _model, planApproval: _approval, ...rest } = agent
 							const model =
 								input.model === undefined

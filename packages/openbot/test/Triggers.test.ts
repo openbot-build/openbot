@@ -103,6 +103,8 @@ test(
 			const { send, json, until } = client(host)
 			const alice = await host.login("triggers-alice")
 			const bob = await host.login("triggers-bob")
+			await host.defaultAgent(alice.session)
+			await host.defaultAgent(bob.session)
 			const sessions = async (credential: Redacted.Redacted<string>) =>
 				json(
 					Schema.Array(

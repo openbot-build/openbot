@@ -10,7 +10,7 @@ You give work to an Agent in plain language. OpenBot runs the work on a server, 
 - **User tokens.** Sign in once in a browser, make a token, and call the API from any program.
 - **Organization and permissions.** Many people can share one OpenBot. Roles and policies decide what each person and each token may do.
 - **Sessions and Timelines.** Work happens in Sessions and Turns. The Timeline keeps versions, so you can go back and try again.
-- **Agent for Agents.** A Main Agent acts for you and gives work to a team of lasting Agents and their Session Agents. Each Agent has its own context and memory.
+- **Agent for Agents.** Your default Agent acts for you and gives work to a team of lasting Agents and their Session Agents. Each Agent has its own context and memory.
 - **Lazy capabilities.** Agents have no preset limits. When an Agent tries something new, the decider above it answers, and Grants and Rules keep the answer.
 - **Plans, todos and triggers.** An Agent can plan first and wait for approval, keep a todo list, and wait. A trigger starts its work on a schedule or from a webhook.
 - **Channels.** People talk with an Agent in Slack, Lark, Telegram or their own chat system. Each Turn works for the person who wrote the message.

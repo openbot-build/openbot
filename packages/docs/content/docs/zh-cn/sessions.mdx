@@ -27,7 +27,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions
 ```
 
-所有字段都是可选的。`title` 是一个简短的名字。OpenBot 会去掉首尾空格。剩下的部分必须有 1 到 100 个字符。没有标题的 Session，其 `metadata` 中没有 `title` 字段。`agent` 是在这个 Session 中工作的 Agent 的 ID。不填时，由你的 [Main Agent](/zh-cn/docs/agents) 在其中工作。你需要在这个 Agent 上拥有 `agents.delegate`。`settings` 可以包含 `mode` 和 `model`。没有指定模型时，Session 使用 Agent 的模型。两者都没有模型时，OpenBot 返回 `400`、`SessionModelInvalid` 和原因 `missing`。没有默认模型。见 [Models](/zh-cn/docs/models#选择模型)。要设置记忆开关，见 [Memory](/zh-cn/docs/memory#开关)。创建 Session 不会调用模型。
+所有字段都是可选的。`title` 是一个简短的名字。OpenBot 会去掉首尾空格。剩下的部分必须有 1 到 100 个字符。没有标题的 Session，其 `metadata` 中没有 `title` 字段。`agent` 是在这个 Session 中工作的 Agent 的 ID。不填时，由你的[默认 Agent](/zh-cn/docs/agents#你的默认-agent)在其中工作。如果你没有默认 Agent，OpenBot 返回 `400` 和 `AgentInvalid`。你需要在这个 Agent 上拥有 `agents.delegate`。`settings` 可以包含 `mode` 和 `model`。没有指定模型时，Session 使用 Agent 的模型。两者都没有模型时，OpenBot 返回 `400`、`SessionModelInvalid` 和原因 `missing`。没有默认模型。见 [Models](/zh-cn/docs/models#选择模型)。要设置记忆开关，见 [Memory](/zh-cn/docs/memory#开关)。创建 Session 不会调用模型。
 OpenBot 返回 `201` 和 Session 视图。下面是它的简短形式：
 
 ```json
@@ -285,7 +285,7 @@ OpenBot 会保存每一次等待。重启以后，等待会继续，直到时间
 
 1. Session：创建时的 `planApproval`，或者用 `PATCH /v1/sessions/:sessionId`。发送 `null` 可以移除它。
 2. Agent：[Agent](/zh-cn/docs/agents) 上的 `planApproval`。
-3. 你自己：`PATCH /v1/me/settings`，内容是 `{ "expectedVersion": 0, "planApproval": { ... } }`。用 `GET /v1/me/settings` 读取你的设置。
+3. 你自己：`PATCH /v1/me/settings`，内容是 `{ "expectedVersion": 0, "planApproval": { ... } }`。用 `GET /v1/me/settings` 读取你的设置。同一份设置里也有你的[默认 Agent](/zh-cn/docs/agents#你的默认-agent)。
 4. 组织：[设置](/zh-cn/docs/organization#设置)中的 `planApproval`。它只是默认值，不能禁止更宽松的设置。
 
 ---

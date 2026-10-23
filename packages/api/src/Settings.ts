@@ -1,6 +1,7 @@
 import { Config } from "@openbot-build/core"
 import { Schema } from "effect"
 import { HttpApiSchema } from "effect/http-api"
+import { AgentId } from "./AgentsApi.ts"
 import { Restriction } from "./AppIndexApi.ts"
 import * as Memory from "./Memory.ts"
 import { Policy, RoleId } from "./Permissions.ts"
@@ -274,12 +275,19 @@ export const MemberSettings = Schema.Struct({
 	version: Version,
 	/** How the plans of your Agents are approved. `null` follows the organization. */
 	planApproval: Schema.NullOr(PlanApproval),
+	/**
+	 * The Agent that works when you start a Session or a trigger without an Agent.
+	 * It is one of your own top Agents or a shared Agent. `null` means that you have none.
+	 */
+	defaultAgent: Schema.NullOr(AgentId),
 	updatedAt: Schema.String,
 })
 export type MemberSettings = typeof MemberSettings.Type
 export const UpdateMemberSettingsRequest = Schema.Struct({
 	expectedVersion: Version,
 	planApproval: Schema.optionalKey(Schema.NullOr(PlanApproval)),
+	/** `null` removes your default Agent. */
+	defaultAgent: Schema.optionalKey(Schema.NullOr(AgentId)),
 })
 export type UpdateMemberSettingsRequest =
 	typeof UpdateMemberSettingsRequest.Type

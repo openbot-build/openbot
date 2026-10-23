@@ -16,6 +16,7 @@ import {
 import { LanguageModel, Response, Tool, Toolkit } from "effect/ai"
 import { FetchHttpClient, HttpServer } from "effect/http"
 import { exportJWK, generateKeyPair, SignJWT } from "jose"
+import * as DefaultAgent from "./DefaultAgent.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 import type { Discovery, Network } from "@openbot-build/protocol"
 import type { AppIndexApi, Settings as SettingsApi } from "@openbot-build/api"
@@ -494,6 +495,24 @@ export async function start(options: {
 				returnLocation: callback.headers.get("location"),
 			}
 		}
+		/** Sets up a default Agent for the person, when they have none. */
+		const defaultAgent = (session: Redacted.Redacted<string>) =>
+			DefaultAgent.ensure((path, method, payload) =>
+				fetch(address + path, {
+					method,
+					headers: {
+						cookie:
+							AuthApi.SessionCookie +
+							"=" +
+							encodeURIComponent(Redacted.value(session)),
+						origin: options.publicOrigin,
+						...(payload === undefined
+							? {}
+							: { "content-type": "application/json" }),
+					},
+					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+				}),
+			)
 		return {
 			databaseUrl: database.url,
 			get runtime() {
@@ -512,6 +531,7 @@ export async function start(options: {
 				)
 			},
 			login,
+			defaultAgent,
 			toolCalls: () => toolCalls,
 			values,
 			locked,

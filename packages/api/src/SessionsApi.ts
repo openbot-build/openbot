@@ -40,7 +40,7 @@ export const SettingsPatch = Schema.Struct({
 	model: Schema.optionalKey(Config.Selection),
 })
 export const CreateSessionRequest = Schema.Struct({
-	/** The Agent that works in the Session. Without it, the Main Agent of the caller works. */
+	/** The Agent that works in the Session. Without it, the default Agent of the caller works. */
 	agent: Schema.optionalKey(AgentId),
 	title: Schema.optionalKey(Name),
 	settings: Schema.optionalKey(SettingsPatch),
@@ -431,7 +431,7 @@ export class SessionsApi extends HttpApiGroup.make("sessions")
 			error: [...SessionOperationErrors, ...AgentErrors],
 		}).annotate(
 			OpenApi.Description,
-			"Creates an idle Session for an Agent without calling a model. Without `agent`, the Main Agent of the caller works in it. The latest response is null.",
+			"Creates an idle Session for an Agent without calling a model. Without `agent`, the default Agent of the caller works in it. It fails when the caller has no default Agent. The latest response is null.",
 		),
 		HttpApiEndpoint.post("startTurn", "/v1/sessions/:sessionId/turns", {
 			params: { sessionId: Session.Id.check(Schema.isMinLength(1)) },

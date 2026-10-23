@@ -198,7 +198,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 OpenBot 从不替你选模型。没有默认模型。每种用途都要指明自己的模型：
 
-- **新 Session** 使用请求中的 `settings.model`。没有它时，Session 使用它的 [Agent](/zh-cn/docs/agents) 的 `model`。两者都没有模型时，OpenBot 返回 `400`、`SessionModelInvalid` 和原因 `missing`。你的 Main Agent 一开始没有模型，所以请先用 `PATCH /v1/agents/:id` 设置它的 `model`。
+- **新 Session** 使用请求中的 `settings.model`。没有它时，Session 使用它的 [Agent](/zh-cn/docs/agents) 的 `model`。两者都没有模型时，OpenBot 返回 `400`、`SessionModelInvalid` 和原因 `missing`。新的 Agent 没有模型，除非你给它一个。所以请在创建时设置它的 `model`，或之后用 `PATCH /v1/agents/:id` 设置。
 - **[Rule](/zh-cn/docs/rules) 的评判**使用[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel`。它为 `null` 时，评判不给出答案，由人或 Agent 来决定。
 - **[Agent 记忆](/zh-cn/docs/memory#agent-记忆)**使用同一份设置中的 `agentMemoryModel`。它为 `null` 时，Agent 什么都不学。
 
@@ -206,7 +206,7 @@ OpenBot 从不替你选模型。没有默认模型。每种用途都要指明自
 
 旧版本的 OpenBot 有 `defaultModel` 和 `helperModel`。升级时，OpenBot 把旧的 `defaultModel` 给每个没有模型的 Agent。`rulesModel` 和 `agentMemoryModel` 得到旧的辅助模型：`helperModel`，没有时用 `defaultModel`。如果两者都是 `null`，新的值保持为空，你必须设置它们。
 
-例如，要给你的 Main Agent 设置模型，把它当前的 `revision` 作为 `expected` 发送：
+例如，要给一个 Agent 设置模型，把它当前的 `revision` 作为 `expected` 发送：
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \

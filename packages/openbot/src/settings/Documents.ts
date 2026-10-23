@@ -76,9 +76,14 @@ export const organizationDefaults: OrganizationDocument = {
 /** The settings of one member in one organization. */
 export const MemberDocument = Schema.Struct({
 	planApproval: Api.MemberSettings.fields.planApproval,
+	/** Missing in documents from before default Agents. Then there is none. */
+	defaultAgent: Schema.optionalKey(Api.MemberSettings.fields.defaultAgent),
 })
 export type MemberDocument = typeof MemberDocument.Type
-export const memberDefaults: MemberDocument = { planApproval: null }
+export const memberDefaults: MemberDocument = {
+	planApproval: null,
+	defaultAgent: null,
+}
 
 export type Scope =
 	| { readonly kind: "platform" }

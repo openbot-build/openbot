@@ -31,8 +31,8 @@ export type RequestStatus = typeof RequestStatus.Type
 
 /**
  * An Agent tried to use a capability that no Grant or Rule covers.
- * The request waits for the decider above the Agent: its owning Agent, then the Main Agent,
- * then the person.
+ * The request waits for the decider above the Agent: its owning Agent, then the Agent above
+ * that, up to the top Agent of the tree. Then it waits for the person.
  */
 export const CapabilityRequest = Schema.Struct({
 	id: Schema.String,

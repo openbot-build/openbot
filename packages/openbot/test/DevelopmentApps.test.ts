@@ -11,6 +11,7 @@ import { Scenarios } from "../src/app/DevelopmentScenarios.ts"
 import { Business } from "../src/app/DevelopmentBusiness.ts"
 import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Postgres from "./PostgresTest.ts"
+import * as DefaultAgent from "./DefaultAgent.ts"
 
 test("development Apps show protocol, requirement, expiry and cleanup failures through the standard APIs", async () => {
 	const database = await Postgres.start()
@@ -116,6 +117,13 @@ test("development Apps show protocol, requirement, expiry and cleanup failures t
 					business.executions(ownerKey(memberOf(account))),
 				),
 			)
+		await DefaultAgent.ensure((path, method, payload) =>
+			fetch(address + path, {
+				method,
+				headers,
+				...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+			}),
+		)
 		const created = await post("/v1/sessions", {
 			settings: {
 				model: {

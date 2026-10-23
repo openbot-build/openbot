@@ -32,7 +32,7 @@ OpenBot 按下面的顺序检查每次尝试。第一个能做出决定的步骤
 1. **成员的策略。** Agent 能做的事永远不会超过它所代表的成员。如果成员的[权限](/zh-cn/docs/permissions)，或者启动这项工作的令牌不允许，调用就会被拒绝。这一步永远不会交给决策者。在 [Channel](/zh-cn/docs/channels) 中，这个成员是写下这个 Turn 的消息的人。
 2. **Grant。** [Grant](/zh-cn/docs/rules#grant)（授权）是保存下来的决定。拒绝的 Grant 优先于允许的 Grant。
 3. **Rule。** 一个评判模型会阅读这个 Agent 的 [Rule](/zh-cn/docs/rules)（规则），规则用自然语言写成。只有评判模型引用了的 Rule 才能允许或拒绝。
-4. **上方的决策者。** OpenBot 创建一个 Request。决策者是这个 Agent 所有者链中的所有者。对于 Main Agent，决策者就是人本身。
+4. **上方的决策者。** OpenBot 创建一个 Request。决策者是这个 Agent 所有者链中的所有者。对于顶层 Agent，决策者就是人本身。
 
 有些调用不需要决定：组织标记为读取的工具调用、为同一 Session 中的 Session Agent 做的工作，以及为这个 Agent 自己拥有的 Agent 做的工作。
 
@@ -40,16 +40,15 @@ OpenBot 按下面的顺序检查每次尝试。第一个能做出决定的步骤
 
 ### 决策者链
 
-每个 Agent 都有一条**所有者链**（owner chain）。它从人开始，经过一个 Main Agent，一直到这个 Agent，比如 **人 → Main → Programmer → Session Agent**。各步如下：
+每个 Agent 都有一条**所有者链**（owner chain）。它从人开始，经过一个顶层 Agent，一直到这个 Agent，比如 **人 → Assistant → Programmer → Session Agent**。各步如下：
 
 - Session Agent 属于它所在 Session 的 Agent。
 - 由某个 Agent 拥有的 Agent 属于那个 Agent。
-- 其他长期 Agent 和共享 Agent 属于与它们一起工作的那个人的 Main Agent。
-- Main Agent 属于它的人。
+- 顶层 Agent（成员的长期 Agent 或共享 Agent）属于与它一起工作的人。
 
 请求沿着所有者链向上走，而不是沿着工作传来的路径走。所以，Session Agent 的请求会先到 Programmer，即使是人直接把工作交给了这个 Session Agent。请求中的 `chain` 从顶部开始列出所有者链，最后是提出请求的 Agent。已归档的 Agent 不会列出。
 
-决策者只能允许它自己能做的事。如果 Programmer 同意，但它自己没有这项能力，请求会带着 Programmer 的支持继续上交给 Main，再交给人。当上方有人允许时，途中的每个 Agent 都会得到一个 Grant，范围由它自己选择。
+决策者只能允许它自己能做的事。如果 Programmer 同意，但它自己没有这项能力，请求会带着 Programmer 的支持继续上交给 Assistant，再交给人。当上方有人允许时，途中的每个 Agent 都会得到一个 Grant，范围由它自己选择。
 
 Agent 在一个简短的**审查 Session**（review Session）中做决定。它只读取自己的角色、自己的记忆、它给出的任务说明，以及这个请求。它不读取自己很长的历史。审查 Session 的 `kind` 为 `"review"`，做出决定后会被归档。如果审查结束时没有做出决定，请求会交给下一个决策者。
 
@@ -70,7 +69,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		"capability": { "action": "apps.call", "target": "conn-7/send_email" },
 		"reason": "Send the meeting notes to the team.",
 		"approver": { "_tag": "Person", "userId": "u-1" },
-		"chain": ["agt_main…", "agt_5c0e…"],
+		"chain": ["agt_3a9d…", "agt_5c0e…"],
 		"session": "c81d…",
 		"turn": "t-77",
 		"toolCallId": "call-9",

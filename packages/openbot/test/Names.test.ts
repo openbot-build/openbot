@@ -11,6 +11,7 @@ test(
 		const host = await BrowserHost.start({ publicOrigin })
 		try {
 			const alice = await host.login("alice")
+			await host.defaultAgent(alice.session)
 			const account = withCookie({ address: host.address, publicOrigin })
 			const keyed = withToken(host.address)
 

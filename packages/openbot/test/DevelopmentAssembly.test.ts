@@ -34,6 +34,7 @@ import * as Server from "../dist/app/Server.js"
 import * as DevelopmentModel from "../src/app/DevelopmentModel.ts"
 import * as DatabasePostgres from "../dist/database/DatabasePostgres.js"
 import * as PostgresTest from "./PostgresTest.ts"
+import * as DefaultAgent from "./DefaultAgent.ts"
 
 const settings = (databaseUrl: string) => ({
 	host: "127.0.0.1",
@@ -117,6 +118,13 @@ test(
 				origin: options.auth.publicOrigin,
 				"content-type": "application/json",
 			}
+			await DefaultAgent.ensure((path, method, payload) =>
+				fetch(address + path, {
+					method,
+					headers,
+					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+				}),
+			)
 			const created = await fetch(address + "/v1/sessions", {
 				method: "POST",
 				headers,

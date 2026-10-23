@@ -14,6 +14,7 @@ test(
 		try {
 			const alice = await host.login("alice")
 			const bob = await host.login("bob")
+			await host.defaultAgent(alice.session)
 			const account = withCookie({ address: host.address, publicOrigin })
 			const keyed = withToken(host.address)
 

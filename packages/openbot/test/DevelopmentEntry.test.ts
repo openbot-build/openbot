@@ -11,6 +11,7 @@ import {
 } from "@openbot-build/api"
 import { Schema } from "effect"
 import * as PostgresTest from "./PostgresTest.ts"
+import * as DefaultAgent from "./DefaultAgent.ts"
 
 test(
 	"built development entry migrates and runs, and production keeps missing-model behavior",
@@ -132,8 +133,17 @@ test(
 					origin: publicOrigin,
 					"content-type": "application/json",
 				}
-				const create = async (address: string) =>
-					Schema.decodeUnknownSync(SessionView)(
+				const create = async (address: string) => {
+					await DefaultAgent.ensure((path, method, payload) =>
+						fetch(address + path, {
+							method,
+							headers,
+							...(payload === undefined
+								? {}
+								: { body: JSON.stringify(payload) }),
+						}),
+					)
+					return Schema.decodeUnknownSync(SessionView)(
 						await (
 							await fetch(address + "/v1/sessions", {
 								method: "POST",
@@ -142,6 +152,7 @@ test(
 							})
 						).json(),
 					)
+				}
 				const discover = (address: string, input: string) =>
 					fetch(address + "/v1/apps/discover", {
 						method: "POST",

@@ -89,7 +89,7 @@ description: 权限组、策略、角色和资源键。
 | 一个模型提供方   | `openbot.org.<org>.model.<provider>`                    |
 | 整个平台         | `openbot.platform`                                      |
 
-由另一个 Agent 拥有的 Agent，使用其所有者树最顶层的成员或组织的键。所以 `openbot.org.<org>.user.<user>.agent.<agent>` 也是该成员的 Main Agent 所拥有的 Agent 的键。当一个 Agent 创建或提升另一个 Agent 时，它所服务的成员需要在那个位置上拥有 `agents.write`。
+由另一个 Agent 拥有的 Agent，使用其所有者树最顶层的成员或组织的键。所以 `openbot.org.<org>.user.<user>.agent.<agent>` 也是该成员的顶层 Agent 所拥有的 Agent 的键。当一个 Agent 创建或提升另一个 Agent 时，它所服务的成员需要在那个位置上拥有 `agents.write`。
 
 一个键涵盖它自己，以及它下面的所有键。所以 `openbot.org.<org>` 涵盖组织中的一切，`openbot.org.<org>.user.<user>` 涵盖一个成员的一切。
 

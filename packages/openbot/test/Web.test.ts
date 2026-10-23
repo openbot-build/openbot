@@ -6,7 +6,6 @@ import {
 	SessionView,
 	SessionResponseEvent,
 	RequestsApi,
-	AgentsApi,
 } from "@openbot-build/api"
 import { AiError, LanguageModel, Response } from "effect/ai"
 import { Timeline, Session } from "@openbot-build/core"
@@ -22,6 +21,8 @@ test(
 		try {
 			const alice = await host.login("alice"),
 				bob = await host.login("bob")
+			const aliceAgent = await host.defaultAgent(alice.session)
+			await host.defaultAgent(bob.session)
 			const request = (
 				credential: Redacted.Redacted<string>,
 				path: string,
@@ -406,12 +407,8 @@ test(
 			).json()
 			assert.equal(old.response.id, completed.response!.id)
 			assert.equal(old.response.version, completed.response!.version)
-			// Sessions without an Agent belong to the Main Agent of the member.
-			const agents = Schema.decodeUnknownSync(Schema.Array(AgentsApi.Agent))(
-				await (await request(alice.session, "/v1/agents")).json(),
-			)
-			assert.equal(agents[0]?.kind, "main")
-			assert.equal(agents[0]?.id, initial.agent)
+			// Sessions without an Agent belong to the default Agent of the member.
+			assert.equal(initial.agent, aliceAgent)
 			assert.equal(
 				(await request(alice.session, path + "/merge", "POST", {})).status,
 				404,
@@ -504,6 +501,7 @@ test(
 		})
 		try {
 			const account = await host.login("stream-observer")
+			await host.defaultAgent(account.session)
 			const request = (path: string, payload?: unknown) =>
 				fetch(host.address + path, {
 					method: payload === undefined ? "GET" : "POST",
