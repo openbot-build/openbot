@@ -15,7 +15,7 @@ import * as Timeline from "../timeline/Timeline.ts"
 import * as TimelineState from "../timeline/TimelineState.ts"
 import { PromptJson } from "../store/PromptCodec.ts"
 import type * as SessionStore from "../store/SessionStore.ts"
-import type * as Agent from "../agent/Agent.ts"
+import type * as Bot from "../bot/Bot.ts"
 import type * as ContextCompaction from "../context/ContextCompaction.ts"
 export { Id, Revision } from "./SessionIdentity.ts"
 
@@ -157,7 +157,7 @@ export interface RuntimeOptions<
 	HostTools extends Record<string, Tool.Any> = {},
 > {
 	readonly store: SessionStore.Store<P>
-	readonly agent: Agent.Definition<Tools, E, R, BuildE, BuildR, HostTools>
+	readonly bot: Bot.Definition<Tools, E, R, BuildE, BuildR, HostTools>
 }
 export interface Runtime<
 	P = {},
@@ -171,39 +171,35 @@ export interface Runtime<
 		input: Input,
 	) => Effect.Effect<
 		View<P>,
-		RuntimeError | Agent.ExecutionError<Tools, E>,
-		Agent.RuntimeServices<Tools, R>
+		RuntimeError | Bot.ExecutionError<Tools, E>,
+		Bot.RuntimeServices<Tools, R>
 	>
 	readonly stream: (
 		input: Input,
 	) => Stream.Stream<
-		Agent.Event<
+		Bot.Event<
 			Toolkit.MergedTools<[Toolkit.Toolkit<Tools>, Toolkit.Toolkit<HostTools>]>,
 			P
 		>,
-		RuntimeError | Agent.ExecutionError<Tools, E>,
-		Agent.RuntimeServices<Tools, R>
+		RuntimeError | Bot.ExecutionError<Tools, E>,
+		Bot.RuntimeServices<Tools, R>
 	>
 	readonly start: (
 		input: Input,
-	) => Effect.Effect<Receipt, RuntimeError, Agent.RuntimeServices<Tools, R>>
+	) => Effect.Effect<Receipt, RuntimeError, Bot.RuntimeServices<Tools, R>>
 	readonly startAction: (
 		input: ActionInput,
-	) => Effect.Effect<
-		ActionReceipt,
-		RuntimeError,
-		Agent.ActionServices<Tools, R>
-	>
+	) => Effect.Effect<ActionReceipt, RuntimeError, Bot.ActionServices<Tools, R>>
 	/** Like resolve, for a Turn that runs a host-selected action. */
 	readonly resolveAction: (
 		input: ResolveInput,
-	) => Effect.Effect<Receipt, RuntimeError, Agent.ActionServices<Tools, R>>
+	) => Effect.Effect<Receipt, RuntimeError, Bot.ActionServices<Tools, R>>
 	readonly runQueued: (
 		session: Id,
 	) => Effect.Effect<
 		Option.Option<Receipt>,
 		RuntimeError,
-		Agent.RuntimeServices<Tools, R>
+		Bot.RuntimeServices<Tools, R>
 	>
 	readonly steer: (input: {
 		readonly session: Id
@@ -235,7 +231,7 @@ export interface Runtime<
 	 */
 	readonly resolve: (
 		input: ResolveInput,
-	) => Effect.Effect<Receipt, RuntimeError, Agent.RuntimeServices<Tools, R>>
+	) => Effect.Effect<Receipt, RuntimeError, Bot.RuntimeServices<Tools, R>>
 	readonly resume: (session: Id) => Effect.Effect<View<P>, RuntimeError>
 	readonly status: (session: Id) => Effect.Effect<View<P>, RuntimeError>
 	readonly wait: (input: {
@@ -248,7 +244,7 @@ export interface Runtime<
 		readonly session: Id
 		readonly after?: Revision
 	}) => Stream.Stream<
-		Agent.Event<
+		Bot.Event<
 			Toolkit.MergedTools<[Toolkit.Toolkit<Tools>, Toolkit.Toolkit<HostTools>]>,
 			P
 		>,

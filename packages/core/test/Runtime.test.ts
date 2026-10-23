@@ -32,7 +32,7 @@ const setup = Effect.gen(function* () {
 		definition: definition,
 		persistence: yield* MemoryPersistence.make,
 	})
-	const runtime = yield* SessionRuntime.make({ store: runtimeStore, agent: {} })
+	const runtime = yield* SessionRuntime.make({ store: runtimeStore, bot: {} })
 	const view = yield* runtimeStore.create({
 		metadata: {},
 		value: TimelineState.initial({}),

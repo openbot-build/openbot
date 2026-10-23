@@ -168,7 +168,7 @@ test(
 			platformAdmins: ["root@example.com"],
 			registryModels: true,
 			platformFetch: providerFetch,
-			agents: { memory: false },
+			bots: { memory: false },
 		})
 		try {
 			const send = withCookie({ address: host.address, publicOrigin })
@@ -194,7 +194,7 @@ test(
 			const alice = await host.login("alice")
 			const bob = await host.login("bob")
 			const root = await host.login("root")
-			await host.defaultAgent(alice.session)
+			await host.defaultBot(alice.session)
 			const organizationId = alice.identity.organizationId
 
 			// The platform shares a model that it pays for.
@@ -337,7 +337,7 @@ test(
 			assert.equal(first["sessionId"], platformSession.split("/").at(-1))
 			assert.equal(first["userId"], alice.identity.userId)
 			assert.equal(typeof first["turnId"], "string")
-			assert.equal(typeof first["agentId"], "string")
+			assert.equal(typeof first["botId"], "string")
 			assert.equal(first["providerOwner"], "platform")
 			assert.equal(first["inputUncached"], 800)
 			assert.equal(first["inputCacheRead"], 200)
@@ -528,7 +528,7 @@ test(
 			assert.deepEqual(platform.tokenRate, {
 				organization: null,
 				member: null,
-				agent: null,
+				bot: null,
 				token: null,
 			})
 			await json(
@@ -537,7 +537,7 @@ test(
 					tokenRate: {
 						organization: { tokensPerSecond: 20_000, burstTokens: 1000 },
 						member: null,
-						agent: null,
+						bot: null,
 						token: null,
 					},
 				}),
@@ -551,7 +551,7 @@ test(
 					tokenRate: {
 						organization: null,
 						member: { tokensPerSecond: 10_000, burstTokens: 1000 },
-						agent: null,
+						bot: null,
 						token: null,
 					},
 				}),

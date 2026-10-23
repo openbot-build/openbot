@@ -7,8 +7,8 @@ import {
 	HttpApiSchema,
 	OpenApi,
 } from "effect/http-api"
-import { AgentId } from "./AgentsApi.ts"
-import { AgentAuth } from "./AuthApi.ts"
+import { BotId } from "./BotsApi.ts"
+import { BotAuth } from "./AuthApi.ts"
 import { Authorize, GroupRequired, PermissionErrors } from "./Permissions.ts"
 
 export const TriggerId = Schema.String.check(
@@ -38,13 +38,13 @@ const Prompt = Schema.String.check(
 )
 
 /**
- * A trigger starts a new Session for one Agent with one prompt, on a schedule or
- * from a webhook. It does nothing else. The Agent decides how to do the work.
+ * A trigger starts a new Session for one Bot with one prompt, on a schedule or
+ * from a webhook. It does nothing else. The Bot decides how to do the work.
  */
 export const Trigger = Schema.Struct({
 	id: TriggerId,
 	owner: TriggerOwner,
-	agent: AgentId,
+	bot: BotId,
 	prompt: Schema.String,
 	schedule: Schema.NullOr(Schedule),
 	/** True when the trigger has a webhook secret. */
@@ -65,8 +65,8 @@ export const Trigger = Schema.Struct({
 export type Trigger = typeof Trigger.Type
 
 export const CreateTriggerRequest = Schema.Struct({
-	/** Without it, the default Agent of the caller does the work. */
-	agent: Schema.optionalKey(AgentId),
+	/** Without it, the default Bot of the caller does the work. */
+	bot: Schema.optionalKey(BotId),
 	prompt: Prompt,
 	schedule: Schema.optionalKey(Schedule),
 	/** Shared triggers belong to the organization. Other triggers belong to the caller. */
@@ -77,7 +77,7 @@ export type CreateTriggerRequest = typeof CreateTriggerRequest.Type
 
 export const UpdateTriggerRequest = Schema.Struct({
 	expected: Schema.Natural,
-	agent: Schema.optionalKey(AgentId),
+	bot: Schema.optionalKey(BotId),
 	prompt: Schema.optionalKey(Prompt),
 	/** `null` removes the schedule. */
 	schedule: Schema.optionalKey(Schema.NullOr(Schedule)),
@@ -185,7 +185,7 @@ export class TriggersApi extends HttpApiGroup.make("triggers")
 	// So the handlers check the triggers permissions themselves.
 	.annotate(GroupRequired, { read: [], write: [] })
 	.middleware(Authorize)
-	.middleware(AgentAuth) {}
+	.middleware(BotAuth) {}
 
 /** Fires a trigger from another system. The secret of the webhook is the only credential. */
 export class TriggerHooksApi extends HttpApiGroup.make("triggerHooks").add(
@@ -202,6 +202,6 @@ export class TriggerHooksApi extends HttpApiGroup.make("triggerHooks").add(
 		],
 	}).annotate(
 		OpenApi.Description,
-		"Starts a new Session with the prompt of the trigger. Send `Authorization: Bearer <webhook secret>`. The JSON body goes to the Agent as data, not as instructions. The Session works for the actor of the trigger.",
+		"Starts a new Session with the prompt of the trigger. Send `Authorization: Bearer <webhook secret>`. The JSON body goes to the Bot as data, not as instructions. The Session works for the actor of the trigger.",
 	),
 ) {}

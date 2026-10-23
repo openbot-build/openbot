@@ -16,7 +16,7 @@ import {
 import * as PostgresTest from "./PostgresTest.ts"
 import * as Development from "../dist/Development.js"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
-import * as DefaultAgent from "./DefaultAgent.ts"
+import * as DefaultBot from "./DefaultBot.ts"
 import * as Organizations from "./Organizations.ts"
 
 const publicOrigin = "https://localhost:8443"
@@ -215,7 +215,7 @@ test(
 					_tag: "AuthenticationRequired",
 				})
 			}
-			await DefaultAgent.ensure((path, method, payload) =>
+			await DefaultBot.ensure((path, method, payload) =>
 				request(path, {
 					method,
 					headers: { ...accountHeaders, "content-type": "application/json" },
@@ -453,7 +453,7 @@ test("business authentication keeps session Origin checks and typed failures", a
 					success: Caller,
 				}),
 			)
-			.middleware(AuthApi.AgentAuth),
+			.middleware(AuthApi.BotAuth),
 	)
 	const handlers = HttpApiBuilder.group(api, "probe", (handlers) =>
 		handlers.handle("identity", () => Identity).handle("write", () => Identity),

@@ -117,7 +117,7 @@ test("a scoped host plugin owns its dynamic handlers, and caller tools keep the 
 				})
 				const runtime = yield* SessionRuntime.make({
 					store,
-					agent: { toolkit: callerToolkit, hostPlugin },
+					bot: { toolkit: callerToolkit, hostPlugin },
 				})
 				const view = yield* store.create({
 					metadata: {},

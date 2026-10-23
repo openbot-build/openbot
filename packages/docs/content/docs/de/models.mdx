@@ -3,7 +3,7 @@ title: Models
 description: Verbinde OpenBot mit Sprachmodellen, über Models und Model Providers.
 ---
 
-Ein Agent braucht ein Sprachmodell, um zu arbeiten. OpenBot enthält kein Modell. Du verbindest eins.
+Ein Bot braucht ein Sprachmodell, um zu arbeiten. OpenBot enthält kein Modell. Du verbindest eins.
 OpenBot speichert dafür zwei Arten von Einträgen:
 
 - Ein **Model** beschreibt ein Sprachmodell, zum Beispiel `gpt-5`: seinen Namen, seine Optionen und seine Grenzen. Ein Model gehört nicht zu einem Anbieter.
@@ -22,7 +22,7 @@ Eine Organization kann ein Model eines Anbieters nur nutzen, wenn sie sowohl den
 
 Jedes Model hat einen von zwei Typen:
 
-- Ein `language`-Model schreibt Text und ruft Werkzeuge auf. Es führt Sessions aus, beurteilt Rules und lernt Agent-Memory.
+- Ein `language`-Model schreibt Text und ruft Werkzeuge auf. Es führt Sessions aus, beurteilt Rules und lernt Bot-Memory.
 - Ein `decision`-Model wählt nur eine Antwort aus einer festen Liste. Es schreibt keinen Text. Jev von TypeSafe ist ein Beispiel. Siehe [Decision-Model](#decision-model).
 
 Wenn du OpenBot aus Code startest, kannst du auch eingebaute Models angeben. Siehe [Eingebaute Models](#eingebaute-models).
@@ -135,7 +135,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 Der nächste Aufruf eines Modells nach einer Änderung nutzt den neuen Schlüssel, Endpoint oder die neuen Verknüpfungen. OpenBot baut jedes Model einmal und baut es neu, wenn sich sein Anbieter ändert.
 
-Du kannst einen Anbieter nicht entfernen, solange `rulesModel`, `agentMemoryModel` oder `decisionModel` in den [Einstellungen der Organization](/de/docs/organization#einstellungen) ihn nennt. OpenBot gibt `409` mit `ModelProviderInUse` zurück. Ändere zuerst die Einstellung.
+Du kannst einen Anbieter nicht entfernen, solange `rulesModel`, `botMemoryModel` oder `decisionModel` in den [Einstellungen der Organization](/de/docs/organization#einstellungen) ihn nennt. OpenBot gibt `409` mit `ModelProviderInUse` zurück. Ändere zuerst die Einstellung.
 
 ---
 
@@ -200,20 +200,20 @@ Eine Auswahl eines Model nennt den Anbieter und die Model-ID:
 
 OpenBot wählt nie ein Model für dich. Es gibt kein Standard-Model. Jede Nutzung nennt ihr eigenes Model:
 
-- **Eine neue Session** nutzt `settings.model` aus der Anfrage. Ohne diesen Wert nutzt die Session das `model` ihres [Agents](/de/docs/agents). Wenn keiner von beiden ein Model gibt, gibt OpenBot `400` mit `SessionModelInvalid` und dem Grund `missing` zurück. Ein neuer Agent hat kein Model, wenn du ihm keines gibst. Setze also sein `model`, wenn du ihn erstellst, oder später mit `PATCH /v1/agents/:id`.
-- **Das Prüf-Modell für [Rules](/de/docs/rules)** nutzt `rulesModel` in den [Einstellungen der Organization](/de/docs/organization#einstellungen). Wenn es `null` ist, gibt das Prüf-Modell keine Antwort. Dann entscheidet eine Person oder ein Agent.
-- **[Agent-Memory](/de/docs/memory#agent-memory)** nutzt `agentMemoryModel` in denselben Einstellungen. Wenn es `null` ist, lernen Agents nichts.
+- **Eine neue Session** nutzt `settings.model` aus der Anfrage. Ohne diesen Wert nutzt die Session das `model` ihres [Bots](/de/docs/bots). Wenn keiner von beiden ein Model gibt, gibt OpenBot `400` mit `SessionModelInvalid` und dem Grund `missing` zurück. Ein neuer Bot hat kein Model, wenn du ihm keines gibst. Setze also sein `model`, wenn du ihn erstellst, oder später mit `PATCH /v1/bots/:id`.
+- **Das Prüf-Modell für [Rules](/de/docs/rules)** nutzt `rulesModel` in den [Einstellungen der Organization](/de/docs/organization#einstellungen). Wenn es `null` ist, gibt das Prüf-Modell keine Antwort. Dann entscheidet eine Person oder ein Bot.
+- **[Bot-Memory](/de/docs/memory#bot-memory)** nutzt `botMemoryModel` in denselben Einstellungen. Wenn es `null` ist, lernen Bots nichts.
 
-`rulesModel` und `agentMemoryModel` müssen `language`-Models sein. Der Katalog nennt den `type` jedes Model, und eine Session kann nur `language`-Models wählen.
+`rulesModel` und `botMemoryModel` müssen `language`-Models sein. Der Katalog nennt den `type` jedes Model, und eine Session kann nur `language`-Models wählen.
 
-Ältere Versionen von OpenBot hatten `defaultModel` und `helperModel`. Beim Update gibt OpenBot das alte `defaultModel` jedem Agent, der kein Model hat. `rulesModel` und `agentMemoryModel` bekommen das alte Helfer-Modell: `helperModel`, sonst `defaultModel`. Wenn beide `null` waren, bleiben die neuen Werte leer, und du musst sie setzen.
+Ältere Versionen von OpenBot hatten `defaultModel` und `helperModel`. Beim Update gibt OpenBot das alte `defaultModel` jedem Bot, der kein Model hat. `rulesModel` und `botMemoryModel` bekommen das alte Helfer-Modell: `helperModel`, sonst `defaultModel`. Wenn beide `null` waren, bleiben die neuen Werte leer, und du musst sie setzen.
 
-So gibst du zum Beispiel einem Agent ein Model. Schicke seine aktuelle `revision` als `expected`:
+So gibst du zum Beispiel einem Bot ein Model. Schicke seine aktuelle `revision` als `expected`:
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
   -d '{"expected":0,"model":{"_tag":"Config.Selection","provider":"prov_4c1e...","model":"qwen3-32b"}}' \
-  https://api.example.com/v1/agents/$AGENT_ID
+  https://api.example.com/v1/bots/$BOT_ID
 ```
 
 Eine Session kann ihre eigene Auswahl speichern. Schicke die aktuelle Revision der Session als `expected`:

@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "ஹெட்லெஸ், API-ஃபர்ஸ்ட் Agent தளம்.",
+	description: "ஹெட்லெஸ், API-ஃபர்ஸ்ட் Bot தளம்.",
 	nav: {
 		label: "தளம்",
 		docs: "ஆவணங்கள்",
@@ -10,10 +10,10 @@ export default {
 	},
 	hero: {
 		title: [
-			"நீங்கள் அழைக்கக்கூடிய Agents.",
+			"நீங்கள் அழைக்கக்கூடிய Bots.",
 			"நீங்கள் சரிபார்க்கக்கூடிய முடிவுகள்.",
 		],
-		body: "OpenBot என்பது பயனர் இடைமுகம் இல்லாத ஓப்பன் சோர்ஸ் Agent தளம். HTTP மூலம் Agent-க்கு வேலை கொடுக்கிறீர்கள்.",
+		body: "OpenBot என்பது பயனர் இடைமுகம் இல்லாத ஓப்பன் சோர்ஸ் Bot தளம். HTTP மூலம் Bot-க்கு வேலை கொடுக்கிறீர்கள்.",
 		quickStart: "விரைவான தொடக்கம்",
 		apiReference: "API குறிப்பு",
 		visual: "ஒரு Turn தொடங்குங்கள்",
@@ -68,7 +68,7 @@ export default {
 			},
 			{
 				title: "திறந்த Apps",
-				text: "வெளியீட்டாளர்கள் OpenBot App Protocol மூலம் திறந்த வலையில் வைக்கும் Apps-ஐ Agents கண்டுபிடித்துப் பயன்படுத்துகின்றன.",
+				text: "வெளியீட்டாளர்கள் OpenBot App Protocol மூலம் திறந்த வலையில் வைக்கும் Apps-ஐ Bots கண்டுபிடித்துப் பயன்படுத்துகின்றன.",
 			},
 			{
 				title: "உங்கள் மாடல்கள்",

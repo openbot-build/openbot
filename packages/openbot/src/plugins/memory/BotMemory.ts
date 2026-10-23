@@ -1,10 +1,10 @@
-import { AgentMemory as Api } from "@openbot-build/api"
+import { BotMemory as Api } from "@openbot-build/api"
 import { Array as Arr, HashMap, HashSet, Option, Schema } from "effect"
 import * as Audience from "./Audience.ts"
 
 /**
- * Agent memory is what one Agent learns over many Sessions: one pool of tagged entries,
- * kept by a memory Agent. The schemas are part of the HTTP contract, so they live in the api package.
+ * Bot memory is what one Bot learns over many Sessions: one pool of tagged entries,
+ * kept by a memory Bot. The schemas are part of the HTTP contract, so they live in the api package.
  */
 export const Layer = Api.Layer
 export type Layer = Api.Layer
@@ -23,7 +23,7 @@ export type LogEntry = Api.LogEntry
 
 const sourceKey = (source: ItemSource) => source.session + "/" + source.item
 
-/** One Item that the memory Agent may learn from. */
+/** One Item that the memory Bot may learn from. */
 export interface Evidence {
 	readonly source: ItemSource
 	readonly role: "user" | "assistant" | "tool"
@@ -61,7 +61,7 @@ export const isActive = (entry: Entry) =>
 export const topicsOf = (entry: Entry) =>
 	entry.tags.filter((tag) => !Audience.isSystem(tag))
 
-/** One change that the memory Agent asks for. `ref` names a new entry within one answer. */
+/** One change that the memory Bot asks for. `ref` names a new entry within one answer. */
 export const Operation = Schema.TaggedUnion({
 	AddFact: {
 		ref: Schema.String,
@@ -83,7 +83,7 @@ export const Operation = Schema.TaggedUnion({
 		add: Schema.Array(TopicTag),
 		remove: Schema.Array(TopicTag),
 	},
-	/** `agent`, `person:<userId>` or `channel:<channelId>`. */
+	/** `bot`, `person:<userId>` or `channel:<channelId>`. */
 	Widen: {
 		id: Schema.String,
 		audience: Schema.String,
@@ -96,7 +96,7 @@ export const Plan = Schema.Struct({ operations: Schema.Array(Operation) })
 export type Plan = typeof Plan.Type
 
 const parseAudience = (text: string): Option.Option<Audience.Audience> =>
-	text === "agent"
+	text === "bot"
 		? Option.some(Audience.everyone)
 		: text.startsWith("person:") && text.length > "person:".length
 			? Option.some(Audience.person(text.slice("person:".length)))
@@ -114,7 +114,7 @@ export interface Applied {
 }
 
 /**
- * Checks and applies the operations of the memory Agent. Each one that breaks a rule is left out:
+ * Checks and applies the operations of the memory Bot. Each one that breaks a rule is left out:
  * - A fact needs sources from the evidence, and not only results from Apps.
  * - An observation needs active entries as support. Its tags of OpenBot come from them.
  * - Only people change pinned and retracted entries.
@@ -150,7 +150,7 @@ export const apply = (input: {
 		})
 		const resolve = (id: string) =>
 			Option.getOrElse(HashMap.get(state.refs, id), () => id)
-		// The memory Agent may change only active entries that it learned itself.
+		// The memory Bot may change only active entries that it learned itself.
 		const own = (id: string) =>
 			HashMap.get(state.entries, resolve(id)).pipe(
 				Option.filter((entry) => isActive(entry) && entry.layer !== "pinned"),

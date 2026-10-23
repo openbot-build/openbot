@@ -1,0 +1,166 @@
+---
+title: Bots
+description: Halte ein Team aus dauerhaften Bots. Jeder hat seine eigene Rolle, seinen Kontext und sein Gedächtnis.
+---
+
+Ein **Bot** ist ein Arbeiter mit einer Rolle, zum Beispiel ein Programmierer, ein Autor oder ein Designer. Jeder Bot hat seine eigenen Anweisungen, seine eigenen Sessions und sein eigenes Langzeitgedächtnis. Bots geben sich gegenseitig Arbeit. So bleibt jeder bei seiner eigenen Aufgabe.
+Diese Seite zeigt die Arten von Bots und die Routen unter `/v1/bots`. Jede Route nimmt ein User-Token oder das Session-Cookie an. Siehe [Authentifizierung](/de/docs/authentication).
+
+---
+
+## Zwei Arten von Bots
+
+| Art          | Besitzer                                          | Lebt                                    | Wofür er da ist                                                                    |
+| ------------ | ------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------- |
+| `persistent` | Ein Member, die Organisation oder ein anderer Bot | Bis du ihn archivierst                  | Ein dauerhafter Arbeiter mit einer Rolle. Er lernt mit der Zeit aus seiner Arbeit. |
+| `session`    | Eine Session                                      | So lange wie die Session, der er gehört | Ein Helfer für einen Arbeitsstrang. Er behält seinen Kontext in dieser Session.    |
+
+Ein **oberster Bot** ist ein dauerhafter Bot, der einem Member oder der Organisation gehört, nicht einem anderen Bot. Du kannst einen obersten Bot als deinen [Standard-Bot](#dein-standard-bot) wählen.
+
+Ein **Session Bot** ist "fast dauerhaft". Ein Bot startet ihn während der Arbeit mit einem Werkzeug. Der Session Bot behält seinen Kontext, solange seine Session besteht. So kann der Bot ihm viele Male Arbeit geben. Wenn du die Session löschst, werden auch ihre Session Bots archiviert. Du kannst einen nützlichen Session Bot zu einem dauerhaften Bot [machen](#einen-session-bot-dauerhaft-machen).
+
+Ein Bot kann auch selbst dauerhafte Bots besitzen. Siehe [Bots, die Bots besitzen](#bots-die-bots-besitzen).
+
+Jede Session gehört zu einem Bot. Siehe [Sessions](/de/docs/sessions). Wie Bots sich gegenseitig Arbeit geben, steht unter [Delegation](/de/docs/delegation).
+
+### Dein Standard-Bot
+
+Dein **Standard-Bot** arbeitet, wenn du eine Session oder einen Trigger ohne Bot erstellst. OpenBot erstellt keine Bots für dich. Ein neues Member hat also keinen Standard-Bot. Dann schlägt eine Session oder ein Trigger ohne Bot mit `400` und `BotInvalid` fehl.
+
+Um deinen Standard-Bot zu setzen, erstelle einen Bot. Schicke dann seine ID in deinen Member-Einstellungen:
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expectedVersion":0,"defaultBot":"bot_5c0e…"}' \
+  https://openbot.example.com/v1/me/settings
+```
+
+`expectedVersion` ist die `version` aus `GET /v1/me/settings`. Der Bot muss einer deiner eigenen obersten Bots oder ein gemeinsamer Bot sein, und du brauchst `bots.delegate` für ihn. Sonst gibt OpenBot `400` mit `SettingsInvalid` zurück. Sende `null`, um deinen Standard-Bot zu entfernen.
+
+Du kannst deinen Standard-Bot trotzdem archivieren. Danach schlägt eine Session oder ein Trigger ohne Bot fehl, bis du einen anderen Standard-Bot wählst.
+
+Ältere Versionen von OpenBot haben für jedes Member einen Main Bot erstellt. Beim Update wird jeder Main Bot ein normaler dauerhafter Bot und der Standard-Bot seines Members. Seine Sessions, sein Gedächtnis und seine Grants bleiben.
+
+### Keine Grenzen, die ein Bot kennt
+
+Bots haben keine Liste von Dingen, die sie tun dürfen. Ein Bot probiert es einfach. Wenn er zum ersten Mal etwas Neues versucht, zum Beispiel einen Bot erstellen oder ein App-Werkzeug aufrufen, entscheidet die Stelle über ihm. Siehe [Requests](/de/docs/requests). Die Entscheidungen werden gespeichert. So wachsen die Grenzen jedes Bots aus echter Arbeit.
+
+---
+
+## Einen Bot erstellen
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Programmer","role":"Writes and reviews TypeScript code","instructions":"Write small, tested changes. Explain each change in one short paragraph."}' \
+  https://api.example.com/v1/bots
+```
+
+| Feld           | Bedeutung                                                                                                         |
+| -------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `name`         | Pflicht. Ein kurzer Name. OpenBot entfernt Leerzeichen am Anfang und Ende. Der Rest muss 1 bis 100 Zeichen haben. |
+| `role`         | Pflicht. Was der Bot tut, in einer Zeile. Andere Bots lesen sie, um Arbeiter auszuwählen.                         |
+| `instructions` | Pflicht. Die dauerhaften Anweisungen des Bots, wie eine Stellenbeschreibung.                                      |
+| `model`        | Optional. Das Model der Sessions dieses Bots, wenn eine Session kein eigenes wählt.                               |
+| `planApproval` | Optional. Wie die Pläne dieses Bots erlaubt werden. Siehe [Plan-Modus](/de/docs/sessions#plan-modus).             |
+| `shared`       | Optional. `true` erstellt einen Bot der Organisation, den jedes Member nutzen kann.                               |
+| `bot`          | Optional. Die ID des Bots, dem der neue Bot gehört. Du kannst es nicht zusammen mit `shared` nutzen.              |
+
+OpenBot antwortet mit `201` und dem Bot:
+
+```json
+{
+	"id": "bot_5c0e…",
+	"kind": "persistent",
+	"owner": { "_tag": "Member", "userId": "u-1" },
+	"name": "Programmer",
+	"role": "Writes and reviews TypeScript code",
+	"instructions": "Write small, tested changes. …",
+	"archived": false,
+	"revision": 0,
+	"createdAt": 1792486800000,
+	"updatedAt": 1792486800000
+}
+```
+
+`owner` ist `Member`, `Organization`, `Session` oder `Bot`. Ein gemeinsamer Bot arbeitet mit den Berechtigungen und App-Verbindungen des Members, das ihn nutzt. Er arbeitet nie mit denen der Person, die ihn erstellt hat.
+
+## Bots auflisten, lesen und ändern
+
+`GET /v1/bots` listet deine eigenen Bots und die gemeinsamen Bots auf, die du nutzen darfst. Füge `?archived=false` hinzu, um archivierte Bots auszublenden. Füge `?session=<id>` hinzu, um die Session Bots einer Session aufzulisten. Füge `?bot=<id>` hinzu, um die Bots aufzulisten, die einem Bot gehören.
+
+`GET /v1/bots/:botId` gibt einen Bot zurück.
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expected":0,"instructions":"Write small changes with tests first."}' \
+  https://api.example.com/v1/bots/$BOT
+```
+
+`expected` ist die aktuelle `revision`. Du kannst `name` (mit denselben Regeln wie oben), `role`, `instructions`, `model` (sende `null`, um es zu entfernen) und `archived` ändern. Wenn du einen Bot archivierst, archiviert OpenBot auch jeden Bot, der ihm gehört, und die Bots darunter. Wenn du die Archivierung aufhebst, kommt nur dieser eine Bot zurück.
+
+## Einen Session Bot dauerhaft machen
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"expected":3}' \
+  https://api.example.com/v1/bots/$BOT/promote
+```
+
+Der Session Bot wird ein dauerhafter Bot des Members. Sende `bot` mit der ID eines Bots, um diesen Bot zu seinem Besitzer zu machen. OpenBot fügt auch die dauerhaften Einträge seines Session-Memorys zu seinem [Bot-Memory](/de/docs/memory#bot-memory) hinzu.
+
+Ein Bot kann einen Session Bot seiner eigenen Session mit dem Werkzeug `openbot_promote_bot` dauerhaft machen. Dann gehört er diesem Bot.
+
+---
+
+## Bots, die Bots besitzen
+
+Ein Bot kann dauerhafte Bots besitzen. So kann ein Bot sein eigenes Team bauen, und jedes Teammitglied behält sein eigenes Gedächtnis.
+
+- Ein Bot erstellt einen Bot, der ihm gehört, mit dem Werkzeug `openbot_create_bot`. Eine Person erstellt einen mit `POST /v1/bots` und dem Feld `bot`.
+- Ein Bot, den ein anderer Bot mit einem Werkzeug erstellt, also ein dauerhafter Bot oder ein Session Bot, bekommt das `model` des Bots, der ihn erstellt. Der Aufruf des Werkzeugs kann ein anderes `model` nennen.
+- Der Besitzer ist `{ "_tag": "Bot", "bot": "<owner ID>", "userId": "<member>" }`. `userId` ist das Member an der Spitze des Besitzer-Baums. Es ist `null`, wenn die Organisation den obersten Bot besitzt.
+- Ein Bot kann den Bots, die ihm gehören, ohne Request Arbeit geben.
+- Die **Besitzer-Kette** eines Bots geht über seine Besitzer nach oben bis zu einem obersten Bot und dann bis zur Person. Zum Beispiel: **Person → Assistant → Worker → Scout**. Requests eines Bots gehen diese Kette hinauf, auch wenn eine Person direkt mit dem Bot arbeitet. Siehe [Requests](/de/docs/requests#die-kette-der-entscheider).
+- Über einem obersten Bot steht die Person, die mit ihm arbeitet. Das gilt für deine eigenen obersten Bots und für gemeinsame Bots.
+
+---
+
+## Was ein Bot in jedem Turn weiß
+
+OpenBot fügt diese Dinge zu den Anweisungen jedes Turns hinzu:
+
+- den Namen, die Rolle und die Anweisungen des Bots,
+- die Person, mit der er gerade arbeitet, mit ihrem Namen und ihrer Member-ID. In einem [Channel](/de/docs/channels) ist es die Person, die die Nachricht des Turns geschrieben hat,
+- bei einer Session mit Arbeit von einem anderen Bot: wie er das Ergebnis zurückschickt,
+- dass er Erfahrung aus seiner früheren Arbeit mitbringt, und dass die aktuellen Anweisungen gegen sie gewinnen.
+
+Der [Memory-Bot](/de/docs/memory#bot-memory) kann der Eingabe des Turns auch hinzufügen, was hilft. Der Bot sieht die Ergänzungen als seine eigene Erfahrung. Er hat das Tool `confide`, und er kennt es nur als einen Ort, an dem er sagt, wie seine Arbeit läuft.
+
+Du kannst einen Bot auch mit Personen in anderen Organisationen [teilen](/de/docs/sharing). Sie bekommen einen verknüpften Bot mit `source`, der deinen Bot nutzt.
+
+---
+
+## Berechtigungen
+
+| Berechtigung    | Damit kannst du                                                          |
+| --------------- | ------------------------------------------------------------------------ |
+| `bots.read`     | Bots lesen, mit ihrem Memory, ihren Rules und Grants.                    |
+| `bots.write`    | Bots erstellen und ändern, mit ihrem Memory, ihren Rules und Grants.     |
+| `bots.delegate` | Einem Bot Arbeit geben, von einem Client oder von einem anderen Bot aus. |
+| `bots.share`    | Personen einladen, einen [Bot zu nutzen](/de/docs/sharing).              |
+
+Deine eigenen Bots liegen unter deinem Member-Schlüssel. Gemeinsame Bots liegen unter `openbot.org.<org>.bot`. Members dürfen gemeinsame Bots lesen und nutzen. Administratoren dürfen sie auch ändern und teilen. Siehe [Berechtigungen](/de/docs/permissions).
+
+## Fehler
+
+| Status | Fehler                  | Wann                                                                   |
+| ------ | ----------------------- | ---------------------------------------------------------------------- |
+| `400`  | `BotInvalid`            | Die Änderung ist nicht erlaubt, oder du hast keinen Standard-Bot.      |
+| `403`  | `PermissionDenied`      | Du darfst den Bot lesen, aber nicht ändern oder nutzen.                |
+| `404`  | `BotNotFound`           | Es gibt keinen Bot mit dieser ID, den du lesen darfst.                 |
+| `409`  | `BotConflict`           | `expected` ist veraltet. Lies den Bot neu und versuche es noch einmal. |
+| `503`  | `BotStorageUnavailable` | OpenBot erreicht seine Datenbank nicht.                                |

@@ -10,7 +10,7 @@ export interface Options {
 
 /**
  * Pauses idle Computers, and removes old pairings, old calls and the rights of
- * archived Agents. Each step is safe when many instances do it at the same time.
+ * archived Bots. Each step is safe when many instances do it at the same time.
  */
 export const layer = (options: Options = {}) =>
 	Layer.effectDiscard(

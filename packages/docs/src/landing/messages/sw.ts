@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "Jukwaa la Agent lisilo na kiolesura, linaloanza na API.",
+	description: "Jukwaa la Bot lisilo na kiolesura, linaloanza na API.",
 	nav: {
 		label: "Tovuti",
 		docs: "Nyaraka",
@@ -9,8 +9,8 @@ export default {
 		language: "Lugha",
 	},
 	hero: {
-		title: ["Agent unaoweza kuwaita.", "Matokeo unayoweza kukagua."],
-		body: "OpenBot ni jukwaa huria la Agent lisilo na kiolesura cha mtumiaji. Unampa Agent kazi kupitia HTTP.",
+		title: ["Bot unaoweza kuwaita.", "Matokeo unayoweza kukagua."],
+		body: "OpenBot ni jukwaa huria la Bot lisilo na kiolesura cha mtumiaji. Unampa Bot kazi kupitia HTTP.",
 		quickStart: "Anza haraka",
 		apiReference: "Marejeo ya API",
 		visual: "Anza Turn",
@@ -57,7 +57,7 @@ export default {
 			},
 			{
 				title: "App huria",
-				text: "Agent hupata na kutumia App ambazo wachapishaji huweka kwenye wavuti huria kwa OpenBot App Protocol.",
+				text: "Bot hupata na kutumia App ambazo wachapishaji huweka kwenye wavuti huria kwa OpenBot App Protocol.",
 			},
 			{
 				title: "Modeli zako",

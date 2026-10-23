@@ -18,7 +18,7 @@ export const SessionTest = <Tools extends Record<string, Tool.Any>, E, R>(
 		})
 		const runtime = yield* SessionRuntime.make({
 			store: runtimeStore,
-			agent: { plugin: plugin },
+			bot: { plugin: plugin },
 		})
 		const view = yield* runtimeStore.create({
 			metadata: {},

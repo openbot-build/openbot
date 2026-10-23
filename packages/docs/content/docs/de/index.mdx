@@ -3,10 +3,10 @@ title: Einführung
 description: Lerne OpenBot kennen.
 ---
 
-**OpenBot** ist eine Open-Source-Plattform für Agents. Sie hat keine eigene Benutzeroberfläche. Du nutzt sie über eine HTTP-API.
-Ein Agent ist ein Programm. Es bekommt ein Ziel in normaler Sprache, plant die Schritte, nutzt Werkzeuge und gibt ein Ergebnis zurück.
+**OpenBot** ist eine Open-Source-Plattform für Bots. Sie hat keine eigene Benutzeroberfläche. Du nutzt sie über eine HTTP-API.
+Ein Bot ist ein Programm. Es bekommt ein Ziel in normaler Sprache, plant die Schritte, nutzt Werkzeuge und gibt ein Ergebnis zurück.
 
-OpenBot führt die Arbeit der Agents auf einem Server aus und speichert den Verlauf. Bevor ein Agent eine neue Fähigkeit nutzt, fragt OpenBot die Menschen.
+OpenBot führt die Arbeit der Bots auf einem Server aus und speichert den Verlauf. Bevor ein Bot eine neue Fähigkeit nutzt, fragt OpenBot die Menschen.
 Den Client bringst du selbst mit: ein Skript, einen Backend-Dienst, einen Chat-Bot oder deine eigene Web- oder Mobil-App.
 
 ---
@@ -15,10 +15,10 @@ Den Client bringst du selbst mit: ein Skript, einen Backend-Dienst, einen Chat-B
 
 - Starte eine **Session** (Sitzung) und gib ihr Arbeit in **Turns** (Durchgängen). Lies die Antwort als eine Antwort oder als Live-Stream.
 - Jede Änderung kommt in die **Timeline** (Zeitleiste) der Session. Geh zu einem früheren Punkt zurück und probiere mit einem Fork (Abzweigung) einen anderen Weg aus.
-- Lass den Agent **Apps** nutzen. Das sind externe Dienste, die Menschen mit ihrem Konto verbinden.
-- Halte ein Team aus dauerhaften **Agents**, zum Beispiel einen Programmierer und einen Autor. Jeder hat seinen eigenen Kontext und sein eigenes Gedächtnis. Sie geben sich gegenseitig Arbeit.
-- Lass einen Agent im **Plan-Modus** zuerst planen, eine **Todo-Liste** führen und warten. Starte seine Arbeit nach Zeitplan oder über einen Webhook mit einem **Trigger** (Auslöser).
-- Agents haben keine festen Grenzen. Wenn ein Agent etwas Neues versucht, beantwortet die Stelle über ihm, die entscheidet, eine **Anfrage** (Request). Die Antwort wird gespeichert.
+- Lass den Bot **Apps** nutzen. Das sind externe Dienste, die Menschen mit ihrem Konto verbinden.
+- Halte ein Team aus dauerhaften **Bots**, zum Beispiel einen Programmierer und einen Autor. Jeder hat seinen eigenen Kontext und sein eigenes Gedächtnis. Sie geben sich gegenseitig Arbeit.
+- Lass einen Bot im **Plan-Modus** zuerst planen, eine **Todo-Liste** führen und warten. Starte seine Arbeit nach Zeitplan oder über einen Webhook mit einem **Trigger** (Auslöser).
+- Bots haben keine festen Grenzen. Wenn ein Bot etwas Neues versucht, beantwortet die Stelle über ihm, die entscheidet, eine **Anfrage** (Request). Die Antwort wird gespeichert.
 - Finde Apps in einem öffentlichen **App Index** (App-Verzeichnis). Als Herausgeber kannst du dort deine eigene App prüfen.
 
 ---
@@ -33,7 +33,7 @@ Den Client bringst du selbst mit: ein Skript, einen Backend-Dienst, einen Chat-B
 | User-Tokens    | Programme senden bei jedem Aufruf ein Token im Header `Authorization: Bearer <token>`.                                          |
 | Berechtigungen | Roles (Rollen) und Policies (Regeln) bestimmen, was jedes Member (Mitglied) und jedes Token tun darf.                           |
 | API-Vertrag    | Ein typisierter Vertrag erzeugt den Server, den TypeScript-Client und die [API-Referenz](/docs/api/).                           |
-| App Protocol   | Ein offener Weg, Apps im Web zu veröffentlichen, damit Agents sie finden und nutzen können.                                     |
+| App Protocol   | Ein offener Weg, Apps im Web zu veröffentlichen, damit Bots sie finden und nutzen können.                                       |
 
 Jedes OpenBot sagt dir, wo es weitergeht. Sende `GET /`, um sein Dienstdokument zu lesen:
 
@@ -71,7 +71,7 @@ Den vollen Text findest du in der Datei [LICENSE](https://github.com/openbot-bui
 		Melde dich an und erstelle User-Tokens.
 	</Card>
 	<Card title="Sessions" href="/de/docs/sessions">
-		Gib dem Agent Arbeit und lies die Ergebnisse.
+		Gib dem Bot Arbeit und lies die Ergebnisse.
 	</Card>
 	<Card title="Bereitstellung" href="/de/docs/deploy">
 		Betreibe OpenBot auf deinem eigenen Server.

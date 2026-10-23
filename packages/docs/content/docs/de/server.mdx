@@ -86,14 +86,14 @@ Das Programm braucht trotzdem eine Plattform. Führe das Einrichtungsprogramm ei
 
 Einige Werte waren früher Optionen. Jetzt sind sie Einstellungen in der Datenbank. So teilen alle Instanzen sie:
 
-| Alte Option             | Einstellung                                                                                       |
-| ----------------------- | ------------------------------------------------------------------------------------------------- |
-| `appRestrictions`       | `appRestrictions` in den [Plattform-Einstellungen](/de/docs/platform#einstellungen-der-platform). |
-| `appReadRules`          | `appReadRules` in den [Organisations-Einstellungen](/de/docs/organization#einstellungen).         |
-| `agents.helperModel`    | `rulesModel` und `agentMemoryModel` in den Organisations-Einstellungen.                           |
-| `agents.requestTimeout` | `requestTimeoutMs` in den Organisations-Einstellungen.                                            |
-| `agents.memory`         | `agentMemory` in den Organisations-Einstellungen.                                                 |
-| `appEncryptionKey`      | Die Instanz-Option `secretKeys`.                                                                  |
+| Alte Option           | Einstellung                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------------------- |
+| `appRestrictions`     | `appRestrictions` in den [Plattform-Einstellungen](/de/docs/platform#einstellungen-der-platform). |
+| `appReadRules`        | `appReadRules` in den [Organisations-Einstellungen](/de/docs/organization#einstellungen).         |
+| `bots.helperModel`    | `rulesModel` und `botMemoryModel` in den Organisations-Einstellungen.                             |
+| `bots.requestTimeout` | `requestTimeoutMs` in den Organisations-Einstellungen.                                            |
+| `bots.memory`         | `botMemory` in den Organisations-Einstellungen.                                                   |
+| `appEncryptionKey`    | Die Instanz-Option `secretKeys`.                                                                  |
 
 ---
 
@@ -103,7 +103,7 @@ Die Option `sessions` legt fest, wie Sessions ihre Arbeit machen.
 
 | Feld             | Was es tut                                                                             |
 | ---------------- | -------------------------------------------------------------------------------------- |
-| `runtime`        | Die Agent-Definition: `toolkit`, `plugin`, `providers`, `compaction` und mehr.         |
+| `runtime`        | Die Bot-Definition: `toolkit`, `plugin`, `providers`, `compaction` und mehr.           |
 | `layerExecution` | Eine Funktion, die für jeden Turn zusätzliche Dienste baut, zum Beispiel Tool-Handler. |
 | `memory`         | Gelerntes Memory: dein eigenes `model` und deine eigene `policy`.                      |
 

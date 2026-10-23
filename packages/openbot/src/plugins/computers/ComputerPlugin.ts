@@ -1,4 +1,4 @@
-import { type AgentsApi, ComputersApi } from "@openbot-build/api"
+import { type BotsApi, ComputersApi } from "@openbot-build/api"
 import { Plugin } from "@openbot-build/core"
 import {
 	Context,
@@ -188,10 +188,10 @@ export const keepNewestImage = (prompt: Prompt.Prompt): Prompt.Prompt => {
 }
 
 /**
- * Builds the Computer plugin. It gives each Agent tools to get, make and use Computers.
- * It runs inside the Agent plugin, so getting, making and deleting a Computer and
+ * Builds the Computer plugin. It gives each Bot tools to get, make and use Computers.
+ * It runs inside the Bot plugin, so getting, making and deleting a Computer and
  * opening a port go through the capability gate. Work inside a Computer that the
- * Agent may use needs no review.
+ * Bot may use needs no review.
  */
 export class ComputerPlugin extends Context.Service<
 	ComputerPlugin,
@@ -210,13 +210,13 @@ export const make = Effect.gen(function* () {
 		effect: Effect.Effect<A, E, AuthorizationServices>,
 	): Effect.Effect<A, E> => Effect.provideContext(effect, services)
 
-	/** The Computer, when the current Agent may use it. */
+	/** The Computer, when the current Bot may use it. */
 	const held = (id: string) =>
 		Effect.gen(function* () {
 			const current = yield* work
 			const may = yield* computers.holds(
 				current.caller.organizationId,
-				current.agent.id,
+				current.bot.id,
 				id,
 			)
 			if (!may)
@@ -236,14 +236,11 @@ export const make = Effect.gen(function* () {
 			)
 			return yield* use(machine)
 		})
-	/** The Agents above the current one. A child Agent may ask for their Computers. */
+	/** The Bots above the current one. A child Bot may ask for their Computers. */
 	const parents = (current: typeof Work.Service) => {
-		const above = new Set<string>([
-			...current.deciders,
-			...current.chain.agents,
-		])
-		above.delete(current.agent.id)
-		return [...above] as unknown as ReadonlyArray<AgentsApi.AgentId>
+		const above = new Set<string>([...current.deciders, ...current.chain.bots])
+		above.delete(current.bot.id)
+		return [...above] as unknown as ReadonlyArray<BotsApi.BotId>
 	}
 	/** Asks the gate. A failed check waits for a decision. */
 	const ask = (
@@ -321,7 +318,7 @@ export const make = Effect.gen(function* () {
 				Effect.gen(function* () {
 					const current = yield* work
 					const organizationId = current.caller.organizationId
-					const mine = yield* computers.heldBy(organizationId, current.agent.id)
+					const mine = yield* computers.heldBy(organizationId, current.bot.id)
 					const mineIds = new Set(mine.map((computer) => computer.id))
 					const usable = yield* authorized(computers.list(current.caller))
 					const fromParents = new Set<string>()
@@ -359,7 +356,7 @@ export const make = Effect.gen(function* () {
 		),
 		tool(
 			names.acquire,
-			"Ask for the right to use a Computer that exists, such as a machine of your person or a Computer of the Agent that gave you work. The Agent above you or your person decides.",
+			"Ask for the right to use a Computer that exists, such as a machine of your person or a Computer of the Bot that gave you work. The Bot above you or your person decides.",
 			WithReason,
 			{
 				type: "object",
@@ -372,7 +369,7 @@ export const make = Effect.gen(function* () {
 					return yield* computers.grantApproved(
 						current.caller.organizationId,
 						request.computer,
-						current.agent.id,
+						current.bot.id,
 						current.caller.userId,
 					)
 				}),
@@ -382,7 +379,7 @@ export const make = Effect.gen(function* () {
 					if (
 						yield* computers.holds(
 							current.caller.organizationId,
-							current.agent.id,
+							current.bot.id,
 							request.computer,
 						)
 					)
@@ -425,7 +422,7 @@ export const make = Effect.gen(function* () {
 					else
 						yield* computers.release(
 							current.caller.organizationId,
-							current.agent.id,
+							current.bot.id,
 							request.computer,
 						)
 				}),
@@ -491,7 +488,7 @@ export const make = Effect.gen(function* () {
 									? {}
 									: { desktop: request.desktop }),
 							},
-							current.agent.id,
+							current.bot.id,
 						),
 					)
 					return { id: computer.id, name: computer.name, state: computer.state }
@@ -755,7 +752,7 @@ export const make = Effect.gen(function* () {
 						),
 					)
 					const mine = yield* computers
-						.heldBy(current.value.caller.organizationId, current.value.agent.id)
+						.heldBy(current.value.caller.organizationId, current.value.bot.id)
 						.pipe(Effect.orElseSucceed(() => []))
 					const instructions = Prompt.concat(
 						options.instructions,

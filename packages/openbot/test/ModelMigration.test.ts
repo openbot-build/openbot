@@ -283,7 +283,7 @@ test("old models become language models, and old organization settings get no de
 							{
 								decisionModel: null,
 								rulesModel: null,
-								agentMemoryModel: null,
+								botMemoryModel: null,
 								planApproval,
 							},
 						],
@@ -292,7 +292,7 @@ test("old models become language models, and old organization settings get no de
 							{
 								decisionModel: selection,
 								rulesModel: null,
-								agentMemoryModel: null,
+								botMemoryModel: null,
 								planApproval,
 							},
 						],
@@ -307,7 +307,7 @@ test("old models become language models, and old organization settings get no de
 	}
 })
 
-test("the old default model moves to Agents without a model, and the old helper model moves to rulesModel and agentMemoryModel", async () => {
+test("the old default model moves to Bots without a model, and the old helper model moves to rulesModel and botMemoryModel", async () => {
 	const database = await PostgresTest.start()
 	const before = await mkdtemp(join(tmpdir(), "openbot-migrations-"))
 	await using runtime = ManagedRuntime.make(
@@ -320,7 +320,7 @@ test("the old default model moves to Agents without a model, and the old helper 
 		provider: "prov_a",
 		model,
 	})
-	const agent = (id: string, organizationId: string, extra: object) => ({
+	const bot = (id: string, organizationId: string, extra: object) => ({
 		kind: "agent",
 		organization_id: organizationId,
 		id,
@@ -371,9 +371,9 @@ test("the old default model moves to Agents without a model, and the old helper 
 						updated_at: 1,
 					})}`
 				for (const row of [
-					agent("agent_plain", "org_a", {}),
-					agent("agent_own", "org_a", { model: selection("own") }),
-					agent("agent_none", "org_c", {}),
+					bot("bot_plain", "org_a", {}),
+					bot("bot_own", "org_a", { model: selection("own") }),
+					bot("bot_none", "org_c", {}),
 				])
 					yield* sql`insert into openbot_agent_records ${sql.insert(row)}`
 			}),
@@ -382,16 +382,16 @@ test("the old default model moves to Agents without a model, and the old helper 
 		await runtime.runPromise(
 			Effect.gen(function* () {
 				const sql = yield* PgClient.PgClient
-				const agents = yield* sql<{
+				const bots = yield* sql<{
 					readonly id: string
 					readonly body: string
-				}>`select id, body from openbot_agent_records order by id`
+				}>`select id, body from openbot_bot_records order by id`
 				assert.deepEqual(
-					agents.map((row) => [row.id, JSON.parse(row.body).model]),
+					bots.map((row) => [row.id, JSON.parse(row.body).model]),
 					[
-						["agent_none", undefined],
-						["agent_own", selection("own")],
-						["agent_plain", selection("big")],
+						["bot_none", undefined],
+						["bot_own", selection("own")],
+						["bot_plain", selection("big")],
 					],
 				)
 				const settings = yield* sql<{
@@ -406,7 +406,7 @@ test("the old default model moves to Agents without a model, and the old helper 
 							{
 								decisionModel: null,
 								rulesModel: selection("big"),
-								agentMemoryModel: selection("big"),
+								botMemoryModel: selection("big"),
 								planApproval,
 							},
 						],
@@ -415,7 +415,7 @@ test("the old default model moves to Agents without a model, and the old helper 
 							{
 								decisionModel: null,
 								rulesModel: selection("small"),
-								agentMemoryModel: selection("small"),
+								botMemoryModel: selection("small"),
 								planApproval,
 							},
 						],
@@ -424,7 +424,7 @@ test("the old default model moves to Agents without a model, and the old helper 
 							{
 								decisionModel: null,
 								rulesModel: null,
-								agentMemoryModel: null,
+								botMemoryModel: null,
 								planApproval,
 							},
 						],

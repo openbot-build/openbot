@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "હેડલેસ, API-ફર્સ્ટ Agent પ્લેટફોર્મ.",
+	description: "હેડલેસ, API-ફર્સ્ટ Bot પ્લેટફોર્મ.",
 	nav: {
 		label: "સાઇટ",
 		docs: "ડૉક્સ",
@@ -9,8 +9,8 @@ export default {
 		language: "ભાષા",
 	},
 	hero: {
-		title: ["Agents જેને તમે બોલાવી શકો.", "પરિણામો જે તમે ચકાસી શકો."],
-		body: "OpenBot એ યુઝર ઇન્ટરફેસ વગરનું ઓપન સોર્સ Agent પ્લેટફોર્મ છે. તમે HTTP દ્વારા Agent ને કામ આપો છો.",
+		title: ["Bots જેને તમે બોલાવી શકો.", "પરિણામો જે તમે ચકાસી શકો."],
+		body: "OpenBot એ યુઝર ઇન્ટરફેસ વગરનું ઓપન સોર્સ Bot પ્લેટફોર્મ છે. તમે HTTP દ્વારા Bot ને કામ આપો છો.",
 		quickStart: "ઝડપી શરૂઆત",
 		apiReference: "API રેફરન્સ",
 		visual: "એક Turn શરૂ કરો",
@@ -55,7 +55,7 @@ export default {
 			},
 			{
 				title: "ઓપન Apps",
-				text: "પબ્લિશર્સ OpenBot App Protocol સાથે ઓપન વેબ પર મૂકે છે તે Apps ને Agents શોધે છે અને વાપરે છે.",
+				text: "પબ્લિશર્સ OpenBot App Protocol સાથે ઓપન વેબ પર મૂકે છે તે Apps ને Bots શોધે છે અને વાપરે છે.",
 			},
 			{
 				title: "તમારા મોડલ્સ",

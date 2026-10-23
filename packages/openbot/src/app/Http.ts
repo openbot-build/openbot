@@ -11,7 +11,7 @@ import * as IndexHandlers from "../apps/IndexHttpHandlers.ts"
 import * as AppAuthorizationHandlers from "../apps/AuthorizationHttpHandlers.ts"
 import * as ConnectionHandlers from "../apps/ConnectionHttpHandlers.ts"
 import * as SessionHandlers from "../sessions/SessionHandlers.ts"
-import * as AgentHandlers from "../agents/HttpHandlers.ts"
+import * as BotHandlers from "../bots/HttpHandlers.ts"
 import * as RequestHandlers from "../capabilities/HttpHandlers.ts"
 import * as OrganizationHandlers from "../organization/HttpHandlers.ts"
 import * as ModelProviderHandlers from "../models/HttpHandlers.ts"
@@ -45,8 +45,8 @@ export const layerPlatform = (publicOrigin: string) =>
 					AppAuthorizationHandlers.layer(publicOrigin),
 					ConnectionHandlers.layer,
 					SessionHandlers.layerPlatform,
-					AgentHandlers.layer(publicOrigin),
-					AgentHandlers.layerInvitations,
+					BotHandlers.layer(publicOrigin),
+					BotHandlers.layerInvitations,
 					RequestHandlers.layer,
 					SettingsHandlers.layerMember,
 					TriggerHandlers.layer(publicOrigin),

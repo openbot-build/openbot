@@ -45,10 +45,10 @@ export const rateLimitOf = (document: PlatformDocument): Api.RateLimit =>
 
 export const OrganizationDocument = Schema.Struct({
 	rulesModel: Api.OrganizationSettings.fields.rulesModel,
-	agentMemoryModel: Api.OrganizationSettings.fields.agentMemoryModel,
+	botMemoryModel: Api.OrganizationSettings.fields.botMemoryModel,
 	decisionModel: Api.OrganizationSettings.fields.decisionModel,
 	memory: Api.OrganizationSettings.fields.memory,
-	agentMemory: Schema.Boolean,
+	botMemory: Schema.Boolean,
 	requestTimeoutMs: Api.RequestTimeout,
 	planApproval: PlanApproval.PlanApproval,
 	appReadRules: Api.AppReadRules,
@@ -62,10 +62,10 @@ export type OrganizationDocument = typeof OrganizationDocument.Type
 /** A new organization starts with these settings. */
 export const organizationDefaults: OrganizationDocument = {
 	rulesModel: null,
-	agentMemoryModel: null,
+	botMemoryModel: null,
 	decisionModel: null,
 	memory: { use: true, generate: true },
-	agentMemory: true,
+	botMemory: true,
 	requestTimeoutMs: 24 * 60 * 60 * 1000,
 	planApproval: PlanApproval.defaults,
 	appReadRules: [],
@@ -76,13 +76,13 @@ export const organizationDefaults: OrganizationDocument = {
 /** The settings of one member in one organization. */
 export const MemberDocument = Schema.Struct({
 	planApproval: Api.MemberSettings.fields.planApproval,
-	/** Missing in documents from before default Agents. Then there is none. */
-	defaultAgent: Schema.optionalKey(Api.MemberSettings.fields.defaultAgent),
+	/** Missing in documents from before default Bots. Then there is none. */
+	defaultBot: Schema.optionalKey(Api.MemberSettings.fields.defaultBot),
 })
 export type MemberDocument = typeof MemberDocument.Type
 export const memberDefaults: MemberDocument = {
 	planApproval: null,
-	defaultAgent: null,
+	defaultBot: null,
 }
 
 export type Scope =

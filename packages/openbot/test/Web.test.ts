@@ -21,8 +21,8 @@ test(
 		try {
 			const alice = await host.login("alice"),
 				bob = await host.login("bob")
-			const aliceAgent = await host.defaultAgent(alice.session)
-			await host.defaultAgent(bob.session)
+			const aliceBot = await host.defaultBot(alice.session)
+			await host.defaultBot(bob.session)
 			const request = (
 				credential: Redacted.Redacted<string>,
 				path: string,
@@ -42,7 +42,7 @@ test(
 					},
 					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
 				})
-			// Agents learn memory only with the Agent memory model of the organization.
+			// Bots learn memory only with the Bot memory model of the organization.
 			const settings = await (
 				await request(alice.session, "/v1/organization/settings")
 			).json()
@@ -52,7 +52,7 @@ test(
 				"PATCH",
 				{
 					expectedVersion: settings.version,
-					agentMemoryModel: {
+					botMemoryModel: {
 						_tag: "Config.Selection",
 						provider: "fixture",
 						model: "fixture-model",
@@ -186,7 +186,7 @@ test(
 			)
 			assert.equal(fork.session.head, initial.session.head)
 			assert.deepEqual(fork.session.turns, [])
-			assert.equal(fork.agent, initial.agent)
+			assert.equal(fork.bot, initial.bot)
 			assert.equal(fork.kind, "direct")
 			assert.equal(fork.parent, null)
 			assert.deepEqual(fork.session.pending, [])
@@ -394,8 +394,8 @@ test(
 				202,
 			)
 			await wait()
-			// One model call learns Session memory. Agent memory learns only after the Agent
-			// confides, and the empty pool gives the memory Agent nothing to add to the input.
+			// One model call learns Session memory. Bot memory learns only after the Bot
+			// confides, and the empty pool gives the memory Bot nothing to add to the input.
 			for (
 				let tries = 0;
 				tries < 200 && host.consolidations() < beforeConsolidations + 1;
@@ -409,8 +409,8 @@ test(
 			).json()
 			assert.equal(old.response.id, completed.response!.id)
 			assert.equal(old.response.version, completed.response!.version)
-			// Sessions without an Agent belong to the default Agent of the member.
-			assert.equal(initial.agent, aliceAgent)
+			// Sessions without a Bot belong to the default Bot of the member.
+			assert.equal(initial.bot, aliceBot)
 			assert.equal(
 				(await request(alice.session, path + "/merge", "POST", {})).status,
 				404,
@@ -503,7 +503,7 @@ test(
 		})
 		try {
 			const account = await host.login("stream-observer")
-			await host.defaultAgent(account.session)
+			await host.defaultBot(account.session)
 			const request = (path: string, payload?: unknown) =>
 				fetch(host.address + path, {
 					method: payload === undefined ? "GET" : "POST",

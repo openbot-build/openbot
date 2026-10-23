@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "A headless, API-first Agent platform.",
+	description: "A headless, API-first Bot platform.",
 	nav: {
 		label: "Site",
 		docs: "Docs",
@@ -9,8 +9,8 @@ export default {
 		language: "Language",
 	},
 	hero: {
-		title: ["Agents you can call.", "Results you can check."],
-		body: "OpenBot is an open source Agent platform with no user interface. You give work to an Agent over HTTP.",
+		title: ["Bots you can call.", "Results you can check."],
+		body: "OpenBot is an open source Bot platform with no user interface. You give work to a Bot over HTTP.",
 		quickStart: "Quick start",
 		apiReference: "API reference",
 		visual: "Start a Turn",
@@ -55,7 +55,7 @@ export default {
 			},
 			{
 				title: "Open Apps",
-				text: "Agents find and use Apps that publishers put on the open web with the OpenBot App Protocol.",
+				text: "Bots find and use Apps that publishers put on the open web with the OpenBot App Protocol.",
 			},
 			{
 				title: "Your models",

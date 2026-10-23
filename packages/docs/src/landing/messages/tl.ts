@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "Isang Agent platform na walang interface at API ang inuuna.",
+	description: "Isang Bot platform na walang interface at API ang inuuna.",
 	nav: {
 		label: "Site",
 		docs: "Docs",
@@ -10,10 +10,10 @@ export default {
 	},
 	hero: {
 		title: [
-			"Mga Agent na puwede mong tawagin.",
+			"Mga Bot na puwede mong tawagin.",
 			"Mga resulta na puwede mong suriin.",
 		],
-		body: "Ang OpenBot ay isang open source na Agent platform na walang user interface. Binibigyan mo ng trabaho ang Agent gamit ang HTTP.",
+		body: "Ang OpenBot ay isang open source na Bot platform na walang user interface. Binibigyan mo ng trabaho ang Bot gamit ang HTTP.",
 		quickStart: "Mabilis na simula",
 		apiReference: "API reference",
 		visual: "Magsimula ng Turn",
@@ -61,7 +61,7 @@ export default {
 			},
 			{
 				title: "Mga bukas na App",
-				text: "Hinahanap at ginagamit ng mga Agent ang mga App na inilagay ng mga publisher sa bukas na web gamit ang OpenBot App Protocol.",
+				text: "Hinahanap at ginagamit ng mga Bot ang mga App na inilagay ng mga publisher sa bukas na web gamit ang OpenBot App Protocol.",
 			},
 			{
 				title: "Ang sarili mong mga model",

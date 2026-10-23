@@ -6,8 +6,8 @@ import {
 	HttpApiSchema,
 	OpenApi,
 } from "effect/http-api"
-import { AgentId } from "./AgentsApi.ts"
-import { AgentAuth } from "./AuthApi.ts"
+import { BotId } from "./BotsApi.ts"
+import { BotAuth } from "./AuthApi.ts"
 import { Authorize, GroupRequired, PermissionErrors } from "./Permissions.ts"
 import { PublicOrigin, SecretInput, SecretState, Version } from "./Settings.ts"
 
@@ -25,7 +25,7 @@ export type ComputerProviderId = typeof ComputerProviderId.Type
 
 /**
  * A member owns their own Computers and Computer providers. Only they and their
- * Agents can use them. The organization owns shared ones. Policies decide who can use them.
+ * Bots can use them. The organization owns shared ones. Policies decide who can use them.
  */
 export const ComputerOwner = Schema.TaggedUnion({
 	Member: { userId: Schema.String },
@@ -35,7 +35,7 @@ export type ComputerOwner = typeof ComputerOwner.Type
 
 /**
  * The service that runs Computers.
- * `e2b` is any service that speaks the E2B API, such as E2B, PPIO, Alibaba Cloud Agent
+ * `e2b` is any service that speaks the E2B API, such as E2B, PPIO, Alibaba Cloud Bot
  * Sandbox, or a self-hosted E2B. `daytona` is Daytona, hosted or self-hosted.
  */
 export const ComputerProviderKind = Schema.Literals(["e2b", "daytona"])
@@ -172,8 +172,8 @@ const PauseAfter = Schema.Int.check(
 )
 
 /**
- * A machine where Agents run commands, change files and use a desktop.
- * A member or the organization owns it. Agents never own a Computer. They get the
+ * A machine where Bots run commands, change files and use a desktop.
+ * A member or the organization owns it. Bots never own a Computer. They get the
  * right to use it (see `ComputerAccess`). Work inside a Computer needs no review,
  * because the Computer is the boundary.
  */
@@ -186,7 +186,7 @@ export const Computer = Schema.Struct({
 	features: ComputerFeatures,
 	/** Seconds without work before OpenBot pauses the Computer. `null` never pauses it. */
 	pauseAfter: Schema.NullOr(PauseAfter),
-	/** The member that made the Computer, or the Agent that made it for its member. */
+	/** The member that made the Computer, or the Bot that made it for its member. */
 	createdBy: Schema.String,
 	version: Version,
 	createdAt: Schema.Finite,
@@ -214,14 +214,14 @@ export const UpdateComputerRequest = Schema.Struct({
 export type UpdateComputerRequest = typeof UpdateComputerRequest.Type
 
 /**
- * The right of one Agent to use one Computer. Many Agents can use one Computer.
- * Only the Agent with the right can use it. Its child Agents ask for their own right.
- * The right ends when the Agent is archived. The Computer stays.
+ * The right of one Bot to use one Computer. Many Bots can use one Computer.
+ * Only the Bot with the right can use it. Its child Bots ask for their own right.
+ * The right ends when the Bot is archived. The Computer stays.
  */
 export const ComputerAccess = Schema.Struct({
 	computer: ComputerId,
-	agent: AgentId,
-	/** The member who gave the right, or who answered the request of the Agent. */
+	bot: BotId,
+	/** The member who gave the right, or who answered the request of the Bot. */
 	grantedBy: Schema.String,
 	grantedAt: Schema.Finite,
 })
@@ -595,17 +595,17 @@ export class ComputerProvidersApi extends HttpApiGroup.make("computerProviders")
 	// So the handlers check the permissions themselves.
 	.annotate(GroupRequired, { read: [], write: [] })
 	.middleware(Authorize)
-	.middleware(AgentAuth) {}
+	.middleware(BotAuth) {}
 
 export class ComputersApi extends HttpApiGroup.make("computers")
 	.add(
 		HttpApiEndpoint.get("listComputers", "/v1/computers", {
-			query: { agent: Schema.optionalKey(AgentId) },
+			query: { bot: Schema.optionalKey(BotId) },
 			success: Schema.Array(Computer),
 			error: ComputerErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Lists the Computers that the caller can use: their own and the shared ones. With `agent`, it lists only the Computers that this Agent has the right to use.",
+			"Lists the Computers that the caller can use: their own and the shared ones. With `bot`, it lists only the Computers that this Bot has the right to use.",
 		),
 		HttpApiEndpoint.post("createComputer", "/v1/computers", {
 			payload: CreateComputerRequest,
@@ -632,43 +632,39 @@ export class ComputersApi extends HttpApiGroup.make("computers")
 			error: ComputerErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Deletes a Computer, its sandbox at the provider, and the rights of all Agents to use it. The files are gone. For a connector Computer, the connector is disconnected.",
+			"Deletes a Computer, its sandbox at the provider, and the rights of all Bots to use it. The files are gone. For a connector Computer, the connector is disconnected.",
 		),
-		HttpApiEndpoint.get(
-			"listComputerAgents",
-			"/v1/computers/:computerId/agents",
-			{
-				params: computerParams,
-				success: Schema.Array(ComputerAccess),
-				error: ComputerErrors,
-			},
-		).annotate(
+		HttpApiEndpoint.get("listComputerBots", "/v1/computers/:computerId/bots", {
+			params: computerParams,
+			success: Schema.Array(ComputerAccess),
+			error: ComputerErrors,
+		}).annotate(
 			OpenApi.Description,
-			"Lists the Agents that have the right to use a Computer.",
+			"Lists the Bots that have the right to use a Computer.",
 		),
 		HttpApiEndpoint.put(
 			"grantComputer",
-			"/v1/computers/:computerId/agents/:agentId",
+			"/v1/computers/:computerId/bots/:botId",
 			{
-				params: { computerId: ComputerId, agentId: AgentId },
+				params: { computerId: ComputerId, botId: BotId },
 				success: ComputerAccess,
 				error: ComputerErrors,
 			},
 		).annotate(
 			OpenApi.Description,
-			"Gives an Agent the right to use a Computer. The caller must be able to use the Computer and to change the Agent.",
+			"Gives a Bot the right to use a Computer. The caller must be able to use the Computer and to change the Bot.",
 		),
 		HttpApiEndpoint.delete(
 			"revokeComputer",
-			"/v1/computers/:computerId/agents/:agentId",
+			"/v1/computers/:computerId/bots/:botId",
 			{
-				params: { computerId: ComputerId, agentId: AgentId },
+				params: { computerId: ComputerId, botId: BotId },
 				success: HttpApiSchema.NoContent,
 				error: ComputerErrors,
 			},
 		).annotate(
 			OpenApi.Description,
-			"Takes the right to use a Computer away from an Agent. The Computer stays.",
+			"Takes the right to use a Computer away from a Bot. The Computer stays.",
 		),
 		HttpApiEndpoint.get(
 			"listComputerUsage",
@@ -824,7 +820,7 @@ export class ComputersApi extends HttpApiGroup.make("computers")
 	// So the handlers check the permissions themselves.
 	.annotate(GroupRequired, { read: [], write: [] })
 	.middleware(Authorize)
-	.middleware(AgentAuth) {}
+	.middleware(BotAuth) {}
 
 const pairingErrors = [
 	PairingInvalid.pipe(HttpApiSchema.status(404)),

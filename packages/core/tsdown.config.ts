@@ -4,7 +4,7 @@ import { defineConfig } from "tsdown"
 export default defineConfig({
 	...config,
 	entry: {
-		"agent/Agent": "src/agent/Agent.ts",
+		"bot/Bot": "src/bot/Bot.ts",
 		"session/Turn": "src/session/Turn.ts",
 		"timeline/Timeline": "src/timeline/Timeline.ts",
 		"timeline/Item": "src/timeline/Item.ts",

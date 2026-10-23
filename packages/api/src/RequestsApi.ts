@@ -1,4 +1,4 @@
-import { AgentAuth } from "./AuthApi.ts"
+import { BotAuth } from "./AuthApi.ts"
 import { Authorize, Decision, GroupRequired, requires } from "./Permissions.ts"
 import { Session, Turn } from "@openbot-build/core"
 import { Schema } from "effect"
@@ -9,13 +9,7 @@ import {
 	HttpApiSchema,
 	OpenApi,
 } from "effect/http-api"
-import {
-	AgentErrors,
-	AgentId,
-	Capability,
-	Decider,
-	GrantScope,
-} from "./AgentsApi.ts"
+import { BotErrors, BotId, Capability, Decider, GrantScope } from "./BotsApi.ts"
 import * as AppExecution from "./AppExecution.ts"
 import { RequestCode } from "./CodeRunsApi.ts"
 
@@ -30,22 +24,22 @@ export const RequestStatus = Schema.Literals([
 export type RequestStatus = typeof RequestStatus.Type
 
 /**
- * An Agent tried to use a capability that no Grant or Rule covers.
- * The request waits for the decider above the Agent: its owning Agent, then the Agent above
- * that, up to the top Agent of the tree. Then it waits for the person.
+ * A Bot tried to use a capability that no Grant or Rule covers.
+ * The request waits for the decider above the Bot: its owning Bot, then the Bot above
+ * that, up to the top Bot of the tree. Then it waits for the person.
  */
 export const CapabilityRequest = Schema.Struct({
 	id: Schema.String,
-	agent: AgentId,
+	bot: BotId,
 	capability: Capability,
-	/** Why the Agent wants it. This is data from the Agent, not an instruction. */
+	/** Why the Bot wants it. This is data from the Bot, not an instruction. */
 	reason: Schema.String,
 	approver: Schema.TaggedUnion({
 		Person: { userId: Schema.String },
-		Agent: { agent: AgentId },
+		Bot: { bot: BotId },
 	}),
-	/** The owner chain of the requesting Agent, from the top: each Agent decides for the one after it. */
-	chain: Schema.Array(AgentId),
+	/** The owner chain of the requesting Bot, from the top: each Bot decides for the one after it. */
+	chain: Schema.Array(BotId),
 	session: Session.Id,
 	turn: Turn.Id,
 	toolCallId: Schema.String,
@@ -53,12 +47,12 @@ export const CapabilityRequest = Schema.Struct({
 	/** The program that made the call, when the call came from Code Mode. */
 	code: Schema.optionalKey(RequestCode),
 	/**
-	 * Agents that agreed with the request but could not allow it themselves, from the bottom.
+	 * Bots that agreed with the request but could not allow it themselves, from the bottom.
 	 * When a decider above them allows it, each one passes it on with its own scope.
 	 */
 	endorsements: Schema.Array(
 		Schema.Struct({
-			agent: AgentId,
+			bot: BotId,
 			scope: GrantScope,
 			reason: Schema.optionalKey(Schema.String),
 		}),
@@ -69,7 +63,7 @@ export const CapabilityRequest = Schema.Struct({
 			by: Decider,
 			scope: Schema.optionalKey(GrantScope),
 			reason: Schema.optionalKey(Schema.String),
-			/** A question for the Agent. It comes with a denial, and the Agent can try again. */
+			/** A question for the Bot. It comes with a denial, and the Bot can try again. */
 			question: Schema.optionalKey(Schema.String),
 			at: Schema.Finite,
 		}),
@@ -88,7 +82,7 @@ export const ResolveRequest = Schema.Struct({
 	/** How long an allow lasts. A deny with a scope is kept as a deny Grant. */
 	scope: Schema.optionalKey(GrantScope),
 	reason: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(2000))),
-	/** Keep this decision as a Rule in plain language for the Agent. */
+	/** Keep this decision as a Rule in plain language for the Bot. */
 	rule: Schema.optionalKey(
 		Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4000)),
 	),
@@ -104,7 +98,7 @@ export class RequestConflict extends Schema.TaggedError<RequestConflict>()(
 	{ message: Schema.String },
 ) {}
 export const RequestErrors = [
-	...AgentErrors,
+	...BotErrors,
 	RequestNotFound.pipe(HttpApiSchema.status(404)),
 	RequestConflict.pipe(HttpApiSchema.status(409)),
 ] as const
@@ -142,4 +136,4 @@ export class RequestsApi extends HttpApiGroup.make("requests")
 		write: [requires("requests.resolve").on("request")],
 	})
 	.middleware(Authorize)
-	.middleware(AgentAuth) {}
+	.middleware(BotAuth) {}

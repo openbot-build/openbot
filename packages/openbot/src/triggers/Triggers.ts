@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
 import {
-	type AgentsApi,
+	type BotsApi,
 	type Caller,
 	Permissions,
 	TriggersApi,
@@ -61,7 +61,7 @@ export class Triggers extends Context.Service<
 		readonly create: (
 			caller: Caller,
 			input: {
-				readonly agent: AgentsApi.AgentId
+				readonly bot: BotsApi.BotId
 				readonly prompt: string
 				readonly schedule?: TriggersApi.Schedule
 				readonly shared?: boolean
@@ -126,7 +126,7 @@ const fromRow = (row: Row): Trigger => ({
 		row.ownerUserId === null
 			? { _tag: "Organization" }
 			: { _tag: "Member", userId: row.ownerUserId },
-	agent: row.agent as AgentsApi.AgentId,
+	bot: row.bot as BotsApi.BotId,
 	prompt: row.prompt,
 	schedule:
 		row.scheduleCron === null
@@ -206,7 +206,7 @@ export const make = Effect.gen(function* () {
 				id: trigger.id,
 				ownerUserId:
 					trigger.owner._tag === "Member" ? trigger.owner.userId : null,
-				agent: trigger.agent,
+				bot: trigger.bot,
 				prompt: trigger.prompt,
 				scheduleCron: trigger.schedule?.cron ?? null,
 				scheduleTimeZone: trigger.schedule?.timeZone ?? null,
@@ -346,7 +346,7 @@ export const make = Effect.gen(function* () {
 						"trg_" + randomBytes(16).toString("hex"),
 					),
 					owner,
-					agent: input.agent,
+					bot: input.bot,
 					prompt: input.prompt,
 					schedule,
 					webhook: false,
@@ -369,7 +369,7 @@ export const make = Effect.gen(function* () {
 					return {
 						trigger: {
 							...current,
-							...(input.agent === undefined ? {} : { agent: input.agent }),
+							...(input.bot === undefined ? {} : { bot: input.bot }),
 							...(input.prompt === undefined ? {} : { prompt: input.prompt }),
 							...(input.enabled === undefined
 								? {}

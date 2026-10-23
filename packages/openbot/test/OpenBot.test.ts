@@ -30,7 +30,7 @@ import { FetchHttpClient, HttpServer } from "effect/http"
 import { SqlClient } from "effect/sql"
 import { exportJWK, generateKeyPair, SignJWT } from "jose"
 import * as PostgresTest from "./PostgresTest.ts"
-import * as DefaultAgent from "./DefaultAgent.ts"
+import * as DefaultBot from "./DefaultBot.ts"
 import * as Organizations from "./Organizations.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
 
@@ -430,13 +430,13 @@ test(
 			})
 			assert.equal(cookieSessions.status, 200)
 			assert.deepEqual(await cookieSessions.json(), [])
-			const defaultAgent = (cookie: string) =>
-				DefaultAgent.ensure((path, method, payload) =>
+			const defaultBot = (cookie: string) =>
+				DefaultBot.ensure((path, method, payload) =>
 					session(cookie, path, method, payload),
 				)
-			await defaultAgent(alice.session)
-			await defaultAgent(bobSession)
-			// A Session needs a model from its settings or its Agent. There is no default model.
+			await defaultBot(alice.session)
+			await defaultBot(bobSession)
+			// A Session needs a model from its settings or its Bot. There is no default model.
 			const withoutModel = await session(
 				alice.session,
 				"/v1/sessions",

@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "اک ہیڈلیس، API فرسٹ Agent پلیٹ فارم۔",
+	description: "اک ہیڈلیس، API فرسٹ Bot پلیٹ فارم۔",
 	nav: {
 		label: "سائٹ",
 		docs: "ڈاکس",
@@ -10,10 +10,10 @@ export default {
 	},
 	hero: {
 		title: [
-			"Agent جنہاں نوں تسیں سد سکدے او۔",
+			"Bot جنہاں نوں تسیں سد سکدے او۔",
 			"نتیجے جنہاں نوں تسیں چیک کر سکدے او۔",
 		],
-		body: "OpenBot اک اوپن سورس Agent پلیٹ فارم اے جس دا کوئی یوزر انٹرفیس نہیں۔ تسیں HTTP راہیں Agent نوں کم دیندے او۔",
+		body: "OpenBot اک اوپن سورس Bot پلیٹ فارم اے جس دا کوئی یوزر انٹرفیس نہیں۔ تسیں HTTP راہیں Bot نوں کم دیندے او۔",
 		quickStart: "چھیتی شروع کرو",
 		apiReference: "API ریفرنس",
 		visual: "اک Turn شروع کرو",
@@ -60,7 +60,7 @@ export default {
 			},
 			{
 				title: "کھلیاں App",
-				text: "Agent اوہ App لبھدے تے ورتدے نیں جیہڑیاں پبلشر OpenBot App Protocol نال کھلے ویب تے رکھدے نیں۔",
+				text: "Bot اوہ App لبھدے تے ورتدے نیں جیہڑیاں پبلشر OpenBot App Protocol نال کھلے ویب تے رکھدے نیں۔",
 			},
 			{
 				title: "تہاڈے ماڈل",

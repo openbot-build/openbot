@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "화면 없이 API를 먼저 생각한 Agent 플랫폼.",
+	description: "화면 없이 API를 먼저 생각한 Bot 플랫폼.",
 	nav: {
 		label: "사이트",
 		docs: "문서",
@@ -9,8 +9,8 @@ export default {
 		language: "언어",
 	},
 	hero: {
-		title: ["호출할 수 있는 Agent.", "확인할 수 있는 결과."],
-		body: "OpenBot은 사용자 인터페이스가 없는 오픈 소스 Agent 플랫폼입니다. HTTP로 Agent에게 일을 맡기세요.",
+		title: ["호출할 수 있는 Bot.", "확인할 수 있는 결과."],
+		body: "OpenBot은 사용자 인터페이스가 없는 오픈 소스 Bot 플랫폼입니다. HTTP로 Bot에게 일을 맡기세요.",
 		quickStart: "빠른 시작",
 		apiReference: "API 레퍼런스",
 		visual: "Turn 시작하기",
@@ -56,7 +56,7 @@ export default {
 			},
 			{
 				title: "열린 App",
-				text: "Agent는 게시자가 OpenBot App Protocol로 열린 웹에 올린 App을 찾아서 사용합니다.",
+				text: "Bot는 게시자가 OpenBot App Protocol로 열린 웹에 올린 App을 찾아서 사용합니다.",
 			},
 			{
 				title: "원하는 모델",

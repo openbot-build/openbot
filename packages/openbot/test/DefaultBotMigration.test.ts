@@ -14,7 +14,7 @@ import * as PostgresTest from "./PostgresTest.ts"
 
 const migrations = fileURLToPath(new URL("../migrations", import.meta.url))
 
-test("each old Main Agent becomes a lasting Agent and the default Agent of its member", async () => {
+test("each old Main Bot becomes a lasting Bot and the default Bot of its member", async () => {
 	const database = await PostgresTest.start()
 	const before = await mkdtemp(join(tmpdir(), "openbot-migrations-"))
 	await using runtime = ManagedRuntime.make(
@@ -22,7 +22,7 @@ test("each old Main Agent becomes a lasting Agent and the default Agent of its m
 			Layer.provide(NodeServices.layer),
 		),
 	)
-	const agent = (
+	const bot = (
 		id: string,
 		organizationId: string,
 		userId: string,
@@ -54,9 +54,9 @@ test("each old Main Agent becomes a lasting Agent and the default Agent of its m
 				yield* migrate(db, { migrationsFolder: before })
 				const sql = yield* PgClient.PgClient
 				for (const row of [
-					agent("agt_main_a", "org_a", "user_a", "main"),
-					agent("agt_main_b", "org_a", "user_b", "main"),
-					agent("agt_other", "org_a", "user_a", "persistent"),
+					bot("bot_main_a", "org_a", "user_a", "main"),
+					bot("bot_main_b", "org_a", "user_b", "main"),
+					bot("bot_other", "org_a", "user_a", "persistent"),
 				])
 					yield* sql`insert into openbot_agent_records ${sql.insert(row)}`
 				// This member changed their settings before.
@@ -73,17 +73,17 @@ test("each old Main Agent becomes a lasting Agent and the default Agent of its m
 		await runtime.runPromise(
 			Effect.gen(function* () {
 				const sql = yield* PgClient.PgClient
-				const agents = yield* sql<{
+				const bots = yield* sql<{
 					readonly id: string
 					readonly status: string
 					readonly body: string
-				}>`select id, status, body from openbot_agent_records order by id`
+				}>`select id, status, body from openbot_bot_records order by id`
 				assert.deepEqual(
-					agents.map((row) => [row.id, row.status, JSON.parse(row.body).kind]),
+					bots.map((row) => [row.id, row.status, JSON.parse(row.body).kind]),
 					[
-						["agt_main_a", "persistent", "persistent"],
-						["agt_main_b", "persistent", "persistent"],
-						["agt_other", "persistent", "persistent"],
+						["bot_main_a", "persistent", "persistent"],
+						["bot_main_b", "persistent", "persistent"],
+						["bot_other", "persistent", "persistent"],
 					],
 				)
 				const settings = yield* sql<{
@@ -100,12 +100,12 @@ test("each old Main Agent becomes a lasting Agent and the default Agent of its m
 					[
 						[
 							"org_a/user_a",
-							{ planApproval: null, defaultAgent: "agt_main_a" },
+							{ planApproval: null, defaultBot: "bot_main_a" },
 							1,
 						],
 						[
 							"org_a/user_b",
-							{ planApproval: approval, defaultAgent: "agt_main_b" },
+							{ planApproval: approval, defaultBot: "bot_main_b" },
 							4,
 						],
 					],

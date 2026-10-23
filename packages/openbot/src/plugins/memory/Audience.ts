@@ -1,26 +1,26 @@
 import { Array as Arr } from "effect"
 
 /**
- * The tags that OpenBot sets on Agent memory entries. A tag with a colon belongs to OpenBot.
- * The memory Agent never writes them itself, so the model cannot change who sees an entry.
+ * The tags that OpenBot sets on Bot memory entries. A tag with a colon belongs to OpenBot.
+ * The memory Bot never writes them itself, so the model cannot change who sees an entry.
  *
  * - `from:<userId>`: a person who said or did what the entry is about.
- * - `for:person:<userId>`, `for:channel:<channelId>`, `for:agent`: who may see the entry.
+ * - `for:person:<userId>`, `for:channel:<channelId>`, `for:bot`: who may see the entry.
  * - `session:<id>`, `channel:<id>`: where the entry comes from.
  * - `org:<organizationId>`: the organization where it happened. Only work in that
  *   organization sees the entry.
  * - `app:<tool>`: a tool result from an App supports the entry.
  */
 
-/** Who may see an entry: one person, the people of one Channel group, or everyone who uses the Agent. */
+/** Who may see an entry: one person, the people of one Channel group, or everyone who uses the Bot. */
 export type Audience =
 	| { readonly _tag: "Person"; readonly id: string }
 	| { readonly _tag: "Channel"; readonly id: string }
-	| { readonly _tag: "Agent" }
+	| { readonly _tag: "Bot" }
 
 export const person = (id: string): Audience => ({ _tag: "Person", id })
 export const channel = (id: string): Audience => ({ _tag: "Channel", id })
-export const everyone: Audience = { _tag: "Agent" }
+export const everyone: Audience = { _tag: "Bot" }
 
 export const fromTag = (userId: string) => "from:" + userId
 export const sessionTag = (session: string) => "session:" + session
@@ -28,8 +28,8 @@ export const orgTag = (organizationId: string) => "org:" + organizationId
 export const channelTag = (channelId: string) => "channel:" + channelId
 export const appTag = (tool: string) => "app:" + tool
 export const forTag = (audience: Audience) =>
-	audience._tag === "Agent"
-		? "for:agent"
+	audience._tag === "Bot"
+		? "for:bot"
 		: audience._tag === "Person"
 			? "for:person:" + audience.id
 			: "for:channel:" + audience.id
@@ -44,7 +44,7 @@ const valuesOf = (tags: ReadonlyArray<string>, prefix: string) =>
 
 export const audiencesOf = (tags: ReadonlyArray<string>) =>
 	tags.flatMap((tag): ReadonlyArray<Audience> =>
-		tag === "for:agent"
+		tag === "for:bot"
 			? [everyone]
 			: tag.startsWith("for:person:")
 				? [person(tag.slice("for:person:".length))]
@@ -56,10 +56,10 @@ export const peopleOf = (tags: ReadonlyArray<string>) => valuesOf(tags, "from:")
 export const orgsOf = (tags: ReadonlyArray<string>) => valuesOf(tags, "org:")
 
 const same = (a: Audience, b: Audience) =>
-	a._tag === b._tag && (a._tag === "Agent" || a.id === (b as { id: string }).id)
+	a._tag === b._tag && (a._tag === "Bot" || a.id === (b as { id: string }).id)
 
 /**
- * The people who may see both of two entries. `for:agent` is everyone, so it gives the other side.
+ * The people who may see both of two entries. `for:bot` is everyone, so it gives the other side.
  * Two different people, or a person and a Channel, give nobody: OpenBot does not know who is
  * in a Channel group, so it does not guess.
  */
@@ -70,9 +70,9 @@ export const intersect = (
 	Arr.dedupeWith(
 		a.flatMap((left) =>
 			b.flatMap((right): ReadonlyArray<Audience> =>
-				left._tag === "Agent"
+				left._tag === "Bot"
 					? [right]
-					: right._tag === "Agent" || same(left, right)
+					: right._tag === "Bot" || same(left, right)
 						? [left]
 						: [],
 			),
@@ -129,7 +129,7 @@ export interface Viewer {
 export const visible = (tags: ReadonlyArray<string>, viewer: Viewer) =>
 	orgsOf(tags).includes(viewer.organizationId) &&
 	audiencesOf(tags).some((audience) =>
-		audience._tag === "Agent"
+		audience._tag === "Bot"
 			? true
 			: audience._tag === "Person"
 				? viewer.channel === undefined && viewer.person === audience.id

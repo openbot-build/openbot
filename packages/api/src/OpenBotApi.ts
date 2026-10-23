@@ -4,7 +4,7 @@ import { ConnectionsApi } from "./ConnectionsApi.ts"
 import { HttpApi, OpenApi } from "effect/http-api"
 import { SessionsApi } from "./SessionsApi.ts"
 import { HealthApi } from "./HealthApi.ts"
-import { AccountApi, AgentAuth, SignInApi } from "./AuthApi.ts"
+import { AccountApi, BotAuth, SignInApi } from "./AuthApi.ts"
 import { UserTokensApi } from "./UserTokensApi.ts"
 import { OrganizationApi, OrganizationsApi } from "./OrganizationApi.ts"
 import { ModelProvidersApi } from "./ModelProvidersApi.ts"
@@ -16,7 +16,7 @@ import {
 	AppAuthorizationApi,
 	AppAuthorizationPublicApi,
 } from "./AppAuthorizationApi.ts"
-import { AgentInvitationsApi, AgentsApi } from "./AgentsApi.ts"
+import { BotInvitationsApi, BotsApi } from "./BotsApi.ts"
 import { RequestsApi } from "./RequestsApi.ts"
 import { MemberSettingsApi } from "./MemberSettingsApi.ts"
 import { TriggerHooksApi, TriggersApi } from "./TriggersApi.ts"
@@ -49,7 +49,7 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 			write: [requires("apps.publish").on("apps")],
 		})
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		AppIndexApi,
 		AppAuthorizationPublicApi,
 		AppAuthorizationApi.annotate(GroupRequired, {
@@ -57,13 +57,13 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 			write: connection("connections.write"),
 		})
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		AppsApi.annotate(GroupRequired, { read: apps, write: apps })
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		SessionsApi,
-		AgentsApi,
-		AgentInvitationsApi,
+		BotsApi,
+		BotInvitationsApi,
 		RequestsApi,
 		MemberSettingsApi,
 		TriggersApi,
@@ -78,25 +78,25 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 		BudgetsApi,
 		AppOperationsApi.annotate(GroupRequired, { read: apps, write: apps })
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		CodeRunsApi.annotate(GroupRequired, { read: apps, write: apps })
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		AppViewsApi.annotate(GroupRequired, { read: apps, write: apps })
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		AppExperienceApi.annotate(GroupRequired, {
 			read: connection("connections.read"),
 			write: connection("connections.write"),
 		})
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		ConnectionsApi.annotate(GroupRequired, {
 			read: connection("connections.read"),
 			write: connection("connections.write"),
 		})
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		AccountApi,
 		SignInApi,
 		OrganizationsApi,
@@ -106,25 +106,25 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 			write: [requires("tokens.write").on("user")],
 		})
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		OrganizationApi.annotate(GroupRequired, {
 			read: [requires("organization.read").on("organization")],
 			write: [requires("organization.write").on("organization")],
 		})
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		ModelProvidersApi.annotate(GroupRequired, {
 			read: [requires("model_providers.read").on("organization")],
 			write: [requires("model_providers.write").on("organization")],
 		})
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 		SsoApi.annotate(GroupRequired, {
 			read: [requires("sso.read").on("organization")],
 			write: [requires("sso.write").on("organization")],
 		})
 			.middleware(Authorize)
-			.middleware(AgentAuth),
+			.middleware(BotAuth),
 	)
 	.add(HealthApi)
 	.annotate(OpenApi.Title, "OpenBot API")

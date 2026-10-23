@@ -3,17 +3,17 @@ title: Usage and budgets
 description: See the model usage and its cost, set budgets, and pay for platform models with credits.
 ---
 
-OpenBot records each call to a model. You can see how many tokens each member, Agent, and user token used, and what they cost. A token is a small piece of text that a model reads or writes. You can also set **budgets** that stop model calls when too much money is spent. A platform can give organizations **credits** to pay for the models that the platform shares.
+OpenBot records each call to a model. You can see how many tokens each member, Bot, and user token used, and what they cost. A token is a small piece of text that a model reads or writes. You can also set **budgets** that stop model calls when too much money is spent. A platform can give organizations **credits** to pay for the models that the platform shares.
 
-| Word         | Meaning                                                                                               |
-| ------------ | ----------------------------------------------------------------------------------------------------- |
-| Usage event  | One model call: its tokens, its cost, and who made it.                                                |
-| Price        | What one million tokens of a model cost at one provider.                                              |
-| Budget       | A spending limit for the organization, a member, an Agent, or a user token, for one day or one month. |
-| Credits      | Money that the platform gives an organization to pay for the models of the platform.                  |
-| Micro-USD    | All money in the API is in micro-USD. One US dollar is 1,000,000 micro-USD.                           |
-| Platform key | A [shared model provider](/docs/platform#shared-model-providers). The platform pays for it.           |
-| Own key      | A model provider of the organization. The organization pays the model company itself.                 |
+| Word         | Meaning                                                                                            |
+| ------------ | -------------------------------------------------------------------------------------------------- |
+| Usage event  | One model call: its tokens, its cost, and who made it.                                             |
+| Price        | What one million tokens of a model cost at one provider.                                           |
+| Budget       | A spending limit for the organization, a member, a Bot, or a user token, for one day or one month. |
+| Credits      | Money that the platform gives an organization to pay for the models of the platform.               |
+| Micro-USD    | All money in the API is in micro-USD. One US dollar is 1,000,000 micro-USD.                        |
+| Platform key | A [shared model provider](/docs/platform#shared-model-providers). The platform pays for it.        |
+| Own key      | A model provider of the organization. The organization pays the model company itself.              |
 
 ---
 
@@ -21,16 +21,16 @@ OpenBot records each call to a model. You can see how many tokens each member, A
 
 OpenBot records each model call that gets an answer. Each usage event has a `source`:
 
-| `source`         | What made the call                                                               |
-| ---------------- | -------------------------------------------------------------------------------- |
-| `turn`           | A model step of a Turn in a Session.                                             |
-| `compaction`     | A summary of old messages, so the conversation fits the model.                   |
-| `session_memory` | The [memory](/docs/memory) of a Session.                                         |
-| `judge`          | The model that judges [Rules](/docs/rules).                                      |
-| `agent_memory`   | The [memory Agent](/docs/memory#agent-memory): what it learns, adds and answers. |
-| `other`          | Any other call.                                                                  |
+| `source`         | What made the call                                                           |
+| ---------------- | ---------------------------------------------------------------------------- |
+| `turn`           | A model step of a Turn in a Session.                                         |
+| `compaction`     | A summary of old messages, so the conversation fits the model.               |
+| `session_memory` | The [memory](/docs/memory) of a Session.                                     |
+| `judge`          | The model that judges [Rules](/docs/rules).                                  |
+| `bot_memory`     | The [memory Bot](/docs/memory#bot-memory): what it learns, adds and answers. |
+| `other`          | Any other call.                                                              |
 
-A usage event also has the Session, the Turn, the Agent, the member and the user token, when the call has them. In a [Channel](/docs/channels), the member is the person who wrote the message.
+A usage event also has the Session, the Turn, the Bot, the member and the user token, when the call has them. In a [Channel](/docs/channels), the member is the person who wrote the message.
 
 Some calls are not recorded:
 
@@ -179,7 +179,7 @@ Leave `periods` out when the price is the same at all times.
 | --------- | ------------------------------------------------------------------------------------- |
 | `from`    | The start, as an ISO 8601 time. The default is the start of the current month in UTC. |
 | `to`      | The end, as an ISO 8601 time. The default is now.                                     |
-| `groupBy` | `day` (the default), `model`, `provider`, `member`, `agent`, `token` or `source`.     |
+| `groupBy` | `day` (the default), `model`, `provider`, `member`, `bot`, `token` or `source`.       |
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -215,7 +215,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 }
 ```
 
-`key` is the value of the group, such as a user ID or a day. It is `null` for calls without that value, such as calls without an Agent.
+`key` is the value of the group, such as a user ID or a day. It is `null` for calls without that value, such as calls without a Bot.
 
 `GET /v1/organization/usage/events` lists the single usage events, newest first. It takes `from`, `to`, `limit` (1 to 200, the default is 50) and `after`. Send the `next` value of a page as `after` to get the next page. Each event has `priced` and `charged`. `charged` is `true` when the cost came from the credits.
 
@@ -229,7 +229,7 @@ A budget stops spending at a limit. You can set a budget on four scopes:
 | -------------- | ---------------------------------------- | ------------------------------------------ |
 | `organization` | Leave it out. It is the organization ID. | Every call of the organization.            |
 | `member`       | The user ID of a member.                 | The calls that work for this member.       |
-| `agent`        | The ID of an Agent.                      | The calls of this Agent.                   |
+| `bot`          | The ID of a Bot.                         | The calls of this Bot.                     |
 | `token`        | The ID of a user token.                  | The calls of work that this token started. |
 
 Each budget has a `period`: `day` or `month`. Both start at midnight UTC. Each scope can have one budget for each period.
@@ -244,15 +244,15 @@ A budget counts every priced call, also the calls with the organization's own ke
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"scope":"agent","scopeId":"agt_7d2c","period":"month","limitMicros":50000000,"mode":"hard"}' \
+  -d '{"scope":"bot","scopeId":"bot_7d2c","period":"month","limitMicros":50000000,"mode":"hard"}' \
   https://api.example.com/v1/organization/budgets
 ```
 
 ```json
 {
 	"id": "budget_5c9e",
-	"scope": "agent",
-	"scopeId": "agt_7d2c",
+	"scope": "bot",
+	"scopeId": "bot_7d2c",
 	"period": "month",
 	"limitMicros": 50000000,
 	"mode": "hard",
@@ -344,7 +344,7 @@ Each scope has a **token bucket**. The bucket holds up to `burstTokens` and fill
 | -------------- | ---------------------------------------------------- |
 | `organization` | All model calls of the organization.                 |
 | `member`       | The model calls that work for one member.            |
-| `agent`        | The model calls of one Agent.                        |
+| `bot`          | The model calls of one Bot.                          |
 | `token`        | The model calls of work that one user token started. |
 
 A model call takes from every bucket of its scopes:
@@ -358,7 +358,7 @@ The platform admin sets the highest rates in the [platform settings](/docs/platf
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"expectedVersion":5,"tokenRate":{"organization":{"tokensPerSecond":2000,"burstTokens":20000},"member":{"tokensPerSecond":500,"burstTokens":10000},"agent":null,"token":null}}' \
+  -d '{"expectedVersion":5,"tokenRate":{"organization":{"tokensPerSecond":2000,"burstTokens":20000},"member":{"tokensPerSecond":500,"burstTokens":10000},"bot":null,"token":null}}' \
   https://api.example.com/v1/platform/settings
 ```
 

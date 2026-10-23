@@ -1,13 +1,13 @@
 import { createHash, randomBytes } from "node:crypto"
 import {
-	type AgentsApi,
+	type BotsApi,
 	type Caller,
 	ComputersApi,
 	Permissions,
 } from "@openbot-build/api"
 import { and, desc, eq, inArray, isNull, or } from "drizzle-orm"
 import { Clock, Context, Effect, Layer, Option } from "effect"
-import { Agents } from "../agents/Agents.ts"
+import { Bots } from "../bots/Bots.ts"
 import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
 import { can } from "../authorization/Check.ts"
 import { computerKey, computerPlace } from "../authorization/Policy.ts"
@@ -81,14 +81,14 @@ const fromDriver = (error: ComputerError) =>
 /** Which permission a caller needs on a Computer. */
 export type Need = "computers.read" | "computers.use" | "computers.write"
 
-/** The Computers of an organization, and the rights of Agents to use them. */
+/** The Computers of an organization, and the rights of Bots to use them. */
 export class Computers extends Context.Service<
 	Computers,
 	{
-		/** The Computers that the caller can read. With `agent`, only those that Agent may use. */
+		/** The Computers that the caller can read. With `bot`, only those that Bot may use. */
 		readonly list: (
 			caller: Caller,
-			agent?: AgentsApi.AgentId,
+			bot?: BotsApi.BotId,
 		) => Effect.Effect<ReadonlyArray<Computer>, Failure, AuthorizationServices>
 		readonly get: (
 			caller: Caller,
@@ -96,13 +96,13 @@ export class Computers extends Context.Service<
 			need?: Need,
 		) => Effect.Effect<Computer, Failure, AuthorizationServices>
 		/**
-		 * Creates a Computer. `createdBy` is the Agent that made it for the caller.
-		 * That Agent gets the right to use it.
+		 * Creates a Computer. `createdBy` is the Bot that made it for the caller.
+		 * That Bot gets the right to use it.
 		 */
 		readonly create: (
 			caller: Caller,
 			input: ComputersApi.CreateComputerRequest,
-			agent?: AgentsApi.AgentId,
+			bot?: BotsApi.BotId,
 		) => Effect.Effect<Computer, Failure, AuthorizationServices>
 		readonly update: (
 			caller: Caller,
@@ -172,7 +172,7 @@ export class Computers extends Context.Service<
 			Failure,
 			AuthorizationServices
 		>
-		readonly agents: (
+		readonly bots: (
 			caller: Caller,
 			id: string,
 		) => Effect.Effect<
@@ -180,11 +180,11 @@ export class Computers extends Context.Service<
 			Failure,
 			AuthorizationServices
 		>
-		/** Gives an Agent the right to use a Computer. The caller decides for the Agent. */
+		/** Gives a Bot the right to use a Computer. The caller decides for the Bot. */
 		readonly grant: (
 			caller: Caller,
 			id: string,
-			agent: AgentsApi.AgentId,
+			bot: BotsApi.BotId,
 		) => Effect.Effect<
 			ComputersApi.ComputerAccess,
 			Failure,
@@ -193,34 +193,34 @@ export class Computers extends Context.Service<
 		readonly revoke: (
 			caller: Caller,
 			id: string,
-			agent: AgentsApi.AgentId,
+			bot: BotsApi.BotId,
 		) => Effect.Effect<void, Failure, AuthorizationServices>
-		/** The Agent gives up its own right to use the Computer. The Computer stays. */
+		/** The Bot gives up its own right to use the Computer. The Computer stays. */
 		readonly release: (
 			organizationId: string,
-			agent: AgentsApi.AgentId,
+			bot: BotsApi.BotId,
 			id: string,
 		) => Effect.Effect<void, ComputersApi.ComputersUnavailable>
-		/** Gives an Agent the right after its request was approved. It checks no permission. */
+		/** Gives a Bot the right after its request was approved. It checks no permission. */
 		readonly grantApproved: (
 			organizationId: string,
 			id: string,
-			agent: AgentsApi.AgentId,
+			bot: BotsApi.BotId,
 			grantedBy: string,
 		) => Effect.Effect<
 			ComputersApi.ComputerAccess,
 			ComputersApi.ComputersUnavailable
 		>
-		/** True when the Agent has the right to use the Computer and is not archived. */
+		/** True when the Bot has the right to use the Computer and is not archived. */
 		readonly holds: (
 			organizationId: string,
-			agent: AgentsApi.AgentId,
+			bot: BotsApi.BotId,
 			id: string,
 		) => Effect.Effect<boolean, ComputersApi.ComputersUnavailable>
-		/** The Computers of an Agent that it may use. */
+		/** The Computers of a Bot that it may use. */
 		readonly heldBy: (
 			organizationId: string,
-			agent: AgentsApi.AgentId,
+			bot: BotsApi.BotId,
 		) => Effect.Effect<
 			ReadonlyArray<Computer>,
 			ComputersApi.ComputersUnavailable
@@ -235,7 +235,7 @@ export class Computers extends Context.Service<
 		>
 		/** Pauses the Computers that had no work for longer than their `pauseAfter`. */
 		readonly pauseIdle: Effect.Effect<void>
-		/** Removes the rights of archived Agents. */
+		/** Removes the rights of archived Bots. */
 		readonly forgetArchived: Effect.Effect<void>
 	}
 >()("@openbot-build/openbot/computers/Computers") {}
@@ -245,7 +245,7 @@ export const make = Effect.gen(function* () {
 	const providers = yield* ComputerProviders
 	const drivers = yield* Drivers
 	const connectors = yield* Connectors
-	const agentsService = yield* Agents
+	const botsService = yield* Bots
 	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 		effect.pipe(Effect.mapError(unavailable))
 	const where = (organizationId: string, id: string) =>
@@ -358,7 +358,7 @@ export const make = Effect.gen(function* () {
 	const grantRow = (
 		organizationId: string,
 		computerId: string,
-		agent: AgentsApi.AgentId,
+		bot: BotsApi.BotId,
 		grantedBy: string,
 	) =>
 		Effect.gen(function* () {
@@ -369,7 +369,7 @@ export const make = Effect.gen(function* () {
 					.values({
 						organizationId,
 						computerId,
-						agent,
+						bot,
 						grantedBy,
 						grantedAt: now,
 					})
@@ -382,14 +382,14 @@ export const make = Effect.gen(function* () {
 					.where(
 						and(
 							eq(computerAccess.computerId, computerId),
-							eq(computerAccess.agent, agent),
+							eq(computerAccess.bot, bot),
 						),
 					),
 			)
 			const saved = rows[0]!
 			return {
 				computer: ComputersApi.ComputerId.make(computerId),
-				agent,
+				bot,
 				grantedBy: saved.grantedBy,
 				grantedAt: saved.grantedAt,
 			} satisfies ComputersApi.ComputerAccess
@@ -413,7 +413,7 @@ export const make = Effect.gen(function* () {
 		})
 
 	const service: Computers["Service"] = {
-		list: (caller, agent) =>
+		list: (caller, bot) =>
 			Effect.gen(function* () {
 				const readable: Array<string | null> = []
 				for (const userId of [caller.userId, null])
@@ -431,7 +431,7 @@ export const make = Effect.gen(function* () {
 						readable.push(userId)
 				if (readable.length === 0) return []
 				const held =
-					agent === undefined
+					bot === undefined
 						? undefined
 						: (yield* stored(
 								db
@@ -440,7 +440,7 @@ export const make = Effect.gen(function* () {
 									.where(
 										and(
 											eq(computerAccess.organizationId, caller.organizationId),
-											eq(computerAccess.agent, agent),
+											eq(computerAccess.bot, bot),
 										),
 									),
 							)).map((entry) => entry.id)
@@ -468,7 +468,7 @@ export const make = Effect.gen(function* () {
 			}),
 		get: (caller, id, need = "computers.read") =>
 			Effect.map(access(caller, id, need), (found) => found.computer),
-		create: (caller, input, agent) =>
+		create: (caller, input, bot) =>
 			Effect.gen(function* () {
 				const shared = input.shared === true
 				yield* mayCreate(caller, shared)
@@ -483,7 +483,7 @@ export const make = Effect.gen(function* () {
 						input.pauseAfter === undefined
 							? defaultPauseAfter
 							: input.pauseAfter,
-					createdBy: agent ?? caller.userId,
+					createdBy: bot ?? caller.userId,
 					version: 0,
 					createdAt: now,
 					updatedAt: now,
@@ -539,8 +539,8 @@ export const make = Effect.gen(function* () {
 					)
 					yield* setState(caller.organizationId, stored_, "running")
 				}
-				if (agent !== undefined)
-					yield* grantRow(caller.organizationId, id, agent, caller.userId)
+				if (bot !== undefined)
+					yield* grantRow(caller.organizationId, id, bot, caller.userId)
 				return fromRow(Option.getOrThrow(yield* row(caller.organizationId, id)))
 			}),
 		update: (caller, id, input) =>
@@ -753,7 +753,7 @@ export const make = Effect.gen(function* () {
 					token,
 				}
 			}),
-		agents: (caller, id) =>
+		bots: (caller, id) =>
 			Effect.gen(function* () {
 				yield* access(caller, id, "computers.read")
 				const rows = yield* stored(
@@ -770,29 +770,29 @@ export const make = Effect.gen(function* () {
 				)
 				return rows.map((entry) => ({
 					computer: ComputersApi.ComputerId.make(entry.computerId),
-					agent: entry.agent as AgentsApi.AgentId,
+					bot: entry.bot as BotsApi.BotId,
 					grantedBy: entry.grantedBy,
 					grantedAt: entry.grantedAt,
 				}))
 			}),
-		grant: (caller, id, agent) =>
+		grant: (caller, id, bot) =>
 			Effect.gen(function* () {
 				yield* access(caller, id, "computers.use")
-				const target = yield* agentsService
-					.access(caller, agent, "agents.write")
+				const target = yield* botsService
+					.access(caller, bot, "bots.write")
 					.pipe(
 						Effect.catchTags({
-							AgentNotFound: () => invalid("The Agent does not exist."),
-							AgentStorageUnavailable: () => Effect.fail(unavailable()),
-							AgentConflict: () => invalid("The Agent changed. Try again."),
-							AgentInvalid: (error) => invalid(error.message),
+							BotNotFound: () => invalid("The Bot does not exist."),
+							BotStorageUnavailable: () => Effect.fail(unavailable()),
+							BotConflict: () => invalid("The Bot changed. Try again."),
+							BotInvalid: (error) => invalid(error.message),
 						}),
 					)
 				if (target.archived)
-					return yield* invalid("An archived Agent cannot use a Computer.")
-				return yield* grantRow(caller.organizationId, id, agent, caller.userId)
+					return yield* invalid("An archived Bot cannot use a Computer.")
+				return yield* grantRow(caller.organizationId, id, bot, caller.userId)
 			}),
-		revoke: (caller, id, agent) =>
+		revoke: (caller, id, bot) =>
 			Effect.gen(function* () {
 				yield* access(caller, id, "computers.use")
 				yield* stored(
@@ -802,12 +802,12 @@ export const make = Effect.gen(function* () {
 							and(
 								eq(computerAccess.organizationId, caller.organizationId),
 								eq(computerAccess.computerId, id),
-								eq(computerAccess.agent, agent),
+								eq(computerAccess.bot, bot),
 							),
 						),
 				)
 			}),
-		release: (organizationId, agent, id) =>
+		release: (organizationId, bot, id) =>
 			stored(
 				db
 					.delete(computerAccess)
@@ -815,32 +815,32 @@ export const make = Effect.gen(function* () {
 						and(
 							eq(computerAccess.organizationId, organizationId),
 							eq(computerAccess.computerId, id),
-							eq(computerAccess.agent, agent),
+							eq(computerAccess.bot, bot),
 						),
 					),
 			).pipe(Effect.asVoid),
 		grantApproved: grantRow,
-		holds: (organizationId, agent, id) =>
+		holds: (organizationId, bot, id) =>
 			Effect.gen(function* () {
 				const rows = yield* stored(
 					db
-						.select({ agent: computerAccess.agent })
+						.select({ bot: computerAccess.bot })
 						.from(computerAccess)
 						.where(
 							and(
 								eq(computerAccess.organizationId, organizationId),
 								eq(computerAccess.computerId, id),
-								eq(computerAccess.agent, agent),
+								eq(computerAccess.bot, bot),
 							),
 						),
 				)
 				if (rows.length === 0) return false
-				const found = yield* agentsService
-					.find(organizationId, agent)
+				const found = yield* botsService
+					.find(organizationId, bot)
 					.pipe(Effect.mapError(unavailable))
 				return Option.isSome(found) && !found.value.archived
 			}),
-		heldBy: (organizationId, agent) =>
+		heldBy: (organizationId, bot) =>
 			Effect.gen(function* () {
 				const rows = yield* stored(
 					db
@@ -856,7 +856,7 @@ export const make = Effect.gen(function* () {
 						.where(
 							and(
 								eq(computerAccess.organizationId, organizationId),
-								eq(computerAccess.agent, agent),
+								eq(computerAccess.bot, bot),
 							),
 						)
 						.orderBy(computers.createdAt),
@@ -926,13 +926,13 @@ export const make = Effect.gen(function* () {
 				db
 					.selectDistinct({
 						organizationId: computerAccess.organizationId,
-						agent: computerAccess.agent,
+						bot: computerAccess.bot,
 					})
 					.from(computerAccess),
 			)
 			for (const entry of rows) {
-				const found = yield* agentsService
-					.find(entry.organizationId, entry.agent)
+				const found = yield* botsService
+					.find(entry.organizationId, entry.bot)
 					.pipe(Effect.mapError(unavailable))
 				if (Option.isSome(found) && !found.value.archived) continue
 				yield* stored(
@@ -941,7 +941,7 @@ export const make = Effect.gen(function* () {
 						.where(
 							and(
 								eq(computerAccess.organizationId, entry.organizationId),
-								eq(computerAccess.agent, entry.agent),
+								eq(computerAccess.bot, entry.bot),
 							),
 						),
 				)

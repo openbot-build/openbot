@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "منصة Agent بلا واجهة، تبدأ من الـ API.",
+	description: "منصة Bot بلا واجهة، تبدأ من الـ API.",
 	nav: {
 		label: "الموقع",
 		docs: "الوثائق",
@@ -9,8 +9,8 @@ export default {
 		language: "اللغة",
 	},
 	hero: {
-		title: ["Agents يمكنك استدعاؤها.", "نتائج يمكنك التحقق منها."],
-		body: "OpenBot منصة Agent مفتوحة المصدر بلا واجهة مستخدم. تعطي العمل إلى Agent عبر HTTP.",
+		title: ["Bots يمكنك استدعاؤها.", "نتائج يمكنك التحقق منها."],
+		body: "OpenBot منصة Bot مفتوحة المصدر بلا واجهة مستخدم. تعطي العمل إلى Bot عبر HTTP.",
 		quickStart: "بداية سريعة",
 		apiReference: "مرجع الـ API",
 		visual: "ابدأ Turn",
@@ -54,7 +54,7 @@ export default {
 			},
 			{
 				title: "Apps مفتوحة",
-				text: "تجد الـ Agents وتستخدم Apps ينشرها الناشرون على الويب المفتوح عبر OpenBot App Protocol.",
+				text: "تجد الـ Bots وتستخدم Apps ينشرها الناشرون على الويب المفتوح عبر OpenBot App Protocol.",
 			},
 			{
 				title: "نماذجك",

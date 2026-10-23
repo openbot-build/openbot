@@ -5,7 +5,7 @@ description: Search the public list of Apps without signing in.
 
 The **App Index** is a public list of Apps. Anyone can search it. You do not need to sign in or send a user token. The Index only holds public App descriptions. It never holds accounts, settings, sign-ins, or results.
 
-The Agent uses the same Index through the `openbot_search_apps` and `openbot_app_details` tools. See [Apps](/docs/apps#apps-in-turns).
+The Bot uses the same Index through the `openbot_search_apps` and `openbot_app_details` tools. See [Apps](/docs/apps#apps-in-turns).
 
 ---
 
@@ -136,7 +136,7 @@ Nobody needs to register an App. An App joins the Index after a user connects it
 2. OpenBot puts the Card URL in a queue. The connection does not wait for this. It works even when the Index is down.
 3. A background worker reads the Card again with no user data and no credentials. It checks that:
    - the Card is public and valid, and has an endpoint that supports the protocol;
-   - `robots.txt` allows the `OpenBot` user agent;
+   - `robots.txt` allows the `OpenBot` user bot;
    - the Card has no `noindex` rule;
    - a publisher Catalog lists the same Card URL.
 4. If all checks pass, OpenBot saves the public entry.
@@ -164,7 +164,7 @@ A publisher controls whether their App is in the Index:
 
 - **`noindex`.** Send `X-Robots-Tag: noindex` on the Card response. You can also send `X-Robots-Tag: OpenBot: noindex` to target only this crawler. At the next check, OpenBot removes the entry, or never adds it.
 - **Remove the Card from your Catalog.** At the next check, OpenBot withdraws the entry.
-- **`robots.txt`.** Block the `OpenBot` user agent. At the next check, OpenBot excludes the App, and it no longer shows in search.
+- **`robots.txt`.** Block the `OpenBot` user bot. At the next check, OpenBot excludes the App, and it no longer shows in search.
 
 If your Catalog cannot be reached, that is not a withdrawal. The check is `Unconfirmed`, and the entry stays.
 
@@ -187,6 +187,6 @@ A blocked App:
 - is excluded at that check, and then no longer shows in search;
 - returns 403 `IndexRestricted` from the details call;
 - cannot be connected (403 `AppRestricted`);
-- has the availability `Restricted` in existing connections, so the Agent cannot use it.
+- has the availability `Restricted` in existing connections, so the Bot cannot use it.
 
 See the full shapes in the [API reference](/docs/api/operations/tags/app-index/).

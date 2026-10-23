@@ -3,10 +3,10 @@ title: Intro
 description: Get to know OpenBot.
 ---
 
-**OpenBot** is an open source Agent platform with no user interface of its own. You use it through an HTTP API.
-An Agent is a program that takes a goal in plain language, plans the steps, uses tools, and gives back a result.
+**OpenBot** is an open source Bot platform with no user interface of its own. You use it through an HTTP API.
+A Bot is a program that takes a goal in plain language, plans the steps, uses tools, and gives back a result.
 
-OpenBot runs the Agent work on a server, keeps the history, and asks people before Agents use a new capability.
+OpenBot runs the Bot work on a server, keeps the history, and asks people before Bots use a new capability.
 You bring the client: a script, a backend service, a chat bot, or your own web or mobile app.
 
 ---
@@ -15,10 +15,10 @@ You bring the client: a script, a backend service, a chat bot, or your own web o
 
 - Start a **Session** and give it work in **Turns**. Read the answer as one response or as a live stream.
 - Every change goes into the Session's **Timeline**. Go back to an earlier point and try a different path with a Fork.
-- Let the Agent use **Apps**: outside services that people connect to their account.
-- Keep a team of lasting **Agents**, such as a programmer and a writer. Each has its own context and memory, and they give work to each other.
-- Let an Agent plan first in **plan mode**, keep a **todo list**, and wait. Start its work on a schedule or from a webhook with a **trigger**.
-- Agents have no preset limits. When an Agent tries something new, the decider above it answers a **request**, and the answer is kept.
+- Let the Bot use **Apps**: outside services that people connect to their account.
+- Keep a team of lasting **Bots**, such as a programmer and a writer. Each has its own context and memory, and they give work to each other.
+- Let a Bot plan first in **plan mode**, keep a **todo list**, and wait. Start its work on a schedule or from a webhook with a **trigger**.
+- Bots have no preset limits. When a Bot tries something new, the decider above it answers a **request**, and the answer is kept.
 - Find Apps in a public **App Index**, and check your own App as a publisher.
 
 ---
@@ -33,7 +33,7 @@ You bring the client: a script, a backend service, a chat bot, or your own web o
 | User tokens  | Programs send a token in the `Authorization: Bearer <token>` header for every call.                            |
 | Permissions  | Roles and policies decide what each member and each token may do.                                              |
 | API contract | One typed contract makes the server, the TypeScript client, and the [API reference](/docs/api/).               |
-| App Protocol | An open way to publish Apps on the web so that Agents can find and use them.                                   |
+| App Protocol | An open way to publish Apps on the web so that Bots can find and use them.                                     |
 
 Every OpenBot tells you where to go next. Send `GET /` to read its service document:
 
@@ -71,7 +71,7 @@ See the [LICENSE](https://github.com/openbot-build/openbot/blob/main/LICENSE) fi
 		Sign in and make user tokens.
 	</Card>
 	<Card title="Sessions" href="/docs/sessions">
-		Give work to the Agent and read the results.
+		Give work to the Bot and read the results.
 	</Card>
 	<Card title="Deploy" href="/docs/deploy">
 		Run OpenBot on your own server.

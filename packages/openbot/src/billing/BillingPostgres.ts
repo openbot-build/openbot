@@ -64,7 +64,7 @@ const eventView = (row: EventRow): BillingApi.UsageEvent => ({
 	source: row.source as BillingApi.UsageSource,
 	sessionId: row.sessionId,
 	turnId: row.turnId,
-	agentId: row.agentId,
+	botId: row.botId,
 	userId: row.userId,
 	tokenId: row.tokenId,
 	provider: row.providerId,
@@ -89,8 +89,8 @@ const scopeColumn = (
 			return undefined
 		case "member":
 			return usageEvents.userId
-		case "agent":
-			return usageEvents.agentId
+		case "bot":
+			return usageEvents.botId
 		case "token":
 			return usageEvents.tokenId
 	}
@@ -107,8 +107,8 @@ const scopeIdOf = (
 			return call.organizationId
 		case "member":
 			return attribution.userId
-		case "agent":
-			return attribution.agentId
+		case "bot":
+			return attribution.botId
 		case "token":
 			return attribution.tokenId
 	}
@@ -138,8 +138,8 @@ const groupColumn = (
 			return usageEvents.providerId
 		case "member":
 			return usageEvents.userId
-		case "agent":
-			return usageEvents.agentId
+		case "bot":
+			return usageEvents.botId
 		case "token":
 			return usageEvents.tokenId
 		case "source":
@@ -352,7 +352,7 @@ export const make = Effect.gen(function* () {
 		})
 
 	return Billing.of({
-		agentSpend: (agentId, since) =>
+		botSpend: (botId, since) =>
 			stored(
 				Effect.gen(function* () {
 					const [row] = yield* db
@@ -360,7 +360,7 @@ export const make = Effect.gen(function* () {
 						.from(usageEvents)
 						.where(
 							and(
-								eq(usageEvents.agentId, agentId),
+								eq(usageEvents.botId, botId),
 								gte(usageEvents.occurredAt, since),
 							),
 						)
@@ -480,7 +480,7 @@ export const make = Effect.gen(function* () {
 								source: attribution.source,
 								sessionId: attribution.sessionId ?? null,
 								turnId: attribution.turnId ?? null,
-								agentId: attribution.agentId ?? null,
+								botId: attribution.botId ?? null,
 								userId: attribution.userId ?? null,
 								tokenId: attribution.tokenId ?? null,
 								providerId: call.providerId,

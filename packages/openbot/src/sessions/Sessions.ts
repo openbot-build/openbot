@@ -1,5 +1,5 @@
 import {
-	Agent,
+	Bot,
 	Config,
 	Item,
 	Timeline,
@@ -29,7 +29,7 @@ import {
 	type CreateSessionRequest,
 	type StartTurnRequest,
 	type MemoryCommand,
-	type AgentsApi,
+	type BotsApi,
 	type SessionKind,
 	type SessionParent,
 	type SessionMemory,
@@ -42,9 +42,9 @@ import type * as Memory from "../plugins/memory/Memory.ts"
 import type { Tools as AppTools } from "../plugins/apps/AppPlugin.ts"
 import type * as SessionHost from "./SessionHost.ts"
 
-/** What a new Session needs: the Agent that works in it and where the work came from. */
+/** What a new Session needs: the Bot that works in it and where the work came from. */
 export interface CreateInput {
-	readonly agent: AgentsApi.Agent
+	readonly bot: BotsApi.Bot
 	readonly kind: SessionKind
 	readonly chain: SessionHost.Chain
 	readonly parent?: SessionParent
@@ -96,8 +96,8 @@ export interface Options<
 	/**
 	 * Settings that the host gives to each new Session, such as the simulated
 	 * model of a development platform or of a test. They come before the model
-	 * of the Agent. A real platform never sets them: each Session gets its model
-	 * from its own settings or from its Agent.
+	 * of the Bot. A real platform never sets them: each Session gets its model
+	 * from its own settings or from its Bot.
 	 */
 	readonly defaults?: Effect.Effect<Partial<Turn.Settings>>
 	readonly resolveModel?: (
@@ -121,7 +121,7 @@ export interface Options<
 	 */
 	readonly organization?: (organizationId: string) => OrganizationOptions
 	readonly namespace?: string
-	readonly runtime?: Agent.Definition<Tools, E, R, BuildE, BuildR>
+	readonly runtime?: Bot.Definition<Tools, E, R, BuildE, BuildR>
 	readonly layerExecution?: (
 		ref: Session.Ref,
 		namespace: string,
@@ -180,7 +180,7 @@ export class Sessions extends Context.Service<
 		) => Effect.Effect<SessionView, ServiceError>
 		readonly list: (input?: {
 			readonly archived?: boolean
-			readonly agent?: string
+			readonly bot?: string
 			readonly kind?: SessionKind
 		}) => Effect.Effect<ReadonlyArray<SessionSummary>, ServiceError>
 		readonly update: (

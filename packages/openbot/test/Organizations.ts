@@ -1,4 +1,4 @@
-import type { Send } from "./DefaultAgent.ts"
+import type { Send } from "./DefaultBot.ts"
 
 /**
  * Makes an organization for the account when it has none, like a new person does.

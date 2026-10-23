@@ -1,5 +1,5 @@
 import {
-	type AgentsApi,
+	type BotsApi,
 	type ComputersApi,
 	Permissions,
 	type TriggersApi,
@@ -49,9 +49,9 @@ export const resourceKey = (target: {
 		case "connection":
 		case "request":
 			return child(userKey(subject))
-		// The key of one Agent, trigger or Computer depends on its owner.
-		// Use agentKey, triggerKey or computerKey when it is known.
-		case "agent":
+		// The key of one Bot, trigger or Computer depends on its owner.
+		// Use botKey, triggerKey or computerKey when it is known.
+		case "bot":
 		case "trigger":
 		case "computer":
 		case "computer_provider":
@@ -62,22 +62,22 @@ export const resourceKey = (target: {
 }
 
 /**
- * The member at the top of the owner tree of an Agent.
- * It is `null` when the organization owns the Agent at the top.
+ * The member at the top of the owner tree of a Bot.
+ * It is `null` when the organization owns the Bot at the top.
  */
-export const rootOf = (owner: AgentsApi.AgentOwner): string | null => {
+export const rootOf = (owner: BotsApi.BotOwner): string | null => {
 	switch (owner._tag) {
 		case "Organization":
 			return null
 		case "Member":
 		case "Session":
-		case "Agent":
+		case "Bot":
 			return owner.userId
 	}
 }
 
-/** The place for the Agents of a member, or for shared Agents when `root` is `null`. */
-export const agentPlace = ({
+/** The place for the Bots of a member, or for shared Bots when `root` is `null`. */
+export const botPlace = ({
 	organizationId,
 	root,
 }: {
@@ -86,23 +86,23 @@ export const agentPlace = ({
 }) =>
 	(root === null
 		? organizationKey(organizationId)
-		: userKey({ organizationId, userId: root })) + ".agent"
+		: userKey({ organizationId, userId: root })) + ".bot"
 
 /**
- * The key of one Agent. Shared Agents, and the Agents below them, are below the organization.
- * The other Agents are below the member at the top of their owner tree.
+ * The key of one Bot. Shared Bots, and the Bots below them, are below the organization.
+ * The other Bots are below the member at the top of their owner tree.
  */
-export const agentKey = (agent: {
+export const botKey = (bot: {
 	readonly organizationId: string
 	readonly id: string
-	readonly owner: AgentsApi.AgentOwner
+	readonly owner: BotsApi.BotOwner
 }) =>
-	agentPlace({
-		organizationId: agent.organizationId,
-		root: rootOf(agent.owner),
+	botPlace({
+		organizationId: bot.organizationId,
+		root: rootOf(bot.owner),
 	}) +
 	"." +
-	segment(agent.id)
+	segment(bot.id)
 
 /** The place for the triggers of a member, or for shared triggers when `userId` is `null`. */
 export const triggerPlace = (input: {

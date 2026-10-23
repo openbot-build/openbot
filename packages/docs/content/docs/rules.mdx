@@ -16,14 +16,14 @@ A Grant is fast and exact. A Rule covers a whole kind of request.
 
 ## Grants
 
-A **Grant** is a kept decision about one capability of one Agent. The Agent never sees its Grants. It only sees that some calls run and some are denied.
+A **Grant** is a kept decision about one capability of one Bot. The Bot never sees its Grants. It only sees that some calls run and some are denied.
 
 | Field        | Meaning                                                                   |
 | ------------ | ------------------------------------------------------------------------- |
 | `capability` | `action`, `target` (`*` for every target) and optional exact `arguments`. |
 | `effect`     | `allow` or `deny`. A deny wins.                                           |
 | `scope`      | `once` (used up by one call), `session` or `lifetime`.                    |
-| `grantedBy`  | The person, Agent or Rule that decided.                                   |
+| `grantedBy`  | The person, Bot or Rule that decided.                                     |
 | `parent`     | The Grant of the decider that this Grant came from.                       |
 | `status`     | `active`, `used` or `revoked`.                                            |
 
@@ -32,51 +32,51 @@ OpenBot makes Grants when a decider answers a request. You can also make one you
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"capability":{"action":"agents.spawn","target":"*"},"effect":"allow","scope":"lifetime"}' \
-  https://api.example.com/v1/agents/$AGENT/grants
+  -d '{"capability":{"action":"bots.spawn","target":"*"},"effect":"allow","scope":"lifetime"}' \
+  https://api.example.com/v1/bots/$BOT/grants
 ```
 
-`GET /v1/agents/:agentId/grants` lists Grants. Add `?status=active` to see only active ones.
+`GET /v1/bots/:botId/grants` lists Grants. Add `?status=active` to see only active ones.
 
-`DELETE /v1/agents/:agentId/grants/:grantId` revokes a Grant. OpenBot also revokes every Grant that came from it, so Agents below lose what they got through it.
+`DELETE /v1/bots/:botId/grants/:grantId` revokes a Grant. OpenBot also revokes every Grant that came from it, so Bots below lose what they got through it.
 
 ---
 
 ## Rules
 
-A **Rule** is a sentence in plain language for one Agent. When no Grant decides a request, a judge model reads the active Rules of the Agent.
+A **Rule** is a sentence in plain language for one Bot. When no Grant decides a request, a judge model reads the active Rules of the Bot.
 
 - The judge allows only when a Rule clearly allows this request, and denies only when a Rule clearly forbids it. In every other case, the request goes to the decider.
 - Each allow or deny must quote the text of a Rule. OpenBot checks the quote. Without a real quote, there is no decision.
 - A deny wins over an allow.
 - When the judge fails or is slow, there is no decision.
 
-A Rule that an Agent wrote counts only when that Agent is above this Agent in its [owner chain](/docs/requests#the-chain-of-deciders), and may use the capability itself.
+A Rule that a Bot wrote counts only when that Bot is above this Bot in its [owner chain](/docs/requests#the-chain-of-deciders), and may use the capability itself.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text":"The Programmer may read any repository of the openbot organization, but must ask before it pushes to main."}' \
-  https://api.example.com/v1/agents/$AGENT/rules
+  https://api.example.com/v1/bots/$BOT/rules
 ```
 
 | Field     | Meaning                                                     |
 | --------- | ----------------------------------------------------------- |
-| `author`  | The person or Agent that wrote the Rule.                    |
+| `author`  | The person or Bot that wrote the Rule.                      |
 | `status`  | `active`, `proposed` or `retired`. Only active Rules count. |
 | `version` | Goes up with each change.                                   |
 
-A Rule from a person is active at once. An Agent can propose a Rule in a review. A proposed Rule counts only after a person makes it active:
+A Rule from a person is active at once. A Bot can propose a Rule in a review. A proposed Rule counts only after a person makes it active:
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"expected":0,"status":"active"}' \
-  https://api.example.com/v1/agents/$AGENT/rules/$RULE
+  https://api.example.com/v1/bots/$BOT/rules/$RULE
 ```
 
 You can also keep a Rule when you answer a request: send `rule` with the answer. See [Answer a request](/docs/requests#answer-a-request).
 
 ### The judge model
 
-The judge uses the **Rules model**. It is `rulesModel` in the [organization settings](/docs/organization#settings). It has no default. When it is `null`, the judge gives no answer, so a person or an Agent decides. OpenBot keeps each judge answer for the same Rules and the same capability, so the judge does not run again for the same question.
+The judge uses the **Rules model**. It is `rulesModel` in the [organization settings](/docs/organization#settings). It has no default. When it is `null`, the judge gives no answer, so a person or a Bot decides. OpenBot keeps each judge answer for the same Rules and the same capability, so the judge does not run again for the same question.

@@ -1,15 +1,15 @@
 ---
 title: Code Mode
-description: 让 Agent 写一段调用 App 工具的小程序。
+description: 让 Bot 写一段调用 App 工具的小程序。
 ---
 
-在 **Code Mode** 中，Agent 不再一次调用一个 App 工具，而是写一段简短的 JavaScript 程序。程序调用这些工具，处理它们的结果，只把 Agent 需要的内容交回。这样可以节省 token，因为大的结果留在程序里，不会进入模型的上下文。程序也可以同时调用很多工具。
+在 **Code Mode** 中，Bot 不再一次调用一个 App 工具，而是写一段简短的 JavaScript 程序。程序调用这些工具，处理它们的结果，只把 Bot 需要的内容交回。这样可以节省 token，因为大的结果留在程序里，不会进入模型的上下文。程序也可以同时调用很多工具。
 
-Code Mode 不给 Agent 任何新的权限。程序中的每次 App 调用都经过和普通 App 工具调用相同的[能力检查](/zh-cn/docs/requests)。每次调用也都是一个普通的 [App operation](/zh-cn/docs/apps#app-操作)。
+Code Mode 不给 Bot 任何新的权限。程序中的每次 App 调用都经过和普通 App 工具调用相同的[能力检查](/zh-cn/docs/requests)。每次调用也都是一个普通的 [App operation](/zh-cn/docs/apps#app-操作)。
 
 | 词       | 含义                                                                       |
 | -------- | -------------------------------------------------------------------------- |
-| 程序     | Agent 写的 JavaScript 代码。它是一个 async 函数的函数体。                  |
+| 程序     | Bot 写的 JavaScript 代码。它是一个 async 函数的函数体。                    |
 | 绑定     | 程序可以调用的一个 App 能力，比如 `apps.work_calendar.list_events`。       |
 | 沙箱     | 程序运行的封闭环境。里面没有网络、没有文件、没有定时器，也没有 Node.js。   |
 | Code run | 一个程序以及它所有 App 调用的记录。用 `GET /v1/code-runs/:id` 读取。       |
@@ -28,24 +28,24 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/platform/settings
 ```
 
-| 字段          | 含义                                                                       |
-| ------------- | -------------------------------------------------------------------------- |
-| `enabled`     | 为 `true` 时，在有 App 连接的每个 Turn 中，Agent 都会得到 Code Mode 工具。 |
-| `timeoutMs`   | 程序一次运行可以用多长时间。程序等待 App 调用的时间不算在内。              |
-| `memoryMb`    | 一个程序可以使用多少内存。                                                 |
-| `outputBytes` | 程序返回值的最大大小，以及它最多保留多少日志文本。                         |
+| 字段          | 含义                                                                     |
+| ------------- | ------------------------------------------------------------------------ |
+| `enabled`     | 为 `true` 时，在有 App 连接的每个 Turn 中，Bot 都会得到 Code Mode 工具。 |
+| `timeoutMs`   | 程序一次运行可以用多长时间。程序等待 App 调用的时间不算在内。            |
+| `memoryMb`    | 一个程序可以使用多少内存。                                               |
+| `outputBytes` | 程序返回值的最大大小，以及它最多保留多少日志文本。                       |
 
-这些限制保护的是服务器，而不是对 Agent 的限制。OpenBot 的每个实例都使用相同的限制，所以另一个实例再次运行程序时，程序的行为也相同。
+这些限制保护的是服务器，而不是对 Bot 的限制。OpenBot 的每个实例都使用相同的限制，所以另一个实例再次运行程序时，程序的行为也相同。
 
 ---
 
-## Agent 如何使用它
+## Bot 如何使用它
 
-Agent 会多得到两个工具。它们和普通的 App 工具并存，不会取代它们。
+Bot 会多得到两个工具。它们和普通的 App 工具并存，不会取代它们。
 
 | 工具               | 作用                                                        |
 | ------------------ | ----------------------------------------------------------- |
-| `openbot_code_api` | 显示绑定的 TypeScript 声明。Agent 可以按词语或按连接搜索。  |
+| `openbot_code_api` | 显示绑定的 TypeScript 声明。Bot 可以按词语或按连接搜索。    |
 | `openbot_run_code` | 运行一个程序，交回它的结果、日志行，以及它的 App 调用列表。 |
 
 每个绑定有两部分：连接和能力。一个名为 "Work calendar" 的连接中有工具 `list-events`，它会变成 `apps.work_calendar.list_events`。`apps.call("work_calendar.list_events", args)` 的作用相同。资源和 prompt 也会变成读取用的绑定。一个程序可以是这样的：

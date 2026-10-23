@@ -191,7 +191,7 @@ test("Catalog candidates keep separate Card identities and the reasons for unusa
 							{
 								identifier: "other",
 								type: "application/a2a-agent-card+json",
-								url: "https://irrelevant.example/agent",
+								url: "https://irrelevant.example/bot",
 							},
 							{
 								identifier: "incompatible",

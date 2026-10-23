@@ -3,17 +3,17 @@ import { Schema } from "effect"
 import { EntryStatus } from "./Memory.ts"
 
 /**
- * Agent memory is what one Agent learns over many Sessions.
- * Each Agent has one pool of entries. A memory Agent keeps the pool: it reads all of it,
- * learns new entries, and decides what goes into the work of the Agent.
+ * Bot memory is what one Bot learns over many Sessions.
+ * Each Bot has one pool of entries. A memory Bot keeps the pool: it reads all of it,
+ * learns new entries, and decides what goes into the work of the Bot.
  * Tags sort the entries. Some tags come from OpenBot and say where an entry comes from
- * and who may see it. Other tags name topics, and the memory Agent chooses them.
+ * and who may see it. Other tags name topics, and the memory Bot chooses them.
  * The memory does not follow a Timeline, so a Fork never changes it.
  */
 
 /**
  * - `fact`: something that a Session shows, with its Items as sources.
- * - `observation`: what the memory Agent concluded from other entries.
+ * - `observation`: what the memory Bot concluded from other entries.
  * - `pinned`: what a person told OpenBot to remember.
  */
 export const Layer = Schema.Literals(["fact", "observation", "pinned"])
@@ -44,7 +44,7 @@ export const Entry = Schema.Struct({
 	/** The tags of OpenBot and the topic tags. */
 	tags: Schema.Array(Schema.String),
 	sources: Schema.Array(Source),
-	/** How sure the memory Agent is about an observation, from 0 to 1. */
+	/** How sure the memory Bot is about an observation, from 0 to 1. */
 	confidence: Schema.optionalKey(Schema.Finite),
 	status: EntryStatus,
 	createdAt: Schema.Finite,
@@ -77,13 +77,13 @@ export const Edit = Schema.TaggedUnion({
 })
 export type Edit = typeof Edit.Type
 
-/** One change of the memory of an Agent. */
+/** One change of the memory of a Bot. */
 export const LogEntry = Schema.Struct({
 	version: Schema.Natural,
 	at: Schema.Finite,
-	by: Schema.Literals(["memory_agent", "person", "promotion"]),
+	by: Schema.Literals(["memory_bot", "person", "promotion"]),
 	ids: Schema.Array(Schema.String),
-	/** Why the memory Agent made a change, when it shows more people an entry. */
+	/** Why the memory Bot made a change, when it shows more people an entry. */
 	reason: Schema.optionalKey(Schema.String),
 })
 export type LogEntry = typeof LogEntry.Type
@@ -100,7 +100,7 @@ export type PurgeRequest = typeof PurgeRequest.Type
 export const PurgeResult = Schema.Struct({ removed: Schema.Natural })
 export type PurgeResult = typeof PurgeResult.Type
 
-/** The most money that the memory Agent may spend in one period, over all organizations. */
+/** The most money that the memory Bot may spend in one period, over all organizations. */
 export const MemoryBudget = Schema.Struct({
 	/** A day or a month in UTC, like the budgets of an organization. */
 	period: Schema.Literals(["day", "month"]),
@@ -109,17 +109,17 @@ export const MemoryBudget = Schema.Struct({
 })
 export type MemoryBudget = typeof MemoryBudget.Type
 
-/** The settings of the memory Agent of one Agent. Without a limit, it has none. */
-export const MemoryAgentSettings = Schema.Struct({
+/** The settings of the memory Bot of one Bot. Without a limit, it has none. */
+export const MemoryBotSettings = Schema.Struct({
 	/** Rules about privacy and sharing, in plain language. */
 	instructions: Schema.String,
-	/** The most tasks that the memory Agent runs at the same time on one server. */
+	/** The most tasks that the memory Bot runs at the same time on one server. */
 	concurrency: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThan(0))),
 	budget: Schema.optionalKey(MemoryBudget),
 	revision: Schema.Natural,
 })
-export type MemoryAgentSettings = typeof MemoryAgentSettings.Type
-export const UpdateMemoryAgentRequest = Schema.Struct({
+export type MemoryBotSettings = typeof MemoryBotSettings.Type
+export const UpdateMemoryBotRequest = Schema.Struct({
 	expected: Schema.Natural,
 	instructions: Schema.optionalKey(
 		Schema.String.check(Schema.isMaxLength(20000)),
@@ -131,9 +131,9 @@ export const UpdateMemoryAgentRequest = Schema.Struct({
 	/** `null` removes the limit. */
 	budget: Schema.optionalKey(Schema.NullOr(MemoryBudget)),
 })
-export type UpdateMemoryAgentRequest = typeof UpdateMemoryAgentRequest.Type
+export type UpdateMemoryBotRequest = typeof UpdateMemoryBotRequest.Type
 
-/** What an Agent said with `confide`, and the answer that it got. */
+/** What a Bot said with `confide`, and the answer that it got. */
 export const Confession = Schema.Struct({
 	id: Schema.String,
 	session: Session.Id,
@@ -144,13 +144,13 @@ export const Confession = Schema.Struct({
 })
 export type Confession = typeof Confession.Type
 
-/** What the memory Agent added to the input of one Turn, and the entries it used. */
+/** What the memory Bot added to the input of one Turn, and the entries it used. */
 export const Enrichment = Schema.Struct({
 	session: Session.Id,
 	turn: Turn.Id,
 	/** The input as the model saw it. */
 	text: Schema.String,
-	/** The parts that the memory Agent added, in order. */
+	/** The parts that the memory Bot added, in order. */
 	inserted: Schema.Array(Schema.String),
 	entries: Schema.Array(Schema.String),
 	at: Schema.Finite,

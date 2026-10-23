@@ -11,7 +11,7 @@ import { Scenarios } from "../src/app/DevelopmentScenarios.ts"
 import { Business } from "../src/app/DevelopmentBusiness.ts"
 import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Postgres from "./PostgresTest.ts"
-import * as DefaultAgent from "./DefaultAgent.ts"
+import * as DefaultBot from "./DefaultBot.ts"
 import * as Organizations from "./Organizations.ts"
 
 test("development Apps show protocol, requirement, expiry and cleanup failures through the standard APIs", async () => {
@@ -125,7 +125,7 @@ test("development Apps show protocol, requirement, expiry and cleanup failures t
 					business.executions(ownerKey(memberOf(account))),
 				),
 			)
-		await DefaultAgent.ensure((path, method, payload) =>
+		await DefaultBot.ensure((path, method, payload) =>
 			fetch(address + path, {
 				method,
 				headers,

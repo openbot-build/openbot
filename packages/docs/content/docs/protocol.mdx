@@ -1,9 +1,9 @@
 ---
 title: App Protocol
-description: Publish an App on the web so that any Agent host can find and use it.
+description: Publish an App on the web so that any Bot host can find and use it.
 ---
 
-The **OpenBot App Protocol** is an open way to publish an App on the web. Any Agent host can then find the App, connect to it, and use it. You do not need a developer account, a registry, or a review. An HTTPS address that you control is enough.
+The **OpenBot App Protocol** is an open way to publish an App on the web. Any Bot host can then find the App, connect to it, and use it. You do not need a developer account, a registry, or a review. An HTTPS address that you control is enough.
 
 This page describes draft **V1.1**. In this page, "must" means a rule, "should" means a strong advice, and "may" means an option. All domains are examples.
 
@@ -219,7 +219,7 @@ Many users can connect the same App. Removing one connection never affects anoth
 
 **When you list a Card in your public AI Catalog, you allow public indexing of it.** The host must confirm this from your own documents. A copy in someone else's Catalog is only a hint.
 
-The crawler works without user data. It uses the user agent token `OpenBot` and follows `robots.txt` (RFC 9309). It accepts publisher evidence from:
+The crawler works without user data. It uses the user bot token `OpenBot` and follows `robots.txt` (RFC 9309). It accepts publisher evidence from:
 
 - the Catalog at the Card origin's `/.well-known/ai-catalog.json`;
 - a Catalog named by an `ai-catalog` `Link` header on the Card response;

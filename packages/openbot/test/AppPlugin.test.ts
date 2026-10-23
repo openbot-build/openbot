@@ -186,8 +186,8 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 	try {
 		const alice = await host.login("plugin-alice")
 		const bob = await host.login("plugin-bob")
-		await host.defaultAgent(alice.session)
-		await host.defaultAgent(bob.session)
+		await host.defaultBot(alice.session)
+		await host.defaultBot(bob.session)
 		const headers = (session = alice.session) => ({
 			cookie:
 				AuthApi.SessionCookie +

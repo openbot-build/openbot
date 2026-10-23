@@ -1,5 +1,5 @@
 import {
-	Agent,
+	Bot,
 	MemoryPersistence,
 	SessionRuntime,
 	SessionStoreRepository,
@@ -16,7 +16,7 @@ export const SessionTest = <
 	BuildE = never,
 	BuildR = never,
 >(
-	agent: Agent.Definition<Tools, E, R, BuildE, BuildR> = {},
+	bot: Bot.Definition<Tools, E, R, BuildE, BuildR> = {},
 ) =>
 	Effect.gen(function* () {
 		const definition = yield* Store.define({
@@ -27,7 +27,7 @@ export const SessionTest = <
 			definition,
 			persistence: yield* MemoryPersistence.make,
 		})
-		const runtime = yield* SessionRuntime.make({ store: runtimeStore, agent })
+		const runtime = yield* SessionRuntime.make({ store: runtimeStore, bot })
 		const view = yield* runtimeStore.create({ metadata: {} })
 		return {
 			definition,

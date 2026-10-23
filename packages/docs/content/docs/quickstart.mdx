@@ -77,7 +77,7 @@ This account is a platform admin. It has no organization yet.
 
 ### Make an organization
 
-Agents, Sessions and tokens belong to an [organization](/docs/organization). Make one for yourself:
+Bots, Sessions and tokens belong to an [organization](/docs/organization). Make one for yourself:
 
 ```sh
 curl -b cookies.txt \
@@ -113,18 +113,18 @@ export OPENBOT_TOKEN=obut_...
 
 <Step>
 
-### Make an Agent
+### Make a Bot
 
-Every Session belongs to an [Agent](/docs/agents). A new account has no Agents, so make one:
+Every Session belongs to an [Bot](/docs/bots). A new account has no Bots, so make one:
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"name":"Assistant","role":"Helps me","instructions":"Answer in short sentences."}' \
-  https://localhost:8443/v1/agents
+  https://localhost:8443/v1/bots
 ```
 
-Take `id` from the answer. To use this Agent when you name no Agent, make it your [default Agent](/docs/agents#your-default-agent).
+Take `id` from the answer. To use this Bot when you name no Bot, make it your [default Bot](/docs/bots#your-default-bot).
 
 </Step>
 
@@ -132,12 +132,12 @@ Take `id` from the answer. To use this Agent when you name no Agent, make it you
 
 ### Start a Session and a Turn
 
-Make a Session for your Agent:
+Make a Session for your Bot:
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"agent":"<agentId>","title":"My first Session"}' \
+  -d '{"bot":"<botId>","title":"My first Session"}' \
   https://localhost:8443/v1/sessions
 ```
 

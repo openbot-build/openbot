@@ -7,7 +7,7 @@ import {
 } from "effect/http-api"
 import {
 	AccountAuth,
-	AgentAuth,
+	BotAuth,
 	AuthApi,
 	OpenBotApi,
 	SessionAuth,
@@ -41,7 +41,7 @@ export const make = (options: {
 	typeof Client.Service,
 	never,
 	| HttpClient.HttpClient
-	| HttpApiMiddleware.ForClient<AgentAuth>
+	| HttpApiMiddleware.ForClient<BotAuth>
 	| HttpApiMiddleware.ForClient<AccountAuth>
 	| HttpApiMiddleware.ForClient<SessionAuth>
 > =>
@@ -80,7 +80,7 @@ export const layer = (options: {
 						}),
 					),
 				),
-				HttpApiMiddleware.layerClient(AgentAuth, ({ request, next }) =>
+				HttpApiMiddleware.layerClient(BotAuth, ({ request, next }) =>
 					next(
 						Option.match(token, {
 							onNone: () =>

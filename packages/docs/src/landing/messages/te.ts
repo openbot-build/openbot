@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "హెడ్‌లెస్, API-ఫస్ట్ Agent ప్లాట్‌ఫామ్.",
+	description: "హెడ్‌లెస్, API-ఫస్ట్ Bot ప్లాట్‌ఫామ్.",
 	nav: {
 		label: "సైట్",
 		docs: "డాక్స్",
@@ -9,8 +9,8 @@ export default {
 		language: "భాష",
 	},
 	hero: {
-		title: ["మీరు పిలవగల Agents.", "మీరు చెక్ చేయగల ఫలితాలు."],
-		body: "OpenBot అనేది యూజర్ ఇంటర్‌ఫేస్ లేని ఓపెన్ సోర్స్ Agent ప్లాట్‌ఫామ్. మీరు HTTP ద్వారా Agent కు పని ఇస్తారు.",
+		title: ["మీరు పిలవగల Bots.", "మీరు చెక్ చేయగల ఫలితాలు."],
+		body: "OpenBot అనేది యూజర్ ఇంటర్‌ఫేస్ లేని ఓపెన్ సోర్స్ Bot ప్లాట్‌ఫామ్. మీరు HTTP ద్వారా Bot కు పని ఇస్తారు.",
 		quickStart: "త్వరగా మొదలుపెట్టండి",
 		apiReference: "API రిఫరెన్స్",
 		visual: "ఒక Turn మొదలుపెట్టండి",
@@ -58,7 +58,7 @@ export default {
 			},
 			{
 				title: "ఓపెన్ Apps",
-				text: "పబ్లిషర్లు OpenBot App Protocol తో ఓపెన్ వెబ్‌లో పెట్టిన Apps ను Agents కనుగొని వాడతాయి.",
+				text: "పబ్లిషర్లు OpenBot App Protocol తో ఓపెన్ వెబ్‌లో పెట్టిన Apps ను Bots కనుగొని వాడతాయి.",
 			},
 			{
 				title: "మీ మోడల్స్",

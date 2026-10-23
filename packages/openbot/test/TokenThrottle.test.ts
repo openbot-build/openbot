@@ -18,7 +18,7 @@ const call = {
 const none: Api.TokenRateLimits = {
 	organization: null,
 	member: null,
-	agent: null,
+	bot: null,
 	token: null,
 }
 
@@ -69,7 +69,7 @@ test("each scope uses the lower rate of the platform and the organization", asyn
 			throttle.scopes(call, {
 				source: "turn",
 				userId: "u_1",
-				agentId: "agt_1",
+				botId: "bot_1",
 			}),
 		),
 		{
@@ -80,7 +80,7 @@ test("each scope uses the lower rate of the platform and the organization", asyn
 		{
 			...none,
 			organization: { tokensPerSecond: 200, burstTokens: 10 },
-			agent: { tokensPerSecond: 30, burstTokens: 30 },
+			bot: { tokensPerSecond: 30, burstTokens: 30 },
 			token: { tokensPerSecond: 5, burstTokens: 5 },
 		},
 	)
@@ -94,7 +94,7 @@ test("each scope uses the lower rate of the platform and the organization", asyn
 			rate: { tokensPerSecond: 10, burstTokens: 10 },
 		},
 		{
-			key: "agent:org_1:agt_1",
+			key: "bot:org_1:bot_1",
 			rate: { tokensPerSecond: 30, burstTokens: 30 },
 		},
 	])

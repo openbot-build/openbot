@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "Платформа для Agent без интерфейса, где главное — API.",
+	description: "Платформа для Bot без интерфейса, где главное — API.",
 	nav: {
 		label: "Сайт",
 		docs: "Документация",
@@ -10,10 +10,10 @@ export default {
 	},
 	hero: {
 		title: [
-			"Agent, которого можно вызвать.",
+			"Bot, которого можно вызвать.",
 			"Результат, который можно проверить.",
 		],
-		body: "OpenBot — платформа для Agent с открытым исходным кодом и без пользовательского интерфейса. Вы даёте работу Agent через HTTP.",
+		body: "OpenBot — платформа для Bot с открытым исходным кодом и без пользовательского интерфейса. Вы даёте работу Bot через HTTP.",
 		quickStart: "Быстрый старт",
 		apiReference: "Справочник API",
 		visual: "Начать Turn",
@@ -64,7 +64,7 @@ export default {
 			},
 			{
 				title: "Открытые App",
-				text: "Agent находит и использует App, которые издатели размещают в открытом вебе по OpenBot App Protocol.",
+				text: "Bot находит и использует App, которые издатели размещают в открытом вебе по OpenBot App Protocol.",
 			},
 			{
 				title: "Ваши модели",

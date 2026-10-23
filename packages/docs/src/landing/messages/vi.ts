@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "Nền tảng Agent không giao diện, ưu tiên API.",
+	description: "Nền tảng Bot không giao diện, ưu tiên API.",
 	nav: {
 		label: "Trang",
 		docs: "Tài liệu",
@@ -9,8 +9,8 @@ export default {
 		language: "Ngôn ngữ",
 	},
 	hero: {
-		title: ["Agent bạn có thể gọi.", "Kết quả bạn có thể kiểm tra."],
-		body: "OpenBot là nền tảng Agent mã nguồn mở, không có giao diện người dùng. Bạn giao việc cho Agent qua HTTP.",
+		title: ["Bot bạn có thể gọi.", "Kết quả bạn có thể kiểm tra."],
+		body: "OpenBot là nền tảng Bot mã nguồn mở, không có giao diện người dùng. Bạn giao việc cho Bot qua HTTP.",
 		quickStart: "Bắt đầu nhanh",
 		apiReference: "Tài liệu API",
 		visual: "Bắt đầu một Turn",
@@ -59,7 +59,7 @@ export default {
 			},
 			{
 				title: "App mở",
-				text: "Agent tìm và dùng các App mà nhà phát hành đưa lên web mở bằng OpenBot App Protocol.",
+				text: "Bot tìm và dùng các App mà nhà phát hành đưa lên web mở bằng OpenBot App Protocol.",
 			},
 			{
 				title: "Mô hình của bạn",

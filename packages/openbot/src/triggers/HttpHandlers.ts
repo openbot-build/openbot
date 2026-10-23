@@ -8,8 +8,8 @@ import {
 } from "@openbot-build/api"
 import { Effect, Option, type Schema } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import { Agents } from "../agents/Agents.ts"
-import * as DefaultAgent from "../agents/DefaultAgent.ts"
+import { Bots } from "../bots/Bots.ts"
+import * as DefaultBot from "../bots/DefaultBot.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { triggerKey } from "../authorization/Policy.ts"
 import { fire } from "./Fire.ts"
@@ -21,10 +21,10 @@ export const layer = (publicOrigin: string) =>
 	HttpApiBuilder.group(OpenBotApi, "triggers", (handlers) =>
 		Effect.gen(function* () {
 			const triggers = yield* Triggers
-			const agents = yield* Agents
+			const bots = yield* Bots
 			const audit = yield* AuditLog
 			const services = yield* Effect.context<
-				AuthorizationServices | DefaultAgent.Services
+				AuthorizationServices | DefaultBot.Services
 			>()
 			const record = (
 				caller: Caller,
@@ -44,26 +44,26 @@ export const layer = (publicOrigin: string) =>
 						details,
 					})
 					.pipe(Effect.mapError(unavailable))
-			/** The Sessions of a trigger work for the caller, so the caller must be able to give work to its Agent. */
-			const agentFor = (caller: Caller, agent: string | undefined) =>
-				(agent === undefined
-					? DefaultAgent.resolve(caller)
-					: agents.access(caller, agent, "agents.delegate")
+			/** The Sessions of a trigger work for the caller, so the caller must be able to give work to its Bot. */
+			const botFor = (caller: Caller, bot: string | undefined) =>
+				(bot === undefined
+					? DefaultBot.resolve(caller)
+					: bots.access(caller, bot, "bots.delegate")
 				).pipe(
 					Effect.provideContext(services),
 					Effect.catchTags({
-						AgentNotFound: (error) =>
+						BotNotFound: (error) =>
 							Effect.fail(
 								TriggersApi.TriggerInvalid.make({
-									message: `There is no Agent ${error.agent}.`,
+									message: `There is no Bot ${error.bot}.`,
 								}),
 							),
-						AgentConflict: () => Effect.fail(unavailable()),
-						AgentInvalid: (error) =>
+						BotConflict: () => Effect.fail(unavailable()),
+						BotInvalid: (error) =>
 							Effect.fail(
 								TriggersApi.TriggerInvalid.make({ message: error.message }),
 							),
-						AgentStorageUnavailable: () => Effect.fail(unavailable()),
+						BotStorageUnavailable: () => Effect.fail(unavailable()),
 					}),
 				)
 			return handlers
@@ -75,10 +75,10 @@ export const layer = (publicOrigin: string) =>
 				.handle("createTrigger", ({ payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const agent = yield* agentFor(caller, payload.agent)
+						const bot = yield* botFor(caller, payload.bot)
 						const trigger = yield* triggers
 							.create(caller, {
-								agent: agent.id,
+								bot: bot.id,
 								prompt: payload.prompt,
 								...(payload.schedule === undefined
 									? {}
@@ -92,7 +92,7 @@ export const layer = (publicOrigin: string) =>
 							})
 							.pipe(Effect.provideContext(services))
 						yield* record(caller, "trigger.created", trigger, {
-							agent: trigger.agent,
+							bot: trigger.bot,
 							schedule: trigger.schedule !== null,
 						})
 						return trigger
@@ -111,8 +111,8 @@ export const layer = (publicOrigin: string) =>
 						const current = yield* triggers
 							.get(caller, params.triggerId, "triggers.write")
 							.pipe(Effect.provideContext(services))
-						// The caller becomes the actor, so it must be able to give work to the Agent.
-						yield* agentFor(caller, payload.agent ?? current.agent)
+						// The caller becomes the actor, so it must be able to give work to the Bot.
+						yield* botFor(caller, payload.bot ?? current.bot)
 						const trigger = yield* triggers
 							.update(caller, params.triggerId, payload)
 							.pipe(Effect.provideContext(services))
@@ -137,7 +137,7 @@ export const layer = (publicOrigin: string) =>
 						const current = yield* triggers
 							.get(caller, params.triggerId, "triggers.write")
 							.pipe(Effect.provideContext(services))
-						yield* agentFor(caller, current.agent)
+						yield* botFor(caller, current.bot)
 						const { trigger, secret } = yield* triggers
 							.setWebhook(caller, params.triggerId)
 							.pipe(Effect.provideContext(services))
@@ -182,7 +182,7 @@ export const layerHooks = HttpApiBuilder.group(
 					if (Option.isNone(found)) return yield* denied
 					const session = yield* fire({ ...found.value, data: payload }).pipe(
 						Effect.provideContext(context),
-						// The actor can no longer give work to the Agent, or the Session
+						// The actor can no longer give work to the Bot, or the Session
 						// could not start. The caller of the webhook learns only that it failed.
 						Effect.catchCause((cause) =>
 							Effect.logWarning(

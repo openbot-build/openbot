@@ -1,7 +1,7 @@
 import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
 import {
 	Account,
-	AgentsApi,
+	BotsApi,
 	type Caller,
 	Identity,
 	OrganizationApi,
@@ -11,24 +11,24 @@ import { Effect, Option, Schema } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Backend } from "../app/Backend.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
-import { agentKey } from "../authorization/Policy.ts"
+import { botKey } from "../authorization/Policy.ts"
 import { Grants } from "../capabilities/Grants.ts"
 import { Rules } from "../capabilities/Rules.ts"
-import { AgentMemories, homeOf } from "./AgentMemories.ts"
-import { MemoryAgent } from "./MemoryAgent.ts"
+import { BotMemories, homeOf } from "./BotMemories.ts"
+import { MemoryBot } from "./MemoryBot.ts"
 import { Organization } from "../organization/Organization.ts"
-import { Agents } from "./Agents.ts"
+import { Bots } from "./Bots.ts"
 import * as InvitationLinks from "./InvitationLinks.ts"
 import { shareable } from "./Sharing.ts"
 
-const unavailable = () => AgentsApi.AgentStorageUnavailable.make({})
+const unavailable = () => BotsApi.BotStorageUnavailable.make({})
 
 export const layer = (publicOrigin: string) =>
-	HttpApiBuilder.group(OpenBotApi, "agents", (handlers) =>
+	HttpApiBuilder.group(OpenBotApi, "bots", (handlers) =>
 		Effect.gen(function* () {
-			const agents = yield* Agents
-			const memories = yield* AgentMemories
-			const memoryAgent = yield* MemoryAgent
+			const bots = yield* Bots
+			const memories = yield* BotMemories
+			const memoryBot = yield* MemoryBot
 			const rules = yield* Rules
 			const grants = yield* Grants
 			const audit = yield* AuditLog
@@ -40,15 +40,15 @@ export const layer = (publicOrigin: string) =>
 			const access = (
 				caller: Caller,
 				id: string,
-				permission: "agents.read" | "agents.write" | "agents.share",
+				permission: "bots.read" | "bots.write" | "bots.share",
 			) =>
-				agents
+				bots
 					.access(caller, id, permission)
 					.pipe(Effect.provideContext(services))
 			const record = (
 				caller: Caller,
 				action: OrganizationApi.AuditAction,
-				agent: AgentsApi.Agent,
+				bot: BotsApi.Bot,
 				details: Schema.JsonObject,
 			) =>
 				audit
@@ -56,45 +56,45 @@ export const layer = (publicOrigin: string) =>
 						organizationId: caller.organizationId,
 						action,
 						actor: caller,
-						resource: agentKey({
-							...agent,
+						resource: botKey({
+							...bot,
 							organizationId: caller.organizationId,
 						}),
 						details,
 					})
 					.pipe(Effect.mapError(unavailable))
 			/**
-			 * The memory pool of an Agent, as the caller sees it. Each person reads only the
+			 * The memory pool of a Bot, as the caller sees it. Each person reads only the
 			 * entries for them, in their own organization. Nobody reads another person's memory.
 			 */
 			const memoryOf = (caller: Caller, id: string) =>
 				Effect.gen(function* () {
-					const agent = yield* access(caller, id, "agents.read")
+					const bot = yield* access(caller, id, "bots.read")
 					return {
-						agent,
-						home: homeOf(caller.organizationId, agent),
+						bot,
+						home: homeOf(caller.organizationId, bot),
 						viewer: {
 							organizationId: caller.organizationId,
 							person: caller.userId,
 						},
 					}
 				})
-			/** The memory Agent and the purge belong to the people of the Agent, not to its members. */
+			/** The memory Bot and the purge belong to the people of the Bot, not to its members. */
 			const ownMemory = (caller: Caller, id: string) =>
 				Effect.gen(function* () {
-					const agent = yield* access(caller, id, "agents.write")
-					if (agent.source !== undefined)
-						return yield* AgentsApi.AgentInvalid.make({
+					const bot = yield* access(caller, id, "bots.write")
+					if (bot.source !== undefined)
+						return yield* BotsApi.BotInvalid.make({
 							message:
-								"This Agent is shared with you. Only its own people manage its memory.",
+								"This Bot is shared with you. Only its own people manage its memory.",
 						})
-					return { agent, home: homeOf(caller.organizationId, agent) }
+					return { bot, home: homeOf(caller.organizationId, bot) }
 				})
 			return handlers
-				.handle("listAgents", ({ query }) =>
+				.handle("listBots", ({ query }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						return yield* agents
+						return yield* bots
 							.list(caller, {
 								...(query.archived === undefined
 									? {}
@@ -102,60 +102,60 @@ export const layer = (publicOrigin: string) =>
 								...(query.session === undefined
 									? {}
 									: { session: query.session }),
-								...(query.agent === undefined ? {} : { agent: query.agent }),
+								...(query.bot === undefined ? {} : { bot: query.bot }),
 							})
 							.pipe(Effect.provideContext(services))
 					}),
 				)
-				.handle("createAgent", ({ payload }) =>
+				.handle("createBot", ({ payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const agent = yield* agents
+						const bot = yield* bots
 							.create(caller, payload)
 							.pipe(Effect.provideContext(services))
-						yield* record(caller, "agent.created", agent, {
-							name: agent.name,
-							shared: agent.owner._tag === "Organization",
+						yield* record(caller, "bot.created", bot, {
+							name: bot.name,
+							shared: bot.owner._tag === "Organization",
 						})
-						return agent
+						return bot
 					}),
 				)
-				.handle("getAgent", ({ params }) =>
+				.handle("getBot", ({ params }) =>
 					Effect.flatMap(Identity, (caller) =>
-						access(caller, params.agentId, "agents.read"),
+						access(caller, params.botId, "bots.read"),
 					),
 				)
-				.handle("updateAgent", ({ params, payload }) =>
+				.handle("updateBot", ({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const agent = yield* agents
-							.update(caller, params.agentId, payload)
+						const bot = yield* bots
+							.update(caller, params.botId, payload)
 							.pipe(Effect.provideContext(services))
-						yield* record(caller, "agent.updated", agent, {
-							revision: agent.revision,
+						yield* record(caller, "bot.updated", bot, {
+							revision: bot.revision,
 						})
-						return agent
+						return bot
 					}),
 				)
-				.handle("promoteAgent", ({ params, payload }) =>
+				.handle("promoteBot", ({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const agent = yield* agents
-							.promote(caller, params.agentId, payload.expected, payload.agent)
+						const bot = yield* bots
+							.promote(caller, params.botId, payload.expected, payload.bot)
 							.pipe(Effect.provideContext(services))
 						// The memory of its delegated Sessions becomes its long-term memory.
 						const sessions = yield* backend
 							.forCaller(caller)
 							.pipe(Effect.mapError(unavailable))
 						const worked = yield* sessions
-							.list({ agent: agent.id, kind: "delegated" })
+							.list({ bot: bot.id, kind: "delegated" })
 							.pipe(Effect.mapError(unavailable))
 						for (const row of worked) {
 							const memory = yield* sessions
 								.memory(row.session.id)
 								.pipe(Effect.mapError(unavailable))
 							yield* memories.adopt(
-								homeOf(caller.organizationId, agent),
+								homeOf(caller.organizationId, bot),
 								{
 									userId: caller.userId,
 									organizationId: caller.organizationId,
@@ -164,14 +164,14 @@ export const layer = (publicOrigin: string) =>
 								memory,
 							)
 						}
-						yield* record(caller, "agent.promoted", agent, {})
-						return agent
+						yield* record(caller, "bot.promoted", bot, {})
+						return bot
 					}),
 				)
-				.handle("agentMemory", ({ params, query }) =>
+				.handle("botMemory", ({ params, query }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const { home, viewer } = yield* memoryOf(caller, params.agentId)
+						const { home, viewer } = yield* memoryOf(caller, params.botId)
 						const tags =
 							query.tags === undefined
 								? []
@@ -182,16 +182,16 @@ export const layer = (publicOrigin: string) =>
 						return yield* memories.view(home, viewer, tags)
 					}),
 				)
-				.handle("updateAgentMemory", ({ params, payload }) =>
+				.handle("updateBotMemory", ({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const { agent, home } = yield* memoryOf(caller, params.agentId)
+						const { bot, home } = yield* memoryOf(caller, params.botId)
 						const view = yield* memories.edit(
 							home,
 							{ userId: caller.userId, organizationId: caller.organizationId },
 							payload.command,
 						)
-						yield* record(caller, "agent.memory.updated", agent, {
+						yield* record(caller, "bot.memory.updated", bot, {
 							command: payload.command._tag,
 							...(payload.command._tag === "Forget"
 								? { id: payload.command.id }
@@ -200,38 +200,38 @@ export const layer = (publicOrigin: string) =>
 						return view
 					}),
 				)
-				.handle("agentMemoryLog", ({ params }) =>
+				.handle("botMemoryLog", ({ params }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const { home, viewer } = yield* memoryOf(caller, params.agentId)
+						const { home, viewer } = yield* memoryOf(caller, params.botId)
 						return yield* memories.log(home, viewer)
 					}),
 				)
-				.handle("purgeAgentMemory", ({ params, payload }) =>
+				.handle("purgeBotMemory", ({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const { agent, home } = yield* ownMemory(caller, params.agentId)
+						const { bot, home } = yield* ownMemory(caller, params.botId)
 						const removed = yield* memories.purge(home, payload.tag)
-						yield* record(caller, "agent.memory.purged", agent, {
+						yield* record(caller, "bot.memory.purged", bot, {
 							tag: payload.tag,
 							removed,
 						})
 						return { removed }
 					}),
 				)
-				.handle("memoryAgent", ({ params }) =>
+				.handle("memoryBot", ({ params }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const { home } = yield* ownMemory(caller, params.agentId)
-						return yield* memoryAgent.settings(home)
+						const { home } = yield* ownMemory(caller, params.botId)
+						return yield* memoryBot.settings(home)
 					}),
 				)
-				.handle("updateMemoryAgent", ({ params, payload }) =>
+				.handle("updateMemoryBot", ({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const { agent, home } = yield* ownMemory(caller, params.agentId)
-						const settings = yield* memoryAgent.update(home, payload)
-						yield* record(caller, "agent.memory_agent.updated", agent, {
+						const { bot, home } = yield* ownMemory(caller, params.botId)
+						const settings = yield* memoryBot.update(home, payload)
+						yield* record(caller, "bot.memory_bot.updated", bot, {
 							revision: settings.revision,
 						})
 						return settings
@@ -240,35 +240,35 @@ export const layer = (publicOrigin: string) =>
 				.handle("listRules", ({ params }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const agent = yield* access(caller, params.agentId, "agents.read")
-						return yield* rules.list(caller.organizationId, agent.id)
+						const bot = yield* access(caller, params.botId, "bots.read")
+						return yield* rules.list(caller.organizationId, bot.id)
 					}),
 				)
 				.handle("createRule", ({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const agent = yield* access(caller, params.agentId, "agents.write")
+						const bot = yield* access(caller, params.botId, "bots.write")
 						const rule = yield* rules.create(caller.organizationId, {
-							agent: agent.id,
+							bot: bot.id,
 							author: { _tag: "Person", userId: caller.userId },
 							text: payload.text,
 							status: "active",
 						})
-						yield* record(caller, "rule.created", agent, { rule: rule.id })
+						yield* record(caller, "rule.created", bot, { rule: rule.id })
 						return rule
 					}),
 				)
 				.handle("updateRule", ({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const agent = yield* access(caller, params.agentId, "agents.write")
+						const bot = yield* access(caller, params.botId, "bots.write")
 						const rule = yield* rules.update(
 							caller.organizationId,
-							agent.id,
+							bot.id,
 							params.ruleId,
 							payload,
 						)
-						yield* record(caller, "rule.updated", agent, {
+						yield* record(caller, "rule.updated", bot, {
 							rule: rule.id,
 							status: rule.status,
 							version: rule.version,
@@ -279,10 +279,10 @@ export const layer = (publicOrigin: string) =>
 				.handle("listGrants", ({ params, query }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const agent = yield* access(caller, params.agentId, "agents.read")
+						const bot = yield* access(caller, params.botId, "bots.read")
 						return yield* grants.list(
 							caller.organizationId,
-							agent.id,
+							bot.id,
 							query.status,
 						)
 					}),
@@ -290,14 +290,14 @@ export const layer = (publicOrigin: string) =>
 				.handle("createGrant", ({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const agent = yield* access(caller, params.agentId, "agents.write")
+						const bot = yield* access(caller, params.botId, "bots.write")
 						if (payload.scope === "session")
-							return yield* AgentsApi.AgentInvalid.make({
+							return yield* BotsApi.BotInvalid.make({
 								message:
 									"A person gives a Session Grant by answering a request in that Session.",
 							})
 						const grant = yield* grants.create(caller.organizationId, {
-							agent: agent.id,
+							bot: bot.id,
 							capability: payload.capability,
 							effect: payload.effect,
 							scope: payload.scope,
@@ -306,7 +306,7 @@ export const layer = (publicOrigin: string) =>
 								? {}
 								: { reason: payload.reason }),
 						})
-						yield* record(caller, "grant.created", agent, {
+						yield* record(caller, "grant.created", bot, {
 							grant: grant.id,
 							effect: grant.effect,
 						})
@@ -316,48 +316,48 @@ export const layer = (publicOrigin: string) =>
 				.handle("revokeGrant", ({ params }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const agent = yield* access(caller, params.agentId, "agents.write")
+						const bot = yield* access(caller, params.botId, "bots.write")
 						const revoked = yield* grants.revoke(
 							caller.organizationId,
-							agent.id,
+							bot.id,
 							params.grantId,
 						)
-						yield* record(caller, "grant.revoked", agent, {
+						yield* record(caller, "grant.revoked", bot, {
 							grants: revoked.map((grant) => grant.id),
 						})
 					}),
 				)
-				.handle("listAgentMembers", ({ params }) =>
+				.handle("listBotMembers", ({ params }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const agent = yield* access(caller, params.agentId, "agents.share")
-						return yield* agents.members(caller.organizationId, agent.id)
+						const bot = yield* access(caller, params.botId, "bots.share")
+						return yield* bots.members(caller.organizationId, bot.id)
 					}),
 				)
-				.handle("removeAgentMember", ({ params }) =>
+				.handle("removeBotMember", ({ params }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const agent = yield* access(caller, params.agentId, "agents.share")
-						const removed = yield* agents.removeMember(
+						const bot = yield* access(caller, params.botId, "bots.share")
+						const removed = yield* bots.removeMember(
 							caller.organizationId,
-							agent.id,
+							bot.id,
 							params.userId,
 						)
 						if (!removed)
-							return yield* AgentsApi.AgentNotFound.make({ agent: agent.id })
-						yield* record(caller, "agent_member.removed", agent, {
+							return yield* BotsApi.BotNotFound.make({ bot: bot.id })
+						yield* record(caller, "bot_member.removed", bot, {
 							userId: params.userId,
 						})
 					}),
 				)
-				.handle("createAgentInvitation", ({ params, payload }) =>
+				.handle("createBotInvitation", ({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const agent = yield* access(caller, params.agentId, "agents.share")
-						if (!shareable(agent))
-							return yield* AgentsApi.AgentInvalid.make({
+						const bot = yield* access(caller, params.botId, "bots.share")
+						if (!shareable(bot))
+							return yield* BotsApi.BotInvalid.make({
 								message:
-									"Only a lasting top Agent of this organization that is not archived can be shared.",
+									"Only a lasting top Bot of this organization that is not archived can be shared.",
 							})
 						const made =
 							payload.email === undefined
@@ -369,9 +369,9 @@ export const layer = (publicOrigin: string) =>
 									)
 								: Option.none()
 						const invitation = yield* organization
-							.createAgentInvitation({
+							.createBotInvitation({
 								organizationId: caller.organizationId,
-								agent: { id: agent.id, name: agent.name },
+								bot: { id: bot.id, name: bot.name },
 								invitedBy: caller.userId,
 								...(payload.email === undefined
 									? {}
@@ -392,9 +392,9 @@ export const layer = (publicOrigin: string) =>
 										: error,
 								),
 							)
-						yield* record(caller, "invitation.created", agent, {
+						yield* record(caller, "invitation.created", bot, {
 							invitationId: invitation.id,
-							target: "agent",
+							target: "bot",
 							...(invitation.email === null ? {} : { email: invitation.email }),
 						})
 						const secret = Option.match(made, {
@@ -408,29 +408,21 @@ export const layer = (publicOrigin: string) =>
 						}
 					}),
 				)
-				.handle("listAgentInvitations", ({ params, query }) =>
+				.handle("listBotInvitations", ({ params, query }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const agent = yield* access(caller, params.agentId, "agents.share")
+						const bot = yield* access(caller, params.botId, "bots.share")
 						return yield* organization
-							.listAgentInvitations(
-								caller.organizationId,
-								agent.id,
-								query.status,
-							)
+							.listBotInvitations(caller.organizationId, bot.id, query.status)
 							.pipe(Effect.mapError(unavailable))
 					}),
 				)
-				.handle("agentInvitationSecret", ({ params }) =>
+				.handle("botInvitationSecret", ({ params }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const agent = yield* access(caller, params.agentId, "agents.share")
+						const bot = yield* access(caller, params.botId, "bots.share")
 						const { invitation, link } = yield* organization
-							.agentInvitation(
-								caller.organizationId,
-								agent.id,
-								params.invitationId,
-							)
+							.botInvitation(caller.organizationId, bot.id, params.invitationId)
 							.pipe(
 								Effect.mapError((error) =>
 									error._tag === "OrganizationUnavailable"
@@ -452,14 +444,14 @@ export const layer = (publicOrigin: string) =>
 						}
 					}),
 				)
-				.handle("revokeAgentInvitation", ({ params }) =>
+				.handle("revokeBotInvitation", ({ params }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const agent = yield* access(caller, params.agentId, "agents.share")
+						const bot = yield* access(caller, params.botId, "bots.share")
 						const invitation = yield* organization
-							.revokeAgentInvitation(
+							.revokeBotInvitation(
 								caller.organizationId,
-								agent.id,
+								bot.id,
 								params.invitationId,
 							)
 							.pipe(
@@ -469,28 +461,28 @@ export const layer = (publicOrigin: string) =>
 										: error,
 								),
 							)
-						yield* record(caller, "invitation.revoked", agent, {
+						yield* record(caller, "invitation.revoked", bot, {
 							invitationId: invitation.id,
-							target: "agent",
+							target: "bot",
 						})
 					}),
 				)
 		}),
 	)
 
-/** A person accepts an invitation to use an Agent, in an organization of their own. */
+/** A person accepts an invitation to use a Bot, in an organization of their own. */
 export const layerInvitations = HttpApiBuilder.group(
 	OpenBotApi,
-	"agentInvitations",
+	"botInvitations",
 	(handlers) =>
 		Effect.gen(function* () {
-			const agents = yield* Agents
+			const bots = yield* Bots
 			const organization = yield* Organization
 			const audit = yield* AuditLog
 			const services = yield* Effect.context<AuthorizationServices>()
 			const invalid = (message: string) =>
 				OrganizationApi.InvitationInvalid.make({ message })
-			return handlers.handle("acceptAgentInvitation", ({ payload }) =>
+			return handlers.handle("acceptBotInvitation", ({ payload }) =>
 				Effect.gen(function* () {
 					const account = yield* Account
 					const by =
@@ -504,7 +496,7 @@ export const layerInvitations = HttpApiBuilder.group(
 								: undefined
 					if (by === undefined)
 						return yield* invalid("Send `invitation` or `secret`.")
-					// The organization where the person uses the Agent. They name it, a user
+					// The organization where the person uses the Bot. They name it, a user
 					// token names it, or it is their only organization.
 					const memberships = yield* organization
 						.memberships(account.userId)
@@ -517,17 +509,17 @@ export const layerInvitations = HttpApiBuilder.group(
 							: undefined)
 					if (chosen === undefined)
 						return yield* invalid(
-							"Name the organization where you use the Agent in `organization`.",
+							"Name the organization where you use the Bot in `organization`.",
 						)
 					const active = yield* organization
 						.activeMember(chosen, account.userId)
 						.pipe(Effect.mapError(unavailable))
 					if (Option.isNone(active))
 						return yield* invalid(
-							"You must be an active member of the organization where you use the Agent.",
+							"You must be an active member of the organization where you use the Bot.",
 						)
 					const taken = yield* organization
-						.takeAgentInvitation(account.userId, by)
+						.takeBotInvitation(account.userId, by)
 						.pipe(
 							Effect.mapError((error) =>
 								error._tag === "OrganizationUnavailable"
@@ -535,18 +527,18 @@ export const layerInvitations = HttpApiBuilder.group(
 									: error,
 							),
 						)
-					const source = yield* agents.find(taken.organizationId, taken.agent)
+					const source = yield* bots.find(taken.organizationId, taken.bot)
 					if (Option.isNone(source) || !shareable(source.value))
-						return yield* invalid("This Agent is not shared any more.")
+						return yield* invalid("This Bot is not shared any more.")
 					const caller: Caller = {
 						kind: "member",
 						organizationId: chosen,
 						userId: account.userId,
 					}
-					const linked = yield* agents
+					const linked = yield* bots
 						.link(caller, {
 							organizationId: taken.organizationId,
-							agent: source.value,
+							bot: source.value,
 						})
 						.pipe(Effect.provideContext(services))
 					const actor: Caller = {
@@ -557,9 +549,9 @@ export const layerInvitations = HttpApiBuilder.group(
 					yield* audit
 						.record({
 							organizationId: taken.organizationId,
-							action: "agent_member.joined",
+							action: "bot_member.joined",
 							actor,
-							resource: agentKey({
+							resource: botKey({
 								...source.value,
 								organizationId: taken.organizationId,
 							}),

@@ -10,7 +10,7 @@ Admins der Platform betreiben die Platform. Diese Seite zeigt dir, wie du sie ei
 
 ## Admins der Platform
 
-Ein Admin der Platform verwaltet die Platform. Ein Admin der Platform ist **nicht** Member jeder Organization. Er kann die Sessions, Agents oder Members einer Organization nicht lesen, außer er ist auch Member dieser Organization. Er verwaltet die Platform nur über `/v1/platform`.
+Ein Admin der Platform verwaltet die Platform. Ein Admin der Platform ist **nicht** Member jeder Organization. Er kann die Sessions, Bots oder Members einer Organization nicht lesen, außer er ist auch Member dieser Organization. Er verwaltet die Platform nur über `/v1/platform`.
 
 Ein Admin der Platform ist eine E-Mail-Adresse. Der Eintrag wird mit einem Konto verknüpft, wenn sich jemand zum ersten Mal mit dieser E-Mail anmeldet und der Anbieter sie bestätigt hat.
 
@@ -111,7 +111,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 	"tokenRate": {
 		"organization": null,
 		"member": null,
-		"agent": null,
+		"bot": null,
 		"token": null
 	},
 	"updatedAt": "2026-10-21T09:00:00.000Z"
@@ -126,7 +126,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `organizationCreation` | Wer eine Organization erstellen kann: `anyone` oder `platform_admins`. Siehe [Organizations erstellen](#organizations-erstellen).  |
 | `policyCeiling`        | Policies zum Ablehnen für jede Organization. Siehe [Obergrenze für Policies](#obergrenze-für-policies).                            |
 | `appRestrictions`      | Apps, die der App Index versteckt. Siehe [App Index](/de/docs/app-index#sperren-durch-den-host).                                   |
-| `codeMode`             | Ob Agents Code Mode nutzen können, und seine Grenzen. Siehe [Code Mode](/de/docs/code-mode#code-mode-einschalten).                 |
+| `codeMode`             | Ob Bots Code Mode nutzen können, und seine Grenzen. Siehe [Code Mode](/de/docs/code-mode#code-mode-einschalten).                   |
 | `rateLimit`            | Wie viele API-Anfragen jeder Aufrufer in einer Minute senden darf. Siehe [Rate Limit](/de/docs/usage#rate-limit).                  |
 | `tokenRate`            | Die höchsten Token Rates jedes Bereichs. Organisationen können nur kleinere setzen. Siehe [Token Rate](/de/docs/usage#token-rate). |
 | `updatedAt`            | Wann sich die Einstellungen zuletzt geändert haben.                                                                                |

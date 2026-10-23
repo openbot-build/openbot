@@ -112,7 +112,7 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 					eventId: `update:${updateId}`,
 					conversation: chat,
 					sender: from,
-					// Commands such as `/ask@my_bot` name the bot. The Agent does not need that part.
+					// Commands such as `/ask@my_bot` name the bot. The Bot does not need that part.
 					text: body.replace(/^\/\w+(@\w+)?\s*/, "").trim() || body,
 					mentioned: true,
 				}),

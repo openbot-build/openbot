@@ -6,8 +6,8 @@ import {
 	HttpApiSchema,
 	OpenApi,
 } from "effect/http-api"
-import { AgentId } from "./AgentsApi.ts"
-import { AgentAuth, ReturnTo } from "./AuthApi.ts"
+import { BotId } from "./BotsApi.ts"
+import { BotAuth, ReturnTo } from "./AuthApi.ts"
 import {
 	Authorize,
 	GroupRequired,
@@ -113,14 +113,14 @@ export type ChannelCredentialsView = typeof ChannelCredentialsView.Type
 
 /**
  * A Channel is one bot of the organization on one platform, such as a Slack app.
- * People talk with its Agent in direct chats and group chats. Each chat is one Session.
+ * People talk with its Bot in direct chats and group chats. Each chat is one Session.
  */
 export const Channel = Schema.Struct({
 	id: ChannelId,
 	kind: ChannelKind,
 	name: Schema.String,
-	/** The persistent Agent of the organization that answers in this Channel. */
-	agent: AgentId,
+	/** The persistent Bot of the organization that answers in this Channel. */
+	bot: BotId,
 	/**
 	 * The member that owns the Sessions of the Channel. It is the last member who
 	 * created or changed the Channel. Each Turn works for the person who spoke.
@@ -148,7 +148,7 @@ const ChannelName = Schema.String.check(
 
 export const CreateChannelRequest = Schema.Struct({
 	name: ChannelName,
-	agent: AgentId,
+	bot: BotId,
 	credentials: ChannelCredentials,
 	linkPath: Schema.optionalKey(ReturnTo),
 	enabled: Schema.optionalKey(Schema.Boolean),
@@ -158,7 +158,7 @@ export type CreateChannelRequest = typeof CreateChannelRequest.Type
 export const UpdateChannelRequest = Schema.Struct({
 	expectedVersion: Version,
 	name: Schema.optionalKey(ChannelName),
-	agent: Schema.optionalKey(AgentId),
+	bot: Schema.optionalKey(BotId),
 	/** Leave it out to keep the current secrets. The kind cannot change. */
 	credentials: Schema.optionalKey(ChannelCredentials),
 	/** `null` removes the path. */
@@ -404,7 +404,7 @@ export class ChannelsApi extends HttpApiGroup.make("channels")
 		write: [requires("channels.write").on("channel", "channelId")],
 	})
 	.middleware(Authorize)
-	.middleware(AgentAuth) {}
+	.middleware(BotAuth) {}
 
 /** Each member links their own accounts on the platforms of the Channels. */
 export class ChannelLinksApi extends HttpApiGroup.make("channelLinks")
@@ -452,7 +452,7 @@ export class ChannelLinksApi extends HttpApiGroup.make("channelLinks")
 		write: [requires("channel_identities.write").on("user")],
 	})
 	.middleware(Authorize)
-	.middleware(AgentAuth) {}
+	.middleware(BotAuth) {}
 
 /**
  * Receives the events of a platform. The signature of the platform is the only credential,

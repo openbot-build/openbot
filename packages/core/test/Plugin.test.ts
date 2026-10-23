@@ -1,6 +1,6 @@
 import { Timeline } from "@openbot-build/core"
 import { Turn } from "@openbot-build/core"
-import { Agent } from "@openbot-build/core"
+import { Bot } from "@openbot-build/core"
 import { SessionStoreRepository } from "@openbot-build/core"
 import {
 	Order,
@@ -174,7 +174,7 @@ test("host-provided stores are isolated and keep their exact definitions and ope
 				})
 				const runtime = yield* SessionRuntime.make({
 					store: runtimeStore,
-					agent: { plugin: combined },
+					bot: { plugin: combined },
 				})
 				const view = yield* runtimeStore.create({
 					metadata: {},
@@ -278,7 +278,7 @@ test("one plugin builds its runtime and store in order, reads state in middlewar
 				}).pipe(Effect.provideService(EncodingDependency, 7))
 				const runtime = yield* SessionRuntime.make({
 					store: runtimeStore,
-					agent: { plugin: plugin },
+					bot: { plugin: plugin },
 				})
 				const view = yield* runtimeStore
 					.create({
@@ -319,7 +319,7 @@ test("one plugin builds its runtime and store in order, reads state in middlewar
 				assert.deepEqual(completed.state.value.b, { value: 2 })
 				assert.deepEqual(completed.state.value["future"], { x: 1 })
 				assert.throws(() => Plugin.Id.make("session"))
-				const context = Agent.Context.of({
+				const context = Bot.Context.of({
 					options: { prompt: Prompt.empty },
 					at: runtimeStore.read(view.session.id).pipe(
 						Effect.map((v) => ({
@@ -389,7 +389,7 @@ test("one plugin builds its runtime and store in order, reads state in middlewar
 						completed.state.value.conversation,
 					)
 				})
-				yield* program.pipe(Effect.provideService(Agent.Context, context))
+				yield* program.pipe(Effect.provideService(Bot.Context, context))
 			}),
 		),
 	)
@@ -417,7 +417,7 @@ const counterStore = (
 		})
 		const runtime = yield* SessionRuntime.make({
 			store: runtimeStore,
-			agent: {},
+			bot: {},
 		})
 		const initial = yield* runtimeStore.create({
 			metadata: {},
@@ -427,7 +427,7 @@ const counterStore = (
 			},
 		})
 		const own = yield* PluginState.make({ store: runtimeStore, plugin })
-		const context = Agent.Context.of({
+		const context = Bot.Context.of({
 			options: { prompt: Prompt.empty },
 			at: Effect.succeed({
 				session: initial.session.id,
@@ -455,7 +455,7 @@ test("Store safe methods match SynchronizedRef return values and commit only sel
 					Option.some(increment(value))
 				const check = <A, E>(
 					name: string,
-					actual: Effect.Effect<A, E, Agent.Context>,
+					actual: Effect.Effect<A, E, Bot.Context>,
 					expected: Effect.Effect<A>,
 					writes = true,
 				) =>
@@ -727,7 +727,7 @@ test("Store safe methods match SynchronizedRef return values and commit only sel
 						initial.state.value,
 					)
 				})
-				yield* program.pipe(Effect.provideService(Agent.Context, context))
+				yield* program.pipe(Effect.provideService(Bot.Context, context))
 			}),
 		),
 	)
@@ -842,7 +842,7 @@ test("concurrent Store Effect updates use committed state and keep failures and 
 							.toSorted(),
 					)
 				})
-				yield* program.pipe(Effect.provideService(Agent.Context, context))
+				yield* program.pipe(Effect.provideService(Bot.Context, context))
 			}),
 		),
 	)
@@ -878,7 +878,7 @@ test("Store writes return and notify only after the Version is saved", async () 
 							returned = true
 						}),
 					),
-					Effect.provideService(Agent.Context, context),
+					Effect.provideService(Bot.Context, context),
 					Effect.forkChild,
 				)
 				yield* Deferred.await(started)

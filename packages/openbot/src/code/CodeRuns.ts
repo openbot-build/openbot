@@ -25,11 +25,11 @@ import { Sandbox } from "./Sandbox.ts"
 import * as Stored from "./StoredCodeRuns.ts"
 import * as Db from "../database/Database.ts"
 
-/** What the Agent gets back from a program. */
+/** What the Bot gets back from a program. */
 export const ToolResult = Schema.Struct({
 	run: Schema.String,
 	result: CodeRunsApi.CodeResult,
-	/** Each App call of the program, so the Agent knows what already happened. */
+	/** Each App call of the program, so the Bot knows what already happened. */
 	calls: Schema.Array(
 		Schema.Struct({
 			index: Schema.Natural,
@@ -200,7 +200,7 @@ export class CodeRuns extends Context.Service<
 		/** The Code Mode settings, when the platform turned Code Mode on. */
 		readonly settings: Effect.Effect<Option.Option<SettingsApi.CodeMode>>
 		/**
-		 * The first run of a program, in the Turn of the Agent. It ends when the program
+		 * The first run of a program, in the Turn of the Bot. It ends when the program
 		 * ends or when a call waits for a decision.
 		 */
 		readonly start: (input: {
@@ -588,7 +588,7 @@ export const make: Effect.Effect<
 	const start: typeof CodeRuns.Service.start = (input) =>
 		Effect.gen(function* () {
 			const limits = yield* settings
-			// The capability checks read the current Agent from the context too.
+			// The capability checks read the current Bot from the context too.
 			const work = yield* Effect.serviceOption(Work)
 			const now = yield* Clock.currentTimeMillis
 			const id = Stored.idOf({ ...input.position, callId: input.callId })
@@ -624,7 +624,7 @@ export const make: Effect.Effect<
 						reason: "Unavailable",
 						message: Option.isNone(limits)
 							? "Code Mode is off on this platform."
-							: "The program has no Agent to work for.",
+							: "The program has no Bot to work for.",
 						logs: [],
 					},
 				}

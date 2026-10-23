@@ -323,7 +323,7 @@ test("an approval survives a restart and resumes the Turn once", async () => {
 				})
 				const restoredRuntime = yield* SessionRuntime.make({
 					store: restoredStore,
-					agent: { toolkit: approved },
+					bot: { toolkit: approved },
 				})
 				assert.equal(
 					Session.status((yield* restoredRuntime.resume(base.session)).session)

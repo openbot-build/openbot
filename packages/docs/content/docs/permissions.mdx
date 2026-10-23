@@ -28,21 +28,21 @@ List them with `GET /v1/organization/permission_groups`.
 | `responses.run`            | Session           | Start, steer, queue and resume work in a Session.                                          |
 | `sessions.read`            | Session           | Read Sessions, their history, memory and delegations.                                      |
 | `sessions.write`           | Session           | Create, change, fork, restore, interrupt and delete Sessions.                              |
-| `requests.resolve`         | Request           | Answer the requests of your Agents for new capabilities.                                   |
-| `agents.read`              | Agent             | Read Agents, their memory, Rules and Grants.                                               |
-| `agents.write`             | Agent             | Create and change Agents, their memory, Rules and Grants.                                  |
-| `agents.delegate`          | Agent             | Give work to an Agent, from a client or from another Agent.                                |
-| `agents.share`             | Agent             | Invite people to [use an Agent](/docs/sharing), and manage its members.                    |
+| `requests.resolve`         | Request           | Answer the requests of your Bots for new capabilities.                                     |
+| `bots.read`                | Bot               | Read Bots, their memory, Rules and Grants.                                                 |
+| `bots.write`               | Bot               | Create and change Bots, their memory, Rules and Grants.                                    |
+| `bots.delegate`            | Bot               | Give work to a Bot, from a client or from another Bot.                                     |
+| `bots.share`               | Bot               | Invite people to [use a Bot](/docs/sharing), and manage its members.                       |
 | `triggers.read`            | Trigger           | Read [triggers](/docs/triggers): their schedules and webhooks.                             |
 | `triggers.write`           | Trigger           | Create, change and delete triggers, and set their webhook secrets.                         |
 | `channels.read`            | Channel           | Read the [Channels](/docs/channels) of the organization and the people linked to them.     |
 | `channels.write`           | Channel           | Create, change and delete Channels, set their secrets, and unlink people.                  |
-| `channels.use`             | Channel           | Talk with the Agent of a Channel, and let your Agents post to it.                          |
+| `channels.use`             | Channel           | Talk with the Bot of a Channel, and let your Bots post to it.                              |
 | `channel_identities.read`  | User              | Read your linked accounts on the platforms of Channels.                                    |
 | `channel_identities.write` | User              | Link and unlink your accounts on the platforms of Channels.                                |
-| `computers.read`           | Computer          | Read [Computers](/docs/computers), the Agents that may use them, and their usage.          |
+| `computers.read`           | Computer          | Read [Computers](/docs/computers), the Bots that may use them, and their usage.            |
 | `computers.write`          | Computer          | Create, change and delete Computers, pair machines, and make connector tokens.             |
-| `computers.use`            | Computer          | Run commands, change files, open ports and use the desktop, and let your Agents use them.  |
+| `computers.use`            | Computer          | Run commands, change files, open ports and use the desktop, and let your Bots use them.    |
 | `computer_providers.read`  | Computer provider | Read the accounts at Computer providers.                                                   |
 | `computer_providers.write` | Computer provider | Add, change and delete accounts at Computer providers, and their keys.                     |
 | `computer_providers.use`   | Computer provider | Create Computers with an account at a Computer provider.                                   |
@@ -85,8 +85,8 @@ A resource key is a name with parts that dots separate:
 | The organization         | `openbot.org.<org>`                                     |
 | One member               | `openbot.org.<org>.user.<user>`                         |
 | One Session              | `openbot.org.<org>.user.<user>.session.<session>`       |
-| One Agent of a member    | `openbot.org.<org>.user.<user>.agent.<agent>`           |
-| One shared Agent         | `openbot.org.<org>.agent.<agent>`                       |
+| One Bot of a member      | `openbot.org.<org>.user.<user>.bot.<bot>`               |
+| One shared Bot           | `openbot.org.<org>.bot.<bot>`                           |
 | One trigger of a member  | `openbot.org.<org>.user.<user>.trigger.<trigger>`       |
 | One shared trigger       | `openbot.org.<org>.trigger.<trigger>`                   |
 | One Channel              | `openbot.org.<org>.channel.<channel>`                   |
@@ -96,7 +96,7 @@ A resource key is a name with parts that dots separate:
 | One model provider       | `openbot.org.<org>.model.<provider>`                    |
 | The whole platform       | `openbot.platform`                                      |
 
-An Agent that another Agent owns has the key of the member or the organization at the top of its owner tree. So `openbot.org.<org>.user.<user>.agent.<agent>` is also the key of an Agent that a top Agent of that member owns. When an Agent makes or promotes an Agent, the member it works for needs `agents.write` on that place.
+A Bot that another Bot owns has the key of the member or the organization at the top of its owner tree. So `openbot.org.<org>.user.<user>.bot.<bot>` is also the key of a Bot that a top Bot of that member owns. When a Bot makes or promotes a Bot, the member it works for needs `bots.write` on that place.
 
 A key covers itself and every key below it. So `openbot.org.<org>` covers everything in the organization, and `openbot.org.<org>.user.<user>` covers everything of one member.
 
@@ -192,13 +192,13 @@ List them with `GET /v1/organization/roles`. The list has the built-in roles and
 
 Every organization has these roles. They cannot change. A change returns `409` with `RoleReadOnly`.
 
-| Role                      | What it can do                                                                                                                                                                                 |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `super_administrator`     | Everything in the organization. Only a Super Administrator can give or take away this role.                                                                                                    |
-| `administrator`           | Manage the organization, its members, its shared Agents, its shared triggers, its shared Computers and its Channels, and read the audit log. Work only with your own Sessions and connections. |
-| `administrator_read_only` | Read the organization, its members, usage, budgets and the audit log, and read the shared Agents, triggers, Computers and Channels. Work only with your own Sessions and connections.          |
-| `member`                  | Work with your own Agents, Sessions, triggers, Computers, connections and tokens, use the shared Agents, triggers, Computers, Channels and models of the organization, and read its settings.  |
-| `auditor`                 | Read the organization, its members, usage, budgets and the audit log. Nothing else.                                                                                                            |
+| Role                      | What it can do                                                                                                                                                                               |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `super_administrator`     | Everything in the organization. Only a Super Administrator can give or take away this role.                                                                                                  |
+| `administrator`           | Manage the organization, its members, its shared Bots, its shared triggers, its shared Computers and its Channels, and read the audit log. Work only with your own Sessions and connections. |
+| `administrator_read_only` | Read the organization, its members, usage, budgets and the audit log, and read the shared Bots, triggers, Computers and Channels. Work only with your own Sessions and connections.          |
+| `member`                  | Work with your own Bots, Sessions, triggers, Computers, connections and tokens, use the shared Bots, triggers, Computers, Channels and models of the organization, and read its settings.    |
+| `auditor`                 | Read the organization, its members, usage, budgets and the audit log. Nothing else.                                                                                                          |
 
 Some built-in roles also hold the groups for roles, model providers, SSO, Channels, usage and budgets:
 

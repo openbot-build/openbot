@@ -6,12 +6,12 @@ import { ExperienceErrors } from "./ExperienceErrors.ts"
 import { requires, Required } from "./Permissions.ts"
 
 /**
- * Code Mode lets the Agent write a short JavaScript program that calls App tools.
+ * Code Mode lets the Bot write a short JavaScript program that calls App tools.
  * The program runs in a sandbox: a closed place with no network and no files.
  * Each App call in it goes through the same capability check as a normal App tool call.
  */
 
-/** The longest program that the Agent can send, in characters. */
+/** The longest program that the Bot can send, in characters. */
 export const maxCodeLength = 100_000
 export const Code = Schema.String.check(
 	Schema.isMinLength(1),
@@ -56,7 +56,7 @@ export const FailureReason = Schema.Literals([
 ])
 export type FailureReason = typeof FailureReason.Type
 
-/** The end of a program. The Agent gets this as the result of its tool call. */
+/** The end of a program. The Bot gets this as the result of its tool call. */
 export const CodeResult = Schema.TaggedUnion({
 	Completed: {
 		/** The value that the program returned, as JSON. */
@@ -85,11 +85,11 @@ export const CodeRun = Schema.Struct({
 	id: Schema.String,
 	session: Session.Id,
 	turn: Turn.Id,
-	/** The tool call of the Agent that started the program. */
+	/** The tool call of the Bot that started the program. */
 	callId: Schema.String,
 	status: CodeRunStatus,
 	code: Schema.String,
-	/** Why the Agent runs the program, in its own words. */
+	/** Why the Bot runs the program, in its own words. */
 	reason: Schema.String,
 	calls: Schema.Array(CodeCall),
 	result: Schema.NullOr(CodeResult),

@@ -16,14 +16,14 @@ Grant 快速而精确。Rule 能覆盖一整类请求。
 
 ## Grant
 
-**Grant**（授权）是对某个 Agent 的某一项能力保存下来的决定。Agent 永远看不到自己的 Grant。它只能看到有些调用能运行，有些被拒绝。
+**Grant**（授权）是对某个 Bot 的某一项能力保存下来的决定。Bot 永远看不到自己的 Grant。它只能看到有些调用能运行，有些被拒绝。
 
 | 字段         | 含义                                                                 |
 | ------------ | -------------------------------------------------------------------- |
 | `capability` | `action`、`target`（`*` 表示所有目标），以及可选的确切 `arguments`。 |
 | `effect`     | `allow` 或 `deny`。拒绝优先。                                        |
 | `scope`      | `once`（一次调用后用完）、`session` 或 `lifetime`。                  |
-| `grantedBy`  | 做出决定的人、Agent 或 Rule。                                        |
+| `grantedBy`  | 做出决定的人、Bot 或 Rule。                                          |
 | `parent`     | 这个 Grant 来源于决策者的哪个 Grant。                                |
 | `status`     | `active`、`used` 或 `revoked`。                                      |
 
@@ -32,51 +32,51 @@ Grant 快速而精确。Rule 能覆盖一整类请求。
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"capability":{"action":"agents.spawn","target":"*"},"effect":"allow","scope":"lifetime"}' \
-  https://api.example.com/v1/agents/$AGENT/grants
+  -d '{"capability":{"action":"bots.spawn","target":"*"},"effect":"allow","scope":"lifetime"}' \
+  https://api.example.com/v1/bots/$BOT/grants
 ```
 
-`GET /v1/agents/:agentId/grants` 列出 Grant。加上 `?status=active` 只看有效的 Grant。
+`GET /v1/bots/:botId/grants` 列出 Grant。加上 `?status=active` 只看有效的 Grant。
 
-`DELETE /v1/agents/:agentId/grants/:grantId` 撤销一个 Grant。OpenBot 还会撤销所有来源于它的 Grant，因此下方的 Agent 会失去通过它得到的权限。
+`DELETE /v1/bots/:botId/grants/:grantId` 撤销一个 Grant。OpenBot 还会撤销所有来源于它的 Grant，因此下方的 Bot 会失去通过它得到的权限。
 
 ---
 
 ## Rule
 
-**Rule**（规则）是为某个 Agent 写的一句自然语言。当没有 Grant 能对请求做出决定时，评判模型会阅读这个 Agent 的有效 Rule。
+**Rule**（规则）是为某个 Bot 写的一句自然语言。当没有 Grant 能对请求做出决定时，评判模型会阅读这个 Bot 的有效 Rule。
 
 - 只有当某条 Rule 明确允许这个请求时，评判模型才会允许；只有当某条 Rule 明确禁止它时，才会拒绝。其他情况下，请求交给决策者。
 - 每次允许或拒绝都必须引用一条 Rule 的原文。OpenBot 会检查引用。没有真实的引用，就没有决定。
 - 拒绝优先于允许。
 - 评判模型出错或太慢时，没有决定。
 
-由 Agent 写的 Rule，只有在这个 Agent 位于本 Agent 的[所有者链](/zh-cn/docs/requests#决策者链)上方，并且自己也能使用这项能力时，才会生效。
+由 Bot 写的 Rule，只有在这个 Bot 位于本 Bot 的[所有者链](/zh-cn/docs/requests#决策者链)上方，并且自己也能使用这项能力时，才会生效。
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text":"The Programmer may read any repository of the openbot organization, but must ask before it pushes to main."}' \
-  https://api.example.com/v1/agents/$AGENT/rules
+  https://api.example.com/v1/bots/$BOT/rules
 ```
 
 | 字段      | 含义                                                        |
 | --------- | ----------------------------------------------------------- |
-| `author`  | 写这条 Rule 的人或 Agent。                                  |
+| `author`  | 写这条 Rule 的人或 Bot。                                    |
 | `status`  | `active`、`proposed` 或 `retired`。只有有效的 Rule 才生效。 |
 | `version` | 每次修改都会增加。                                          |
 
-人写的 Rule 立刻生效。Agent 可以在审查中提议一条 Rule。提议的 Rule 要等人把它设为有效后才会生效：
+人写的 Rule 立刻生效。Bot 可以在审查中提议一条 Rule。提议的 Rule 要等人把它设为有效后才会生效：
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"expected":0,"status":"active"}' \
-  https://api.example.com/v1/agents/$AGENT/rules/$RULE
+  https://api.example.com/v1/bots/$BOT/rules/$RULE
 ```
 
 你也可以在回答请求时保存一条 Rule：在回答中带上 `rule`。参见[回答请求](/zh-cn/docs/requests#回答请求)。
 
 ### 评判模型
 
-评判模型使用 **Rules 模型**。它是[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel`。它没有默认值。它为 `null` 时，评判不给出答案，由人或 Agent 来决定。对于相同的 Rule 和相同的能力，OpenBot 会保存每次评判的回答，因此同一个问题不会让评判模型再运行一次。
+评判模型使用 **Rules 模型**。它是[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel`。它没有默认值。它为 `null` 时，评判不给出答案，由人或 Bot 来决定。对于相同的 Rule 和相同的能力，OpenBot 会保存每次评判的回答，因此同一个问题不会让评判模型再运行一次。

@@ -184,20 +184,20 @@ OpenBot 现在用 `k2` 封存新的机密。`k1` 封存的机密仍然可以打�
 | `OPENBOT_ALLOWED_EMAIL_DOMAINS` | 每个组织的已验证域名，配合其设置中的 `joinByDomain`。参见 [SSO](/zh-cn/docs/sso#已验证的域名)。  |
 | `OPENBOT_MODEL_ENDPOINT`        | 组织或平台的模型提供方。参见 [Model](/zh-cn/docs/models)。                                       |
 | `OPENBOT_MODEL_API_KEY`         | 模型提供方，已加密。                                                                             |
-| `OPENBOT_MODEL_ID`              | 由模型提供方关联的模型，以及每个 Agent 的 `model`。                                              |
+| `OPENBOT_MODEL_ID`              | 由模型提供方关联的模型，以及每个 Bot 的 `model`。                                                |
 | `OPENBOT_DEV_MODE`              | 由开发入口决定。参见[开发](#开发)。                                                              |
 
 有些值以前是代码中的选项。现在它们也成了设置：
 
-| 旧选项                                       | 新位置                                            |
-| -------------------------------------------- | ------------------------------------------------- |
-| `appRestrictions`                            | 平台设置中的 `appRestrictions`。                  |
-| `appReadRules`                               | 组织设置中的 `appReadRules`。                     |
-| `agents.helperModel`                         | 组织设置中的 `rulesModel` 和 `agentMemoryModel`。 |
-| `agents.requestTimeout`                      | 组织设置中的 `requestTimeoutMs`。                 |
-| `agents.memory`                              | 组织设置中的 `agentMemory`。                      |
-| `sessions.memory.defaults`                   | 组织设置中的 `memory`。                           |
-| `allowedEmailDomains`、`defaultRoles`（API） | 已验证域名，以及组织设置中的 `defaultRoles`。     |
+| 旧选项                                       | 新位置                                          |
+| -------------------------------------------- | ----------------------------------------------- |
+| `appRestrictions`                            | 平台设置中的 `appRestrictions`。                |
+| `appReadRules`                               | 组织设置中的 `appReadRules`。                   |
+| `bots.helperModel`                           | 组织设置中的 `rulesModel` 和 `botMemoryModel`。 |
+| `bots.requestTimeout`                        | 组织设置中的 `requestTimeoutMs`。               |
+| `bots.memory`                                | 组织设置中的 `botMemory`。                      |
+| `sessions.memory.defaults`                   | 组织设置中的 `memory`。                         |
+| `allowedEmailDomains`、`defaultRoles`（API） | 已验证域名，以及组织设置中的 `defaultRoles`。   |
 
 ### 修改如何到达每个实例
 

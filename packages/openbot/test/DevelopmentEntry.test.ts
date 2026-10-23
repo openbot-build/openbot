@@ -11,7 +11,7 @@ import {
 } from "@openbot-build/api"
 import { Schema } from "effect"
 import * as PostgresTest from "./PostgresTest.ts"
-import * as DefaultAgent from "./DefaultAgent.ts"
+import * as DefaultBot from "./DefaultBot.ts"
 import * as Organizations from "./Organizations.ts"
 
 test(
@@ -142,7 +142,7 @@ test(
 					}),
 				)
 				const create = async (address: string) => {
-					await DefaultAgent.ensure((path, method, payload) =>
+					await DefaultBot.ensure((path, method, payload) =>
 						fetch(address + path, {
 							method,
 							headers,
@@ -190,15 +190,15 @@ test(
 						.reason,
 					"NoDeclaration",
 				)
-				const agent = await create(development.address)
+				const bot = await create(development.address)
 				const answer = await fetch(
-					development.address + `/v1/sessions/${agent.session.id}/turns`,
+					development.address + `/v1/sessions/${bot.session.id}/turns`,
 					{
 						method: "POST",
 						headers,
 						body: JSON.stringify({
 							input: "Verify the built entry",
-							expected: agent.session.revision,
+							expected: bot.session.revision,
 							stream: true,
 						}),
 					},
@@ -232,7 +232,7 @@ test(
 					assert.equal(withoutModel.status, 400)
 					assert.equal((await withoutModel.json()).reason, "missing")
 					const simulated = await post({
-						settings: { model: agent.session.settings.model },
+						settings: { model: bot.session.settings.model },
 					})
 					assert.equal(simulated.status, 400)
 					assert.equal((await simulated.json())._tag, "SessionModelInvalid")

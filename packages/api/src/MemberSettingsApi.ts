@@ -1,5 +1,5 @@
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
-import { AgentAuth } from "./AuthApi.ts"
+import { BotAuth } from "./AuthApi.ts"
 import { Authorize, GroupRequired, requires } from "./Permissions.ts"
 import {
 	MemberSettings,
@@ -28,4 +28,4 @@ export class MemberSettingsApi extends HttpApiGroup.make("memberSettings")
 		write: [requires("sessions.write").on("user")],
 	})
 	.middleware(Authorize)
-	.middleware(AgentAuth) {}
+	.middleware(BotAuth) {}

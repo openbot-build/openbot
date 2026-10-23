@@ -109,10 +109,10 @@ export class AuthSession extends Context.Service<
  * Both schemes read their credential from the current request.
  * @effect-expect-leaking HttpServerRequest | ParsedSearchParams | RouteContext
  */
-export class AgentAuth extends HttpApiMiddleware.Service<
-	AgentAuth,
+export class BotAuth extends HttpApiMiddleware.Service<
+	BotAuth,
 	{ readonly requires: never; readonly provides: Identity }
->()("@openbot-build/api/AuthApi/AgentAuth", {
+>()("@openbot-build/api/AuthApi/BotAuth", {
 	requiredForClient: true,
 	security: {
 		token: HttpApiSecurity.bearer,
@@ -128,7 +128,7 @@ export class AgentAuth extends HttpApiMiddleware.Service<
 /**
  * Finds the account of a request that does not act in one organization,
  * such as creating an organization or using `/v1/platform`.
- * It accepts the same credentials as `AgentAuth`.
+ * It accepts the same credentials as `BotAuth`.
  * @effect-expect-leaking HttpServerRequest | ParsedSearchParams | RouteContext
  */
 export class AccountAuth extends HttpApiMiddleware.Service<

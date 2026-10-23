@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "פלטפורמת Agent בלי ממשק, שבנויה קודם כול סביב API.",
+	description: "פלטפורמת Bot בלי ממשק, שבנויה קודם כול סביב API.",
 	nav: {
 		label: "אתר",
 		docs: "תיעוד",
@@ -9,8 +9,8 @@ export default {
 		language: "שפה",
 	},
 	hero: {
-		title: ["Agents שאפשר לקרוא להם.", "תוצאות שאפשר לבדוק."],
-		body: "OpenBot היא פלטפורמת Agent בקוד פתוח, בלי ממשק משתמש. אתם נותנים עבודה ל-Agent דרך HTTP.",
+		title: ["Bots שאפשר לקרוא להם.", "תוצאות שאפשר לבדוק."],
+		body: "OpenBot היא פלטפורמת Bot בקוד פתוח, בלי ממשק משתמש. אתם נותנים עבודה ל-Bot דרך HTTP.",
 		quickStart: "התחלה מהירה",
 		apiReference: "מדריך API",
 		visual: "התחילו Turn",
@@ -55,7 +55,7 @@ export default {
 			},
 			{
 				title: "Apps פתוחות",
-				text: "Agents מוצאים ומשתמשים ב-Apps שמפרסמים שמים ברשת הפתוחה עם OpenBot App Protocol.",
+				text: "Bots מוצאים ומשתמשים ב-Apps שמפרסמים שמים ברשת הפתוחה עם OpenBot App Protocol.",
 			},
 			{
 				title: "המודלים שלכם",

@@ -1,22 +1,22 @@
 ---
-title: 分享 Agents
-description: 邀请其他人在他们自己的组织中使用你的某个 Agent，可以通过邮箱或链接邀请。
+title: 分享 Bots
+description: 邀请其他人在他们自己的组织中使用你的某个 Bot，可以通过邮箱或链接邀请。
 ---
 
-你可以把一个 Agent 分享给组织外的人，就像把成员加入组织一样。你可以按邮箱邀请一个人，也可以创建一个**邀请链接**。你的客户端可以把这个链接显示成二维码。这个人接受邀请，然后在他们自己的组织中使用这个 Agent。
+你可以把一个 Bot 分享给组织外的人，就像把成员加入组织一样。你可以按邮箱邀请一个人，也可以创建一个**邀请链接**。你的客户端可以把这个链接显示成二维码。这个人接受邀请，然后在他们自己的组织中使用这个 Bot。
 
-| 词           | 含义                                                               |
-| ------------ | ------------------------------------------------------------------ |
-| 共享的 Agent | 其他人使用的你的 Agent。                                           |
-| 邀请链接     | 没有邮箱的邀请。在你撤销它之前，任何拥有它的密钥的人都可以接受它。 |
-| Agent 成员   | 接受了邀请并使用这个 Agent 的人。                                  |
-| 关联 Agent   | 成员在他们自己的组织中得到的 Agent。它使用你的 Agent。             |
+| 词         | 含义                                                               |
+| ---------- | ------------------------------------------------------------------ |
+| 共享的 Bot | 其他人使用的你的 Bot。                                             |
+| 邀请链接   | 没有邮箱的邀请。在你撤销它之前，任何拥有它的密钥的人都可以接受它。 |
+| Bot 成员   | 接受了邀请并使用这个 Bot 的人。                                    |
+| 关联 Bot   | 成员在他们自己的组织中得到的 Bot。它使用你的 Bot。                 |
 
 ---
 
 ## 邀请别人
 
-你需要这个 Agent 上的 `agents.share`。成员可以分享自己的 Agents。管理员还可以分享组织的共享 Agents。只有长期存在的顶层 Agent 才能被分享：它由一个成员或组织拥有，并且没有被归档。
+你需要这个 Bot 上的 `bots.share`。成员可以分享自己的 Bots。管理员还可以分享组织的共享 Bots。只有长期存在的顶层 Bot 才能被分享：它由一个成员或组织拥有，并且没有被归档。
 
 要邀请一个人，请发送这个人的邮箱。这个邀请的有效期是 7 天，和[组织邀请](/zh-cn/docs/organization#邀请)一样：
 
@@ -24,7 +24,7 @@ description: 邀请其他人在他们自己的组织中使用你的某个 Agent�
 curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"email":"ana@example.com"}' \
-  https://api.example.com/v1/agents/$AGENT/invitations
+  https://api.example.com/v1/bots/$BOT/invitations
 ```
 
 要创建邀请链接，请不填 `email`。很多人可以使用同一个链接。
@@ -33,7 +33,7 @@ curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
 curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"path":"/join"}' \
-  https://api.example.com/v1/agents/$AGENT/invitations
+  https://api.example.com/v1/bots/$BOT/invitations
 ```
 
 | 字段        | 含义                                                           |
@@ -46,7 +46,7 @@ curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
 {
 	"invitation": {
 		"id": "inv_51c2…",
-		"agent": "agt_7d2c",
+		"bot": "bot_7d2c",
 		"email": null,
 		"prefix": "obai_Xk2pQ9aB",
 		"path": "/join",
@@ -62,9 +62,9 @@ curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 `url` 由公开源、`path`、`#` 和密钥组成。浏览器从不把 `#` 后面的部分发给服务器，所以密钥永远不会进入服务器日志。没有 `path` 时，`url` 是 `null`。把 `url` 显示成二维码，或者用 `secret` 拼出你自己的地址。
 
-`GET /v1/agents/:agentId/invitations/:invitationId/secret` 再次给出链接的密钥和 `url`，例如用来再次打印二维码。OpenBot 把密钥加密保存，并保存一个哈希值来查找这个链接。
+`GET /v1/bots/:botId/invitations/:invitationId/secret` 再次给出链接的密钥和 `url`，例如用来再次打印二维码。OpenBot 把密钥加密保存，并保存一个哈希值来查找这个链接。
 
-`GET /v1/agents/:agentId/invitations` 列出邀请。`DELETE /v1/agents/:agentId/invitations/:invitationId` 撤销一个邀请。之后，没有人能接受它。之前已经接受它的人仍然是成员。
+`GET /v1/bots/:botId/invitations` 列出邀请。`DELETE /v1/bots/:botId/invitations/:invitationId` 撤销一个邀请。之后，没有人能接受它。之前已经接受它的人仍然是成员。
 
 ---
 
@@ -72,77 +72,77 @@ curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 被邀请的人先登录。他们使用 session cookie 或自己的用户令牌。
 
-- 邮箱邀请会出现在 `GET /v1/invitations` 中，并带有 `agent`。用它的 ID 接受它。
+- 邮箱邀请会出现在 `GET /v1/invitations` 中，并带有 `bot`。用它的 ID 接受它。
 - 对于链接，请发送它的密钥。
 
 ```sh
 curl -X POST -H "Authorization: Bearer $THEIR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"secret":"obai_Xk2pQ9aB…","organization":"org_9a1f"}' \
-  https://api.example.com/v1/agent-invitations/accept
+  https://api.example.com/v1/bot-invitations/accept
 ```
 
-`organization` 是这个人使用这个 Agent 的组织。他们必须是这个组织的有效成员。当他们只有一个组织，或者使用用户令牌时，可以不填它。返回的是他们新的关联 Agent。
+`organization` 是这个人使用这个 Bot 的组织。他们必须是这个组织的有效成员。当他们只有一个组织，或者使用用户令牌时，可以不填它。返回的是他们新的关联 Bot。
 
-如果这个人已经在使用这个 Agent，他们会得到原来的关联 Agent。要拒绝邮箱邀请，请使用 `POST /v1/invitations/:invitationId/decline`。
+如果这个人已经在使用这个 Bot，他们会得到原来的关联 Bot。要拒绝邮箱邀请，请使用 `POST /v1/invitations/:invitationId/decline`。
 
 ---
 
-## 使用共享的 Agent
+## 使用共享的 Bot
 
-关联 Agent 是成员在他们自己的组织中的一个 Agent。它带有 `source`，`source` 指向你的 Agent：
+关联 Bot 是成员在他们自己的组织中的一个 Bot。它带有 `source`，`source` 指向你的 Bot：
 
 ```json
 {
-	"id": "agt_e40b",
+	"id": "bot_e40b",
 	"kind": "persistent",
 	"owner": { "_tag": "Member", "userId": "u_456" },
 	"name": "Guide",
-	"source": { "organizationId": "org_3c7e", "agent": "agt_7d2c" }
+	"source": { "organizationId": "org_3c7e", "bot": "bot_7d2c" }
 }
 ```
 
-成员像使用自己的 Agents 一样使用它：
+成员像使用自己的 Bots 一样使用它：
 
-- 他们用它启动 [Sessions](/zh-cn/docs/sessions)，并且可以把它设为自己的默认 Agent。
-- 它使用他们的权限、他们连接的 [Apps](/zh-cn/docs/apps)，以及他们的其他 Agents。它可以把工作交给他们的 Agents。
+- 他们用它启动 [Sessions](/zh-cn/docs/sessions)，并且可以把它设为自己的默认 Bot。
+- 它使用他们的权限、他们连接的 [Apps](/zh-cn/docs/apps)，以及他们的其他 Bots。它可以把工作交给他们的 Bots。
 - 它的 [requests](/zh-cn/docs/requests) 会发给这个成员。他们的决定、[Grants](/zh-cn/docs/requests#回答请求) 和 [Rules](/zh-cn/docs/rules) 只在他们的组织中有效。你的只在你的组织中有效。
-- 他们的组织为模型付费。如果你的 Agent 指定了一个他们的组织没有的模型，Session 会使用他们组织的默认模型。
+- 他们的组织为模型付费。如果你的 Bot 指定了一个他们的组织没有的模型，Session 会使用他们组织的默认模型。
 - 你永远看不到他们的 Sessions。
 
-名字、角色、指令和模型总是来自你的 Agent。你修改它们时，每个关联 Agent 也会一起改变。成员不能修改它们。成员可以修改 `planApproval`。
+名字、角色、指令和模型总是来自你的 Bot。你修改它们时，每个关联 Bot 也会一起改变。成员不能修改它们。成员可以修改 `planApproval`。
 
-这个 Agent 在你的组织中保存[一个记忆池](/zh-cn/docs/memory#agent-记忆)。它在某个成员的组织中学到的内容属于这个成员，并且只在那个组织中有效。没有人能读取关于另一个人的记忆：你不能，其他成员也不能。你可以用 purge 删除一个成员留下的内容，而不用读取它。只有你能管理记忆 Agent。
+这个 Bot 在你的组织中保存[一个记忆池](/zh-cn/docs/memory#bot-记忆)。它在某个成员的组织中学到的内容属于这个成员，并且只在那个组织中有效。没有人能读取关于另一个人的记忆：你不能，其他成员也不能。你可以用 purge 删除一个成员留下的内容，而不用读取它。只有你能管理记忆 Bot。
 
 ---
 
 ## 管理成员
 
-| 请求                                         | 作用                                                   |
-| -------------------------------------------- | ------------------------------------------------------ |
-| `GET /v1/agents/:agentId/members`            | 列出成员：他们的用户 ID 和组织，以及他们的关联 Agent。 |
-| `DELETE /v1/agents/:agentId/members/:userId` | 移除一个人。他们的关联 Agent 会立即停止工作。          |
+| 请求                                     | 作用                                                 |
+| ---------------------------------------- | ---------------------------------------------------- |
+| `GET /v1/bots/:botId/members`            | 列出成员：他们的用户 ID 和组织，以及他们的关联 Bot。 |
+| `DELETE /v1/bots/:botId/members/:userId` | 移除一个人。他们的关联 Bot 会立即停止工作。          |
 
-这两个请求都需要 `agents.share`。当你归档你的 Agent 时，关联 Agent 也会停止工作。
+这两个请求都需要 `bots.share`。当你归档你的 Bot 时，关联 Bot 也会停止工作。
 
-成员归档自己的关联 Agent 时，就会离开。
+成员归档自己的关联 Bot 时，就会离开。
 
 ---
 
 ## 权限
 
-| 权限           | 允许你                                   |
-| -------------- | ---------------------------------------- |
-| `agents.share` | 邀请别人使用某个 Agent，并管理它的成员。 |
+| 权限         | 允许你                                 |
+| ------------ | -------------------------------------- |
+| `bots.share` | 邀请别人使用某个 Bot，并管理它的成员。 |
 
 见 [权限](/zh-cn/docs/permissions)。
 
 ## 错误
 
-| 状态码 | 错误                      | 何时出现                                                                |
-| ------ | ------------------------- | ----------------------------------------------------------------------- |
-| `400`  | `AgentInvalid`            | 这个 Agent 不能被分享，或者成员试图修改共享的 Agent 本身的内容。        |
-| `400`  | `InvitationInvalid`       | 这个邀请已被使用、撤销或过期，或者你必须指明组织。                      |
-| `404`  | `InvitationNotFound`      | 没有发给你的、使用这个 ID 或密钥的邀请。                                |
-| `404`  | `AgentNotFound`           | 没有你可以读取的、使用这个 ID 的 Agent，或者某个关联 Agent 已停止工作。 |
-| `503`  | `AgentStorageUnavailable` | OpenBot 无法连接到它的数据库。                                          |
+| 状态码 | 错误                    | 何时出现                                                            |
+| ------ | ----------------------- | ------------------------------------------------------------------- |
+| `400`  | `BotInvalid`            | 这个 Bot 不能被分享，或者成员试图修改共享的 Bot 本身的内容。        |
+| `400`  | `InvitationInvalid`     | 这个邀请已被使用、撤销或过期，或者你必须指明组织。                  |
+| `404`  | `InvitationNotFound`    | 没有发给你的、使用这个 ID 或密钥的邀请。                            |
+| `404`  | `BotNotFound`           | 没有你可以读取的、使用这个 ID 的 Bot，或者某个关联 Bot 已停止工作。 |
+| `503`  | `BotStorageUnavailable` | OpenBot 无法连接到它的数据库。                                      |

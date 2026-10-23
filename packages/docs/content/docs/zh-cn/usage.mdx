@@ -3,13 +3,13 @@ title: 用量和预算
 description: 查看模型用量和费用，设置预算，并用额度支付平台的模型。
 ---
 
-OpenBot 会记录每一次模型调用。你可以看到每个成员、每个 Agent 和每个用户令牌用了多少 token，以及花了多少钱。token 是模型读或写的一小段文本。你也可以设置**预算**。花的钱太多时，预算会停止模型调用。平台可以给组织**额度**，用来支付平台共享的模型。
+OpenBot 会记录每一次模型调用。你可以看到每个成员、每个 Bot 和每个用户令牌用了多少 token，以及花了多少钱。token 是模型读或写的一小段文本。你也可以设置**预算**。花的钱太多时，预算会停止模型调用。平台可以给组织**额度**，用来支付平台共享的模型。
 
 | 词         | 含义                                                                        |
 | ---------- | --------------------------------------------------------------------------- |
 | 用量事件   | 一次模型调用：它的 token、它的费用，以及谁发起了它。                        |
 | 价格       | 一个模型在一个提供方那里，一百万个 token 的费用。                           |
-| 预算       | 组织、成员、Agent 或用户令牌的花费上限，按一天或一个月计算。                |
+| 预算       | 组织、成员、Bot 或用户令牌的花费上限，按一天或一个月计算。                  |
 | 额度       | 平台给组织的钱，用来支付平台的模型。                                        |
 | 微美元     | API 中所有的钱都以微美元（micro-USD）为单位。1 美元等于 1,000,000 微美元。  |
 | 平台密钥   | 一个[共享的模型提供方](/zh-cn/docs/platform#共享的模型提供方)。由平台付费。 |
@@ -21,16 +21,16 @@ OpenBot 会记录每一次模型调用。你可以看到每个成员、每个 Ag
 
 OpenBot 会记录每一次得到回答的模型调用。每个用量事件都有一个 `source`：
 
-| `source`         | 是什么发起了调用                                                          |
-| ---------------- | ------------------------------------------------------------------------- |
-| `turn`           | Session 中一个 Turn 的一个模型步骤。                                      |
-| `compaction`     | 对旧消息的总结，让对话能放进模型。                                        |
-| `session_memory` | Session 的[记忆](/zh-cn/docs/memory)。                                    |
-| `judge`          | 评判 [Rules](/zh-cn/docs/rules) 的模型。                                  |
-| `agent_memory`   | [记忆 Agent](/zh-cn/docs/memory#agent-记忆)：它学习、补充和回答时的用量。 |
-| `other`          | 其他任何调用。                                                            |
+| `source`         | 是什么发起了调用                                                      |
+| ---------------- | --------------------------------------------------------------------- |
+| `turn`           | Session 中一个 Turn 的一个模型步骤。                                  |
+| `compaction`     | 对旧消息的总结，让对话能放进模型。                                    |
+| `session_memory` | Session 的[记忆](/zh-cn/docs/memory)。                                |
+| `judge`          | 评判 [Rules](/zh-cn/docs/rules) 的模型。                              |
+| `bot_memory`     | [记忆 Bot](/zh-cn/docs/memory#bot-记忆)：它学习、补充和回答时的用量。 |
+| `other`          | 其他任何调用。                                                        |
 
-当调用有这些信息时，用量事件还会带有 Session、Turn、Agent、成员和用户令牌。在 [Channel](/zh-cn/docs/channels) 中，成员是写这条消息的人。
+当调用有这些信息时，用量事件还会带有 Session、Turn、Bot、成员和用户令牌。在 [Channel](/zh-cn/docs/channels) 中，成员是写这条消息的人。
 
 有些调用不会被记录：
 
@@ -175,11 +175,11 @@ OpenBot 使用调用开始的时间。它使用第一个有窗口包含这个时
 
 `GET /v1/organization/usage` 把一段时间内的 token 和费用加起来。它需要 `usage.read`。
 
-| 查询参数  | 作用                                                                         |
-| --------- | ---------------------------------------------------------------------------- |
-| `from`    | 开始时间，使用 ISO 8601 格式。默认是 UTC 时间当前月份的开始。                |
-| `to`      | 结束时间，使用 ISO 8601 格式。默认是现在。                                   |
-| `groupBy` | `day`（默认）、`model`、`provider`、`member`、`agent`、`token` 或 `source`。 |
+| 查询参数  | 作用                                                                       |
+| --------- | -------------------------------------------------------------------------- |
+| `from`    | 开始时间，使用 ISO 8601 格式。默认是 UTC 时间当前月份的开始。              |
+| `to`      | 结束时间，使用 ISO 8601 格式。默认是现在。                                 |
+| `groupBy` | `day`（默认）、`model`、`provider`、`member`、`bot`、`token` 或 `source`。 |
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -215,7 +215,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 }
 ```
 
-`key` 是分组的值，比如一个用户 ID 或一天。对于没有这个值的调用，比如没有 Agent 的调用，它为 `null`。
+`key` 是分组的值，比如一个用户 ID 或一天。对于没有这个值的调用，比如没有 Bot 的调用，它为 `null`。
 
 `GET /v1/organization/usage/events` 列出单个用量事件，最新的在前。它接受 `from`、`to`、`limit`（1 到 200，默认 50）和 `after`。把一页的 `next` 值作为 `after` 发送，就能得到下一页。每个事件都有 `priced` 和 `charged`。当费用从额度中扣除时，`charged` 为 `true`。
 
@@ -229,7 +229,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | -------------- | ----------------------- | ---------------------------- |
 | `organization` | 不写它。它就是组织 ID。 | 组织的每一次调用。           |
 | `member`       | 一个成员的用户 ID。     | 为这个成员工作的调用。       |
-| `agent`        | 一个 Agent 的 ID。      | 这个 Agent 的调用。          |
+| `bot`          | 一个 Bot 的 ID。        | 这个 Bot 的调用。            |
 | `token`        | 一个用户令牌的 ID。     | 这个令牌启动的工作中的调用。 |
 
 每个预算都有一个 `period`（周期）：`day` 或 `month`。两者都从 UTC 午夜开始。每个范围在每种周期上只能有一个预算。
@@ -244,15 +244,15 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"scope":"agent","scopeId":"agt_7d2c","period":"month","limitMicros":50000000,"mode":"hard"}' \
+  -d '{"scope":"bot","scopeId":"bot_7d2c","period":"month","limitMicros":50000000,"mode":"hard"}' \
   https://api.example.com/v1/organization/budgets
 ```
 
 ```json
 {
 	"id": "budget_5c9e",
-	"scope": "agent",
-	"scopeId": "agt_7d2c",
+	"scope": "bot",
+	"scopeId": "bot_7d2c",
 	"period": "month",
 	"limitMicros": 50000000,
 	"mode": "hard",
@@ -344,7 +344,7 @@ token 速率限制一个范围内的模型工作使用 token 的速度。它把�
 | -------------- | ------------------------------------ |
 | `organization` | 组织的所有模型调用。                 |
 | `member`       | 为一个成员工作的模型调用。           |
-| `agent`        | 一个 Agent 的模型调用。              |
+| `bot`          | 一个 Bot 的模型调用。                |
 | `token`        | 一个用户令牌启动的工作中的模型调用。 |
 
 一次模型调用从它所属的每个范围的桶中取 token：
@@ -358,7 +358,7 @@ token 速率限制一个范围内的模型工作使用 token 的速度。它把�
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"expectedVersion":5,"tokenRate":{"organization":{"tokensPerSecond":2000,"burstTokens":20000},"member":{"tokensPerSecond":500,"burstTokens":10000},"agent":null,"token":null}}' \
+  -d '{"expectedVersion":5,"tokenRate":{"organization":{"tokensPerSecond":2000,"burstTokens":20000},"member":{"tokensPerSecond":500,"burstTokens":10000},"bot":null,"token":null}}' \
   https://api.example.com/v1/platform/settings
 ```
 

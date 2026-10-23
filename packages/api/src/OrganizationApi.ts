@@ -76,7 +76,7 @@ export type UpdateMemberRequest = typeof UpdateMemberRequest.Type
 
 export { InvitationId, InvitationInvalid, InvitationNotFound, InvitationStatus }
 /**
- * An invitation to join an organization, or to use one shared Agent of it.
+ * An invitation to join an organization, or to use one shared Bot of it.
  * The person with this verified email can accept it.
  */
 export const Invitation = Schema.Struct({
@@ -84,7 +84,7 @@ export const Invitation = Schema.Struct({
 	organizationId: Schema.String,
 	organizationName: Schema.String,
 	email: Schema.String,
-	/** The roles that the person gets when they accept. An invitation to an Agent has none. */
+	/** The roles that the person gets when they accept. An invitation to a Bot has none. */
 	roles: Schema.Array(RoleId),
 	status: InvitationStatus,
 	/** The user ID of the person who made the invitation. */
@@ -92,10 +92,10 @@ export const Invitation = Schema.Struct({
 	createdAt: Schema.String,
 	expiresAt: Schema.String,
 	/**
-	 * Only for an invitation to use one Agent. Accept it with
-	 * `POST /v1/agent-invitations/accept`. `roles` is empty then.
+	 * Only for an invitation to use one Bot. Accept it with
+	 * `POST /v1/bot-invitations/accept`. `roles` is empty then.
 	 */
-	agent: Schema.optionalKey(
+	bot: Schema.optionalKey(
 		Schema.Struct({ id: Schema.String, name: Schema.String }),
 	),
 })
@@ -117,7 +117,7 @@ export type CreateInvitationRequest = typeof CreateInvitationRequest.Type
 const auditActionTree = {
 	member: ["joined", "updated", "removed", "left"],
 	invitation: ["created", "revoked", "accepted", "declined"],
-	agent_member: ["joined", "removed"],
+	bot_member: ["joined", "removed"],
 	organization: ["created", "updated"],
 	settings: ["updated"],
 	role: ["created", "updated", "deleted"],
@@ -126,13 +126,13 @@ const auditActionTree = {
 	domain: ["added", "verified", "removed"],
 	sso_connection: ["created", "updated", "deleted"],
 	token: ["created", "revoked"],
-	agent: [
+	bot: [
 		"created",
 		"updated",
 		"promoted",
 		"memory.updated",
 		"memory.purged",
-		"memory_agent.updated",
+		"memory_bot.updated",
 	],
 	delegation: ["started", "completed"],
 	capability: ["decided"],
@@ -467,7 +467,7 @@ export class OrganizationsApi extends HttpApiGroup.make("organizations")
 			},
 		).annotate(
 			OpenApi.Description,
-			"Joins the organization of the invitation. You need the session cookie, and your verified email must be the email of the invitation. An invitation to use an Agent needs `POST /v1/agent-invitations/accept` instead.",
+			"Joins the organization of the invitation. You need the session cookie, and your verified email must be the email of the invitation. An invitation to use a Bot needs `POST /v1/bot-invitations/accept` instead.",
 		),
 		HttpApiEndpoint.post(
 			"declineInvitation",

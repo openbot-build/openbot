@@ -3,13 +3,13 @@ title: Memory
 description: 保存 Session 中有用的事实，并在之后的 Turn 中使用它们。
 ---
 
-**学到的记忆**（learned memory）是 Agent 为一个 Session 保存的一小份事实列表。每条事实在对话中都有来源。
+**学到的记忆**（learned memory）是 Bot 为一个 Session 保存的一小份事实列表。每条事实在对话中都有来源。
 OpenBot 在每个 Turn 之后添加事实，并在之后的 Turn 中把它们展示给模型。你也可以自己添加、删除和关闭事实。
 本页介绍学到的记忆如何工作，以及如何用 API 修改它。
 
 学到的记忆属于一个 Session。它是 Session 历史的一部分，所以 [Fork](/zh-cn/docs/sessions#从某个-version-分叉)（分叉）会得到它的一份副本。其他 Session 看不到它。
 
-每个 [Agent](/zh-cn/docs/agents) 还有一份跨越它所有 Session 的长期记忆，由一个记忆 Agent 保管。参见 [Agent 记忆](#agent-记忆)。
+每个 [Bot](/zh-cn/docs/bots) 还有一份跨越它所有 Session 的长期记忆，由一个记忆 Bot 保管。参见 [Bot 记忆](#bot-记忆)。
 
 ---
 
@@ -185,35 +185,35 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ---
 
-## Agent 记忆
+## Bot 记忆
 
-**Agent 记忆**（Agent memory）是一个 Agent 在许多 Session 中学到的东西。每个 Agent 有一个条目池。**记忆 Agent**（memory Agent）保管这个池。它是属于这个 Agent 的助手：它读取整个池，学习新的条目，并把有用的内容加入 Agent 的工作。它从不在 Session 中工作，所以没有人能读到它读的内容。
+**Bot 记忆**（Bot memory）是一个 Bot 在许多 Session 中学到的东西。每个 Bot 有一个条目池。**记忆 Bot**（memory Bot）保管这个池。它是属于这个 Bot 的助手：它读取整个池，学习新的条目，并把有用的内容加入 Bot 的工作。它从不在 Session 中工作，所以没有人能读到它读的内容。
 
-Agent 记忆不跟随 Timeline。Fork 永远不会改变它，回到旧的 Version 也不会撤销它。
+Bot 记忆不跟随 Timeline。Fork 永远不会改变它，回到旧的 Version 也不会撤销它。
 
 ### 条目和 Tag
 
 每个条目属于一层：
 
-| 层            | 含义                                                                               |
-| ------------- | ---------------------------------------------------------------------------------- |
-| `fact`        | Session 中出现的事情。它的来源是 Item。                                            |
-| `observation` | 记忆 Agent 从其他条目得出的结论。它的来源是那些条目。`confidence` 在 0 到 1 之间。 |
-| `pinned`      | 某个人让 OpenBot 记住的内容。                                                      |
+| 层            | 含义                                                                             |
+| ------------- | -------------------------------------------------------------------------------- |
+| `fact`        | Session 中出现的事情。它的来源是 Item。                                          |
+| `observation` | 记忆 Bot 从其他条目得出的结论。它的来源是那些条目。`confidence` 在 0 到 1 之间。 |
+| `pinned`      | 某个人让 OpenBot 记住的内容。                                                    |
 
-**Tag**（标签）用来给条目分类。带冒号的 Tag 属于 OpenBot。记忆 Agent 不能写这些 Tag，所以模型无法改变谁能看到一个条目。
+**Tag**（标签）用来给条目分类。带冒号的 Tag 属于 OpenBot。记忆 Bot 不能写这些 Tag，所以模型无法改变谁能看到一个条目。
 
 | Tag                            | 含义                                                      |
 | ------------------------------ | --------------------------------------------------------- |
 | `from:<userId>`                | 说了或做了这件事的人。                                    |
 | `for:person:<userId>`          | 这个人可以看到这个条目。                                  |
 | `for:channel:<channelId>`      | 这个 [Channel](/zh-cn/docs/channels) 群里的人可以看到它。 |
-| `for:agent`                    | 使用这个 Agent 的所有人都可以看到它。                     |
+| `for:bot`                      | 使用这个 Bot 的所有人都可以看到它。                       |
 | `org:<organizationId>`         | 它发生的组织。只有这个组织中的工作能看到它。              |
 | `session:<id>`、`channel:<id>` | 它来自哪里。                                              |
 | `app:<tool>`                   | 有一个来自 App 的工具结果支持它。                         |
 
-其他 Tag，比如 `testing` 或 `trip-planning`，是**主题**（topic）。记忆 Agent 选择它们，并让它们保持整洁。主题只用小写字母、数字和短横线。
+其他 Tag，比如 `testing` 或 `trip-planning`，是**主题**（topic）。记忆 Bot 选择它们，并让它们保持整洁。主题只用小写字母、数字和短横线。
 
 ### 谁能看到条目
 
@@ -221,36 +221,36 @@ Agent 记忆不跟随 Timeline。Fork 永远不会改变它，回到旧的 Versi
 
 - 事实属于当时在场的人：这个 Turn 的人，或者在群聊 Session 中是这个 Channel 群。
 - 观察来自它所有来源中的人。但只有能看到每一个来源的人才能看到它。
-- 只有当某个人明确同意，或者它的规则允许时，记忆 Agent 才会让更多人看到一个条目。它必须给出理由，日志会记下这次修改。
+- 只有当某个人明确同意，或者它的规则允许时，记忆 Bot 才会让更多人看到一个条目。它必须给出理由，日志会记下这次修改。
 
-条目不再成立时不会被删除。记忆 Agent 用 `invalidatedAt` 标记它们，所以历史会保留下来。
+条目不再成立时不会被删除。记忆 Bot 用 `invalidatedAt` 标记它们，所以历史会保留下来。
 
-### Agent 如何学习
+### Bot 如何学习
 
-Agent 有一个叫 `confide`（倾诉）的工具。Agent 只知道它是一个说出工作情况的地方：卡住、不确定、难过或自豪的时候，或者犯了错的时候。Agent 不知道这个工具通向它的记忆。所以它倾诉是因为需要，而不是为了改变自己会记住什么。
+Bot 有一个叫 `confide`（倾诉）的工具。Bot 只知道它是一个说出工作情况的地方：卡住、不确定、难过或自豪的时候，或者犯了错的时候。Bot 不知道这个工具通向它的记忆。所以它倾诉是因为需要，而不是为了改变自己会记住什么。
 
-当 Agent 倾诉时：
+当 Bot 倾诉时：
 
-1. 记忆 Agent 会马上回答，就像牧师听人告解。它倾听，不评判。它说犯错是工作的一部分。它请 Agent 把事情直接告诉那个人，并尽量补救。它不给新任务。没有模型能回答时，Agent 会得到一段固定的平静回答。
-2. 当 Turn 结束并且 Session 的队列为空时，记忆 Agent 读取 Session 中新的 Item，并从中学习。
+1. 记忆 Bot 会马上回答，就像牧师听人告解。它倾听，不评判。它说犯错是工作的一部分。它请 Bot 把事情直接告诉那个人，并尽量补救。它不给新任务。没有模型能回答时，Bot 会得到一段固定的平静回答。
+2. 当 Turn 结束并且 Session 的队列为空时，记忆 Bot 读取 Session 中新的 Item，并从中学习。
 
-Agent 的话只是告诉记忆 Agent 该看哪里。它们本身永远不会成为记忆。来自 App 的工具结果也不会单独成为记忆。从不倾诉的 Agent 什么都学不到。
+Bot 的话只是告诉记忆 Bot 该看哪里。它们本身永远不会成为记忆。来自 App 的工具结果也不会单独成为记忆。从不倾诉的 Bot 什么都学不到。
 
-审查 Session 没有 `confide` 工具。当[组织设置](/zh-cn/docs/organization#设置)中的 `agentMemory` 关闭，或者 Session 的 `generate` 开关关闭时，Agent 仍然会得到回答，但不会学到任何东西。
+审查 Session 没有 `confide` 工具。当[组织设置](/zh-cn/docs/organization#设置)中的 `botMemory` 关闭，或者 Session 的 `generate` 开关关闭时，Bot 仍然会得到回答，但不会学到任何东西。
 
-### Agent 如何使用记忆
+### Bot 如何使用记忆
 
-当一个 Turn 开始时，记忆 Agent 会读取这个人的输入。如果有条目能帮上忙，它会在输入中加入简短的内容。它只能添加文字：不能删除或修改任何一个词，OpenBot 会检查这一点。它只能使用这次回答的读者可以看到的条目。在 Channel 群中，只能使用属于这个群或属于所有人的条目。
+当一个 Turn 开始时，记忆 Bot 会读取这个人的输入。如果有条目能帮上忙，它会在输入中加入简短的内容。它只能添加文字：不能删除或修改任何一个词，OpenBot 会检查这一点。它只能使用这次回答的读者可以看到的条目。在 Channel 群中，只能使用属于这个群或属于所有人的条目。
 
-模型看到的是加入了补充内容的输入。Session 的历史保留这个人原本的话。Agent 不知道这些补充来自记忆，它把它们当作自己的经验。请求和对请求的审查只看到 Agent 提出的内容，永远看不到这些补充。
+模型看到的是加入了补充内容的输入。Session 的历史保留这个人原本的话。Bot 不知道这些补充来自记忆，它把它们当作自己的经验。请求和对请求的审查只看到 Bot 提出的内容，永远看不到这些补充。
 
-当 Session 的 `use` 关闭，或者 `agentMemory` 关闭时，不会添加任何内容。
+当 Session 的 `use` 关闭，或者 `botMemory` 关闭时，不会添加任何内容。
 
-### 记忆 Agent
+### 记忆 Bot
 
-记忆 Agent 使用组织设置中的 `agentMemoryModel`。它没有默认值。它为 `null` 时，记忆 Agent 给出固定的平静回答，不添加也不学习任何东西。对于[共享的 Agent](/zh-cn/docs/sharing)，模型和费用来自 Session 所在的组织。
+记忆 Bot 使用组织设置中的 `botMemoryModel`。它没有默认值。它为 `null` 时，记忆 Bot 给出固定的平静回答，不添加也不学习任何东西。对于[共享的 Bot](/zh-cn/docs/sharing)，模型和费用来自 Session 所在的组织。
 
-用 `GET` 和 `PATCH /v1/agents/:agentId/memory/agent` 读取和修改记忆 Agent 的设置。你需要在一个不是关联 Agent 的 Agent 上拥有 `agents.write`：
+用 `GET` 和 `PATCH /v1/bots/:botId/memory/bot` 读取和修改记忆 Bot 的设置。你需要在一个不是关联 Bot 的 Bot 上拥有 `bots.write`：
 
 ```json
 {
@@ -263,19 +263,19 @@ Agent 的话只是告诉记忆 Agent 该看哪里。它们本身永远不会成�
 
 | 字段           | 含义                                                                                  |
 | -------------- | ------------------------------------------------------------------------------------- |
-| `instructions` | 关于隐私和分享的规则，用平实的语言写。记忆 Agent 会遵守它们。                         |
+| `instructions` | 关于隐私和分享的规则，用平实的语言写。记忆 Bot 会遵守它们。                           |
 | `concurrency`  | 它在一台服务器上同时运行的最多任务数。`null` 去掉这个限制。                           |
 | `budget`       | 它在一天或一个月内最多能花的钱，单位是 micro-USD，覆盖所有组织。`null` 去掉这个限制。 |
 
-不设限制时就没有限制。预算用完时，Agent 会得到固定的平静回答，输入保持原样，学习会等到下一个周期。
+不设限制时就没有限制。预算用完时，Bot 会得到固定的平静回答，输入保持原样，学习会等到下一个周期。
 
 ### 读取和修改
 
-`GET /v1/agents/:agentId/memory` 显示在你的组织中属于你的条目。加上用逗号分隔的 `tags`，只看带有所有这些 Tag 的条目。你需要 `agents.read`。没有人能读取关于另一个人的记忆，即使有 `agents.write` 也不行。
+`GET /v1/bots/:botId/memory` 显示在你的组织中属于你的条目。加上用逗号分隔的 `tags`，只看带有所有这些 Tag 的条目。你需要 `bots.read`。没有人能读取关于另一个人的记忆，即使有 `bots.write` 也不行。
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  "https://api.example.com/v1/agents/$AGENT/memory?tags=testing"
+  "https://api.example.com/v1/bots/$BOT/memory?tags=testing"
 ```
 
 ```json
@@ -302,7 +302,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 }
 ```
 
-用 `POST /v1/agents/:agentId/memory` 修改它：
+用 `POST /v1/bots/:botId/memory` 修改它：
 
 - 带 `content` 和可选 `tags` 的 `Remember` 会添加一个 pinned 条目。只有你能看到它。
 - 带 `id` 的 `Forget` 会收回你的那一部分。如果这个条目只和你有关，它会变成 `retracted`。否则你不再算作它的相关人，这个条目也不再属于你，但它仍然属于其他人。不属于你的 id 会返回 `409`。
@@ -311,22 +311,22 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"command":{"_tag":"Forget","id":"mem_4f2a…"}}' \
-  https://api.example.com/v1/agents/$AGENT/memory
+  https://api.example.com/v1/bots/$BOT/memory
 ```
 
-`GET /v1/agents/:agentId/memory/log` 列出你能看到的条目的修改：`version`、时间、是谁做的修改（`memory_agent`、`person` 或 `promotion`），以及条目 id。
+`GET /v1/bots/:botId/memory/log` 列出你能看到的条目的修改：`version`、时间、是谁做的修改（`memory_bot`、`person` 或 `promotion`），以及条目 id。
 
-要在不读取的情况下删除记忆，把一个 OpenBot 的 Tag 发送到 `POST /v1/agents/:agentId/memory/purge`：可以是 `from:`、`session:`、`org:` 或 `channel:` Tag。从这些条目得出的观察带有同样的 Tag，所以也会一起删除。你需要在一个不是关联 Agent 的 Agent 上拥有 `agents.write`。回答只包含删除的条目数量。
+要在不读取的情况下删除记忆，把一个 OpenBot 的 Tag 发送到 `POST /v1/bots/:botId/memory/purge`：可以是 `from:`、`session:`、`org:` 或 `channel:` Tag。从这些条目得出的观察带有同样的 Tag，所以也会一起删除。你需要在一个不是关联 Bot 的 Bot 上拥有 `bots.write`。回答只包含删除的条目数量。
 
-当你或某个 Agent [提升](/zh-cn/docs/agents#提升-session-agent)一个 Session Agent 时，它 Session 记忆中的长期条目会变成属于提升者的事实。
+当你或某个 Bot [提升](/zh-cn/docs/bots#提升-session-bot)一个 Session Bot 时，它 Session 记忆中的长期条目会变成属于提升者的事实。
 
-升级时，OpenBot 会删除旧的按人保存的记忆，每个 Agent 都从空的条目池开始。
+升级时，OpenBot 会删除旧的按人保存的记忆，每个 Bot 都从空的条目池开始。
 
 ### 告解和补充
 
 有两个路由显示你的某个 Session 中发生了什么：
 
-- `GET /v1/sessions/:sessionId/confessions` 列出 Agent 倾诉的内容和它得到的回答。在展示给别人之前，请先阅读[展示告解](/zh-cn/docs/client#展示告解)。
-- `GET /v1/sessions/:sessionId/memory/enrichments` 列出记忆 Agent 在每个 Turn 的输入中添加了什么，以及它用了哪些条目。
+- `GET /v1/sessions/:sessionId/confessions` 列出 Bot 倾诉的内容和它得到的回答。在展示给别人之前，请先阅读[展示告解](/zh-cn/docs/client#展示告解)。
+- `GET /v1/sessions/:sessionId/memory/enrichments` 列出记忆 Bot 在每个 Turn 的输入中添加了什么，以及它用了哪些条目。
 
 两者都需要 `sessions.read`，所以只有拥有这个 Session 的人才能读取。

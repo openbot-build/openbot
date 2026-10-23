@@ -1,4 +1,4 @@
-import { AgentAuth } from "./AuthApi.ts"
+import { BotAuth } from "./AuthApi.ts"
 import {
 	Config,
 	Item,
@@ -7,10 +7,10 @@ import {
 	SessionStore,
 	Turn,
 } from "@openbot-build/core"
-import * as AgentMemory from "./AgentMemory.ts"
+import * as BotMemory from "./BotMemory.ts"
 import * as Memory from "./Memory.ts"
 import { Authorize, GroupRequired, Required, requires } from "./Permissions.ts"
-import { AgentErrors, AgentId, Delegation } from "./AgentsApi.ts"
+import { BotErrors, BotId, Delegation } from "./BotsApi.ts"
 import { Name } from "./Name.ts"
 import { PlanApproval } from "./PlanApproval.ts"
 import { Schema } from "effect"
@@ -41,11 +41,11 @@ export const SettingsPatch = Schema.Struct({
 	model: Schema.optionalKey(Config.Selection),
 })
 export const CreateSessionRequest = Schema.Struct({
-	/** The Agent that works in the Session. Without it, the default Agent of the caller works. */
-	agent: Schema.optionalKey(AgentId),
+	/** The Bot that works in the Session. Without it, the default Bot of the caller works. */
+	bot: Schema.optionalKey(BotId),
 	title: Schema.optionalKey(Name),
 	settings: Schema.optionalKey(SettingsPatch),
-	/** How plans in this Session are approved. Without it, the Agent and then the member decide. */
+	/** How plans in this Session are approved. Without it, the Bot and then the member decide. */
 	planApproval: Schema.optionalKey(PlanApproval),
 })
 export type CreateSessionRequest = typeof CreateSessionRequest.Type
@@ -211,7 +211,7 @@ export const SessionResponseSseEvent: Schema.Codec<
 
 /**
  * Why a Session exists. A direct Session is work that a client started.
- * A delegated Session is work that another Agent gave. A review Session decides one request.
+ * A delegated Session is work that another Bot gave. A review Session decides one request.
  * A trigger Session is work that a schedule or a webhook started.
  * A channel Session is one chat of a Channel, such as a Slack channel.
  */
@@ -245,7 +245,7 @@ export type SessionActivity = typeof SessionActivity.Type
 /** The current core view, plus the latest message in the Responses format. */
 export const SessionView = Schema.Struct({
 	...Session.View({}).fields,
-	agent: AgentId,
+	bot: BotId,
 	kind: SessionKind,
 	parent: Schema.NullOr(SessionParent),
 	response: Schema.NullOr(SessionResponse),
@@ -258,7 +258,7 @@ export type SessionView = typeof SessionView.Type
 /** The list view. It leaves out state, message content and response output. */
 export const SessionSummary = Schema.Struct({
 	session: Session.Ref,
-	agent: AgentId,
+	bot: BotId,
 	kind: SessionKind,
 	parent: Schema.NullOr(SessionParent),
 	status: Schema.Literals(["Idle", ...Turn.StatusTag.literals]),
@@ -337,7 +337,7 @@ export const UpdateSessionRequest = Schema.Struct({
 	/** A new title. `null` removes the title. */
 	title: Schema.optionalKey(Schema.NullOr(Name)),
 	archived: Schema.optionalKey(Schema.Boolean),
-	/** `null` makes the Session follow its Agent and the member again. */
+	/** `null` makes the Session follow its Bot and the member again. */
 	planApproval: Schema.optionalKey(Schema.NullOr(PlanApproval)),
 })
 export const ForkSessionRequest = Schema.Struct({
@@ -396,7 +396,7 @@ export const Todo = Schema.Struct({
 export type Todo = typeof Todo.Type
 /**
  * The todo list of a Session. It is part of the Timeline, so a fork or a restore
- * takes the list of that point. While an item is not done, the Agent goes on working.
+ * takes the list of that point. While an item is not done, the Bot goes on working.
  */
 export const SessionTodos = Schema.Struct({
 	items: Schema.Array(Todo).check(Schema.isMaxLength(1000)),
@@ -429,10 +429,10 @@ export class SessionsApi extends HttpApiGroup.make("sessions")
 		HttpApiEndpoint.post("createSession", "/v1/sessions", {
 			payload: CreateSessionRequest,
 			success: SessionView.pipe(HttpApiSchema.status(201)),
-			error: [...SessionOperationErrors, ...AgentErrors],
+			error: [...SessionOperationErrors, ...BotErrors],
 		}).annotate(
 			OpenApi.Description,
-			"Creates an idle Session for an Agent without calling a model. Without `agent`, the default Agent of the caller works in it. It fails when the caller has no default Agent. The latest response is null.",
+			"Creates an idle Session for a Bot without calling a model. Without `bot`, the default Bot of the caller works in it. It fails when the caller has no default Bot. The latest response is null.",
 		),
 		HttpApiEndpoint.post("startTurn", "/v1/sessions/:sessionId/turns", {
 			params: { sessionId: Session.Id.check(Schema.isMinLength(1)) },
@@ -514,24 +514,24 @@ export class SessionsApi extends HttpApiGroup.make("sessions")
 			"/v1/sessions/:sessionId/confessions",
 			{
 				params: sessionParams,
-				success: Schema.Array(AgentMemory.Confession),
+				success: Schema.Array(BotMemory.Confession),
 				error: SessionOperationErrors,
 			},
 		).annotate(
 			OpenApi.Description,
-			"Lists what the Agent said with `confide` in this Session, and the answers that it got. The Agent uses it to talk about how its work goes. See the client guide before you show it to people.",
+			"Lists what the Bot said with `confide` in this Session, and the answers that it got. The Bot uses it to talk about how its work goes. See the client guide before you show it to people.",
 		),
 		HttpApiEndpoint.get(
 			"sessionEnrichments",
 			"/v1/sessions/:sessionId/memory/enrichments",
 			{
 				params: sessionParams,
-				success: Schema.Array(AgentMemory.Enrichment),
+				success: Schema.Array(BotMemory.Enrichment),
 				error: SessionOperationErrors,
 			},
 		).annotate(
 			OpenApi.Description,
-			"Lists what the memory Agent added to the input of each Turn, and the Agent memory entries that it used.",
+			"Lists what the memory Bot added to the input of each Turn, and the Bot memory entries that it used.",
 		),
 		HttpApiEndpoint.get("sessionTodos", "/v1/sessions/:sessionId/todos", {
 			params: sessionParams,
@@ -545,12 +545,12 @@ export class SessionsApi extends HttpApiGroup.make("sessions")
 			error: SessionOperationErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Replaces the todo list of the Session. The Agent also changes it with its todo tool.",
+			"Replaces the todo list of the Session. The Bot also changes it with its todo tool.",
 		),
 		HttpApiEndpoint.get("listSessions", "/v1/sessions", {
 			query: {
 				archived: Schema.optionalKey(Schema.Literals(["true", "false"])),
-				agent: Schema.optionalKey(AgentId),
+				bot: Schema.optionalKey(BotId),
 				kind: Schema.optionalKey(SessionKind),
 			},
 			success: Schema.Array(SessionSummary),
@@ -695,7 +695,7 @@ export class SessionsApi extends HttpApiGroup.make("sessions")
 			},
 		).annotate(
 			OpenApi.Description,
-			"Lists the work that this Session gave to other Agents, with its status and result.",
+			"Lists the work that this Session gave to other Bots, with its status and result.",
 		),
 		HttpApiEndpoint.post(
 			"interruptTurn",
@@ -714,4 +714,4 @@ export class SessionsApi extends HttpApiGroup.make("sessions")
 		write: [requires("sessions.write").on("session", "sessionId")],
 	})
 	.middleware(Authorize)
-	.middleware(AgentAuth) {}
+	.middleware(BotAuth) {}

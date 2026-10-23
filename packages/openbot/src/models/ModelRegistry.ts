@@ -77,8 +77,8 @@ export class ModelRegistry extends Context.Service<
 			LanguageModel.LanguageModel,
 			Config.ModelConfigurationError
 		>
-		/** The model that learns Agent memory. It fails when the organization has none. */
-		readonly agentMemoryModel: (
+		/** The model that learns Bot memory. It fails when the organization has none. */
+		readonly botMemoryModel: (
 			organizationId: string,
 		) => Effect.Effect<
 			LanguageModel.LanguageModel,
@@ -496,7 +496,7 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 		/** The model that one setting of the organization names. */
 		const setting = (
 			organizationId: string,
-			name: "rulesModel" | "agentMemoryModel",
+			name: "rulesModel" | "botMemoryModel",
 		) =>
 			Effect.gen(function* () {
 				const selection = (yield* organizationSettings(organizationId))
@@ -581,8 +581,8 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 			resolve,
 			decision,
 			rulesModel: (organizationId) => setting(organizationId, "rulesModel"),
-			agentMemoryModel: (organizationId) =>
-				setting(organizationId, "agentMemoryModel"),
+			botMemoryModel: (organizationId) =>
+				setting(organizationId, "botMemoryModel"),
 		})
 	})
 

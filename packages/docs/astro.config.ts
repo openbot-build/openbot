@@ -18,7 +18,7 @@ export default defineConfig({
 		}),
 		starlight({
 			title: "OpenBot",
-			description: "A headless, API-first Agent platform.",
+			description: "A headless, API-first Bot platform.",
 			// English pages are at the root. Translations are in a folder with the
 			// name of the locale. See `src/i18n.ts`.
 			defaultLocale: "root",
@@ -67,7 +67,7 @@ export default defineConfig({
 						"docs/sso",
 						"docs/organization",
 						"docs/permissions",
-						"docs/agents",
+						"docs/bots",
 						"docs/sharing",
 						"docs/sessions",
 						"docs/delegation",

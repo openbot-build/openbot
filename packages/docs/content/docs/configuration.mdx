@@ -185,7 +185,7 @@ Older versions of OpenBot read more environment variables. OpenBot ignores them 
 | `OPENBOT_ALLOWED_EMAIL_DOMAINS` | Verified domains of each organization, with `joinByDomain` in its settings. See [SSO](/docs/sso#verified-domains). |
 | `OPENBOT_MODEL_ENDPOINT`        | Model providers of an organization or of the platform. See [Models](/docs/models).                                 |
 | `OPENBOT_MODEL_API_KEY`         | Model providers, encrypted.                                                                                        |
-| `OPENBOT_MODEL_ID`              | A model that a model provider links, and the `model` of each Agent.                                                |
+| `OPENBOT_MODEL_ID`              | A model that a model provider links, and the `model` of each Bot.                                                  |
 | `OPENBOT_DEV_MODE`              | The development entry point decides. See [Development](#development).                                              |
 
 Some values were options in code before. They are settings now, too:
@@ -194,9 +194,9 @@ Some values were options in code before. They are settings now, too:
 | ------------------------------------------- | ------------------------------------------------------------------ |
 | `appRestrictions`                           | `appRestrictions` in the platform settings.                        |
 | `appReadRules`                              | `appReadRules` in the organization settings.                       |
-| `agents.helperModel`                        | `rulesModel` and `agentMemoryModel` in the organization settings.  |
-| `agents.requestTimeout`                     | `requestTimeoutMs` in the organization settings.                   |
-| `agents.memory`                             | `agentMemory` in the organization settings.                        |
+| `bots.helperModel`                          | `rulesModel` and `botMemoryModel` in the organization settings.    |
+| `bots.requestTimeout`                       | `requestTimeoutMs` in the organization settings.                   |
+| `bots.memory`                               | `botMemory` in the organization settings.                          |
 | `sessions.memory.defaults`                  | `memory` in the organization settings.                             |
 | `allowedEmailDomains`, `defaultRoles` (API) | Verified domains, and `defaultRoles` in the organization settings. |
 

@@ -86,14 +86,14 @@ NodeRuntime.runMain(
 
 有些值以前是选项。现在它们是数据库中的设置，所以每个实例都共享它们：
 
-| 旧选项                  | 设置                                                              |
-| ----------------------- | ----------------------------------------------------------------- |
-| `appRestrictions`       | [平台设置](/zh-cn/docs/platform#平台设置)中的 `appRestrictions`。 |
-| `appReadRules`          | [组织设置](/zh-cn/docs/organization#设置)中的 `appReadRules`。    |
-| `agents.helperModel`    | 组织设置中的 `rulesModel` 和 `agentMemoryModel`。                 |
-| `agents.requestTimeout` | 组织设置中的 `requestTimeoutMs`。                                 |
-| `agents.memory`         | 组织设置中的 `agentMemory`。                                      |
-| `appEncryptionKey`      | 实例选项 `secretKeys`。                                           |
+| 旧选项                | 设置                                                              |
+| --------------------- | ----------------------------------------------------------------- |
+| `appRestrictions`     | [平台设置](/zh-cn/docs/platform#平台设置)中的 `appRestrictions`。 |
+| `appReadRules`        | [组织设置](/zh-cn/docs/organization#设置)中的 `appReadRules`。    |
+| `bots.helperModel`    | 组织设置中的 `rulesModel` 和 `botMemoryModel`。                   |
+| `bots.requestTimeout` | 组织设置中的 `requestTimeoutMs`。                                 |
+| `bots.memory`         | 组织设置中的 `botMemory`。                                        |
+| `appEncryptionKey`    | 实例选项 `secretKeys`。                                           |
 
 ---
 
@@ -101,11 +101,11 @@ NodeRuntime.runMain(
 
 `sessions` 选项决定 Session（会话）如何完成工作。
 
-| 字段             | 作用                                                              |
-| ---------------- | ----------------------------------------------------------------- |
-| `runtime`        | Agent 的定义：`toolkit`、`plugin`、`providers`、`compaction` 等。 |
-| `layerExecution` | 一个函数，为每个 Turn 构建额外的服务，例如工具处理器。            |
-| `memory`         | 学到的记忆：你自己的 `model` 和 `policy`。                        |
+| 字段             | 作用                                                            |
+| ---------------- | --------------------------------------------------------------- |
+| `runtime`        | Bot 的定义：`toolkit`、`plugin`、`providers`、`compaction` 等。 |
+| `layerExecution` | 一个函数，为每个 Turn 构建额外的服务，例如工具处理器。          |
+| `memory`         | 学到的记忆：你自己的 `model` 和 `policy`。                      |
 
 模型来自数据库中的模型提供方和 `builtinModels`。请看[模型](/zh-cn/docs/models)。
 新 Session 的记忆开关来自[组织设置](/zh-cn/docs/organization#设置)中的 `memory`。请看 [Memory](/zh-cn/docs/memory#开关)。

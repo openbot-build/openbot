@@ -159,7 +159,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 			.handle("listComputers", ({ query }) =>
 				Effect.flatMap(Identity, (caller) =>
 					computers
-						.list(caller, query.agent)
+						.list(caller, query.bot)
 						.pipe(Effect.provideContext(services)),
 				),
 			)
@@ -204,10 +204,10 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 					yield* record(caller, "computer.deleted", computer, {})
 				}),
 			)
-			.handle("listComputerAgents", ({ params }) =>
+			.handle("listComputerBots", ({ params }) =>
 				Effect.flatMap(Identity, (caller) =>
 					computers
-						.agents(caller, params.computerId)
+						.bots(caller, params.computerId)
 						.pipe(Effect.provideContext(services)),
 				),
 			)
@@ -218,10 +218,10 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 						.get(caller, params.computerId)
 						.pipe(Effect.provideContext(services))
 					const access = yield* computers
-						.grant(caller, params.computerId, params.agentId)
+						.grant(caller, params.computerId, params.botId)
 						.pipe(Effect.provideContext(services))
 					yield* record(caller, "computer.granted", computer, {
-						agent: params.agentId,
+						bot: params.botId,
 					})
 					return access
 				}),
@@ -233,10 +233,10 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 						.get(caller, params.computerId)
 						.pipe(Effect.provideContext(services))
 					yield* computers
-						.revoke(caller, params.computerId, params.agentId)
+						.revoke(caller, params.computerId, params.botId)
 						.pipe(Effect.provideContext(services))
 					yield* record(caller, "computer.revoked", computer, {
-						agent: params.agentId,
+						bot: params.botId,
 					})
 				}),
 			)

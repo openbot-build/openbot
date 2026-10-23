@@ -5,7 +5,7 @@ description: Durchsuche die öffentliche Liste der Apps, ohne dich anzumelden.
 
 Der **App Index** ist eine öffentliche Liste von Apps. Jeder kann darin suchen. Du musst dich nicht anmelden und kein Nutzer-Token schicken. Der Index enthält nur öffentliche Beschreibungen von Apps. Er enthält nie Konten, Einstellungen, Anmeldungen oder Ergebnisse.
 
-Der Agent nutzt denselben Index über die Tools `openbot_search_apps` und `openbot_app_details`. Siehe [Apps](/de/docs/apps#apps-in-turns).
+Der Bot nutzt denselben Index über die Tools `openbot_search_apps` und `openbot_app_details`. Siehe [Apps](/de/docs/apps#apps-in-turns).
 
 ---
 
@@ -187,6 +187,6 @@ Eine gesperrte App:
 - wird bei dieser Prüfung ausgeschlossen und erscheint danach nicht mehr in der Suche;
 - gibt beim Aufruf der Details 403 `IndexRestricted` zurück;
 - kann nicht verbunden werden (403 `AppRestricted`);
-- hat in bestehenden Connections die Verfügbarkeit `Restricted`, darum kann der Agent sie nicht nutzen.
+- hat in bestehenden Connections die Verfügbarkeit `Restricted`, darum kann der Bot sie nicht nutzen.
 
 Die vollständigen Formen findest du in der [API-Referenz](/docs/api/operations/tags/app-index/).

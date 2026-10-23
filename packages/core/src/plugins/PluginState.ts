@@ -1,6 +1,6 @@
 import { Effect, Option, Record as EffectRecord } from "effect"
 import * as Session from "../session/Session.ts"
-import * as Agent from "../agent/Agent.ts"
+import * as Bot from "../bot/Bot.ts"
 import type * as Timeline from "../timeline/Timeline.ts"
 import type * as Plugin from "./Plugin.ts"
 import type * as SessionStore from "../store/SessionStore.ts"
@@ -10,13 +10,13 @@ export const make = <P, D extends Plugin.StateDeclaration>(input: {
 	readonly plugin: Plugin.Definition & {
 		readonly store: { readonly definition: D }
 	}
-}): Effect.Effect<Plugin.Store<D, Session.SessionError, Agent.Context>> =>
+}): Effect.Effect<Plugin.Store<D, Session.SessionError, Bot.Context>> =>
 	Effect.gen(function* () {
 		type A = D["schema"]["Type"]
 		type Operations = Plugin.StoreOperations<
 			A,
 			Session.SessionError,
-			Agent.Context
+			Bot.Context
 		>
 		const key = input.plugin.id
 		const scoped = (view: Session.View<P>) =>
@@ -38,7 +38,7 @@ export const make = <P, D extends Plugin.StateDeclaration>(input: {
 				: { session: { business: value } }
 		}
 		const snapshot: Operations["snapshot"] = Effect.gen(function* () {
-			const context = yield* Agent.Context,
+			const context = yield* Bot.Context,
 				at = yield* context.at,
 				view = yield* input.store.read(at.session)
 			return {
@@ -48,7 +48,7 @@ export const make = <P, D extends Plugin.StateDeclaration>(input: {
 		})
 		const modifySomeEffect: Operations["modifySomeEffect"] = (f) =>
 			Effect.gen(function* () {
-				const context = yield* Agent.Context,
+				const context = yield* Bot.Context,
 					at = yield* context.at
 				const changed = yield* input.store.modifyEffect({
 					session: at.session,
@@ -81,7 +81,7 @@ export const make = <P, D extends Plugin.StateDeclaration>(input: {
 			get: Effect.map(snapshot, ({ value }) => value),
 			setAt: (request) =>
 				Effect.gen(function* () {
-					const context = yield* Agent.Context,
+					const context = yield* Bot.Context,
 						at = yield* context.at
 					if (at.session !== request.base.session)
 						return yield* new Session.SessionError({

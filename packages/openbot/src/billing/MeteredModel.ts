@@ -12,7 +12,7 @@ import type { TokenThrottle } from "./TokenThrottle.ts"
 
 /**
  * Finds who makes a model call, at the time of the call. The code that gives a
- * model to a Session, the Rules judge or Agent memory provides it. It runs in the
+ * model to a Session, the Rules judge or Bot memory provides it. It runs in the
  * fiber of the call, so it can read the Turn that is running.
  */
 export const CurrentAttribution = Context.Reference<Effect.Effect<Attribution>>(

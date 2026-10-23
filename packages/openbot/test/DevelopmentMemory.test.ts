@@ -1,5 +1,5 @@
 // @effect-diagnostics strictEffectProvide:off
-import * as AgentFixture from "./AgentFixture.ts"
+import * as BotFixture from "./BotFixture.ts"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { NodeServices } from "@effect/platform-node"
@@ -38,7 +38,7 @@ test(
 								models.resolve(selection ?? DevelopmentModel.selection),
 							namespace: "memory-owner",
 						})
-						let source = yield* sessions.create(AgentFixture.direct())
+						let source = yield* sessions.create(BotFixture.direct())
 						source = yield* sessions.updateMemory(source.session.id, {
 							expected: source.session.head,
 							revision: source.session.revision,

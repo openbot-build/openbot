@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "Agent platform wey no get screen, wey put API first.",
+	description: "Bot platform wey no get screen, wey put API first.",
 	nav: {
 		label: "Site",
 		docs: "Docs",
@@ -9,8 +9,8 @@ export default {
 		language: "Language",
 	},
 	hero: {
-		title: ["Agents wey you fit call.", "Results wey you fit check."],
-		body: "OpenBot na open source Agent platform wey no get user interface. You go give Agent work through HTTP.",
+		title: ["Bots wey you fit call.", "Results wey you fit check."],
+		body: "OpenBot na open source Bot platform wey no get user interface. You go give Bot work through HTTP.",
 		quickStart: "Start sharp sharp",
 		apiReference: "API reference",
 		visual: "Start one Turn",
@@ -56,7 +56,7 @@ export default {
 			},
 			{
 				title: "Open Apps",
-				text: "Agents dey find and use Apps wey publishers put for open web with OpenBot App Protocol.",
+				text: "Bots dey find and use Apps wey publishers put for open web with OpenBot App Protocol.",
 			},
 			{
 				title: "Your own models",

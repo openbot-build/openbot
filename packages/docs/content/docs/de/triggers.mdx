@@ -1,9 +1,9 @@
 ---
 title: Trigger
-description: Eine Session für einen Agent mit einem Prompt starten, nach Zeitplan oder über einen Webhook.
+description: Eine Session für einen Bot mit einem Prompt starten, nach Zeitplan oder über einen Webhook.
 ---
 
-Ein **Trigger** (Auslöser) startet eine neue Session für einen Agent mit einem Prompt. Er löst nach einem Zeitplan aus, über einen Webhook oder beides. Mehr tut er nicht: Der Agent entscheidet, wie er die Arbeit macht. Er kann zuerst planen, eine [Todo-Liste](/de/docs/sessions#todo-liste) führen und Arbeit an andere Agents geben.
+Ein **Trigger** (Auslöser) startet eine neue Session für einen Bot mit einem Prompt. Er löst nach einem Zeitplan aus, über einen Webhook oder beides. Mehr tut er nicht: Der Bot entscheidet, wie er die Arbeit macht. Er kann zuerst planen, eine [Todo-Liste](/de/docs/sessions#todo-liste) führen und Arbeit an andere Bots geben.
 
 ---
 
@@ -16,13 +16,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/triggers
 ```
 
-| Feld       | Was es tut                                                                                                                |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `prompt`   | Die Nachricht, die die Arbeit startet.                                                                                    |
-| `agent`    | Optional. Der Agent, der die Arbeit macht. Ohne ihn macht dein [Standard-Agent](/de/docs/agents#dein-standard-agent) sie. |
-| `schedule` | Optional. Wann der Trigger von selbst auslöst.                                                                            |
-| `shared`   | Optional. `true` erstellt einen gemeinsamen Trigger, der der Organisation gehört.                                         |
-| `enabled`  | Optional. `false` verhindert, dass der Trigger auslöst. Der Standard ist `true`.                                          |
+| Feld       | Was es tut                                                                                                        |
+| ---------- | ----------------------------------------------------------------------------------------------------------------- |
+| `prompt`   | Die Nachricht, die die Arbeit startet.                                                                            |
+| `bot`      | Optional. Der Bot, der die Arbeit macht. Ohne ihn macht dein [Standard-Bot](/de/docs/bots#dein-standard-bot) sie. |
+| `schedule` | Optional. Wann der Trigger von selbst auslöst.                                                                    |
+| `shared`   | Optional. `true` erstellt einen gemeinsamen Trigger, der der Organisation gehört.                                 |
+| `enabled`  | Optional. `false` verhindert, dass der Trigger auslöst. Der Standard ist `true`.                                  |
 
 Die Antwort ist `201` mit dem Trigger. Er hat `nextRunAt`, die nächste Zeit, zu der der Zeitplan auslöst, und `lastFiredAt`.
 
@@ -60,7 +60,7 @@ curl -H "Authorization: Bearer $WEBHOOK_SECRET" \
   https://api.example.com/v1/hooks/triggers/trg_4c1e...
 ```
 
-Die Antwort ist `202` mit der `session`. Der JSON-Body geht als eigene Nachricht an den Agent. OpenBot markiert ihn als Daten eines anderen Systems, nicht als Anweisung. Ein falsches Geheimnis, ein Trigger ohne Webhook oder ein abgeschalteter Trigger gibt `401` mit `TriggerHookDenied` zurück.
+Die Antwort ist `202` mit der `session`. Der JSON-Body geht als eigene Nachricht an den Bot. OpenBot markiert ihn als Daten eines anderen Systems, nicht als Anweisung. Ein falsches Geheimnis, ein Trigger ohne Webhook oder ein abgeschalteter Trigger gibt `401` mit `TriggerHookDenied` zurück.
 
 Ein neues `PUT` erstellt ein neues Geheimnis, und das alte funktioniert nicht mehr. `DELETE /v1/triggers/:triggerId/webhook` entfernt den Webhook.
 
@@ -68,9 +68,9 @@ Ein neues `PUT` erstellt ein neues Geheimnis, und das alte funktioniert nicht me
 
 ## Für wen die Session arbeitet
 
-Die Sessions eines Triggers arbeiten für seinen **Actor**: das letzte Member, das den Trigger oder seinen Webhook erstellt oder geändert hat. Eine Änderung macht dich also zum Actor. Der Actor muss dem Agent Arbeit geben können. Wenn er das nicht mehr kann, löst der Trigger nicht aus.
+Die Sessions eines Triggers arbeiten für seinen **Actor**: das letzte Member, das den Trigger oder seinen Webhook erstellt oder geändert hat. Eine Änderung macht dich also zum Actor. Der Actor muss dem Bot Arbeit geben können. Wenn er das nicht mehr kann, löst der Trigger nicht aus.
 
-Der Agent arbeitet wie in jeder Session. Er hat keine zusätzlichen Grenzen und fragt mit [Requests](/de/docs/requests) nach neuen Fähigkeiten.
+Der Bot arbeitet wie in jeder Session. Er hat keine zusätzlichen Grenzen und fragt mit [Requests](/de/docs/requests) nach neuen Fähigkeiten.
 
 ---
 

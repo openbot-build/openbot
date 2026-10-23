@@ -5,7 +5,7 @@ description: 不用登录，就能搜索公开的 App 列表。
 
 **App Index**（App 索引）是一个公开的 App 列表。任何人都可以搜索它。你不需要登录，也不需要发送用户令牌。Index 只保存公开的 App 描述。它永远不保存账号、设置、登录信息或结果。
 
-Agent 通过 `openbot_search_apps` 和 `openbot_app_details` 工具使用同一个 Index。参见 [App](/zh-cn/docs/apps#turn-中的-app)。
+Bot 通过 `openbot_search_apps` 和 `openbot_app_details` 工具使用同一个 Index。参见 [App](/zh-cn/docs/apps#turn-中的-app)。
 
 ---
 
@@ -187,6 +187,6 @@ OpenBot 大约每小时重新检查一次每个 App。检查失败或结果不�
 - 在那次检查时被排除，之后不再出现在搜索中；
 - 调用详情时返回 403 `IndexRestricted`；
 - 无法连接（403 `AppRestricted`）；
-- 在已有的连接中可用性为 `Restricted`，所以 Agent 无法使用它。
+- 在已有的连接中可用性为 `Restricted`，所以 Bot 无法使用它。
 
 在 [API 参考](/docs/api/operations/tags/app-index/)中查看完整的结构。

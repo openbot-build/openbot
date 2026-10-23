@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { Item, Session } from "@openbot-build/core"
-import * as AgentMemory from "../src/plugins/memory/AgentMemory.ts"
+import * as BotMemory from "../src/plugins/memory/BotMemory.ts"
 import * as Audience from "../src/plugins/memory/Audience.ts"
 import { insertions } from "../src/plugins/memory/InsertOnly.ts"
 import { Option } from "effect"
@@ -14,7 +14,7 @@ const said = (
 	item: string,
 	author: string,
 	text: string,
-): AgentMemory.Evidence => ({
+): BotMemory.Evidence => ({
 	source: source(item),
 	role: "user",
 	outside: false,
@@ -23,7 +23,7 @@ const said = (
 	audience: Audience.person(author),
 	text,
 })
-const evidence: ReadonlyArray<AgentMemory.Evidence> = [
+const evidence: ReadonlyArray<BotMemory.Evidence> = [
 	said("ana", "u-ana", "Use tabs."),
 	said("bob", "u-bob", "Use tabs too."),
 	{
@@ -43,7 +43,7 @@ const ids = () => {
 }
 
 test("a fact gets the tags of OpenBot from its source Items", () => {
-	const applied = AgentMemory.apply({
+	const applied = BotMemory.apply({
 		pool: [],
 		evidence,
 		operations: [
@@ -92,7 +92,7 @@ test("a fact gets the tags of OpenBot from its source Items", () => {
 })
 
 test("an App result alone never becomes memory, and unknown sources are refused", () => {
-	const applied = AgentMemory.apply({
+	const applied = BotMemory.apply({
 		pool: [],
 		evidence,
 		operations: [
@@ -120,7 +120,7 @@ test("an App result alone never becomes memory, and unknown sources are refused"
 
 test("an observation comes from all its people, but only people who see every source see it", () => {
 	const next = ids()
-	const applied = AgentMemory.apply({
+	const applied = BotMemory.apply({
 		pool: [],
 		evidence,
 		operations: [
@@ -166,15 +166,15 @@ test("an observation comes from all its people, but only people who see every so
 			person: "u-ana",
 		}),
 	)
-	// Widen needs a reason, and then everyone who uses the Agent sees it.
-	const widened = AgentMemory.apply({
+	// Widen needs a reason, and then everyone who uses the Bot sees it.
+	const widened = BotMemory.apply({
 		pool: applied.entries,
 		evidence: [],
 		operations: [
 			{
 				_tag: "Widen",
 				id: observation.id,
-				audience: "agent",
+				audience: "bot",
 				reason: "Ana and Bob agreed to share it with the team.",
 			},
 		],
@@ -190,9 +190,9 @@ test("an observation comes from all its people, but only people who see every so
 	)
 })
 
-test("the memory Agent cannot change pinned or retracted entries", () => {
+test("the memory Bot cannot change pinned or retracted entries", () => {
 	const pinned = Option.getOrThrow(
-		AgentMemory.edit({
+		BotMemory.edit({
 			pool: [],
 			person: { userId: "u-ana", organizationId: "org-a" },
 			change: {
@@ -205,12 +205,12 @@ test("the memory Agent cannot change pinned or retracted entries", () => {
 		}),
 	)
 	assert.equal(pinned.layer, "pinned")
-	const applied = AgentMemory.apply({
+	const applied = BotMemory.apply({
 		pool: [pinned],
 		evidence: [],
 		operations: [
 			{ _tag: "Invalidate", id: "p1", reason: "No." },
-			{ _tag: "Widen", id: "p1", audience: "agent", reason: "No." },
+			{ _tag: "Widen", id: "p1", audience: "bot", reason: "No." },
 		],
 		now: 2,
 		id: ids(),
@@ -220,7 +220,7 @@ test("the memory Agent cannot change pinned or retracted entries", () => {
 })
 
 test("Forget takes back only the part of the person who forgets", () => {
-	const shared: AgentMemory.Entry = {
+	const shared: BotMemory.Entry = {
 		id: "s1",
 		layer: "fact",
 		content: "We use tabs.",
@@ -238,7 +238,7 @@ test("Forget takes back only the part of the person who forgets", () => {
 	}
 	const ana = { userId: "u-ana", organizationId: "org-a" }
 	const after = Option.getOrThrow(
-		AgentMemory.edit({
+		BotMemory.edit({
 			pool: [shared],
 			person: ana,
 			change: { _tag: "Forget", id: "s1" },
@@ -251,7 +251,7 @@ test("Forget takes back only the part of the person who forgets", () => {
 	assert.ok(!Audience.visible(after.tags, { ...ana, person: "u-ana" }))
 	const bob = { userId: "u-bob", organizationId: "org-a" }
 	const gone = Option.getOrThrow(
-		AgentMemory.edit({
+		BotMemory.edit({
 			pool: [after],
 			person: bob,
 			change: { _tag: "Forget", id: "s1" },
@@ -263,7 +263,7 @@ test("Forget takes back only the part of the person who forgets", () => {
 	// A person cannot forget an entry that is not for them.
 	assert.ok(
 		Option.isNone(
-			AgentMemory.edit({
+			BotMemory.edit({
 				pool: [gone],
 				person: { userId: "u-carol", organizationId: "org-a" },
 				change: { _tag: "Forget", id: "s1" },
@@ -277,7 +277,7 @@ test("Forget takes back only the part of the person who forgets", () => {
 test("a Channel group sees only group entries and entries for everyone", () => {
 	const group = ["from:u-ana", "org:org-a", "for:channel:c-1"]
 	const own = ["from:u-ana", "org:org-a", "for:person:u-ana"]
-	const everyone = ["from:u-ana", "org:org-a", "for:agent"]
+	const everyone = ["from:u-ana", "org:org-a", "for:bot"]
 	const inGroup = { organizationId: "org-a", channel: "c-1" }
 	assert.ok(Audience.visible(group, inGroup))
 	assert.ok(!Audience.visible(own, inGroup))

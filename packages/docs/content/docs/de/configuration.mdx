@@ -187,7 +187,7 @@ Jede andere Einstellung ist eine geteilte Einstellung in der Datenbank. Zwei Dok
 | `OPENBOT_ALLOWED_EMAIL_DOMAINS` | Bestätigte Domains jeder Organization, mit `joinByDomain` in ihren Einstellungen. Siehe [SSO](/de/docs/sso#bestätigte-domains).      |
 | `OPENBOT_MODEL_ENDPOINT`        | Model Providers einer Organization oder der Platform. Siehe [Models](/de/docs/models).                                               |
 | `OPENBOT_MODEL_API_KEY`         | Model Providers, verschlüsselt.                                                                                                      |
-| `OPENBOT_MODEL_ID`              | Ein Model, das ein Model Provider verknüpft, und das `model` jedes Agents.                                                           |
+| `OPENBOT_MODEL_ID`              | Ein Model, das ein Model Provider verknüpft, und das `model` jedes Bots.                                                             |
 | `OPENBOT_DEV_MODE`              | Der Einstiegspunkt für die Entwicklung entscheidet. Siehe [Entwicklung](#entwicklung).                                               |
 
 Manche Werte waren früher Optionen im Code. Sie sind jetzt auch Einstellungen:
@@ -196,9 +196,9 @@ Manche Werte waren früher Optionen im Code. Sie sind jetzt auch Einstellungen:
 | ------------------------------------------- | ----------------------------------------------------------------------------- |
 | `appRestrictions`                           | `appRestrictions` in den Einstellungen der Platform.                          |
 | `appReadRules`                              | `appReadRules` in den Einstellungen der Organization.                         |
-| `agents.helperModel`                        | `rulesModel` und `agentMemoryModel` in den Einstellungen der Organization.    |
-| `agents.requestTimeout`                     | `requestTimeoutMs` in den Einstellungen der Organization.                     |
-| `agents.memory`                             | `agentMemory` in den Einstellungen der Organization.                          |
+| `bots.helperModel`                          | `rulesModel` und `botMemoryModel` in den Einstellungen der Organization.      |
+| `bots.requestTimeout`                       | `requestTimeoutMs` in den Einstellungen der Organization.                     |
+| `bots.memory`                               | `botMemory` in den Einstellungen der Organization.                            |
 | `sessions.memory.defaults`                  | `memory` in den Einstellungen der Organization.                               |
 | `allowedEmailDomains`, `defaultRoles` (API) | Bestätigte Domains, und `defaultRoles` in den Einstellungen der Organization. |
 

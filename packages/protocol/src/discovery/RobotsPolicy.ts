@@ -6,7 +6,7 @@ interface Rule {
 	readonly pattern: string
 }
 interface Group {
-	readonly agents: ReadonlyArray<string>
+	readonly bots: ReadonlyArray<string>
 	readonly rules: ReadonlyArray<Rule>
 }
 
@@ -25,12 +25,12 @@ const groups = (text: string) => {
 			if (!/^(?:[a-z_-]+|\*)$/i.test(field)) continue
 			if (group === undefined || rulesStarted) {
 				if (group !== undefined) result = EffectArray.append(result, group)
-				group = { agents: [], rules: [] }
+				group = { bots: [], rules: [] }
 				rulesStarted = false
 			}
 			group = {
 				...group,
-				agents: EffectArray.append(group.agents, field.toLowerCase()),
+				bots: EffectArray.append(group.bots, field.toLowerCase()),
 			}
 		} else if (
 			(name === "allow" || name === "disallow") &&
@@ -104,11 +104,11 @@ export const allowed = (options: {
 	if (url.pathname === "/robots.txt") return true
 	const parsed = groups(options.text)
 	const token = options.productToken.toLowerCase()
-	const exact = parsed.filter((group) => group.agents.includes(token))
+	const exact = parsed.filter((group) => group.bots.includes(token))
 	const selected =
 		exact.length > 0
 			? exact
-			: parsed.filter((group) => group.agents.includes("*"))
+			: parsed.filter((group) => group.bots.includes("*"))
 	const path = octets(url.pathname + url.search, false)
 	let length = -1
 	let decision = true

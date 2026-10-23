@@ -3,7 +3,7 @@
 	"version": "0.1.0",
 	"license": "AGPL-3.0-only",
 	"type": "module",
-	"description": "Headless, API-first Agent host for OpenBot",
+	"description": "Headless, API-first Bot host for OpenBot",
 	"sideEffects": false,
 	"files": [
 		"dist",

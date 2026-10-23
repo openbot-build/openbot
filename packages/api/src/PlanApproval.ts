@@ -6,14 +6,14 @@ export const Timeout = Schema.Int.check(
 )
 
 /**
- * What happens when an Agent in plan mode asks to carry out its plan.
- * `approver`: `chain` asks the decider above the Agent, like any capability, so a Grant
+ * What happens when a Bot in plan mode asks to carry out its plan.
+ * `approver`: `chain` asks the decider above the Bot, like any capability, so a Grant
  * or a Rule can answer. `person` always asks the person that the work is for.
  * `onTimeout`: when nobody answers in time, `run` carries out the plan, and `stay`
  * keeps the Session in plan mode.
  *
- * It can be set for a Session, an Agent, a member and the organization. The most specific
- * one that is set wins, so a person can make it looser for one Agent or one Session.
+ * It can be set for a Session, a Bot, a member and the organization. The most specific
+ * one that is set wins, so a person can make it looser for one Bot or one Session.
  */
 export const PlanApproval = Schema.Struct({
 	approver: Schema.Literals(["chain", "person"]),
@@ -22,7 +22,7 @@ export const PlanApproval = Schema.Struct({
 })
 export type PlanApproval = typeof PlanApproval.Type
 
-/** A plan waits for the decider above the Agent for one day, and then stays a plan. */
+/** A plan waits for the decider above the Bot for one day, and then stays a plan. */
 export const defaults: PlanApproval = {
 	approver: "chain",
 	timeoutMs: 24 * 60 * 60 * 1000,

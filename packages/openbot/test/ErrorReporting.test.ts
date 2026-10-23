@@ -1,5 +1,5 @@
 // @effect-diagnostics strictEffectProvide:off
-import * as AgentFixture from "./AgentFixture.ts"
+import * as BotFixture from "./BotFixture.ts"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { NodeServices } from "@effect/platform-node"
@@ -158,7 +158,7 @@ test(
 							generateText: () => Effect.never,
 							streamText: () => Stream.never,
 						})
-						const created = yield* sessions.create(AgentFixture.direct())
+						const created = yield* sessions.create(BotFixture.direct())
 						const receipt = yield* sessions
 							.send(created.session.id, {
 								input: "Private input",
@@ -187,7 +187,7 @@ test(
 							title: "Renamed",
 						})
 						assert.equal(logs.length, 1)
-						const other = yield* sessions.create(AgentFixture.direct())
+						const other = yield* sessions.create(BotFixture.direct())
 						const pending = yield* sessions
 							.send(other.session.id, {
 								input: "Cancel",

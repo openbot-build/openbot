@@ -1,7 +1,7 @@
 import { Session, Turn } from "@openbot-build/core"
-import type { AgentsApi } from "@openbot-build/api"
+import type { BotsApi } from "@openbot-build/api"
 import { Clock, Context, Effect, Layer, type Option, Schema } from "effect"
-import { AgentRecords } from "../../agents/AgentRecords.ts"
+import { BotRecords } from "../../bots/BotRecords.ts"
 import { hash } from "../../capabilities/Capability.ts"
 
 export const WaitStatus = Schema.Literals(["waiting", "done", "cancelled"])
@@ -28,37 +28,37 @@ export class Waits extends Context.Service<
 		readonly start: (
 			organizationId: string,
 			input: Pick<Wait, "userId" | "session" | "turn" | "toolCallId" | "dueAt">,
-		) => Effect.Effect<Wait, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<Wait, BotsApi.BotStorageUnavailable>
 		readonly find: (
 			organizationId: string,
 			id: string,
-		) => Effect.Effect<Option.Option<Wait>, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<Option.Option<Wait>, BotsApi.BotStorageUnavailable>
 		/** The open waits in every organization. */
 		readonly open: Effect.Effect<
 			ReadonlyArray<{ readonly organizationId: string; readonly value: Wait }>,
-			AgentsApi.AgentStorageUnavailable
+			BotsApi.BotStorageUnavailable
 		>
 		/** The waits whose time came, in every organization. */
 		readonly due: Effect.Effect<
 			ReadonlyArray<{ readonly organizationId: string; readonly value: Wait }>,
-			AgentsApi.AgentStorageUnavailable
+			BotsApi.BotStorageUnavailable
 		>
 		readonly close: (
 			organizationId: string,
 			wait: Wait,
 			status: Exclude<WaitStatus, "waiting">,
-		) => Effect.Effect<void, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<void, BotsApi.BotStorageUnavailable>
 		/** The open waits of a Session. */
 		readonly forSession: (
 			organizationId: string,
 			session: Session.Id,
-		) => Effect.Effect<ReadonlyArray<Wait>, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<ReadonlyArray<Wait>, BotsApi.BotStorageUnavailable>
 	}
 >()("@openbot-build/openbot/plugins/work/Waits") {}
 
-export const make: Effect.Effect<typeof Waits.Service, never, AgentRecords> =
+export const make: Effect.Effect<typeof Waits.Service, never, BotRecords> =
 	Effect.gen(function* () {
-		const records = yield* AgentRecords
+		const records = yield* BotRecords
 		const waits = records.collection("wait", Wait, WaitStatus)
 		const keys = (organizationId: string, wait: Wait) => ({
 			organizationId,

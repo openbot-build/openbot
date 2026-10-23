@@ -1,9 +1,9 @@
 ---
 title: App
-description: 连接外部服务，让 Agent 可以在 Turn 中使用它们。
+description: 连接外部服务，让 Bot 可以在 Turn 中使用它们。
 ---
 
-**App**（应用）是 Agent 可以使用的外部服务。每个 App 都通过 [OpenBot App Protocol](/zh-cn/docs/protocol) 发布在网上。本页介绍如何把 App 连接到你的账号、登录 App，以及在 Turn 中使用它。
+**App**（应用）是 Bot 可以使用的外部服务。每个 App 都通过 [OpenBot App Protocol](/zh-cn/docs/protocol) 发布在网上。本页介绍如何把 App 连接到你的账号、登录 App，以及在 Turn 中使用它。
 
 所有示例都使用用户令牌。同样的调用也可以用 session cookie 完成。参见[身份验证](/zh-cn/docs/authentication)。
 
@@ -93,7 +93,7 @@ curl -X POST https://api.example.com/v1/connections/<connection id>/verify \
 
 ### 可用性
 
-`availability` 字段告诉你 Agent 能否使用一个连接。
+`availability` 字段告诉你 Bot 能否使用一个连接。
 
 | `_tag`                 | 含义                                              |
 | ---------------------- | ------------------------------------------------- |
@@ -155,7 +155,7 @@ OpenBot 的 OAuth 客户端 ID 是一个公开文档，地址是 `https://api.ex
 
 刷新永远不会要求更多的访问权限。如果刷新失败，连接会变成 `AuthorizationExpired`。
 
-当 App 改变了它的端点、私密设置、提供方或范围时，连接会变成 `NeedsRevalidation`。在你审查之前，Agent 不能使用它。把 `{ "revision", "draftId", "remoteIndex", "values", "confirmed": true }` 发送到 `revalidate`。OpenBot 不会把旧令牌发送到新端点。需要登录的 App 这时需要重新登录。
+当 App 改变了它的端点、私密设置、提供方或范围时，连接会变成 `NeedsRevalidation`。在你审查之前，Bot 不能使用它。把 `{ "revision", "draftId", "remoteIndex", "values", "confirmed": true }` 发送到 `revalidate`。OpenBot 不会把旧令牌发送到新端点。需要登录的 App 这时需要重新登录。
 
 移除返回 204。OpenBot 先关闭连接，再撤销并删除它的令牌。如果清理没有完成，你会得到 409 `ConnectionCleanupPending`。再次发送同样的 `DELETE` 来完成它。
 
@@ -172,7 +172,7 @@ Turn 运行时，OpenBot 会为你可用连接的每项能力给模型一个工�
 - **工具**（tools）成为可调用的工具。`visibility` 不包含 `model` 的工具对模型隐藏。
 - **资源**（resources）、**资源模板**（resource templates）和**提示词**（prompts）成为读取工具。
 
-每次 App 工具调用都要先经过[能力检查](/zh-cn/docs/requests)。一个工具的第一次调用通常会产生一个请求，由决策者回答。之后的调用可以由一个 Grant 或 Rule 覆盖。读取资源和提示词不需要决定，组织在[设置](/zh-cn/docs/organization#设置)中标记为读取的工具也不需要。App 的说明永远不能决定这一点。每个 App 工具都有一个额外的 `openbot_reason` 参数，用来传 Agent 的理由。OpenBot 永远不会把它发给 App。
+每次 App 工具调用都要先经过[能力检查](/zh-cn/docs/requests)。一个工具的第一次调用通常会产生一个请求，由决策者回答。之后的调用可以由一个 Grant 或 Rule 覆盖。读取资源和提示词不需要决定，组织在[设置](/zh-cn/docs/organization#设置)中标记为读取的工具也不需要。App 的说明永远不能决定这一点。每个 App 工具都有一个额外的 `openbot_reason` 参数，用来传 Bot 的理由。OpenBot 永远不会把它发给 App。
 
 模型还会得到三个辅助工具。它们永远不会添加 App、登录或批准动作。
 
@@ -184,7 +184,7 @@ Turn 运行时，OpenBot 会为你可用连接的每项能力给模型一个工�
 
 ### Code Mode
 
-当平台打开 [Code Mode](/zh-cn/docs/code-mode) 时，模型还会得到 `openbot_code_api` 和 `openbot_run_code`。Agent 用它们写一段调用这些 App 工具的小程序。程序中的每次调用都和普通的 App 工具调用走同样的路径。
+当平台打开 [Code Mode](/zh-cn/docs/code-mode) 时，模型还会得到 `openbot_code_api` 和 `openbot_run_code`。Bot 用它们写一段调用这些 App 工具的小程序。程序中的每次调用都和普通的 App 工具调用走同样的路径。
 
 ### App 操作
 
@@ -211,7 +211,7 @@ curl -X POST https://api.example.com/v1/app-operations/<operation id>/inputs \
 
 <Callout type="warn">
 	永远不要重复一个以 `OutcomeUnknown` 结束的操作。App
-	可能已经完成了这项工作。请先用一次读取检查真实的状态。Agent 也遵守同样的规则。
+	可能已经完成了这项工作。请先用一次读取检查真实的状态。Bot 也遵守同样的规则。
 </Callout>
 
 ---

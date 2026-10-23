@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto"
 import { PgClient } from "@effect/sql-pg"
 import type { Session } from "@openbot-build/core"
-import { AgentMemory as Api, AgentsApi } from "@openbot-build/api"
-import * as AgentMemory from "../plugins/memory/AgentMemory.ts"
+import { BotMemory as Api, BotsApi } from "@openbot-build/api"
+import * as BotMemory from "../plugins/memory/BotMemory.ts"
 import * as Audience from "../plugins/memory/Audience.ts"
 import type * as Memory from "../plugins/memory/Memory.ts"
 import {
@@ -16,51 +16,51 @@ import {
 	Option,
 	Schema,
 } from "effect"
-import { AgentRecords } from "./AgentRecords.ts"
+import { BotRecords } from "./BotRecords.ts"
 
 /**
- * Where the memory of an Agent lives. A linked Agent uses the memory of its source,
- * so everyone who uses a shared Agent adds to one pool.
+ * Where the memory of a Bot lives. A linked Bot uses the memory of its source,
+ * so everyone who uses a shared Bot adds to one pool.
  */
-export const homeOf = (organizationId: string, agent: AgentsApi.Agent): Home =>
-	agent.source ?? { organizationId, agent: agent.id }
+export const homeOf = (organizationId: string, bot: BotsApi.Bot): Home =>
+	bot.source ?? { organizationId, bot: bot.id }
 
-/** One memory pool: the Agent and its organization. */
+/** One memory pool: the Bot and its organization. */
 export interface Home {
 	readonly organizationId: string
-	readonly agent: AgentsApi.AgentId
+	readonly bot: BotsApi.BotId
 }
 
 /** What one change of the pool writes. */
 export interface Change<A> {
-	readonly entries: ReadonlyArray<AgentMemory.Entry>
-	readonly by: AgentMemory.LogEntry["by"]
+	readonly entries: ReadonlyArray<BotMemory.Entry>
+	readonly by: BotMemory.LogEntry["by"]
 	readonly reasons?: ReadonlyArray<string>
 	readonly result: A
 }
 
-/** Session memory kinds that last. They become topic tags when a Session Agent is promoted. */
+/** Session memory kinds that last. They become topic tags when a Session Bot is promoted. */
 const lasting = HashSet.make("procedure", "preference", "decision")
 
 export const newId = () => "mem_" + randomUUID().replaceAll("-", "")
 
-/** The pool of tagged memory entries of each Agent. It does not follow any Timeline. */
-export class AgentMemories extends Context.Service<
-	AgentMemories,
+/** The pool of tagged memory entries of each Bot. It does not follow any Timeline. */
+export class BotMemories extends Context.Service<
+	BotMemories,
 	{
 		/** All entries of the pool, the most recently changed first. Only OpenBot reads it whole. */
 		readonly pool: (
 			home: Home,
 		) => Effect.Effect<
-			ReadonlyArray<AgentMemory.Entry>,
-			AgentsApi.AgentStorageUnavailable
+			ReadonlyArray<BotMemory.Entry>,
+			BotsApi.BotStorageUnavailable
 		>
 		/** The entries that a viewer may see, with all of `tags`. */
 		readonly view: (
 			home: Home,
 			viewer: Audience.Viewer,
 			tags?: ReadonlyArray<string>,
-		) => Effect.Effect<Api.View, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<Api.View, BotsApi.BotStorageUnavailable>
 		/**
 		 * Reads the newest pool under a lock, and writes what `run` returns. Do slow work like
 		 * model calls before it, so that the lock is short and no edit gets lost.
@@ -68,47 +68,47 @@ export class AgentMemories extends Context.Service<
 		readonly change: <A, E, R>(
 			home: Home,
 			run: (
-				pool: ReadonlyArray<AgentMemory.Entry>,
+				pool: ReadonlyArray<BotMemory.Entry>,
 			) => Effect.Effect<Change<A>, E, R>,
-		) => Effect.Effect<A, E | AgentsApi.AgentStorageUnavailable, R>
+		) => Effect.Effect<A, E | BotsApi.BotStorageUnavailable, R>
 		readonly edit: (
 			home: Home,
-			person: AgentMemory.Person,
-			command: AgentMemory.Edit,
+			person: BotMemory.Person,
+			command: BotMemory.Edit,
 		) => Effect.Effect<
 			Api.View,
-			AgentsApi.AgentConflict | AgentsApi.AgentStorageUnavailable
+			BotsApi.BotConflict | BotsApi.BotStorageUnavailable
 		>
 		/** The changes that touch entries the viewer may see, with only those ids. */
 		readonly log: (
 			home: Home,
 			viewer: Audience.Viewer,
 		) => Effect.Effect<
-			ReadonlyArray<AgentMemory.LogEntry>,
-			AgentsApi.AgentStorageUnavailable
+			ReadonlyArray<BotMemory.LogEntry>,
+			BotsApi.BotStorageUnavailable
 		>
 		/** Removes every entry with one tag of OpenBot, and gives how many went. */
 		readonly purge: (
 			home: Home,
 			tag: string,
-		) => Effect.Effect<number, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<number, BotsApi.BotStorageUnavailable>
 		/**
-		 * Adds the lasting entries of a Session memory, when a Session Agent is promoted.
+		 * Adds the lasting entries of a Session memory, when a Session Bot is promoted.
 		 * They become facts for the person who promotes it.
 		 */
 		readonly adopt: (
 			home: Home,
-			person: AgentMemory.Person,
+			person: BotMemory.Person,
 			session: Session.Id,
 			memory: Memory.State,
-		) => Effect.Effect<void, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<void, BotsApi.BotStorageUnavailable>
 	}
->()("@openbot-build/openbot/agents/AgentMemories") {}
+>()("@openbot-build/openbot/bots/BotMemories") {}
 
-const Sources = Schema.fromJsonString(Schema.Array(AgentMemory.Source))
+const Sources = Schema.fromJsonString(Schema.Array(BotMemory.Source))
 const encodeSources = Schema.encodeSync(Sources)
 const decodeSources = Schema.decodeUnknownEffect(Sources)
-const decodeEntry = Schema.decodeUnknownEffect(AgentMemory.Entry)
+const decodeEntry = Schema.decodeUnknownEffect(BotMemory.Entry)
 
 interface Row {
 	readonly id: string
@@ -123,29 +123,29 @@ interface Row {
 }
 
 export const make: Effect.Effect<
-	typeof AgentMemories.Service,
+	typeof BotMemories.Service,
 	never,
-	AgentRecords | PgClient.PgClient
+	BotRecords | PgClient.PgClient
 > = Effect.gen(function* () {
 	const sql = yield* PgClient.PgClient
-	const records = yield* AgentRecords
+	const records = yield* BotRecords
 	const versions = records.collection(
 		"memory_pool",
 		Schema.Struct({ version: Schema.Natural }),
 	)
 	const logs = records.collection(
 		"memory_log",
-		Schema.Struct({ agent: AgentsApi.AgentId, entry: AgentMemory.LogEntry }),
+		Schema.Struct({ bot: BotsApi.BotId, entry: BotMemory.LogEntry }),
 	)
-	const unavailable = () => AgentsApi.AgentStorageUnavailable.make({})
+	const unavailable = () => BotsApi.BotStorageUnavailable.make({})
 	const pool = (home: Home) =>
 		Effect.gen(function* () {
 			const rows =
-				yield* sql<Row>`SELECT id, layer, content, sources, confidence, status, created_at, updated_at, invalidated_at FROM openbot_agent_memories WHERE organization_id = ${home.organizationId} AND home_agent = ${home.agent} ORDER BY updated_at DESC, id`
+				yield* sql<Row>`SELECT id, layer, content, sources, confidence, status, created_at, updated_at, invalidated_at FROM openbot_bot_memories WHERE organization_id = ${home.organizationId} AND home_bot = ${home.bot} ORDER BY updated_at DESC, id`
 			const tags = yield* sql<{
 				memory_id: string
 				tag: string
-			}>`SELECT memory_id, tag FROM openbot_agent_memory_tags WHERE organization_id = ${home.organizationId} AND home_agent = ${home.agent} ORDER BY tag`
+			}>`SELECT memory_id, tag FROM openbot_bot_memory_tags WHERE organization_id = ${home.organizationId} AND home_bot = ${home.bot} ORDER BY tag`
 			const byEntry = tags.reduce(
 				(map, row) =>
 					HashMap.set(map, row.memory_id, [
@@ -175,19 +175,19 @@ export const make: Effect.Effect<
 		}).pipe(Effect.mapError(unavailable))
 	const version = (home: Home) =>
 		versions
-			.find(home.organizationId, home.agent)
+			.find(home.organizationId, home.bot)
 			.pipe(
 				Effect.map(Option.match({ onNone: () => 0, onSome: (v) => v.version })),
 			)
-	const writeEntry = (home: Home, entry: AgentMemory.Entry) =>
+	const writeEntry = (home: Home, entry: BotMemory.Entry) =>
 		Effect.gen(function* () {
-			yield* sql`INSERT INTO openbot_agent_memories (organization_id, home_agent, id, layer, content, sources, confidence, status, created_at, updated_at, invalidated_at) VALUES (${home.organizationId}, ${home.agent}, ${entry.id}, ${entry.layer}, ${entry.content}, ${encodeSources(entry.sources)}, ${entry.confidence ?? null}, ${entry.status}, ${entry.createdAt}, ${entry.updatedAt}, ${entry.invalidatedAt ?? null}) ON CONFLICT (organization_id, home_agent, id) DO UPDATE SET layer = EXCLUDED.layer, content = EXCLUDED.content, sources = EXCLUDED.sources, confidence = EXCLUDED.confidence, status = EXCLUDED.status, updated_at = EXCLUDED.updated_at, invalidated_at = EXCLUDED.invalidated_at`
-			yield* sql`DELETE FROM openbot_agent_memory_tags WHERE organization_id = ${home.organizationId} AND home_agent = ${home.agent} AND memory_id = ${entry.id}`
+			yield* sql`INSERT INTO openbot_bot_memories (organization_id, home_bot, id, layer, content, sources, confidence, status, created_at, updated_at, invalidated_at) VALUES (${home.organizationId}, ${home.bot}, ${entry.id}, ${entry.layer}, ${entry.content}, ${encodeSources(entry.sources)}, ${entry.confidence ?? null}, ${entry.status}, ${entry.createdAt}, ${entry.updatedAt}, ${entry.invalidatedAt ?? null}) ON CONFLICT (organization_id, home_bot, id) DO UPDATE SET layer = EXCLUDED.layer, content = EXCLUDED.content, sources = EXCLUDED.sources, confidence = EXCLUDED.confidence, status = EXCLUDED.status, updated_at = EXCLUDED.updated_at, invalidated_at = EXCLUDED.invalidated_at`
+			yield* sql`DELETE FROM openbot_bot_memory_tags WHERE organization_id = ${home.organizationId} AND home_bot = ${home.bot} AND memory_id = ${entry.id}`
 			if (entry.tags.length > 0)
-				yield* sql`INSERT INTO openbot_agent_memory_tags ${sql.insert(
+				yield* sql`INSERT INTO openbot_bot_memory_tags ${sql.insert(
 					Arr.dedupe(entry.tags).map((tag) => ({
 						organization_id: home.organizationId,
-						home_agent: home.agent,
+						home_bot: home.bot,
 						memory_id: entry.id,
 						tag,
 					})),
@@ -197,7 +197,7 @@ export const make: Effect.Effect<
 	const bump = (
 		home: Home,
 		ids: ReadonlyArray<string>,
-		by: AgentMemory.LogEntry["by"],
+		by: BotMemory.LogEntry["by"],
 		reasons: ReadonlyArray<string>,
 	) =>
 		Effect.gen(function* () {
@@ -206,8 +206,8 @@ export const make: Effect.Effect<
 			yield* versions.put(
 				{
 					organizationId: home.organizationId,
-					id: home.agent,
-					owner: home.agent,
+					id: home.bot,
+					owner: home.bot,
 					scope: "",
 					status: "",
 				},
@@ -216,13 +216,13 @@ export const make: Effect.Effect<
 			yield* logs.put(
 				{
 					organizationId: home.organizationId,
-					id: home.agent + ":" + String(next).padStart(12, "0"),
-					owner: home.agent,
+					id: home.bot + ":" + String(next).padStart(12, "0"),
+					owner: home.bot,
 					scope: "",
 					status: "",
 				},
 				{
-					agent: home.agent,
+					bot: home.bot,
 					entry: {
 						version: next,
 						at: now,
@@ -236,10 +236,10 @@ export const make: Effect.Effect<
 		})
 	const locked = <A, E, R>(home: Home, operation: Effect.Effect<A, E, R>) =>
 		records.transaction(
-			"memory:" + home.organizationId + ":" + home.agent,
+			"memory:" + home.organizationId + ":" + home.bot,
 			operation,
 		)
-	const change: (typeof AgentMemories.Service)["change"] = (home, run) =>
+	const change: (typeof BotMemories.Service)["change"] = (home, run) =>
 		locked(
 			home,
 			Effect.gen(function* () {
@@ -276,7 +276,7 @@ export const make: Effect.Effect<
 				version: current,
 			})),
 		)
-	return AgentMemories.of({
+	return BotMemories.of({
 		pool,
 		view,
 		change,
@@ -286,7 +286,7 @@ export const make: Effect.Effect<
 				const found = yield* change(home, (current) =>
 					Effect.succeed(
 						Option.match(
-							AgentMemory.edit({
+							BotMemory.edit({
 								pool: current,
 								person,
 								change: command,
@@ -309,7 +309,7 @@ export const make: Effect.Effect<
 					),
 				)
 				if (!found)
-					return yield* AgentsApi.AgentConflict.make({
+					return yield* BotsApi.BotConflict.make({
 						message: "No active memory entry with this id is for you.",
 					})
 				return yield* view(home, {
@@ -320,7 +320,7 @@ export const make: Effect.Effect<
 		log: (home, viewer) =>
 			Effect.all([
 				pool(home),
-				logs.list(home.organizationId, { owner: home.agent }),
+				logs.list(home.organizationId, { owner: home.bot }),
 			]).pipe(
 				Effect.map(([entries, list]) => {
 					const seen = HashSet.fromIterable(
@@ -342,7 +342,7 @@ export const make: Effect.Effect<
 				Effect.gen(function* () {
 					const removed = yield* sql<{
 						id: string
-					}>`DELETE FROM openbot_agent_memories WHERE organization_id = ${home.organizationId} AND home_agent = ${home.agent} AND id IN (SELECT memory_id FROM openbot_agent_memory_tags WHERE organization_id = ${home.organizationId} AND home_agent = ${home.agent} AND tag = ${tag}) RETURNING id`.pipe(
+					}>`DELETE FROM openbot_bot_memories WHERE organization_id = ${home.organizationId} AND home_bot = ${home.bot} AND id IN (SELECT memory_id FROM openbot_bot_memory_tags WHERE organization_id = ${home.organizationId} AND home_bot = ${home.bot} AND tag = ${tag}) RETURNING id`.pipe(
 						Effect.mapError(unavailable),
 					)
 					if (removed.length > 0)
@@ -363,7 +363,7 @@ export const make: Effect.Effect<
 						(entry) =>
 							entry.status === "active" && HashSet.has(lasting, entry.kind),
 					)
-					.map((entry): AgentMemory.Entry => ({
+					.map((entry): BotMemory.Entry => ({
 						id: newId(),
 						layer: "fact",
 						content: entry.content,
@@ -390,4 +390,4 @@ export const make: Effect.Effect<
 			}),
 	})
 })
-export const layer = Layer.effect(AgentMemories, make)
+export const layer = Layer.effect(BotMemories, make)

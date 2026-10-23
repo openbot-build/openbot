@@ -1,4 +1,4 @@
-import { Agent, Plugin, type Session, type Turn } from "@openbot-build/core"
+import { Bot, Plugin, type Session, type Turn } from "@openbot-build/core"
 import { Effect, Option, Stream } from "effect"
 import { LanguageModel, Prompt } from "effect/ai"
 import * as Memory from "./Memory.ts"
@@ -14,11 +14,11 @@ import * as LanguageModelMemory from "./LanguageModelMemory.ts"
  */
 export const make = <SE = never, LE = never>(
 	options: Memory.Options & {
-		readonly settings: Effect.Effect<Memory.Settings, SE, Agent.Context>
+		readonly settings: Effect.Effect<Memory.Settings, SE, Bot.Context>
 		readonly languageModel: Effect.Effect<
 			LanguageModel.LanguageModel,
 			LE,
-			Agent.Context
+			Bot.Context
 		>
 	},
 ) => {
@@ -34,7 +34,7 @@ export const make = <SE = never, LE = never>(
 						// A host action Turn has no model step, so memory does not learn from it.
 						const generate =
 							settings.generate &&
-							(yield* Agent.Context).options.action === undefined
+							(yield* Bot.Context).options.action === undefined
 						const text = settings.use
 							? policy.project(
 									Option.getOrElse(yield* memory.get, Memory.empty),

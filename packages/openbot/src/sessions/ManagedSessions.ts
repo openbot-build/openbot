@@ -1,5 +1,5 @@
 import {
-	Agent,
+	Bot,
 	Config,
 	ConfigurationOperations,
 	Item,
@@ -68,8 +68,8 @@ import {
 	AppPlugin,
 	empty as emptyAppPlugin,
 } from "../plugins/apps/AppPlugin.ts"
-import { AgentPlugin } from "../plugins/agents/AgentPlugin.ts"
-import { Signal, publish } from "../agents/Signals.ts"
+import { BotPlugin } from "../plugins/bots/BotPlugin.ts"
+import { Signal, publish } from "../bots/Signals.ts"
 import * as Db from "../database/Database.ts"
 
 /** The response of the current Turn, when the Session has one. */
@@ -124,7 +124,7 @@ export const make = <
 		const environment = yield* Effect.context<ExecutionServices<Tools, R>>()
 		const fallback = yield* Effect.serviceOption(LanguageModel.LanguageModel)
 		const appPlugin = yield* Effect.serviceOption(AppPlugin)
-		const agentPlugin = yield* Effect.serviceOption(AgentPlugin)
+		const botPlugin = yield* Effect.serviceOption(BotPlugin)
 		const workPlugin = yield* Effect.serviceOption(WorkPlugin)
 		const channelPlugin = yield* Effect.serviceOption(ChannelPlugin)
 		const computerPlugin = yield* Effect.serviceOption(ComputerPlugin)
@@ -157,7 +157,7 @@ export const make = <
 		 */
 		const attribution = (view: Session.View, turn?: Turn.Record) =>
 			Effect.gen(function* () {
-				const context = yield* Effect.serviceOption(Agent.Context)
+				const context = yield* Effect.serviceOption(Bot.Context)
 				const turnId = Option.isSome(context)
 					? yield* context.value.turn
 					: turn?.id
@@ -180,7 +180,7 @@ export const make = <
 					source: "turn" as const,
 					sessionId: view.session.id,
 					...(turnId === undefined ? {} : { turnId }),
-					...(state === undefined ? {} : { agentId: state.agent }),
+					...(state === undefined ? {} : { botId: state.bot }),
 					...(chain === undefined ? {} : { userId: chain.userId }),
 					...(chain?.tokenId === undefined ? {} : { tokenId: chain.tokenId }),
 				}
@@ -198,9 +198,9 @@ export const make = <
 			settings: Effect.gen(function* (): Effect.fn.Return<
 				Memory.Settings,
 				Session.SessionNotFound | SessionStore.SessionStoreError,
-				Agent.Context
+				Bot.Context
 			> {
-				const context = yield* Agent.Context,
+				const context = yield* Bot.Context,
 					at = yield* context.at,
 					view = yield* store.read(at.session)
 				const organizationDefaults =
@@ -217,9 +217,9 @@ export const make = <
 				| Session.SessionNotFound
 				| SessionStore.SessionStoreError
 				| SessionExecutionUnavailable,
-				Agent.Context
+				Bot.Context
 			> {
-				const context = yield* Agent.Context,
+				const context = yield* Bot.Context,
 					at = yield* context.at,
 					view = yield* store.read(at.session)
 				return yield* modelFor(view, Session.currentTurn(view.session))
@@ -243,7 +243,7 @@ export const make = <
 				return (next, input) =>
 					Stream.unwrap(
 						Effect.gen(function* () {
-							const context = yield* Agent.Context,
+							const context = yield* Bot.Context,
 								at = yield* context.at,
 								view = yield* store.read(at.session)
 							const configured = options.runtime?.toolkit
@@ -376,7 +376,7 @@ export const make = <
 						Stream.provideService(memoryPlugin.store, memoryStore),
 						// The memory plugin adds no tools, so the merged tools are Tools.
 						// TypeScript cannot reduce MergedTools<[{}, Tools]> to Tools for a generic Tools.
-						Stream.map((event) => event as Agent.Event<Tools>),
+						Stream.map((event) => event as Bot.Event<Tools>),
 					),
 			),
 		)
@@ -384,16 +384,16 @@ export const make = <
 			options.owner === undefined || Option.isNone(appPlugin)
 				? emptyAppPlugin
 				: appPlugin.value.forOwner(options.owner)
-		const agentPluginFor = (
-			agent: typeof AgentPlugin.Service,
+		const botPluginFor = (
+			bot: typeof BotPlugin.Service,
 			owner: NonNullable<typeof options.owner>,
 		) =>
-			agent.forOwner({
+			bot.forOwner({
 				owner,
 				namespace,
 				read: (id) => store.read(id),
-				delegatedMemory: (agent) =>
-					list({ agent, kind: "delegated" }).pipe(
+				delegatedMemory: (bot) =>
+					list({ bot, kind: "delegated" }).pipe(
 						Effect.flatMap((rows) =>
 							Effect.forEach(rows, (row) =>
 								store.read(row.session.id).pipe(
@@ -406,12 +406,12 @@ export const make = <
 						),
 					),
 			})
-		// The Agent plugin runs inside the App plugin, so it sees every tool of the Turn.
-		// The work, Channel and Computer plugins run inside the Agent plugin, so they see the current Agent.
+		// The Bot plugin runs inside the App plugin, so it sees every tool of the Turn.
+		// The work, Channel and Computer plugins run inside the Bot plugin, so they see the current Bot.
 		// The plugins add tools at run time with JSON Schema parameters. TypeScript cannot see
 		// that their merged tool types fit the type of the plugin they join.
-		const withInner = (agent: ReturnType<typeof agentPluginFor>) => {
-			let inner = agent
+		const withInner = (bot: ReturnType<typeof botPluginFor>) => {
+			let inner = bot
 			if (Option.isSome(workPlugin))
 				inner = PluginComposition.merge(
 					inner,
@@ -430,15 +430,15 @@ export const make = <
 			return inner
 		}
 		const hostPlugin =
-			options.owner === undefined || Option.isNone(agentPlugin)
+			options.owner === undefined || Option.isNone(botPlugin)
 				? apps
 				: (PluginComposition.merge(
 						apps,
-						withInner(agentPluginFor(agentPlugin.value, options.owner)),
+						withInner(botPluginFor(botPlugin.value, options.owner)),
 					) as unknown as typeof apps)
 		const runtime = yield* SessionRuntime.make({
 			store,
-			agent: {
+			bot: {
 				...options.runtime,
 				plugin,
 				hostPlugin,
@@ -454,7 +454,7 @@ export const make = <
 				const planApproval = SessionHost.hostState(view.session)?.planApproval
 				return {
 					...view,
-					...SessionHost.agentFields(view.session),
+					...SessionHost.botFields(view.session),
 					...(planApproval === undefined ? {} : { planApproval }),
 					response: Option.getOrNull(currentResponse(view)),
 					activity: active
@@ -493,20 +493,20 @@ export const make = <
 		const create: typeof Sessions.Service.create = (input) =>
 			Effect.gen(function* () {
 				const defaults = yield* options.defaults ?? Effect.succeed({})
-				// A linked Agent comes from another organization. This organization may not
+				// A linked Bot comes from another organization. This organization may not
 				// have its model, and then the Session uses the defaults of the host.
-				const agentModel =
-					input.agent.model === undefined
+				const botModel =
+					input.bot.model === undefined
 						? undefined
-						: input.agent.source === undefined
-							? input.agent.model
+						: input.bot.source === undefined
+							? input.bot.model
 							: Option.getOrUndefined(
-									yield* Effect.option(validateSelection(input.agent.model)),
+									yield* Effect.option(validateSelection(input.bot.model)),
 								)
-				// The model of the Agent comes after the defaults of the host.
+				// The model of the Bot comes after the defaults of the host.
 				const settings = {
 					...defaults,
-					...(agentModel === undefined ? {} : { model: agentModel }),
+					...(botModel === undefined ? {} : { model: botModel }),
 					...input.settings,
 				}
 				// A host that resolves models by selection needs a model for each Session.
@@ -514,14 +514,14 @@ export const make = <
 					return yield* SessionModelInvalid.make({
 						reason: "missing",
 						message:
-							"Choose a model for the Session, or set the model of the Agent.",
+							"Choose a model for the Session, or set the model of the Bot.",
 					})
 				const model =
 					settings.model === undefined
 						? undefined
 						: yield* validateSelection(settings.model)
 				const state: SessionHost.SessionHostState = {
-					agent: input.agent.id,
+					bot: input.bot.id,
 					kind: input.kind,
 					chain: input.chain,
 					...(input.parent === undefined ? {} : { parent: input.parent }),
@@ -616,7 +616,7 @@ export const make = <
 					expectedRevision: input.expected,
 					update: (view) => {
 						const state = SessionHost.hostState(view.session)
-						// A `null` makes the Session follow its Agent and the member again.
+						// A `null` makes the Session follow its Bot and the member again.
 						const { planApproval: _approval, ...kept } = state
 						const business =
 							input.planApproval === undefined
@@ -660,7 +660,7 @@ export const make = <
 				Effect.map((rows) =>
 					rows.filter(
 						(row) =>
-							(input?.agent === undefined || row.agent === input.agent) &&
+							(input?.bot === undefined || row.bot === input.bot) &&
 							(input?.kind === undefined
 								? row.kind !== "review"
 								: row.kind === input.kind),
@@ -708,7 +708,7 @@ export const make = <
 						...(input.version === undefined ? {} : { version: input.version }),
 						metadata: title === undefined ? {} : { title },
 						...(settings === undefined ? {} : { settings }),
-						// The Fork keeps the OpenBot data of its source, such as the Agent and the
+						// The Fork keeps the OpenBot data of its source, such as the Bot and the
 						// memory switches. It is new direct work, so it has no parent tool call.
 						business: {
 							[sessionHostId]: forked(SessionHost.hostState(source.session)),

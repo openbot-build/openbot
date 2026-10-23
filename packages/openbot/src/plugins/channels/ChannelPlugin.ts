@@ -1,5 +1,5 @@
 import {
-	Agent,
+	Bot,
 	Plugin,
 	type Session,
 	type SessionStore,
@@ -61,8 +61,8 @@ interface ForOwnerInput {
 
 /**
  * Builds the Channel plugin for the Sessions of one member. In a channel Session, it tells
- * the Agent where it talks, and lets it post to other chats of the same Channel.
- * It runs inside the Agent plugin, so a post goes through the capability gate.
+ * the Bot where it talks, and lets it post to other chats of the same Channel.
+ * It runs inside the Bot plugin, so a post goes through the capability gate.
  */
 export class ChannelPlugin extends Context.Service<
 	ChannelPlugin,
@@ -82,7 +82,7 @@ export const make = Effect.gen(function* () {
 				Effect.succeed((next, options) =>
 					Stream.unwrap(
 						Effect.gen(function* () {
-							const context = yield* Agent.Context
+							const context = yield* Bot.Context
 							const at = yield* context.at
 							const view = yield* input.read(at.session)
 							const state = SessionHost.hostState(view.session)

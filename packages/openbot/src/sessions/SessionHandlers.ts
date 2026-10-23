@@ -9,10 +9,10 @@ import { Effect, Option } from "effect"
 import { LanguageModel } from "effect/ai"
 import { HttpApiBuilder, type HttpApiEndpoint } from "effect/http-api"
 import { Backend } from "../app/Backend.ts"
-import { Agents } from "../agents/Agents.ts"
-import * as DefaultAgent from "../agents/DefaultAgent.ts"
-import { Delegations } from "../agents/Delegations.ts"
-import { MemoryAgent } from "../agents/MemoryAgent.ts"
+import { Bots } from "../bots/Bots.ts"
+import * as DefaultBot from "../bots/DefaultBot.ts"
+import { Delegations } from "../bots/Delegations.ts"
+import { MemoryBot } from "../bots/MemoryBot.ts"
 
 type Request<K extends keyof typeof SessionsApi.endpoints> = Omit<
 	HttpApiEndpoint.Request<(typeof SessionsApi.endpoints)[K]>,
@@ -28,11 +28,11 @@ const currentSessions = Effect.map(Backend, (backend) =>
 )
 const implementations = Effect.gen(function* () {
 	const current = yield* currentSessions
-	const agents = yield* Agents
+	const bots = yield* Bots
 	const delegations = yield* Delegations
-	const memoryAgent = yield* MemoryAgent
+	const memoryBot = yield* MemoryBot
 	const services = yield* Effect.context<
-		AuthorizationServices | DefaultAgent.Services
+		AuthorizationServices | DefaultBot.Services
 	>()
 	const model = yield* Effect.serviceOption(LanguageModel.LanguageModel)
 	/** Give the host model to operations that may run one. */
@@ -71,7 +71,7 @@ const implementations = Effect.gen(function* () {
 			Effect.gen(function* () {
 				const caller = yield* Identity
 				yield* (yield* current).get(params.sessionId)
-				return yield* memoryAgent
+				return yield* memoryBot
 					.confessions(caller.organizationId, params.sessionId)
 					.pipe(Effect.mapError(() => SessionStorageUnavailable.make({})))
 			}),
@@ -79,7 +79,7 @@ const implementations = Effect.gen(function* () {
 			Effect.gen(function* () {
 				const caller = yield* Identity
 				yield* (yield* current).get(params.sessionId)
-				return yield* memoryAgent
+				return yield* memoryBot
 					.enrichments(caller.organizationId, params.sessionId)
 					.pipe(Effect.mapError(() => SessionStorageUnavailable.make({})))
 			}),
@@ -93,14 +93,14 @@ const implementations = Effect.gen(function* () {
 			Effect.gen(function* () {
 				const caller = yield* Identity
 				const sessions = yield* current
-				// Work for an Agent needs the delegate permission on it.
-				const agent = yield* (
-					payload.agent === undefined
-						? DefaultAgent.resolve(caller)
-						: agents.access(caller, payload.agent, "agents.delegate")
+				// Work for a Bot needs the delegate permission on it.
+				const bot = yield* (
+					payload.bot === undefined
+						? DefaultBot.resolve(caller)
+						: bots.access(caller, payload.bot, "bots.delegate")
 				).pipe(Effect.provideContext(services))
 				return yield* sessions.create({
-					agent,
+					bot,
 					kind: "direct",
 					chain: {
 						organizationId: caller.organizationId,
@@ -108,7 +108,7 @@ const implementations = Effect.gen(function* () {
 						...(caller.tokenId === undefined
 							? {}
 							: { tokenId: caller.tokenId }),
-						agents: [agent.id],
+						bots: [bot.id],
 						sessions: [],
 					},
 					...(payload.title === undefined ? {} : { title: payload.title }),
@@ -128,7 +128,7 @@ const implementations = Effect.gen(function* () {
 					...(query.archived === undefined
 						? {}
 						: { archived: query.archived === "true" }),
-					...(query.agent === undefined ? {} : { agent: query.agent }),
+					...(query.bot === undefined ? {} : { bot: query.bot }),
 					...(query.kind === undefined ? {} : { kind: query.kind }),
 				}),
 			),
@@ -141,8 +141,8 @@ const implementations = Effect.gen(function* () {
 				const caller = yield* Identity
 				const sessions = yield* current
 				yield* sessions.remove(params.sessionId)
-				// The Session Agents of a Session live only as long as the Session.
-				yield* agents
+				// The Session Bots of a Session live only as long as the Session.
+				yield* bots
 					.archiveOwnedBy(caller, params.sessionId)
 					.pipe(Effect.mapError(() => SessionStorageUnavailable.make({})))
 			}),

@@ -1,9 +1,9 @@
 ---
 title: Apps
-description: Verbinde externe Dienste, damit der Agent sie in Turns nutzen kann.
+description: Verbinde externe Dienste, damit der Bot sie in Turns nutzen kann.
 ---
 
-Eine **App** ist ein externer Dienst, den der Agent nutzen kann. Jede App ist im Web mit dem [OpenBot App Protocol](/de/docs/protocol) veröffentlicht. Diese Seite zeigt dir, wie du eine App mit deinem Konto verbindest, dich bei ihr anmeldest und sie in Turns nutzt.
+Eine **App** ist ein externer Dienst, den der Bot nutzen kann. Jede App ist im Web mit dem [OpenBot App Protocol](/de/docs/protocol) veröffentlicht. Diese Seite zeigt dir, wie du eine App mit deinem Konto verbindest, dich bei ihr anmeldest und sie in Turns nutzt.
 
 Alle Beispiele nutzen ein Nutzer-Token. Dieselben Aufrufe funktionieren auch mit dem Session-Cookie. Siehe [Authentifizierung](/de/docs/authentication).
 
@@ -93,7 +93,7 @@ curl -X POST https://api.example.com/v1/connections/<connection id>/verify \
 
 ### Verfügbarkeit
 
-Das Feld `availability` sagt dir, ob der Agent eine Connection nutzen kann.
+Das Feld `availability` sagt dir, ob der Bot eine Connection nutzen kann.
 
 | `_tag`                 | Bedeutung                                                                                     |
 | ---------------------- | --------------------------------------------------------------------------------------------- |
@@ -155,7 +155,7 @@ Um dich bei der App abzumelden, schicke `DELETE /v1/connections/:connectionId/au
 
 Ein Erneuern verlangt nie mehr Zugang. Wenn es fehlschlägt, wird die Connection `AuthorizationExpired`.
 
-Wenn eine App ihren Endpoint, private Einstellungen, ihren Anbieter oder ihre Scopes ändert, wird die Connection `NeedsRevalidation`. Der Agent kann sie nicht nutzen, bis du sie prüfst. Schicke `{ "revision", "draftId", "remoteIndex", "values", "confirmed": true }` an `revalidate`. OpenBot schickt keine alten Tokens an einen neuen Endpoint. Eine App, die eine Anmeldung braucht, braucht dann eine neue Anmeldung.
+Wenn eine App ihren Endpoint, private Einstellungen, ihren Anbieter oder ihre Scopes ändert, wird die Connection `NeedsRevalidation`. Der Bot kann sie nicht nutzen, bis du sie prüfst. Schicke `{ "revision", "draftId", "remoteIndex", "values", "confirmed": true }` an `revalidate`. OpenBot schickt keine alten Tokens an einen neuen Endpoint. Eine App, die eine Anmeldung braucht, braucht dann eine neue Anmeldung.
 
 Entfernen gibt 204 zurück. OpenBot schaltet die Connection zuerst aus. Dann zieht es ihre Tokens zurück und löscht sie. Wenn das Aufräumen nicht fertig wird, bekommst du 409 `ConnectionCleanupPending`. Schicke dasselbe `DELETE` noch einmal, um es zu beenden.
 
@@ -172,7 +172,7 @@ Wenn ein Turn läuft, gibt OpenBot dem Modell ein Tool für jede Fähigkeit dein
 - **Tools** werden zu Tools, die das Modell aufrufen kann. Tools, deren `visibility` kein `model` enthält, bleiben für das Modell versteckt.
 - **Resources**, **resource templates** und **prompts** werden zu Lese-Tools.
 
-Jeder Aufruf eines App-Tools geht zuerst durch die [Prüfung der Fähigkeit](/de/docs/requests). Der erste Aufruf eines Tools macht meistens einen Request, den ein Entscheider beantwortet. Ein Grant oder eine Rule kann dann spätere Aufrufe abdecken. Das Lesen von Resources und Prompts braucht keine Entscheidung. Das gilt auch für Tools, die die Organization in ihren [Einstellungen](/de/docs/organization#einstellungen) als Lesen markiert hat. Hinweise der App entscheiden das nie. Jedes App-Tool hat einen zusätzlichen Parameter `openbot_reason` für den Grund des Agent. OpenBot schickt ihn nie an die App.
+Jeder Aufruf eines App-Tools geht zuerst durch die [Prüfung der Fähigkeit](/de/docs/requests). Der erste Aufruf eines Tools macht meistens einen Request, den ein Entscheider beantwortet. Ein Grant oder eine Rule kann dann spätere Aufrufe abdecken. Das Lesen von Resources und Prompts braucht keine Entscheidung. Das gilt auch für Tools, die die Organization in ihren [Einstellungen](/de/docs/organization#einstellungen) als Lesen markiert hat. Hinweise der App entscheiden das nie. Jedes App-Tool hat einen zusätzlichen Parameter `openbot_reason` für den Grund des Bot. OpenBot schickt ihn nie an die App.
 
 Das Modell bekommt auch drei Helfer-Tools. Sie fügen nie eine App hinzu, melden sich nie an und geben nie eine Aktion frei.
 
@@ -184,7 +184,7 @@ Das Modell bekommt auch drei Helfer-Tools. Sie fügen nie eine App hinzu, melden
 
 ### Code Mode
 
-Wenn die Platform [Code Mode](/de/docs/code-mode) einschaltet, bekommt das Modell auch `openbot_code_api` und `openbot_run_code`. Damit schreibt der Agent ein kurzes Programm, das diese Tools der Apps aufruft. Jeder Aufruf im Programm nimmt denselben Weg wie ein normaler Aufruf eines App-Tools.
+Wenn die Platform [Code Mode](/de/docs/code-mode) einschaltet, bekommt das Modell auch `openbot_code_api` und `openbot_run_code`. Damit schreibt der Bot ein kurzes Programm, das diese Tools der Apps aufruft. Jeder Aufruf im Programm nimmt denselben Weg wie ein normaler Aufruf eines App-Tools.
 
 ### App operations
 
@@ -212,7 +212,7 @@ Die Keys in `responses` müssen zu den Keys der Eingabe-Anfragen der App passen.
 <Callout type="warn">
 	Wiederhole nie eine Operation, die mit `OutcomeUnknown` endet. Die App hat die
 	Arbeit vielleicht schon gemacht. Prüfe zuerst mit einem Lese-Aufruf den echten
-	Zustand. Der Agent folgt derselben Regel.
+	Zustand. Der Bot folgt derselben Regel.
 </Callout>
 
 ---

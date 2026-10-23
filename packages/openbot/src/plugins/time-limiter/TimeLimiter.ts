@@ -1,6 +1,6 @@
 import { Data, Duration, Effect, Option, Stream } from "effect"
 import { type Prompt } from "effect/ai"
-import { Agent, Plugin } from "@openbot-build/core"
+import { Bot, Plugin } from "@openbot-build/core"
 
 export interface Options {
 	/** Maximum time for one execution, for example `"5 minutes"`. */
@@ -37,7 +37,7 @@ export const make = ({
 				if (Option.isNone(duration))
 					return yield* new InvalidMaxDuration({ maxDuration })
 
-				const context = yield* Agent.Context
+				const context = yield* Bot.Context
 				return next(options).pipe(
 					Stream.interruptWhen(
 						Effect.sleep(duration.value).pipe(

@@ -1,6 +1,6 @@
 import { type Plugin, Session, type Turn } from "@openbot-build/core"
 import {
-	AgentsApi,
+	BotsApi,
 	MemoryOverrides,
 	PlanApproval,
 	SessionKind,
@@ -17,8 +17,8 @@ export const sessionHostId = Schema.Literal(sessionHostKey)
 	.make(sessionHostKey)
 
 /**
- * Who the work in a Session is for, and through which Agents it came.
- * `agents` starts with the Agent that the person or client called, and ends with the Agent of this Session.
+ * Who the work in a Session is for, and through which Bots it came.
+ * `bots` starts with the Bot that the person or client called, and ends with the Bot of this Session.
  * `sessions` lists the Sessions before this one, in the same order.
  */
 export const Chain = Schema.Struct({
@@ -31,7 +31,7 @@ export const Chain = Schema.Struct({
 	 * the Sessions belong to the actor of the Channel, and each Turn works for its speaker.
 	 */
 	owner: Schema.optionalKey(Schema.String),
-	agents: Schema.Array(AgentsApi.AgentId),
+	bots: Schema.Array(BotsApi.BotId),
 	sessions: Schema.Array(Session.Id),
 })
 export type Chain = typeof Chain.Type
@@ -39,7 +39,7 @@ export type Chain = typeof Chain.Type
 /** OpenBot data for one Session. It does not follow the Timeline. */
 export const SessionHostState = Schema.Struct({
 	memory: Schema.optionalKey(MemoryOverrides),
-	agent: AgentsApi.AgentId,
+	bot: BotsApi.BotId,
 	kind: SessionKind,
 	parent: Schema.optionalKey(SessionParent),
 	chain: Chain,
@@ -101,7 +101,7 @@ export const turnChain = (
 				organizationId: chain.organizationId,
 				userId: author,
 				owner: ownerOf(chain),
-				agents: chain.agents,
+				bots: chain.bots,
 				sessions: chain.sessions,
 			}
 }
@@ -112,11 +112,11 @@ export const ownerOf = (chain: Chain) => chain.owner ?? chain.userId
 export const overrides = (session: Session.Ref): MemoryOverrides =>
 	hostState(session)?.memory ?? {}
 
-/** The Agent fields of the API views of a Session. */
-export const agentFields = (session: Session.Ref) => {
+/** The Bot fields of the API views of a Session. */
+export const botFields = (session: Session.Ref) => {
 	const state = hostState(session)
 	return {
-		agent: state.agent,
+		bot: state.bot,
 		kind: state.kind,
 		parent: state.parent ?? null,
 	}

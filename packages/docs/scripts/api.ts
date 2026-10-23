@@ -34,7 +34,7 @@ const groups = [
 	[
 		"budgets",
 		"Budgets",
-		"Set spending limits for the organization, members, Agents, and user tokens.",
+		"Set spending limits for the organization, members, Bots, and user tokens.",
 	],
 	[
 		"platform",
@@ -42,20 +42,20 @@ const groups = [
 		"Manage the whole platform. Only platform admins can use it.",
 	],
 	[
-		"agents",
-		"Agents",
-		"Make, manage, and share Agents, with their memory, Rules, Grants, members, and invitations.",
+		"bots",
+		"Bots",
+		"Make, manage, and share Bots, with their memory, Rules, Grants, members, and invitations.",
 	],
-	["sessions", "Sessions", "Give work to an Agent in Sessions and Turns."],
+	["sessions", "Sessions", "Give work to a Bot in Sessions and Turns."],
 	[
-		"agentInvitations",
-		"Agent invitations",
-		"Accept an invitation to use an Agent in your own organization.",
+		"botInvitations",
+		"Bot invitations",
+		"Accept an invitation to use a Bot in your own organization.",
 	],
 	[
 		"triggers",
 		"Triggers",
-		"Start a Session for an Agent with a prompt, on a schedule or from a webhook.",
+		"Start a Session for a Bot with a prompt, on a schedule or from a webhook.",
 	],
 	[
 		"triggerHooks",
@@ -85,7 +85,7 @@ const groups = [
 	[
 		"computers",
 		"Computers",
-		"Make and use machines where Agents run commands, change files and use a desktop.",
+		"Make and use machines where Bots run commands, change files and use a desktop.",
 	],
 	[
 		"computerHooks",
@@ -100,9 +100,9 @@ const groups = [
 	[
 		"requests",
 		"Requests",
-		"Answer the requests of your Agents for new capabilities.",
+		"Answer the requests of your Bots for new capabilities.",
 	],
-	["apps", "App discovery", "Find Apps that the Agent can use."],
+	["apps", "App discovery", "Find Apps that the Bot can use."],
 	["connections", "Connections", "Connect an account to an App."],
 	["appAuthorization", "App authorization", "Let an App act for you."],
 	[
@@ -124,7 +124,7 @@ const groups = [
 	[
 		"appExperience",
 		"App transfer and reset",
-		"Export, import, and reset what the Agent learned about Apps.",
+		"Export, import, and reset what the Bot learned about Apps.",
 	],
 	["appIndex", "App Index", "Search the public index of Apps."],
 	["developer", "Developer tools", "Test and watch the Apps that you publish."],

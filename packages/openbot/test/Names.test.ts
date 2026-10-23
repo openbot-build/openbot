@@ -4,29 +4,29 @@ import * as BrowserHost from "./BrowserHost.ts"
 import { withCookie, withToken } from "./Caller.ts"
 
 test(
-	"Agent names and Session titles lose outer spaces, and a Session can have no title",
+	"Bot names and Session titles lose outer spaces, and a Session can have no title",
 	{ timeout: 60000 },
 	async () => {
 		const publicOrigin = "https://names.example.com"
 		const host = await BrowserHost.start({ publicOrigin })
 		try {
 			const alice = await host.login("alice")
-			await host.defaultAgent(alice.session)
+			await host.defaultBot(alice.session)
 			const account = withCookie({ address: host.address, publicOrigin })
 			const keyed = withToken(host.address)
 
-			const agent = await account(alice.session, "/v1/agents", "POST", {
+			const bot = await account(alice.session, "/v1/bots", "POST", {
 				name: "  Writer  ",
 				role: "Writes text",
 				instructions: "Write short text.",
 			})
-			assert.equal(agent.status, 201, await agent.clone().text())
-			const created = await agent.json()
+			assert.equal(bot.status, 201, await bot.clone().text())
+			const created = await bot.json()
 			assert.equal(created.name, "Writer")
-			const agentPath = "/v1/agents/" + created.id
+			const botPath = "/v1/bots/" + created.id
 			assert.equal(
 				(
-					await account(alice.session, agentPath, "PATCH", {
+					await account(alice.session, botPath, "PATCH", {
 						expected: created.revision,
 						name: "   ",
 					})
@@ -35,14 +35,14 @@ test(
 			)
 			assert.equal(
 				(
-					await account(alice.session, agentPath, "PATCH", {
+					await account(alice.session, botPath, "PATCH", {
 						expected: created.revision,
 						name: "x".repeat(101),
 					})
 				).status,
 				400,
 			)
-			const renamed = await account(alice.session, agentPath, "PATCH", {
+			const renamed = await account(alice.session, botPath, "PATCH", {
 				expected: created.revision,
 				name: " Editor ",
 			})

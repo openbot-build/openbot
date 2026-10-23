@@ -216,7 +216,7 @@ const client = (host: Awaited<ReturnType<typeof BrowserHost.start>>) => {
 }
 
 test(
-	"people add Computer providers, make Computers, and give Agents the right to use them",
+	"people add Computer providers, make Computers, and give Bots the right to use them",
 	{ timeout: 120000 },
 	async () => {
 		const fake = fakeProvider()
@@ -326,34 +326,34 @@ test(
 			assert.equal(usageList.length, 2)
 			assert.equal(usageList[0]!.endedAt, null)
 
-			// Alice gives her Agent the right to use the Computer, and takes it back.
-			const agent = await host.defaultAgent(alice.session)
+			// Alice gives her Bot the right to use the Computer, and takes it back.
+			const bot = await host.defaultBot(alice.session)
 			const granted = await json(
 				ComputersApi.ComputerAccess,
-				send(alice.session, path + "/agents/" + agent, "PUT"),
+				send(alice.session, path + "/bots/" + bot, "PUT"),
 			)
-			assert.equal(granted.agent, agent)
+			assert.equal(granted.bot, bot)
 			assert.deepEqual(
 				(
 					await json(
 						Schema.Array(ComputersApi.Computer),
-						send(alice.session, "/v1/computers?agent=" + agent),
+						send(alice.session, "/v1/computers?bot=" + bot),
 					)
 				).map((entry) => entry.id),
 				[computer.id],
 			)
 			assert.equal(
-				(await send(bob.session, path + "/agents/" + agent, "PUT")).status,
+				(await send(bob.session, path + "/bots/" + bot, "PUT")).status,
 				404,
 			)
 			assert.equal(
-				(await send(alice.session, path + "/agents/" + agent, "DELETE")).status,
+				(await send(alice.session, path + "/bots/" + bot, "DELETE")).status,
 				204,
 			)
 			assert.deepEqual(
 				await json(
 					Schema.Array(ComputersApi.ComputerAccess),
-					send(alice.session, path + "/agents"),
+					send(alice.session, path + "/bots"),
 				),
 				[],
 			)
@@ -544,7 +544,7 @@ test(
 )
 
 test(
-	"an Agent asks for a Computer, and uses it after its person allows it",
+	"a Bot asks for a Computer, and uses it after its person allows it",
 	{ timeout: 120000 },
 	async () => {
 		const fake = fakeProvider()
@@ -570,7 +570,7 @@ test(
 					source: { _tag: "Provider", provider: provider.id, template: null },
 				}),
 			)
-			await host.defaultAgent(alice.session)
+			await host.defaultBot(alice.session)
 			const created = await json(
 				SessionView,
 				send(alice.session, "/v1/sessions", "POST", {}),
@@ -608,7 +608,7 @@ test(
 			assert.match(lastText(denied), /may not use the Computer/)
 			assert.ok(!fake.log.some((line) => line.startsWith("run ")))
 
-			// The Agent asks. The request goes to Alice, and she allows it.
+			// The Bot asks. The request goes to Alice, and she allows it.
 			const asked = await start("get " + computer.id)
 			await status("Waiting", asked)
 			const request = await until("a request", async () => {

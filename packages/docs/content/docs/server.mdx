@@ -88,14 +88,14 @@ The subpath `@openbot-build/openbot/Development` exports the development server.
 
 Some values were options before. They are settings in the database now, so every instance shares them:
 
-| Old option              | Setting                                                                         |
-| ----------------------- | ------------------------------------------------------------------------------- |
-| `appRestrictions`       | `appRestrictions` in the [platform settings](/docs/platform#platform-settings). |
-| `appReadRules`          | `appReadRules` in the [organization settings](/docs/organization#settings).     |
-| `agents.helperModel`    | `rulesModel` and `agentMemoryModel` in the organization settings.               |
-| `agents.requestTimeout` | `requestTimeoutMs` in the organization settings.                                |
-| `agents.memory`         | `agentMemory` in the organization settings.                                     |
-| `appEncryptionKey`      | The `secretKeys` instance option.                                               |
+| Old option            | Setting                                                                         |
+| --------------------- | ------------------------------------------------------------------------------- |
+| `appRestrictions`     | `appRestrictions` in the [platform settings](/docs/platform#platform-settings). |
+| `appReadRules`        | `appReadRules` in the [organization settings](/docs/organization#settings).     |
+| `bots.helperModel`    | `rulesModel` and `botMemoryModel` in the organization settings.                 |
+| `bots.requestTimeout` | `requestTimeoutMs` in the organization settings.                                |
+| `bots.memory`         | `botMemory` in the organization settings.                                       |
+| `appEncryptionKey`    | The `secretKeys` instance option.                                               |
 
 ---
 
@@ -103,11 +103,11 @@ Some values were options before. They are settings in the database now, so every
 
 The `sessions` option sets how Sessions do their work.
 
-| Field            | What it does                                                                    |
-| ---------------- | ------------------------------------------------------------------------------- |
-| `runtime`        | The Agent definition: `toolkit`, `plugin`, `providers`, `compaction`, and more. |
-| `layerExecution` | A function that builds extra services for each Turn, such as tool handlers.     |
-| `memory`         | Learned memory: your own `model` and `policy`.                                  |
+| Field            | What it does                                                                  |
+| ---------------- | ----------------------------------------------------------------------------- |
+| `runtime`        | The Bot definition: `toolkit`, `plugin`, `providers`, `compaction`, and more. |
+| `layerExecution` | A function that builds extra services for each Turn, such as tool handlers.   |
+| `memory`         | Learned memory: your own `model` and `policy`.                                |
 
 Models come from the model providers in the database and from `builtinModels`. See [Models](/docs/models).
 The memory switches of a new Session come from `memory` in the [organization settings](/docs/organization#settings). See [Memory](/docs/memory#switches).

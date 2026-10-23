@@ -150,10 +150,7 @@ export const make = Effect.gen(function* () {
 						"member",
 						attribution.userId && `member:${org}:${attribution.userId}`,
 					],
-					[
-						"agent",
-						attribution.agentId && `agent:${org}:${attribution.agentId}`,
-					],
+					["bot", attribution.botId && `bot:${org}:${attribution.botId}`],
 					[
 						"token",
 						attribution.tokenId && `token:${org}:${attribution.tokenId}`,

@@ -1,10 +1,10 @@
 export { Health, HealthApi, Service, service } from "./HealthApi.ts"
 export { OpenBotApi } from "./OpenBotApi.ts"
 export { Account, AccountCaller, Caller, Identity } from "./Identity.ts"
-export * as AgentsApi from "./AgentsApi.ts"
+export * as BotsApi from "./BotsApi.ts"
 export { Name } from "./Name.ts"
 export * as Memory from "./Memory.ts"
-export * as AgentMemory from "./AgentMemory.ts"
+export * as BotMemory from "./BotMemory.ts"
 export * as RequestsApi from "./RequestsApi.ts"
 export * as PlanApproval from "./PlanApproval.ts"
 export * as TriggersApi from "./TriggersApi.ts"
@@ -34,7 +34,7 @@ export {
 } from "./Settings.ts"
 export {
 	AccountAuth,
-	AgentAuth,
+	BotAuth,
 	NoStore,
 	OriginCheck,
 	OrganizationRequired,

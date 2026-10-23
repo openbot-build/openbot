@@ -3,7 +3,7 @@ title: Organisation
 description: Organisationen, Members, Einstellungen, Roles und das Audit-Log.
 ---
 
-Diese Seite zeigt, wie viele Menschen OpenBot gemeinsam nutzen. Eine Organization (Organisation) ist eine Gruppe von Menschen, die Agents, Models und Einstellungen teilen.
+Diese Seite zeigt, wie viele Menschen OpenBot gemeinsam nutzen. Eine Organization (Organisation) ist eine Gruppe von Menschen, die Bots, Models und Einstellungen teilen.
 Eine Platform hat viele Organisationen. Ein User und eine Organisation sind zwei verschiedene Dinge. Ein User kann Organisationen erstellen, auch eine nur für sich selbst, und kann Member (Mitglied) in vielen Organisationen sein.
 
 Die Routen der aktuellen Organisation liegen unter `/v1/organization`. Sie nehmen ein User-Token oder das Session-Cookie an. Mit dem Cookie sendest du den Header `OpenBot-Organization`, wenn du zu mehr als einer Organisation gehörst. Siehe [Authentifizierung](/de/docs/authentication#eine-organisation-wählen).
@@ -108,10 +108,10 @@ Jede Organisation hat ihre eigenen Einstellungen. Sie liegen in der Datenbank. S
 		"provider": "prov_4c1e...",
 		"model": "gpt-4.1-mini"
 	},
-	"agentMemoryModel": null,
+	"botMemoryModel": null,
 	"decisionModel": null,
 	"memory": { "use": true, "generate": true },
-	"agentMemory": true,
+	"botMemory": true,
 	"requestTimeoutMs": 86400000,
 	"planApproval": {
 		"approver": "chain",
@@ -124,7 +124,7 @@ Jede Organisation hat ihre eigenen Einstellungen. Sie liegen in der Datenbank. S
 	"tokenRate": {
 		"organization": null,
 		"member": null,
-		"agent": null,
+		"bot": null,
 		"token": null
 	},
 	"updatedAt": "2026-10-21T09:00:00.000Z"
@@ -134,12 +134,12 @@ Jede Organisation hat ihre eigenen Einstellungen. Sie liegen in der Datenbank. S
 | Feld               | Standard                                                         | Was es tut                                                                                                                                     |
 | ------------------ | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `rulesModel`       | `null`                                                           | Das Model, das [Rules](/de/docs/rules) beurteilt. `null` heißt: Kein Model beurteilt sie. Siehe [Models](/de/docs/models#ein-model-auswählen). |
-| `agentMemoryModel` | `null`                                                           | Das Model, das [Agent-Memory](/de/docs/memory#agent-memory) lernt. `null` heißt: Agents lernen nichts.                                         |
+| `botMemoryModel`   | `null`                                                           | Das Model, das [Bot-Memory](/de/docs/memory#bot-memory) lernt. `null` heißt: Bots lernen nichts.                                               |
 | `decisionModel`    | `null`                                                           | Das Decision-Model, zum Beispiel Jev. Es muss ein `decision`-Model sein. `null` heißt: keins. Siehe [Models](/de/docs/models#decision-model).  |
 | `memory`           | beide an                                                         | Die Memory-Schalter `use` und `generate` einer neuen Session. Siehe [Memory](/de/docs/memory#schalter).                                        |
-| `agentMemory`      | `true`                                                           | Der Memory-Agent lernt aus Sessions und ergänzt die Eingabe von Turns.                                                                         |
+| `botMemory`        | `true`                                                           | Der Memory-Bot lernt aus Sessions und ergänzt die Eingabe von Turns.                                                                           |
 | `requestTimeoutMs` | 24 Stunden                                                       | Wie lange ein [Request](/de/docs/requests) auf eine Antwort wartet, bevor OpenBot ihn ablehnt. Von 1 Sekunde bis 7 Tage.                       |
-| `planApproval`     | den Entscheider darüber fragen, nach 24 Stunden ein Plan bleiben | Wie ein Plan erlaubt wird, wenn kein Member, Agent und keine Session es festlegt. Siehe [Plan-Modus](/de/docs/sessions#plan-modus).            |
+| `planApproval`     | den Entscheider darüber fragen, nach 24 Stunden ein Plan bleiben | Wie ein Plan erlaubt wird, wenn kein Member, Bot und keine Session es festlegt. Siehe [Plan-Modus](/de/docs/sessions#plan-modus).              |
 | `appReadRules`     | `[]`                                                             | App-Werkzeuge, die nur lesen: `{ cardUrl, tool }`. Siehe [Requests](/de/docs/requests).                                                        |
 | `defaultRoles`     | `["member"]`                                                     | Die Roles eines neuen Members.                                                                                                                 |
 | `joinByDomain`     | `true`                                                           | Menschen mit einer geprüften E-Mail in einer bestätigten Domain der Organisation treten bei, wenn sie sich anmelden.                           |
@@ -247,7 +247,7 @@ curl -b cookies.txt \
 - Eine Einladung gilt 7 Tage. Danach ist ihr `status` `expired`.
 - Eine E-Mail kann in einer Organisation nur eine offene Einladung haben. OpenBot gibt `400` mit `InvitationInvalid` zurück, wenn es schon eine gibt oder wenn ein Member diese E-Mail schon hat.
 
-Du kannst auch Personen einladen, einen Agent zu nutzen. Siehe [Agents teilen](/de/docs/sharing).
+Du kannst auch Personen einladen, einen Bot zu nutzen. Siehe [Bots teilen](/de/docs/sharing).
 
 `GET /v1/organization/invitations` listet die Einladungen auf, die neuesten zuerst. Es braucht `members.read`. Füge `?status=pending` hinzu, um nur die offenen zu sehen. `DELETE /v1/organization/invitations/:invitationId` nimmt eine offene Einladung zurück. Es braucht `members.write`.
 
@@ -255,7 +255,7 @@ Du kannst auch Personen einladen, einen Agent zu nutzen. Siehe [Agents teilen](/
 
 Diese Routen sind für die eingeladene Person. Sie brauchen keine Mitgliedschaft.
 
-- `GET /v1/invitations` listet die offenen Einladungen für deine geprüfte E-Mail auf. Eine Einladung, einen Agent zu nutzen, hat `agent` und keine `roles`. Nimm sie mit `POST /v1/agent-invitations/accept` an. Siehe [Agents teilen](/de/docs/sharing#eine-einladung-annehmen).
+- `GET /v1/invitations` listet die offenen Einladungen für deine geprüfte E-Mail auf. Eine Einladung, einen Bot zu nutzen, hat `bot` und keine `roles`. Nimm sie mit `POST /v1/bot-invitations/accept` an. Siehe [Bots teilen](/de/docs/sharing#eine-einladung-annehmen).
 - `POST /v1/invitations/:invitationId/accept` macht dich zum Member mit den Roles der Einladung. Es gibt die Organisation zurück.
 - `POST /v1/invitations/:invitationId/decline` lehnt ab.
 
@@ -308,50 +308,50 @@ Das Audit-Log zeichnet wichtige Änderungen auf. Nichts kann einen Eintrag ände
 }
 ```
 
-| Aktion                       | Wann                                                                 |
-| ---------------------------- | -------------------------------------------------------------------- |
-| `member.joined`              | Ein Konto tritt der Organisation bei.                                |
-| `member.updated`             | Ein Member bekommt einen neuen Status, Roles oder Policies.          |
-| `member.removed`             | Ein Member wird entfernt.                                            |
-| `member.left`                | Ein Member verlässt die Organisation.                                |
-| `invitation.created`         | Ein Member lädt eine E-Mail ein.                                     |
-| `invitation.revoked`         | Ein Member nimmt eine Einladung zurück.                              |
-| `invitation.accepted`        | Die eingeladene Person nimmt an.                                     |
-| `invitation.declined`        | Die eingeladene Person lehnt ab.                                     |
-| `organization.created`       | Jemand erstellt eine Organisation.                                   |
-| `organization.updated`       | Die Organisation bekommt einen neuen Namen.                          |
-| `settings.updated`           | Die Einstellungen der Organisation ändern sich.                      |
-| `role.created`               | Ein Member erstellt eine eigene Role.                                |
-| `role.updated`               | Ein Member ändert eine eigene Role.                                  |
-| `role.deleted`               | Ein Member löscht eine eigene Role.                                  |
-| `model.created`              | Ein Member fügt ein Model hinzu.                                     |
-| `model.updated`              | Ein Member ändert ein Model.                                         |
-| `model.deleted`              | Ein Member entfernt ein Model.                                       |
-| `model_provider.created`     | Ein Member fügt einen Model Provider hinzu.                          |
-| `model_provider.updated`     | Ein Member ändert einen Model Provider.                              |
-| `model_provider.deleted`     | Ein Member entfernt einen Model Provider.                            |
-| `domain.added`               | Ein Member fügt eine E-Mail-Domain hinzu.                            |
-| `domain.verified`            | Eine E-Mail-Domain wird bestätigt.                                   |
-| `domain.removed`             | Ein Member entfernt eine E-Mail-Domain.                              |
-| `sso_connection.created`     | Ein Member fügt eine SSO-Verbindung hinzu.                           |
-| `sso_connection.updated`     | Ein Member ändert eine SSO-Verbindung.                               |
-| `sso_connection.deleted`     | Ein Member entfernt eine SSO-Verbindung.                             |
-| `token.created`              | Ein Member erstellt ein User-Token.                                  |
-| `token.revoked`              | Ein Member widerruft ein User-Token.                                 |
-| `agent.created`              | Ein Member erstellt einen Agent.                                     |
-| `agent.updated`              | Ein Member ändert einen Agent.                                       |
-| `agent.promoted`             | Ein Member macht einen Session-Agent dauerhaft.                      |
-| `agent.memory.updated`       | Ein Member ändert Agent-Memory.                                      |
-| `agent.memory.purged`        | Ein Member entfernt Agent-Memory nach einem Tag.                     |
-| `agent.memory_agent.updated` | Ein Member ändert den Memory-Agent.                                  |
-| `delegation.started`         | Ein Agent gibt Arbeit an einen anderen Agent.                        |
-| `delegation.completed`       | Abgegebene Arbeit endet.                                             |
-| `capability.decided`         | Eine Person beantwortet einen Request.                               |
-| `request.resolved`           | Ein Request wird geschlossen. `details.chain` listet die Agents auf. |
-| `grant.created`              | Ein Member erstellt einen Grant.                                     |
-| `grant.revoked`              | Ein Member widerruft einen Grant.                                    |
-| `rule.created`               | Ein Member fügt eine Rule hinzu.                                     |
-| `rule.updated`               | Ein Member ändert eine Rule.                                         |
+| Aktion                   | Wann                                                               |
+| ------------------------ | ------------------------------------------------------------------ |
+| `member.joined`          | Ein Konto tritt der Organisation bei.                              |
+| `member.updated`         | Ein Member bekommt einen neuen Status, Roles oder Policies.        |
+| `member.removed`         | Ein Member wird entfernt.                                          |
+| `member.left`            | Ein Member verlässt die Organisation.                              |
+| `invitation.created`     | Ein Member lädt eine E-Mail ein.                                   |
+| `invitation.revoked`     | Ein Member nimmt eine Einladung zurück.                            |
+| `invitation.accepted`    | Die eingeladene Person nimmt an.                                   |
+| `invitation.declined`    | Die eingeladene Person lehnt ab.                                   |
+| `organization.created`   | Jemand erstellt eine Organisation.                                 |
+| `organization.updated`   | Die Organisation bekommt einen neuen Namen.                        |
+| `settings.updated`       | Die Einstellungen der Organisation ändern sich.                    |
+| `role.created`           | Ein Member erstellt eine eigene Role.                              |
+| `role.updated`           | Ein Member ändert eine eigene Role.                                |
+| `role.deleted`           | Ein Member löscht eine eigene Role.                                |
+| `model.created`          | Ein Member fügt ein Model hinzu.                                   |
+| `model.updated`          | Ein Member ändert ein Model.                                       |
+| `model.deleted`          | Ein Member entfernt ein Model.                                     |
+| `model_provider.created` | Ein Member fügt einen Model Provider hinzu.                        |
+| `model_provider.updated` | Ein Member ändert einen Model Provider.                            |
+| `model_provider.deleted` | Ein Member entfernt einen Model Provider.                          |
+| `domain.added`           | Ein Member fügt eine E-Mail-Domain hinzu.                          |
+| `domain.verified`        | Eine E-Mail-Domain wird bestätigt.                                 |
+| `domain.removed`         | Ein Member entfernt eine E-Mail-Domain.                            |
+| `sso_connection.created` | Ein Member fügt eine SSO-Verbindung hinzu.                         |
+| `sso_connection.updated` | Ein Member ändert eine SSO-Verbindung.                             |
+| `sso_connection.deleted` | Ein Member entfernt eine SSO-Verbindung.                           |
+| `token.created`          | Ein Member erstellt ein User-Token.                                |
+| `token.revoked`          | Ein Member widerruft ein User-Token.                               |
+| `bot.created`            | Ein Member erstellt einen Bot.                                     |
+| `bot.updated`            | Ein Member ändert einen Bot.                                       |
+| `bot.promoted`           | Ein Member macht einen Session-Bot dauerhaft.                      |
+| `bot.memory.updated`     | Ein Member ändert Bot-Memory.                                      |
+| `bot.memory.purged`      | Ein Member entfernt Bot-Memory nach einem Tag.                     |
+| `bot.memory_bot.updated` | Ein Member ändert den Memory-Bot.                                  |
+| `delegation.started`     | Ein Bot gibt Arbeit an einen anderen Bot.                          |
+| `delegation.completed`   | Abgegebene Arbeit endet.                                           |
+| `capability.decided`     | Eine Person beantwortet einen Request.                             |
+| `request.resolved`       | Ein Request wird geschlossen. `details.chain` listet die Bots auf. |
+| `grant.created`          | Ein Member erstellt einen Grant.                                   |
+| `grant.revoked`          | Ein Member widerruft einen Grant.                                  |
+| `rule.created`           | Ein Member fügt eine Rule hinzu.                                   |
+| `rule.updated`           | Ein Member ändert eine Rule.                                       |
 
 ---
 

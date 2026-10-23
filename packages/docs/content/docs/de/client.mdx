@@ -94,8 +94,8 @@ Einige Gruppen und ihre Seiten:
 | Gruppe           | Nutze sie, um                                                             | Referenz                                                      |
 | ---------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | `sessions`       | Sessions zu erstellen, Turns zu starten und Ergebnisse zu lesen.          | [Sessions](/docs/api/operations/tags/sessions/)               |
-| `agents`         | Agents zu erstellen und zu verwalten.                                     | [Agents](/docs/api/operations/tags/agents/)                   |
-| `requests`       | Die Requests deiner Agents zu beantworten.                                | [Requests](/docs/api/operations/tags/requests/)               |
+| `bots`           | Bots zu erstellen und zu verwalten.                                       | [Bots](/docs/api/operations/tags/bots/)                       |
+| `requests`       | Die Requests deiner Bots zu beantworten.                                  | [Requests](/docs/api/operations/tags/requests/)               |
 | `apps`           | Eine App unter einer Adresse zu finden.                                   | [App discovery](/docs/api/operations/tags/app-discovery/)     |
 | `connections`    | App-Verbindungen hinzuzufügen und zu verwalten.                           | [Connections](/docs/api/operations/tags/connections/)         |
 | `appIndex`       | Den öffentlichen App Index zu durchsuchen.                                | [App Index](/docs/api/operations/tags/app-index/)             |
@@ -181,7 +181,7 @@ Wie du deine Web-App auf demselben Origin bereitstellst, steht unter [Betrieb](/
 `make({ baseUrl })` baut den Dienst `Client` ohne die Standard-Teile. Du gibst ihm dann:
 
 - einen Dienst `HttpClient`,
-- Client-Middleware für `AgentAuth`, genutzt von Token-Routen,
+- Client-Middleware für `BotAuth`, genutzt von Token-Routen,
 - Client-Middleware für `AccountAuth`, genutzt von Routen, die nicht in einer einzelnen Organisation handeln, zum Beispiel `/v1/organizations` und `/v1/platform`,
 - Client-Middleware für `SessionAuth`, genutzt von Routen nur mit Cookie.
 
@@ -191,7 +191,7 @@ Nutze das, wenn du deinen eigenen HTTP-Client, eigenes Logging oder eigene Heade
 
 ## App-Ansichten zeigen
 
-Manche App-Werkzeuge haben eine kleine Benutzeroberfläche, eine sogenannte MCP-Apps-Ansicht. MCP ist das Model Context Protocol, ein Standardweg, auf dem Agents mit Werkzeugen sprechen.
+Manche App-Werkzeuge haben eine kleine Benutzeroberfläche, eine sogenannte MCP-Apps-Ansicht. MCP ist das Model Context Protocol, ein Standardweg, auf dem Bots mit Werkzeugen sprechen.
 OpenBot hält die Ansicht auf dem Server. Dein Client zeigt sie nur an.
 
 Öffne zuerst die Ansicht für eine App-Operation. Erstelle dann mit `AppViews.make` einen Ansichts-Client:
@@ -230,12 +230,12 @@ Wenn du die Ansicht schließt, hört der Client mit dem Prüfen auf. Eine Aktion
 
 ## Beichten zeigen
 
-Der Agent nutzt das Tool `confide`, um zu sagen, wie seine Arbeit läuft, und der [Memory-Agent](/de/docs/memory#wie-der-agent-lernt) antwortet ihm. Personen dürfen das lesen: `GET /v1/sessions/:sessionId/confessions` listet es, und die Aufrufe sind im Verlauf der Session. Aber der Agent spricht dort freier als in seinen Antworten. Mach es darum nicht zu leicht, sie zu lesen:
+Der Bot nutzt das Tool `confide`, um zu sagen, wie seine Arbeit läuft, und der [Memory-Bot](/de/docs/memory#wie-der-bot-lernt) antwortet ihm. Personen dürfen das lesen: `GET /v1/sessions/:sessionId/confessions` listet es, und die Aufrufe sind im Verlauf der Session. Aber der Bot spricht dort freier als in seinen Antworten. Mach es darum nicht zu leicht, sie zu lesen:
 
 - Zeige Beichten nicht im Chat. Klappe die Aufrufe von `confide` im Verlauf zu, und sende keine Benachrichtigung dazu.
 - Lege sie an einen Ort, den eine Person absichtlich öffnen muss, zum Beispiel in einen zugeklappten Teil der Details einer Session.
-- Sage vor dem Öffnen in einem Satz, was sie sind: ein Ort, an dem der Agent über seine Arbeit spricht und an dem er nicht erwartet, zitiert zu werden.
-- Zeige die Worte einer Beichte nicht wieder dem Agent, zum Beispiel in einer späteren Nachricht. Wenn der Agent merkt, dass Personen zitieren, was er anvertraut, vertraut er sich nicht mehr an.
+- Sage vor dem Öffnen in einem Satz, was sie sind: ein Ort, an dem der Bot über seine Arbeit spricht und an dem er nicht erwartet, zitiert zu werden.
+- Zeige die Worte einer Beichte nicht wieder dem Bot, zum Beispiel in einer späteren Nachricht. Wenn der Bot merkt, dass Personen zitieren, was er anvertraut, vertraut er sich nicht mehr an.
 - Wenn eine Beichte etwas betrifft, das eine Person reparieren muss, wie eine gelöschte Datei, führe die Person zu den Items und Aktionen der Session, nicht zur Beichte.
 
-Der Memory-Agent bittet den Agent auch, der Person offen von Fehlern zu erzählen. So kommen die wichtigen Dinge meist im Chat zur Sprache.
+Der Memory-Bot bittet den Bot auch, der Person offen von Fehlern zu erzählen. So kommen die wichtigen Dinge meist im Chat zur Sprache.

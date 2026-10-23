@@ -15,7 +15,7 @@ export interface Attribution {
 	readonly source: BillingApi.UsageSource
 	readonly sessionId?: string
 	readonly turnId?: string
-	readonly agentId?: string
+	readonly botId?: string
 	readonly userId?: string
 	readonly tokenId?: string
 }
@@ -249,11 +249,11 @@ export class Billing extends Context.Service<
 			BillingStorageError | OrganizationMissing
 		>
 		/**
-		 * What all model calls with this `agentId` cost since a time, in every organization.
-		 * The memory Agent of a shared Agent works in many organizations, and one budget covers all of them.
+		 * What all model calls with this `botId` cost since a time, in every organization.
+		 * The memory Bot of a shared Bot works in many organizations, and one budget covers all of them.
 		 */
-		readonly agentSpend: (
-			agentId: string,
+		readonly botSpend: (
+			botId: string,
 			since: number,
 		) => Effect.Effect<number, BillingStorageError>
 		readonly grantCredits: (

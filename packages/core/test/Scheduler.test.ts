@@ -154,7 +154,7 @@ test("read and Resume do not run saved queues or restart an interrupted Turn", a
 					yield* restoredStore.import({ record, expected: null })
 					const restored = yield* SessionRuntime.make({
 						store: restoredStore,
-						agent: {},
+						bot: {},
 					})
 					assert.equal(
 						Session.currentTurn(

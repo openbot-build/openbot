@@ -1,5 +1,5 @@
 import {
-	type AgentsApi,
+	type BotsApi,
 	type AuthApi,
 	OrganizationApi,
 	Permissions,
@@ -86,24 +86,24 @@ const invitationView = (
 	id: row.id,
 	organizationId: row.organizationId,
 	organizationName: row.organizationName,
-	// Only Agent links have no email, and this view never shows them.
+	// Only Bot links have no email, and this view never shows them.
 	email: row.email ?? "",
-	// An invitation to an Agent gives no roles in the organization.
-	roles: row.target === "agent" ? [] : decodeRoles(row.roles),
+	// An invitation to a Bot gives no roles in the organization.
+	roles: row.target === "bot" ? [] : decodeRoles(row.roles),
 	status: statusOf(row, now),
 	invitedBy: row.invitedBy,
 	createdAt: iso(row.createdAt),
 	expiresAt: iso(row.expiresAt ?? row.createdAt),
-	...(row.target === "agent" && row.agentId !== null
-		? { agent: { id: row.agentId, name: row.agentName ?? "" } }
+	...(row.target === "bot" && row.botId !== null
+		? { bot: { id: row.botId, name: row.botName ?? "" } }
 		: {}),
 })
-const agentInvitationView = (
+const botInvitationView = (
 	row: InvitationRow,
 	now: number,
-): AgentsApi.AgentInvitation => ({
+): BotsApi.BotInvitation => ({
 	id: row.id,
-	agent: (row.agentId ?? "") as AgentsApi.AgentId,
+	bot: (row.botId ?? "") as BotsApi.BotId,
 	email: row.email,
 	prefix: row.prefix,
 	path: row.path,
@@ -317,16 +317,16 @@ export const make: Effect.Effect<
 			.where(where)
 			.orderBy(desc(invitations.createdAt), desc(invitations.id))
 			.pipe(Effect.mapError(unavailable))
-	/** The invitations to use one Agent, newest first. */
-	const agentInvitationRows = (organizationId: string, agent: string) =>
+	/** The invitations to use one Bot, newest first. */
+	const botInvitationRows = (organizationId: string, bot: string) =>
 		db
 			.select()
 			.from(invitations)
 			.where(
 				and(
 					eq(invitations.organizationId, organizationId),
-					eq(invitations.target, "agent"),
-					eq(invitations.agentId, agent),
+					eq(invitations.target, "bot"),
+					eq(invitations.botId, bot),
 				),
 			)
 			.orderBy(desc(invitations.createdAt), desc(invitations.id))
@@ -706,10 +706,10 @@ export const make: Effect.Effect<
 					return yield* OrganizationApi.InvitationInvalid.make({
 						message: "Verify your email address first.",
 					})
-				if (row.target === "agent" && answer === "accepted")
+				if (row.target === "bot" && answer === "accepted")
 					return yield* OrganizationApi.InvitationInvalid.make({
 						message:
-							"This invitation is for an Agent. Accept it with POST /v1/agent-invitations/accept.",
+							"This invitation is for a Bot. Accept it with POST /v1/bot-invitations/accept.",
 					})
 				const now = yield* Clock.currentTimeMillis
 				const roles = decodeRoles(row.roles)
@@ -760,27 +760,27 @@ export const make: Effect.Effect<
 					yield* recordJoin(row.organizationId, { id: account.value.id }, roles)
 				return { ...invitationView(row, now), status: answer }
 			}),
-		listAgentInvitations: (organizationId, agent, status) =>
+		listBotInvitations: (organizationId, bot, status) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				const rows = yield* agentInvitationRows(organizationId, agent)
+				const rows = yield* botInvitationRows(organizationId, bot)
 				return rows
-					.map((row) => agentInvitationView(row, now))
+					.map((row) => botInvitationView(row, now))
 					.filter(
 						(invitation) =>
 							status === undefined || invitation.status === status,
 					)
 			}),
-		createAgentInvitation: (input) =>
+		createBotInvitation: (input) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
 				const email = input.email?.trim().toLowerCase() ?? null
 				const row: InvitationRow = {
 					id: newInvitationId(),
 					organizationId: input.organizationId,
-					target: "agent",
-					agentId: input.agent.id,
-					agentName: input.agent.name,
+					target: "bot",
+					botId: input.bot.id,
+					botName: input.bot.name,
 					email,
 					roles: "[]",
 					status: "pending",
@@ -800,7 +800,7 @@ export const make: Effect.Effect<
 					.transaction((tx) =>
 						Effect.gen(function* () {
 							yield* lockMembers(tx, input.organizationId)
-							// One email has at most one pending invitation to an Agent.
+							// One email has at most one pending invitation to a Bot.
 							if (email !== null) {
 								const pending = yield* tx
 									.select({ id: invitations.id })
@@ -808,8 +808,8 @@ export const make: Effect.Effect<
 									.where(
 										and(
 											eq(invitations.organizationId, input.organizationId),
-											eq(invitations.target, "agent"),
-											eq(invitations.agentId, input.agent.id),
+											eq(invitations.target, "bot"),
+											eq(invitations.botId, input.bot.id),
 											eq(invitations.email, email),
 											eq(invitations.status, "pending"),
 											gt(invitations.expiresAt, now),
@@ -829,12 +829,12 @@ export const make: Effect.Effect<
 							error._tag === "InvitationInvalid" ? error : unavailable(),
 						),
 					)
-				return agentInvitationView(row, now)
+				return botInvitationView(row, now)
 			}),
-		agentInvitation: (organizationId, agent, invitationId) =>
+		botInvitation: (organizationId, bot, invitationId) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				const row = (yield* agentInvitationRows(organizationId, agent)).find(
+				const row = (yield* botInvitationRows(organizationId, bot)).find(
 					(row) => row.id === invitationId,
 				)
 				if (row === undefined)
@@ -842,7 +842,7 @@ export const make: Effect.Effect<
 						invitationId,
 					})
 				return {
-					invitation: agentInvitationView(row, now),
+					invitation: botInvitationView(row, now),
 					link:
 						row.secretHash === null ||
 						row.secret === null ||
@@ -855,17 +855,17 @@ export const make: Effect.Effect<
 								},
 				}
 			}),
-		revokeAgentInvitation: (organizationId, agent, invitationId) =>
+		revokeBotInvitation: (organizationId, bot, invitationId) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				const row = (yield* agentInvitationRows(organizationId, agent)).find(
+				const row = (yield* botInvitationRows(organizationId, bot)).find(
 					(row) => row.id === invitationId,
 				)
 				if (row === undefined)
 					return yield* OrganizationApi.InvitationNotFound.make({
 						invitationId,
 					})
-				const current = agentInvitationView(row, now)
+				const current = botInvitationView(row, now)
 				if (current.status !== "pending")
 					return yield* OrganizationApi.InvitationInvalid.make({
 						message: `The invitation is ${current.status}.`,
@@ -882,7 +882,7 @@ export const make: Effect.Effect<
 					.pipe(Effect.mapError(unavailable))
 				return { ...current, status: "revoked" as const }
 			}),
-		takeAgentInvitation: (userId, by) =>
+		takeBotInvitation: (userId, by) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
 				const id = by._tag === "Email" ? by.invitationId : ""
@@ -894,18 +894,18 @@ export const make: Effect.Effect<
 					.from(invitations)
 					.where(
 						and(
-							eq(invitations.target, "agent"),
+							eq(invitations.target, "bot"),
 							by._tag === "Email"
 								? eq(invitations.id, by.invitationId)
 								: eq(invitations.secretHash, by.secretHash),
 						),
 					)
 					.pipe(Effect.mapError(unavailable))
-				if (row === undefined || row.agentId === null) return yield* notFound
+				if (row === undefined || row.botId === null) return yield* notFound
 				const taken = {
 					invitationId: row.id,
 					organizationId: row.organizationId,
-					agent: row.agentId,
+					bot: row.botId,
 				}
 				if (by._tag === "Link") {
 					// A link stays open, so many people can use it.

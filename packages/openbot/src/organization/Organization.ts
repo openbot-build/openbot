@@ -1,5 +1,5 @@
 import type {
-	AgentsApi,
+	BotsApi,
 	AuthApi,
 	OrganizationApi,
 	PlatformApi,
@@ -181,59 +181,59 @@ export class Organization extends Context.Service<
 			| OrganizationApi.InvitationInvalid
 			| OrganizationUnavailable
 		>
-		/** The invitations to use one Agent of an organization, newest first. */
-		readonly listAgentInvitations: (
+		/** The invitations to use one Bot of an organization, newest first. */
+		readonly listBotInvitations: (
 			organizationId: string,
-			agent: string,
+			bot: string,
 			status?: OrganizationApi.InvitationStatus,
 		) => Effect.Effect<
-			ReadonlyArray<AgentsApi.AgentInvitation>,
+			ReadonlyArray<BotsApi.BotInvitation>,
 			OrganizationUnavailable
 		>
 		/**
-		 * Invites an email, or makes an invitation link, to use one Agent.
+		 * Invites an email, or makes an invitation link, to use one Bot.
 		 * A link has `link`: the hash of its secret, its sealed secret and its prefix.
 		 */
-		readonly createAgentInvitation: (input: {
+		readonly createBotInvitation: (input: {
 			readonly organizationId: string
-			readonly agent: { readonly id: string; readonly name: string }
+			readonly bot: { readonly id: string; readonly name: string }
 			readonly email?: string
 			readonly link?: LinkSecret
 			readonly expiresAt?: number
 			readonly path?: string
 			readonly invitedBy: string
 		}) => Effect.Effect<
-			AgentsApi.AgentInvitation,
+			BotsApi.BotInvitation,
 			OrganizationApi.InvitationInvalid | OrganizationUnavailable
 		>
-		/** One invitation to use an Agent, with the secret of a link. */
-		readonly agentInvitation: (
+		/** One invitation to use a Bot, with the secret of a link. */
+		readonly botInvitation: (
 			organizationId: string,
-			agent: string,
+			bot: string,
 			invitationId: string,
 		) => Effect.Effect<
 			{
-				readonly invitation: AgentsApi.AgentInvitation
+				readonly invitation: BotsApi.BotInvitation
 				readonly link: LinkSecret | null
 			},
 			OrganizationApi.InvitationNotFound | OrganizationUnavailable
 		>
-		readonly revokeAgentInvitation: (
+		readonly revokeBotInvitation: (
 			organizationId: string,
-			agent: string,
+			bot: string,
 			invitationId: string,
 		) => Effect.Effect<
-			AgentsApi.AgentInvitation,
+			BotsApi.BotInvitation,
 			| OrganizationApi.InvitationNotFound
 			| OrganizationApi.InvitationInvalid
 			| OrganizationUnavailable
 		>
 		/**
-		 * Uses an invitation to an Agent for a user: an email invitation for their verified
+		 * Uses an invitation to a Bot for a user: an email invitation for their verified
 		 * email, which then counts as accepted, or a link by the hash of its secret, which
-		 * stays open for other people. Gives back the Agent and its organization.
+		 * stays open for other people. Gives back the Bot and its organization.
 		 */
-		readonly takeAgentInvitation: (
+		readonly takeBotInvitation: (
 			userId: string,
 			by:
 				| { readonly _tag: "Email"; readonly invitationId: string }
@@ -242,7 +242,7 @@ export class Organization extends Context.Service<
 			{
 				readonly invitationId: string
 				readonly organizationId: string
-				readonly agent: string
+				readonly bot: string
 			},
 			| OrganizationApi.InvitationNotFound
 			| OrganizationApi.InvitationInvalid

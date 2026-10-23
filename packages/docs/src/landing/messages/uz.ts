@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "Interfeyssiz, API asosidagi Agent platformasi.",
+	description: "Interfeyssiz, API asosidagi Bot platformasi.",
 	nav: {
 		label: "Sayt",
 		docs: "Hujjatlar",
@@ -9,8 +9,8 @@ export default {
 		language: "Til",
 	},
 	hero: {
-		title: ["Chaqira oladigan Agentlar.", "Tekshira oladigan natijalar."],
-		body: "OpenBot – foydalanuvchi interfeysi yo‘q ochiq kodli Agent platformasi. Siz Agentga HTTP orqali ish berasiz.",
+		title: ["Chaqira oladigan Botlar.", "Tekshira oladigan natijalar."],
+		body: "OpenBot – foydalanuvchi interfeysi yo‘q ochiq kodli Bot platformasi. Siz Botga HTTP orqali ish berasiz.",
 		quickStart: "Tez boshlash",
 		apiReference: "API ma’lumotnomasi",
 		visual: "Turn boshlash",
@@ -60,7 +60,7 @@ export default {
 			},
 			{
 				title: "Ochiq Applar",
-				text: "Agentlar nashriyotchilar OpenBot App Protocol orqali ochiq vebga qo‘ygan Applarni topadi va ishlatadi.",
+				text: "Botlar nashriyotchilar OpenBot App Protocol orqali ochiq vebga qo‘ygan Applarni topadi va ishlatadi.",
 			},
 			{
 				title: "Sizning modellaringiz",

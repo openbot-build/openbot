@@ -33,7 +33,7 @@ test("host-selected actions check and approve the exact parameters without the m
 				})
 				const runtime = yield* SessionRuntime.make({
 					store,
-					agent: {
+					bot: {
 						toolkit,
 						modelCatalog: Effect.die(
 							"Host actions must not load a model catalog",
@@ -112,7 +112,7 @@ test("host-selected actions check and approve the exact parameters without the m
 				assert.equal(busy._tag, "Failure")
 				const restored = yield* SessionRuntime.make({
 					store,
-					agent: { toolkit },
+					bot: { toolkit },
 				})
 				// A new runtime over the same store can answer, as after a restart.
 				yield* restored.resolveAction({
@@ -182,7 +182,7 @@ test("host actions share cancellation and admission, and independent Sessions ke
 				})
 				const runtime = yield* SessionRuntime.make({
 					store,
-					agent: { toolkit },
+					bot: { toolkit },
 				})
 				const first = yield* store.create({
 					metadata: {},
@@ -291,7 +291,7 @@ test("a related host action waits in the active Turn and keeps its own approval 
 				})
 				const runtime = yield* SessionRuntime.make({
 					store,
-					agent: { toolkit },
+					bot: { toolkit },
 				})
 				const view = yield* store.create({
 					metadata: {},

@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto"
-import { type AgentsApi, ChannelsApi } from "@openbot-build/api"
+import { type BotsApi, ChannelsApi } from "@openbot-build/api"
 import { and, eq, isNull } from "drizzle-orm"
 import { Clock, Context, Effect, Layer, Option } from "effect"
 import {
@@ -154,7 +154,7 @@ const fromRow = (row: Row): StoredChannel => {
 		id: ChannelsApi.ChannelId.make(row.id),
 		kind,
 		name: row.name,
-		agent: row.agent as AgentsApi.AgentId,
+		bot: row.bot as BotsApi.BotId,
 		actor: row.actor,
 		enabled: row.enabled,
 		linkPath: row.linkPath,
@@ -202,7 +202,7 @@ export class Channels extends Context.Service<
 			readonly organizationId: string
 			readonly actor: string
 			readonly name: string
-			readonly agent: AgentsApi.AgentId
+			readonly bot: BotsApi.BotId
 			readonly credentials: Credentials
 			readonly linkPath: string | null
 			readonly enabled: boolean
@@ -215,7 +215,7 @@ export class Channels extends Context.Service<
 			change: {
 				readonly actor: string
 				readonly name?: string
-				readonly agent?: AgentsApi.AgentId
+				readonly bot?: BotsApi.BotId
 				readonly credentials?: Credentials
 				readonly linkPath?: string | null
 				readonly enabled?: boolean
@@ -380,7 +380,7 @@ export const make = Effect.gen(function* () {
 					id,
 					kind: input.credentials.kind,
 					name: input.name,
-					agent: input.agent,
+					bot: input.bot,
 					actor: input.actor,
 					enabled: input.enabled,
 					linkPath: input.linkPath,
@@ -410,7 +410,7 @@ export const make = Effect.gen(function* () {
 					...current.value,
 					actor: change.actor,
 					...(change.name === undefined ? {} : { name: change.name }),
-					...(change.agent === undefined ? {} : { agent: change.agent }),
+					...(change.bot === undefined ? {} : { bot: change.bot }),
 					...(change.linkPath === undefined
 						? {}
 						: { linkPath: change.linkPath }),

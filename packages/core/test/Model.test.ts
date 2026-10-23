@@ -393,7 +393,7 @@ test("model and mode updates keep the Timeline and each change Session settings 
 					(yield* store.export(created.session.id)).versions.length,
 					1,
 				)
-				const runtime = yield* SessionRuntime.make({ store, agent: {} })
+				const runtime = yield* SessionRuntime.make({ store, bot: {} })
 				expectedPrompt = Prompt.concat(
 					TimelineState.fullHistory(value),
 					Prompt.make("model switch input"),

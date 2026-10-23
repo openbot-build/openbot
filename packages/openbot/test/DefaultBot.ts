@@ -6,8 +6,8 @@ export type Send = (
 ) => Promise<Response>
 
 /**
- * Makes an Agent and sets it as the default Agent of the person, when they have none.
- * Answers the ID of the default Agent.
+ * Makes a Bot and sets it as the default Bot of the person, when they have none.
+ * Answers the ID of the default Bot.
  */
 export const ensure = async (send: Send): Promise<string> => {
 	const read = async (
@@ -21,16 +21,15 @@ export const ensure = async (send: Send): Promise<string> => {
 		return JSON.parse(body) as Record<string, unknown>
 	}
 	const settings = await read("/v1/me/settings", "GET")
-	if (typeof settings["defaultAgent"] === "string")
-		return settings["defaultAgent"]
-	const agent = await read("/v1/agents", "POST", {
+	if (typeof settings["defaultBot"] === "string") return settings["defaultBot"]
+	const bot = await read("/v1/bots", "POST", {
 		name: "Assistant",
 		role: "Helps one person",
 		instructions: "Help the person.",
 	})
 	await read("/v1/me/settings", "PATCH", {
 		expectedVersion: settings["version"],
-		defaultAgent: agent["id"],
+		defaultBot: bot["id"],
 	})
-	return agent["id"] as string
+	return bot["id"] as string
 }

@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "Uma plataforma de Agents sem interface e com foco na API.",
+	description: "Uma plataforma de Bots sem interface e com foco na API.",
 	nav: {
 		label: "Site",
 		docs: "Docs",
@@ -9,11 +9,8 @@ export default {
 		language: "Idioma",
 	},
 	hero: {
-		title: [
-			"Agents que você pode chamar.",
-			"Resultados que você pode conferir.",
-		],
-		body: "OpenBot é uma plataforma de Agents de código aberto sem interface de usuário. Você entrega trabalho a um Agent por HTTP.",
+		title: ["Bots que você pode chamar.", "Resultados que você pode conferir."],
+		body: "OpenBot é uma plataforma de Bots de código aberto sem interface de usuário. Você entrega trabalho a um Bot por HTTP.",
 		quickStart: "Começo rápido",
 		apiReference: "Referência da API",
 		visual: "Inicie um Turn",
@@ -60,7 +57,7 @@ export default {
 			},
 			{
 				title: "Apps abertos",
-				text: "Agents encontram e usam Apps que publicadores colocam na web aberta com o OpenBot App Protocol.",
+				text: "Bots encontram e usam Apps que publicadores colocam na web aberta com o OpenBot App Protocol.",
 			},
 			{
 				title: "Seus modelos",

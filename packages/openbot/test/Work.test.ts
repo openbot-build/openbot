@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { Session } from "@openbot-build/core"
 import {
-	AgentsApi,
+	BotsApi,
 	RequestsApi,
 	SessionTodos,
 	SessionView,
@@ -81,9 +81,9 @@ const model = Effect.runSync(
 				if (system.includes("You are in plan mode")) {
 					const names = tools.map((tool) => tool.name)
 					// Plan mode keeps only the tools that read.
-					if (names.includes("openbot_create_agent"))
+					if (names.includes("openbot_create_bot"))
 						return answer("A tool that changes things leaked.")
-					if (!names.includes("openbot_list_agents"))
+					if (!names.includes("openbot_list_bots"))
 						return answer("A tool that reads is missing.")
 					if (!answered)
 						return call(planNames.submitPlan, {
@@ -184,13 +184,13 @@ const client = (host: Awaited<ReturnType<typeof BrowserHost.start>>) => {
 	return { send, json, until }
 }
 
-/** A new Session of the default Agent, with helpers to start Turns and read it. */
+/** A new Session of the default Bot, with helpers to start Turns and read it. */
 const session = async (
 	host: Awaited<ReturnType<typeof BrowserHost.start>>,
 	credential: Redacted.Redacted<string>,
 ) => {
 	const { send, json, until } = client(host)
-	await host.defaultAgent(credential)
+	await host.defaultBot(credential)
 	const created = await json(
 		SessionView,
 		send(credential, "/v1/sessions", "POST", {}),
@@ -228,7 +228,7 @@ const session = async (
 }
 
 test(
-	"an Agent keeps working while its todos are open, and a person reads and replaces the list",
+	"a Bot keeps working while its todos are open, and a person reads and replaces the list",
 	{ timeout: 120000 },
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
@@ -237,7 +237,7 @@ test(
 			const work = await session(host, alice.session)
 			assert.deepEqual(await work.todos(), { items: [] })
 
-			// The Agent stops after the first step, so OpenBot reminds it once.
+			// The Bot stops after the first step, so OpenBot reminds it once.
 			// It then marks both steps done, and the Turn ends.
 			await work.turn("do two steps")
 			assert.deepEqual((await work.todos()).items, [
@@ -313,7 +313,7 @@ test(
 )
 
 test(
-	"an Agent waits for some time, also over a restart, and an interrupt ends the wait",
+	"a Bot waits for some time, also over a restart, and an interrupt ends the wait",
 	{ timeout: 120000 },
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
@@ -368,7 +368,7 @@ test(
 			assert.equal(stopped.status, 200, await stopped.clone().text())
 			await ended("Interrupted")
 
-			// A wrong input does not wait. The Agent gets an error.
+			// A wrong input does not wait. The Bot gets an error.
 			await work.turn("wait wrongly")
 			assert.match(await text(), /Give either seconds or until, not both/)
 		} finally {
@@ -412,7 +412,7 @@ test(
 				planApproval: null,
 			})
 			assert.equal(stale.status, 409)
-			const defaultAgent = await host.defaultAgent(alice.session)
+			const defaultBot = await host.defaultBot(alice.session)
 
 			const plan = async (body: Record<string, unknown>) => {
 				const created = await json(
@@ -493,14 +493,14 @@ test(
 			assert.equal(stayed.session.settings.mode, "plan")
 			assert.equal(stayed.session.turns.length, 1)
 
-			// 4. An Agent setting comes before the member setting.
+			// 4. A Bot setting comes before the member setting.
 			const main = await json(
-				AgentsApi.Agent,
-				send(alice.session, "/v1/agents/" + defaultAgent),
+				BotsApi.Bot,
+				send(alice.session, "/v1/bots/" + defaultBot),
 			)
 			const changed = await send(
 				alice.session,
-				"/v1/agents/" + main.id,
+				"/v1/bots/" + main.id,
 				"PATCH",
 				{
 					expected: main.revision,
@@ -513,8 +513,8 @@ test(
 			)
 			assert.equal(changed.status, 200, await changed.clone().text())
 			const fourth = await plan({})
-			const agentRan = await settled(fourth, 2)
-			assert.equal(agentRan.session.settings.mode, "build")
+			const botRan = await settled(fourth, 2)
+			assert.equal(botRan.session.settings.mode, "build")
 		} finally {
 			await host.close()
 		}

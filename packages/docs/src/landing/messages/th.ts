@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "แพลตฟอร์ม Agent แบบไม่มีหน้าจอ เน้น API เป็นหลัก",
+	description: "แพลตฟอร์ม Bot แบบไม่มีหน้าจอ เน้น API เป็นหลัก",
 	nav: {
 		label: "เว็บไซต์",
 		docs: "เอกสาร",
@@ -9,8 +9,8 @@ export default {
 		language: "ภาษา",
 	},
 	hero: {
-		title: ["Agent ที่คุณเรียกใช้ได้", "ผลลัพธ์ที่คุณตรวจสอบได้"],
-		body: "OpenBot เป็นแพลตฟอร์ม Agent แบบโอเพนซอร์สที่ไม่มีหน้าจอผู้ใช้ คุณส่งงานให้ Agent ผ่าน HTTP",
+		title: ["Bot ที่คุณเรียกใช้ได้", "ผลลัพธ์ที่คุณตรวจสอบได้"],
+		body: "OpenBot เป็นแพลตฟอร์ม Bot แบบโอเพนซอร์สที่ไม่มีหน้าจอผู้ใช้ คุณส่งงานให้ Bot ผ่าน HTTP",
 		quickStart: "เริ่มต้นอย่างรวดเร็ว",
 		apiReference: "เอกสารอ้างอิง API",
 		visual: "เริ่ม Turn",
@@ -55,7 +55,7 @@ export default {
 			},
 			{
 				title: "App แบบเปิด",
-				text: "Agent ค้นหาและใช้ App ที่ผู้เผยแพร่วางไว้บนเว็บแบบเปิดด้วย OpenBot App Protocol",
+				text: "Bot ค้นหาและใช้ App ที่ผู้เผยแพร่วางไว้บนเว็บแบบเปิดด้วย OpenBot App Protocol",
 			},
 			{
 				title: "โมเดลของคุณ",

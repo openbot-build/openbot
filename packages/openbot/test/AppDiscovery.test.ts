@@ -1,4 +1,4 @@
-import * as AgentFixture from "./AgentFixture.ts"
+import * as BotFixture from "./BotFixture.ts"
 import * as TriggerStore from "../src/triggers/Triggers.ts"
 import * as Channels from "../src/channels/Channels.ts"
 import { ComputerProviders } from "../src/computers/ComputerProviders.ts"
@@ -398,7 +398,7 @@ const startApi = async (
 		organizationId: "local-organization",
 	}
 	const unused = () =>
-		Effect.die("Discovery must not call account or Agent operations")
+		Effect.die("Discovery must not call account or Bot operations")
 	const auth = Auth.Auth.of({
 		handler: () =>
 			Promise.reject(new Error("Discovery must not call Better Auth routes")),
@@ -518,7 +518,7 @@ const startApi = async (
 				OrganizationFixture.layerNoAudit,
 				OrganizationFixture.layerUnusedPlatform,
 				Secrets.layer(Redacted.make("test:" + "11".repeat(32))),
-				AgentFixture.layerAgentServices.pipe(
+				BotFixture.layerBotServices.pipe(
 					Layer.provide(TokensPostgres.layer),
 					Layer.provide(OrganizationFixture.layerAuthorization),
 				),
@@ -573,7 +573,7 @@ const startApi = async (
 	}
 }
 
-test("the registered public App API checks ordinary AgentAuth before it discovers local services", async () => {
+test("the registered public App API checks ordinary BotAuth before it discovers local services", async () => {
 	await using publisher = await fixture()
 	await using api = await startApi(publisher.layer)
 	const payload = { input: publisher.origin + "/card?edition=team" }

@@ -644,10 +644,10 @@ export const members = table(
 )
 
 /**
- * Invitations to join an organization, or to use one Agent of it (`target` is `agent`).
+ * Invitations to join an organization, or to use one Bot of it (`target` is `bot`).
  * `email` is lower case. `roles` is JSON text. A pending invitation that is past
  * `expires_at` counts as expired.
- * An Agent invitation without `email` is a link that many people can use. It has the
+ * A Bot invitation without `email` is a link that many people can use. It has the
  * SHA-256 hash of its secret, to find it, and the sealed secret, to show it again.
  * A link without `expires_at` never expires.
  */
@@ -659,8 +659,8 @@ export const invitations = table(
 			.notNull()
 			.references(() => organizations.id, { onDelete: "cascade" }),
 		target: text().notNull().default("organization"),
-		agentId: text("agent_id"),
-		agentName: text("agent_name"),
+		botId: text("bot_id"),
+		botName: text("bot_name"),
 		email: text(),
 		roles: text().notNull(),
 		status: text().notNull(),
@@ -725,11 +725,11 @@ export const auditLogs = table(
 )
 
 /**
- * Records of Agents, their memory, delegations, Grants, Rules and requests.
+ * Records of Bots, their memory, delegations, Grants, Rules and requests.
  * `owner` and `scope` are the two keys that lists filter by. `status` helps recovery find open work.
  */
-export const agentRecords = table(
-	"openbot_agent_records",
+export const botRecords = table(
+	"openbot_bot_records",
 	{
 		kind: text().notNull(),
 		organizationId: text("organization_id").notNull(),
@@ -741,21 +741,21 @@ export const agentRecords = table(
 	},
 	(t) => [
 		primaryKey({ columns: [t.kind, t.organizationId, t.id] }),
-		index("openbot_agent_records_owner").on(t.kind, t.organizationId, t.owner),
-		index("openbot_agent_records_scope").on(t.kind, t.organizationId, t.scope),
-		index("openbot_agent_records_status").on(t.kind, t.status),
+		index("openbot_bot_records_owner").on(t.kind, t.organizationId, t.owner),
+		index("openbot_bot_records_scope").on(t.kind, t.organizationId, t.scope),
+		index("openbot_bot_records_status").on(t.kind, t.status),
 	],
 )
 /**
- * The entries of Agent memory. Each Agent has one pool: `home_agent` in `organization_id`.
- * A linked Agent uses the pool of its source. Entries are not deleted when they stop being
+ * The entries of Bot memory. Each Bot has one pool: `home_bot` in `organization_id`.
+ * A linked Bot uses the pool of its source. Entries are not deleted when they stop being
  * true: `invalidated_at` marks them. `sources` is JSON.
  */
-export const agentMemories = table(
-	"openbot_agent_memories",
+export const botMemories = table(
+	"openbot_bot_memories",
 	{
 		organizationId: text("organization_id").notNull(),
-		homeAgent: text("home_agent").notNull(),
+		homeBot: text("home_bot").notNull(),
 		id: text().notNull(),
 		layer: text().notNull(),
 		content: text().notNull(),
@@ -767,10 +767,10 @@ export const agentMemories = table(
 		invalidatedAt: time("invalidated_at"),
 	},
 	(t) => [
-		primaryKey({ columns: [t.organizationId, t.homeAgent, t.id] }),
-		index("openbot_agent_memories_updated").on(
+		primaryKey({ columns: [t.organizationId, t.homeBot, t.id] }),
+		index("openbot_bot_memories_updated").on(
 			t.organizationId,
-			t.homeAgent,
+			t.homeBot,
 			t.updatedAt,
 		),
 	],
@@ -779,35 +779,31 @@ export const agentMemories = table(
  * The tags of each memory entry. Tags with a colon come from OpenBot, like `from:<userId>`.
  * Topic tags have no colon.
  */
-export const agentMemoryTags = table(
-	"openbot_agent_memory_tags",
+export const botMemoryTags = table(
+	"openbot_bot_memory_tags",
 	{
 		organizationId: text("organization_id").notNull(),
-		homeAgent: text("home_agent").notNull(),
+		homeBot: text("home_bot").notNull(),
 		memoryId: text("memory_id").notNull(),
 		tag: text().notNull(),
 	},
 	(t) => [
 		primaryKey({
-			columns: [t.organizationId, t.homeAgent, t.memoryId, t.tag],
+			columns: [t.organizationId, t.homeBot, t.memoryId, t.tag],
 		}),
 		foreignKey({
-			columns: [t.organizationId, t.homeAgent, t.memoryId],
+			columns: [t.organizationId, t.homeBot, t.memoryId],
 			foreignColumns: [
-				agentMemories.organizationId,
-				agentMemories.homeAgent,
-				agentMemories.id,
+				botMemories.organizationId,
+				botMemories.homeBot,
+				botMemories.id,
 			],
 		}).onDelete("cascade"),
-		index("openbot_agent_memory_tags_tag").on(
-			t.organizationId,
-			t.homeAgent,
-			t.tag,
-		),
+		index("openbot_bot_memory_tags_tag").on(t.organizationId, t.homeBot, t.tag),
 	],
 )
 /**
- * A trigger starts a new Session for one Agent with one prompt, on a schedule or
+ * A trigger starts a new Session for one Bot with one prompt, on a schedule or
  * from a webhook. `owner_user_id` is null for a shared trigger.
  */
 export const triggers = table(
@@ -816,7 +812,7 @@ export const triggers = table(
 		organizationId: text("organization_id").notNull(),
 		id: text().notNull(),
 		ownerUserId: text("owner_user_id"),
-		agent: text().notNull(),
+		bot: text().notNull(),
 		prompt: text().notNull(),
 		scheduleCron: text("schedule_cron"),
 		scheduleTimeZone: text("schedule_time_zone"),
@@ -851,7 +847,7 @@ export const channels = table(
 		id: text().notNull(),
 		kind: text().notNull(),
 		name: text().notNull(),
-		agent: text().notNull(),
+		bot: text().notNull(),
 		actor: text().notNull(),
 		enabled: boolean().notNull(),
 		linkPath: text("link_path"),
@@ -939,7 +935,7 @@ export const computerProviders = table(
 )
 
 /**
- * A machine where Agents work. `owner_user_id` is null when it is shared.
+ * A machine where Bots work. `owner_user_id` is null when it is shared.
  * A provider Computer has `provider_id` and `ref`, the ID of its sandbox at the provider.
  * A connector Computer has `machine_id` and the hash of its connector token.
  * `features` is JSON text.
@@ -980,23 +976,23 @@ export const computers = table(
 	],
 )
 
-/** The right of one Agent to use one Computer. */
+/** The right of one Bot to use one Computer. */
 export const computerAccess = table(
 	"openbot_computer_access",
 	{
 		organizationId: text("organization_id").notNull(),
 		computerId: text("computer_id").notNull(),
-		agent: text().notNull(),
+		bot: text().notNull(),
 		grantedBy: text("granted_by").notNull(),
 		grantedAt: time("granted_at").notNull(),
 	},
 	(t) => [
-		primaryKey({ columns: [t.computerId, t.agent] }),
+		primaryKey({ columns: [t.computerId, t.bot] }),
 		foreignKey({
 			columns: [t.organizationId, t.computerId],
 			foreignColumns: [computers.organizationId, computers.id],
 		}).onDelete("cascade"),
-		index("openbot_computer_access_agent").on(t.organizationId, t.agent),
+		index("openbot_computer_access_bot").on(t.organizationId, t.bot),
 	],
 )
 
@@ -1178,11 +1174,11 @@ export const usageEvents = table(
 		id: text().primaryKey(),
 		organizationId: text("organization_id").notNull(),
 		occurredAt: time("occurred_at").notNull(),
-		/** `turn`, `compaction`, `session_memory`, `judge`, `agent_memory` or `other`. */
+		/** `turn`, `compaction`, `session_memory`, `judge`, `bot_memory` or `other`. */
 		source: text().notNull(),
 		sessionId: text("session_id"),
 		turnId: text("turn_id"),
-		agentId: text("agent_id"),
+		botId: text("bot_id"),
 		userId: text("user_id"),
 		tokenId: text("token_id"),
 		providerId: text("provider_id").notNull(),
@@ -1207,9 +1203,9 @@ export const usageEvents = table(
 			t.userId,
 			t.occurredAt,
 		),
-		index("openbot_usage_events_agent").on(
+		index("openbot_usage_events_bot").on(
 			t.organizationId,
-			t.agentId,
+			t.botId,
 			t.occurredAt,
 		),
 		index("openbot_usage_events_token").on(
@@ -1249,7 +1245,7 @@ export const modelPrices = table(
 	],
 )
 
-/** Spending limits of an organization, a member, an Agent or a user token. */
+/** Spending limits of an organization, a member, a Bot or a user token. */
 export const budgets = table(
 	"openbot_budgets",
 	{
@@ -1257,9 +1253,9 @@ export const budgets = table(
 		organizationId: text("organization_id")
 			.notNull()
 			.references(() => organizations.id, { onDelete: "cascade" }),
-		/** `organization`, `member`, `agent` or `token`. */
+		/** `organization`, `member`, `bot` or `token`. */
 		scopeKind: text("scope_kind").notNull(),
-		/** The organization ID, user ID, Agent ID or token ID. */
+		/** The organization ID, user ID, Bot ID or token ID. */
 		scopeId: text("scope_id").notNull(),
 		/** `day` or `month`, in UTC. */
 		period: text().notNull(),

@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "Platform Agent tanpa antarmuka yang mengutamakan API.",
+	description: "Platform Bot tanpa antarmuka yang mengutamakan API.",
 	nav: {
 		label: "Situs",
 		docs: "Dokumentasi",
@@ -9,8 +9,8 @@ export default {
 		language: "Bahasa",
 	},
 	hero: {
-		title: ["Agent yang bisa kamu panggil.", "Hasil yang bisa kamu periksa."],
-		body: "OpenBot adalah platform Agent open source tanpa antarmuka pengguna. Kamu memberi pekerjaan ke Agent lewat HTTP.",
+		title: ["Bot yang bisa kamu panggil.", "Hasil yang bisa kamu periksa."],
+		body: "OpenBot adalah platform Bot open source tanpa antarmuka pengguna. Kamu memberi pekerjaan ke Bot lewat HTTP.",
 		quickStart: "Mulai cepat",
 		apiReference: "Referensi API",
 		visual: "Mulai Turn",
@@ -57,7 +57,7 @@ export default {
 			},
 			{
 				title: "App terbuka",
-				text: "Agent menemukan dan memakai App yang dipasang penerbit di web terbuka dengan OpenBot App Protocol.",
+				text: "Bot menemukan dan memakai App yang dipasang penerbit di web terbuka dengan OpenBot App Protocol.",
 			},
 			{
 				title: "Model kamu",

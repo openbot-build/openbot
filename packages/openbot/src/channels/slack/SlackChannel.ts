@@ -18,7 +18,7 @@ export interface Secrets {
 
 const api = "https://slack.com/api/"
 
-/** Slack puts `<@U123>` in the text for each mention. The Agent does not need them. */
+/** Slack puts `<@U123>` in the text for each mention. The Bot does not need them. */
 const withoutMentions = (value: string) =>
 	value.replace(/<@[A-Z0-9]+>/g, "").trim()
 

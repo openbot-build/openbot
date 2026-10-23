@@ -108,7 +108,7 @@ export const layer = (config: { readonly publicOrigin: string }) => {
 	return Layer.mergeAll(account, userTokens, signIn).pipe(
 		Layer.provideMerge(
 			Layer.mergeAll(
-				HttpMiddleware.layerAgentAuth(config),
+				HttpMiddleware.layerBotAuth(config),
 				HttpMiddleware.layerAccountAuth(config),
 				Authorize.layer,
 				PlatformHandlers.layerAuthorize,

@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "Arayüzü olmayan, API öncelikli bir Agent platformu.",
+	description: "Arayüzü olmayan, API öncelikli bir Bot platformu.",
 	nav: {
 		label: "Site",
 		docs: "Belgeler",
@@ -9,8 +9,8 @@ export default {
 		language: "Dil",
 	},
 	hero: {
-		title: ["Çağırabileceğin Agent'lar.", "Kontrol edebileceğin sonuçlar."],
-		body: "OpenBot, kullanıcı arayüzü olmayan açık kaynak bir Agent platformudur. Agent'a işi HTTP ile verirsin.",
+		title: ["Çağırabileceğin Bot'lar.", "Kontrol edebileceğin sonuçlar."],
+		body: "OpenBot, kullanıcı arayüzü olmayan açık kaynak bir Bot platformudur. Bot'a işi HTTP ile verirsin.",
 		quickStart: "Hızlı başlangıç",
 		apiReference: "API başvurusu",
 		visual: "Bir Turn başlat",
@@ -56,7 +56,7 @@ export default {
 			},
 			{
 				title: "Açık App'ler",
-				text: "Agent'lar, yayıncıların OpenBot App Protocol ile açık web'e koyduğu App'leri bulur ve kullanır.",
+				text: "Bot'lar, yayıncıların OpenBot App Protocol ile açık web'e koyduğu App'leri bulur ve kullanır.",
 			},
 			{
 				title: "Senin modellerin",

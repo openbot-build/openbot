@@ -77,7 +77,7 @@ Dieses Konto ist ein Platform-Admin. Es hat noch keine Organisation.
 
 ### Eine Organisation erstellen
 
-Agents, Sessions und Tokens gehören zu einer [Organisation](/de/docs/organization). Erstelle eine für dich:
+Bots, Sessions und Tokens gehören zu einer [Organisation](/de/docs/organization). Erstelle eine für dich:
 
 ```sh
 curl -b cookies.txt \
@@ -113,18 +113,18 @@ export OPENBOT_TOKEN=obut_...
 
 <Step>
 
-### Einen Agent erstellen
+### Einen Bot erstellen
 
-Jede Session gehört zu einem [Agent](/de/docs/agents). Ein neues Konto hat keine Agents. Erstelle also einen:
+Jede Session gehört zu einem [Bot](/de/docs/bots). Ein neues Konto hat keine Bots. Erstelle also einen:
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"name":"Assistant","role":"Helps me","instructions":"Answer in short sentences."}' \
-  https://localhost:8443/v1/agents
+  https://localhost:8443/v1/bots
 ```
 
-Nimm `id` aus der Antwort. Wenn du diesen Agent auch ohne Angabe eines Agents nutzen willst, mach ihn zu deinem [Standard-Agent](/de/docs/agents#dein-standard-agent).
+Nimm `id` aus der Antwort. Wenn du diesen Bot auch ohne Angabe eines Bots nutzen willst, mach ihn zu deinem [Standard-Bot](/de/docs/bots#dein-standard-bot).
 
 </Step>
 
@@ -132,12 +132,12 @@ Nimm `id` aus der Antwort. Wenn du diesen Agent auch ohne Angabe eines Agents nu
 
 ### Eine Session und einen Turn starten
 
-Erstelle eine Session für deinen Agent:
+Erstelle eine Session für deinen Bot:
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"agent":"<agentId>","title":"My first Session"}' \
+  -d '{"bot":"<botId>","title":"My first Session"}' \
   https://localhost:8443/v1/sessions
 ```
 

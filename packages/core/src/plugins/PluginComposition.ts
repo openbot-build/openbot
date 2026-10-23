@@ -1,7 +1,7 @@
 import { Effect, Stream, type Brand, Scope } from "effect"
 import { dual } from "effect/Function"
 import { Prompt, Toolkit, type Tool } from "effect/ai"
-import { Context, type Event } from "../agent/Agent.ts"
+import { Context, type Event } from "../bot/Bot.ts"
 import {
 	Id,
 	Plugin,

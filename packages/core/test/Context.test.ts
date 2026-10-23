@@ -111,7 +111,7 @@ test("explicit compaction keeps complete opaque items and full history after a r
 				})
 				const fresh = yield* SessionRuntime.make({
 					store: freshStore,
-					agent: { compaction: test.service },
+					bot: { compaction: test.service },
 				})
 				const codec = RecordSerialization.make<{}>()
 				const record = yield* runtimeStore.export(view.session.id)

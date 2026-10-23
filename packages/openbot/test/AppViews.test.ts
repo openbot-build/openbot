@@ -68,8 +68,8 @@ test("App views bind to the real history and account, accept each exact host act
 	try {
 		const alice = await host.login("views-alice"),
 			bob = await host.login("views-bob")
-		await host.defaultAgent(alice.session)
-		await host.defaultAgent(bob.session)
+		await host.defaultBot(alice.session)
+		await host.defaultBot(bob.session)
 		const headers = (cookie = alice.session) => ({
 			cookie:
 				AuthApi.SessionCookie +

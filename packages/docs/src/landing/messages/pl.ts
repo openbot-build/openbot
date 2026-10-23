@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "Platforma dla Agentów bez interfejsu, oparta na API.",
+	description: "Platforma dla Botów bez interfejsu, oparta na API.",
 	nav: {
 		label: "Strona",
 		docs: "Dokumentacja",
@@ -10,7 +10,7 @@ export default {
 	},
 	hero: {
 		title: ["Agenci, których wywołasz.", "Wyniki, które sprawdzisz."],
-		body: "OpenBot to otwarta platforma dla Agentów bez interfejsu użytkownika. Dajesz pracę Agentowi przez HTTP.",
+		body: "OpenBot to otwarta platforma dla Botów bez interfejsu użytkownika. Dajesz pracę Botowi przez HTTP.",
 		quickStart: "Szybki start",
 		apiReference: "Dokumentacja API",
 		visual: "Zacznij Turn",

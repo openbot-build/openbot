@@ -77,7 +77,7 @@ curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
 
 ### 创建组织
 
-Agents、Sessions 和令牌都属于一个[组织](/zh-cn/docs/organization)。为你自己创建一个：
+Bots、Sessions 和令牌都属于一个[组织](/zh-cn/docs/organization)。为你自己创建一个：
 
 ```sh
 curl -b cookies.txt \
@@ -113,18 +113,18 @@ export OPENBOT_TOKEN=obut_...
 
 <Step>
 
-### 创建 Agent
+### 创建 Bot
 
-每个 Session 都属于一个 [Agent](/zh-cn/docs/agents)。新账号没有 Agent，所以先创建一个：
+每个 Session 都属于一个 [Bot](/zh-cn/docs/bots)。新账号没有 Bot，所以先创建一个：
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"name":"Assistant","role":"Helps me","instructions":"Answer in short sentences."}' \
-  https://localhost:8443/v1/agents
+  https://localhost:8443/v1/bots
 ```
 
-从回答中取出 `id`。如果想在不指定 Agent 时也用这个 Agent，把它设为你的[默认 Agent](/zh-cn/docs/agents#你的默认-agent)。
+从回答中取出 `id`。如果想在不指定 Bot 时也用这个 Bot，把它设为你的[默认 Bot](/zh-cn/docs/bots#你的默认-bot)。
 
 </Step>
 
@@ -132,12 +132,12 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ### 启动 Session 和 Turn
 
-为你的 Agent 创建一个 Session：
+为你的 Bot 创建一个 Session：
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"agent":"<agentId>","title":"My first Session"}' \
+  -d '{"bot":"<botId>","title":"My first Session"}' \
   https://localhost:8443/v1/sessions
 ```
 

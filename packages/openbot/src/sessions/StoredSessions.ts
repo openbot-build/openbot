@@ -8,7 +8,7 @@ import {
 } from "@openbot-build/core"
 import { SessionResponse, SessionSummary } from "@openbot-build/api"
 import * as SessionEncoding from "./SessionEncoding.ts"
-import { agentFields } from "./SessionHost.ts"
+import { botFields } from "./SessionHost.ts"
 import { Array, Match, Effect, Equal, Schema, Option } from "effect"
 import { and, eq, inArray } from "drizzle-orm"
 import { refs, versions, contents } from "../database/Schema.ts"
@@ -352,7 +352,7 @@ export const list = (
 						const session = yield* json(Session.Ref, row.body)
 						return yield* decode(SessionSummary)({
 							session,
-							...agentFields(session),
+							...botFields(session),
 							status: row.status,
 							turn: row.turn,
 							response:

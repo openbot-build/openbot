@@ -16,14 +16,14 @@ Ein Grant ist schnell und genau. Eine Rule (Regel) deckt eine ganze Art von Requ
 
 ## Grants
 
-Ein **Grant** ist eine gespeicherte Entscheidung über eine Fähigkeit eines Agent. Der Agent sieht seine Grants nie. Er sieht nur, dass manche Aufrufe laufen und manche abgelehnt werden.
+Ein **Grant** ist eine gespeicherte Entscheidung über eine Fähigkeit eines Bot. Der Bot sieht seine Grants nie. Er sieht nur, dass manche Aufrufe laufen und manche abgelehnt werden.
 
 | Feld         | Bedeutung                                                                |
 | ------------ | ------------------------------------------------------------------------ |
 | `capability` | `action`, `target` (`*` für jedes Ziel) und optional genaue `arguments`. |
 | `effect`     | `allow` oder `deny`. Ein Ablehnen gewinnt.                               |
 | `scope`      | `once` (durch einen Aufruf verbraucht), `session` oder `lifetime`.       |
-| `grantedBy`  | Die Person, der Agent oder die Rule, die entschieden hat.                |
+| `grantedBy`  | Die Person, der Bot oder die Rule, die entschieden hat.                  |
 | `parent`     | Der Grant des Entscheiders, aus dem dieser Grant entstanden ist.         |
 | `status`     | `active`, `used` oder `revoked`.                                         |
 
@@ -32,51 +32,51 @@ OpenBot erstellt Grants, wenn ein Entscheider einen Request beantwortet. Du kann
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"capability":{"action":"agents.spawn","target":"*"},"effect":"allow","scope":"lifetime"}' \
-  https://api.example.com/v1/agents/$AGENT/grants
+  -d '{"capability":{"action":"bots.spawn","target":"*"},"effect":"allow","scope":"lifetime"}' \
+  https://api.example.com/v1/bots/$BOT/grants
 ```
 
-`GET /v1/agents/:agentId/grants` listet Grants auf. Füge `?status=active` hinzu, um nur aktive Grants zu sehen.
+`GET /v1/bots/:botId/grants` listet Grants auf. Füge `?status=active` hinzu, um nur aktive Grants zu sehen.
 
-`DELETE /v1/agents/:agentId/grants/:grantId` nimmt einen Grant zurück. OpenBot nimmt auch jeden Grant zurück, der aus ihm entstanden ist. So verlieren Agents weiter unten, was sie dadurch bekommen haben.
+`DELETE /v1/bots/:botId/grants/:grantId` nimmt einen Grant zurück. OpenBot nimmt auch jeden Grant zurück, der aus ihm entstanden ist. So verlieren Bots weiter unten, was sie dadurch bekommen haben.
 
 ---
 
 ## Rules
 
-Eine **Rule** ist ein Satz in normaler Sprache für einen Agent. Wenn kein Grant über einen Request entscheidet, liest ein Prüf-Modell die aktiven Rules des Agent.
+Eine **Rule** ist ein Satz in normaler Sprache für einen Bot. Wenn kein Grant über einen Request entscheidet, liest ein Prüf-Modell die aktiven Rules des Bot.
 
 - Das Prüf-Modell erlaubt nur, wenn eine Rule diesen Request klar erlaubt. Es lehnt nur ab, wenn eine Rule ihn klar verbietet. In allen anderen Fällen geht der Request an den Entscheider.
 - Jedes Erlauben oder Ablehnen muss den Text einer Rule zitieren. OpenBot prüft das Zitat. Ohne echtes Zitat gibt es keine Entscheidung.
 - Ein Ablehnen gewinnt gegen ein Erlauben.
 - Wenn das Prüf-Modell einen Fehler hat oder zu langsam ist, gibt es keine Entscheidung.
 
-Eine Rule, die ein Agent geschrieben hat, zählt nur unter zwei Bedingungen: Dieser Agent steht in der [Besitzer-Kette](/de/docs/requests#die-kette-der-entscheider) über dem Agent, und er darf die Fähigkeit selbst nutzen.
+Eine Rule, die ein Bot geschrieben hat, zählt nur unter zwei Bedingungen: Dieser Bot steht in der [Besitzer-Kette](/de/docs/requests#die-kette-der-entscheider) über dem Bot, und er darf die Fähigkeit selbst nutzen.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text":"The Programmer may read any repository of the openbot organization, but must ask before it pushes to main."}' \
-  https://api.example.com/v1/agents/$AGENT/rules
+  https://api.example.com/v1/bots/$BOT/rules
 ```
 
 | Feld      | Bedeutung                                                     |
 | --------- | ------------------------------------------------------------- |
-| `author`  | Die Person oder der Agent, die die Rule geschrieben hat.      |
+| `author`  | Die Person oder der Bot, die die Rule geschrieben hat.        |
 | `status`  | `active`, `proposed` oder `retired`. Nur aktive Rules zählen. |
 | `version` | Steigt mit jeder Änderung.                                    |
 
-Eine Rule von einer Person ist sofort aktiv. Ein Agent kann in einer Prüfung eine Rule vorschlagen. Eine vorgeschlagene Rule zählt erst, wenn eine Person sie aktiv macht:
+Eine Rule von einer Person ist sofort aktiv. Ein Bot kann in einer Prüfung eine Rule vorschlagen. Eine vorgeschlagene Rule zählt erst, wenn eine Person sie aktiv macht:
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"expected":0,"status":"active"}' \
-  https://api.example.com/v1/agents/$AGENT/rules/$RULE
+  https://api.example.com/v1/bots/$BOT/rules/$RULE
 ```
 
 Du kannst auch eine Rule speichern, wenn du einen Request beantwortest: Schicke `rule` mit der Antwort. Siehe [Einen Request beantworten](/de/docs/requests#einen-request-beantworten).
 
 ### Das Prüf-Modell
 
-Das Prüf-Modell nutzt das **Rules-Model**. Es ist `rulesModel` in den [Einstellungen der Organization](/de/docs/organization#einstellungen). Es hat keinen Standardwert. Wenn es `null` ist, gibt das Prüf-Modell keine Antwort. Dann entscheidet eine Person oder ein Agent. OpenBot speichert jede Antwort des Prüf-Modells für dieselben Rules und dieselbe Fähigkeit. So läuft das Prüf-Modell für dieselbe Frage nicht noch einmal.
+Das Prüf-Modell nutzt das **Rules-Model**. Es ist `rulesModel` in den [Einstellungen der Organization](/de/docs/organization#einstellungen). Es hat keinen Standardwert. Wenn es `null` ist, gibt das Prüf-Modell keine Antwort. Dann entscheidet eine Person oder ein Bot. OpenBot speichert jede Antwort des Prüf-Modells für dieselben Rules und dieselbe Fähigkeit. So läuft das Prüf-Modell für dieselbe Frage nicht noch einmal.

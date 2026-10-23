@@ -1,15 +1,15 @@
 ---
 title: Code Mode
-description: Der Agent schreibt ein kurzes Programm, das Tools von Apps aufruft.
+description: Der Bot schreibt ein kurzes Programm, das Tools von Apps aufruft.
 ---
 
-Im **Code Mode** schreibt der Agent ein kurzes JavaScript-Programm, statt die Tools einer App einzeln aufzurufen. Das Programm ruft die Tools auf, arbeitet mit ihren Ergebnissen und gibt nur das zurück, was der Agent braucht. Das spart Tokens, denn große Ergebnisse bleiben im Programm und kommen nicht in den Kontext des Modells. Das Programm kann auch viele Tools auf einmal aufrufen.
+Im **Code Mode** schreibt der Bot ein kurzes JavaScript-Programm, statt die Tools einer App einzeln aufzurufen. Das Programm ruft die Tools auf, arbeitet mit ihren Ergebnissen und gibt nur das zurück, was der Bot braucht. Das spart Tokens, denn große Ergebnisse bleiben im Programm und kommen nicht in den Kontext des Modells. Das Programm kann auch viele Tools auf einmal aufrufen.
 
-Code Mode gibt dem Agent keine neuen Rechte. Jeder Aufruf einer App in einem Programm geht durch dieselbe [Prüfung der Fähigkeiten](/de/docs/requests) wie ein normaler Aufruf eines App-Tools. Jeder Aufruf ist auch eine normale [App operation](/de/docs/apps#app-operations).
+Code Mode gibt dem Bot keine neuen Rechte. Jeder Aufruf einer App in einem Programm geht durch dieselbe [Prüfung der Fähigkeiten](/de/docs/requests) wie ein normaler Aufruf eines App-Tools. Jeder Aufruf ist auch eine normale [App operation](/de/docs/apps#app-operations).
 
 | Wort     | Bedeutung                                                                                                                |
 | -------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Programm | Der JavaScript-Code, den der Agent schreibt. Er ist der Rumpf einer async-Funktion.                                      |
+| Programm | Der JavaScript-Code, den der Bot schreibt. Er ist der Rumpf einer async-Funktion.                                        |
 | Binding  | Eine Fähigkeit einer App, die ein Programm aufrufen kann, zum Beispiel `apps.work_calendar.list_events`.                 |
 | Sandbox  | Ein geschlossener Ort, an dem das Programm läuft. Er hat kein Netzwerk, keine Dateien, keine Timer und kein Node.js.     |
 | Code run | Ein Programm und die Liste aller seiner Aufrufe. Lies ihn mit `GET /v1/code-runs/:id`.                                   |
@@ -30,23 +30,23 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 | Feld          | Was es ist                                                                                                    |
 | ------------- | ------------------------------------------------------------------------------------------------------------- |
-| `enabled`     | Bei `true` bekommen Agents die Tools von Code Mode in jedem Turn, der Connections zu Apps hat.                |
+| `enabled`     | Bei `true` bekommen Bots die Tools von Code Mode in jedem Turn, der Connections zu Apps hat.                  |
 | `timeoutMs`   | Wie lange ein Lauf eines Programms dauern darf. Die Zeit, in der es auf Aufrufe von Apps wartet, zählt nicht. |
 | `memoryMb`    | Wie viel Speicher ein Programm nutzen darf.                                                                   |
 | `outputBytes` | Der größte Rückgabewert eines Programms und die größte Menge an Log-Text, die es behält.                      |
 
-Diese Grenzen schützen den Server. Sie sind keine Grenzen für den Agent. Jede Instanz von OpenBot nutzt dieselben Grenzen. So verhält sich ein Programm gleich, wenn eine andere Instanz es noch einmal ausführt.
+Diese Grenzen schützen den Server. Sie sind keine Grenzen für den Bot. Jede Instanz von OpenBot nutzt dieselben Grenzen. So verhält sich ein Programm gleich, wenn eine andere Instanz es noch einmal ausführt.
 
 ---
 
-## So nutzt der Agent ihn
+## So nutzt der Bot ihn
 
-Der Agent bekommt zwei weitere Tools. Sie stehen neben den normalen Tools der Apps und ersetzen sie nicht.
+Der Bot bekommt zwei weitere Tools. Sie stehen neben den normalen Tools der Apps und ersetzen sie nicht.
 
-| Tool               | Was es tut                                                                                                    |
-| ------------------ | ------------------------------------------------------------------------------------------------------------- |
-| `openbot_code_api` | Zeigt die TypeScript-Deklarationen der Bindings. Der Agent kann sie nach Wörtern oder nach Connection suchen. |
-| `openbot_run_code` | Führt ein Programm aus und gibt sein Ergebnis, seine Log-Zeilen und eine Liste seiner Aufrufe zurück.         |
+| Tool               | Was es tut                                                                                                  |
+| ------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `openbot_code_api` | Zeigt die TypeScript-Deklarationen der Bindings. Der Bot kann sie nach Wörtern oder nach Connection suchen. |
+| `openbot_run_code` | Führt ein Programm aus und gibt sein Ergebnis, seine Log-Zeilen und eine Liste seiner Aufrufe zurück.       |
 
 Jedes Binding hat zwei Teile: die Connection und die Fähigkeit. Eine Connection mit dem Namen "Work calendar" und dem Tool `list-events` wird zu `apps.work_calendar.list_events`. `apps.call("work_calendar.list_events", args)` tut dasselbe. Auch Ressourcen und Prompts werden zu Bindings zum Lesen. Ein Programm kann so aussehen:
 

@@ -94,8 +94,8 @@ const archived =
 | 分组             | 用途                                                | 参考                                                          |
 | ---------------- | --------------------------------------------------- | ------------------------------------------------------------- |
 | `sessions`       | 创建 Session（会话）、启动 Turn（轮次）、读取结果。 | [Sessions](/docs/api/operations/tags/sessions/)               |
-| `agents`         | 创建和管理 Agent。                                  | [Agents](/docs/api/operations/tags/agents/)                   |
-| `requests`       | 回答你的 Agent 发出的 Request。                     | [Requests](/docs/api/operations/tags/requests/)               |
+| `bots`           | 创建和管理 Bot。                                    | [Bots](/docs/api/operations/tags/bots/)                       |
+| `requests`       | 回答你的 Bot 发出的 Request。                       | [Requests](/docs/api/operations/tags/requests/)               |
 | `apps`           | 在某个地址上查找 App。                              | [App discovery](/docs/api/operations/tags/app-discovery/)     |
 | `connections`    | 添加和管理 App 连接。                               | [Connections](/docs/api/operations/tags/connections/)         |
 | `appIndex`       | 搜索公开的 App Index。                              | [App Index](/docs/api/operations/tags/app-index/)             |
@@ -180,7 +180,7 @@ const ClientLive = layer({
 `make({ baseUrl })` 构建 `Client` 服务，但不带默认部件。你需要自己提供：
 
 - 一个 `HttpClient` 服务，
-- `AgentAuth` 的客户端中间件，供使用令牌的路由使用，
+- `BotAuth` 的客户端中间件，供使用令牌的路由使用，
 - `AccountAuth` 的客户端中间件，供不在某个组织中操作的路由使用，例如 `/v1/organizations` 和 `/v1/platform`，
 - `SessionAuth` 的客户端中间件，供只接受 cookie 的路由使用。
 
@@ -190,7 +190,7 @@ const ClientLive = layer({
 
 ## 显示 App 视图
 
-有些 App 工具带有一个小的用户界面，叫作 MCP Apps 视图。MCP 是 Model Context Protocol（模型上下文协议），它是 Agent 和工具通信的标准方式。
+有些 App 工具带有一个小的用户界面，叫作 MCP Apps 视图。MCP 是 Model Context Protocol（模型上下文协议），它是 Bot 和工具通信的标准方式。
 OpenBot 把视图保存在服务器上。你的客户端只负责显示它。
 
 先为一个 App 操作打开视图。然后用 `AppViews.make` 创建视图客户端：
@@ -229,12 +229,12 @@ const program = Effect.gen(function* () {
 
 ## 展示告解
 
-Agent 用 `confide` 工具说出工作情况，[记忆 Agent](/zh-cn/docs/memory#agent-如何学习) 会回答它。人可以读到这些内容：`GET /v1/sessions/:sessionId/confessions` 会列出它们，这些调用也在 Session 的历史中。但 Agent 在那里说话比在回答中更放得开。所以不要让人太容易读到它们：
+Bot 用 `confide` 工具说出工作情况，[记忆 Bot](/zh-cn/docs/memory#bot-如何学习) 会回答它。人可以读到这些内容：`GET /v1/sessions/:sessionId/confessions` 会列出它们，这些调用也在 Session 的历史中。但 Bot 在那里说话比在回答中更放得开。所以不要让人太容易读到它们：
 
 - 不要在聊天中显示告解。在历史中折叠 `confide` 工具调用，也不要为它们发送通知。
 - 把它们放在一个需要人主动打开的地方，比如 Session 详情中一个折叠起来的部分。
-- 打开之前，用一句话说明它们是什么：这是 Agent 谈论自己工作的地方，它不希望被引用。
-- 不要再把告解中的话给 Agent 看，比如放进之后的消息里。如果 Agent 发现人们会引用它倾诉的内容，它就不再倾诉了。
+- 打开之前，用一句话说明它们是什么：这是 Bot 谈论自己工作的地方，它不希望被引用。
+- 不要再把告解中的话给 Bot 看，比如放进之后的消息里。如果 Bot 发现人们会引用它倾诉的内容，它就不再倾诉了。
 - 当告解涉及某件需要人来处理的事情，比如一个被删除的文件时，请把人引导到 Session 的 Item 和操作，而不是引导到告解。
 
-记忆 Agent 也会请 Agent 把错误直接告诉那个人。所以重要的事情通常会在聊天中说出来。
+记忆 Bot 也会请 Bot 把错误直接告诉那个人。所以重要的事情通常会在聊天中说出来。

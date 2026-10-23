@@ -90,7 +90,7 @@ const turn = (input: {
 			persistence: yield* MemoryPersistence.make,
 		})
 		const own = yield* PluginState.make({ store, plugin })
-		const runtime = yield* SessionRuntime.make({ store, agent: { plugin } })
+		const runtime = yield* SessionRuntime.make({ store, bot: { plugin } })
 		const view = yield* store.create({
 			metadata: {},
 			value: { ...TimelineState.initial({}), [Memory.pluginId]: known },

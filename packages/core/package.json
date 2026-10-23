@@ -12,7 +12,7 @@
 	],
 	"exports": {
 		".": "./dist/index.js",
-		"./Agent": "./dist/agent/Agent.js",
+		"./Bot": "./dist/bot/Bot.js",
 		"./ContextCompaction": "./dist/context/ContextCompaction.js",
 		"./ContextWindow": "./dist/context/ContextWindow.js",
 		"./ConversationContext": "./dist/context/ConversationContext.js",

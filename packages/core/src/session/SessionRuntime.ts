@@ -33,7 +33,7 @@ import {
 import * as Session from "./Session.ts"
 import * as HostActionDriver from "./HostActionDriver.ts"
 import * as Turn from "./Turn.ts"
-import * as Agent from "../agent/Agent.ts"
+import * as Bot from "../bot/Bot.ts"
 import * as Timeline from "../timeline/Timeline.ts"
 import * as Item from "../timeline/Item.ts"
 import { fullHistory, unansweredCalls } from "../timeline/TimelineState.ts"
@@ -63,14 +63,14 @@ export const make = <
 	BuildR | Scope.Scope
 > =>
 	Effect.gen(function* () {
-		type Event = Agent.Event<
+		type Event = Bot.Event<
 			Toolkit.MergedTools<[Toolkit.Toolkit<Tools>, Toolkit.Toolkit<HostTools>]>,
 			P
 		>
-		const agent = options.agent
+		const bot = options.bot
 		const scope = yield* Effect.scope
 		const basePlugin =
-			agent.plugin ??
+			bot.plugin ??
 			Plugin.make({ id: Plugin.Id.make("@openbot-build/core/runtime-tools") })<
 				Tools,
 				E,
@@ -80,16 +80,16 @@ export const make = <
 					next({
 						...input,
 						toolkit:
-							agent.toolkit === undefined
+							bot.toolkit === undefined
 								? input.toolkit
-								: Predicate.hasProperty(agent.toolkit, "toHandlers")
-									? Effect.succeed(agent.toolkit)
-									: agent.toolkit,
+								: Predicate.hasProperty(bot.toolkit, "toHandlers")
+									? Effect.succeed(bot.toolkit)
+									: bot.toolkit,
 					}),
 				),
 			)
 		const hosted =
-			agent.hostPlugin ??
+			bot.hostPlugin ??
 			Plugin.make({
 				id: Plugin.Id.make("@openbot-build/core/empty-host-tools"),
 			})<HostTools>(() => Effect.succeed((next, input) => next(input)))
@@ -101,13 +101,13 @@ export const make = <
 			() => IdGenerator.defaultIdGenerator,
 		)
 		const id = () => generator.generateId()
-		// The agent compaction service comes first. Otherwise the host may provide one.
+		// The bot compaction service comes first. Otherwise the host may provide one.
 		const compactionService =
-			agent.compaction === undefined
+			bot.compaction === undefined
 				? Effect.serviceOption(ContextCompaction.ContextCompaction)
-				: Effect.succeedSome(agent.compaction)
+				: Effect.succeedSome(bot.compaction)
 		const findModel = (selection: Config.Selection | undefined) =>
-			(agent.modelCatalog ?? Effect.succeed([])).pipe(
+			(bot.modelCatalog ?? Effect.succeed([])).pipe(
 				Effect.map((models) =>
 					models.find(
 						(model) =>
@@ -444,7 +444,7 @@ export const make = <
 					Match.when({ _tag: "NonNative" }, (configuration) =>
 						Effect.gen(function* () {
 							const summarySelection = configuration.model ?? selection
-							const provider = agent.providers?.find(
+							const provider = bot.providers?.find(
 								(p) => p.id === summarySelection.provider,
 							)
 							const program = SummaryCompaction.compact({
@@ -545,8 +545,8 @@ export const make = <
 			readonly prompt: Prompt.Prompt
 		}): Stream.Stream<
 			Event,
-			Session.RuntimeError | Agent.ExecutionError<Tools, E>,
-			Agent.RuntimeServices<Tools, R>
+			Session.RuntimeError | Bot.ExecutionError<Tools, E>,
+			Bot.RuntimeServices<Tools, R>
 		> =>
 			Stream.unwrap(
 				Effect.gen(function* () {
@@ -569,14 +569,14 @@ export const make = <
 								accepted.view.state.value.conversation.context.prompt,
 							),
 						)
-					const context = Agent.Context.of({
+					const context = Bot.Context.of({
 						options: {
 							prompt: accepted.prompt,
 							...(action === undefined ? {} : { action }),
 							...R.filter(
 								{
-									toolChoice: agent.toolChoice,
-									concurrency: agent.concurrency,
+									toolChoice: bot.toolChoice,
+									concurrency: bot.concurrency,
 								},
 								Predicate.isNotUndefined,
 							),
@@ -591,8 +591,8 @@ export const make = <
 						),
 					})
 					const next: Plugin.Next<
-						Session.RuntimeError | Agent.ExecutionError<Tools, E>,
-						R | Agent.Requirements<Tools, Tool.HandlersFor<Tools>>
+						Session.RuntimeError | Bot.ExecutionError<Tools, E>,
+						R | Bot.Requirements<Tools, Tool.HandlersFor<Tools>>
 					> = <TK extends Toolkit.Any, ToolkitE, ToolkitR>(
 						inner: Plugin.Options<TK, ToolkitE, ToolkitR>,
 					) =>
@@ -606,8 +606,8 @@ export const make = <
 								): Stream.Stream<
 									Event,
 									| Session.RuntimeError
-									| Agent.ExecutionError<Tools, E | ToolkitE>,
-									R | Agent.Requirements<Tools, ToolkitR>
+									| Bot.ExecutionError<Tools, E | ToolkitE>,
+									R | Bot.Requirements<Tools, ToolkitR>
 								> =>
 									Stream.unwrap(
 										Effect.gen(function* () {
@@ -776,7 +776,7 @@ export const make = <
 												Response.StreamPart<Tools, "opaque">
 											> = []
 											let usage: Response.Usage | undefined
-											const provider = agent.providers?.find(
+											const provider = bot.providers?.find(
 												(provider) => provider.id === selection?.provider,
 											)
 											const nativeModel =
@@ -853,8 +853,8 @@ export const make = <
 																Stream.provide(nativeModel),
 															)) as Stream.Stream<
 													Event,
-													Agent.ExecutionError<Tools, E>,
-													R | Agent.Requirements<Tools>
+													Bot.ExecutionError<Tools, E>,
+													R | Bot.Requirements<Tools>
 												>
 											).pipe(
 												Stream.onExit((exit) =>
@@ -1108,7 +1108,7 @@ export const make = <
 									)
 								return loop(turnRecord.steps + 1).pipe(
 									Stream.map(
-										(event) => event as Agent.Event<Toolkit.MergedTools<[TK]>>,
+										(event) => event as Bot.Event<Toolkit.MergedTools<[TK]>>,
 									),
 								)
 							}),
@@ -1120,7 +1120,7 @@ export const make = <
 							instructions: Prompt.empty,
 						}).pipe(Stream.map((event) => event as Event)),
 					)
-					return Agent.Context.provide(
+					return Bot.Context.provide(
 						Stream.concat(
 							Stream.make(versionEvent(accepted.view), {
 								_tag: "TurnStarted",
@@ -1185,15 +1185,15 @@ export const make = <
 			readonly prompt: Prompt.Prompt
 		}): Stream.Stream<
 			Event,
-			Session.RuntimeError | Agent.ExecutionError<Tools, E>,
-			Agent.RuntimeServices<Tools, R>
+			Session.RuntimeError | Bot.ExecutionError<Tools, E>,
+			Bot.RuntimeServices<Tools, R>
 		> => {
 			const next = (
 				phase: typeof accepted,
 			): Stream.Stream<
 				Event,
-				Session.RuntimeError | Agent.ExecutionError<Tools, E>,
-				Agent.RuntimeServices<Tools, R>
+				Session.RuntimeError | Bot.ExecutionError<Tools, E>,
+				Bot.RuntimeServices<Tools, R>
 			> =>
 				Stream.concat(
 					run(phase),
@@ -1298,7 +1298,7 @@ export const make = <
 			readonly turn: Turn.Id
 			readonly item: Item.Id
 			readonly prompt: Prompt.Prompt
-		}): Effect.Effect<void, never, Agent.RuntimeServices<Tools, R>> =>
+		}): Effect.Effect<void, never, Bot.RuntimeServices<Tools, R>> =>
 			Effect.gen(function* () {
 				const started = yield* Deferred.make<void>()
 				yield* Effect.forkIn(

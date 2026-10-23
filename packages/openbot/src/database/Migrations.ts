@@ -38,9 +38,9 @@ import {
 	members,
 	tokens,
 	auditLogs,
-	agentRecords,
-	agentMemories,
-	agentMemoryTags,
+	botRecords,
+	botMemories,
+	botMemoryTags,
 	triggers,
 	channels,
 	channelIdentities,
@@ -112,9 +112,9 @@ export const check = Effect.gen(function* () {
 	yield* db.select().from(members).limit(0)
 	yield* db.select().from(tokens).limit(0)
 	yield* db.select().from(auditLogs).limit(0)
-	yield* db.select().from(agentRecords).limit(0)
-	yield* db.select().from(agentMemories).limit(0)
-	yield* db.select().from(agentMemoryTags).limit(0)
+	yield* db.select().from(botRecords).limit(0)
+	yield* db.select().from(botMemories).limit(0)
+	yield* db.select().from(botMemoryTags).limit(0)
 	yield* db.select().from(triggers).limit(0)
 	yield* db.select().from(channels).limit(0)
 	yield* db.select().from(channelIdentities).limit(0)

@@ -1,6 +1,6 @@
 import { memberOf } from "./Caller.ts"
 // @effect-diagnostics strictEffectProvide:off
-import * as AgentFixture from "./AgentFixture.ts"
+import * as BotFixture from "./BotFixture.ts"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { NodeServices } from "@effect/platform-node"
@@ -34,7 +34,7 @@ import * as Server from "../dist/app/Server.js"
 import * as DevelopmentModel from "../src/app/DevelopmentModel.ts"
 import * as DatabasePostgres from "../dist/database/DatabasePostgres.js"
 import * as PostgresTest from "./PostgresTest.ts"
-import * as DefaultAgent from "./DefaultAgent.ts"
+import * as DefaultBot from "./DefaultBot.ts"
 import * as Organizations from "./Organizations.ts"
 
 const settings = (databaseUrl: string) => ({
@@ -126,7 +126,7 @@ test(
 					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
 				}),
 			)
-			await DefaultAgent.ensure((path, method, payload) =>
+			await DefaultBot.ensure((path, method, payload) =>
 				fetch(address + path, {
 					method,
 					headers,
@@ -378,7 +378,7 @@ test(
 			const create = () =>
 				runtime.runPromise(
 					Effect.gen(function* () {
-						const view = yield* sessions.create(AgentFixture.direct())
+						const view = yield* sessions.create(BotFixture.direct())
 						return yield* sessions.selectModel(view.session.id, {
 							expected: view.session.revision,
 							selection: Config.Selection.make({

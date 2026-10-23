@@ -23,51 +23,51 @@ Ein Member bekommt die Policies seiner Roles und dazu seine eigenen zusätzliche
 
 Liste sie mit `GET /v1/organization/permission_groups` auf.
 
-| ID                         | Ressource         | Was sie erlaubt                                                                                             |
-| -------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------- |
-| `responses.run`            | Session           | Arbeit in einer Session starten, lenken (Steer), einreihen (Queue) und fortsetzen.                          |
-| `sessions.read`            | Session           | Sessions lesen, mit ihrem Verlauf, Memory und ihren Delegationen.                                           |
-| `sessions.write`           | Session           | Sessions erstellen, ändern, forken, wiederherstellen, unterbrechen und löschen.                             |
-| `requests.resolve`         | Request           | Die Requests deiner Agents für neue Fähigkeiten beantworten.                                                |
-| `agents.read`              | Agent             | Agents lesen, mit ihrem Memory, ihren Rules und Grants.                                                     |
-| `agents.write`             | Agent             | Agents erstellen und ändern, mit ihrem Memory, ihren Rules und Grants.                                      |
-| `agents.delegate`          | Agent             | Einem Agent Arbeit geben, von einem Client oder von einem anderen Agent aus.                                |
-| `agents.share`             | Agent             | Personen einladen, einen [Agent zu nutzen](/de/docs/sharing), und seine Agent-Mitglieder verwalten.         |
-| `triggers.read`            | Trigger           | [Trigger](/de/docs/triggers) lesen: ihre Zeitpläne und Webhooks.                                            |
-| `triggers.write`           | Trigger           | Trigger erstellen, ändern und löschen und ihre Webhook-Geheimnisse festlegen.                               |
-| `channels.read`            | Channel           | Die [Channels](/de/docs/channels) der Organisation lesen und die Personen, die mit ihnen verknüpft sind.    |
-| `channels.write`           | Channel           | Channels erstellen, ändern und löschen, ihre Geheimnisse festlegen und Verknüpfungen von Personen lösen.    |
-| `channels.use`             | Channel           | Mit dem Agent eines Channel sprechen und deine Agents dorthin schreiben lassen.                             |
-| `channel_identities.read`  | User              | Deine verknüpften Konten auf den Plattformen von Channels lesen.                                            |
-| `channel_identities.write` | User              | Deine Konten auf den Plattformen von Channels verknüpfen und die Verknüpfung lösen.                         |
-| `computers.read`           | Computer          | [Computer](/de/docs/computers) lesen, die Agents, die sie nutzen dürfen, und ihre Nutzung.                  |
-| `computers.write`          | Computer          | Computer erstellen, ändern und löschen, Maschinen koppeln und Connector-Tokens erstellen.                   |
-| `computers.use`            | Computer          | Befehle ausführen, Dateien ändern, Ports öffnen und den Desktop nutzen, und deine Agents sie nutzen lassen. |
-| `computer_providers.read`  | Computer provider | Die Konten bei Computer-Providern lesen.                                                                    |
-| `computer_providers.write` | Computer provider | Konten bei Computer-Providern und ihre Schlüssel hinzufügen, ändern und löschen.                            |
-| `computer_providers.use`   | Computer provider | Computer mit einem Konto bei einem Computer-Provider erstellen.                                             |
-| `connections.read`         | Connection        | App-Verbindungen und App-Konten lesen.                                                                      |
-| `connections.write`        | Connection        | App-Verbindungen erstellen, ändern und löschen, und sich bei App-Konten anmelden.                           |
-| `apps.use`                 | Apps              | Apps finden und App-Operationen und App-Ansichten nutzen.                                                   |
-| `apps.publish`             | Apps              | Die Entwicklerwerkzeuge für Apps nutzen, die du veröffentlichst.                                            |
-| `models.use`               | Model             | Ein Model für eine Session wählen.                                                                          |
-| `tokens.read`              | User              | API-Tokens auflisten.                                                                                       |
-| `tokens.write`             | User              | API-Tokens erstellen und widerrufen.                                                                        |
-| `organization.read`        | Organization      | Die Einstellungen der Organisation lesen.                                                                   |
-| `organization.write`       | Organization      | Die Einstellungen der Organisation ändern.                                                                  |
-| `members.read`             | Organization      | Members auflisten, mit ihren Roles und Policies.                                                            |
-| `members.write`            | Organization      | Roles, Policies und Status von Members ändern und Members entfernen.                                        |
-| `roles.write`              | Organization      | Die eigenen Roles der Organisation erstellen, ändern und löschen.                                           |
-| `model_providers.read`     | Organization      | Die Models und Model Providers der Organisation lesen. Schlüssel werden nie gezeigt.                        |
-| `model_providers.write`    | Organization      | Die Models, Model Providers und Schlüssel der Organisation hinzufügen, ändern und entfernen.                |
-| `sso.read`                 | Organization      | Die E-Mail-Domains und SSO-Verbindungen lesen.                                                              |
-| `sso.write`                | Organization      | E-Mail-Domains hinzufügen und bestätigen, und SSO-Verbindungen ändern.                                      |
-| `audit_logs.read`          | Organization      | Das Audit-Log lesen.                                                                                        |
-| `usage.read`               | Organization      | Die [Nutzung der Models](/de/docs/usage) und ihre Kosten lesen, und die Credits der Organisation.           |
-| `budgets.read`             | Organization      | Die [Budgets](/de/docs/usage#budgets) lesen und wie viel davon ausgegeben ist.                              |
-| `budgets.write`            | Organization      | Budgets erstellen, ändern und löschen.                                                                      |
-| `platform.read`            | Platform          | Die Platform-Einstellungen, Organisationen, Admins und gemeinsamen Models und Model Providers lesen.        |
-| `platform.write`           | Platform          | Die Platform-Einstellungen, Organisationen, Admins und gemeinsamen Models und Model Providers ändern.       |
+| ID                         | Ressource         | Was sie erlaubt                                                                                           |
+| -------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------- |
+| `responses.run`            | Session           | Arbeit in einer Session starten, lenken (Steer), einreihen (Queue) und fortsetzen.                        |
+| `sessions.read`            | Session           | Sessions lesen, mit ihrem Verlauf, Memory und ihren Delegationen.                                         |
+| `sessions.write`           | Session           | Sessions erstellen, ändern, forken, wiederherstellen, unterbrechen und löschen.                           |
+| `requests.resolve`         | Request           | Die Requests deiner Bots für neue Fähigkeiten beantworten.                                                |
+| `bots.read`                | Bot               | Bots lesen, mit ihrem Memory, ihren Rules und Grants.                                                     |
+| `bots.write`               | Bot               | Bots erstellen und ändern, mit ihrem Memory, ihren Rules und Grants.                                      |
+| `bots.delegate`            | Bot               | Einem Bot Arbeit geben, von einem Client oder von einem anderen Bot aus.                                  |
+| `bots.share`               | Bot               | Personen einladen, einen [Bot zu nutzen](/de/docs/sharing), und seine Bot-Mitglieder verwalten.           |
+| `triggers.read`            | Trigger           | [Trigger](/de/docs/triggers) lesen: ihre Zeitpläne und Webhooks.                                          |
+| `triggers.write`           | Trigger           | Trigger erstellen, ändern und löschen und ihre Webhook-Geheimnisse festlegen.                             |
+| `channels.read`            | Channel           | Die [Channels](/de/docs/channels) der Organisation lesen und die Personen, die mit ihnen verknüpft sind.  |
+| `channels.write`           | Channel           | Channels erstellen, ändern und löschen, ihre Geheimnisse festlegen und Verknüpfungen von Personen lösen.  |
+| `channels.use`             | Channel           | Mit dem Bot eines Channel sprechen und deine Bots dorthin schreiben lassen.                               |
+| `channel_identities.read`  | User              | Deine verknüpften Konten auf den Plattformen von Channels lesen.                                          |
+| `channel_identities.write` | User              | Deine Konten auf den Plattformen von Channels verknüpfen und die Verknüpfung lösen.                       |
+| `computers.read`           | Computer          | [Computer](/de/docs/computers) lesen, die Bots, die sie nutzen dürfen, und ihre Nutzung.                  |
+| `computers.write`          | Computer          | Computer erstellen, ändern und löschen, Maschinen koppeln und Connector-Tokens erstellen.                 |
+| `computers.use`            | Computer          | Befehle ausführen, Dateien ändern, Ports öffnen und den Desktop nutzen, und deine Bots sie nutzen lassen. |
+| `computer_providers.read`  | Computer provider | Die Konten bei Computer-Providern lesen.                                                                  |
+| `computer_providers.write` | Computer provider | Konten bei Computer-Providern und ihre Schlüssel hinzufügen, ändern und löschen.                          |
+| `computer_providers.use`   | Computer provider | Computer mit einem Konto bei einem Computer-Provider erstellen.                                           |
+| `connections.read`         | Connection        | App-Verbindungen und App-Konten lesen.                                                                    |
+| `connections.write`        | Connection        | App-Verbindungen erstellen, ändern und löschen, und sich bei App-Konten anmelden.                         |
+| `apps.use`                 | Apps              | Apps finden und App-Operationen und App-Ansichten nutzen.                                                 |
+| `apps.publish`             | Apps              | Die Entwicklerwerkzeuge für Apps nutzen, die du veröffentlichst.                                          |
+| `models.use`               | Model             | Ein Model für eine Session wählen.                                                                        |
+| `tokens.read`              | User              | API-Tokens auflisten.                                                                                     |
+| `tokens.write`             | User              | API-Tokens erstellen und widerrufen.                                                                      |
+| `organization.read`        | Organization      | Die Einstellungen der Organisation lesen.                                                                 |
+| `organization.write`       | Organization      | Die Einstellungen der Organisation ändern.                                                                |
+| `members.read`             | Organization      | Members auflisten, mit ihren Roles und Policies.                                                          |
+| `members.write`            | Organization      | Roles, Policies und Status von Members ändern und Members entfernen.                                      |
+| `roles.write`              | Organization      | Die eigenen Roles der Organisation erstellen, ändern und löschen.                                         |
+| `model_providers.read`     | Organization      | Die Models und Model Providers der Organisation lesen. Schlüssel werden nie gezeigt.                      |
+| `model_providers.write`    | Organization      | Die Models, Model Providers und Schlüssel der Organisation hinzufügen, ändern und entfernen.              |
+| `sso.read`                 | Organization      | Die E-Mail-Domains und SSO-Verbindungen lesen.                                                            |
+| `sso.write`                | Organization      | E-Mail-Domains hinzufügen und bestätigen, und SSO-Verbindungen ändern.                                    |
+| `audit_logs.read`          | Organization      | Das Audit-Log lesen.                                                                                      |
+| `usage.read`               | Organization      | Die [Nutzung der Models](/de/docs/usage) und ihre Kosten lesen, und die Credits der Organisation.         |
+| `budgets.read`             | Organization      | Die [Budgets](/de/docs/usage#budgets) lesen und wie viel davon ausgegeben ist.                            |
+| `budgets.write`            | Organization      | Budgets erstellen, ändern und löschen.                                                                    |
+| `platform.read`            | Platform          | Die Platform-Einstellungen, Organisationen, Admins und gemeinsamen Models und Model Providers lesen.      |
+| `platform.write`           | Platform          | Die Platform-Einstellungen, Organisationen, Admins und gemeinsamen Models und Model Providers ändern.     |
 
 `organization.read` und `organization.write` gelten auch für die [Einstellungen der Organisation](/de/docs/organization#einstellungen).
 `platform.read` und `platform.write` funktionieren nur auf der Ressource `openbot.platform` und nur für Platform-Admins. Siehe [Platform-Gruppen](#platform-gruppen).
@@ -85,8 +85,8 @@ Ein Ressourcen-Schlüssel ist ein Name aus Teilen, die durch Punkte getrennt sin
 | Die Organisation           | `openbot.org.<org>`                                     |
 | Ein Member                 | `openbot.org.<org>.user.<user>`                         |
 | Eine Session               | `openbot.org.<org>.user.<user>.session.<session>`       |
-| Ein Agent eines Members    | `openbot.org.<org>.user.<user>.agent.<agent>`           |
-| Ein gemeinsamer Agent      | `openbot.org.<org>.agent.<agent>`                       |
+| Ein Bot eines Members      | `openbot.org.<org>.user.<user>.bot.<bot>`               |
+| Ein gemeinsamer Bot        | `openbot.org.<org>.bot.<bot>`                           |
 | Ein Trigger eines Members  | `openbot.org.<org>.user.<user>.trigger.<trigger>`       |
 | Ein gemeinsamer Trigger    | `openbot.org.<org>.trigger.<trigger>`                   |
 | Ein Channel                | `openbot.org.<org>.channel.<channel>`                   |
@@ -96,7 +96,7 @@ Ein Ressourcen-Schlüssel ist ein Name aus Teilen, die durch Punkte getrennt sin
 | Ein Model Provider         | `openbot.org.<org>.model.<provider>`                    |
 | Die ganze Platform         | `openbot.platform`                                      |
 
-Ein Agent, der einem anderen Agent gehört, hat den Schlüssel des Members oder der Organisation an der Spitze seines Besitzer-Baums. `openbot.org.<org>.user.<user>.agent.<agent>` ist also auch der Schlüssel eines Agents, der einem obersten Agent dieses Members gehört. Wenn ein Agent einen Agent erstellt oder dauerhaft macht, braucht das Member, für das er arbeitet, `agents.write` an dieser Stelle.
+Ein Bot, der einem anderen Bot gehört, hat den Schlüssel des Members oder der Organisation an der Spitze seines Besitzer-Baums. `openbot.org.<org>.user.<user>.bot.<bot>` ist also auch der Schlüssel eines Bots, der einem obersten Bot dieses Members gehört. Wenn ein Bot einen Bot erstellt oder dauerhaft macht, braucht das Member, für das er arbeitet, `bots.write` an dieser Stelle.
 
 Ein Schlüssel gilt für sich selbst und für jeden Schlüssel darunter. `openbot.org.<org>` gilt also für alles in der Organisation, und `openbot.org.<org>.user.<user>` gilt für alles eines Members.
 
@@ -192,13 +192,13 @@ Liste sie mit `GET /v1/organization/roles` auf. Die Liste enthält die eingebaut
 
 Jede Organisation hat diese Roles. Sie lassen sich nicht ändern. Eine Änderung ergibt `409` mit `RoleReadOnly`.
 
-| Role                      | Was sie kann                                                                                                                                                                                                              |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `super_administrator`     | Alles in der Organisation. Nur ein Super Administrator kann diese Role geben oder wegnehmen.                                                                                                                              |
-| `administrator`           | Die Organisation, ihre Members, ihre gemeinsamen Agents, ihre gemeinsamen Trigger, ihre gemeinsamen Computer und ihre Channels verwalten und das Audit-Log lesen. Nur mit den eigenen Sessions und Verbindungen arbeiten. |
-| `administrator_read_only` | Die Organisation, ihre Members, die Nutzung, die Budgets und das Audit-Log lesen und die gemeinsamen Agents, Trigger, Computer und Channels lesen. Nur mit den eigenen Sessions und Verbindungen arbeiten.                |
-| `member`                  | Mit den eigenen Agents, Sessions, Triggern, Computern, Verbindungen und Tokens arbeiten, die gemeinsamen Agents, Trigger, Computer, Channels und Models der Organisation nutzen und ihre Einstellungen lesen.             |
-| `auditor`                 | Die Organisation, ihre Members, die Nutzung, die Budgets und das Audit-Log lesen. Sonst nichts.                                                                                                                           |
+| Role                      | Was sie kann                                                                                                                                                                                                            |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `super_administrator`     | Alles in der Organisation. Nur ein Super Administrator kann diese Role geben oder wegnehmen.                                                                                                                            |
+| `administrator`           | Die Organisation, ihre Members, ihre gemeinsamen Bots, ihre gemeinsamen Trigger, ihre gemeinsamen Computer und ihre Channels verwalten und das Audit-Log lesen. Nur mit den eigenen Sessions und Verbindungen arbeiten. |
+| `administrator_read_only` | Die Organisation, ihre Members, die Nutzung, die Budgets und das Audit-Log lesen und die gemeinsamen Bots, Trigger, Computer und Channels lesen. Nur mit den eigenen Sessions und Verbindungen arbeiten.                |
+| `member`                  | Mit den eigenen Bots, Sessions, Triggern, Computern, Verbindungen und Tokens arbeiten, die gemeinsamen Bots, Trigger, Computer, Channels und Models der Organisation nutzen und ihre Einstellungen lesen.               |
+| `auditor`                 | Die Organisation, ihre Members, die Nutzung, die Budgets und das Audit-Log lesen. Sonst nichts.                                                                                                                         |
 
 Einige eingebaute Roles haben auch die Gruppen für Roles, Model Providers, SSO, Channels, Nutzung und Budgets:
 

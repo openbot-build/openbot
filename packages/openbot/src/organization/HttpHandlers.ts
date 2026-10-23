@@ -57,7 +57,7 @@ const organizationGroup = HttpApiBuilder.group(
 					.pipe(Effect.mapError(unavailable))
 			/**
 			 * A decision model must be a `decision` model that a provider offers.
-			 * The Rules and Agent memory models must not be `decision` models.
+			 * The Rules and Bot memory models must not be `decision` models.
 			 */
 			const checkModels = (
 				caller: Caller,
@@ -67,10 +67,8 @@ const organizationGroup = HttpApiBuilder.group(
 				>,
 			) =>
 				Effect.gen(function* () {
-					const { rulesModel, agentMemoryModel, decisionModel } = changes
-					if (
-						(rulesModel ?? agentMemoryModel ?? decisionModel ?? null) === null
-					)
+					const { rulesModel, botMemoryModel, decisionModel } = changes
+					if ((rulesModel ?? botMemoryModel ?? decisionModel ?? null) === null)
 						return
 					const catalog = yield* registry
 						.view(caller.organizationId)
@@ -85,7 +83,7 @@ const organizationGroup = HttpApiBuilder.group(
 						)?.type
 					for (const [name, selection] of [
 						["rulesModel", rulesModel],
-						["agentMemoryModel", agentMemoryModel],
+						["botMemoryModel", botMemoryModel],
 					] as const)
 						if (
 							selection !== undefined &&

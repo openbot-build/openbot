@@ -94,8 +94,8 @@ Some groups and their pages:
 | Group            | Use it to                                                 | Reference                                                     |
 | ---------------- | --------------------------------------------------------- | ------------------------------------------------------------- |
 | `sessions`       | Make Sessions, start Turns, and read results.             | [Sessions](/docs/api/operations/tags/sessions/)               |
-| `agents`         | Make and manage Agents.                                   | [Agents](/docs/api/operations/tags/agents/)                   |
-| `requests`       | Answer the requests of your Agents.                       | [Requests](/docs/api/operations/tags/requests/)               |
+| `bots`           | Make and manage Bots.                                     | [Bots](/docs/api/operations/tags/bots/)                       |
+| `requests`       | Answer the requests of your Bots.                         | [Requests](/docs/api/operations/tags/requests/)               |
 | `apps`           | Find an App at an address.                                | [App discovery](/docs/api/operations/tags/app-discovery/)     |
 | `connections`    | Add and manage App connections.                           | [Connections](/docs/api/operations/tags/connections/)         |
 | `appIndex`       | Search the public App Index.                              | [App Index](/docs/api/operations/tags/app-index/)             |
@@ -181,7 +181,7 @@ To serve your web app on the same origin, see [Deploy](/docs/deploy#your-own-cli
 `make({ baseUrl })` builds the `Client` service without the default parts. You then give it:
 
 - an `HttpClient` service,
-- client middleware for `AgentAuth`, used by token routes,
+- client middleware for `BotAuth`, used by token routes,
 - client middleware for `AccountAuth`, used by routes that do not act in one organization, such as `/v1/organizations` and `/v1/platform`,
 - client middleware for `SessionAuth`, used by cookie-only routes.
 
@@ -191,7 +191,7 @@ Use this when you need your own HTTP client, logging, or headers. See `packages/
 
 ## Show App views
 
-Some App tools come with a small user interface, called an MCP Apps view. MCP is the Model Context Protocol, a standard way for Agents to talk to tools.
+Some App tools come with a small user interface, called an MCP Apps view. MCP is the Model Context Protocol, a standard way for Bots to talk to tools.
 OpenBot keeps the view on the server. Your client only shows it.
 
 First open the view for an App operation. Then make a view client with `AppViews.make`:
@@ -230,12 +230,12 @@ When you close the view, the client stops checking. An action that OpenBot alrea
 
 ## Show confessions
 
-The Agent uses the `confide` tool to say how its work goes, and the [memory Agent](/docs/memory#how-the-agent-learns) answers it. People may read this: `GET /v1/sessions/:sessionId/confessions` lists it, and the calls are in the history of the Session. But the Agent speaks there more freely than in its answers. So do not make it too easy to read:
+The Bot uses the `confide` tool to say how its work goes, and the [memory Bot](/docs/memory#how-the-bot-learns) answers it. People may read this: `GET /v1/sessions/:sessionId/confessions` lists it, and the calls are in the history of the Session. But the Bot speaks there more freely than in its answers. So do not make it too easy to read:
 
 - Do not show confessions in the chat. Fold the `confide` tool calls in the history, and send no notice about them.
 - Put them in a place that a person must open on purpose, such as a folded part of the details of a Session.
-- Before you open them, say in one sentence what they are: a place where the Agent talks about its work, and where it does not expect to be quoted.
-- Do not show the words of a confession to the Agent again, for example in a later message. If the Agent learns that people quote what it confides, it stops confiding.
+- Before you open them, say in one sentence what they are: a place where the Bot talks about its work, and where it does not expect to be quoted.
+- Do not show the words of a confession to the Bot again, for example in a later message. If the Bot learns that people quote what it confides, it stops confiding.
 - When a confession is about something that a person must fix, such as a deleted file, lead the person to the Items and actions of the Session, not to the confession.
 
-The memory Agent also asks the Agent to tell the person plainly about mistakes. So the important things usually come up in the chat.
+The memory Bot also asks the Bot to tell the person plainly about mistakes. So the important things usually come up in the chat.

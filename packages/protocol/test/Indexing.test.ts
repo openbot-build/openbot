@@ -421,7 +421,7 @@ test("noindex withdraws the entry, and authorization, robots and storage failure
 	)
 	assert.equal(result._tag, "Failure")
 })
-test("robots combines matching agents, encoded paths, wildcards, longest match and allow ties", async () => {
+test("robots combines matching bots, encoded paths, wildcards, longest match and allow ties", async () => {
 	for (const [path, text, expected] of [
 		[
 			"/card",

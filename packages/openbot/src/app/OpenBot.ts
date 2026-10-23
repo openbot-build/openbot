@@ -30,8 +30,8 @@ import * as IndexStore from "../apps/IndexStore.ts"
 import { IndexNamespace } from "../apps/IndexNamespace.ts"
 import { ResolvedConfiguration } from "../auth/Configuration.js"
 import * as BackendLayers from "./BackendLayers.ts"
-import * as AgentLayers from "../agents/AgentLayers.ts"
-import * as Coordinator from "../agents/Coordinator.ts"
+import * as BotLayers from "../bots/BotLayers.ts"
+import * as Coordinator from "../bots/Coordinator.ts"
 import * as CodeRuns from "../code/CodeRuns.ts"
 import * as Sandbox from "../code/Sandbox.ts"
 import * as Triggers from "../triggers/Triggers.ts"
@@ -205,13 +205,13 @@ export const layer = <
 			const resolve = options.sessions?.resolveModel
 			const model = (
 				organizationId: string,
-				name: "rulesModel" | "agentMemoryModel",
+				name: "rulesModel" | "botMemoryModel",
 			) =>
 				Effect.mapError(
 					resolve === undefined
 						? name === "rulesModel"
 							? registry.rulesModel(organizationId)
-							: registry.agentMemoryModel(organizationId)
+							: registry.botMemoryModel(organizationId)
 						: settings.organization(organizationId).pipe(
 								Effect.mapError(
 									() =>
@@ -236,12 +236,11 @@ export const layer = <
 				)
 			return Judge.HelperModel.of({
 				rules: (organizationId) => model(organizationId, "rulesModel"),
-				agentMemory: (organizationId) =>
-					model(organizationId, "agentMemoryModel"),
+				botMemory: (organizationId) => model(organizationId, "botMemoryModel"),
 			})
 		}),
 	)
-	const agents = AgentLayers.layer({ helper })
+	const bots = BotLayers.layer({ helper })
 
 	// A custom Channel calls an address that an administrator chose, so it uses the
 	// same network guard as Apps.
@@ -343,7 +342,7 @@ export const layer = <
 		Layer.provideMerge(apps),
 		Layer.provideMerge(Triggers.layer),
 		Layer.provideMerge(Layer.merge(channels, computers)),
-		Layer.provideMerge(agents),
+		Layer.provideMerge(bots),
 		Layer.provideMerge(index),
 		Layer.provideMerge(Governance.layer),
 		Layer.provideMerge(TokensPostgres.layer),

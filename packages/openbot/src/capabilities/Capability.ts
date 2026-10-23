@@ -1,20 +1,20 @@
 import { createHash } from "node:crypto"
 import {
-	type AgentsApi,
+	type BotsApi,
 	type Caller,
 	type ComputersApi,
 	type Permissions,
 } from "@openbot-build/api"
 import { Option } from "effect"
 import {
-	agentKey,
-	agentPlace,
+	botKey,
+	botPlace,
 	computerKey,
 	resourceKey,
 	rootOf,
 } from "../authorization/Policy.ts"
 
-export type Capability = AgentsApi.Capability
+export type Capability = BotsApi.Capability
 
 /**
  * True when a stored capability covers a request.
@@ -47,16 +47,16 @@ export const hash = (value: unknown) =>
 
 /**
  * The member permission that a capability needs, and its resource key.
- * An Agent never does more than the member it works for, so this check comes first.
+ * A Bot never does more than the member it works for, so this check comes first.
  */
 export const permission = (input: {
 	readonly caller: Caller
 	readonly capability: Capability
 	readonly session: string
-	/** The target Agent, for actions on an Agent. */
-	readonly agent?: AgentsApi.Agent
-	/** The Agent that tries the action. The Agents it makes go below its owner tree. */
-	readonly self: AgentsApi.Agent
+	/** The target Bot, for actions on a Bot. */
+	readonly bot?: BotsApi.Bot
+	/** The Bot that tries the action. The Bots it makes go below its owner tree. */
+	readonly self: BotsApi.Bot
 	/**
 	 * The owner of the target Computer, or of the Computer provider for `computers.create`.
 	 * Without it, OpenBot uses the place of the member, so a shared target is denied.
@@ -74,12 +74,12 @@ export const permission = (input: {
 		_tag: "Member",
 		userId: subject.userId,
 	}
-	const onAgent = (permission: Permissions.PermissionGroupId) => ({
+	const onBot = (permission: Permissions.PermissionGroupId) => ({
 		permission,
 		key:
-			input.agent === undefined
-				? resourceKey({ subject, kind: "agent", id: Option.none() })
-				: agentKey({ ...input.agent, organizationId: subject.organizationId }),
+			input.bot === undefined
+				? resourceKey({ subject, kind: "bot", id: Option.none() })
+				: botKey({ ...input.bot, organizationId: subject.organizationId }),
 	})
 	switch (input.capability.action) {
 		case "apps.call":
@@ -87,23 +87,22 @@ export const permission = (input: {
 				permission: "apps.use",
 				key: resourceKey({ subject, kind: "apps", id: Option.none() }),
 			}
-		case "agents.spawn":
+		case "bots.spawn":
 			return {
-				permission: "agents.write",
-				key:
-					resourceKey({ subject, kind: "user", id: Option.none() }) + ".agent",
+				permission: "bots.write",
+				key: resourceKey({ subject, kind: "user", id: Option.none() }) + ".bot",
 			}
-		case "agents.create":
-		case "agents.promote":
+		case "bots.create":
+		case "bots.promote":
 			return {
-				permission: "agents.write",
-				key: agentPlace({
+				permission: "bots.write",
+				key: botPlace({
 					organizationId: subject.organizationId,
 					root: rootOf(input.self.owner),
 				}),
 			}
-		case "agents.delegate":
-			return onAgent("agents.delegate")
+		case "bots.delegate":
+			return onBot("bots.delegate")
 		// Carrying out a plan is work in the Session, like a tool call.
 		case "plans.run":
 		case "tools.call":
@@ -115,7 +114,7 @@ export const permission = (input: {
 					id: Option.some(input.session),
 				}),
 			}
-		// An Agent makes a Computer with an account at a provider, for its member.
+		// A Bot makes a Computer with an account at a provider, for its member.
 		case "computers.create":
 			return {
 				permission: "computer_providers.use",
@@ -126,7 +125,7 @@ export const permission = (input: {
 					kind: "computer_provider",
 				}),
 			}
-		// The Agent can only get or use a Computer that its member can use.
+		// The Bot can only get or use a Computer that its member can use.
 		case "computers.acquire":
 		case "computers.expose":
 		case "computers.delete":

@@ -1,5 +1,5 @@
 import {
-	Agent,
+	Bot,
 	Item,
 	Plugin,
 	type Session,
@@ -19,7 +19,7 @@ import {
 	Stream,
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
-import { Signal, publish } from "../../agents/Signals.ts"
+import { Signal, publish } from "../../bots/Signals.ts"
 import { Gate } from "../../capabilities/Gate.ts"
 import { Work } from "../../capabilities/Work.ts"
 import { Settings } from "../../settings/Settings.ts"
@@ -87,7 +87,7 @@ const text = { type: "string" } as const
 const json = (value: unknown): Schema.Json =>
 	JSON.parse(JSON.stringify(value)) as Schema.Json
 
-const waitInstructions = `To wait for some time, call ${names.wait} with seconds, or with until and a date and time. Your Turn waits, and goes on when the time comes. To wait for several Agents at once, give them their tasks with several openbot_delegate calls in the same step.`
+const waitInstructions = `To wait for some time, call ${names.wait} with seconds, or with until and a date and time. Your Turn waits, and goes on when the time comes. To wait for several Bots at once, give them their tasks with several openbot_delegate calls in the same step.`
 
 const todoInstructions = `Keep a todo list when work has more than one step. Call ${names.todos} with the whole list each time it changes: when you plan the steps, when you start a step, and when you finish one. Keep one item in_progress at a time. While an item is not done, you go on working. If an item is not needed any more, remove it and say why.`
 
@@ -113,7 +113,7 @@ interface ForOwnerInput {
 }
 
 /**
- * Builds the work plugin for the Sessions of one member. It runs inside the Agent
+ * Builds the work plugin for the Sessions of one member. It runs inside the Bot
  * plugin, so it sees every tool of the Turn.
  */
 export class WorkPlugin extends Context.Service<
@@ -345,7 +345,7 @@ export const make: Effect.Effect<
 			(raw, context) =>
 				Effect.gen(function* () {
 					const request = yield* Schema.decodeUnknownEffect(PlanInput)(raw)
-					// A wrong list does not ask. The handler tells the Agent why.
+					// A wrong list does not ask. The handler tells the Bot why.
 					if (Todos.problem(request.items) !== undefined) return false
 					const current = yield* work
 					yield* Todos.replace({
@@ -358,7 +358,7 @@ export const make: Effect.Effect<
 						settings,
 						state: SessionHost.hostState(view.session),
 						chain: current.chain,
-						agent: current.agent,
+						bot: current.bot,
 					})
 					const answer = yield* gate.check({
 						capability: { action: "plans.run", target: current.session },
@@ -396,10 +396,10 @@ export const make: Effect.Effect<
 	/**
 	 * Keeps the Turn going while todos are open. When a model step ends with no tool
 	 * call, it adds a reminder as a steer message, so the runtime runs one more step.
-	 * It reminds only once for each state of the list. When the Agent stops again
+	 * It reminds only once for each state of the list. When the Bot stops again
 	 * without a change, the Turn ends, so a model that cannot go on does not loop.
 	 */
-	const keepGoing = <A extends Agent.Event<Tools>, E, R>(
+	const keepGoing = <A extends Bot.Event<Tools>, E, R>(
 		input: ForOwnerInput,
 		turn: Turn.Id,
 		stream: Stream.Stream<A, E, R>,
@@ -464,7 +464,7 @@ export const make: Effect.Effect<
 				Effect.succeed((next, options) =>
 					Stream.unwrap(
 						Effect.gen(function* () {
-							const context = yield* Agent.Context
+							const context = yield* Bot.Context
 							const at = yield* context.at
 							const turn = yield* context.turn
 							const view = yield* input.read(at.session)

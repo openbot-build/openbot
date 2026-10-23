@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "یک پلتفرم Agent بدون رابط کاربری، با اولویت API.",
+	description: "یک پلتفرم Bot بدون رابط کاربری، با اولویت API.",
 	nav: {
 		label: "سایت",
 		docs: "مستندات",
@@ -10,10 +10,10 @@ export default {
 	},
 	hero: {
 		title: [
-			"Agentهایی که می‌توانی صدا بزنی.",
+			"Botهایی که می‌توانی صدا بزنی.",
 			"نتیجه‌هایی که می‌توانی بررسی کنی.",
 		],
-		body: "OpenBot یک پلتفرم Agent متن‌باز و بدون رابط کاربری است. تو کار را با HTTP به Agent می‌دهی.",
+		body: "OpenBot یک پلتفرم Bot متن‌باز و بدون رابط کاربری است. تو کار را با HTTP به Bot می‌دهی.",
 		quickStart: "شروع سریع",
 		apiReference: "مرجع API",
 		visual: "یک Turn شروع کن",
@@ -60,7 +60,7 @@ export default {
 			},
 			{
 				title: "Appهای باز",
-				text: "Agentها Appهایی را پیدا و استفاده می‌کنند که ناشرها با OpenBot App Protocol روی وب باز گذاشته‌اند.",
+				text: "Botها Appهایی را پیدا و استفاده می‌کنند که ناشرها با OpenBot App Protocol روی وب باز گذاشته‌اند.",
 			},
 			{
 				title: "مدل‌های خودت",

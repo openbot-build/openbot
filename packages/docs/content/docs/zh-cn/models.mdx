@@ -3,7 +3,7 @@ title: Model
 description: 通过模型和模型提供方，把 OpenBot 连接到语言模型。
 ---
 
-Agent 需要一个语言模型才能工作。OpenBot 不自带模型。你需要连接一个。
+Bot 需要一个语言模型才能工作。OpenBot 不自带模型。你需要连接一个。
 OpenBot 为此保存两种记录：
 
 - **Model**（模型）描述一个语言模型，比如 `gpt-5`：它的名称、选项和限制。模型不属于某个提供方。
@@ -22,7 +22,7 @@ OpenBot 为此保存两种记录：
 
 每个模型有两种类型之一：
 
-- `language` 模型会写文本、调用工具。它运行 Session、评判 Rule，并学习 Agent 记忆。
+- `language` 模型会写文本、调用工具。它运行 Session、评判 Rule，并学习 Bot 记忆。
 - `decision` 模型只从固定的列表中选一个答案。它不写文本。TypeSafe 的 Jev 就是一个例子。见[决策模型](#决策模型)。
 
 当你从代码中运行 OpenBot 时，还可以提供内置模型。参见[内置模型](#内置模型)。
@@ -135,7 +135,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 修改之后的下一次模型调用会使用新的密钥、端点或关联。OpenBot 对每个模型只构建一次，在它的提供方变化时再重新构建。
 
-当[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel`、`agentMemoryModel` 或 `decisionModel` 指向某个提供方时，你不能移除它。OpenBot 会返回 `409` 和 `ModelProviderInUse`。请先修改设置。
+当[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel`、`botMemoryModel` 或 `decisionModel` 指向某个提供方时，你不能移除它。OpenBot 会返回 `409` 和 `ModelProviderInUse`。请先修改设置。
 
 ---
 
@@ -200,20 +200,20 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 OpenBot 从不替你选模型。没有默认模型。每种用途都要指明自己的模型：
 
-- **新 Session** 使用请求中的 `settings.model`。没有它时，Session 使用它的 [Agent](/zh-cn/docs/agents) 的 `model`。两者都没有模型时，OpenBot 返回 `400`、`SessionModelInvalid` 和原因 `missing`。新的 Agent 没有模型，除非你给它一个。所以请在创建时设置它的 `model`，或之后用 `PATCH /v1/agents/:id` 设置。
-- **[Rule](/zh-cn/docs/rules) 的评判**使用[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel`。它为 `null` 时，评判不给出答案，由人或 Agent 来决定。
-- **[Agent 记忆](/zh-cn/docs/memory#agent-记忆)**使用同一份设置中的 `agentMemoryModel`。它为 `null` 时，Agent 什么都不学。
+- **新 Session** 使用请求中的 `settings.model`。没有它时，Session 使用它的 [Bot](/zh-cn/docs/bots) 的 `model`。两者都没有模型时，OpenBot 返回 `400`、`SessionModelInvalid` 和原因 `missing`。新的 Bot 没有模型，除非你给它一个。所以请在创建时设置它的 `model`，或之后用 `PATCH /v1/bots/:id` 设置。
+- **[Rule](/zh-cn/docs/rules) 的评判**使用[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel`。它为 `null` 时，评判不给出答案，由人或 Bot 来决定。
+- **[Bot 记忆](/zh-cn/docs/memory#bot-记忆)**使用同一份设置中的 `botMemoryModel`。它为 `null` 时，Bot 什么都不学。
 
-`rulesModel` 和 `agentMemoryModel` 必须是 `language` 模型。目录会给出每个模型的 `type`，Session 只能选择 `language` 模型。
+`rulesModel` 和 `botMemoryModel` 必须是 `language` 模型。目录会给出每个模型的 `type`，Session 只能选择 `language` 模型。
 
-旧版本的 OpenBot 有 `defaultModel` 和 `helperModel`。升级时，OpenBot 把旧的 `defaultModel` 给每个没有模型的 Agent。`rulesModel` 和 `agentMemoryModel` 得到旧的辅助模型：`helperModel`，没有时用 `defaultModel`。如果两者都是 `null`，新的值保持为空，你必须设置它们。
+旧版本的 OpenBot 有 `defaultModel` 和 `helperModel`。升级时，OpenBot 把旧的 `defaultModel` 给每个没有模型的 Bot。`rulesModel` 和 `botMemoryModel` 得到旧的辅助模型：`helperModel`，没有时用 `defaultModel`。如果两者都是 `null`，新的值保持为空，你必须设置它们。
 
-例如，要给一个 Agent 设置模型，把它当前的 `revision` 作为 `expected` 发送：
+例如，要给一个 Bot 设置模型，把它当前的 `revision` 作为 `expected` 发送：
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
   -d '{"expected":0,"model":{"_tag":"Config.Selection","provider":"prov_4c1e...","model":"qwen3-32b"}}' \
-  https://api.example.com/v1/agents/$AGENT_ID
+  https://api.example.com/v1/bots/$BOT_ID
 ```
 
 Session 可以保存自己的选择。把当前的 Session 修订版本作为 `expected` 发送：

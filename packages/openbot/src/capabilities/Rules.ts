@@ -1,64 +1,58 @@
 import { randomUUID } from "node:crypto"
-import { AgentsApi } from "@openbot-build/api"
+import { BotsApi } from "@openbot-build/api"
 import { Clock, Context, Effect, Layer, Option } from "effect"
-import { AgentRecords } from "../agents/AgentRecords.ts"
+import { BotRecords } from "../bots/BotRecords.ts"
 
-type Rule = AgentsApi.Rule
+type Rule = BotsApi.Rule
 
 /** The key of a decider in record lists. */
-export const deciderKey = (decider: AgentsApi.Decider) =>
+export const deciderKey = (decider: BotsApi.Decider) =>
 	decider._tag === "Person"
 		? "person:" + decider.userId
-		: decider._tag === "Agent"
-			? "agent:" + decider.agent
+		: decider._tag === "Bot"
+			? "bot:" + decider.bot
 			: "rule:" + decider.rule
 
-/** Rules in plain language that deciders use to answer the requests of an Agent. */
+/** Rules in plain language that deciders use to answer the requests of a Bot. */
 export class Rules extends Context.Service<
 	Rules,
 	{
 		readonly list: (
 			organizationId: string,
-			agent: string,
-		) => Effect.Effect<ReadonlyArray<Rule>, AgentsApi.AgentStorageUnavailable>
+			bot: string,
+		) => Effect.Effect<ReadonlyArray<Rule>, BotsApi.BotStorageUnavailable>
 		readonly create: (
 			organizationId: string,
 			input: {
-				readonly agent: AgentsApi.AgentId
-				readonly author: AgentsApi.Decider
+				readonly bot: BotsApi.BotId
+				readonly author: BotsApi.Decider
 				readonly text: string
 				readonly status: "active" | "proposed"
 			},
-		) => Effect.Effect<Rule, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<Rule, BotsApi.BotStorageUnavailable>
 		readonly update: (
 			organizationId: string,
-			agent: string,
+			bot: string,
 			id: string,
-			input: AgentsApi.UpdateRuleRequest,
+			input: BotsApi.UpdateRuleRequest,
 		) => Effect.Effect<
 			Rule,
-			| AgentsApi.AgentNotFound
-			| AgentsApi.AgentConflict
-			| AgentsApi.AgentStorageUnavailable
+			BotsApi.BotNotFound | BotsApi.BotConflict | BotsApi.BotStorageUnavailable
 		>
 	}
 >()("@openbot-build/openbot/capabilities/Rules") {}
 
-export const make: Effect.Effect<typeof Rules.Service, never, AgentRecords> =
+export const make: Effect.Effect<typeof Rules.Service, never, BotRecords> =
 	Effect.gen(function* () {
-		const records = yield* AgentRecords
-		const rules = records.collection(
-			"rule",
-			AgentsApi.Rule,
-			AgentsApi.RuleStatus,
-		)
+		const records = yield* BotRecords
+		const rules = records.collection("rule", BotsApi.Rule, BotsApi.RuleStatus)
 		const put = (organizationId: string, rule: Rule) =>
 			rules
 				.put(
 					{
 						organizationId,
 						id: rule.id,
-						owner: rule.agent,
+						owner: rule.bot,
 						scope: deciderKey(rule.author),
 						status: rule.status,
 					},
@@ -66,8 +60,7 @@ export const make: Effect.Effect<typeof Rules.Service, never, AgentRecords> =
 				)
 				.pipe(Effect.as(rule))
 		return Rules.of({
-			list: (organizationId, agent) =>
-				rules.list(organizationId, { owner: agent }),
+			list: (organizationId, bot) => rules.list(organizationId, { owner: bot }),
 			create: (organizationId, input) =>
 				Effect.gen(function* () {
 					const now = yield* Clock.currentTimeMillis
@@ -79,16 +72,16 @@ export const make: Effect.Effect<typeof Rules.Service, never, AgentRecords> =
 						updatedAt: now,
 					})
 				}),
-			update: (organizationId, agent, id, input) =>
+			update: (organizationId, bot, id, input) =>
 				records.transaction(
 					"rule:" + organizationId + ":" + id,
 					Effect.gen(function* () {
 						const found = yield* rules.find(organizationId, id)
-						if (Option.isNone(found) || found.value.agent !== agent)
-							return yield* AgentsApi.AgentNotFound.make({ agent: id })
+						if (Option.isNone(found) || found.value.bot !== bot)
+							return yield* BotsApi.BotNotFound.make({ bot: id })
 						const rule = found.value
 						if (rule.version !== input.expected)
-							return yield* AgentsApi.AgentConflict.make({
+							return yield* BotsApi.BotConflict.make({
 								message: "The Rule changed. Read it again and retry.",
 							})
 						const now = yield* Clock.currentTimeMillis

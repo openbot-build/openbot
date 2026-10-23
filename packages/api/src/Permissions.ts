@@ -8,7 +8,7 @@ export const ResourceKind = Schema.Literals([
 	"organization",
 	"user",
 	"session",
-	"agent",
+	"bot",
 	"trigger",
 	"channel",
 	"request",
@@ -56,31 +56,29 @@ const permissionTree = {
 			resolve: {
 				name: "Requests Resolve",
 				description:
-					"Answer the requests of your Agents for new capabilities, such as App tool calls.",
+					"Answer the requests of your Bots for new capabilities, such as App tool calls.",
 			},
 		},
 	},
-	agents: {
-		scope: "agent",
+	bots: {
+		scope: "bot",
 		actions: {
 			read: {
-				name: "Agents Read",
-				description: "Read Agents, their memory, Rules and Grants.",
+				name: "Bots Read",
+				description: "Read Bots, their memory, Rules and Grants.",
 			},
 			write: {
-				name: "Agents Write",
-				description:
-					"Create and change Agents, their memory, Rules and Grants.",
+				name: "Bots Write",
+				description: "Create and change Bots, their memory, Rules and Grants.",
 			},
 			delegate: {
-				name: "Agents Delegate",
-				description:
-					"Give work to an Agent, from a client or from another Agent.",
+				name: "Bots Delegate",
+				description: "Give work to a Bot, from a client or from another Bot.",
 			},
 			share: {
-				name: "Agents Share",
+				name: "Bots Share",
 				description:
-					"Invite other people to use an Agent, and manage the people who use it.",
+					"Invite other people to use a Bot, and manage the people who use it.",
 			},
 		},
 	},
@@ -114,7 +112,7 @@ const permissionTree = {
 			use: {
 				name: "Channels Use",
 				description:
-					"Talk with the Agent of a Channel, and let your Agents post to it.",
+					"Talk with the Bot of a Channel, and let your Bots post to it.",
 			},
 		},
 	},
@@ -165,7 +163,7 @@ const permissionTree = {
 			read: {
 				name: "Computers Read",
 				description:
-					"Read Computers, the Agents that may use them, and their usage.",
+					"Read Computers, the Bots that may use them, and their usage.",
 			},
 			write: {
 				name: "Computers Write",
@@ -175,7 +173,7 @@ const permissionTree = {
 			use: {
 				name: "Computers Use",
 				description:
-					"Run commands, change files, open ports and use the desktop of Computers, and let your Agents use them.",
+					"Run commands, change files, open ports and use the desktop of Computers, and let your Bots use them.",
 			},
 		},
 	},
@@ -423,8 +421,8 @@ export const organizationResource = "openbot.org.{org}"
 export const selfResource = "openbot.org.{org}.user.{self}"
 const organization = organizationResource
 const self = selfResource
-/** The shared Agents of the organization. */
-const sharedAgents = "openbot.org.{org}.agent"
+/** The shared Bots of the organization. */
+const sharedBots = "openbot.org.{org}.bot"
 /** The shared triggers of the organization. */
 const sharedTriggers = "openbot.org.{org}.trigger"
 /** The Channels of the organization. */
@@ -438,10 +436,10 @@ const own: ReadonlyArray<PermissionGroupId> = [
 	"sessions.read",
 	"sessions.write",
 	"requests.resolve",
-	"agents.read",
-	"agents.write",
-	"agents.delegate",
-	"agents.share",
+	"bots.read",
+	"bots.write",
+	"bots.delegate",
+	"bots.share",
 	"triggers.read",
 	"triggers.write",
 	"channel_identities.read",
@@ -464,10 +462,10 @@ const ownWork: Policy = {
 	permissionGroups: own,
 	resources: [self],
 }
-const useSharedAgents: Policy = {
+const useSharedBots: Policy = {
 	effect: "allow",
-	permissionGroups: ["agents.read", "agents.delegate"],
-	resources: [sharedAgents],
+	permissionGroups: ["bots.read", "bots.delegate"],
+	resources: [sharedBots],
 }
 const readSharedTriggers: Policy = {
 	effect: "allow",
@@ -519,17 +517,17 @@ export const builtinRoles = [
 		id: "administrator",
 		name: "Administrator",
 		description:
-			"Manage the organization, its members, its shared Agents, its shared triggers, its shared Computers and its Channels. Work only with your own Sessions and connections.",
+			"Manage the organization, its members, its shared Bots, its shared triggers, its shared Computers and its Channels. Work only with your own Sessions and connections.",
 		policies: [
 			ownWork,
-			useSharedAgents,
+			useSharedBots,
 			readSharedTriggers,
 			useChannels,
 			useSharedComputers,
 			{
 				effect: "allow",
-				permissionGroups: ["agents.write", "agents.share"],
-				resources: [sharedAgents],
+				permissionGroups: ["bots.write", "bots.share"],
+				resources: [sharedBots],
 			},
 			{
 				effect: "allow",
@@ -572,7 +570,7 @@ export const builtinRoles = [
 			"Read the organization, its members, usage, budgets and the audit log. Work only with your own Sessions and connections.",
 		policies: [
 			ownWork,
-			useSharedAgents,
+			useSharedBots,
 			readSharedTriggers,
 			useChannels,
 			readSharedComputers,
@@ -597,10 +595,10 @@ export const builtinRoles = [
 		id: "member",
 		name: "Member",
 		description:
-			"Work with your own Agents, Sessions, triggers, Computers, connections and tokens, and use the shared Agents, triggers, Computers, Channels and models of the organization.",
+			"Work with your own Bots, Sessions, triggers, Computers, connections and tokens, and use the shared Bots, triggers, Computers, Channels and models of the organization.",
 		policies: [
 			ownWork,
-			useSharedAgents,
+			useSharedBots,
 			readSharedTriggers,
 			useChannels,
 			useSharedComputers,

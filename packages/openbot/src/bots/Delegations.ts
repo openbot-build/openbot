@@ -1,21 +1,21 @@
 import type { Session, Turn } from "@openbot-build/core"
-import { AgentsApi } from "@openbot-build/api"
+import { BotsApi } from "@openbot-build/api"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { hash } from "../capabilities/Capability.ts"
-import { AgentRecords } from "./AgentRecords.ts"
+import { BotRecords } from "./BotRecords.ts"
 
-type Delegation = AgentsApi.Delegation
+type Delegation = BotsApi.Delegation
 
 /** A delegation as it is stored, with the member it works for and its open request. */
 export const Stored = Schema.Struct({
-	delegation: AgentsApi.Delegation,
+	delegation: BotsApi.Delegation,
 	userId: Schema.String,
 	/** The queued message, when the child Session was busy. Its Turn is the work. */
 	queuedItem: Schema.optionalKey(Schema.String),
 })
 export type Stored = typeof Stored.Type
 
-/** The records of work that one Agent gave to another. */
+/** The records of work that one Bot gave to another. */
 export class Delegations extends Context.Service<
 	Delegations,
 	{
@@ -29,34 +29,34 @@ export class Delegations extends Context.Service<
 					readonly turn: Turn.Id
 					readonly toolCallId: string
 				}
-				readonly agent: AgentsApi.AgentId
-				readonly brief: AgentsApi.Brief
+				readonly bot: BotsApi.BotId
+				readonly brief: BotsApi.Brief
 				readonly status: "authorizing" | "queued" | "failed"
-				readonly result?: AgentsApi.DelegationResult
+				readonly result?: BotsApi.DelegationResult
 			},
-		) => Effect.Effect<Stored, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<Stored, BotsApi.BotStorageUnavailable>
 		readonly forCall: (
 			organizationId: string,
 			session: Session.Id,
 			toolCallId: string,
-		) => Effect.Effect<Option.Option<Stored>, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<Option.Option<Stored>, BotsApi.BotStorageUnavailable>
 		readonly forSession: (
 			organizationId: string,
 			session: Session.Id,
-		) => Effect.Effect<ReadonlyArray<Stored>, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<ReadonlyArray<Stored>, BotsApi.BotStorageUnavailable>
 		/** The running delegation whose work happens in this Session. */
 		readonly forChild: (
 			organizationId: string,
 			userId: string,
 			session: Session.Id,
-		) => Effect.Effect<Option.Option<Stored>, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<Option.Option<Stored>, BotsApi.BotStorageUnavailable>
 		/** Delegations that are not closed, in every organization. */
 		readonly open: Effect.Effect<
 			ReadonlyArray<{
 				readonly organizationId: string
 				readonly value: Stored
 			}>,
-			AgentsApi.AgentStorageUnavailable
+			BotsApi.BotStorageUnavailable
 		>
 		/**
 		 * Changes a delegation when it still has one of the expected statuses.
@@ -67,20 +67,20 @@ export class Delegations extends Context.Service<
 			id: string,
 			expected: ReadonlyArray<Delegation["status"]>,
 			update: (stored: Stored) => Stored,
-		) => Effect.Effect<Option.Option<Stored>, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<Option.Option<Stored>, BotsApi.BotStorageUnavailable>
 	}
->()("@openbot-build/openbot/agents/Delegations") {}
+>()("@openbot-build/openbot/bots/Delegations") {}
 
 export const make: Effect.Effect<
 	typeof Delegations.Service,
 	never,
-	AgentRecords
+	BotRecords
 > = Effect.gen(function* () {
-	const records = yield* AgentRecords
+	const records = yield* BotRecords
 	const delegations = records.collection(
 		"delegation",
 		Stored,
-		AgentsApi.DelegationStatus,
+		BotsApi.DelegationStatus,
 	)
 	const put = (organizationId: string, stored: Stored) =>
 		delegations
@@ -111,7 +111,7 @@ export const make: Effect.Effect<
 						delegation: {
 							id,
 							parent: input.parent,
-							agent: input.agent,
+							bot: input.bot,
 							child: null,
 							status: input.status,
 							brief: input.brief,
@@ -140,7 +140,7 @@ export const make: Effect.Effect<
 				),
 		open: Effect.gen(function* () {
 			const all = yield* Effect.forEach(
-				AgentsApi.OpenDelegationStatus.literals,
+				BotsApi.OpenDelegationStatus.literals,
 				(status) => delegations.withStatus(status),
 			)
 			return all.flat()

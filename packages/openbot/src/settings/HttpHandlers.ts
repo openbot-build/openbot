@@ -2,7 +2,7 @@ import type { Services as AuthorizationServices } from "../authorization/Authori
 import { Identity, OpenBotApi, Settings as Api } from "@openbot-build/api"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import * as DefaultAgent from "../agents/DefaultAgent.ts"
+import * as DefaultBot from "../bots/DefaultBot.ts"
 import { Settings } from "./Settings.ts"
 import * as Views from "./Views.ts"
 
@@ -14,7 +14,7 @@ export const layerMember = HttpApiBuilder.group(
 		Effect.gen(function* () {
 			const settings = yield* Settings
 			const services = yield* Effect.context<
-				AuthorizationServices | DefaultAgent.Services
+				AuthorizationServices | DefaultBot.Services
 			>()
 			return handlers
 				.handle("getMemberSettings", () =>
@@ -26,30 +26,30 @@ export const layerMember = HttpApiBuilder.group(
 					Effect.gen(function* () {
 						const caller = yield* Identity
 						const { expectedVersion, ...changes } = payload
-						const defaultAgent = changes.defaultAgent
-						if (defaultAgent !== undefined && defaultAgent !== null)
-							yield* DefaultAgent.check(caller, defaultAgent).pipe(
+						const defaultBot = changes.defaultBot
+						if (defaultBot !== undefined && defaultBot !== null)
+							yield* DefaultBot.check(caller, defaultBot).pipe(
 								Effect.provideContext(services),
 								Effect.catchTags({
-									AgentNotFound: (error) =>
+									BotNotFound: (error) =>
 										Effect.fail(
 											Api.SettingsInvalid.make({
-												message: `There is no Agent ${error.agent}.`,
+												message: `There is no Bot ${error.bot}.`,
 											}),
 										),
 									PermissionDenied: () =>
 										Effect.fail(
 											Api.SettingsInvalid.make({
-												message: `You cannot give work to Agent ${defaultAgent}.`,
+												message: `You cannot give work to Bot ${defaultBot}.`,
 											}),
 										),
-									AgentInvalid: (error) =>
+									BotInvalid: (error) =>
 										Effect.fail(
 											Api.SettingsInvalid.make({ message: error.message }),
 										),
-									AgentConflict: () =>
+									BotConflict: () =>
 										Effect.fail(Api.SettingsUnavailable.make({})),
-									AgentStorageUnavailable: () =>
+									BotStorageUnavailable: () =>
 										Effect.fail(Api.SettingsUnavailable.make({})),
 									AuthorizationUnavailable: () =>
 										Effect.fail(Api.SettingsUnavailable.make({})),

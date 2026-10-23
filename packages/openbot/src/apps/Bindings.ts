@@ -437,7 +437,7 @@ export const prepare = (
 export interface Check {
 	readonly callId: string
 	readonly arguments: Schema.JsonObject
-	/** Why the Agent wants the call, in its own words. */
+	/** Why the Bot wants the call, in its own words. */
 	readonly reason: string
 	/** The tool call that waits for the decision. It is `callId` unless the call comes from a program. */
 	readonly toolCallId?: string

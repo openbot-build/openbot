@@ -61,10 +61,10 @@ const client = (host: Host) => {
 	return { send, json, until }
 }
 
-const sharedAgent = async (host: Host, owner: Redacted.Redacted<string>) => {
+const sharedBot = async (host: Host, owner: Redacted.Redacted<string>) => {
 	const { send, json } = client(host)
-	const agent = await json(
-		send(owner, "/v1/agents", "POST", {
+	const bot = await json(
+		send(owner, "/v1/bots", "POST", {
 			name: "Team Bot",
 			role: "Helps the team in chat",
 			instructions: "Answer short.",
@@ -72,7 +72,7 @@ const sharedAgent = async (host: Host, owner: Redacted.Redacted<string>) => {
 		}),
 		201,
 	)
-	return agent.id as string
+	return bot.id as string
 }
 
 test("Markdown turns into the format of each platform, and long text splits at words", () => {
@@ -130,12 +130,12 @@ test(
 			const { send, json, until } = client(host)
 			const alice = await host.login("channels-alice")
 			const bob = await host.login("channels-bob")
-			const agent = await sharedAgent(host, alice.session)
+			const bot = await sharedBot(host, alice.session)
 
 			// Only administrators manage Channels. Secrets never come back.
 			const payload = {
 				name: "Team Slack",
-				agent,
+				bot,
 				linkPath: "/link",
 				credentials: {
 					kind: "slack",
@@ -170,23 +170,23 @@ test(
 				/xoxb-test-token|signing-secret/,
 			)
 			const mine = await json(
-				send(alice.session, "/v1/agents", "POST", {
+				send(alice.session, "/v1/bots", "POST", {
 					name: "Private Bot",
 					role: "Mine",
 					instructions: "Help me.",
 				}),
 				201,
 			)
-			const wrongAgent = await send(
+			const wrongBot = await send(
 				alice.session,
 				"/v1/organization/channels",
 				"POST",
 				{
 					...payload,
-					agent: mine.id,
+					bot: mine.id,
 				},
 			)
-			assert.equal(wrongAgent.status, 400)
+			assert.equal(wrongBot.status, 400)
 
 			const hook = (
 				body: string,
@@ -330,7 +330,7 @@ test(
 				1,
 			)
 
-			// Now the Agent answers. The Session belongs to the actor, and the Turn works for Bob.
+			// Now the Bot answers. The Session belongs to the actor, and the Turn works for Bob.
 			await message({
 				user: "UBOB",
 				text: "hello again",
@@ -540,12 +540,12 @@ test(
 		try {
 			const { send, json, until } = client(host)
 			const alice = await host.login("kinds-alice")
-			const agent = await sharedAgent(host, alice.session)
+			const bot = await sharedBot(host, alice.session)
 			const create = (credentials: unknown) =>
 				json(
 					send(alice.session, "/v1/organization/channels", "POST", {
 						name: "Bot",
-						agent,
+						bot,
 						credentials,
 					}),
 					201,
@@ -562,13 +562,13 @@ test(
 				})
 
 			// OpenBot gives Telegram the webhook and a secret. Telegram sends the secret back.
-			const bot = await create({
+			const channel = await create({
 				kind: "telegram",
 				botToken: "123456:telegram-token",
 			})
 			const registered = telegram.find((call) => call.method === "setWebhook")
 			assert.ok(registered !== undefined)
-			assert.equal(registered.body["url"], bot.webhookUrl)
+			assert.equal(registered.body["url"], channel.webhookUrl)
 			const secret = String(registered.body["secret_token"])
 			const update = JSON.stringify({
 				update_id: 1,
@@ -581,7 +581,7 @@ test(
 			})
 			assert.equal(
 				(
-					await hook(bot.id, update, {
+					await hook(channel.id, update, {
 						"x-telegram-bot-api-secret-token": "wrong",
 					})
 				).status,
@@ -589,7 +589,7 @@ test(
 			)
 			assert.equal(
 				(
-					await hook(bot.id, update, {
+					await hook(channel.id, update, {
 						"x-telegram-bot-api-secret-token": secret,
 					})
 				).status,

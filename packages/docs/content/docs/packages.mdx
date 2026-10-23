@@ -16,7 +16,7 @@ All packages are named `@openbot-build/<name>`, have version `0.1.0`, and use `e
 | `openbot`       | The server, its plugins, and its model providers. See [Run from code](/docs/server).           |
 | `api`           | The typed HTTP contract. The server, the client, and the API reference use it.                 |
 | `client`        | The TypeScript client. See [Client](/docs/client).                                             |
-| `core`          | The Agent core: Agents, Sessions, Turns, Timelines, storage, plugins, and skills.              |
+| `core`          | The Bot core: Bots, Sessions, Turns, Timelines, storage, plugins, and skills.                  |
 | `protocol`      | The OpenBot App Protocol: publish, find, connect, and index Apps.                              |
 | `protocol-test` | A public test service for the App Protocol. See [Protocol test](/docs/protocol-test).          |
 | `cli`           | The `openbot` command. It runs `openbot-<name>` for `openbot <name>`.                          |
@@ -29,17 +29,17 @@ The examples below leave out the model. To run them, provide a `LanguageModel` L
 
 ## core
 
-`@openbot-build/core` runs Agents. It has these main parts:
+`@openbot-build/core` runs Bots. It has these main parts:
 
-| Module                                       | What it does                                                                                            |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `Agent`                                      | An Agent definition: tools, plugins, providers, and compaction. One definition can serve many Sessions. |
-| `SessionRuntime`                             | Runs Turns: `execute`, `stream`, `start`, `steer`, `approve`, `interrupt`, and more.                    |
-| `SessionStore`, `Store`                      | Saves Sessions and their Timelines.                                                                     |
-| `SessionStoreMemory`                         | A store that keeps everything in memory, for tests and scripts.                                         |
-| `Timeline`, `Item`, `Turn`, `Session`        | The data types.                                                                                         |
-| `Plugin`, `PluginComposition`, `PluginState` | Make and combine plugins, and give them saved state.                                                    |
-| `Skill`, `SkillMap`                          | Describe skills and keep a list of them.                                                                |
+| Module                                       | What it does                                                                                         |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `Bot`                                        | A Bot definition: tools, plugins, providers, and compaction. One definition can serve many Sessions. |
+| `SessionRuntime`                             | Runs Turns: `execute`, `stream`, `start`, `steer`, `approve`, `interrupt`, and more.                 |
+| `SessionStore`, `Store`                      | Saves Sessions and their Timelines.                                                                  |
+| `SessionStoreMemory`                         | A store that keeps everything in memory, for tests and scripts.                                      |
+| `Timeline`, `Item`, `Turn`, `Session`        | The data types.                                                                                      |
+| `Plugin`, `PluginComposition`, `PluginState` | Make and combine plugins, and give them saved state.                                                 |
+| `Skill`, `SkillMap`                          | Describe skills and keep a list of them.                                                             |
 
 A **Session** is one line of work. Each input starts a **Turn**. A Turn can have many model steps and tool calls.
 The **Timeline** is the saved history of a Session. Every change makes a new Timeline version, so you can read or fork from an earlier point.
@@ -58,7 +58,7 @@ const program = Effect.scoped(
 		const store = yield* SessionStoreMemory.make(definition)
 		const runtime = yield* SessionRuntime.make({
 			store,
-			agent: { toolkit: Toolkit.empty },
+			bot: { toolkit: Toolkit.empty },
 		})
 		const view = yield* store.create({ metadata: { title: "Closures" } })
 		return yield* runtime.execute({
@@ -117,12 +117,12 @@ Your program finds, loads, and runs the skills.
 
 ## Plugins in openbot
 
-`@openbot-build/openbot` has all plugins of OpenBot. The server uses the Agent, App, work, and memory plugins in every Turn. The work plugin gives the Agent its todo list. You can also use the memory and Turn limit plugins with your own `SessionRuntime`.
+`@openbot-build/openbot` has all plugins of OpenBot. The server uses the Bot, App, work, and memory plugins in every Turn. The work plugin gives the Bot its todo list. You can also use the memory and Turn limit plugins with your own `SessionRuntime`.
 
 ### Memory
 
-The memory plugin keeps learned memory: short facts that the Agent learns in a Session and uses in later Turns.
-The server uses it for the memory API. See [Memory](/docs/memory). The schemas of the memory API are in `api`, as `Memory` and `AgentMemory`.
+The memory plugin keeps learned memory: short facts that the Bot learns in a Session and uses in later Turns.
+The server uses it for the memory API. See [Memory](/docs/memory). The schemas of the memory API are in `api`, as `Memory` and `BotMemory`.
 
 ```ts
 import { SessionStoreMemory, Store } from "@openbot-build/core"
@@ -186,7 +186,7 @@ const runtime =
 	yield *
 	SessionRuntime.make({
 		store,
-		agent: { plugin: TurnLimiter.make({ maxSteps: 4 }) },
+		bot: { plugin: TurnLimiter.make({ maxSteps: 4 }) },
 	})
 ```
 

@@ -30,7 +30,7 @@ export class Signals extends Context.Service<
 		readonly publish: (signal: Signal) => Effect.Effect<void>
 		readonly pubsub: PubSub.PubSub<Signal>
 	}
->()("@openbot-build/openbot/agents/Signals") {}
+>()("@openbot-build/openbot/bots/Signals") {}
 
 export const layer = Layer.effect(
 	Signals,
@@ -44,7 +44,7 @@ export const layer = Layer.effect(
 	}),
 )
 
-/** Publishes when the service is there. Code that runs without Agents does nothing. */
+/** Publishes when the service is there. Code that runs without Bots does nothing. */
 export const publish = (signal: Signal) =>
 	Effect.serviceOption(Signals).pipe(
 		Effect.flatMap((signals) =>

@@ -1,14 +1,14 @@
 ---
 title: Computers
-description: 给 Agent 一台机器，让它在上面运行命令、修改文件和使用桌面。
+description: 给 Bot 一台机器，让它在上面运行命令、修改文件和使用桌面。
 ---
 
-**Computer** 是 Agent 工作的机器。Agent 在上面运行 shell 命令、读写文件、打开端口和使用桌面。Computer 有两种：
+**Computer** 是 Bot 工作的机器。Bot 在上面运行 shell 命令、读写文件、打开端口和使用桌面。Computer 有两种：
 
 - Computer 提供方（例如 E2B 或 Daytona）那里的一个**沙箱**。你使用自己在提供方那里的账户。提供方直接向你收费。
 - **你自己的机器**，例如笔记本电脑或服务器。你只需要把它和 OpenBot 配对一次。之后，机器上的一个小程序会保持与 OpenBot 的连接。
 
-Computer 属于一个成员或属于组织，和[触发器](/zh-cn/docs/triggers)一样。Agent 从不拥有 Computer。Agent 得到的是一台 Computer 的**使用权**。很多 Agent 可以使用同一台 Computer。
+Computer 属于一个成员或属于组织，和[触发器](/zh-cn/docs/triggers)一样。Bot 从不拥有 Computer。Bot 得到的是一台 Computer 的**使用权**。很多 Bot 可以使用同一台 Computer。
 
 ---
 
@@ -23,10 +23,10 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/computer-providers
 ```
 
-| 类型      | 字段                                | 它是什么                                                                                                                          |
-| --------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `e2b`     | `apiKey`、`apiUrl`、`sandboxDomain` | 任何使用 E2B API 的服务：E2B、PPIO、阿里云 Agent Sandbox，或你自己的 E2B。对 E2B 以外的服务，请设置 `apiUrl` 和 `sandboxDomain`。 |
-| `daytona` | `apiKey`、`apiUrl`、`target`        | Daytona，托管的或你自己的。`target` 是区域，例如 `us` 或 `eu`。                                                                   |
+| 类型      | 字段                                | 它是什么                                                                                                                        |
+| --------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `e2b`     | `apiKey`、`apiUrl`、`sandboxDomain` | 任何使用 E2B API 的服务：E2B、PPIO、阿里云 Bot Sandbox，或你自己的 E2B。对 E2B 以外的服务，请设置 `apiUrl` 和 `sandboxDomain`。 |
+| `daytona` | `apiKey`、`apiUrl`、`target`        | Daytona，托管的或你自己的。`target` 是区域，例如 `us` 或 `eu`。                                                                 |
 
 OpenBot 在保存密钥之前，会先向提供方检查它。密钥永远不会再被取出。API 只显示它的最后几个字符。发送 `"shared": true` 可以创建组织共享的提供方。
 
@@ -99,34 +99,34 @@ openbot computer connect
 
 ---
 
-## Agent 和 Computer 的使用权
+## Bot 和 Computer 的使用权
 
-给你的 Agent 一台 Computer 的使用权：
+给你的 Bot 一台 Computer 的使用权：
 
 ```sh
 curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  https://api.example.com/v1/computers/cmp_.../agents/agt_...
+  https://api.example.com/v1/computers/cmp_.../bots/bot_...
 ```
 
-你必须能使用这台 Computer，并且能修改这个 Agent。`GET /v1/computers/:computerId/agents` 列出有使用权的 Agent。`DELETE /v1/computers/:computerId/agents/:agentId` 收回使用权。Agent 被归档时，使用权也会结束。Computer 会留下。
+你必须能使用这台 Computer，并且能修改这个 Bot。`GET /v1/computers/:computerId/bots` 列出有使用权的 Bot。`DELETE /v1/computers/:computerId/bots/:botId` 收回使用权。Bot 被归档时，使用权也会结束。Computer 会留下。
 
-Agent 有用于 Computer 的工具。它用 `openbot_computers_list` 列出 Computer。然后它可以：
+Bot 有用于 Computer 的工具。它用 `openbot_computers_list` 列出 Computer。然后它可以：
 
-- 用 `openbot_computers_acquire` 请求一台已有 Computer 的使用权。子 Agent 可以请求把工作交给它的那个 Agent 的 Computer。
-- 用 `openbot_computers_create` 创建一个新沙箱。这台 Computer 属于 Agent 的那个人，Agent 得到它的使用权。
+- 用 `openbot_computers_acquire` 请求一台已有 Computer 的使用权。子 Bot 可以请求把工作交给它的那个 Bot 的 Computer。
+- 用 `openbot_computers_create` 创建一个新沙箱。这台 Computer 属于 Bot 的那个人，Bot 得到它的使用权。
 - 用 `openbot_computers_release` 放弃它的使用权。带上 `destroy` 时，它还会删除这台 Computer。
 - 运行命令、修改文件、打开端口和使用桌面。截图会作为图片返回，模型可以看到它。
 
 这四个动作是[能力](/zh-cn/docs/requests#能力)。[决策者链](/zh-cn/docs/requests#决策者链)会决定它们，和其他能力一样：
 
-| 动作                | 目标           | Agent 何时使用                   |
+| 动作                | 目标           | Bot 何时使用                     |
 | ------------------- | -------------- | -------------------------------- |
 | `computers.acquire` | Computer 的 ID | 请求一台 Computer 的使用权时。   |
 | `computers.create`  | 提供方的 ID    | 创建一个新沙箱时。               |
 | `computers.delete`  | Computer 的 ID | 删除一台 Computer 和它的文件时。 |
 | `computers.expose`  | Computer 的 ID | 给一个端口一个公开地址时。       |
 
-在 Computer 上的其他工作都不需要决定。Computer 就是边界：有使用权的 Agent 可以在里面做任何事。
+在 Computer 上的其他工作都不需要决定。Computer 就是边界：有使用权的 Bot 可以在里面做任何事。
 
 ---
 

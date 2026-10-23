@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "UI を持たない、API ファーストの Agent プラットフォーム。",
+	description: "UI を持たない、API ファーストの Bot プラットフォーム。",
 	nav: {
 		label: "サイト",
 		docs: "ドキュメント",
@@ -9,8 +9,8 @@ export default {
 		language: "言語",
 	},
 	hero: {
-		title: ["呼び出せる Agent。", "確かめられる結果。"],
-		body: "OpenBot は、ユーザーインターフェースのないオープンソースの Agent プラットフォームです。HTTP で Agent に仕事を渡せます。",
+		title: ["呼び出せる Bot。", "確かめられる結果。"],
+		body: "OpenBot は、ユーザーインターフェースのないオープンソースの Bot プラットフォームです。HTTP で Bot に仕事を渡せます。",
 		quickStart: "クイックスタート",
 		apiReference: "API リファレンス",
 		visual: "Turn を始める",
@@ -55,7 +55,7 @@ export default {
 			},
 			{
 				title: "オープンな App",
-				text: "Agent は、公開者が OpenBot App Protocol でオープンなウェブに置いた App を見つけて使います。",
+				text: "Bot は、公開者が OpenBot App Protocol でオープンなウェブに置いた App を見つけて使います。",
 			},
 			{
 				title: "好きなモデルを",

@@ -531,7 +531,7 @@ test("cache eviction keeps active execution and scoped interruption working", as
 				})
 				const runtime = yield* SessionRuntime.make({
 					store: runtimeStore,
-					agent: {},
+					bot: {},
 				})
 				const entered = yield* Deferred.make<void>()
 				const model = yield* LanguageModel.make({

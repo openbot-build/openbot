@@ -24,7 +24,7 @@ const session = (id: string, kind: string, spaced: boolean) => {
 		settings: { mode: "default" },
 		turns: [{ id: "turn_1", settings: { mode: "default" } }],
 		business: {
-			[host]: { agent: "agt_1", kind, run: "run_1" },
+			[host]: { bot: "bot_1", kind, run: "run_1" },
 		},
 	}
 	return {
@@ -75,7 +75,7 @@ test("old Sessions get the mode build, Sessions of Runs become direct, Workflow 
 					version: 1,
 					updated_at: 1,
 				})}`
-				for (const action of ["workflow.run_started", "agent.created"])
+				for (const action of ["workflow.run_started", "bot.created"])
 					yield* sql`insert into openbot_audit_logs ${sql.insert({
 						organization_id: "org_a",
 						created_at: 1,
@@ -105,7 +105,7 @@ test("old Sessions get the mode build, Sessions of Runs become direct, Workflow 
 					assert.equal(bodies[id].turns[0].settings.mode, "build", id)
 				}
 				assert.deepEqual(bodies["ses_run"].business[host], {
-					agent: "agt_1",
+					bot: "bot_1",
 					kind: "direct",
 				})
 				assert.equal(bodies["ses_direct"].business[host].kind, "direct")
@@ -126,7 +126,7 @@ test("old Sessions get the mode build, Sessions of Runs become direct, Workflow 
 				}>`select action from openbot_audit_logs order by sequence`
 				assert.deepEqual(
 					audit.map((row) => row.action),
-					["agent.created"],
+					["bot.created"],
 				)
 				const cluster = yield* sql<{
 					readonly tablename: string

@@ -16,7 +16,7 @@ OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot` 把各�
 | `openbot`       | 服务器、它的插件和它的模型提供方。请看[从代码中运行](/zh-cn/docs/server)。          |
 | `api`           | 带类型的 HTTP 契约。服务器、客户端和 API 参考都使用它。                             |
 | `client`        | TypeScript 客户端。请看[客户端](/zh-cn/docs/client)。                               |
-| `core`          | Agent 核心：Agent、Session、Turn、Timeline、存储、插件和技能。                      |
+| `core`          | Bot 核心：Bot、Session、Turn、Timeline、存储、插件和技能。                          |
 | `protocol`      | OpenBot App Protocol：发布、查找、连接 App，并为 App 建立索引。                     |
 | `protocol-test` | App Protocol 的公开测试服务。请看[协议测试](/zh-cn/docs/protocol-test)。            |
 | `cli`           | `openbot` 命令。对于 `openbot <name>`，它会运行 `openbot-<name>`。                  |
@@ -29,11 +29,11 @@ OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot` 把各�
 
 ## core
 
-`@openbot-build/core` 负责运行 Agent。它有以下主要部分：
+`@openbot-build/core` 负责运行 Bot。它有以下主要部分：
 
 | 模块                                         | 作用                                                                          |
 | -------------------------------------------- | ----------------------------------------------------------------------------- |
-| `Agent`                                      | Agent 定义：工具、插件、提供方和压缩。一个定义可以服务多个 Session。          |
+| `Bot`                                        | Bot 定义：工具、插件、提供方和压缩。一个定义可以服务多个 Session。            |
 | `SessionRuntime`                             | 运行 Turn：`execute`、`stream`、`start`、`steer`、`approve`、`interrupt` 等。 |
 | `SessionStore`、`Store`                      | 保存 Session 及其 Timeline。                                                  |
 | `SessionStoreMemory`                         | 把所有内容都放在内存中的存储，用于测试和脚本。                                |
@@ -58,7 +58,7 @@ const program = Effect.scoped(
 		const store = yield* SessionStoreMemory.make(definition)
 		const runtime = yield* SessionRuntime.make({
 			store,
-			agent: { toolkit: Toolkit.empty },
+			bot: { toolkit: Toolkit.empty },
 		})
 		const view = yield* store.create({ metadata: { title: "Closures" } })
 		return yield* runtime.execute({
@@ -117,12 +117,12 @@ const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
 
 ## openbot 中的插件
 
-`@openbot-build/openbot` 包含 OpenBot 的所有插件。服务器在每个 Turn 中都使用 Agent、App、工作和记忆插件。工作插件为 Agent 提供待办列表。你也可以在自己的 `SessionRuntime` 中使用记忆插件和 Turn 限制插件。
+`@openbot-build/openbot` 包含 OpenBot 的所有插件。服务器在每个 Turn 中都使用 Bot、App、工作和记忆插件。工作插件为 Bot 提供待办列表。你也可以在自己的 `SessionRuntime` 中使用记忆插件和 Turn 限制插件。
 
 ### 记忆
 
-记忆插件保存学到的记忆：Agent 在 Session 中学到、并在之后的 Turn 中使用的简短事实。
-服务器用它实现记忆 API。请看 [Memory](/zh-cn/docs/memory)。记忆 API 的 schema 在 `api` 中，名为 `Memory` 和 `AgentMemory`。
+记忆插件保存学到的记忆：Bot 在 Session 中学到、并在之后的 Turn 中使用的简短事实。
+服务器用它实现记忆 API。请看 [Memory](/zh-cn/docs/memory)。记忆 API 的 schema 在 `api` 中，名为 `Memory` 和 `BotMemory`。
 
 ```ts
 import { SessionStoreMemory, Store } from "@openbot-build/core"
@@ -186,7 +186,7 @@ const runtime =
 	yield *
 	SessionRuntime.make({
 		store,
-		agent: { plugin: TurnLimiter.make({ maxSteps: 4 }) },
+		bot: { plugin: TurnLimiter.make({ maxSteps: 4 }) },
 	})
 ```
 

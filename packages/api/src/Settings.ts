@@ -1,7 +1,7 @@
 import { Config } from "@openbot-build/core"
 import { Schema } from "effect"
 import { HttpApiSchema } from "effect/http-api"
-import { AgentId } from "./AgentsApi.ts"
+import { BotId } from "./BotsApi.ts"
 import { Restriction } from "./AppIndexApi.ts"
 import * as Memory from "./Memory.ts"
 import { Policy, RoleId } from "./Permissions.ts"
@@ -96,11 +96,11 @@ export const OrganizationCreation = Schema.Literals([
 export type OrganizationCreation = typeof OrganizationCreation.Type
 
 /**
- * The limits of Code Mode. They protect the host, not the Agent. Every instance
+ * The limits of Code Mode. They protect the host, not the Bot. Every instance
  * uses the same limits, so a program acts the same when another instance runs it again.
  */
 export const CodeMode = Schema.Struct({
-	/** When false, Agents do not get the Code Mode tools. */
+	/** When false, Bots do not get the Code Mode tools. */
 	enabled: Schema.Boolean,
 	/** How long one run of a program may take, in milliseconds. Time spent waiting for decisions does not count. */
 	timeoutMs: Schema.Int.check(
@@ -156,8 +156,8 @@ export const TokenRateLimits = Schema.Struct({
 	organization: Schema.NullOr(TokenRate),
 	/** The model calls that work for one member. */
 	member: Schema.NullOr(TokenRate),
-	/** The model calls of one Agent. */
-	agent: Schema.NullOr(TokenRate),
+	/** The model calls of one Bot. */
+	bot: Schema.NullOr(TokenRate),
 	/** The model calls of work that one user token started. */
 	token: Schema.NullOr(TokenRate),
 })
@@ -165,7 +165,7 @@ export type TokenRateLimits = typeof TokenRateLimits.Type
 export const tokenRateDefaults: TokenRateLimits = {
 	organization: null,
 	member: null,
-	agent: null,
+	bot: null,
 	token: null,
 }
 
@@ -229,16 +229,16 @@ export const OrganizationSettings = Schema.Struct({
 	version: Version,
 	/** The model that judges Rules. Null means that no model judges Rules. */
 	rulesModel: Schema.NullOr(Config.Selection),
-	/** The model of the memory Agent of each Agent. Null means that Agents learn no memory. */
-	agentMemoryModel: Schema.NullOr(Config.Selection),
+	/** The model of the memory Bot of each Bot. Null means that Bots learn no memory. */
+	botMemoryModel: Schema.NullOr(Config.Selection),
 	/** The decision model, such as Jev. It must be a model of type `decision`. Null means none. */
 	decisionModel: Schema.NullOr(Config.Selection),
 	/** The memory switches of a new Session. */
 	memory: Memory.Settings,
-	/** Let the memory Agent learn from Sessions and add to the input of Turns. */
-	agentMemory: Schema.Boolean,
+	/** Let the memory Bot learn from Sessions and add to the input of Turns. */
+	botMemory: Schema.Boolean,
 	requestTimeoutMs: RequestTimeout,
-	/** How plans are approved when no member, Agent or Session sets it. */
+	/** How plans are approved when no member, Bot or Session sets it. */
 	planApproval: PlanApproval,
 	appReadRules: AppReadRules,
 	/** The roles of a new member. */
@@ -256,10 +256,10 @@ export type OrganizationSettings = typeof OrganizationSettings.Type
 export const UpdateOrganizationSettingsRequest = Schema.Struct({
 	expectedVersion: Version,
 	rulesModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
-	agentMemoryModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
+	botMemoryModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
 	decisionModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
 	memory: Schema.optionalKey(Memory.Settings),
-	agentMemory: Schema.optionalKey(Schema.Boolean),
+	botMemory: Schema.optionalKey(Schema.Boolean),
 	requestTimeoutMs: Schema.optionalKey(RequestTimeout),
 	planApproval: Schema.optionalKey(PlanApproval),
 	appReadRules: Schema.optionalKey(AppReadRules),
@@ -273,21 +273,21 @@ export type UpdateOrganizationSettingsRequest =
 /** The settings of one member in one organization. */
 export const MemberSettings = Schema.Struct({
 	version: Version,
-	/** How the plans of your Agents are approved. `null` follows the organization. */
+	/** How the plans of your Bots are approved. `null` follows the organization. */
 	planApproval: Schema.NullOr(PlanApproval),
 	/**
-	 * The Agent that works when you start a Session or a trigger without an Agent.
-	 * It is one of your own top Agents or a shared Agent. `null` means that you have none.
+	 * The Bot that works when you start a Session or a trigger without a Bot.
+	 * It is one of your own top Bots or a shared Bot. `null` means that you have none.
 	 */
-	defaultAgent: Schema.NullOr(AgentId),
+	defaultBot: Schema.NullOr(BotId),
 	updatedAt: Schema.String,
 })
 export type MemberSettings = typeof MemberSettings.Type
 export const UpdateMemberSettingsRequest = Schema.Struct({
 	expectedVersion: Version,
 	planApproval: Schema.optionalKey(Schema.NullOr(PlanApproval)),
-	/** `null` removes your default Agent. */
-	defaultAgent: Schema.optionalKey(Schema.NullOr(AgentId)),
+	/** `null` removes your default Bot. */
+	defaultBot: Schema.optionalKey(Schema.NullOr(BotId)),
 })
 export type UpdateMemberSettingsRequest =
 	typeof UpdateMemberSettingsRequest.Type

@@ -1,6 +1,6 @@
-import { AgentsApi, type Caller, RequestsApi } from "@openbot-build/api"
+import { BotsApi, type Caller, RequestsApi } from "@openbot-build/api"
 import { Effect, Option } from "effect"
-import { Signal, Signals } from "../agents/Signals.ts"
+import { Signal, Signals } from "../bots/Signals.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { Requests } from "./Requests.ts"
 
@@ -54,7 +54,7 @@ export const resolveAsPerson = (
 					...(payload.scope === undefined ? {} : { scope: payload.scope }),
 				},
 			})
-			.pipe(Effect.mapError(() => AgentsApi.AgentStorageUnavailable.make({})))
+			.pipe(Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})))
 		// The waiting work goes on at once.
 		yield* signals.publish(
 			Signal.RequestChanged({

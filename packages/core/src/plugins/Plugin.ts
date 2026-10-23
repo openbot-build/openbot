@@ -9,11 +9,7 @@ import {
 	type Scope,
 } from "effect"
 import { type Prompt, type Toolkit, type Tool } from "effect/ai"
-import {
-	Context,
-	type Event,
-	type Options as AgentOptions,
-} from "../agent/Agent.ts"
+import { Context, type Event, type Options as BotOptions } from "../bot/Bot.ts"
 import type * as Timeline from "../timeline/Timeline.ts"
 import type * as Session from "../session/Session.ts"
 import type * as SessionStore from "../store/SessionStore.ts"
@@ -305,7 +301,7 @@ export interface Options<
 	TK extends Toolkit.Any = Toolkit.Any,
 	E = never,
 	R = never,
-> extends Omit<AgentOptions<Record<string, Tool.Any>>, "toolkit"> {
+> extends Omit<BotOptions<Record<string, Tool.Any>>, "toolkit"> {
 	readonly toolkit: Effect.Effect<TK, E, R>
 	readonly instructions: Prompt.Prompt
 	/**

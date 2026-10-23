@@ -1,14 +1,14 @@
 import type { Session } from "@openbot-build/core"
 import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
 import type {
-	AgentsApi,
+	BotsApi,
 	AppExecution,
 	CodeRunsApi,
 	ComputersApi,
 } from "@openbot-build/api"
 import { Context, Effect, Layer, Option } from "effect"
 import { can } from "../authorization/Check.ts"
-import { Signal, Signals } from "../agents/Signals.ts"
+import { Signal, Signals } from "../bots/Signals.ts"
 import { type Capability, describe, permission } from "./Capability.ts"
 import { Grants } from "./Grants.ts"
 import { Judge } from "./Judge.ts"
@@ -21,11 +21,11 @@ export type Answer = "allow" | "pause"
 
 export interface Attempt {
 	readonly capability: Capability
-	/** Why the Agent wants it, in its own words. */
+	/** Why the Bot wants it, in its own words. */
 	readonly reason: string
 	readonly toolCallId: string
-	/** The target Agent, for actions on an Agent. */
-	readonly target?: AgentsApi.Agent
+	/** The target Bot, for actions on a Bot. */
+	readonly target?: BotsApi.Bot
 	/** The owner of the target Computer or Computer provider, for actions on Computers. */
 	readonly computerOwner?: ComputersApi.ComputerOwner
 	/** The deployment owner allows this without asking, for example a read-only App tool. */
@@ -38,9 +38,9 @@ export interface Attempt {
 }
 
 /**
- * Checks each attempt of an Agent to use a capability. Agents have no limits that they know of.
+ * Checks each attempt of a Bot to use a capability. Bots have no limits that they know of.
  * The steps are: the policy of the member, Grants, Rules with the judge, and then a request
- * to the decider above the Agent.
+ * to the decider above the Bot.
  */
 export class Gate extends Context.Service<
 	Gate,
@@ -50,10 +50,10 @@ export class Gate extends Context.Service<
 		 * and never runs without a decision.
 		 */
 		readonly check: (attempt: Attempt) => Effect.Effect<Answer>
-		/** True when an Agent may use the capability without asking anybody. */
+		/** True when a Bot may use the capability without asking anybody. */
 		readonly holds: (input: {
 			readonly organizationId: string
-			readonly agent: AgentsApi.Agent
+			readonly bot: BotsApi.Bot
 			readonly capability: Capability
 			readonly session: Session.Id
 		}) => Effect.Effect<boolean>
@@ -71,15 +71,15 @@ export const make: Effect.Effect<
 	const requests = yield* Requests
 	const signals = yield* Signals
 	const services = yield* Effect.context<AuthorizationServices>()
-	/** The verdict of the Rules for an Agent, and the Agents that wrote the Rules it quotes. */
+	/** The verdict of the Rules for a Bot, and the Bots that wrote the Rules it quotes. */
 	const judged = (input: {
 		readonly organizationId: string
-		readonly agent: AgentsApi.Agent
+		readonly bot: BotsApi.Bot
 		readonly capability: Capability
 		readonly reason: string
 	}) =>
 		Effect.gen(function* () {
-			const list = yield* rules.list(input.organizationId, input.agent.id)
+			const list = yield* rules.list(input.organizationId, input.bot.id)
 			const verdict = yield* judge.decide({ ...input, rules: list })
 			const authors = verdict.citations.flatMap((citation) =>
 				list
@@ -89,12 +89,12 @@ export const make: Effect.Effect<
 			return { verdict, authors }
 		})
 	/**
-	 * True when an Agent holds a capability by a Grant, or by a Rule from a person.
-	 * A Rule from an Agent counts only when that Agent holds the capability too.
+	 * True when a Bot holds a capability by a Grant, or by a Rule from a person.
+	 * A Rule from a Bot counts only when that Bot holds the capability too.
 	 */
 	const holds = (input: {
 		readonly organizationId: string
-		readonly agent: AgentsApi.Agent
+		readonly bot: BotsApi.Bot
 		readonly capability: Capability
 		readonly session: Session.Id
 		readonly depth?: number
@@ -103,7 +103,7 @@ export const make: Effect.Effect<
 			if ((input.depth ?? 0) > 8) return false
 			const grant = yield* grants.match({
 				organizationId: input.organizationId,
-				agent: input.agent.id,
+				bot: input.bot.id,
 				capability: input.capability,
 				session: input.session,
 			})
@@ -118,18 +118,18 @@ export const make: Effect.Effect<
 	const check: typeof Gate.Service.check = (attempt) =>
 		Effect.gen(function* () {
 			const work = yield* Effect.serviceOption(Work)
-			// Without the current Agent nothing can decide, so the call waits.
+			// Without the current Bot nothing can decide, so the call waits.
 			if (Option.isNone(work)) return "pause" as const
 			const current = work.value
 			const organizationId = current.caller.organizationId
 			const record = (decided?: {
 				readonly allow: boolean
-				readonly by: AgentsApi.Decider
+				readonly by: BotsApi.Decider
 				readonly reason?: string
 			}) =>
 				requests
 					.create(organizationId, {
-						agent: current.agent.id,
+						bot: current.bot.id,
 						chain: current.chain,
 						deciders: current.deciders,
 						capability: attempt.capability,
@@ -157,8 +157,8 @@ export const make: Effect.Effect<
 				caller: current.caller,
 				capability: attempt.capability,
 				session: current.session,
-				self: current.agent,
-				...(attempt.target === undefined ? {} : { agent: attempt.target }),
+				self: current.bot,
+				...(attempt.target === undefined ? {} : { bot: attempt.target }),
 				...(attempt.computerOwner === undefined
 					? {}
 					: { computerOwner: attempt.computerOwner }),
@@ -185,7 +185,7 @@ export const make: Effect.Effect<
 			if (attempt.ask?.person === true) return yield* record()
 			const grant = yield* grants.match({
 				organizationId,
-				agent: current.agent.id,
+				bot: current.bot.id,
 				capability: attempt.capability,
 				session: current.session,
 			})
@@ -201,7 +201,7 @@ export const make: Effect.Effect<
 			}
 			const { verdict, authors } = yield* judged({
 				organizationId,
-				agent: current.agent,
+				bot: current.bot,
 				capability: attempt.capability,
 				reason: attempt.reason,
 			})
@@ -214,14 +214,14 @@ export const make: Effect.Effect<
 				})
 			if (verdict.decision === "allow") {
 				const all = yield* Effect.forEach(authors, (author) =>
-					author._tag === "Agent"
+					author._tag === "Bot"
 						? Effect.gen(function* () {
-								// Only an Agent above this one in its owner chain can set its Rules.
-								if (!current.deciders.includes(author.agent)) return false
-								const index = current.chain.agents.indexOf(author.agent)
+								// Only a Bot above this one in its owner chain can set its Rules.
+								if (!current.deciders.includes(author.bot)) return false
+								const index = current.chain.bots.indexOf(author.bot)
 								return yield* holds({
 									organizationId,
-									agent: { ...current.agent, id: author.agent },
+									bot: { ...current.bot, id: author.bot },
 									capability: attempt.capability,
 									session:
 										(index < 0 ? undefined : current.chain.sessions[index]) ??

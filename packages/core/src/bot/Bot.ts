@@ -66,7 +66,7 @@ export class Context extends EffectContext.Service<
 		readonly step: Effect.Effect<number>
 		readonly history: Effect.Effect<Prompt.Prompt>
 	}
->()("@openbot-build/core/agent/Agent/Context") {
+>()("@openbot-build/core/bot/Bot/Context") {
 	static provide<A, E, R>(
 		stream: Stream.Stream<A, E, R>,
 		context: typeof Context.Service,

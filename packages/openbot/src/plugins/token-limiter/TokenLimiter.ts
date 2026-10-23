@@ -1,6 +1,6 @@
 import { Data, Effect, Match, Ref, Stream } from "effect"
 import { type Prompt } from "effect/ai"
-import { Agent, Plugin } from "@openbot-build/core"
+import { Bot, Plugin } from "@openbot-build/core"
 
 export interface Options {
 	/** Maximum number of input and output tokens in one execution. */
@@ -34,7 +34,7 @@ export const make = ({
 			Effect.gen(function* () {
 				if (!valid) return yield* new InvalidMaxTokens({ maxTokens })
 
-				const context = yield* Agent.Context
+				const context = yield* Bot.Context
 				const used = yield* Ref.make(0)
 				return next(options).pipe(
 					Stream.tap((event) =>

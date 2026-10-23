@@ -1,9 +1,9 @@
 ---
 title: Apps
-description: Connect outside services so the Agent can use them in Turns.
+description: Connect outside services so the Bot can use them in Turns.
 ---
 
-An **App** is an outside service that the Agent can use. Each App is published on the web with the [OpenBot App Protocol](/docs/protocol). This page shows how to connect an App to your account, sign in to it, and use it in Turns.
+An **App** is an outside service that the Bot can use. Each App is published on the web with the [OpenBot App Protocol](/docs/protocol). This page shows how to connect an App to your account, sign in to it, and use it in Turns.
 
 All examples use a user token. The same calls also work with the session cookie. See [Authentication](/docs/authentication).
 
@@ -93,7 +93,7 @@ curl -X POST https://api.example.com/v1/connections/<connection id>/verify \
 
 ### Availability
 
-The `availability` field tells you if the Agent can use a connection.
+The `availability` field tells you if the Bot can use a connection.
 
 | `_tag`                 | Meaning                                                                  |
 | ---------------------- | ------------------------------------------------------------------------ |
@@ -155,7 +155,7 @@ To sign out of the App, send `DELETE /v1/connections/:connectionId/authorization
 
 A refresh never asks for more access. If it fails, the connection becomes `AuthorizationExpired`.
 
-When an App changes its endpoint, private settings, provider, or scopes, the connection becomes `NeedsRevalidation`. The Agent cannot use it until you review it. Send `{ "revision", "draftId", "remoteIndex", "values", "confirmed": true }` to `revalidate`. OpenBot does not send old tokens to a new endpoint. An App that needs sign-in then needs a new sign-in.
+When an App changes its endpoint, private settings, provider, or scopes, the connection becomes `NeedsRevalidation`. The Bot cannot use it until you review it. Send `{ "revision", "draftId", "remoteIndex", "values", "confirmed": true }` to `revalidate`. OpenBot does not send old tokens to a new endpoint. An App that needs sign-in then needs a new sign-in.
 
 Remove returns 204. OpenBot first turns the connection off, then revokes and deletes its tokens. If cleanup does not finish, you get 409 `ConnectionCleanupPending`. Send the same `DELETE` again to finish it.
 
@@ -172,7 +172,7 @@ When a Turn runs, OpenBot gives the model a tool for each capability of your usa
 - **Tools** become callable tools. Tools whose `visibility` does not include `model` stay hidden from the model.
 - **Resources**, **resource templates** and **prompts** become read tools.
 
-Every App tool call goes through the [capability check](/docs/requests) first. The first call of a tool usually makes a request that a decider answers. A Grant or a Rule can then cover later calls. Reads of resources and prompts need no decision, and neither do tools that the organization marked as reads in its [settings](/docs/organization#settings). App notes never decide this. Each App tool has an extra `openbot_reason` parameter for the reason of the Agent. OpenBot never sends it to the App.
+Every App tool call goes through the [capability check](/docs/requests) first. The first call of a tool usually makes a request that a decider answers. A Grant or a Rule can then cover later calls. Reads of resources and prompts need no decision, and neither do tools that the organization marked as reads in its [settings](/docs/organization#settings). App notes never decide this. Each App tool has an extra `openbot_reason` parameter for the reason of the Bot. OpenBot never sends it to the App.
 
 The model also gets three helper tools. They never add an App, sign in, or approve an action.
 
@@ -184,7 +184,7 @@ The model also gets three helper tools. They never add an App, sign in, or appro
 
 ### Code Mode
 
-When the platform turns on [Code Mode](/docs/code-mode), the model also gets `openbot_code_api` and `openbot_run_code`. With them, the Agent writes a short program that calls these App tools. Each call in the program takes the same path as a normal App tool call.
+When the platform turns on [Code Mode](/docs/code-mode), the model also gets `openbot_code_api` and `openbot_run_code`. With them, the Bot writes a short program that calls these App tools. Each call in the program takes the same path as a normal App tool call.
 
 ### App operations
 
@@ -211,7 +211,7 @@ The keys in `responses` must match the keys of the App's input requests. Each an
 
 <Callout type="warn">
 	Never repeat an operation that ends with `OutcomeUnknown`. The App may have
-	done the work already. Use a read to check the real state first. The Agent
+	done the work already. Use a read to check the real state first. The Bot
 	follows the same rule.
 </Callout>
 

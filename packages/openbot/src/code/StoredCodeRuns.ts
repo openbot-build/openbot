@@ -26,7 +26,7 @@ export const Run = Schema.Struct({
 	seed: Schema.Int,
 	/** The time that the program sees, in milliseconds. It is the time of the first run. */
 	clock: Schema.Finite,
-	/** The member that the Agent works for. A host that takes over the run needs it. */
+	/** The member that the Bot works for. A host that takes over the run needs it. */
 	organizationId: Schema.String,
 	userId: Schema.String,
 })

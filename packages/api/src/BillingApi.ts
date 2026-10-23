@@ -6,7 +6,7 @@ import {
 	HttpApiSchema,
 	OpenApi,
 } from "effect/http-api"
-import { AgentAuth } from "./AuthApi.ts"
+import { BotAuth } from "./AuthApi.ts"
 import {
 	Authorize,
 	GroupRequired,
@@ -176,8 +176,8 @@ export const UsageSource = Schema.Literals([
 	"session_memory",
 	/** The model that judges Rules. */
 	"judge",
-	/** The model that learns Agent memory. */
-	"agent_memory",
+	/** The model that learns Bot memory. */
+	"bot_memory",
 	"other",
 ])
 export type UsageSource = typeof UsageSource.Type
@@ -189,7 +189,7 @@ export const UsageEvent = Schema.Struct({
 	source: UsageSource,
 	sessionId: Schema.NullOr(Schema.String),
 	turnId: Schema.NullOr(Schema.String),
-	agentId: Schema.NullOr(Schema.String),
+	botId: Schema.NullOr(Schema.String),
 	userId: Schema.NullOr(Schema.String),
 	tokenId: Schema.NullOr(Schema.String),
 	provider: Schema.String,
@@ -225,7 +225,7 @@ export const UsageGroupBy = Schema.Literals([
 	"model",
 	"provider",
 	"member",
-	"agent",
+	"bot",
 	"token",
 	"source",
 ])
@@ -236,7 +236,7 @@ export const UsageSummary = Schema.Struct({
 	to: Schema.String,
 	groupBy: UsageGroupBy,
 	total: UsageTotals,
-	/** One item for each group. `key` is null for calls without that value, such as calls without an Agent. */
+	/** One item for each group. `key` is null for calls without that value, such as calls without a Bot. */
 	items: Schema.Array(
 		Schema.Struct({ key: Schema.NullOr(Schema.String), ...UsageTotals.fields }),
 	),
@@ -277,7 +277,7 @@ export const GrantCreditsRequest = Schema.Struct({
 export const BudgetScope = Schema.Literals([
 	"organization",
 	"member",
-	"agent",
+	"bot",
 	"token",
 ])
 export type BudgetScope = typeof BudgetScope.Type
@@ -290,7 +290,7 @@ export type BudgetMode = typeof BudgetMode.Type
 export const Budget = Schema.Struct({
 	id: Schema.String,
 	scope: BudgetScope,
-	/** The user ID, Agent ID or token ID. For `organization` it is the organization ID. */
+	/** The user ID, Bot ID or token ID. For `organization` it is the organization ID. */
 	scopeId: Schema.String,
 	/** A day or a month in UTC. */
 	period: BudgetPeriod,
@@ -405,11 +405,11 @@ export class UsageApi extends HttpApiGroup.make("usage")
 		write: [requires("usage.read").on("organization")],
 	})
 	.middleware(Authorize)
-	.middleware(AgentAuth) {}
+	.middleware(BotAuth) {}
 
 const budgetParams = { budgetId: Schema.String }
 
-/** Spending limits of the organization, its members, its Agents and its user tokens. */
+/** Spending limits of the organization, its members, its Bots and its user tokens. */
 export class BudgetsApi extends HttpApiGroup.make("budgets")
 	.add(
 		HttpApiEndpoint.get("listBudgets", "/v1/organization/budgets", {
@@ -455,4 +455,4 @@ export class BudgetsApi extends HttpApiGroup.make("budgets")
 		write: [requires("budgets.write").on("organization")],
 	})
 	.middleware(Authorize)
-	.middleware(AgentAuth) {}
+	.middleware(BotAuth) {}

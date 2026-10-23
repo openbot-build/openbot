@@ -2,7 +2,7 @@ import type { PgClient } from "@effect/sql-pg"
 import * as StoredInvocations from "../../apps/StoredInvocations.ts"
 import * as StoredViews from "../../apps/StoredViews.ts"
 import { Secrets } from "../../secrets/Secrets.ts"
-import { Agent, Plugin } from "@openbot-build/core"
+import { Bot, Plugin } from "@openbot-build/core"
 import { AppExecution, AppViewsApi, type Identity } from "@openbot-build/api"
 import { Client } from "@openbot-build/protocol"
 import {
@@ -54,7 +54,7 @@ export interface Entry {
 		context: Toolkit.HandlerContext<Tools[string]>,
 	) => Effect.Effect<AppExecution.ToolResult>
 }
-/** The name of the parameter that every App tool call gets for the reason of the Agent. */
+/** The name of the parameter that every App tool call gets for the reason of the Bot. */
 const reasonKey = "openbot_reason"
 /** Adds the reason parameter to the parameters of an App tool. */
 const withReason = (schema: JsonSchema.JsonSchema): JsonSchema.JsonSchema => {
@@ -84,7 +84,7 @@ const split = (input: unknown) =>
 				reason:
 					typeof reason === "string" && reason.length > 0
 						? reason
-						: "The Agent gave no reason.",
+						: "The Bot gave no reason.",
 			}
 		}),
 	)
@@ -190,7 +190,7 @@ export const make: Effect.Effect<
 					Stream.scoped(
 						Stream.unwrap(
 							Effect.gen(function* () {
-								const context = yield* Agent.Context
+								const context = yield* Bot.Context
 								const at = yield* context.at
 								const turn = yield* context.turn
 								const incoming = yield* input.toolkit

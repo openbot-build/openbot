@@ -150,9 +150,9 @@ const activeToken = (
  * Find the caller of one credential before the organization's ordinary business handlers run.
  * Browsers do not send tokens on their own, so tokens need no Origin check.
  */
-export const layerAgentAuth = (config: { readonly publicOrigin: string }) =>
+export const layerBotAuth = (config: { readonly publicOrigin: string }) =>
 	Layer.effect(
-		AuthApi.AgentAuth,
+		AuthApi.BotAuth,
 		Effect.gen(function* () {
 			const auth = yield* Auth
 			const tokens = yield* Tokens

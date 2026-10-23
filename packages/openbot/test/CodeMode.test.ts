@@ -337,8 +337,8 @@ test("Code Mode sends App calls through the same checks, waits for decisions, an
 	try {
 		const alice = await host.login("code-alice")
 		const bob = await host.login("code-bob")
-		await host.defaultAgent(alice.session)
-		await host.defaultAgent(bob.session)
+		await host.defaultBot(alice.session)
+		await host.defaultBot(bob.session)
 		const headers = (session = alice.session) => ({
 			cookie:
 				AuthApi.SessionCookie +
@@ -605,7 +605,7 @@ test("Code Mode sends App calls through the same checks, waits for decisions, an
 			}),
 		)
 
-		// When the platform turns Code Mode off, the Agent does not get its tools.
+		// When the platform turns Code Mode off, the Bot does not get its tools.
 		await host.runtime.runPromise(
 			Effect.gen(function* () {
 				const settings = yield* Settings

@@ -1,9 +1,9 @@
 ---
 title: Channels
-description: Talk with an Agent in Slack, Lark, Telegram or your own chat system.
+description: Talk with a Bot in Slack, Lark, Telegram or your own chat system.
 ---
 
-A **Channel** is one bot of your organization on one chat platform, such as a Slack app or a Telegram bot. People talk with the Agent of the Channel in direct chats and group chats. OpenBot stays headless: a Channel is a link between the platform and the API, not a user interface.
+A **Channel** is one bot of your organization on one chat platform, such as a Slack app or a Telegram bot. People talk with the Bot of the Channel in direct chats and group chats. OpenBot stays headless: a Channel is a link between the platform and the API, not a user interface.
 
 | Kind       | Platform                                                                          |
 | ---------- | --------------------------------------------------------------------------------- |
@@ -23,19 +23,19 @@ An administrator adds a Channel. It needs `channels.write`.
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Team Slack","agent":"agt_...","linkPath":"/link","credentials":{"kind":"slack","botToken":"xoxb-...","signingSecret":"..."}}' \
+  -d '{"name":"Team Slack","bot":"bot_...","linkPath":"/link","credentials":{"kind":"slack","botToken":"xoxb-...","signingSecret":"..."}}' \
   https://api.example.com/v1/organization/channels
 ```
 
 | Field         | What it does                                                                                                           |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `name`        | A short name.                                                                                                          |
-| `agent`       | The Agent that answers. It must be a shared, lasting Agent of the organization.                                        |
+| `bot`         | The Bot that answers. It must be a shared, lasting Bot of the organization.                                            |
 | `credentials` | The secrets of the platform. See below. They go in, but they never come out. The answer shows only `set` and a `hint`. |
 | `linkPath`    | Optional. A path on your public origin where your client lets a person [link their account](#link-your-account).       |
 | `enabled`     | Optional. `false` stops the Channel. Its webhook then returns `401`.                                                   |
 
-The answer is `201` with the Channel. Give its `webhookUrl` to the platform. The caller becomes the **actor** of the Channel. The chats of the Channel are Sessions of the actor. The actor must be able to give work to the Agent.
+The answer is `201` with the Channel. Give its `webhookUrl` to the platform. The caller becomes the **actor** of the Channel. The chats of the Channel are Sessions of the actor. The actor must be able to give work to the Bot.
 
 `GET`, `PATCH` and `DELETE /v1/organization/channels/:channelId` read, change and delete one Channel. A change needs `expectedVersion`, the `version` that you read. An old version returns `409` with `ChannelConflict`. A change makes the caller the actor. Leave out `credentials` to keep the secrets. The kind of a Channel cannot change.
 
@@ -82,9 +82,9 @@ The link needs a `POST`, so nobody can link an account by sending a person a lin
 
 Each chat is one lasting Session with `kind: "channel"`: one Session for each direct chat and one for each group chat. List them with `GET /v1/sessions?kind=channel` as the actor.
 
-- In a direct chat, every message goes to the Agent.
-- In a group chat, only a message that names the bot goes to the Agent. Each message starts with the name of the person who wrote it, so the Agent knows who speaks.
-- A message that comes while the Agent still works waits in the [queue](/docs/sessions#steer-queue-and-interrupt). It runs as its own Turn.
+- In a direct chat, every message goes to the Bot.
+- In a group chat, only a message that names the bot goes to the Bot. Each message starts with the name of the person who wrote it, so the Bot knows who speaks.
+- A message that comes while the Bot still works waits in the [queue](/docs/sessions#steer-queue-and-interrupt). It runs as its own Turn.
 - While a Turn runs, the bot shows its text and changes the message as it grows. A long answer goes out in parts.
 - OpenBot drops an event that the platform sends a second time.
 
@@ -92,11 +92,11 @@ Each chat is one lasting Session with `kind: "channel"`: one Session for each di
 
 A Turn in a chat works for the person who wrote its message, not for the actor. OpenBot calls that person the **author** of the Turn. Its `author` field is their user ID. So:
 
-- the [permissions](/docs/permissions) of the author decide what the Agent may do,
+- the [permissions](/docs/permissions) of the author decide what the Bot may do,
 - [requests](/docs/requests) go to the author,
-- the Agent knows that it works with the author, and learns about them.
+- the Bot knows that it works with the author, and learns about them.
 
-A person needs `channels.use` on the Channel to talk with its Agent. A member who is not active any more cannot use it.
+A person needs `channels.use` on the Channel to talk with its Bot. A member who is not active any more cannot use it.
 
 ---
 
@@ -106,7 +106,7 @@ When a request waits for a person, the bot sends a card with three buttons: **Al
 
 Only the person that the request waits for can press a button. When the request changes, the card shows the decision.
 
-Agents can also post to another chat of the same Channel with the tool `openbot_channel_send`. Each post is the capability `channels.send`, so the [chain of deciders](/docs/requests#the-chain-of-deciders) decides it.
+Bots can also post to another chat of the same Channel with the tool `openbot_channel_send`. Each post is the capability `channels.send`, so the [chain of deciders](/docs/requests#the-chain-of-deciders) decides it.
 
 ---
 
@@ -144,7 +144,7 @@ OpenBot sends messages to the `endpoint`. A `send` has `markdown`, optional `but
 | -------------------------- | ------------------------------------------------------------------------- |
 | `channels.read`            | Read the Channels of the organization and the people linked to them.      |
 | `channels.write`           | Create, change and delete Channels, set their secrets, and unlink people. |
-| `channels.use`             | Talk with the Agent of a Channel, and let your Agents post to it.         |
+| `channels.use`             | Talk with the Bot of a Channel, and let your Bots post to it.             |
 | `channel_identities.read`  | Read your linked accounts.                                                |
 | `channel_identities.write` | Link and unlink your accounts.                                            |
 
@@ -154,12 +154,12 @@ Channels are below `openbot.org.<org>.channel`. Administrators manage them. Ever
 
 ## Errors
 
-| Error                     | Status | When                                                                                                 |
-| ------------------------- | ------ | ---------------------------------------------------------------------------------------------------- |
-| `ChannelInvalid`          | 400    | The Agent is not a shared lasting Agent, the kind changed, or the platform did not take the webhook. |
-| `ChannelNotFound`         | 404    | There is no such Channel.                                                                            |
-| `ChannelLinkInvalid`      | 404    | The code is unknown, used or too old. Ask the bot again.                                             |
-| `ChannelIdentityNotFound` | 404    | There is no such linked account.                                                                     |
-| `ChannelConflict`         | 409    | The Channel changed since you read it.                                                               |
-| `ChannelHookDenied`       | 401    | The signature is wrong or too old, or the Channel is disabled.                                       |
-| `ChannelsUnavailable`     | 503    | OpenBot cannot reach its storage now.                                                                |
+| Error                     | Status | When                                                                                             |
+| ------------------------- | ------ | ------------------------------------------------------------------------------------------------ |
+| `ChannelInvalid`          | 400    | The Bot is not a shared lasting Bot, the kind changed, or the platform did not take the webhook. |
+| `ChannelNotFound`         | 404    | There is no such Channel.                                                                        |
+| `ChannelLinkInvalid`      | 404    | The code is unknown, used or too old. Ask the bot again.                                         |
+| `ChannelIdentityNotFound` | 404    | There is no such linked account.                                                                 |
+| `ChannelConflict`         | 409    | The Channel changed since you read it.                                                           |
+| `ChannelHookDenied`       | 401    | The signature is wrong or too old, or the Channel is disabled.                                   |
+| `ChannelsUnavailable`     | 503    | OpenBot cannot reach its storage now.                                                            |

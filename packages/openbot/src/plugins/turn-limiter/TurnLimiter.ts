@@ -1,6 +1,6 @@
 import { Data, Effect, Match, Stream } from "effect"
 import { type Prompt } from "effect/ai"
-import { Agent, Plugin } from "@openbot-build/core"
+import { Bot, Plugin } from "@openbot-build/core"
 
 export interface Options {
 	/** Maximum number of model requests, including the first request. */
@@ -31,7 +31,7 @@ export const make = ({
 			Effect.gen(function* () {
 				if (!valid) return yield* new InvalidMaxSteps({ maxSteps })
 
-				const context = yield* Agent.Context
+				const context = yield* Bot.Context
 				return next(options).pipe(
 					Stream.tap((event) =>
 						Match.value(event).pipe(

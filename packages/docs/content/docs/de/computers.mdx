@@ -1,14 +1,14 @@
 ---
 title: Computer
-description: Gib Agents Maschinen, auf denen sie Befehle ausführen, Dateien ändern und einen Desktop nutzen.
+description: Gib Bots Maschinen, auf denen sie Befehle ausführen, Dateien ändern und einen Desktop nutzen.
 ---
 
-Ein **Computer** ist eine Maschine, auf der ein Agent arbeitet. Der Agent führt dort Shell-Befehle aus, liest und schreibt Dateien, öffnet Ports und nutzt einen Desktop. Es gibt zwei Arten von Computern:
+Ein **Computer** ist eine Maschine, auf der ein Bot arbeitet. Der Bot führt dort Shell-Befehle aus, liest und schreibt Dateien, öffnet Ports und nutzt einen Desktop. Es gibt zwei Arten von Computern:
 
 - Eine **Sandbox** bei einem Computer-Provider, zum Beispiel E2B oder Daytona. Du bringst dein eigenes Konto bei dem Provider mit. Der Provider stellt dir die Kosten direkt in Rechnung.
 - **Deine eigene Maschine**, zum Beispiel ein Laptop oder ein Server. Du koppelst sie einmal mit OpenBot. Danach hält ein kleines Programm auf ihr eine Verbindung zu OpenBot.
 
-Ein Computer gehört einem Member oder der Organisation, wie ein [Trigger](/de/docs/triggers). Agents besitzen nie einen Computer. Ein Agent bekommt das **Recht, einen Computer zu nutzen**. Viele Agents können denselben Computer nutzen.
+Ein Computer gehört einem Member oder der Organisation, wie ein [Trigger](/de/docs/triggers). Bots besitzen nie einen Computer. Ein Bot bekommt das **Recht, einen Computer zu nutzen**. Viele Bots können denselben Computer nutzen.
 
 ---
 
@@ -23,10 +23,10 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/computer-providers
 ```
 
-| Art       | Felder                              | Was es ist                                                                                                                                                                |
-| --------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `e2b`     | `apiKey`, `apiUrl`, `sandboxDomain` | Jeder Dienst, der die E2B-API spricht: E2B, PPIO, Alibaba Cloud Agent Sandbox oder dein eigenes E2B. Setze `apiUrl` und `sandboxDomain` für einen anderen Dienst als E2B. |
-| `daytona` | `apiKey`, `apiUrl`, `target`        | Daytona, gehostet oder dein eigenes. `target` ist die Region, zum Beispiel `us` oder `eu`.                                                                                |
+| Art       | Felder                              | Was es ist                                                                                                                                                              |
+| --------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `e2b`     | `apiKey`, `apiUrl`, `sandboxDomain` | Jeder Dienst, der die E2B-API spricht: E2B, PPIO, Alibaba Cloud Bot Sandbox oder dein eigenes E2B. Setze `apiUrl` und `sandboxDomain` für einen anderen Dienst als E2B. |
+| `daytona` | `apiKey`, `apiUrl`, `target`        | Daytona, gehostet oder dein eigenes. `target` ist die Region, zum Beispiel `us` oder `eu`.                                                                              |
 
 OpenBot prüft den Schlüssel beim Provider, bevor es ihn speichert. Der Schlüssel kommt nie wieder heraus. Die API zeigt nur seine letzten Zeichen. Sende `"shared": true`, um einen gemeinsamen Provider der Organisation zu erstellen.
 
@@ -99,34 +99,34 @@ Wenn dieselbe Maschine sich in derselben Organisation wieder koppelt, behält si
 
 ---
 
-## Agents und das Recht, einen Computer zu nutzen
+## Bots und das Recht, einen Computer zu nutzen
 
-Gib deinem Agent das Recht, einen Computer zu nutzen:
+Gib deinem Bot das Recht, einen Computer zu nutzen:
 
 ```sh
 curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  https://api.example.com/v1/computers/cmp_.../agents/agt_...
+  https://api.example.com/v1/computers/cmp_.../bots/bot_...
 ```
 
-Du musst den Computer nutzen und den Agent ändern dürfen. `GET /v1/computers/:computerId/agents` listet die Agents mit dem Recht. `DELETE /v1/computers/:computerId/agents/:agentId` nimmt das Recht weg. Das Recht endet auch, wenn der Agent archiviert wird. Der Computer bleibt.
+Du musst den Computer nutzen und den Bot ändern dürfen. `GET /v1/computers/:computerId/bots` listet die Bots mit dem Recht. `DELETE /v1/computers/:computerId/bots/:botId` nimmt das Recht weg. Das Recht endet auch, wenn der Bot archiviert wird. Der Computer bleibt.
 
-Ein Agent hat Tools für Computer. Er listet sie mit `openbot_computers_list`. Dann kann er:
+Ein Bot hat Tools für Computer. Er listet sie mit `openbot_computers_list`. Dann kann er:
 
-- Mit `openbot_computers_acquire` nach dem Recht fragen, einen Computer zu nutzen, den es schon gibt. Ein Kind-Agent kann nach einem Computer des Agents fragen, der ihm Arbeit gegeben hat.
-- Mit `openbot_computers_create` eine neue Sandbox erstellen. Der Computer gehört seiner Person, und der Agent bekommt das Recht, ihn zu nutzen.
+- Mit `openbot_computers_acquire` nach dem Recht fragen, einen Computer zu nutzen, den es schon gibt. Ein Kind-Bot kann nach einem Computer des Bots fragen, der ihm Arbeit gegeben hat.
+- Mit `openbot_computers_create` eine neue Sandbox erstellen. Der Computer gehört seiner Person, und der Bot bekommt das Recht, ihn zu nutzen.
 - Mit `openbot_computers_release` sein Recht aufgeben. Mit `destroy` löscht er auch den Computer.
 - Befehle ausführen, Dateien ändern, Ports öffnen und den Desktop nutzen. Ein Screenshot kommt als Bild zurück, das das Model sieht.
 
 Diese vier Aktionen sind [Fähigkeiten](/de/docs/requests#fähigkeiten). Die [Kette der Entscheider](/de/docs/requests#die-kette-der-entscheider) entscheidet über sie, wie bei jeder anderen Fähigkeit:
 
-| Aktion              | Ziel                 | Wann ein Agent sie nutzt                           |
+| Aktion              | Ziel                 | Wann ein Bot sie nutzt                             |
 | ------------------- | -------------------- | -------------------------------------------------- |
 | `computers.acquire` | Die ID des Computer  | Er fragt nach dem Recht, einen Computer zu nutzen. |
 | `computers.create`  | Die ID des Providers | Er erstellt eine neue Sandbox.                     |
 | `computers.delete`  | Die ID des Computer  | Er löscht einen Computer mit seinen Dateien.       |
 | `computers.expose`  | Die ID des Computer  | Er gibt einem Port eine öffentliche Adresse.       |
 
-Jede andere Arbeit auf einem Computer braucht keine Entscheidung. Der Computer ist die Grenze: Ein Agent mit dem Recht darf darin alles tun.
+Jede andere Arbeit auf einem Computer braucht keine Entscheidung. Der Computer ist die Grenze: Ein Bot mit dem Recht darf darin alles tun.
 
 ---
 

@@ -145,16 +145,16 @@ test(
 				alice.session,
 				"/v1/organization/settings",
 				"PATCH",
-				{ expectedVersion: settings.version + 5, agentMemory: false },
+				{ expectedVersion: settings.version + 5, botMemory: false },
 			)
 			assert.equal(stale.status, 409)
 			const changed = await (
 				await account(alice.session, "/v1/organization/settings", "PATCH", {
 					expectedVersion: settings.version,
-					agentMemory: false,
+					botMemory: false,
 				})
 			).json()
-			assert.equal(changed.agentMemory, false)
+			assert.equal(changed.botMemory, false)
 			assert.equal(changed.version, settings.version + 1)
 			const unknownRole = await account(
 				alice.session,
@@ -371,7 +371,7 @@ test(
 				},
 			)
 			assert.equal(deny.status, 200, await deny.clone().text())
-			await host.defaultAgent(carol.session)
+			await host.defaultBot(carol.session)
 			const created = await (
 				await account(carol.session, "/v1/sessions", "POST", { title: "Hi" })
 			).json()

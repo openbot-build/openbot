@@ -1,14 +1,14 @@
 ---
 title: Computers
-description: Give Agents machines where they run commands, change files and use a desktop.
+description: Give Bots machines where they run commands, change files and use a desktop.
 ---
 
-A **Computer** is a machine where an Agent works. The Agent runs shell commands, reads and writes files, opens ports and uses a desktop there. A Computer is one of two kinds:
+A **Computer** is a machine where a Bot works. The Bot runs shell commands, reads and writes files, opens ports and uses a desktop there. A Computer is one of two kinds:
 
 - A **sandbox** at a Computer provider, such as E2B or Daytona. You bring your own account at the provider. The provider bills you directly.
 - **Your own machine**, such as a laptop or a server. You pair it with OpenBot once. Then a small program on it keeps a connection to OpenBot.
 
-A Computer belongs to a member or to the organization, like a [trigger](/docs/triggers). Agents never own a Computer. An Agent gets the **right to use** a Computer. Many Agents can use the same Computer.
+A Computer belongs to a member or to the organization, like a [trigger](/docs/triggers). Bots never own a Computer. A Bot gets the **right to use** a Computer. Many Bots can use the same Computer.
 
 ---
 
@@ -23,10 +23,10 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/computer-providers
 ```
 
-| Kind      | Fields                              | What it is                                                                                                                                                   |
-| --------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `e2b`     | `apiKey`, `apiUrl`, `sandboxDomain` | Any service that speaks the E2B API: E2B, PPIO, Alibaba Cloud Agent Sandbox, or your own E2B. Set `apiUrl` and `sandboxDomain` for a service other than E2B. |
-| `daytona` | `apiKey`, `apiUrl`, `target`        | Daytona, hosted or your own. `target` is the region, such as `us` or `eu`.                                                                                   |
+| Kind      | Fields                              | What it is                                                                                                                                                 |
+| --------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `e2b`     | `apiKey`, `apiUrl`, `sandboxDomain` | Any service that speaks the E2B API: E2B, PPIO, Alibaba Cloud Bot Sandbox, or your own E2B. Set `apiUrl` and `sandboxDomain` for a service other than E2B. |
+| `daytona` | `apiKey`, `apiUrl`, `target`        | Daytona, hosted or your own. `target` is the region, such as `us` or `eu`.                                                                                 |
 
 OpenBot checks the key with the provider before it stores it. The key never comes out again. The API only shows its last characters. Send `"shared": true` to make a shared provider of the organization.
 
@@ -99,34 +99,34 @@ When the same machine pairs again in the same organization, it keeps its Compute
 
 ---
 
-## Agents and the right to use a Computer
+## Bots and the right to use a Computer
 
-Give your Agent the right to use a Computer:
+Give your Bot the right to use a Computer:
 
 ```sh
 curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  https://api.example.com/v1/computers/cmp_.../agents/agt_...
+  https://api.example.com/v1/computers/cmp_.../bots/bot_...
 ```
 
-You must be able to use the Computer and to change the Agent. `GET /v1/computers/:computerId/agents` lists the Agents with the right. `DELETE /v1/computers/:computerId/agents/:agentId` takes the right away. The right also ends when the Agent is archived. The Computer stays.
+You must be able to use the Computer and to change the Bot. `GET /v1/computers/:computerId/bots` lists the Bots with the right. `DELETE /v1/computers/:computerId/bots/:botId` takes the right away. The right also ends when the Bot is archived. The Computer stays.
 
-An Agent has tools for Computers. It lists them with `openbot_computers_list`. Then it can:
+A Bot has tools for Computers. It lists them with `openbot_computers_list`. Then it can:
 
-- Ask for the right to use a Computer that exists, with `openbot_computers_acquire`. A child Agent can ask for a Computer of the Agent that gave it work.
-- Make a new sandbox with `openbot_computers_create`. The Computer belongs to its person, and the Agent gets the right to use it.
+- Ask for the right to use a Computer that exists, with `openbot_computers_acquire`. A child Bot can ask for a Computer of the Bot that gave it work.
+- Make a new sandbox with `openbot_computers_create`. The Computer belongs to its person, and the Bot gets the right to use it.
 - Give up its right with `openbot_computers_release`. With `destroy`, it also deletes the Computer.
 - Run commands, change files, open ports and use the desktop. A screenshot comes back as an image that the model sees.
 
 These four actions are [capabilities](/docs/requests#capabilities). The [chain of deciders](/docs/requests#the-chain-of-deciders) decides them, as for any other capability:
 
-| Action              | Target                 | When an Agent uses it                    |
+| Action              | Target                 | When a Bot uses it                       |
 | ------------------- | ---------------------- | ---------------------------------------- |
 | `computers.acquire` | The ID of the Computer | It asks for the right to use a Computer. |
 | `computers.create`  | The ID of the provider | It makes a new sandbox.                  |
 | `computers.delete`  | The ID of the Computer | It deletes a Computer with its files.    |
 | `computers.expose`  | The ID of the Computer | It gives a port a public address.        |
 
-All other work on a Computer needs no decision. The Computer is the boundary: an Agent with the right can do anything inside it.
+All other work on a Computer needs no decision. The Computer is the boundary: a Bot with the right can do anything inside it.
 
 ---
 

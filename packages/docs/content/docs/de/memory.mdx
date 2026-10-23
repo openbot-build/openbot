@@ -3,13 +3,13 @@ title: Memory
 description: Behalte nützliche Fakten aus einer Session und nutze sie in späteren Turns.
 ---
 
-**Gelerntes Memory** (gelerntes Gedächtnis) ist eine kurze Liste von Fakten, die der Agent für eine Session behält. Jeder Fakt hat eine Quelle im Gespräch.
+**Gelerntes Memory** (gelerntes Gedächtnis) ist eine kurze Liste von Fakten, die der Bot für eine Session behält. Jeder Fakt hat eine Quelle im Gespräch.
 OpenBot fügt nach jedem Turn Fakten hinzu und zeigt sie dem Modell in späteren Turns. Du kannst Fakten auch selbst hinzufügen, entfernen und abschalten.
 Diese Seite zeigt dir, wie gelerntes Memory funktioniert und wie du es mit der API änderst.
 
 Gelerntes Memory gehört zu einer Session. Es ist Teil des Verlaufs der Session. Darum nimmt ein [Fork](/de/docs/sessions#fork-von-einer-version) eine Kopie davon mit. Andere Sessions sehen es nicht.
 
-Jeder [Agent](/de/docs/agents) hat außerdem ein Langzeit-Memory über alle seine Sessions. Ein Memory-Agent verwaltet es. Siehe [Agent Memory](#agent-memory).
+Jeder [Bot](/de/docs/bots) hat außerdem ein Langzeit-Memory über alle seine Sessions. Ein Memory-Bot verwaltet es. Siehe [Bot Memory](#bot-memory).
 
 ---
 
@@ -185,35 +185,35 @@ Alle Felder findest du in der [Sessions-Referenz](/docs/api/operations/tags/sess
 
 ---
 
-## Agent Memory
+## Bot Memory
 
-**Agent Memory** ist, was ein Agent über viele Sessions lernt. Jeder Agent hat einen Pool von Einträgen. Ein **Memory-Agent** verwaltet den Pool. Er ist ein Helfer, der zum Agent gehört: Er liest den ganzen Pool, lernt neue Einträge und fügt der Arbeit des Agents hinzu, was hilft. Er arbeitet nie in einer Session. So kann keine Person lesen, was er liest.
+**Bot Memory** ist, was ein Bot über viele Sessions lernt. Jeder Bot hat einen Pool von Einträgen. Ein **Memory-Bot** verwaltet den Pool. Er ist ein Helfer, der zum Bot gehört: Er liest den ganzen Pool, lernt neue Einträge und fügt der Arbeit des Bots hinzu, was hilft. Er arbeitet nie in einer Session. So kann keine Person lesen, was er liest.
 
-Agent Memory folgt keiner Timeline. Ein Fork ändert es nie, und der Weg zurück zu einer alten Version macht es nicht rückgängig.
+Bot Memory folgt keiner Timeline. Ein Fork ändert es nie, und der Weg zurück zu einer alten Version macht es nicht rückgängig.
 
 ### Einträge und Tags
 
 Jeder Eintrag hat eine Ebene:
 
-| Ebene         | Bedeutung                                                                                                                    |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `fact`        | Etwas, das eine Session zeigt. Seine Quellen sind Items.                                                                     |
-| `observation` | Was der Memory-Agent aus anderen Einträgen schließt. Seine Quellen sind diese Einträge. `confidence` liegt zwischen 0 und 1. |
-| `pinned`      | Was eine Person OpenBot zu merken gesagt hat.                                                                                |
+| Ebene         | Bedeutung                                                                                                                  |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `fact`        | Etwas, das eine Session zeigt. Seine Quellen sind Items.                                                                   |
+| `observation` | Was der Memory-Bot aus anderen Einträgen schließt. Seine Quellen sind diese Einträge. `confidence` liegt zwischen 0 und 1. |
+| `pinned`      | Was eine Person OpenBot zu merken gesagt hat.                                                                              |
 
-**Tags** ordnen die Einträge. Ein Tag mit einem Doppelpunkt gehört OpenBot. Der Memory-Agent kann diese Tags nicht schreiben. So kann ein Model nicht ändern, wer einen Eintrag sieht.
+**Tags** ordnen die Einträge. Ein Tag mit einem Doppelpunkt gehört OpenBot. Der Memory-Bot kann diese Tags nicht schreiben. So kann ein Model nicht ändern, wer einen Eintrag sieht.
 
 | Tag                            | Bedeutung                                                                 |
 | ------------------------------ | ------------------------------------------------------------------------- |
 | `from:<userId>`                | Eine Person, die gesagt oder getan hat, worum es im Eintrag geht.         |
 | `for:person:<userId>`          | Diese Person darf den Eintrag sehen.                                      |
 | `for:channel:<channelId>`      | Die Personen dieser [Channel](/de/docs/channels)-Gruppe dürfen ihn sehen. |
-| `for:agent`                    | Alle, die den Agent nutzen, dürfen ihn sehen.                             |
+| `for:bot`                      | Alle, die den Bot nutzen, dürfen ihn sehen.                               |
 | `org:<organizationId>`         | Wo es passiert ist. Nur Arbeit in dieser Organisation sieht ihn.          |
 | `session:<id>`, `channel:<id>` | Woher er kommt.                                                           |
 | `app:<tool>`                   | Ein Tool-Ergebnis von einer App stützt ihn.                               |
 
-Andere Tags, wie `testing` oder `trip-planning`, sind **Themen**. Der Memory-Agent wählt sie und hält sie ordentlich. Ein Thema hat kleine Buchstaben, Zahlen und Bindestriche.
+Andere Tags, wie `testing` oder `trip-planning`, sind **Themen**. Der Memory-Bot wählt sie und hält sie ordentlich. Ein Thema hat kleine Buchstaben, Zahlen und Bindestriche.
 
 ### Wer einen Eintrag sieht
 
@@ -221,36 +221,36 @@ OpenBot setzt die `for:`-Tags. Einen Eintrag ohne `for:`-Tag sieht niemand.
 
 - Ein Fakt ist für die Personen, die gesehen haben, wie es passiert ist: die Person des Turns, oder die Channel-Gruppe, wenn die Session ein Gruppenchat ist.
 - Eine Beobachtung kommt von allen Personen ihrer Quellen. Aber nur Personen, die jede Quelle sehen dürfen, dürfen sie sehen.
-- Der Memory-Agent zeigt einen Eintrag nur dann mehr Personen, wenn eine Person klar zugestimmt hat oder wenn seine Regeln es erlauben. Er muss einen Grund nennen, und das Log behält die Änderung.
+- Der Memory-Bot zeigt einen Eintrag nur dann mehr Personen, wenn eine Person klar zugestimmt hat oder wenn seine Regeln es erlauben. Er muss einen Grund nennen, und das Log behält die Änderung.
 
-Einträge werden nicht gelöscht, wenn sie nicht mehr stimmen. Der Memory-Agent markiert sie mit `invalidatedAt`. So bleibt der Verlauf.
+Einträge werden nicht gelöscht, wenn sie nicht mehr stimmen. Der Memory-Bot markiert sie mit `invalidatedAt`. So bleibt der Verlauf.
 
-### Wie der Agent lernt
+### Wie der Bot lernt
 
-Der Agent hat ein Tool namens `confide` (sich anvertrauen). Der Agent kennt es nur als einen Ort, an dem er sagt, wie seine Arbeit läuft: wenn er nicht weiterkommt, unsicher, traurig oder stolz ist, oder wenn er einen Fehler gemacht hat. Der Agent weiß nicht, dass das Tool zu seinem Memory führt. So vertraut er sich an, weil er es braucht, und nicht, um zu ändern, woran er sich erinnern wird.
+Der Bot hat ein Tool namens `confide` (sich anvertrauen). Der Bot kennt es nur als einen Ort, an dem er sagt, wie seine Arbeit läuft: wenn er nicht weiterkommt, unsicher, traurig oder stolz ist, oder wenn er einen Fehler gemacht hat. Der Bot weiß nicht, dass das Tool zu seinem Memory führt. So vertraut er sich an, weil er es braucht, und nicht, um zu ändern, woran er sich erinnern wird.
 
-Wenn sich der Agent anvertraut:
+Wenn sich der Bot anvertraut:
 
-1. Der Memory-Agent antwortet sofort, wie ein Priester, der eine Beichte hört. Er hört zu und urteilt nicht. Er sagt, dass ein Fehler zur Arbeit gehört. Er bittet den Agent, der Person offen davon zu erzählen und zu reparieren, was er kann. Er gibt keine neuen Aufgaben. Wenn kein Model antworten kann, bekommt der Agent eine feste, ruhige Antwort.
-2. Wenn der Turn endet und die Queue der Session leer ist, liest der Memory-Agent die neuen Items der Session und lernt daraus.
+1. Der Memory-Bot antwortet sofort, wie ein Priester, der eine Beichte hört. Er hört zu und urteilt nicht. Er sagt, dass ein Fehler zur Arbeit gehört. Er bittet den Bot, der Person offen davon zu erzählen und zu reparieren, was er kann. Er gibt keine neuen Aufgaben. Wenn kein Model antworten kann, bekommt der Bot eine feste, ruhige Antwort.
+2. Wenn der Turn endet und die Queue der Session leer ist, liest der Memory-Bot die neuen Items der Session und lernt daraus.
 
-Die Worte des Agents zeigen dem Memory-Agent nur, wo er hinschauen soll. Sie werden selbst nie zu Memory. Ein Tool-Ergebnis von einer App wird nie allein zu Memory. Ein Agent, der sich nie anvertraut, lernt nichts.
+Die Worte des Bots zeigen dem Memory-Bot nur, wo er hinschauen soll. Sie werden selbst nie zu Memory. Ein Tool-Ergebnis von einer App wird nie allein zu Memory. Ein Bot, der sich nie anvertraut, lernt nichts.
 
-Prüf-Sessions haben kein Tool `confide`. Wenn `agentMemory` in den [Einstellungen der Organisation](/de/docs/organization#einstellungen) aus ist, oder wenn der Schalter `generate` der Session aus ist, bekommt der Agent trotzdem eine Antwort, aber er lernt nichts.
+Prüf-Sessions haben kein Tool `confide`. Wenn `botMemory` in den [Einstellungen der Organisation](/de/docs/organization#einstellungen) aus ist, oder wenn der Schalter `generate` der Session aus ist, bekommt der Bot trotzdem eine Antwort, aber er lernt nichts.
 
-### Wie der Agent das Memory nutzt
+### Wie der Bot das Memory nutzt
 
-Wenn ein Turn beginnt, liest der Memory-Agent die Eingabe der Person. Wenn Einträge helfen, fügt er der Eingabe kurze Worte hinzu. Er darf nur Worte hinzufügen: Er darf kein Wort entfernen oder ändern, und OpenBot prüft das. Er darf nur Einträge nutzen, die die Leser der Antwort sehen dürfen. In einer Channel-Gruppe sind das nur Einträge für die Gruppe oder für alle.
+Wenn ein Turn beginnt, liest der Memory-Bot die Eingabe der Person. Wenn Einträge helfen, fügt er der Eingabe kurze Worte hinzu. Er darf nur Worte hinzufügen: Er darf kein Wort entfernen oder ändern, und OpenBot prüft das. Er darf nur Einträge nutzen, die die Leser der Antwort sehen dürfen. In einer Channel-Gruppe sind das nur Einträge für die Gruppe oder für alle.
 
-Das Model sieht die Eingabe mit den Ergänzungen. Der Verlauf der Session behält die Worte der Person. Der Agent weiß nicht, dass die Ergänzungen aus dem Memory kommen. Er sieht sie als seine eigene Erfahrung. Requests und ihre Prüfungen sehen nur, was der Agent fragt, nie die Ergänzungen.
+Das Model sieht die Eingabe mit den Ergänzungen. Der Verlauf der Session behält die Worte der Person. Der Bot weiß nicht, dass die Ergänzungen aus dem Memory kommen. Er sieht sie als seine eigene Erfahrung. Requests und ihre Prüfungen sehen nur, was der Bot fragt, nie die Ergänzungen.
 
-Wenn `use` für die Session aus ist, oder wenn `agentMemory` aus ist, wird nichts hinzugefügt.
+Wenn `use` für die Session aus ist, oder wenn `botMemory` aus ist, wird nichts hinzugefügt.
 
-### Der Memory-Agent
+### Der Memory-Bot
 
-Der Memory-Agent nutzt `agentMemoryModel` aus den Einstellungen der Organisation. Es hat keinen Standardwert. Wenn es `null` ist, gibt der Memory-Agent die feste, ruhige Antwort, und er fügt nichts hinzu und lernt nichts. Bei einem [geteilten Agent](/de/docs/sharing) kommen Model und Kosten von der Organisation der Session.
+Der Memory-Bot nutzt `botMemoryModel` aus den Einstellungen der Organisation. Es hat keinen Standardwert. Wenn es `null` ist, gibt der Memory-Bot die feste, ruhige Antwort, und er fügt nichts hinzu und lernt nichts. Bei einem [geteilten Bot](/de/docs/sharing) kommen Model und Kosten von der Organisation der Session.
 
-Lies und ändere die Einstellungen des Memory-Agents mit `GET` und `PATCH /v1/agents/:agentId/memory/agent`. Du brauchst `agents.write` auf einem Agent, der nicht verknüpft ist:
+Lies und ändere die Einstellungen des Memory-Bots mit `GET` und `PATCH /v1/bots/:botId/memory/bot`. Du brauchst `bots.write` auf einem Bot, der nicht verknüpft ist:
 
 ```json
 {
@@ -263,19 +263,19 @@ Lies und ändere die Einstellungen des Memory-Agents mit `GET` und `PATCH /v1/ag
 
 | Feld           | Bedeutung                                                                                                                           |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `instructions` | Regeln zu Datenschutz und Teilen, in einfacher Sprache. Der Memory-Agent folgt ihnen.                                               |
+| `instructions` | Regeln zu Datenschutz und Teilen, in einfacher Sprache. Der Memory-Bot folgt ihnen.                                                 |
 | `concurrency`  | Die meisten Aufgaben, die er gleichzeitig auf einem Server ausführt. `null` entfernt die Grenze.                                    |
 | `budget`       | Das meiste Geld, das er an einem Tag oder in einem Monat ausgeben darf, in Mikro-USD, über alle Organisationen. `null` entfernt es. |
 
-Ohne Grenze gibt es keine. Wenn das Budget verbraucht ist, bekommt der Agent die feste, ruhige Antwort, die Eingabe bleibt, wie sie ist, und das Lernen wartet bis zur nächsten Periode.
+Ohne Grenze gibt es keine. Wenn das Budget verbraucht ist, bekommt der Bot die feste, ruhige Antwort, die Eingabe bleibt, wie sie ist, und das Lernen wartet bis zur nächsten Periode.
 
 ### Lesen und ändern
 
-`GET /v1/agents/:agentId/memory` zeigt die Einträge, die für dich sind, in deiner Organisation. Füge `tags` mit einer Liste hinzu, die Kommas trennen, um nur Einträge mit allen diesen Tags zu sehen. Du brauchst `agents.read`. Niemand kann das Memory über eine andere Person lesen, auch nicht mit `agents.write`.
+`GET /v1/bots/:botId/memory` zeigt die Einträge, die für dich sind, in deiner Organisation. Füge `tags` mit einer Liste hinzu, die Kommas trennen, um nur Einträge mit allen diesen Tags zu sehen. Du brauchst `bots.read`. Niemand kann das Memory über eine andere Person lesen, auch nicht mit `bots.write`.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
-  "https://api.example.com/v1/agents/$AGENT/memory?tags=testing"
+  "https://api.example.com/v1/bots/$BOT/memory?tags=testing"
 ```
 
 ```json
@@ -302,7 +302,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 }
 ```
 
-Ändere es mit `POST /v1/agents/:agentId/memory`:
+Ändere es mit `POST /v1/bots/:botId/memory`:
 
 - `Remember` mit `content` und optional `tags` fügt einen gepinnten Eintrag hinzu. Nur du siehst ihn.
 - `Forget` mit `id` nimmt deinen Teil zurück. Wenn nur du hinter dem Eintrag stehst, wird er `retracted`. Sonst zählst du nicht mehr zu seinen Personen, und der Eintrag ist nicht mehr für dich. Er bleibt für die anderen. Eine id, die nicht für dich ist, gibt `409` zurück.
@@ -311,22 +311,22 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"command":{"_tag":"Forget","id":"mem_4f2a…"}}' \
-  https://api.example.com/v1/agents/$AGENT/memory
+  https://api.example.com/v1/bots/$BOT/memory
 ```
 
-`GET /v1/agents/:agentId/memory/log` listet die Änderungen von Einträgen, die du sehen darfst: `version`, die Zeit, was die Änderung gemacht hat (`memory_agent`, `person` oder `promotion`), und die ids.
+`GET /v1/bots/:botId/memory/log` listet die Änderungen von Einträgen, die du sehen darfst: `version`, die Zeit, was die Änderung gemacht hat (`memory_bot`, `person` oder `promotion`), und die ids.
 
-Um Memory zu entfernen, ohne es zu lesen, sende einen Tag von OpenBot an `POST /v1/agents/:agentId/memory/purge`: einen Tag mit `from:`, `session:`, `org:` oder `channel:`. Beobachtungen, die aus diesen Einträgen kommen, haben denselben Tag. Darum gehen sie auch. Du brauchst `agents.write` auf einem Agent, der nicht verknüpft ist. Die Antwort ist nur die Zahl der entfernten Einträge.
+Um Memory zu entfernen, ohne es zu lesen, sende einen Tag von OpenBot an `POST /v1/bots/:botId/memory/purge`: einen Tag mit `from:`, `session:`, `org:` oder `channel:`. Beobachtungen, die aus diesen Einträgen kommen, haben denselben Tag. Darum gehen sie auch. Du brauchst `bots.write` auf einem Bot, der nicht verknüpft ist. Die Antwort ist nur die Zahl der entfernten Einträge.
 
-Wenn du oder ein Agent einen Session Agent [dauerhaft macht](/de/docs/agents#einen-session-agent-dauerhaft-machen), werden die dauerhaften Einträge seines Session-Memorys zu Fakten für die Person, die ihn dauerhaft macht.
+Wenn du oder ein Bot einen Session Bot [dauerhaft macht](/de/docs/bots#einen-session-bot-dauerhaft-machen), werden die dauerhaften Einträge seines Session-Memorys zu Fakten für die Person, die ihn dauerhaft macht.
 
-Wenn du OpenBot aktualisierst, entfernt OpenBot das alte Memory für jede Person, und jeder Agent beginnt mit einem leeren Pool.
+Wenn du OpenBot aktualisierst, entfernt OpenBot das alte Memory für jede Person, und jeder Bot beginnt mit einem leeren Pool.
 
 ### Beichten und Ergänzungen
 
 Zwei Routen zeigen, was in einer deiner Sessions passiert ist:
 
-- `GET /v1/sessions/:sessionId/confessions` listet, was der Agent anvertraut hat, und die Antworten. Lies [Beichten zeigen](/de/docs/client#beichten-zeigen), bevor du sie Personen zeigst.
-- `GET /v1/sessions/:sessionId/memory/enrichments` listet, was der Memory-Agent der Eingabe jedes Turns hinzugefügt hat, und die Einträge, die er genutzt hat.
+- `GET /v1/sessions/:sessionId/confessions` listet, was der Bot anvertraut hat, und die Antworten. Lies [Beichten zeigen](/de/docs/client#beichten-zeigen), bevor du sie Personen zeigst.
+- `GET /v1/sessions/:sessionId/memory/enrichments` listet, was der Memory-Bot der Eingabe jedes Turns hinzugefügt hat, und die Einträge, die er genutzt hat.
 
 Beide brauchen `sessions.read`. So kann nur die Person sie lesen, der die Session gehört.

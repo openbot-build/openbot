@@ -23,7 +23,7 @@ export const empty: SessionTodos = { items: [] }
 export const of = (view: Session.View<Values>): SessionTodos =>
 	view.state.value[storeKey] ?? empty
 
-/** The items that are not done yet. While there are some, the Agent goes on working. */
+/** The items that are not done yet. While there are some, the Bot goes on working. */
 export const open = (todos: SessionTodos): ReadonlyArray<Todo> =>
 	todos.items.filter((item) => item.status !== "done")
 
@@ -36,7 +36,7 @@ export const problem = (items: ReadonlyArray<Todo>): string | undefined => {
 	return undefined
 }
 
-/** One line for each item, for the Agent to read. */
+/** One line for each item, for the Bot to read. */
 export const describe = (items: ReadonlyArray<Todo>): string =>
 	items
 		.map((item) => `- [${item.status}] ${item.id}: ${item.content}`)

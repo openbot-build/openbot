@@ -16,7 +16,7 @@ Alle Pakete heißen `@openbot-build/<name>`, haben die Version `0.1.0` und nutze
 | `openbot`       | Der Server, seine Plugins und seine Model Providers. Siehe [Aus Code starten](/de/docs/server).        |
 | `api`           | Der typisierte HTTP-Vertrag. Der Server, der Client und die API-Referenz nutzen ihn.                   |
 | `client`        | Der TypeScript-Client. Siehe [Client](/de/docs/client).                                                |
-| `core`          | Der Agent-Kern: Agents, Sessions, Turns, Timelines, Speicher, Plugins und Skills.                      |
+| `core`          | Der Bot-Kern: Bots, Sessions, Turns, Timelines, Speicher, Plugins und Skills.                          |
 | `protocol`      | Das OpenBot App Protocol: Apps veröffentlichen, finden, verbinden und indizieren.                      |
 | `protocol-test` | Ein öffentlicher Testdienst für das App Protocol. Siehe [Protokolltest](/de/docs/protocol-test).       |
 | `cli`           | Der Befehl `openbot`. Für `openbot <name>` führt er `openbot-<name>` aus.                              |
@@ -29,17 +29,17 @@ Die Beispiele unten lassen das Model weg. Um sie auszuführen, gib einen `Langua
 
 ## core
 
-`@openbot-build/core` führt Agents aus. Es hat diese Hauptteile:
+`@openbot-build/core` führt Bots aus. Es hat diese Hauptteile:
 
-| Modul                                        | Was es tut                                                                                                       |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `Agent`                                      | Eine Agent-Definition: Werkzeuge, Plugins, Provider und Compaction. Eine Definition kann vielen Sessions dienen. |
-| `SessionRuntime`                             | Führt Turns aus: `execute`, `stream`, `start`, `steer`, `approve`, `interrupt` und mehr.                         |
-| `SessionStore`, `Store`                      | Speichert Sessions und ihre Timelines.                                                                           |
-| `SessionStoreMemory`                         | Ein Speicher, der alles im Arbeitsspeicher hält, für Tests und Skripte.                                          |
-| `Timeline`, `Item`, `Turn`, `Session`        | Die Datentypen.                                                                                                  |
-| `Plugin`, `PluginComposition`, `PluginState` | Plugins erstellen und kombinieren und ihnen gespeicherten Zustand geben.                                         |
-| `Skill`, `SkillMap`                          | Skills beschreiben und eine Liste davon führen.                                                                  |
+| Modul                                        | Was es tut                                                                                                     |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `Bot`                                        | Eine Bot-Definition: Werkzeuge, Plugins, Provider und Compaction. Eine Definition kann vielen Sessions dienen. |
+| `SessionRuntime`                             | Führt Turns aus: `execute`, `stream`, `start`, `steer`, `approve`, `interrupt` und mehr.                       |
+| `SessionStore`, `Store`                      | Speichert Sessions und ihre Timelines.                                                                         |
+| `SessionStoreMemory`                         | Ein Speicher, der alles im Arbeitsspeicher hält, für Tests und Skripte.                                        |
+| `Timeline`, `Item`, `Turn`, `Session`        | Die Datentypen.                                                                                                |
+| `Plugin`, `PluginComposition`, `PluginState` | Plugins erstellen und kombinieren und ihnen gespeicherten Zustand geben.                                       |
+| `Skill`, `SkillMap`                          | Skills beschreiben und eine Liste davon führen.                                                                |
 
 Eine **Session** (Sitzung) ist ein Arbeitsstrang. Jede Eingabe startet einen **Turn** (Durchgang). Ein Turn kann viele Model-Schritte und Werkzeug-Aufrufe haben.
 Die **Timeline** (Zeitleiste) ist der gespeicherte Verlauf einer Session. Jede Änderung erzeugt eine neue Version der Timeline. So kannst du von einem früheren Punkt lesen oder einen Fork erstellen.
@@ -58,7 +58,7 @@ const program = Effect.scoped(
 		const store = yield* SessionStoreMemory.make(definition)
 		const runtime = yield* SessionRuntime.make({
 			store,
-			agent: { toolkit: Toolkit.empty },
+			bot: { toolkit: Toolkit.empty },
 		})
 		const view = yield* store.create({ metadata: { title: "Closures" } })
 		return yield* runtime.execute({
@@ -117,12 +117,12 @@ Dein Programm findet, lädt und führt die Skills aus.
 
 ## Plugins in openbot
 
-`@openbot-build/openbot` enthält alle Plugins von OpenBot. Der Server nutzt die Plugins für Agent, App, Arbeit und Memory in jedem Turn. Das Arbeits-Plugin gibt dem Agent seine Todo-Liste. Die Plugins für Memory und für das Turn-Limit kannst du auch mit deiner eigenen `SessionRuntime` nutzen.
+`@openbot-build/openbot` enthält alle Plugins von OpenBot. Der Server nutzt die Plugins für Bot, App, Arbeit und Memory in jedem Turn. Das Arbeits-Plugin gibt dem Bot seine Todo-Liste. Die Plugins für Memory und für das Turn-Limit kannst du auch mit deiner eigenen `SessionRuntime` nutzen.
 
 ### Memory
 
-Das Memory-Plugin hält gelerntes Memory (Gedächtnis): kurze Fakten, die der Agent in einer Session lernt und in späteren Turns nutzt.
-Der Server nutzt es für die Memory-API. Siehe [Memory](/de/docs/memory). Die Schemas der Memory-API liegen in `api`, als `Memory` und `AgentMemory`.
+Das Memory-Plugin hält gelerntes Memory (Gedächtnis): kurze Fakten, die der Bot in einer Session lernt und in späteren Turns nutzt.
+Der Server nutzt es für die Memory-API. Siehe [Memory](/de/docs/memory). Die Schemas der Memory-API liegen in `api`, als `Memory` und `BotMemory`.
 
 ```ts
 import { SessionStoreMemory, Store } from "@openbot-build/core"
@@ -186,7 +186,7 @@ const runtime =
 	yield *
 	SessionRuntime.make({
 		store,
-		agent: { plugin: TurnLimiter.make({ maxSteps: 4 }) },
+		bot: { plugin: TurnLimiter.make({ maxSteps: 4 }) },
 	})
 ```
 

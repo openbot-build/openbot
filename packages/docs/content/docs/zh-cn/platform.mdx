@@ -10,7 +10,7 @@ Platform（平台）就是整个 OpenBot 部署。一个平台有许多组织。
 
 ## 平台管理员
 
-平台管理员管理平台。平台管理员**不是**每个组织的成员。除非他也是某个组织的成员，否则他不能读取这个组织的 Session、Agent 或成员。他只能通过 `/v1/platform` 管理平台。
+平台管理员管理平台。平台管理员**不是**每个组织的成员。除非他也是某个组织的成员，否则他不能读取这个组织的 Session、Bot 或成员。他只能通过 `/v1/platform` 管理平台。
 
 平台管理员是一个电子邮件地址。当有人第一次用这个邮箱登录、并且提供方已验证该邮箱时，这个条目会关联到那个账号。
 
@@ -111,7 +111,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 	"tokenRate": {
 		"organization": null,
 		"member": null,
-		"agent": null,
+		"bot": null,
 		"token": null
 	},
 	"updatedAt": "2026-10-21T09:00:00.000Z"
@@ -126,7 +126,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `organizationCreation` | 谁可以创建组织：`anyone` 或 `platform_admins`。参见[组织创建](#组织创建)。                           |
 | `policyCeiling`        | 对每个组织生效的拒绝策略。参见[策略上限](#策略上限)。                                                |
 | `appRestrictions`      | App Index 隐藏的 App。参见 [App Index](/zh-cn/docs/app-index#宿主限制)。                             |
-| `codeMode`             | Agent 能否使用 Code Mode，以及它的限制。参见 [Code Mode](/zh-cn/docs/code-mode#打开-code-mode)。     |
+| `codeMode`             | Bot 能否使用 Code Mode，以及它的限制。参见 [Code Mode](/zh-cn/docs/code-mode#打开-code-mode)。       |
 | `rateLimit`            | 每个调用方在一分钟内最多可以发送多少个 API 请求。参见[速率限制](/zh-cn/docs/usage#速率限制)。        |
 | `tokenRate`            | 每个范围最高的 token 速率。组织只能设置更低的速率。参见 [token 速率](/zh-cn/docs/usage#token-速率)。 |
 | `updatedAt`            | 设置最后一次修改的时间。                                                                             |

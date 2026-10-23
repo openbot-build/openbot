@@ -10,7 +10,7 @@ Platform admins run the platform. This page shows how to set it up and how to ma
 
 ## Platform admins
 
-A platform admin manages the platform. A platform admin is **not** a member of every organization. They cannot read the Sessions, Agents or members of an organization unless they are also a member of it. They manage the platform only through `/v1/platform`.
+A platform admin manages the platform. A platform admin is **not** a member of every organization. They cannot read the Sessions, Bots or members of an organization unless they are also a member of it. They manage the platform only through `/v1/platform`.
 
 A platform admin is an email address. The entry links to an account the first time someone signs in with that email, and the provider verified it.
 
@@ -111,7 +111,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 	"tokenRate": {
 		"organization": null,
 		"member": null,
-		"agent": null,
+		"bot": null,
 		"token": null
 	},
 	"updatedAt": "2026-10-21T09:00:00.000Z"
@@ -126,7 +126,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `organizationCreation` | Who can create an organization: `anyone` or `platform_admins`. See [Organization creation](#organization-creation).     |
 | `policyCeiling`        | Deny policies for every organization. See [Policy ceiling](#policy-ceiling).                                            |
 | `appRestrictions`      | Apps that the App Index hides. See [App Index](/docs/app-index#host-restrictions).                                      |
-| `codeMode`             | Whether Agents can use Code Mode, and its limits. See [Code Mode](/docs/code-mode#turn-on-code-mode).                   |
+| `codeMode`             | Whether Bots can use Code Mode, and its limits. See [Code Mode](/docs/code-mode#turn-on-code-mode).                     |
 | `rateLimit`            | How many API requests each caller may send in one minute. See [Rate limit](/docs/usage#rate-limit).                     |
 | `tokenRate`            | The highest token rates of each scope. Organizations can only set lower ones. See [Token rate](/docs/usage#token-rate). |
 | `updatedAt`            | When the settings last changed.                                                                                         |

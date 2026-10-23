@@ -1,22 +1,22 @@
 ---
-title: Agents teilen
-description: Lade andere Personen ein, einen deiner Agents in ihrer eigenen Organisation zu nutzen, per E-Mail oder mit einem Link.
+title: Bots teilen
+description: Lade andere Personen ein, einen deiner Bots in ihrer eigenen Organisation zu nutzen, per E-Mail oder mit einem Link.
 ---
 
-Du kannst einen Agent mit Personen außerhalb deiner Organisation teilen. Das ist so, wie du ein Member zu einer Organisation hinzufügst. Du lädst eine Person per E-Mail ein, oder du erstellst einen **Einladungslink**. Dein Client kann den Link als QR-Code zeigen. Die Person nimmt die Einladung an. Danach nutzt sie den Agent in ihrer eigenen Organisation.
+Du kannst einen Bot mit Personen außerhalb deiner Organisation teilen. Das ist so, wie du ein Member zu einer Organisation hinzufügst. Du lädst eine Person per E-Mail ein, oder du erstellst einen **Einladungslink**. Dein Client kann den Link als QR-Code zeigen. Die Person nimmt die Einladung an. Danach nutzt sie den Bot in ihrer eigenen Organisation.
 
-| Wort              | Bedeutung                                                                                             |
-| ----------------- | ----------------------------------------------------------------------------------------------------- |
-| Geteilter Agent   | Dein Agent, den andere Personen nutzen.                                                               |
-| Einladungslink    | Eine Einladung ohne E-Mail. Jeder, der ihr Geheimnis hat, kann sie annehmen, bis du sie zurückziehst. |
-| Agent-Mitglied    | Eine Person, die eine Einladung angenommen hat und den Agent nutzt.                                   |
-| Verknüpfter Agent | Der Agent, den ein Agent-Mitglied in seiner eigenen Organisation bekommt. Er nutzt deinen Agent.      |
+| Wort            | Bedeutung                                                                                             |
+| --------------- | ----------------------------------------------------------------------------------------------------- |
+| Geteilter Bot   | Dein Bot, den andere Personen nutzen.                                                                 |
+| Einladungslink  | Eine Einladung ohne E-Mail. Jeder, der ihr Geheimnis hat, kann sie annehmen, bis du sie zurückziehst. |
+| Bot-Mitglied    | Eine Person, die eine Einladung angenommen hat und den Bot nutzt.                                     |
+| Verknüpfter Bot | Der Bot, den ein Bot-Mitglied in seiner eigenen Organisation bekommt. Er nutzt deinen Bot.            |
 
 ---
 
 ## Personen einladen
 
-Du brauchst `agents.share` für den Agent. Members können ihre eigenen Agents teilen. Administratoren können auch die gemeinsamen Agents der Organisation teilen. Du kannst nur einen dauerhaften obersten Agent teilen: einen, der einem Member oder der Organisation gehört und der nicht archiviert ist.
+Du brauchst `bots.share` für den Bot. Members können ihre eigenen Bots teilen. Administratoren können auch die gemeinsamen Bots der Organisation teilen. Du kannst nur einen dauerhaften obersten Bot teilen: einen, der einem Member oder der Organisation gehört und der nicht archiviert ist.
 
 Um eine Person einzuladen, sende ihre E-Mail. Die Einladung gilt 7 Tage, wie eine [Einladung in die Organisation](/de/docs/organization#einladungen):
 
@@ -24,7 +24,7 @@ Um eine Person einzuladen, sende ihre E-Mail. Die Einladung gilt 7 Tage, wie ein
 curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"email":"ana@example.com"}' \
-  https://api.example.com/v1/agents/$AGENT/invitations
+  https://api.example.com/v1/bots/$BOT/invitations
 ```
 
 Um einen Einladungslink zu erstellen, lass `email` weg. Viele Personen können denselben Link nutzen.
@@ -33,7 +33,7 @@ Um einen Einladungslink zu erstellen, lass `email` weg. Viele Personen können d
 curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"path":"/join"}' \
-  https://api.example.com/v1/agents/$AGENT/invitations
+  https://api.example.com/v1/bots/$BOT/invitations
 ```
 
 | Feld        | Bedeutung                                                                           |
@@ -46,7 +46,7 @@ curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
 {
 	"invitation": {
 		"id": "inv_51c2…",
-		"agent": "agt_7d2c",
+		"bot": "bot_7d2c",
 		"email": null,
 		"prefix": "obai_Xk2pQ9aB",
 		"path": "/join",
@@ -62,9 +62,9 @@ curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 `url` ist der öffentliche Origin, dann `path`, dann `#` und das Geheimnis. Ein Browser sendet den Teil nach `#` nie an einen Server. So kommt das Geheimnis nie in ein Server-Log. `url` ist `null`, wenn es keinen `path` gibt. Zeige `url` als QR-Code, oder baue deine eigene Adresse aus `secret`.
 
-`GET /v1/agents/:agentId/invitations/:invitationId/secret` gibt dir das Geheimnis und die `url` eines Links noch einmal, zum Beispiel um den QR-Code noch einmal zu drucken. OpenBot speichert das Geheimnis verschlüsselt. Es speichert auch einen Hash, um den Link zu finden.
+`GET /v1/bots/:botId/invitations/:invitationId/secret` gibt dir das Geheimnis und die `url` eines Links noch einmal, zum Beispiel um den QR-Code noch einmal zu drucken. OpenBot speichert das Geheimnis verschlüsselt. Es speichert auch einen Hash, um den Link zu finden.
 
-`GET /v1/agents/:agentId/invitations` listet die Einladungen auf. `DELETE /v1/agents/:agentId/invitations/:invitationId` zieht eine Einladung zurück. Danach kann niemand sie annehmen. Die Personen, die sie vorher angenommen haben, bleiben Agent-Mitglieder.
+`GET /v1/bots/:botId/invitations` listet die Einladungen auf. `DELETE /v1/bots/:botId/invitations/:invitationId` zieht eine Einladung zurück. Danach kann niemand sie annehmen. Die Personen, die sie vorher angenommen haben, bleiben Bot-Mitglieder.
 
 ---
 
@@ -72,77 +72,77 @@ curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 Die eingeladene Person meldet sich an. Sie nutzt das Session-Cookie oder ihr eigenes User-Token.
 
-- Eine Einladung per E-Mail erscheint in `GET /v1/invitations`, mit `agent`. Nimm sie mit ihrer ID an.
+- Eine Einladung per E-Mail erscheint in `GET /v1/invitations`, mit `bot`. Nimm sie mit ihrer ID an.
 - Für einen Link sende sein Geheimnis.
 
 ```sh
 curl -X POST -H "Authorization: Bearer $THEIR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"secret":"obai_Xk2pQ9aB…","organization":"org_9a1f"}' \
-  https://api.example.com/v1/agent-invitations/accept
+  https://api.example.com/v1/bot-invitations/accept
 ```
 
-`organization` ist die Organisation, in der die Person den Agent nutzt. Sie muss ein aktives Member davon sein. Sie kann es weglassen, wenn sie nur eine Organisation hat oder wenn sie ein User-Token nutzt. Die Antwort ist ihr neuer verknüpfter Agent.
+`organization` ist die Organisation, in der die Person den Bot nutzt. Sie muss ein aktives Member davon sein. Sie kann es weglassen, wenn sie nur eine Organisation hat oder wenn sie ein User-Token nutzt. Die Antwort ist ihr neuer verknüpfter Bot.
 
-Wenn die Person den Agent schon nutzt, bekommt sie ihren verknüpften Agent zurück. Um eine Einladung per E-Mail abzulehnen, nutze `POST /v1/invitations/:invitationId/decline`.
+Wenn die Person den Bot schon nutzt, bekommt sie ihren verknüpften Bot zurück. Um eine Einladung per E-Mail abzulehnen, nutze `POST /v1/invitations/:invitationId/decline`.
 
 ---
 
-## Einen geteilten Agent nutzen
+## Einen geteilten Bot nutzen
 
-Der verknüpfte Agent ist ein Agent des Agent-Mitglieds, in seiner eigenen Organisation. Er hat `source`. Das nennt deinen Agent:
+Der verknüpfte Bot ist ein Bot des Bot-Mitglieds, in seiner eigenen Organisation. Er hat `source`. Das nennt deinen Bot:
 
 ```json
 {
-	"id": "agt_e40b",
+	"id": "bot_e40b",
 	"kind": "persistent",
 	"owner": { "_tag": "Member", "userId": "u_456" },
 	"name": "Guide",
-	"source": { "organizationId": "org_3c7e", "agent": "agt_7d2c" }
+	"source": { "organizationId": "org_3c7e", "bot": "bot_7d2c" }
 }
 ```
 
-Das Agent-Mitglied arbeitet damit wie mit seinen eigenen Agents:
+Das Bot-Mitglied arbeitet damit wie mit seinen eigenen Bots:
 
-- Es startet [Sessions](/de/docs/sessions) damit und kann ihn zu seinem Standard-Agent machen.
-- Der Agent arbeitet mit den Berechtigungen des Agent-Mitglieds, mit seinen verbundenen [Apps](/de/docs/apps) und mit seinen anderen Agents. Er kann den Agents des Agent-Mitglieds Arbeit geben.
-- Seine [Requests](/de/docs/requests) gehen an das Agent-Mitglied. Dessen Entscheidungen, [Grants](/de/docs/requests#einen-request-beantworten) und [Rules](/de/docs/rules) gelten nur in seiner Organisation. Deine gelten nur in deiner.
-- Die Organisation des Agent-Mitglieds bezahlt die Models. Wenn dein Agent ein Model nennt, das seine Organisation nicht hat, nutzt die Session das Standard-Model seiner Organisation.
+- Es startet [Sessions](/de/docs/sessions) damit und kann ihn zu seinem Standard-Bot machen.
+- Der Bot arbeitet mit den Berechtigungen des Bot-Mitglieds, mit seinen verbundenen [Apps](/de/docs/apps) und mit seinen anderen Bots. Er kann den Bots des Bot-Mitglieds Arbeit geben.
+- Seine [Requests](/de/docs/requests) gehen an das Bot-Mitglied. Dessen Entscheidungen, [Grants](/de/docs/requests#einen-request-beantworten) und [Rules](/de/docs/rules) gelten nur in seiner Organisation. Deine gelten nur in deiner.
+- Die Organisation des Bot-Mitglieds bezahlt die Models. Wenn dein Bot ein Model nennt, das seine Organisation nicht hat, nutzt die Session das Standard-Model seiner Organisation.
 - Du siehst nie seine Sessions.
 
-Name, Rolle, Anweisungen und Model kommen immer von deinem Agent. Wenn du sie änderst, ändert sich auch jeder verknüpfte Agent. Ein Agent-Mitglied kann sie nicht ändern. Ein Agent-Mitglied kann `planApproval` ändern.
+Name, Rolle, Anweisungen und Model kommen immer von deinem Bot. Wenn du sie änderst, ändert sich auch jeder verknüpfte Bot. Ein Bot-Mitglied kann sie nicht ändern. Ein Bot-Mitglied kann `planApproval` ändern.
 
-Der Agent hat [einen Memory-Pool](/de/docs/memory#agent-memory), in deiner Organisation. Was er in der Organisation eines Agent-Mitglieds lernt, ist für dieses Agent-Mitglied, in dieser Organisation. Niemand liest das Memory über eine andere Person: du nicht, und andere Agent-Mitglieder auch nicht. Du kannst mit einem Purge entfernen, was ein Agent-Mitglied hinterlassen hat, ohne es zu lesen. Nur du verwaltest den Memory-Agent.
+Der Bot hat [einen Memory-Pool](/de/docs/memory#bot-memory), in deiner Organisation. Was er in der Organisation eines Bot-Mitglieds lernt, ist für dieses Bot-Mitglied, in dieser Organisation. Niemand liest das Memory über eine andere Person: du nicht, und andere Bot-Mitglieder auch nicht. Du kannst mit einem Purge entfernen, was ein Bot-Mitglied hinterlassen hat, ohne es zu lesen. Nur du verwaltest den Memory-Bot.
 
 ---
 
-## Agent-Mitglieder verwalten
+## Bot-Mitglieder verwalten
 
-| Anfrage                                      | Was sie tut                                                                                 |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `GET /v1/agents/:agentId/members`            | Listet die Agent-Mitglieder auf: ihre User-ID und Organisation und ihren verknüpften Agent. |
-| `DELETE /v1/agents/:agentId/members/:userId` | Entfernt eine Person. Ihr verknüpfter Agent hört sofort auf zu arbeiten.                    |
+| Anfrage                                  | Was sie tut                                                                             |
+| ---------------------------------------- | --------------------------------------------------------------------------------------- |
+| `GET /v1/bots/:botId/members`            | Listet die Bot-Mitglieder auf: ihre User-ID und Organisation und ihren verknüpften Bot. |
+| `DELETE /v1/bots/:botId/members/:userId` | Entfernt eine Person. Ihr verknüpfter Bot hört sofort auf zu arbeiten.                  |
 
-Beide brauchen `agents.share`. Ein verknüpfter Agent hört auch auf, wenn du deinen Agent archivierst.
+Beide brauchen `bots.share`. Ein verknüpfter Bot hört auch auf, wenn du deinen Bot archivierst.
 
-Ein Agent-Mitglied geht, wenn es seinen verknüpften Agent archiviert.
+Ein Bot-Mitglied geht, wenn es seinen verknüpften Bot archiviert.
 
 ---
 
 ## Berechtigungen
 
-| Berechtigung   | Damit kannst du                                                                 |
-| -------------- | ------------------------------------------------------------------------------- |
-| `agents.share` | Personen einladen, einen Agent zu nutzen, und seine Agent-Mitglieder verwalten. |
+| Berechtigung | Damit kannst du                                                             |
+| ------------ | --------------------------------------------------------------------------- |
+| `bots.share` | Personen einladen, einen Bot zu nutzen, und seine Bot-Mitglieder verwalten. |
 
 Siehe [Berechtigungen](/de/docs/permissions).
 
 ## Fehler
 
-| Status | Fehler                    | Wann                                                                                                     |
-| ------ | ------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `400`  | `AgentInvalid`            | Du kannst den Agent nicht teilen, oder ein Agent-Mitglied will ändern, was der geteilte Agent ist.       |
-| `400`  | `InvitationInvalid`       | Die Einladung ist benutzt, zurückgezogen oder abgelaufen, oder du musst die Organisation nennen.         |
-| `404`  | `InvitationNotFound`      | Es gibt keine Einladung mit dieser ID oder diesem Geheimnis für dich.                                    |
-| `404`  | `AgentNotFound`           | Es gibt keinen Agent mit dieser ID, den du lesen darfst, oder ein verknüpfter Agent arbeitet nicht mehr. |
-| `503`  | `AgentStorageUnavailable` | OpenBot erreicht seine Datenbank nicht.                                                                  |
+| Status | Fehler                  | Wann                                                                                                 |
+| ------ | ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| `400`  | `BotInvalid`            | Du kannst den Bot nicht teilen, oder ein Bot-Mitglied will ändern, was der geteilte Bot ist.         |
+| `400`  | `InvitationInvalid`     | Die Einladung ist benutzt, zurückgezogen oder abgelaufen, oder du musst die Organisation nennen.     |
+| `404`  | `InvitationNotFound`    | Es gibt keine Einladung mit dieser ID oder diesem Geheimnis für dich.                                |
+| `404`  | `BotNotFound`           | Es gibt keinen Bot mit dieser ID, den du lesen darfst, oder ein verknüpfter Bot arbeitet nicht mehr. |
+| `503`  | `BotStorageUnavailable` | OpenBot erreicht seine Datenbank nicht.                                                              |

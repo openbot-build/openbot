@@ -65,7 +65,7 @@ const pair = Command.make("pair", {
 
 const connect = Command.make("connect").pipe(
 	Command.withDescription(
-		"Connect this machine to OpenBot and do the work that Agents send. It connects again when the connection is lost.",
+		"Connect this machine to OpenBot and do the work that Bots send. It connects again when the connection is lost.",
 	),
 	Command.withHandler(() =>
 		Effect.gen(function* () {
@@ -74,7 +74,7 @@ const connect = Command.make("connect").pipe(
 			return yield* Connect.connect({
 				config,
 				events: {
-					connected: Console.log("Connected. Agents can use this machine now."),
+					connected: Console.log("Connected. Bots can use this machine now."),
 					disconnected: (reason, retryInMs) =>
 						Console.error(
 							`The connection is lost (${reason}). Trying again in ${Math.round(retryInMs / 1000)} s.`,

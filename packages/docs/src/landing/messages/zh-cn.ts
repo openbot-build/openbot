@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "一个无界面、API 优先的 Agent 平台。",
+	description: "一个无界面、API 优先的 Bot 平台。",
 	nav: {
 		label: "网站",
 		docs: "文档",
@@ -9,8 +9,8 @@ export default {
 		language: "语言",
 	},
 	hero: {
-		title: ["可以调用的 Agent。", "可以检查的结果。"],
-		body: "OpenBot 是一个开源的 Agent 平台，没有用户界面。你通过 HTTP 把工作交给 Agent。",
+		title: ["可以调用的 Bot。", "可以检查的结果。"],
+		body: "OpenBot 是一个开源的 Bot 平台，没有用户界面。你通过 HTTP 把工作交给 Bot。",
 		quickStart: "快速开始",
 		apiReference: "API 参考",
 		visual: "开始一个 Turn",
@@ -53,7 +53,7 @@ export default {
 			},
 			{
 				title: "开放的 App",
-				text: "Agent 可以找到并使用发布者通过 OpenBot App Protocol 放在开放网络上的 App。",
+				text: "Bot 可以找到并使用发布者通过 OpenBot App Protocol 放在开放网络上的 App。",
 			},
 			{
 				title: "你的模型",

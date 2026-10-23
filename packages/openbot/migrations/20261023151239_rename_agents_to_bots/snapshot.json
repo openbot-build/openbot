@@ -1,0 +1,466 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "354d47fa-c3e1-43dd-a016-07bb185052da",
+	"prevIds": ["9e37fe8d-3fe3-4230-8f99-2baf10012954"],
+	"footprints": [
+		{
+			"statementType": "rename_table",
+			"statementTarget": ["table", "public", "openbot_agent_memories"],
+			"writes": [
+				"s|tbl|public.openbot_agent_memories",
+				"n|tbl|public.openbot_agent_memories",
+				"n|rel|public.openbot_agent_memories",
+				"n|type|public.openbot_agent_memories",
+				"s|tbl|public.openbot_bot_memories",
+				"n|tbl|public.openbot_bot_memories",
+				"n|rel|public.openbot_bot_memories",
+				"n|type|public.openbot_bot_memories"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "rename_table",
+			"statementTarget": ["table", "public", "openbot_agent_memory_tags"],
+			"writes": [
+				"s|tbl|public.openbot_agent_memory_tags",
+				"n|tbl|public.openbot_agent_memory_tags",
+				"n|rel|public.openbot_agent_memory_tags",
+				"n|type|public.openbot_agent_memory_tags",
+				"s|tbl|public.openbot_bot_memory_tags",
+				"n|tbl|public.openbot_bot_memory_tags",
+				"n|rel|public.openbot_bot_memory_tags",
+				"n|type|public.openbot_bot_memory_tags"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "rename_table",
+			"statementTarget": ["table", "public", "openbot_agent_records"],
+			"writes": [
+				"s|tbl|public.openbot_agent_records",
+				"n|tbl|public.openbot_agent_records",
+				"n|rel|public.openbot_agent_records",
+				"n|type|public.openbot_agent_records",
+				"s|tbl|public.openbot_bot_records",
+				"n|tbl|public.openbot_bot_records",
+				"n|rel|public.openbot_bot_records",
+				"n|type|public.openbot_bot_records"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "rename_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_bot_memories",
+				"home_agent"
+			],
+			"writes": [
+				"s|col|public.openbot_bot_memories.home_agent",
+				"n|col|public.openbot_bot_memories.home_agent",
+				"s|col|public.openbot_bot_memories.home_bot",
+				"n|col|public.openbot_bot_memories.home_bot"
+			],
+			"reads": ["n|tbl|public.openbot_bot_memories", "n|sch|public"]
+		},
+		{
+			"statementType": "rename_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_bot_memory_tags",
+				"home_agent"
+			],
+			"writes": [
+				"s|col|public.openbot_bot_memory_tags.home_agent",
+				"n|col|public.openbot_bot_memory_tags.home_agent",
+				"s|col|public.openbot_bot_memory_tags.home_bot",
+				"n|col|public.openbot_bot_memory_tags.home_bot"
+			],
+			"reads": ["n|tbl|public.openbot_bot_memory_tags", "n|sch|public"]
+		},
+		{
+			"statementType": "rename_column",
+			"statementTarget": ["column", "public", "openbot_channels", "agent"],
+			"writes": [
+				"s|col|public.openbot_channels.agent",
+				"n|col|public.openbot_channels.agent",
+				"s|col|public.openbot_channels.bot",
+				"n|col|public.openbot_channels.bot"
+			],
+			"reads": ["n|tbl|public.openbot_channels", "n|sch|public"]
+		},
+		{
+			"statementType": "rename_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_computer_access",
+				"agent"
+			],
+			"writes": [
+				"s|col|public.openbot_computer_access.agent",
+				"n|col|public.openbot_computer_access.agent",
+				"s|col|public.openbot_computer_access.bot",
+				"n|col|public.openbot_computer_access.bot"
+			],
+			"reads": ["n|tbl|public.openbot_computer_access", "n|sch|public"]
+		},
+		{
+			"statementType": "rename_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_invitations",
+				"agent_id"
+			],
+			"writes": [
+				"s|col|public.openbot_invitations.agent_id",
+				"n|col|public.openbot_invitations.agent_id",
+				"s|col|public.openbot_invitations.bot_id",
+				"n|col|public.openbot_invitations.bot_id"
+			],
+			"reads": ["n|tbl|public.openbot_invitations", "n|sch|public"]
+		},
+		{
+			"statementType": "rename_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_invitations",
+				"agent_name"
+			],
+			"writes": [
+				"s|col|public.openbot_invitations.agent_name",
+				"n|col|public.openbot_invitations.agent_name",
+				"s|col|public.openbot_invitations.bot_name",
+				"n|col|public.openbot_invitations.bot_name"
+			],
+			"reads": ["n|tbl|public.openbot_invitations", "n|sch|public"]
+		},
+		{
+			"statementType": "rename_column",
+			"statementTarget": ["column", "public", "openbot_triggers", "agent"],
+			"writes": [
+				"s|col|public.openbot_triggers.agent",
+				"n|col|public.openbot_triggers.agent",
+				"s|col|public.openbot_triggers.bot",
+				"n|col|public.openbot_triggers.bot"
+			],
+			"reads": ["n|tbl|public.openbot_triggers", "n|sch|public"]
+		},
+		{
+			"statementType": "rename_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_usage_events",
+				"agent_id"
+			],
+			"writes": [
+				"s|col|public.openbot_usage_events.agent_id",
+				"n|col|public.openbot_usage_events.agent_id",
+				"s|col|public.openbot_usage_events.bot_id",
+				"n|col|public.openbot_usage_events.bot_id"
+			],
+			"reads": ["n|tbl|public.openbot_usage_events", "n|sch|public"]
+		},
+		{
+			"statementType": "rename_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_bot_memories",
+				"openbot_agent_memories_updated"
+			],
+			"writes": [
+				"s|idx|public.openbot_agent_memories_updated",
+				"n|idx|public.openbot_agent_memories_updated",
+				"n|rel|public.openbot_agent_memories_updated",
+				"s|idx|public.openbot_bot_memories_updated",
+				"n|idx|public.openbot_bot_memories_updated",
+				"n|rel|public.openbot_bot_memories_updated"
+			],
+			"reads": [
+				"e|tbl|public.openbot_bot_memories",
+				"n|sch|public",
+				"e|col|public.openbot_bot_memories.organization_id",
+				"e|col|public.openbot_bot_memories.home_bot",
+				"e|col|public.openbot_bot_memories.updated_at"
+			]
+		},
+		{
+			"statementType": "rename_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_bot_memory_tags",
+				"openbot_agent_memory_tags_tag"
+			],
+			"writes": [
+				"s|idx|public.openbot_agent_memory_tags_tag",
+				"n|idx|public.openbot_agent_memory_tags_tag",
+				"n|rel|public.openbot_agent_memory_tags_tag",
+				"s|idx|public.openbot_bot_memory_tags_tag",
+				"n|idx|public.openbot_bot_memory_tags_tag",
+				"n|rel|public.openbot_bot_memory_tags_tag"
+			],
+			"reads": [
+				"e|tbl|public.openbot_bot_memory_tags",
+				"n|sch|public",
+				"e|col|public.openbot_bot_memory_tags.organization_id",
+				"e|col|public.openbot_bot_memory_tags.home_bot",
+				"e|col|public.openbot_bot_memory_tags.tag"
+			]
+		},
+		{
+			"statementType": "rename_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_bot_records",
+				"openbot_agent_records_owner"
+			],
+			"writes": [
+				"s|idx|public.openbot_agent_records_owner",
+				"n|idx|public.openbot_agent_records_owner",
+				"n|rel|public.openbot_agent_records_owner",
+				"s|idx|public.openbot_bot_records_owner",
+				"n|idx|public.openbot_bot_records_owner",
+				"n|rel|public.openbot_bot_records_owner"
+			],
+			"reads": [
+				"e|tbl|public.openbot_bot_records",
+				"n|sch|public",
+				"e|col|public.openbot_bot_records.kind",
+				"e|col|public.openbot_bot_records.organization_id",
+				"e|col|public.openbot_bot_records.owner"
+			]
+		},
+		{
+			"statementType": "rename_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_bot_records",
+				"openbot_agent_records_scope"
+			],
+			"writes": [
+				"s|idx|public.openbot_agent_records_scope",
+				"n|idx|public.openbot_agent_records_scope",
+				"n|rel|public.openbot_agent_records_scope",
+				"s|idx|public.openbot_bot_records_scope",
+				"n|idx|public.openbot_bot_records_scope",
+				"n|rel|public.openbot_bot_records_scope"
+			],
+			"reads": [
+				"e|tbl|public.openbot_bot_records",
+				"n|sch|public",
+				"e|col|public.openbot_bot_records.kind",
+				"e|col|public.openbot_bot_records.organization_id",
+				"e|col|public.openbot_bot_records.scope"
+			]
+		},
+		{
+			"statementType": "rename_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_bot_records",
+				"openbot_agent_records_status"
+			],
+			"writes": [
+				"s|idx|public.openbot_agent_records_status",
+				"n|idx|public.openbot_agent_records_status",
+				"n|rel|public.openbot_agent_records_status",
+				"s|idx|public.openbot_bot_records_status",
+				"n|idx|public.openbot_bot_records_status",
+				"n|rel|public.openbot_bot_records_status"
+			],
+			"reads": [
+				"e|tbl|public.openbot_bot_records",
+				"n|sch|public",
+				"e|col|public.openbot_bot_records.kind",
+				"e|col|public.openbot_bot_records.status"
+			]
+		},
+		{
+			"statementType": "rename_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_computer_access",
+				"openbot_computer_access_agent"
+			],
+			"writes": [
+				"s|idx|public.openbot_computer_access_agent",
+				"n|idx|public.openbot_computer_access_agent",
+				"n|rel|public.openbot_computer_access_agent",
+				"s|idx|public.openbot_computer_access_bot",
+				"n|idx|public.openbot_computer_access_bot",
+				"n|rel|public.openbot_computer_access_bot"
+			],
+			"reads": [
+				"e|tbl|public.openbot_computer_access",
+				"n|sch|public",
+				"e|col|public.openbot_computer_access.organization_id",
+				"e|col|public.openbot_computer_access.bot"
+			]
+		},
+		{
+			"statementType": "rename_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_usage_events",
+				"openbot_usage_events_agent"
+			],
+			"writes": [
+				"s|idx|public.openbot_usage_events_agent",
+				"n|idx|public.openbot_usage_events_agent",
+				"n|rel|public.openbot_usage_events_agent",
+				"s|idx|public.openbot_usage_events_bot",
+				"n|idx|public.openbot_usage_events_bot",
+				"n|rel|public.openbot_usage_events_bot"
+			],
+			"reads": [
+				"e|tbl|public.openbot_usage_events",
+				"n|sch|public",
+				"e|col|public.openbot_usage_events.organization_id",
+				"e|col|public.openbot_usage_events.bot_id",
+				"e|col|public.openbot_usage_events.occurred_at"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "rename",
+			"key": "tables\u0000[\"public\",\"openbot_agent_memories\"]",
+			"set": {
+				"name": "openbot_bot_memories"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "tables\u0000[\"public\",\"openbot_agent_memory_tags\"]",
+			"set": {
+				"name": "openbot_bot_memory_tags"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "tables\u0000[\"public\",\"openbot_agent_records\"]",
+			"set": {
+				"name": "openbot_bot_records"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "columns\u0000[\"public\",\"openbot_bot_memories\",\"home_agent\"]",
+			"set": {
+				"name": "home_bot"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "columns\u0000[\"public\",\"openbot_bot_memory_tags\",\"home_agent\"]",
+			"set": {
+				"name": "home_bot"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "columns\u0000[\"public\",\"openbot_channels\",\"agent\"]",
+			"set": {
+				"name": "bot"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "columns\u0000[\"public\",\"openbot_computer_access\",\"agent\"]",
+			"set": {
+				"name": "bot"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "columns\u0000[\"public\",\"openbot_invitations\",\"agent_id\"]",
+			"set": {
+				"name": "bot_id"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "columns\u0000[\"public\",\"openbot_invitations\",\"agent_name\"]",
+			"set": {
+				"name": "bot_name"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "columns\u0000[\"public\",\"openbot_triggers\",\"agent\"]",
+			"set": {
+				"name": "bot"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "columns\u0000[\"public\",\"openbot_usage_events\",\"agent_id\"]",
+			"set": {
+				"name": "bot_id"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "indexes\u0000[\"public\",\"openbot_agent_memories_updated\"]",
+			"set": {
+				"name": "openbot_bot_memories_updated"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "indexes\u0000[\"public\",\"openbot_agent_memory_tags_tag\"]",
+			"set": {
+				"name": "openbot_bot_memory_tags_tag"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "indexes\u0000[\"public\",\"openbot_agent_records_owner\"]",
+			"set": {
+				"name": "openbot_bot_records_owner"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "indexes\u0000[\"public\",\"openbot_agent_records_scope\"]",
+			"set": {
+				"name": "openbot_bot_records_scope"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "indexes\u0000[\"public\",\"openbot_agent_records_status\"]",
+			"set": {
+				"name": "openbot_bot_records_status"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "indexes\u0000[\"public\",\"openbot_computer_access_agent\"]",
+			"set": {
+				"name": "openbot_computer_access_bot"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "indexes\u0000[\"public\",\"openbot_usage_events_agent\"]",
+			"set": {
+				"name": "openbot_usage_events_bot"
+			}
+		}
+	]
+}

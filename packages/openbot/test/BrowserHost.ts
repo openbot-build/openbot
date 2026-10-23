@@ -16,7 +16,7 @@ import {
 import { LanguageModel, Response, Tool, Toolkit } from "effect/ai"
 import { FetchHttpClient, HttpServer } from "effect/http"
 import { exportJWK, generateKeyPair, SignJWT } from "jose"
-import * as DefaultAgent from "./DefaultAgent.ts"
+import * as DefaultBot from "./DefaultBot.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 import type { Discovery, Network } from "@openbot-build/protocol"
 import type { AppIndexApi, Settings as SettingsApi } from "@openbot-build/api"
@@ -70,8 +70,8 @@ export async function start(options: {
 	readonly platformFetch?: typeof fetch
 	/** The drivers of the Computer providers. */
 	readonly computerDrivers?: Layer.Layer<Drivers>
-	/** Organization settings for the Agents of each new organization. */
-	readonly agents?: {
+	/** Organization settings for the Bots of each new organization. */
+	readonly bots?: {
 		readonly memory?: boolean
 		readonly requestTimeoutMs?: number
 	}
@@ -422,12 +422,12 @@ export async function start(options: {
 								...(options.appReadRules === undefined
 									? {}
 									: { appReadRules: options.appReadRules }),
-								...(options.agents?.memory === undefined
+								...(options.bots?.memory === undefined
 									? {}
-									: { agentMemory: options.agents.memory }),
-								...(options.agents?.requestTimeoutMs === undefined
+									: { botMemory: options.bots.memory }),
+								...(options.bots?.requestTimeoutMs === undefined
 									? {}
-									: { requestTimeoutMs: options.agents.requestTimeoutMs }),
+									: { requestTimeoutMs: options.bots.requestTimeoutMs }),
 							}),
 					)
 					if (options.sharedDomain === false || prepared.size > 1) return
@@ -534,9 +534,9 @@ export async function start(options: {
 				returnLocation: callback.headers.get("location"),
 			}
 		}
-		/** Sets up a default Agent for the person, when they have none. */
-		const defaultAgent = (session: Redacted.Redacted<string>) =>
-			DefaultAgent.ensure((path, method, payload) =>
+		/** Sets up a default Bot for the person, when they have none. */
+		const defaultBot = (session: Redacted.Redacted<string>) =>
+			DefaultBot.ensure((path, method, payload) =>
 				fetch(address + path, {
 					method,
 					headers: {
@@ -570,7 +570,7 @@ export async function start(options: {
 				)
 			},
 			login,
-			defaultAgent,
+			defaultBot,
 			toolCalls: () => toolCalls,
 			values,
 			locked,

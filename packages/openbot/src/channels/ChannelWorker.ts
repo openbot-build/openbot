@@ -13,8 +13,8 @@ import {
 	Schedule,
 	Stream,
 } from "effect"
-import { Agents } from "../agents/Agents.ts"
-import { Signals, type Signal } from "../agents/Signals.ts"
+import { Bots } from "../bots/Bots.ts"
+import { Signals, type Signal } from "../bots/Signals.ts"
 import { Backend } from "../app/Backend.ts"
 import { can } from "../authorization/Check.ts"
 import { resourceKey } from "../authorization/Policy.ts"
@@ -64,11 +64,11 @@ export const answerOf = (response: {
 	if (response.status === "failed")
 		return (
 			(text.length > 0 ? text + "\n\n" : "") +
-			`The Agent could not finish: ${response.error?.message ?? "unknown error"}`
+			`The Bot could not finish: ${response.error?.message ?? "unknown error"}`
 		)
 	if (response.status === "cancelled")
-		return (text.length > 0 ? text + "\n\n" : "") + "The Agent stopped."
-	return text.length > 0 ? text : "The Agent did not write an answer."
+		return (text.length > 0 ? text + "\n\n" : "") + "The Bot stopped."
+	return text.length > 0 ? text : "The Bot did not write an answer."
 }
 
 const decisions = {
@@ -133,11 +133,11 @@ const outcome = (request: RequestsApi.CapabilityRequest) => {
 /** The card of a request. It has buttons only while the request waits. */
 const requestCard = (
 	request: RequestsApi.CapabilityRequest,
-	agentName: string,
+	botName: string,
 	approverName: string | null,
 ): OutboundMessage => ({
 	markdown: [
-		`**${agentName}** wants to ${describe(request)}.`,
+		`**${botName}** wants to ${describe(request)}.`,
 		request.reason.length > 0 ? `Reason: ${request.reason}` : "",
 		approverName === null ? "" : `This needs a decision from ${approverName}.`,
 		outcome(request),
@@ -177,14 +177,14 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 			const queue = yield* ChannelQueue
 			const registry = yield* ChannelRegistry
 			const backend = yield* Backend
-			const agents = yield* Agents
+			const bots = yield* Bots
 			const organization = yield* Organization
 			const requests = yield* Requests
 			const signals = yield* Signals
 			const services = yield* Effect.context<
 				| Effect.Services<ReturnType<typeof resolveAsPerson>>
 				| Effect.Services<ReturnType<typeof can>>
-				| Effect.Services<ReturnType<typeof agents.access>>
+				| Effect.Services<ReturnType<typeof bots.access>>
 			>()
 			const scope = yield* Effect.scope
 			const interval = options.interval ?? Duration.seconds(1)
@@ -279,8 +279,8 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 						organizationId,
 						userId: stored.actor,
 					}
-					const agent = yield* agents
-						.access(actor, stored.agent, "agents.delegate")
+					const bot = yield* bots
+						.access(actor, stored.bot, "bots.delegate")
 						.pipe(Effect.provideContext(services))
 					const sessions = yield* backend.forCaller(actor)
 					const title =
@@ -289,12 +289,12 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 							? `${stored.name}: ${event.sender.displayName}`
 							: stored.name)
 					const created = yield* sessions.create({
-						agent,
+						bot,
 						kind: "channel",
 						chain: {
 							organizationId,
 							userId: stored.actor,
-							agents: [agent.id],
+							bots: [bot.id],
 							sessions: [],
 						},
 						channel: {
@@ -410,7 +410,7 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 							"You may not use this Channel. Ask an administrator of your organization.",
 						)
 					const chat = yield* sessionOf(organizationId, stored, event).pipe(
-						Effect.catchTag(["AgentNotFound", "PermissionDenied"], () =>
+						Effect.catchTag(["BotNotFound", "PermissionDenied"], () =>
 							Effect.succeed(null),
 						),
 					)
@@ -420,7 +420,7 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 							stored,
 							channel,
 							event,
-							"This Channel cannot work now: its actor cannot give work to its Agent. Ask an administrator to check the Channel.",
+							"This Channel cannot work now: its actor cannot give work to its Bot. Ask an administrator to check the Channel.",
 						)
 					const { session, owner } = chat
 					const sessions = yield* backend.forCaller({
@@ -428,7 +428,7 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 						organizationId,
 						userId: owner,
 					})
-					// In a group, the Agent must know who speaks.
+					// In a group, the Bot must know who speaks.
 					const input =
 						event.conversation.kind === "group"
 							? `${yield* nameOf(organizationId, userId)}: ${event.text}`
@@ -682,7 +682,7 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 					if (request.status !== "pending" && !known) return
 					const where = yield* cardTarget(conversation.value, request)
 					if (where.target === null) return
-					const agent = yield* agents.find(organizationId, request.agent)
+					const bot = yield* bots.find(organizationId, request.bot)
 					yield* queue.putRequest({
 						organizationId,
 						channelId: conversation.value.channelId,
@@ -690,9 +690,9 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 						request: id,
 						message: requestCard(
 							request,
-							Option.match(agent, {
-								onNone: () => "An Agent",
-								onSome: (agent) => agent.name,
+							Option.match(bot, {
+								onNone: () => "A Bot",
+								onSome: (bot) => bot.name,
 							}),
 							where.approver === null
 								? null

@@ -2,13 +2,13 @@ import { Settings } from "../settings/Settings.ts"
 import { randomUUID } from "node:crypto"
 import type { Session, Turn } from "@openbot-build/core"
 import {
-	AgentsApi,
+	BotsApi,
 	type AppExecution,
 	type CodeRunsApi,
 	RequestsApi,
 } from "@openbot-build/api"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
-import { AgentRecords } from "../agents/AgentRecords.ts"
+import { BotRecords } from "../bots/BotRecords.ts"
 import { Chain } from "../sessions/SessionHost.ts"
 import { Grants } from "./Grants.ts"
 import { Rules, deciderKey } from "./Rules.ts"
@@ -27,45 +27,45 @@ export const Stored = Schema.Struct({
 export type Stored = typeof Stored.Type
 
 /**
- * The decider above an Agent in its owner chain: the Agent before it,
+ * The decider above a Bot in its owner chain: the Bot before it,
  * or the person at the top.
  */
 export const superior = ({
 	deciders,
 	userId,
-	agent,
+	bot,
 }: {
-	readonly deciders: ReadonlyArray<AgentsApi.AgentId>
+	readonly deciders: ReadonlyArray<BotsApi.BotId>
 	readonly userId: string
-	readonly agent: string
+	readonly bot: string
 }): Approver => {
-	const index = deciders.indexOf(agent as AgentsApi.AgentId)
+	const index = deciders.indexOf(bot as BotsApi.BotId)
 	return index > 0
-		? { _tag: "Agent", agent: deciders[index - 1]! }
+		? { _tag: "Bot", bot: deciders[index - 1]! }
 		: { _tag: "Person", userId }
 }
 
-const above = (stored: Stored, agent: string) =>
+const above = (stored: Stored, bot: string) =>
 	superior({
 		deciders: stored.request.chain,
 		userId: stored.chain.userId,
-		agent,
+		bot,
 	})
 
 /**
- * The Session where an Agent of the delegation chain works. The last Agent works in `current`.
+ * The Session where a Bot of the delegation chain works. The last Bot works in `current`.
  * A decider outside the delegation chain gets `current` too.
  */
 export const sessionOf = ({
 	chain,
-	agent,
+	bot,
 	current,
 }: {
 	readonly chain: Chain
-	readonly agent: string
+	readonly bot: string
 	readonly current: Session.Id
 }) => {
-	const index = chain.agents.indexOf(agent as AgentsApi.AgentId)
+	const index = chain.bots.indexOf(bot as BotsApi.BotId)
 	return index >= 0 && index < chain.sessions.length
 		? chain.sessions[index]!
 		: current
@@ -74,23 +74,23 @@ export const sessionOf = ({
 const approverKey = (approver: Approver) =>
 	approver._tag === "Person"
 		? "person:" + approver.userId
-		: "agent:" + approver.agent
+		: "bot:" + approver.bot
 
 export interface Decision {
-	readonly by: AgentsApi.Decider
+	readonly by: BotsApi.Decider
 	readonly allow: boolean
-	readonly scope?: AgentsApi.GrantScope
+	readonly scope?: BotsApi.GrantScope
 	readonly reason?: string
 	readonly question?: string
 	readonly expected?: number
-	/** For an allow by an Agent: true when the Agent holds the capability itself. */
+	/** For an allow by a Bot: true when the Bot holds the capability itself. */
 	readonly holds?: boolean
-	/** Keep the decision as a Rule for the requesting Agent. */
+	/** Keep the decision as a Rule for the requesting Bot. */
 	readonly rule?: string
 }
 
 /**
- * How one request waits. `person` sends it to the person at once, not to the Agent above.
+ * How one request waits. `person` sends it to the person at once, not to the Bot above.
  * `timeoutMs` replaces the timeout of the organization. `onExpire` says what happens when
  * nobody answers in time. Without it, the request is denied.
  */
@@ -106,7 +106,7 @@ export type Outcome =
 	| { readonly _tag: "Escalated"; readonly stored: Stored }
 
 /**
- * Requests of Agents for capabilities. A request waits for one decider at a time.
+ * Requests of Bots for capabilities. A request waits for one decider at a time.
  * This service only keeps records. The coordinator starts reviews and lets the work go on.
  */
 export class Requests extends Context.Service<
@@ -115,11 +115,11 @@ export class Requests extends Context.Service<
 		readonly create: (
 			organizationId: string,
 			input: {
-				readonly agent: AgentsApi.AgentId
+				readonly bot: BotsApi.BotId
 				readonly chain: Chain
-				/** The owner chain of the Agent, from the top, ending with the Agent. */
-				readonly deciders: ReadonlyArray<AgentsApi.AgentId>
-				readonly capability: AgentsApi.Capability
+				/** The owner chain of the Bot, from the top, ending with the Bot. */
+				readonly deciders: ReadonlyArray<BotsApi.BotId>
+				readonly capability: BotsApi.Capability
 				readonly reason: string
 				readonly session: Session.Id
 				readonly turn: Turn.Id
@@ -130,35 +130,32 @@ export class Requests extends Context.Service<
 				/** A request that is decided at once, for example by a Grant or by policy. */
 				readonly decided?: {
 					readonly allow: boolean
-					readonly by: AgentsApi.Decider
+					readonly by: BotsApi.Decider
 					readonly reason?: string
 				}
 			},
-		) => Effect.Effect<Stored, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<Stored, BotsApi.BotStorageUnavailable>
 		readonly find: (
 			organizationId: string,
 			id: string,
-		) => Effect.Effect<Option.Option<Stored>, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<Option.Option<Stored>, BotsApi.BotStorageUnavailable>
 		/** The requests that wait for a person, or that the person decided. */
 		readonly forPerson: (
 			organizationId: string,
 			userId: string,
 			status?: Request["status"],
-		) => Effect.Effect<
-			ReadonlyArray<Request>,
-			AgentsApi.AgentStorageUnavailable
-		>
+		) => Effect.Effect<ReadonlyArray<Request>, BotsApi.BotStorageUnavailable>
 		/** The requests of one Session. */
 		readonly forSession: (
 			organizationId: string,
 			session: Session.Id,
-		) => Effect.Effect<ReadonlyArray<Stored>, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<ReadonlyArray<Stored>, BotsApi.BotStorageUnavailable>
 		readonly pending: Effect.Effect<
 			ReadonlyArray<{
 				readonly organizationId: string
 				readonly value: Stored
 			}>,
-			AgentsApi.AgentStorageUnavailable
+			BotsApi.BotStorageUnavailable
 		>
 		readonly decide: (
 			organizationId: string,
@@ -168,7 +165,7 @@ export class Requests extends Context.Service<
 			Outcome,
 			| RequestsApi.RequestNotFound
 			| RequestsApi.RequestConflict
-			| AgentsApi.AgentStorageUnavailable
+			| BotsApi.BotStorageUnavailable
 		>
 		/** Closes pending requests whose time is over. Returns the closed requests. */
 		/**
@@ -178,25 +175,25 @@ export class Requests extends Context.Service<
 		readonly pass: (
 			organizationId: string,
 			id: string,
-			from: AgentsApi.AgentId,
-		) => Effect.Effect<Option.Option<Stored>, AgentsApi.AgentStorageUnavailable>
+			from: BotsApi.BotId,
+		) => Effect.Effect<Option.Option<Stored>, BotsApi.BotStorageUnavailable>
 		/** Closes one pending request when its time is over. */
 		readonly expireOne: (
 			organizationId: string,
 			id: string,
-		) => Effect.Effect<Option.Option<Stored>, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<Option.Option<Stored>, BotsApi.BotStorageUnavailable>
 		readonly expire: Effect.Effect<
 			ReadonlyArray<{
 				readonly organizationId: string
 				readonly value: Stored
 			}>,
-			AgentsApi.AgentStorageUnavailable
+			BotsApi.BotStorageUnavailable
 		>
 		/** Closes the pending requests of a Session, for example when its Turn stops. */
 		readonly cancel: (
 			organizationId: string,
 			session: Session.Id,
-		) => Effect.Effect<void, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<void, BotsApi.BotStorageUnavailable>
 	}
 >()("@openbot-build/openbot/capabilities/Requests") {}
 
@@ -206,10 +203,10 @@ export const defaultTimeout = 24 * 60 * 60 * 1000
 export const make: Effect.Effect<
 	typeof Requests.Service,
 	never,
-	AgentRecords | Grants | Rules | Settings
+	BotRecords | Grants | Rules | Settings
 > = Effect.gen(function* () {
 	const settings = yield* Settings
-	const records = yield* AgentRecords
+	const records = yield* BotRecords
 	const grants = yield* Grants
 	const rules = yield* Rules
 	const requests = records.collection(
@@ -236,7 +233,7 @@ export const make: Effect.Effect<
 				stored,
 			)
 			.pipe(Effect.as(stored))
-	/** Gives the Grants down the chain, from the top decider to the requesting Agent. */
+	/** Gives the Grants down the chain, from the top decider to the requesting Bot. */
 	const giveGrants = (
 		organizationId: string,
 		stored: Stored,
@@ -244,14 +241,14 @@ export const make: Effect.Effect<
 	) =>
 		Effect.gen(function* () {
 			const request = stored.request
-			// Givers from the bottom: each endorsing Agent, then the final decider.
+			// Givers from the bottom: each endorsing Bot, then the final decider.
 			const givers: ReadonlyArray<{
-				readonly by: AgentsApi.Decider
-				readonly scope: AgentsApi.GrantScope
+				readonly by: BotsApi.Decider
+				readonly scope: BotsApi.GrantScope
 				readonly reason?: string
 			}> = [
 				...request.endorsements.map((entry) => ({
-					by: { _tag: "Agent" as const, agent: entry.agent },
+					by: { _tag: "Bot" as const, bot: entry.bot },
 					scope: entry.scope,
 					...(entry.reason === undefined ? {} : { reason: entry.reason }),
 				})),
@@ -262,17 +259,17 @@ export const make: Effect.Effect<
 				},
 			]
 			const receivers = [
-				request.agent,
-				...request.endorsements.map((entry) => entry.agent),
+				request.bot,
+				...request.endorsements.map((entry) => entry.bot),
 			]
 			let parent: string | undefined = undefined
 			for (let index = receivers.length - 1; index >= 0; index--) {
-				const agent = receivers[index]!
+				const bot = receivers[index]!
 				const giver = givers[index]!
-				const grant: AgentsApi.Grant = yield* grants.create(
+				const grant: BotsApi.Grant = yield* grants.create(
 					organizationId,
 					{
-						agent,
+						bot,
 						capability: request.capability,
 						effect: "allow",
 						scope: giver.scope,
@@ -280,7 +277,7 @@ export const make: Effect.Effect<
 							? {
 									session: sessionOf({
 										chain: stored.chain,
-										agent,
+										bot,
 										current: request.session,
 									}),
 								}
@@ -326,18 +323,18 @@ export const make: Effect.Effect<
 				const now = yield* Clock.currentTimeMillis
 				if (decision.rule !== undefined)
 					yield* rules.create(organizationId, {
-						agent: request.agent,
+						bot: request.bot,
 						author: decision.by,
 						text: decision.rule,
 						status: decision.by._tag === "Person" ? "active" : "proposed",
 					})
-				// An Agent that agrees but does not hold the capability passes the request up.
+				// A Bot that agrees but does not hold the capability passes the request up.
 				if (
 					decision.allow &&
-					decision.by._tag === "Agent" &&
+					decision.by._tag === "Bot" &&
 					decision.holds !== true
 				) {
-					const agent = decision.by.agent
+					const bot = decision.by.bot
 					return {
 						_tag: "Escalated" as const,
 						stored: yield* put(organizationId, {
@@ -347,14 +344,14 @@ export const make: Effect.Effect<
 								endorsements: [
 									...request.endorsements,
 									{
-										agent,
+										bot,
 										scope: decision.scope ?? "once",
 										...(decision.reason === undefined
 											? {}
 											: { reason: decision.reason }),
 									},
 								],
-								approver: above(stored, agent),
+								approver: above(stored, bot),
 								revision: request.revision + 1,
 							},
 						}),
@@ -363,7 +360,7 @@ export const make: Effect.Effect<
 				if (decision.allow) yield* giveGrants(organizationId, stored, decision)
 				else if (decision.scope !== undefined && decision.scope !== "once")
 					yield* grants.create(organizationId, {
-						agent: request.agent,
+						bot: request.bot,
 						capability: request.capability,
 						effect: "deny",
 						scope: decision.scope,
@@ -443,7 +440,7 @@ export const make: Effect.Effect<
 					chain: input.chain,
 					request: {
 						id: "req_" + randomUUID().replaceAll("-", ""),
-						agent: input.agent,
+						bot: input.bot,
 						capability: input.capability,
 						reason: input.reason,
 						approver:
@@ -452,7 +449,7 @@ export const make: Effect.Effect<
 								: superior({
 										deciders: input.deciders,
 										userId: input.chain.userId,
-										agent: input.agent,
+										bot: input.bot,
 									}),
 						chain: input.deciders,
 						session: input.session,
@@ -501,7 +498,7 @@ export const make: Effect.Effect<
 					if (
 						Option.isNone(found) ||
 						found.value.request.status !== "pending" ||
-						approverKey(found.value.request.approver) !== "agent:" + from
+						approverKey(found.value.request.approver) !== "bot:" + from
 					)
 						return Option.none()
 					const stored = found.value

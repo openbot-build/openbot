@@ -3,7 +3,7 @@ title: Sessions
 description: Create Sessions, run Turns, and read the results.
 ---
 
-A **Session** is one conversation and line of work. You give it work in **Turns**. A Turn is one request and all the Agent work that follows it. Every Session belongs to one [Agent](/docs/agents).
+A **Session** is one conversation and line of work. You give it work in **Turns**. A Turn is one request and all the Bot work that follows it. Every Session belongs to one [Bot](/docs/bots).
 This page shows the Session and Turn routes. Every route is under `/v1/sessions` and accepts a user token or the session cookie. See [Authentication](/docs/authentication).
 
 | Term          | Meaning                                                                                         |
@@ -27,7 +27,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/sessions
 ```
 
-All fields are optional. `title` is a short name. OpenBot removes spaces at the start and end. The rest must have 1 to 100 characters. A Session without a title has no `title` field in its `metadata`. `agent` is the ID of the Agent that works in the Session. Without it, your [default Agent](/docs/agents#your-default-agent) works in it. If you have no default Agent, OpenBot returns `400` with `AgentInvalid`. You need `agents.delegate` on the Agent. `settings` can hold `mode` and `model`. Without a model, the Session uses the model of the Agent. When neither gives a model, OpenBot returns `400` with `SessionModelInvalid` and the reason `missing`. There is no default model. See [Models](/docs/models#choose-a-model). To set the memory switches, see [Memory](/docs/memory#switches). Creating a Session does not call a model.
+All fields are optional. `title` is a short name. OpenBot removes spaces at the start and end. The rest must have 1 to 100 characters. A Session without a title has no `title` field in its `metadata`. `bot` is the ID of the Bot that works in the Session. Without it, your [default Bot](/docs/bots#your-default-bot) works in it. If you have no default Bot, OpenBot returns `400` with `BotInvalid`. You need `bots.delegate` on the Bot. `settings` can hold `mode` and `model`. Without a model, the Session uses the model of the Bot. When neither gives a model, OpenBot returns `400` with `SessionModelInvalid` and the reason `missing`. There is no default model. See [Models](/docs/models#choose-a-model). To set the memory switches, see [Memory](/docs/memory#switches). Creating a Session does not call a model.
 OpenBot returns `201` with the Session view. Here is a short form of it:
 
 ```json
@@ -46,7 +46,7 @@ OpenBot returns `201` with the Session view. Here is a short form of it:
 		"version": { "id": "v-7d21" },
 		"value": { "conversation": { "history": [] } }
 	},
-	"agent": "agt_3f9a…",
+	"bot": "bot_3f9a…",
 	"kind": "direct",
 	"parent": null,
 	"response": null,
@@ -54,7 +54,7 @@ OpenBot returns `201` with the Session view. Here is a short form of it:
 }
 ```
 
-`agent` is the Agent of the Session. `kind` is `direct` for work that a client started, `delegated` for work that another Agent gave, `review` for a Session where an Agent decides one [request](/docs/requests), `trigger` for work that a [trigger](/docs/triggers) started, and `channel` for one chat of a [Channel](/docs/channels). `parent` names the Session, Turn and tool call that started delegated work. See [Delegation](/docs/delegation).
+`bot` is the Bot of the Session. `kind` is `direct` for work that a client started, `delegated` for work that another Bot gave, `review` for a Session where a Bot decides one [request](/docs/requests), `trigger` for work that a [trigger](/docs/triggers) started, and `channel` for one chat of a [Channel](/docs/channels). `parent` names the Session, Turn and tool call that started delegated work. See [Delegation](/docs/delegation).
 
 `response` is the latest Turn's answer. `activity` is `active` while a Turn runs on this server, `inactive` when nothing runs, and `historical` when a saved Turn says it runs but no server runs it.
 
@@ -65,7 +65,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   "https://api.example.com/v1/sessions?archived=false"
 ```
 
-The list is an array of summaries. Each summary has `session`, `agent`, `kind`, `parent`, `status` (`Idle`, `Running`, `Waiting`, `Completed`, `Failed` or `Interrupted`), `turn`, a short `response` and `activity`. Leave out `archived` to get all Sessions. Add `agent=<id>` to list the Sessions of one Agent. Review Sessions are left out unless you add `kind=review`.
+The list is an array of summaries. Each summary has `session`, `bot`, `kind`, `parent`, `status` (`Idle`, `Running`, `Waiting`, `Completed`, `Failed` or `Interrupted`), `turn`, a short `response` and `activity`. Leave out `archived` to get all Sessions. Add `bot=<id>` to list the Sessions of one Bot. Review Sessions are left out unless you add `kind=review`.
 
 `GET /v1/sessions/:sessionId` returns the full view. Reading never starts work.
 
@@ -87,7 +87,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 `expected` is the current `revision` of the Session. `title` follows the same rules as when you create a Session. Send `"title": null` to remove the title. Leave out a field to keep its value.
 
-`DELETE /v1/sessions/:sessionId` removes the Session and returns `204`. Its [Session Agents](/docs/agents#three-kinds-of-agents) are archived. If a Turn runs, OpenBot returns `409` with `SessionBusy`.
+`DELETE /v1/sessions/:sessionId` removes the Session and returns `204`. Its [Session Bots](/docs/bots#three-kinds-of-bots) are archived. If a Turn runs, OpenBot returns `409` with `SessionBusy`.
 
 ---
 
@@ -182,7 +182,7 @@ The stream only watches the Turn. If you close it, the Turn goes on.
 | `503`  | `SessionExecutionUnavailable` | OpenBot has no model to run the Turn.           |
 | `503`  | `SessionStorageUnavailable`   | OpenBot cannot reach its database.              |
 
-A Turn can also stop and wait: for a decision about a capability, or for work that it gave to another Agent. Its status is then `Waiting`. The wait survives a server restart. See [Requests](/docs/requests) and [Delegation](/docs/delegation).
+A Turn can also stop and wait: for a decision about a capability, or for work that it gave to another Bot. Its status is then `Waiting`. The wait survives a server restart. See [Requests](/docs/requests) and [Delegation](/docs/delegation).
 
 ---
 
@@ -196,7 +196,7 @@ A Turn can also stop and wait: for a decision about a capability, or for work th
 
 ## Steer, queue and interrupt
 
-**Steer** adds a message to a running Turn. The Agent reads it at its next step.
+**Steer** adds a message to a running Turn. The Bot reads it at its next step.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -217,9 +217,9 @@ OpenBot returns `202` with `session`, `turn`, `item`, `revision` and `version`. 
 
 ## Todo list
 
-A Session has a todo list. The Agent keeps it with the tool `openbot_todos` when its work has more than one step. Each item has an `id`, a `content` and a `status`: `pending`, `in_progress` or `done`. Only one item can be `in_progress` at a time.
+A Session has a todo list. The Bot keeps it with the tool `openbot_todos` when its work has more than one step. Each item has an `id`, a `content` and a `status`: `pending`, `in_progress` or `done`. Only one item can be `in_progress` at a time.
 
-While an item is not `done`, the Agent goes on working. When the Agent wants to end the Turn with open items, OpenBot adds a reminder with the open items, and the Agent takes one more step. OpenBot reminds it only once for each state of the list. So if the Agent stops again and the list did not change, the Turn ends.
+While an item is not `done`, the Bot goes on working. When the Bot wants to end the Turn with open items, OpenBot adds a reminder with the open items, and the Bot takes one more step. OpenBot reminds it only once for each state of the list. So if the Bot stops again and the list did not change, the Turn ends.
 
 Read the list with `GET /v1/sessions/:sessionId/todos`:
 
@@ -252,22 +252,22 @@ The list is part of the Timeline. A Fork or a restore of an older Version has th
 
 ## Wait
 
-An Agent can wait with the tool `openbot_wait`. It gives `seconds`, or `until` with a date and time, such as `2026-10-23T09:00:00Z`. The Turn becomes `Waiting`. When the time comes, the tool call gets `{ "waited": true, "at": "<time>" }`, and the Turn goes on.
+A Bot can wait with the tool `openbot_wait`. It gives `seconds`, or `until` with a date and time, such as `2026-10-23T09:00:00Z`. The Turn becomes `Waiting`. When the time comes, the tool call gets `{ "waited": true, "at": "<time>" }`, and the Turn goes on.
 
 OpenBot saves each wait. After a restart, the wait goes on until its time. A wait whose time passed while no server ran goes on right after the start. An interrupt of the Turn ends its waits.
 
-To wait for the work of several Agents at once, the Agent gives them their tasks with several `openbot_delegate` calls in the same step. The Turn goes on when all of them are done. See [Delegation](/docs/delegation).
+To wait for the work of several Bots at once, the Bot gives them their tasks with several `openbot_delegate` calls in the same step. The Turn goes on when all of them are done. See [Delegation](/docs/delegation).
 
 ---
 
 ## Plan mode
 
-In `plan` mode, the Agent looks things up, but it does not change anything yet. It gets only the tools that just read: the Agent tools that list and read Agents, App resources and prompts, and the App tools that the organization lists in `appReadRules`. It also gets the todo tool and the wait tool.
+In `plan` mode, the Bot looks things up, but it does not change anything yet. It gets only the tools that just read: the Bot tools that list and read Bots, App resources and prompts, and the App tools that the organization lists in `appReadRules`. It also gets the todo tool and the wait tool.
 
-When the plan is ready, the Agent calls `openbot_submit_plan` with the steps as a todo list and a short summary. OpenBot saves the list and makes a [request](/docs/requests) for the capability `plans.run`. The Turn waits.
+When the plan is ready, the Bot calls `openbot_submit_plan` with the steps as a todo list and a short summary. OpenBot saves the list and makes a [request](/docs/requests) for the capability `plans.run`. The Turn waits.
 
-- When the request is allowed, the Session moves to `build` mode. A new Turn starts with all tools, and the Agent carries out the plan.
-- When it is denied, the Agent gets the reason and stays in `plan` mode.
+- When the request is allowed, the Session moves to `build` mode. A new Turn starts with all tools, and the Bot carries out the plan.
+- When it is denied, the Bot gets the reason and stays in `plan` mode.
 
 The approval setting says who answers and what happens when nobody answers in time:
 
@@ -275,17 +275,17 @@ The approval setting says who answers and what happens when nobody answers in ti
 { "approver": "person", "timeoutMs": 600000, "onTimeout": "run" }
 ```
 
-| Field       | Values             | What it does                                                                                                |
-| ----------- | ------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `approver`  | `chain`, `person`  | `chain` asks the decider above the Agent, so a Grant or a Rule can answer. `person` always asks the person. |
-| `timeoutMs` | 1 second to 7 days | How long the request waits.                                                                                 |
-| `onTimeout` | `run`, `stay`      | `run` carries out the plan when nobody answers in time. `stay` keeps the Session in `plan` mode.            |
+| Field       | Values             | What it does                                                                                              |
+| ----------- | ------------------ | --------------------------------------------------------------------------------------------------------- |
+| `approver`  | `chain`, `person`  | `chain` asks the decider above the Bot, so a Grant or a Rule can answer. `person` always asks the person. |
+| `timeoutMs` | 1 second to 7 days | How long the request waits.                                                                               |
+| `onTimeout` | `run`, `stay`      | `run` carries out the plan when nobody answers in time. `stay` keeps the Session in `plan` mode.          |
 
 You can set it in four places. The most specific one that is set wins, also when it is looser:
 
 1. The Session: `planApproval` when you create it, or with `PATCH /v1/sessions/:sessionId`. Send `null` to remove it.
-2. The Agent: `planApproval` on the [Agent](/docs/agents).
-3. You: `PATCH /v1/me/settings` with `{ "expectedVersion": 0, "planApproval": { ... } }`. Read your settings with `GET /v1/me/settings`. The same settings hold your [default Agent](/docs/agents#your-default-agent).
+2. The Bot: `planApproval` on the [Bot](/docs/bots).
+3. You: `PATCH /v1/me/settings` with `{ "expectedVersion": 0, "planApproval": { ... } }`. Read your settings with `GET /v1/me/settings`. The same settings hold your [default Bot](/docs/bots#your-default-bot).
 4. The organization: `planApproval` in its [settings](/docs/organization#settings). It is only the default. It cannot forbid a looser setting.
 
 ---
@@ -332,7 +332,7 @@ Pick a model for the Session with `PUT /v1/sessions/:sessionId/model`:
 
 A wrong choice returns `400` with `SessionModelInvalid`. The `reason` is `provider-not-found`, `model-not-found` or `unsupported-option`. To use a model for one Turn only, put the selection in `overrides.model` when you start the Turn. See [Models](/docs/models) for how OpenBot gets its models.
 
-The execution mode is `build` or `plan`. `build` is the normal mode: the Agent does the work. In `plan` mode, the Agent writes a plan first. See [Plan mode](#plan-mode). Set the mode with `PUT /v1/sessions/:sessionId/mode` and `{ "expected": 4, "mode": "plan" }`, or with `settings.mode` when you create the Session. OpenBot saves the mode on the Session and copies it into each new Turn's `settings`.
+The execution mode is `build` or `plan`. `build` is the normal mode: the Bot does the work. In `plan` mode, the Bot writes a plan first. See [Plan mode](#plan-mode). Set the mode with `PUT /v1/sessions/:sessionId/mode` and `{ "expected": 4, "mode": "plan" }`, or with `settings.mode` when you create the Session. OpenBot saves the mode on the Session and copies it into each new Turn's `settings`.
 
 `PUT /v1/sessions/:sessionId/settings` replaces all settings at once: `{ "expected": 4, "settings": { "mode": "build" } }`.
 

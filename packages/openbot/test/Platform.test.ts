@@ -515,7 +515,7 @@ test(
 				{ decisionModel: selection(both.id, "chat") },
 				{ decisionModel: selection(decisions.id, "missing") },
 				{ rulesModel: selection(both.id, "jev-latest") },
-				{ agentMemoryModel: selection(decisions.id, "jev-latest") },
+				{ botMemoryModel: selection(decisions.id, "jev-latest") },
 			]) {
 				const refused = await update(changes)
 				assert.equal(refused.status, 400, JSON.stringify(changes))
@@ -596,11 +596,11 @@ test("every instance sees a settings change at once, and setup runs only once", 
 						settings.organization("org_shared"),
 					),
 				)
-			assert.equal((await read()).document.agentMemory, true)
+			assert.equal((await read()).document.botMemory, true)
 			await first.runPromise(
 				Effect.flatMap(Settings, (settings) =>
 					settings.updateOrganization("org_shared", 0, (document) =>
-						Effect.succeed({ ...document, agentMemory: false }),
+						Effect.succeed({ ...document, botMemory: false }),
 					),
 				),
 			)
@@ -611,7 +611,7 @@ test("every instance sees a settings change at once, and setup runs only once", 
 				seen = await read()
 			}
 			assert.equal(seen.version, 1)
-			assert.equal(seen.document.agentMemory, false)
+			assert.equal(seen.document.botMemory, false)
 			const conflict = await second.runPromise(
 				Effect.flatMap(Settings, (settings) =>
 					settings.updateOrganization("org_shared", 0, (document) =>

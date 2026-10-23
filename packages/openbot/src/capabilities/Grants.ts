@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto"
 import type { Session } from "@openbot-build/core"
-import { AgentsApi } from "@openbot-build/api"
+import { BotsApi } from "@openbot-build/api"
 import { Clock, Context, Effect, Layer, Option } from "effect"
-import { AgentRecords } from "../agents/AgentRecords.ts"
+import { BotRecords } from "../bots/BotRecords.ts"
 import { covers } from "./Capability.ts"
 
-type Grant = AgentsApi.Grant
+type Grant = BotsApi.Grant
 
-/** Stored decisions about the capabilities of Agents. */
+/** Stored decisions about the capabilities of Bots. */
 export class Grants extends Context.Service<
 	Grants,
 	{
@@ -17,45 +17,45 @@ export class Grants extends Context.Service<
 		 */
 		readonly match: (input: {
 			readonly organizationId: string
-			readonly agent: string
-			readonly capability: AgentsApi.Capability
+			readonly bot: string
+			readonly capability: BotsApi.Capability
 			readonly session: Session.Id
-		}) => Effect.Effect<Option.Option<Grant>, AgentsApi.AgentStorageUnavailable>
+		}) => Effect.Effect<Option.Option<Grant>, BotsApi.BotStorageUnavailable>
 		/** Marks a `once` Grant as used, so it does not count again. */
 		readonly use: (
 			organizationId: string,
 			grant: Grant,
-		) => Effect.Effect<void, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<void, BotsApi.BotStorageUnavailable>
 		/** `used` keeps a `once` Grant only as a record, because its one call already has it. */
 		readonly create: (
 			organizationId: string,
 			input: Omit<Grant, "id" | "status" | "createdAt">,
 			used?: boolean,
-		) => Effect.Effect<Grant, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<Grant, BotsApi.BotStorageUnavailable>
 		readonly list: (
 			organizationId: string,
-			agent: string,
+			bot: string,
 			status?: Grant["status"],
-		) => Effect.Effect<ReadonlyArray<Grant>, AgentsApi.AgentStorageUnavailable>
+		) => Effect.Effect<ReadonlyArray<Grant>, BotsApi.BotStorageUnavailable>
 		/** Revokes a Grant and every Grant that came from it. Returns the revoked Grants. */
 		readonly revoke: (
 			organizationId: string,
-			agent: string,
+			bot: string,
 			id: string,
 		) => Effect.Effect<
 			ReadonlyArray<Grant>,
-			AgentsApi.AgentNotFound | AgentsApi.AgentStorageUnavailable
+			BotsApi.BotNotFound | BotsApi.BotStorageUnavailable
 		>
 	}
 >()("@openbot-build/openbot/capabilities/Grants") {}
 
-export const make: Effect.Effect<typeof Grants.Service, never, AgentRecords> =
+export const make: Effect.Effect<typeof Grants.Service, never, BotRecords> =
 	Effect.gen(function* () {
-		const records = yield* AgentRecords
+		const records = yield* BotRecords
 		const grants = records.collection(
 			"grant",
-			AgentsApi.Grant,
-			AgentsApi.GrantStatus,
+			BotsApi.Grant,
+			BotsApi.GrantStatus,
 		)
 		const put = (organizationId: string, grant: Grant) =>
 			grants
@@ -63,7 +63,7 @@ export const make: Effect.Effect<typeof Grants.Service, never, AgentRecords> =
 					{
 						organizationId,
 						id: grant.id,
-						owner: grant.agent,
+						owner: grant.bot,
 						scope: grant.parent ?? "",
 						status: grant.status,
 					},
@@ -73,7 +73,7 @@ export const make: Effect.Effect<typeof Grants.Service, never, AgentRecords> =
 		const revokeTree = (
 			organizationId: string,
 			grant: Grant,
-		): Effect.Effect<ReadonlyArray<Grant>, AgentsApi.AgentStorageUnavailable> =>
+		): Effect.Effect<ReadonlyArray<Grant>, BotsApi.BotStorageUnavailable> =>
 			Effect.gen(function* () {
 				const revoked = yield* put(organizationId, {
 					...grant,
@@ -92,7 +92,7 @@ export const make: Effect.Effect<typeof Grants.Service, never, AgentRecords> =
 			match: (input) =>
 				grants
 					.list(input.organizationId, {
-						owner: input.agent,
+						owner: input.bot,
 						status: "active",
 					})
 					.pipe(
@@ -130,18 +130,18 @@ export const make: Effect.Effect<typeof Grants.Service, never, AgentRecords> =
 						createdAt: now,
 					})
 				}),
-			list: (organizationId, agent, status) =>
+			list: (organizationId, bot, status) =>
 				grants.list(organizationId, {
-					owner: agent,
+					owner: bot,
 					...(status === undefined ? {} : { status }),
 				}),
-			revoke: (organizationId, agent, id) =>
+			revoke: (organizationId, bot, id) =>
 				records.transaction(
 					"grant:" + organizationId + ":" + id,
 					Effect.gen(function* () {
 						const grant = yield* grants.find(organizationId, id)
-						if (Option.isNone(grant) || grant.value.agent !== agent)
-							return yield* AgentsApi.AgentNotFound.make({ agent: id })
+						if (Option.isNone(grant) || grant.value.bot !== bot)
+							return yield* BotsApi.BotNotFound.make({ bot: id })
 						if (grant.value.status === "revoked") return []
 						return yield* revokeTree(organizationId, grant.value)
 					}),

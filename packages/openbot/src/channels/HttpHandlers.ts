@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto"
 import {
-	type AgentsApi,
+	type BotsApi,
 	type Caller,
 	ChannelsApi,
 	Identity,
@@ -10,7 +10,7 @@ import {
 import { Clock, Effect, Option, type Schema } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
-import { Agents } from "../agents/Agents.ts"
+import { Bots } from "../bots/Bots.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
 import { organizationKey, segment } from "../authorization/Policy.ts"
@@ -44,7 +44,7 @@ export const layer = (publicOrigin: string) =>
 		Effect.gen(function* () {
 			const channels = yield* Channels
 			const registry = yield* ChannelRegistry
-			const agents = yield* Agents
+			const bots = yield* Bots
 			const audit = yield* AuditLog
 			const services = yield* Effect.context<AuthorizationServices>()
 			const record = (
@@ -74,24 +74,23 @@ export const layer = (publicOrigin: string) =>
 				)
 			/**
 			 * The Sessions of a Channel work for the caller, who becomes its actor. So the caller
-			 * must be able to give work to the Agent, and the Agent must belong to the organization.
+			 * must be able to give work to the Bot, and the Bot must belong to the organization.
 			 */
-			const checkAgent = (caller: Caller, id: AgentsApi.AgentId) =>
-				agents.access(caller, id, "agents.delegate").pipe(
+			const checkBot = (caller: Caller, id: BotsApi.BotId) =>
+				bots.access(caller, id, "bots.delegate").pipe(
 					Effect.provideContext(services),
 					Effect.catchTags({
-						AgentNotFound: () =>
-							Effect.fail(invalid(`There is no Agent ${id}.`)),
-						AgentConflict: () => Effect.fail(unavailable()),
-						AgentInvalid: () => Effect.fail(unavailable()),
-						AgentStorageUnavailable: () => Effect.fail(unavailable()),
+						BotNotFound: () => Effect.fail(invalid(`There is no Bot ${id}.`)),
+						BotConflict: () => Effect.fail(unavailable()),
+						BotInvalid: () => Effect.fail(unavailable()),
+						BotStorageUnavailable: () => Effect.fail(unavailable()),
 					}),
-					Effect.flatMap((agent) =>
-						agent.kind === "persistent" && agent.owner._tag === "Organization"
+					Effect.flatMap((bot) =>
+						bot.kind === "persistent" && bot.owner._tag === "Organization"
 							? Effect.void
 							: Effect.fail(
 									invalid(
-										"The Agent of a Channel must be a persistent Agent of the organization.",
+										"The Bot of a Channel must be a persistent Bot of the organization.",
 									),
 								),
 					),
@@ -123,13 +122,13 @@ export const layer = (publicOrigin: string) =>
 				.handle("createChannel", ({ payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						yield* checkAgent(caller, payload.agent)
+						yield* checkBot(caller, payload.bot)
 						const credentials = fromInput(payload.credentials)
 						const channel = yield* channels.create({
 							organizationId: caller.organizationId,
 							actor: caller.userId,
 							name: payload.name,
-							agent: payload.agent,
+							bot: payload.bot,
 							credentials,
 							linkPath: payload.linkPath ?? null,
 							enabled: payload.enabled ?? true,
@@ -144,7 +143,7 @@ export const layer = (publicOrigin: string) =>
 							caller,
 							"channel.created",
 							channelKey(caller.organizationId, channel.id),
-							{ kind: channel.kind, agent: channel.agent },
+							{ kind: channel.kind, bot: channel.bot },
 						)
 						return view(publicOrigin, channel)
 					}),
@@ -165,7 +164,7 @@ export const layer = (publicOrigin: string) =>
 							payload.credentials.kind !== current.kind
 						)
 							return yield* invalid("The kind of a Channel cannot change.")
-						yield* checkAgent(caller, payload.agent ?? current.agent)
+						yield* checkBot(caller, payload.bot ?? current.bot)
 						const credentials =
 							payload.credentials === undefined
 								? undefined
@@ -185,9 +184,7 @@ export const layer = (publicOrigin: string) =>
 							{
 								actor: caller.userId,
 								...(payload.name === undefined ? {} : { name: payload.name }),
-								...(payload.agent === undefined
-									? {}
-									: { agent: payload.agent }),
+								...(payload.bot === undefined ? {} : { bot: payload.bot }),
 								...(credentials === undefined ? {} : { credentials }),
 								...(payload.linkPath === undefined
 									? {}

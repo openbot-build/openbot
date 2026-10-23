@@ -1,4 +1,4 @@
-import { Agent } from "@openbot-build/core"
+import { Bot } from "@openbot-build/core"
 import {
 	Array as EffectArray,
 	Cause,
@@ -115,7 +115,7 @@ test("blocks the next request after tool versions complete and keeps their typed
 		for (const mode of ["advance", "stream"]) {
 			let calls = 0,
 				released = 0
-			let observed: ReadonlyArray<Agent.Event<typeof tools.tools>> = []
+			let observed: ReadonlyArray<Bot.Event<typeof tools.tools>> = []
 			const session = SessionTest(
 				PluginComposition.merge(TurnLimiter.make({ maxSteps }), toolPlugin),
 			)

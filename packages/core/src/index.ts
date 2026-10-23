@@ -1,4 +1,4 @@
-export * as Agent from "./agent/Agent.ts"
+export * as Bot from "./bot/Bot.ts"
 export * as Timeline from "./timeline/Timeline.ts"
 export * as Item from "./timeline/Item.ts"
 export * as Turn from "./session/Turn.ts"

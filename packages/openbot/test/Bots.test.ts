@@ -2,24 +2,24 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { Session } from "@openbot-build/core"
 import {
-	AgentMemory,
-	AgentsApi,
+	BotMemory,
+	BotsApi,
 	RequestsApi,
 	SessionView,
 	Settings,
 } from "@openbot-build/api"
 import { Effect, Redacted, Schema, Stream } from "effect"
 import { LanguageModel, type Prompt, Response } from "effect/ai"
-import { names } from "../src/plugins/agents/AgentPlugin.ts"
+import { names } from "../src/plugins/bots/BotPlugin.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 
-const publicOrigin = "https://agents.example.com"
+const publicOrigin = "https://bots.example.com"
 const usage = {
 	inputTokens: { total: 10, uncached: 10, cacheRead: 0, cacheWrite: 0 },
 	outputTokens: { total: 5, text: 5, reasoning: 0 },
 }
 
-/** Agent IDs that the scripted model needs. The test fills them in. */
+/** Bot IDs that the scripted model needs. The test fills them in. */
 const known: {
 	programmer?: string
 	helper?: string
@@ -54,7 +54,7 @@ const call = (name: string, params: Record<string, unknown>) =>
 	)
 
 /**
- * One scripted model for every Agent. It reads the name of the Agent from its instructions,
+ * One scripted model for every Bot. It reads the name of the Bot from its instructions,
  * and the task from the last user message.
  */
 const model = Effect.runSync(
@@ -66,9 +66,7 @@ const model = Effect.runSync(
 					.map(textOf)
 					.join("\n")
 				// The judge allows when a Rule says that Assistant may confirm changes.
-				if (
-					system.includes("You decide one request of an AI Agent with Rules")
-				) {
+				if (system.includes("You decide one request of an AI Bot with Rules")) {
 					const input = JSON.parse(textOf(prompt.content.at(-1)!)) as {
 						rules: ReadonlyArray<{ id: string; text: string }>
 					}
@@ -99,8 +97,8 @@ const model = Effect.runSync(
 					]
 				}
 				const user = textOf(prompt.content.at(-1)!)
-				// The memory Agent learns what a person says about tea.
-				if (system.includes("You keep the memory of an AI Agent.")) {
+				// The memory Bot learns what a person says about tea.
+				if (system.includes("You keep the memory of an AI Bot.")) {
 					const input = JSON.parse(user) as {
 						evidence: ReadonlyArray<{
 							session: string
@@ -215,7 +213,7 @@ const model = Effect.runSync(
 						return has(names.promote)
 							? answer("Promoted.")
 							: call(names.promote, {
-									agent: known.scout,
+									bot: known.scout,
 									reason: "The scout is useful later too.",
 								})
 					return has(names.report)
@@ -230,7 +228,7 @@ const model = Effect.runSync(
 					return answer("Assistant got: " + JSON.stringify(done.result))
 				if (input.includes("delegate to programmer"))
 					return call(names.delegate, {
-						agent: known.programmer,
+						bot: known.programmer,
 						reason: "Code work needs the Programmer.",
 						task: "Write the change.",
 						userRequest: input,
@@ -245,7 +243,7 @@ const model = Effect.runSync(
 					})
 				if (input.includes("delegate to worker"))
 					return call(names.delegate, {
-						agent: known.worker,
+						bot: known.worker,
 						reason: "The Worker does this work.",
 						task: "Do the work.",
 						userRequest: input,
@@ -260,7 +258,7 @@ const model = Effect.runSync(
 					})
 				if (input.includes("confirm via helper"))
 					return call(names.delegate, {
-						agent: known.helper,
+						bot: known.helper,
 						reason: "The Helper confirms changes.",
 						task: "Confirm the change.",
 						userRequest: input,
@@ -321,11 +319,11 @@ const client = (host: Awaited<ReturnType<typeof BrowserHost.start>>) => {
 		}
 		throw new Error("Timed out: " + label)
 	}
-	/** Makes an Agent and sets it as the default Agent of the person. */
-	const defaultAgent = async (credential: Redacted.Redacted<string>) => {
-		const agent = await json(
-			AgentsApi.Agent,
-			send(credential, "/v1/agents", "POST", {
+	/** Makes a Bot and sets it as the default Bot of the person. */
+	const defaultBot = async (credential: Redacted.Redacted<string>) => {
+		const bot = await json(
+			BotsApi.Bot,
+			send(credential, "/v1/bots", "POST", {
 				name: "Assistant",
 				role: "Helps one person",
 				instructions: "Help the person.",
@@ -339,28 +337,28 @@ const client = (host: Awaited<ReturnType<typeof BrowserHost.start>>) => {
 			Settings.MemberSettings,
 			send(credential, "/v1/me/settings", "PATCH", {
 				expectedVersion: settings.version,
-				defaultAgent: agent.id,
+				defaultBot: bot.id,
 			}),
 		)
-		assert.equal(updated.defaultAgent, agent.id)
-		return agent
+		assert.equal(updated.defaultBot, bot.id)
+		return bot
 	}
-	return { send, json, until, defaultAgent }
+	return { send, json, until, defaultBot }
 }
 
 test(
-	"the default Agent gives work to a lasting Agent after the person allows it, and gets only the result back, also after a restart",
+	"the default Bot gives work to a lasting Bot after the person allows it, and gets only the result back, also after a restart",
 	{ timeout: 120000 },
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
 		try {
-			const { send, json, until, defaultAgent } = client(host)
-			const alice = await host.login("agents-alice")
-			const bob = await host.login("agents-bob")
-			const main = await defaultAgent(alice.session)
+			const { send, json, until, defaultBot } = client(host)
+			const alice = await host.login("bots-alice")
+			const bob = await host.login("bots-bob")
+			const main = await defaultBot(alice.session)
 			const programmer = await json(
-				AgentsApi.Agent,
-				send(alice.session, "/v1/agents", "POST", {
+				BotsApi.Bot,
+				send(alice.session, "/v1/bots", "POST", {
 					name: "Programmer",
 					role: "Writes code",
 					instructions: "Write small changes.",
@@ -368,14 +366,14 @@ test(
 			)
 			known.programmer = programmer.id
 			assert.equal(
-				(await send(bob.session, "/v1/agents/" + programmer.id)).status,
+				(await send(bob.session, "/v1/bots/" + programmer.id)).status,
 				404,
 			)
 			const created = await json(
 				SessionView,
 				send(alice.session, "/v1/sessions", "POST", {}),
 			)
-			assert.equal(created.agent, main.id)
+			assert.equal(created.bot, main.id)
 			const path = "/v1/sessions/" + created.session.id
 			const view = () => json(SessionView, send(alice.session, path))
 			const turn = async (input: string) => {
@@ -405,7 +403,7 @@ test(
 			await turn("delegate to programmer")
 			const request = await pending()
 			assert.deepEqual(request.capability, {
-				action: "agents.delegate",
+				action: "bots.delegate",
 				target: programmer.id,
 			})
 			assert.deepEqual(request.approver, {
@@ -420,7 +418,7 @@ test(
 					: undefined
 			})
 			const waiting = await json(
-				Schema.Array(AgentsApi.Delegation),
+				Schema.Array(BotsApi.Delegation),
 				send(alice.session, path + "/delegations"),
 			)
 			assert.equal(waiting[0]?.status, "authorizing")
@@ -439,7 +437,7 @@ test(
 			const done = await completed()
 			assert.match(JSON.stringify(done.response?.output), /Programmer did it/)
 			const delegations = await json(
-				Schema.Array(AgentsApi.Delegation),
+				Schema.Array(BotsApi.Delegation),
 				send(alice.session, path + "/delegations"),
 			)
 			assert.equal(delegations[0]?.status, "completed")
@@ -449,9 +447,9 @@ test(
 				send(alice.session, "/v1/sessions/" + delegations[0]!.child!.session),
 			)
 			assert.equal(child.kind, "delegated")
-			assert.equal(child.agent, programmer.id)
+			assert.equal(child.bot, programmer.id)
 			assert.equal(child.parent?.session, created.session.id)
-			// Only the result went back, never the history of the other Agent.
+			// Only the result went back, never the history of the other Bot.
 			assert.equal(
 				JSON.stringify(done.state.value.conversation.history).includes(
 					"Write the change.",
@@ -467,15 +465,15 @@ test(
 
 			// The decision is kept as a Grant, so the second time needs no request.
 			const grants = await json(
-				Schema.Array(AgentsApi.Grant),
-				send(alice.session, "/v1/agents/" + main.id + "/grants"),
+				Schema.Array(BotsApi.Grant),
+				send(alice.session, "/v1/bots/" + main.id + "/grants"),
 			)
 			assert.equal(grants.length, 1)
 			assert.equal(grants[0]?.scope, "lifetime")
 			await turn("delegate to programmer")
 			await completed()
 			const again = await json(
-				Schema.Array(AgentsApi.Delegation),
+				Schema.Array(BotsApi.Delegation),
 				send(alice.session, path + "/delegations"),
 			)
 			assert.equal(
@@ -490,10 +488,10 @@ test(
 				[],
 			)
 
-			// A person can change Agent memory directly.
+			// A person can change Bot memory directly.
 			const memory = await json(
-				AgentMemory.View,
-				send(alice.session, "/v1/agents/" + programmer.id + "/memory", "POST", {
+				BotMemory.View,
+				send(alice.session, "/v1/bots/" + programmer.id + "/memory", "POST", {
 					command: { _tag: "Remember", content: "Run the tests first." },
 				}),
 			)
@@ -503,7 +501,7 @@ test(
 				(
 					await send(
 						alice.session,
-						"/v1/agents/" + programmer.id + "/memory",
+						"/v1/bots/" + programmer.id + "/memory",
 						"POST",
 						{ command: { _tag: "Forget", id: "mem_missing" } },
 					)
@@ -511,8 +509,8 @@ test(
 				409,
 			)
 			const log = await json(
-				Schema.Array(AgentMemory.LogEntry),
-				send(alice.session, "/v1/agents/" + programmer.id + "/memory/log"),
+				Schema.Array(BotMemory.LogEntry),
+				send(alice.session, "/v1/bots/" + programmer.id + "/memory/log"),
 			)
 			assert.deepEqual(
 				log.map((entry) => [entry.by, entry.ids]),
@@ -525,7 +523,7 @@ test(
 )
 
 test(
-	"after the Agent confides, the memory Agent answers it, learns for the person, and adds what helps only to the input of that person",
+	"after the Bot confides, the memory Bot answers it, learns for the person, and adds what helps only to the input of that person",
 	{ timeout: 120000 },
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
@@ -543,7 +541,7 @@ test(
 				"PATCH",
 				{
 					expectedVersion: settings.version,
-					agentMemoryModel: {
+					botMemoryModel: {
 						_tag: "Config.Selection",
 						provider: "fixture",
 						model: "fixture-model",
@@ -552,22 +550,22 @@ test(
 			)
 			assert.equal(configured.status, 200, await configured.text())
 			const shared = await json(
-				AgentsApi.Agent,
-				send(alice.session, "/v1/agents", "POST", {
+				BotsApi.Bot,
+				send(alice.session, "/v1/bots", "POST", {
 					name: "Concierge",
 					role: "Helps everyone",
 					instructions: "Help the team.",
 					shared: true,
 				}),
 			)
-			const memoryPath = "/v1/agents/" + shared.id + "/memory"
+			const memoryPath = "/v1/bots/" + shared.id + "/memory"
 			const run = async (
 				credential: Redacted.Redacted<string>,
 				input: string,
 			) => {
 				const created = await json(
 					SessionView,
-					send(credential, "/v1/sessions", "POST", { agent: shared.id }),
+					send(credential, "/v1/sessions", "POST", { bot: shared.id }),
 				)
 				const path = "/v1/sessions/" + created.session.id
 				const started = await send(credential, path + "/turns", "POST", {
@@ -584,7 +582,7 @@ test(
 				return { path, done }
 			}
 
-			// The Agent confides and gets a calm answer. It does not hear about memory.
+			// The Bot confides and gets a calm answer. It does not hear about memory.
 			const first = await run(
 				alice.session,
 				"I drink green tea every morning. confide about tea",
@@ -594,7 +592,7 @@ test(
 				JSON.stringify(first.done.response),
 			)
 			const confessions = await json(
-				Schema.Array(AgentMemory.Confession),
+				Schema.Array(BotMemory.Confession),
 				send(alice.session, first.path + "/confessions"),
 			)
 			assert.deepEqual(
@@ -606,12 +604,9 @@ test(
 				404,
 			)
 
-			// After the Turn, the memory Agent learns a fact for Alice only.
-			const learned = await until("the memory Agent learns", async () => {
-				const view = await json(
-					AgentMemory.View,
-					send(alice.session, memoryPath),
-				)
+			// After the Turn, the memory Bot learns a fact for Alice only.
+			const learned = await until("the memory Bot learns", async () => {
+				const view = await json(BotMemory.View, send(alice.session, memoryPath))
 				return view.entries.length > 0 ? view : undefined
 			})
 			const [fact] = learned.entries
@@ -621,7 +616,7 @@ test(
 			assert.ok(fact?.tags.includes("for:person:" + alice.identity.userId))
 			assert.ok(fact?.tags.includes("drinks"))
 			assert.deepEqual(
-				(await json(AgentMemory.View, send(bob.session, memoryPath))).entries,
+				(await json(BotMemory.View, send(bob.session, memoryPath))).entries,
 				[],
 			)
 
@@ -643,7 +638,7 @@ test(
 				!history.includes('"What should I drink? (Alice likes green tea.)"'),
 			)
 			const enrichments = await json(
-				Schema.Array(AgentMemory.Enrichment),
+				Schema.Array(BotMemory.Enrichment),
 				send(alice.session, second.path + "/memory/enrichments"),
 			)
 			assert.deepEqual(
@@ -662,7 +657,7 @@ test(
 			)
 			assert.deepEqual(
 				await json(
-					Schema.Array(AgentMemory.Enrichment),
+					Schema.Array(BotMemory.Enrichment),
 					send(bob.session, third.path + "/memory/enrichments"),
 				),
 				[],
@@ -674,23 +669,23 @@ test(
 )
 
 test(
-	"a Session Agent asks, its owning Agent reviews and passes it up, and the person decides at the top",
+	"a Session Bot asks, its owning Bot reviews and passes it up, and the person decides at the top",
 	{ timeout: 120000 },
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
 		try {
-			const { send, json, until, defaultAgent } = client(host)
-			const alice = await host.login("agents-carol")
-			const listed = await defaultAgent(alice.session)
-			// A new Agent gets the model of the Agent that makes it.
+			const { send, json, until, defaultBot } = client(host)
+			const alice = await host.login("bots-carol")
+			const listed = await defaultBot(alice.session)
+			// A new Bot gets the model of the Bot that makes it.
 			const mainModel = {
 				_tag: "Config.Selection",
 				provider: "fixture",
 				model: "fixture-model",
 			} as const
 			const main = await json(
-				AgentsApi.Agent,
-				send(alice.session, "/v1/agents/" + listed.id, "PATCH", {
+				BotsApi.Bot,
+				send(alice.session, "/v1/bots/" + listed.id, "PATCH", {
 					expected: listed.revision,
 					model: mainModel,
 				}),
@@ -728,10 +723,10 @@ test(
 					).find(check),
 				)
 
-			// Starting a Session Agent is a capability, so the person decides it first.
+			// Starting a Session Bot is a capability, so the person decides it first.
 			await turn("spawn a helper")
 			const spawn = await pendingFor(
-				(request) => request.capability.action === "agents.spawn",
+				(request) => request.capability.action === "bots.spawn",
 			)
 			await json(
 				RequestsApi.CapabilityRequest,
@@ -741,12 +736,12 @@ test(
 				}),
 			)
 			await completed()
-			const sessionAgents = await json(
-				Schema.Array(AgentsApi.Agent),
-				send(alice.session, "/v1/agents?session=" + created.session.id),
+			const sessionBots = await json(
+				Schema.Array(BotsApi.Bot),
+				send(alice.session, "/v1/bots?session=" + created.session.id),
 			)
-			assert.equal(sessionAgents.length, 1)
-			const helper = sessionAgents[0]!
+			assert.equal(sessionBots.length, 1)
+			const helper = sessionBots[0]!
 			assert.equal(helper.kind, "session")
 			assert.deepEqual(
 				helper.model === undefined
@@ -758,7 +753,7 @@ test(
 				_tag: "Session",
 				userId: alice.identity.userId,
 				session: created.session.id,
-				agent: main.id,
+				bot: main.id,
 			})
 			known.helper = helper.id
 
@@ -770,10 +765,10 @@ test(
 					request.capability.action === "tools.call" &&
 					request.endorsements.length === 1,
 			)
-			assert.equal(passedUp.agent, helper.id)
+			assert.equal(passedUp.bot, helper.id)
 			assert.deepEqual(passedUp.chain, [main.id, helper.id])
 			assert.deepEqual(passedUp.endorsements[0], {
-				agent: main.id,
+				bot: main.id,
 				scope: "lifetime",
 				reason: "It fits the task I gave.",
 			})
@@ -789,17 +784,14 @@ test(
 			const done = await completed()
 			assert.match(JSON.stringify(done.response?.output), /Helper confirmed it/)
 			assert.equal(host.toolCalls(), toolsBefore + 1)
-			// Each Agent on the way got a Grant with the scope that its decider chose.
+			// Each Bot on the way got a Grant with the scope that its decider chose.
 			const mainGrants = await json(
-				Schema.Array(AgentsApi.Grant),
-				send(alice.session, "/v1/agents/" + main.id + "/grants?status=active"),
+				Schema.Array(BotsApi.Grant),
+				send(alice.session, "/v1/bots/" + main.id + "/grants?status=active"),
 			)
 			const helperGrants = await json(
-				Schema.Array(AgentsApi.Grant),
-				send(
-					alice.session,
-					"/v1/agents/" + helper.id + "/grants?status=active",
-				),
+				Schema.Array(BotsApi.Grant),
+				send(alice.session, "/v1/bots/" + helper.id + "/grants?status=active"),
 			)
 			const mainTool = mainGrants.find(
 				(grant) => grant.capability.action === "tools.call",
@@ -820,26 +812,26 @@ test(
 			// Revoking the Grant of the owner also revokes the Grant that it gave to the helper.
 			const revoked = await send(
 				alice.session,
-				"/v1/agents/" + main.id + "/grants/" + mainTool!.id,
+				"/v1/bots/" + main.id + "/grants/" + mainTool!.id,
 				"DELETE",
 			)
 			assert.equal(revoked.status, 204)
 			assert.deepEqual(
 				await json(
-					Schema.Array(AgentsApi.Grant),
+					Schema.Array(BotsApi.Grant),
 					send(
 						alice.session,
-						"/v1/agents/" + helper.id + "/grants?status=active",
+						"/v1/bots/" + helper.id + "/grants?status=active",
 					),
 				),
 				[],
 			)
 
-			// Deleting the Session archives its Session Agents.
+			// Deleting the Session archives its Session Bots.
 			assert.equal((await send(alice.session, path, "DELETE")).status, 204)
 			const after = await json(
-				AgentsApi.Agent,
-				send(alice.session, "/v1/agents/" + helper.id),
+				BotsApi.Bot,
+				send(alice.session, "/v1/bots/" + helper.id),
 			)
 			assert.equal(after.archived, true)
 		} finally {
@@ -854,8 +846,8 @@ test(
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
 		try {
-			const { send, json, until, defaultAgent } = client(host)
-			const alice = await host.login("agents-dana")
+			const { send, json, until, defaultBot } = client(host)
+			const alice = await host.login("bots-dana")
 			// The judge reads Rules only with the Rules model of the organization.
 			const settings = await (
 				await send(alice.session, "/v1/organization/settings")
@@ -874,7 +866,7 @@ test(
 				},
 			)
 			assert.equal(configured.status, 200, await configured.clone().text())
-			const main = await defaultAgent(alice.session)
+			const main = await defaultBot(alice.session)
 			const created = await json(
 				SessionView,
 				send(alice.session, "/v1/sessions", "POST", {}),
@@ -897,8 +889,8 @@ test(
 				})
 			}
 			const rule = await json(
-				AgentsApi.Rule,
-				send(alice.session, "/v1/agents/" + main.id + "/rules", "POST", {
+				BotsApi.Rule,
+				send(alice.session, "/v1/bots/" + main.id + "/rules", "POST", {
 					text: "Assistant may confirm changes with ConfirmChange.",
 				}),
 			)
@@ -914,8 +906,8 @@ test(
 				[],
 			)
 			const deny = await json(
-				AgentsApi.Grant,
-				send(alice.session, "/v1/agents/" + main.id + "/grants", "POST", {
+				BotsApi.Grant,
+				send(alice.session, "/v1/bots/" + main.id + "/grants", "POST", {
 					capability: { action: "tools.call", target: "ConfirmChange" },
 					effect: "deny",
 					scope: "lifetime",
@@ -934,7 +926,7 @@ test(
 				(
 					await send(
 						alice.session,
-						"/v1/agents/" + main.id + "/grants/" + deny.id,
+						"/v1/bots/" + main.id + "/grants/" + deny.id,
 						"DELETE",
 					)
 				).status,
@@ -949,22 +941,22 @@ test(
 )
 
 test(
-	"an Agent makes lasting Agents that it owns, and their requests go up the owner chain",
+	"a Bot makes lasting Bots that it owns, and their requests go up the owner chain",
 	{ timeout: 120000 },
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
 		try {
-			const { send, json, until, defaultAgent } = client(host)
-			const dave = await host.login("agents-dave")
-			const main = await defaultAgent(dave.session)
-			const open = async (agent?: string) => {
+			const { send, json, until, defaultBot } = client(host)
+			const dave = await host.login("bots-dave")
+			const main = await defaultBot(dave.session)
+			const open = async (bot?: string) => {
 				const created = await json(
 					SessionView,
 					send(
 						dave.session,
 						"/v1/sessions",
 						"POST",
-						agent === undefined ? {} : { agent },
+						bot === undefined ? {} : { bot },
 					),
 				)
 				const path = "/v1/sessions/" + created.session.id
@@ -1018,19 +1010,19 @@ test(
 						decision: "allow",
 					}),
 				)
-			const agent = (id: string) =>
-				json(AgentsApi.Agent, send(dave.session, "/v1/agents/" + id))
+			const bot = (id: string) =>
+				json(BotsApi.Bot, send(dave.session, "/v1/bots/" + id))
 			const ownedBy = (id: string) =>
 				json(
-					Schema.Array(AgentsApi.Agent),
-					send(dave.session, "/v1/agents?agent=" + id),
+					Schema.Array(BotsApi.Bot),
+					send(dave.session, "/v1/bots?bot=" + id),
 				)
 
-			// The default Agent makes a lasting Agent. It is at the top, so the person decides.
+			// The default Bot makes a lasting Bot. It is at the top, so the person decides.
 			const mainSession = await open()
 			await mainSession.turn("create a worker")
 			const create = await pendingFor(
-				(request) => request.capability.action === "agents.create",
+				(request) => request.capability.action === "bots.create",
 			)
 			assert.deepEqual(create.approver, {
 				_tag: "Person",
@@ -1044,13 +1036,13 @@ test(
 			const worker = owned[0]!
 			assert.equal(worker.kind, "persistent")
 			assert.deepEqual(worker.owner, {
-				_tag: "Agent",
-				agent: main.id,
+				_tag: "Bot",
+				bot: main.id,
 				userId: dave.identity.userId,
 			})
 			known.worker = worker.id
 
-			// The default Agent gives work to the Agent it owns without a request.
+			// The default Bot gives work to the Bot it owns without a request.
 			await mainSession.turn("delegate to worker")
 			const delegated = await mainSession.completed()
 			assert.match(JSON.stringify(delegated.response?.output), /Worker did it/)
@@ -1060,12 +1052,12 @@ test(
 			await workerSession.turn("spawn a scout")
 			const passedUp = await pendingFor(
 				(request) =>
-					request.capability.action === "agents.spawn" &&
+					request.capability.action === "bots.spawn" &&
 					request.endorsements.length === 1,
 			)
-			assert.equal(passedUp.agent, worker.id)
+			assert.equal(passedUp.bot, worker.id)
 			assert.deepEqual(passedUp.chain, [main.id, worker.id])
-			assert.equal(passedUp.endorsements[0]?.agent, main.id)
+			assert.equal(passedUp.endorsements[0]?.bot, main.id)
 			assert.deepEqual(passedUp.approver, {
 				_tag: "Person",
 				userId: dave.identity.userId,
@@ -1073,8 +1065,8 @@ test(
 			await allow(passedUp)
 			await workerSession.completed()
 			const scouts = await json(
-				Schema.Array(AgentsApi.Agent),
-				send(dave.session, "/v1/agents?session=" + workerSession.id),
+				Schema.Array(BotsApi.Bot),
+				send(dave.session, "/v1/bots?session=" + workerSession.id),
 			)
 			assert.equal(scouts.length, 1)
 			const scout = scouts[0]!
@@ -1082,28 +1074,28 @@ test(
 				_tag: "Session",
 				userId: dave.identity.userId,
 				session: workerSession.id,
-				agent: worker.id,
+				bot: worker.id,
 			})
 			known.scout = scout.id
 
-			// The Worker promotes its Session Agent to a lasting Agent that it owns.
+			// The Worker promotes its Session Bot to a lasting Bot that it owns.
 			await workerSession.turn("promote the scout")
 			const promote = await pendingFor(
 				(request) =>
-					request.capability.action === "agents.promote" &&
+					request.capability.action === "bots.promote" &&
 					request.endorsements.length === 1,
 			)
 			assert.deepEqual(promote.capability, {
-				action: "agents.promote",
+				action: "bots.promote",
 				target: scout.id,
 			})
 			await allow(promote)
 			await workerSession.completed()
-			const promoted = await agent(scout.id)
+			const promoted = await bot(scout.id)
 			assert.equal(promoted.kind, "persistent")
 			assert.deepEqual(promoted.owner, {
-				_tag: "Agent",
-				agent: worker.id,
+				_tag: "Bot",
+				bot: worker.id,
 				userId: dave.identity.userId,
 			})
 			assert.deepEqual(
@@ -1111,59 +1103,59 @@ test(
 				[scout.id],
 			)
 
-			// A person can make an owned Agent too, but not a shared one.
-			const mixed = await send(dave.session, "/v1/agents", "POST", {
+			// A person can make an owned Bot too, but not a shared one.
+			const mixed = await send(dave.session, "/v1/bots", "POST", {
 				name: "Mixed",
 				role: "Nothing",
 				instructions: "Nothing.",
 				shared: true,
-				agent: main.id,
+				bot: main.id,
 			})
 			assert.equal(mixed.status, 400)
 			const second = await json(
-				AgentsApi.Agent,
-				send(dave.session, "/v1/agents", "POST", {
+				BotsApi.Bot,
+				send(dave.session, "/v1/bots", "POST", {
 					name: "Second",
 					role: "Helps the Worker",
 					instructions: "Help.",
-					agent: worker.id,
+					bot: worker.id,
 				}),
 			)
 			assert.deepEqual(second.owner, {
-				_tag: "Agent",
-				agent: worker.id,
+				_tag: "Bot",
+				bot: worker.id,
 				userId: dave.identity.userId,
 			})
 
-			// Archiving the Worker archives every Agent below it.
-			const current = await agent(worker.id)
+			// Archiving the Worker archives every Bot below it.
+			const current = await bot(worker.id)
 			await json(
-				AgentsApi.Agent,
-				send(dave.session, "/v1/agents/" + worker.id, "PATCH", {
+				BotsApi.Bot,
+				send(dave.session, "/v1/bots/" + worker.id, "PATCH", {
 					expected: current.revision,
 					archived: true,
 				}),
 			)
-			assert.equal((await agent(scout.id)).archived, true)
-			assert.equal((await agent(second.id)).archived, true)
-			assert.equal((await agent(main.id)).archived, false)
+			assert.equal((await bot(scout.id)).archived, true)
+			assert.equal((await bot(second.id)).archived, true)
+			assert.equal((await bot(main.id)).archived, false)
 
-			// Only a top Agent can be the default Agent.
+			// Only a top Bot can be the default Bot.
 			const settings = await json(
 				Settings.MemberSettings,
 				send(dave.session, "/v1/me/settings"),
 			)
 			const notTop = await send(dave.session, "/v1/me/settings", "PATCH", {
 				expectedVersion: settings.version,
-				defaultAgent: worker.id,
+				defaultBot: worker.id,
 			})
 			assert.equal(notTop.status, 400, await notTop.clone().text())
 
-			// An archived default Agent does no new work.
-			const top = await agent(main.id)
+			// An archived default Bot does no new work.
+			const top = await bot(main.id)
 			await json(
-				AgentsApi.Agent,
-				send(dave.session, "/v1/agents/" + main.id, "PATCH", {
+				BotsApi.Bot,
+				send(dave.session, "/v1/bots/" + main.id, "PATCH", {
 					expected: top.revision,
 					archived: true,
 				}),
@@ -1177,26 +1169,23 @@ test(
 )
 
 test(
-	"a person without a default Agent must name an Agent, and cannot pick an Agent of someone else",
+	"a person without a default Bot must name a Bot, and cannot pick a Bot of someone else",
 	{ timeout: 120000 },
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
 		try {
 			const { send, json } = client(host)
-			const erin = await host.login("agents-erin")
-			const frank = await host.login("agents-frank")
+			const erin = await host.login("bots-erin")
+			const frank = await host.login("bots-frank")
 			assert.deepEqual(
-				await json(
-					Schema.Array(AgentsApi.Agent),
-					send(erin.session, "/v1/agents"),
-				),
+				await json(Schema.Array(BotsApi.Bot), send(erin.session, "/v1/bots")),
 				[],
 			)
 			const settings = await json(
 				Settings.MemberSettings,
 				send(erin.session, "/v1/me/settings"),
 			)
-			assert.equal(settings.defaultAgent, null)
+			assert.equal(settings.defaultBot, null)
 			const none = await send(erin.session, "/v1/sessions", "POST", {})
 			assert.equal(none.status, 400, await none.clone().text())
 			const trigger = await send(erin.session, "/v1/triggers", "POST", {
@@ -1205,8 +1194,8 @@ test(
 			assert.equal(trigger.status, 400, await trigger.clone().text())
 
 			const theirs = await json(
-				AgentsApi.Agent,
-				send(frank.session, "/v1/agents", "POST", {
+				BotsApi.Bot,
+				send(frank.session, "/v1/bots", "POST", {
 					name: "Private",
 					role: "Works for Frank",
 					instructions: "Help Frank.",
@@ -1214,13 +1203,13 @@ test(
 			)
 			const other = await send(erin.session, "/v1/me/settings", "PATCH", {
 				expectedVersion: settings.version,
-				defaultAgent: theirs.id,
+				defaultBot: theirs.id,
 			})
 			assert.equal(other.status, 400, await other.clone().text())
 
 			const named = await json(
-				AgentsApi.Agent,
-				send(erin.session, "/v1/agents", "POST", {
+				BotsApi.Bot,
+				send(erin.session, "/v1/bots", "POST", {
 					name: "Named",
 					role: "Helps Erin",
 					instructions: "Help Erin.",
@@ -1228,9 +1217,9 @@ test(
 			)
 			const created = await json(
 				SessionView,
-				send(erin.session, "/v1/sessions", "POST", { agent: named.id }),
+				send(erin.session, "/v1/sessions", "POST", { bot: named.id }),
 			)
-			assert.equal(created.agent, named.id)
+			assert.equal(created.bot, named.id)
 		} finally {
 			await host.close()
 		}

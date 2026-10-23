@@ -1,8 +1,8 @@
 import { Schema } from "effect"
 
 /**
- * The parts that invitations to an organization and invitations to an Agent share.
- * They live here, so the Agent and organization contracts do not import each other.
+ * The parts that invitations to an organization and invitations to a Bot share.
+ * They live here, so the Bot and organization contracts do not import each other.
  */
 export const InvitationId = Schema.String.check(
 	Schema.isMinLength(1),

@@ -1,7 +1,7 @@
 import type { Messages } from "./types.ts"
 
 export default {
-	description: "Dandalin Agent marar fuska, wanda ke aiki ta API.",
+	description: "Dandalin Bot marar fuska, wanda ke aiki ta API.",
 	nav: {
 		label: "Shafi",
 		docs: "Takardu",
@@ -9,8 +9,8 @@ export default {
 		language: "Harshe",
 	},
 	hero: {
-		title: ["Agent da za ka iya kira.", "Sakamako da za ka iya dubawa."],
-		body: "OpenBot dandalin Agent ne na buɗaɗɗen tushe, ba shi da fuskar mai amfani. Kana ba Agent aiki ta HTTP.",
+		title: ["Bot da za ka iya kira.", "Sakamako da za ka iya dubawa."],
+		body: "OpenBot dandalin Bot ne na buɗaɗɗen tushe, ba shi da fuskar mai amfani. Kana ba Bot aiki ta HTTP.",
 		quickStart: "Fara da sauri",
 		apiReference: "Bayanin API",
 		visual: "Fara Turn",
@@ -58,7 +58,7 @@ export default {
 			},
 			{
 				title: "Buɗaɗɗun App",
-				text: "Agent suna samo kuma suna amfani da App da masu wallafa suka sa a buɗaɗɗen yanar gizo tare da OpenBot App Protocol.",
+				text: "Bot suna samo kuma suna amfani da App da masu wallafa suka sa a buɗaɗɗen yanar gizo tare da OpenBot App Protocol.",
 			},
 			{
 				title: "Samfuranka",

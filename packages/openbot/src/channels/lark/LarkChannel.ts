@@ -44,7 +44,7 @@ const decrypt = (encryptKey: string, data: string) => {
 	}
 }
 
-/** Lark puts `@_user_1` in the text for each mention. The Agent does not need them. */
+/** Lark puts `@_user_1` in the text for each mention. The Bot does not need them. */
 const withoutMentions = (value: string) =>
 	value.replace(/@_user_\d+/g, "").trim()
 

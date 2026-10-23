@@ -1,5 +1,5 @@
 import {
-	Agent,
+	Bot,
 	Item,
 	Timeline,
 	Plugin,
@@ -62,7 +62,7 @@ export const checkLiveChannels = (input: {
 			),
 		)
 		const own = yield* PluginState.make({ store, plugin })
-		const runtime = yield* SessionRuntime.make({ store, agent: { plugin } })
+		const runtime = yield* SessionRuntime.make({ store, bot: { plugin } })
 		const read = store.read(input.session),
 			imported = store.import({ record: input.record, expected: null })
 		const modified = store.modifyEffect({
@@ -123,7 +123,7 @@ export const checkLiveChannels = (input: {
 					: true
 			>,
 			Assert<
-				Agent.Context extends Effect.Services<typeof ownUpdate> ? true : false
+				Bot.Context extends Effect.Services<typeof ownUpdate> ? true : false
 			>,
 			Assert<
 				"own-update-error" extends Effect.Error<typeof ownUpdate> ? true : false
@@ -196,7 +196,7 @@ export const checkHostConstructionChannels = (input: {
 		)
 		const construction = SessionRuntime.make({
 			store: input.store,
-			agent: { hostPlugin },
+			bot: { hostPlugin },
 		})
 		const runtime = yield* construction
 		const execution = runtime.execute({ base: input.base, input: "Continue" })
@@ -259,7 +259,7 @@ export const checkConstructionChannels = ({
 		)
 		const construction = SessionRuntime.make({
 			store,
-			agent: { plugin: combined },
+			bot: { plugin: combined },
 		})
 		const runtime = yield* construction
 		const execution = runtime.execute({ base, input: "input" })
@@ -275,9 +275,7 @@ export const checkConstructionChannels = ({
 					: true
 			>,
 			Assert<
-				Agent.Context extends Effect.Services<typeof construction>
-					? false
-					: true
+				Bot.Context extends Effect.Services<typeof construction> ? false : true
 			>,
 			Assert<
 				Effect.Error<typeof construction> extends "construction-error"
