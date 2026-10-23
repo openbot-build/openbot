@@ -1,5 +1,6 @@
 import type * as Configuration from "./Configuration.ts"
-import { Config, ConfigProvider, Option } from "effect"
+import { Config, ConfigProvider, Option, Result } from "effect"
+import * as OutboundPolicy from "../network/OutboundPolicy.ts"
 
 export const load: Configuration.Load = Config.all({
 	host: Config.NonEmptyString("OPENBOT_HOST").pipe(
@@ -25,6 +26,16 @@ export const load: Configuration.Load = Config.all({
 										"Set both OPENBOT_TLS_CERT and OPENBOT_TLS_KEY to serve HTTPS.",
 								}),
 							),
+			}),
+		),
+	),
+	outboundAllow: Config.String("OPENBOT_OUTBOUND_ALLOW").pipe(
+		Config.withDefault(""),
+		Config.flatMap((input) =>
+			Result.match(OutboundPolicy.parse(input), {
+				onSuccess: (allow) => Config.succeed(allow),
+				onFailure: (message) =>
+					Config.fail(new ConfigProvider.SourceError({ message })),
 			}),
 		),
 	),

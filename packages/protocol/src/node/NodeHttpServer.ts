@@ -12,7 +12,7 @@ import {
 	Record as RecordUtils,
 } from "effect"
 import * as HttpNetwork from "../network/HttpNetwork.ts"
-import { type PublicOptions, type UserOptions } from "./Node.ts"
+import { type PublicOptions, type Resolver, type UserOptions } from "./Node.ts"
 import { NodeHttpClient, NodeStream } from "@effect/platform-node"
 
 import { HttpClient, HttpClientRequest } from "effect/http"
@@ -33,6 +33,7 @@ const blocked = [
 	"172.16.0.0/12",
 	"192.0.0.0/24",
 	"192.0.2.0/24",
+	"192.88.99.0/24",
 	"192.168.0.0/16",
 	"198.18.0.0/15",
 	"198.51.100.0/24",
@@ -72,13 +73,17 @@ interface Guard {
 	readonly allowedOrigins: Option.Option<ReadonlyArray<string>>
 }
 
-const layerNetwork = (options: PublicOptions, guard: Guard) => {
-	const allow = guard.allowAddress
-	const resolver = options.lookup ?? lookup
-	const maxRedirects = options.maxRedirects ?? 5
-	const maxBytes = options.maxBytes ?? 1024 * 1024
-	const timeoutMs = options.timeoutMs ?? 10_000
-	const guardedLookup: LookupFunction = (hostname, requested, callback) => {
+/**
+ * Builds a socket lookup that resolves every address of a host and fails
+ * when one of them is not allowed. Use it on every new connection, so the
+ * checked address is the one that the socket really uses.
+ */
+export const guardedLookup =
+	(
+		allow: (address: string, hostname: string) => boolean,
+		resolver: Resolver = lookup,
+	): LookupFunction =>
+	(hostname, requested, callback) => {
 		resolver(
 			hostname,
 			{
@@ -115,10 +120,17 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 			},
 		)
 	}
+
+const layerNetwork = (options: PublicOptions, guard: Guard) => {
+	const allow = guard.allowAddress
+	const maxRedirects = options.maxRedirects ?? 5
+	const maxBytes = options.maxBytes ?? 1024 * 1024
+	const timeoutMs = options.timeoutMs ?? 10_000
+	const socketLookup = guardedLookup(allow, options.lookup)
 	const layerClient = NodeHttpClient.layerNodeHttpNoAgent.pipe(
 		Layer.provide(
 			NodeHttpClient.layerAgentOptions({
-				lookup: guardedLookup,
+				lookup: socketLookup,
 				...RecordUtils.filter({ ca: options.ca }, Predicate.isNotUndefined),
 				// Resolve DNS for every new connection, so checked addresses stay bound to that socket.
 				keepAlive: false,
@@ -349,7 +361,7 @@ export const layerUserNetwork = (options: UserOptions) =>
 export const layerPublicNetwork = (options: PublicOptions = {}) => {
 	const network = layerNetwork(options, {
 		identity: { scope: "public", owner: "anonymous" },
-		allowAddress: isPublicAddress,
+		allowAddress: options.allowAddress ?? isPublicAddress,
 		allowedOrigins: Option.none(),
 	})
 	const anonymous = Layer.effect(

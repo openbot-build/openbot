@@ -25,14 +25,15 @@ OpenBot 可以运行多个实例。一个实例就是一个正在运行的 OpenB
 
 这是服务器读取的环境变量的完整列表。
 
-| 变量                   | 必需 | 默认值      | 含义                                 |
-| ---------------------- | ---- | ----------- | ------------------------------------ |
-| `OPENBOT_HOST`         | 否   | `127.0.0.1` | 服务器监听的网络地址。               |
-| `OPENBOT_PORT`         | 否   | `3000`      | 服务器监听的端口。                   |
-| `OPENBOT_DATABASE_URL` | 是   |             | 一个 PostgreSQL 连接 URL。           |
-| `OPENBOT_SECRET_KEYS`  | 是   |             | 用来加密数据库中机密的密钥。见下文。 |
-| `OPENBOT_TLS_CERT`     | 否   |             | PEM 证书文件的路径。                 |
-| `OPENBOT_TLS_KEY`      | 否   |             | 该证书对应的 PEM 私钥文件的路径。    |
+| 变量                     | 必需 | 默认值      | 含义                                           |
+| ------------------------ | ---- | ----------- | ---------------------------------------------- |
+| `OPENBOT_HOST`           | 否   | `127.0.0.1` | 服务器监听的网络地址。                         |
+| `OPENBOT_PORT`           | 否   | `3000`      | 服务器监听的端口。                             |
+| `OPENBOT_DATABASE_URL`   | 是   |             | 一个 PostgreSQL 连接 URL。                     |
+| `OPENBOT_SECRET_KEYS`    | 是   |             | 用来加密数据库中机密的密钥。见下文。           |
+| `OPENBOT_TLS_CERT`       | 否   |             | PEM 证书文件的路径。                           |
+| `OPENBOT_TLS_KEY`        | 否   |             | 该证书对应的 PEM 私钥文件的路径。              |
+| `OPENBOT_OUTBOUND_ALLOW` | 否   |             | OpenBot 可以连接的私有主机和 IP 范围。见下文。 |
 
 Docker 镜像设置了 `OPENBOT_HOST=0.0.0.0` 和 `OPENBOT_PORT=3000`，这样服务器可以接收来自容器外部的流量。
 
@@ -49,6 +50,41 @@ Docker 镜像设置了 `OPENBOT_HOST=0.0.0.0` 和 `OPENBOT_PORT=3000`，这样�
 如果只设置其中一个，OpenBot 不会启动。
 
 在生产环境中，通常由反向代理处理 HTTPS。这时两个值都留空。参见[部署](/zh-cn/docs/deploy)。
+
+### 出站连接
+
+OpenBot 会连接别人给它的地址，例如模型提供方的端点、SSO 签发方、自定义 Channel 和 App。攻击者可能借此访问你自己的网络。这种攻击叫做服务端请求伪造（SSRF）。
+
+所以 OpenBot 只连接公网地址。它会阻止下面这些目标：
+
+- 回环地址，例如 `127.0.0.1`、`::1` 和 `localhost`，
+- 私有网络，例如 `10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16` 和 `fc00::/7`，
+- 链路本地地址和云元数据服务，例如 `169.254.169.254`，
+- 其他特殊范围，例如共享、测试、组播和保留的范围。
+
+OpenBot 在 DNS 查询之后，检查每个新连接的真实地址。它也会检查每一次重定向。指向私有地址的主机名同样会被阻止。
+
+要有意开放一个私有目标，请把它写进 `OPENBOT_OUTBOUND_ALLOW`。条目之间用逗号分隔。每个条目是下面的一种：
+
+| 条目         | 示例                           | 开放的内容                                             |
+| ------------ | ------------------------------ | ------------------------------------------------------ |
+| 一个 IP 地址 | `127.0.0.1`、`::1`             | 只有这一个地址。                                       |
+| 一个 IP 范围 | `10.20.0.0/16`、`fd00::/8`     | 范围中的每个地址，不论主机名是什么。                   |
+| 一个主机名   | `localhost`、`ollama.internal` | 只有这个确切的名字，不论它指向哪个地址。不含其他名字。 |
+
+不支持通配符，也不支持端口。如果某个条目写错了，OpenBot 不会启动。
+
+```sh
+# 同一台机器上的模型服务器，以及一个内部网络。
+OPENBOT_OUTBOUND_ALLOW=localhost,10.20.0.0/16
+```
+
+<Callout type="warning">
+	这个列表会为每个出站连接开放目标，也包括成员添加的 App。只列出你需要的主机。
+	永远不要列出云元数据地址。给每个实例设置相同的列表。
+</Callout>
+
+当 OpenBot 阻止一个连接时，错误和日志会写出主机和 `OPENBOT_OUTBOUND_ALLOW`。
 
 ---
 
@@ -179,19 +215,20 @@ OpenBot 现在用 `k2` 封存新的机密。`k1` 封存的机密仍然可以打�
 
 ## 生产环境 Compose
 
-Compose 文件 `deploy/docker/compose.production.yaml` 读取下面这些变量。只有前三个会传给 OpenBot。
+Compose 文件 `deploy/docker/compose.production.yaml` 读取下面这些变量。只有 `OPENBOT_DATABASE_URL`、`OPENBOT_SECRET_KEYS` 和 `OPENBOT_OUTBOUND_ALLOW` 会传给 OpenBot。
 
 | 变量                            | 必需 | 默认值                        | 含义                                                      |
 | ------------------------------- | ---- | ----------------------------- | --------------------------------------------------------- |
 | `POSTGRES_PASSWORD`             | 是   |                               | PostgreSQL 用户 `openbot` 的密码。请使用 URL 安全的字符。 |
 | `OPENBOT_DATABASE_URL`          | 是   |                               | 模板会根据 `POSTGRES_PASSWORD` 填写它。                   |
 | `OPENBOT_SECRET_KEYS`           | 是   |                               | 机密密钥。参见[机密密钥](#机密密钥)。                     |
+| `OPENBOT_OUTBOUND_ALLOW`        | 否   |                               | 要开放的私有目标。参见[出站连接](#出站连接)。             |
 | `OPENBOT_RELEASE`               | 是   |                               | 要运行的镜像标签。                                        |
 | `OPENBOT_PUBLISHED_PORT`        | 否   | `8080`                        | 反向代理在 `127.0.0.1` 上找到 OpenBot 的端口。            |
 | `PROTOCOL_TEST_PUBLIC_ORIGIN`   | 是   |                               | 协议测试服务的公开 HTTPS 源。                             |
 | `PROTOCOL_TEST_ALLOWED_ORIGINS` | 否   | `PROTOCOL_TEST_PUBLIC_ORIGIN` | 协议测试服务接受的浏览器源。                              |
 
-Compose 文件把 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS` 以 `/run/secrets` 中文件的形式交给 OpenBot。`openbot` 服务没有其他环境变量。参见[部署](/zh-cn/docs/deploy#用-compose-运行)。
+Compose 文件把 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS` 以 `/run/secrets` 中文件的形式交给 OpenBot。它把 `OPENBOT_OUTBOUND_ALLOW` 作为环境变量交给 OpenBot。`openbot` 服务没有其他环境变量。参见[部署](/zh-cn/docs/deploy#用-compose-运行)。
 完整的模板在 `deploy/docker/production.env.example` 中。
 
 ---
@@ -226,6 +263,8 @@ Compose 文件把 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS` 以 `/run/sec
 只有开发入口会读取 `OPENBOT_DEV_PUBLIC_ORIGIN`。它不需要设置步骤。每次启动时，它会自己为这个源写入平台设置。它会把本地账号 `developer@localhost.test` 设为平台管理员，并打开本地测试登录。参见[身份验证](/zh-cn/docs/authentication#开发账户)。
 
 生产程序永远不会使用本地测试账号。没有任何开关可以打开它。
+
+开发服务器同样会阻止私有目标。要使用你机器上的模型服务器（例如 Ollama），请在 `.env.development` 中设置 `OPENBOT_OUTBOUND_ALLOW=localhost`。参见[出站连接](#出站连接)。
 
 要使用另一个数据库，请在 `.env.development` 中设置 `OPENBOT_DATABASE_URL`。参见[参与贡献](/zh-cn/docs/contributing)。
 

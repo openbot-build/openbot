@@ -97,6 +97,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `typesafe`      | The decision API of TypeSafe.                           | `decision`                |
 
 An `openai-compat` provider can link both types, so a gateway (a service that passes calls on to other services), such as OpenRouter or LiteLLM, can offer both.
+OpenBot connects only to public addresses. For a model server in your own network or on your machine, the operator must list its host in `OPENBOT_OUTBOUND_ALLOW`. Until then, calls to it fail. See [Outbound connections](/docs/configuration#outbound-connections).
 A `typesafe` provider has no default address yet, because TypeSafe has not published one official address. Give the address that your account uses.
 If a provider links a model of a type that it cannot serve, OpenBot returns `400` with `ModelProviderInvalid`.
 

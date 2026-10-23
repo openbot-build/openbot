@@ -8,6 +8,7 @@ import {
 	Network,
 } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
+import { OutboundPolicy } from "../network/OutboundPolicy.ts"
 import { Context, Effect, Layer } from "effect"
 
 export class Probe extends Context.Service<
@@ -72,10 +73,15 @@ export const layerWithNetwork = (
 				),
 			),
 	})
-export const layer = layerWithNetwork((connection) =>
-	NodeHttpServer.layerUserNetwork({
-		owner: connection.owner,
-		allowedOrigins: [new URL(connection.endpoint).origin],
-		allowAddress: NodeHttpServer.isPublicAddress,
+export const layer = Layer.unwrap(
+	Effect.gen(function* () {
+		const policy = yield* OutboundPolicy
+		return layerWithNetwork((connection) =>
+			NodeHttpServer.layerUserNetwork({
+				owner: connection.owner,
+				allowedOrigins: [new URL(connection.endpoint).origin],
+				allowAddress: policy.allowAddress,
+			}),
+		)
 	}),
 )

@@ -25,14 +25,15 @@ If a required value is missing or wrong, OpenBot does not start. It writes a con
 
 This is the complete list of environment variables that the server reads.
 
-| Variable               | Required | Default     | Meaning                                                    |
-| ---------------------- | -------- | ----------- | ---------------------------------------------------------- |
-| `OPENBOT_HOST`         | No       | `127.0.0.1` | The network address that the server listens on.            |
-| `OPENBOT_PORT`         | No       | `3000`      | The port that the server listens on.                       |
-| `OPENBOT_DATABASE_URL` | Yes      |             | A PostgreSQL connection URL.                               |
-| `OPENBOT_SECRET_KEYS`  | Yes      |             | The keys that encrypt secrets in the database. See below.  |
-| `OPENBOT_TLS_CERT`     | No       |             | The path to a PEM certificate file.                        |
-| `OPENBOT_TLS_KEY`      | No       |             | The path to the PEM private key file for that certificate. |
+| Variable                 | Required | Default     | Meaning                                                             |
+| ------------------------ | -------- | ----------- | ------------------------------------------------------------------- |
+| `OPENBOT_HOST`           | No       | `127.0.0.1` | The network address that the server listens on.                     |
+| `OPENBOT_PORT`           | No       | `3000`      | The port that the server listens on.                                |
+| `OPENBOT_DATABASE_URL`   | Yes      |             | A PostgreSQL connection URL.                                        |
+| `OPENBOT_SECRET_KEYS`    | Yes      |             | The keys that encrypt secrets in the database. See below.           |
+| `OPENBOT_TLS_CERT`       | No       |             | The path to a PEM certificate file.                                 |
+| `OPENBOT_TLS_KEY`        | No       |             | The path to the PEM private key file for that certificate.          |
+| `OPENBOT_OUTBOUND_ALLOW` | No       |             | Private hosts and IP ranges that OpenBot may connect to. See below. |
 
 The Docker image sets `OPENBOT_HOST=0.0.0.0` and `OPENBOT_PORT=3000`, so the server can take traffic from outside the container.
 
@@ -49,6 +50,42 @@ Set both `OPENBOT_TLS_CERT` and `OPENBOT_TLS_KEY` to make OpenBot serve HTTPS it
 If you set only one, OpenBot does not start.
 
 In production, a reverse proxy usually handles HTTPS. Then you leave both values empty. See [Deploy](/docs/deploy).
+
+### Outbound connections
+
+OpenBot connects to addresses that people give it, such as model provider endpoints, SSO issuers, custom Channels, and Apps. An attacker could use this to reach your own network. This attack is called server-side request forgery (SSRF).
+
+So OpenBot connects only to public addresses. It blocks these targets:
+
+- loopback addresses, such as `127.0.0.1`, `::1`, and `localhost`,
+- private networks, such as `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, and `fc00::/7`,
+- link-local addresses and cloud metadata services, such as `169.254.169.254`,
+- other special ranges, such as shared, test, multicast, and reserved ones.
+
+OpenBot checks the real address of every new connection, after the DNS lookup. It also checks each redirect. A host name that points to a private address is blocked, too.
+
+To open a private target on purpose, list it in `OPENBOT_OUTBOUND_ALLOW`. Separate the entries with commas. Each entry is one of these:
+
+| Entry         | Example                        | What it opens                                                  |
+| ------------- | ------------------------------ | -------------------------------------------------------------- |
+| An IP address | `127.0.0.1`, `::1`             | This one address.                                              |
+| An IP range   | `10.20.0.0/16`, `fd00::/8`     | Every address in the range, for any host name.                 |
+| A host name   | `localhost`, `ollama.internal` | This exact name, whatever address it points to. No other name. |
+
+There are no wildcards and no ports. If an entry is wrong, OpenBot does not start.
+
+```sh
+# A model server on the same machine, and one internal network.
+OPENBOT_OUTBOUND_ALLOW=localhost,10.20.0.0/16
+```
+
+<Callout type="warning">
+	The list opens a target for every outbound connection, also for the Apps that
+	members add. List only the hosts that you need. Never list a cloud metadata
+	address. Give every instance the same list.
+</Callout>
+
+When OpenBot blocks a connection, the error and the log name the host and `OPENBOT_OUTBOUND_ALLOW`.
 
 ---
 
@@ -179,19 +216,20 @@ A change to `publicOrigin`, to the platform identity provider, or to the sign-in
 
 ## Production Compose
 
-The Compose file `deploy/docker/compose.production.yaml` reads these variables. Only the first three reach OpenBot.
+The Compose file `deploy/docker/compose.production.yaml` reads these variables. Only `OPENBOT_DATABASE_URL`, `OPENBOT_SECRET_KEYS`, and `OPENBOT_OUTBOUND_ALLOW` reach OpenBot.
 
-| Variable                        | Required | Default                       | Meaning                                                                 |
-| ------------------------------- | -------- | ----------------------------- | ----------------------------------------------------------------------- |
-| `POSTGRES_PASSWORD`             | Yes      |                               | The password of the PostgreSQL user `openbot`. Use URL-safe characters. |
-| `OPENBOT_DATABASE_URL`          | Yes      |                               | The template fills it in from `POSTGRES_PASSWORD`.                      |
-| `OPENBOT_SECRET_KEYS`           | Yes      |                               | The secret keys. See [Secret keys](#secret-keys).                       |
-| `OPENBOT_RELEASE`               | Yes      |                               | The image tag to run.                                                   |
-| `OPENBOT_PUBLISHED_PORT`        | No       | `8080`                        | The port on `127.0.0.1` where your reverse proxy finds OpenBot.         |
-| `PROTOCOL_TEST_PUBLIC_ORIGIN`   | Yes      |                               | The public HTTPS origin of the protocol test service.                   |
-| `PROTOCOL_TEST_ALLOWED_ORIGINS` | No       | `PROTOCOL_TEST_PUBLIC_ORIGIN` | Browser origins that the protocol test service accepts.                 |
+| Variable                        | Required | Default                       | Meaning                                                                     |
+| ------------------------------- | -------- | ----------------------------- | --------------------------------------------------------------------------- |
+| `POSTGRES_PASSWORD`             | Yes      |                               | The password of the PostgreSQL user `openbot`. Use URL-safe characters.     |
+| `OPENBOT_DATABASE_URL`          | Yes      |                               | The template fills it in from `POSTGRES_PASSWORD`.                          |
+| `OPENBOT_SECRET_KEYS`           | Yes      |                               | The secret keys. See [Secret keys](#secret-keys).                           |
+| `OPENBOT_OUTBOUND_ALLOW`        | No       |                               | Private targets to open. See [Outbound connections](#outbound-connections). |
+| `OPENBOT_RELEASE`               | Yes      |                               | The image tag to run.                                                       |
+| `OPENBOT_PUBLISHED_PORT`        | No       | `8080`                        | The port on `127.0.0.1` where your reverse proxy finds OpenBot.             |
+| `PROTOCOL_TEST_PUBLIC_ORIGIN`   | Yes      |                               | The public HTTPS origin of the protocol test service.                       |
+| `PROTOCOL_TEST_ALLOWED_ORIGINS` | No       | `PROTOCOL_TEST_PUBLIC_ORIGIN` | Browser origins that the protocol test service accepts.                     |
 
-The Compose file gives `OPENBOT_DATABASE_URL` and `OPENBOT_SECRET_KEYS` to OpenBot as files in `/run/secrets`. The `openbot` service has no other environment variables. See [Deploy](/docs/deploy#run-with-compose).
+The Compose file gives `OPENBOT_DATABASE_URL` and `OPENBOT_SECRET_KEYS` to OpenBot as files in `/run/secrets`. It gives `OPENBOT_OUTBOUND_ALLOW` as an environment variable. The `openbot` service has no other environment variables. See [Deploy](/docs/deploy#run-with-compose).
 A full template is in `deploy/docker/production.env.example`.
 
 ---
@@ -226,6 +264,8 @@ devenv then sets these values for you:
 Only the development entry point reads `OPENBOT_DEV_PUBLIC_ORIGIN`. It needs no setup step. At each start, it writes the platform settings for this origin itself. It makes the local account `developer@localhost.test` a platform admin, and it turns on the local test sign-in. See [Authentication](/docs/authentication#development-account).
 
 The production program never uses the local test account. There is no switch for it.
+
+The development server blocks private targets, too. To use a model server on your machine, such as Ollama, set `OPENBOT_OUTBOUND_ALLOW=localhost` in `.env.development`. See [Outbound connections](#outbound-connections).
 
 To use another database, set `OPENBOT_DATABASE_URL` in `.env.development`. See [Contributing](/docs/contributing).
 

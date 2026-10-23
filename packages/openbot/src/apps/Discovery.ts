@@ -1,5 +1,5 @@
 import { CatalogDiscovery, Discovery } from "@openbot-build/protocol"
-import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
+import * as OutboundPolicy from "../network/OutboundPolicy.ts"
 import { AppDiscoveryFailed, type AppDiscoveryResult } from "@openbot-build/api"
 import { Effect, Layer, Match } from "effect"
 
@@ -82,5 +82,5 @@ export const discover: (
 export const layerPublic: Layer.Layer<Discovery.Discovery> =
 	CatalogDiscovery.layer().pipe(
 		Layer.provide(CatalogDiscovery.layerRules),
-		Layer.provide(NodeHttpServer.layerPublicNetwork()),
+		Layer.provide(OutboundPolicy.layerPublicNetwork),
 	)

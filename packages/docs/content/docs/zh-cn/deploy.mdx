@@ -166,7 +166,7 @@ pnpm --filter @openbot-build/openbot start
 即使你只用 OpenBot，这个文件也需要 `PROTOCOL_TEST_PUBLIC_ORIGIN`。
 
 Compose 以 `/run/secrets` 中文件的形式把密钥交给容器，而不是用环境变量。这些密钥是 `POSTGRES_PASSWORD`、`OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS`。Compose 从 `.env.production` 读取它们的值。
-`openbot` 服务只拿到 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS`。它没有其他环境变量，因为其他所有设置都存放在数据库中。`migrate` 服务只拿到 `OPENBOT_DATABASE_URL`。
+`openbot` 服务只拿到 `OPENBOT_DATABASE_URL`、`OPENBOT_SECRET_KEYS` 和 `OPENBOT_OUTBOUND_ALLOW`。它没有其他环境变量，因为其他所有设置都存放在数据库中。`migrate` 服务只拿到 `OPENBOT_DATABASE_URL`。
 
 在模板中，`OPENBOT_DATABASE_URL` 使用 `${POSTGRES_PASSWORD}`，所以密码只需要设置一次。
 
@@ -244,7 +244,8 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 你可以在一个负载均衡器后面运行多个 OpenBot 实例。给每个实例：
 
 - 相同的 `OPENBOT_DATABASE_URL`，
-- 相同的 `OPENBOT_SECRET_KEYS`。
+- 相同的 `OPENBOT_SECRET_KEYS`，
+- 相同的 `OPENBOT_OUTBOUND_ALLOW`（如果你设置了它）。参见[出站连接](/zh-cn/docs/configuration#出站连接)。
 
 其他什么都不需要。所有共享设置都存放在数据库中。管理员修改设置后，每个实例会立即使用新设置。请看[配置](/zh-cn/docs/configuration#修改如何到达每个实例)。
 迁移程序和设置程序只运行一次，不要在每个实例上都运行。

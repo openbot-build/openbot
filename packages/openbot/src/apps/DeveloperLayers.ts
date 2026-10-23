@@ -5,7 +5,7 @@ import {
 	RobotsPolicy,
 	type Network,
 } from "@openbot-build/protocol"
-import * as ProtocolNodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
+import * as OutboundPolicy from "../network/OutboundPolicy.ts"
 import * as AppInspections from "./AppInspections.ts"
 import * as Access from "./DeveloperAccess.ts"
 import * as Members from "./DeveloperMembers.ts"
@@ -31,7 +31,7 @@ export const layer = (
 ) => {
 	const publicOrigin = options.publicOrigin ?? "https://localhost"
 	const publicNetwork =
-		options.publicNetwork ?? ProtocolNodeHttpServer.layerPublicNetwork()
+		options.publicNetwork ?? OutboundPolicy.layerPublicNetwork
 	const inspections = AppInspections.layer.pipe(
 		Layer.provide(
 			PublicIndexing.layerInspection.pipe(

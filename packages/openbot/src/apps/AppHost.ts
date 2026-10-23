@@ -11,6 +11,7 @@ import {
 	Store,
 } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
+import { OutboundPolicy } from "../network/OutboundPolicy.ts"
 import {
 	Context,
 	Crypto,
@@ -75,14 +76,20 @@ export class AppNetwork extends Context.Service<
 		) => Layer.Layer<Network.Network>
 	}
 >()("@openbot-build/openbot/apps/AppHost/AppNetwork") {}
-export const layerNetwork = Layer.succeed(AppNetwork, {
-	layer: (owner, origins) =>
-		NodeHttpServer.layerUserNetwork({
-			owner,
-			allowedOrigins: origins,
-			allowAddress: NodeHttpServer.isPublicAddress,
-		}),
-})
+export const layerNetwork = Layer.effect(
+	AppNetwork,
+	Effect.gen(function* () {
+		const policy = yield* OutboundPolicy
+		return {
+			layer: (owner: string, origins: ReadonlyArray<string>) =>
+				NodeHttpServer.layerUserNetwork({
+					owner,
+					allowedOrigins: origins,
+					allowAddress: policy.allowAddress,
+				}),
+		}
+	}),
+)
 
 /** Build a closed App service for the current owner and invocation policy. */
 export class AppHost extends Context.Service<

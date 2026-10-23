@@ -94,6 +94,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `anthropic`     | Anthropic Messages API.                                     |
 | `openai-compat` | OpenAI Chat Completions API und Dienste, die sie nachbauen. |
 
+OpenBot verbindet sich nur mit öffentlichen Adressen. Für einen Model-Server in deinem eigenen Netzwerk oder auf deiner Maschine muss der Betreiber seinen Host in `OPENBOT_OUTBOUND_ALLOW` schreiben. Bis dahin schlagen Aufrufe an ihn fehl. Siehe [Ausgehende Verbindungen](/de/docs/configuration#ausgehende-verbindungen).
+
 Jede Verknüpfung hat diese Felder:
 
 | Feld               | Regeln                                                                                             |

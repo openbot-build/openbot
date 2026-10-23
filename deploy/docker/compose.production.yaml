@@ -46,6 +46,8 @@ services:
   # settings once with the setup program. See the Deploy page in the docs.
   openbot:
     <<: *server
+    environment:
+      OPENBOT_OUTBOUND_ALLOW: ${OPENBOT_OUTBOUND_ALLOW:-}
     ports:
       - "127.0.0.1:${OPENBOT_PUBLISHED_PORT:-8080}:3000"
     depends_on:

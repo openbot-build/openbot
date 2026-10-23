@@ -82,9 +82,14 @@ export const developmentSecret = (secretKeys: Redacted.Redacted<string>) =>
 			.digest("hex"),
 	)
 
-/** Assemble simulated discovery and models with the normal configured identity and storage. */
+/**
+ * Assemble simulated discovery and models with the normal configured identity and storage.
+ * The entry point sets the outbound guard, because it changes the whole process.
+ */
 export const layer = (
-	settings: Configuration.Settings & { readonly auth: AuthConfiguration },
+	settings: Omit<Configuration.Settings, "outboundAllow"> & {
+		readonly auth: AuthConfiguration
+	},
 ) =>
 	Layer.unwrap(
 		Effect.gen(function* () {

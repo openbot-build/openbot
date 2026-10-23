@@ -6,13 +6,17 @@ import { NodeRuntime } from "@effect/platform-node"
 import * as Server from "./Server.ts"
 import * as ErrorReporting from "./ErrorReporting.ts"
 import { FetchHttpClient } from "effect/http"
+import * as OutboundGuard from "../network/OutboundGuard.ts"
 
 NodeRuntime.runMain(
 	ErrorReporting.withStartup(
 		Effect.gen(function* () {
 			const settings = yield* EnvironmentConfiguration.load
 			return yield* Layer.launch(
-				Server.layer(settings).pipe(Layer.provide(FetchHttpClient.layer)),
+				Server.layer(settings).pipe(
+					Layer.provide(FetchHttpClient.layer),
+					Layer.provide(OutboundGuard.layer(settings.outboundAllow)),
+				),
 			)
 		}),
 	).pipe(

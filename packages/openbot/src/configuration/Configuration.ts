@@ -1,4 +1,5 @@
 import { type Config, type Redacted } from "effect"
+import type * as OutboundPolicy from "../network/OutboundPolicy.ts"
 
 /**
  * The configuration of one instance. Only values that belong to this instance
@@ -15,5 +16,7 @@ export interface Settings {
 	/** PEM file paths for serving HTTPS directly, usually during local development. */
 	readonly tls?:
 		{ readonly certFile: string; readonly keyFile: string } | undefined
+	/** `OPENBOT_OUTBOUND_ALLOW`: the private targets that outbound connections may reach. */
+	readonly outboundAllow: OutboundPolicy.Allow
 }
 export type Load = Config.Config<Settings>

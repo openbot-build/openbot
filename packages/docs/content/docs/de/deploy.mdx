@@ -166,7 +166,7 @@ Der Dienst `protocol-test` ist der öffentliche Testdienst für das App Protocol
 Die Datei braucht `PROTOCOL_TEST_PUBLIC_ORIGIN`, auch wenn du nur OpenBot nutzt.
 
 Compose gibt die Geheimnisse den Containern als Dateien in `/run/secrets`, nicht als Umgebungsvariablen. Das sind `POSTGRES_PASSWORD`, `OPENBOT_DATABASE_URL` und `OPENBOT_SECRET_KEYS`. Compose nimmt ihre Werte aus `.env.production`.
-Der Dienst `openbot` bekommt nur `OPENBOT_DATABASE_URL` und `OPENBOT_SECRET_KEYS`. Er hat keine anderen Umgebungsvariablen, denn alle anderen Einstellungen liegen in der Datenbank. Der Dienst `migrate` bekommt nur `OPENBOT_DATABASE_URL`.
+Der Dienst `openbot` bekommt nur `OPENBOT_DATABASE_URL`, `OPENBOT_SECRET_KEYS` und `OPENBOT_OUTBOUND_ALLOW`. Er hat keine anderen Umgebungsvariablen, denn alle anderen Einstellungen liegen in der Datenbank. Der Dienst `migrate` bekommt nur `OPENBOT_DATABASE_URL`.
 
 In der Vorlage nutzt `OPENBOT_DATABASE_URL` den Wert `${POSTGRES_PASSWORD}`. So setzt du das Passwort nur einmal.
 
@@ -244,7 +244,8 @@ Lösche nie das Volume `postgres`. Es enthält alle deine Daten.
 Du kannst viele OpenBot-Instanzen hinter einem Load Balancer betreiben. Gib jeder Instanz:
 
 - dieselbe `OPENBOT_DATABASE_URL`,
-- dieselben `OPENBOT_SECRET_KEYS`.
+- dieselben `OPENBOT_SECRET_KEYS`,
+- dieselbe `OPENBOT_OUTBOUND_ALLOW`, wenn du sie setzt. Siehe [Ausgehende Verbindungen](/de/docs/configuration#ausgehende-verbindungen).
 
 Mehr ist nicht nötig. Alle gemeinsamen Einstellungen liegen in der Datenbank. Wenn ein Admin sie ändert, nutzt jede Instanz die Änderung sofort. Siehe [Konfiguration](/de/docs/configuration#wie-eine-änderung-jede-instanz-erreicht).
 Führe das Migrationsprogramm und das Einrichtungsprogramm nur einmal aus, nicht auf jeder Instanz.

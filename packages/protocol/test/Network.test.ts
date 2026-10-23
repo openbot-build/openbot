@@ -75,10 +75,47 @@ test("Public adapter blocks IP literals and the DNS address used by the socket",
 			"::ffff:127.0.0.1",
 			"fc00::1",
 			"fe80::1",
+			"192.88.99.1",
 		])
 			assert.equal(NodeHttpServer.isPublicAddress(ip), false, ip)
 		assert.equal(NodeHttpServer.isPublicAddress("8.8.8.8"), true)
 		assert.equal(NodeHttpServer.isPublicAddress("2606:4700:4700::1111"), true)
+	} finally {
+		await fixture.close()
+	}
+})
+
+test("Public adapter reaches a private address only when the address rule allows it", async () => {
+	let requests = 0
+	const fixture = await startHttps((_req, res) => {
+		requests++
+		res.end("listed")
+	})
+	try {
+		await using runtime = ManagedRuntime.make(
+			NodeHttpServer.layerPublicNetwork({
+				ca: fixture.ca,
+				allowAddress: (address, hostname) =>
+					NodeHttpServer.isPublicAddress(address) || hostname === "localhost",
+				lookup: (_host, _options, callback) =>
+					callback(null, [{ address: "127.0.0.1", family: 4 }]),
+			}).pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
+		)
+		const port = new URL(fixture.origin).port
+		await assert.rejects(
+			runtime.runPromise(
+				Network.Network.use((net) =>
+					net.readDocument({ url: `https://other.test:${port}/` }),
+				),
+			),
+			/NetworkError/,
+		)
+		assert.equal(requests, 0)
+		const reply = await runtime.runPromise(
+			Network.Network.use((net) => net.readDocument({ url: fixture.origin })),
+		)
+		assert.equal(reply.text, "listed")
+		assert.equal(requests, 1)
 	} finally {
 		await fixture.close()
 	}

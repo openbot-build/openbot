@@ -94,6 +94,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `anthropic`     | Anthropic Messages API。                        |
 | `openai-compat` | OpenAI Chat Completions API，以及仿照它的服务。 |
 
+OpenBot 只连接公网地址。如果模型服务器在你自己的网络中或你的机器上，运维人员必须把它的主机写进 `OPENBOT_OUTBOUND_ALLOW`。在那之前，对它的调用都会失败。参见[出站连接](/zh-cn/docs/configuration#出站连接)。
+
 每个关联有下面这些字段：
 
 | 字段               | 规则                                                           |

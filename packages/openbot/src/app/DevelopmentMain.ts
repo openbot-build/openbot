@@ -4,6 +4,7 @@ import { Config, Effect, Layer } from "effect"
 import * as EnvironmentConfiguration from "../configuration/EnvironmentConfiguration.ts"
 import * as Development from "./Development.ts"
 import * as ErrorReporting from "./ErrorReporting.ts"
+import * as OutboundGuard from "../network/OutboundGuard.ts"
 
 NodeRuntime.runMain(
 	ErrorReporting.withStartup(
@@ -31,6 +32,7 @@ NodeRuntime.runMain(
 							},
 						}),
 					),
+					Layer.provide(OutboundGuard.layer(settings.outboundAllow)),
 				),
 			)
 		}),
