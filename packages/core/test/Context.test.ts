@@ -1,32 +1,32 @@
-import { Item } from "@openbot-build/core"
-import { SessionStoreRepository, MemoryPersistence } from "@openbot-build/core"
-import {
-	Array as EffectArray,
-	Match,
-	Effect,
-	Deferred,
-	Fiber,
-	Layer,
-	Option,
-	Stream,
-	Predicate,
-} from "effect"
-import { RecordSerialization } from "@openbot-build/core"
 // @effect-diagnostics strictEffectProvide:off
 import assert from "node:assert/strict"
 import { test } from "node:test"
-
+import {
+	Array as EffectArray,
+	Deferred,
+	Effect,
+	Fiber,
+	Layer,
+	Match,
+	Option,
+	Predicate,
+	Stream,
+} from "effect"
 import { Prompt, Response, Toolkit } from "effect/ai"
 import {
-	SessionRuntime,
+	type Chat,
+	type ChatStore,
+	ChatRuntime,
+	ChatStoreRepository,
 	Config,
 	ContextCompaction,
 	ContextWindow,
 	ConversationContextOperations,
+	Item,
 	Model,
 	Provider,
 } from "@openbot-build/core"
-import { SessionTest } from "./SessionTest.ts"
+import { ChatTest } from "./ChatTest.ts"
 import { ContextCompactionTest } from "./ContextCompactionTest.ts"
 import { finish, LanguageModelTest, textParts } from "./LanguageModelTest.ts"
 
@@ -46,97 +46,99 @@ const request = {
 	instructions: Prompt.make([{ role: "system", content: "instructions" }]),
 	toolkit: Toolkit.empty,
 }
-const selected = (
-	runtimeStore: import("@openbot-build/core").SessionStore.Store,
-	session: import("@openbot-build/core").Session.Id,
-) =>
+/** Gives the Chat one Item, a window with the same message, and the model of the catalog. */
+const selected = (runtimeStore: ChatStore.Store, chat: Chat.Id) =>
 	runtimeStore
 		.modifyEffect({
-			session,
+			chat,
 			update: (current) =>
 				Effect.succeed([
 					undefined,
 					Option.some({
+						append: [
+							{
+								id: Item.Id.make("history"),
+								content: Prompt.make("whole history"),
+							},
+						],
 						value: {
-							...current.state.value,
+							...current.state,
 							conversation: {
-								...current.state.value.conversation,
-								history: [
-									{
-										id: Item.Id.make("history"),
-										content: Prompt.make("whole history"),
-									},
-								],
+								...current.state.conversation,
 								context: ContextWindow.fromPrompt("whole history"),
 							},
 						},
-						session: {
-							settings: { ...current.session.settings, model: selection },
+						chat: {
+							settings: { ...current.chat.settings, model: selection },
 						},
 					}),
 				] as const),
 		})
 		.pipe(Effect.map(({ view }) => view))
 
-test("explicit compaction keeps complete opaque items and full history after a restore", async () => {
+test("explicit compaction keeps opaque items and the whole Item log, also for a new store over the same persistence", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
 				const test = ContextCompactionTest()
-				const { runtime, runtimeStore, view, definition } = yield* SessionTest({
-					compaction: test.service,
-					modelCatalog: Effect.succeed([catalog]),
-				})
-				const before = yield* selected(runtimeStore, view.session.id)
+				const { runtime, runtimeStore, chat, definition, persistence } =
+					yield* ChatTest({
+						compaction: test.service,
+						modelCatalog: Effect.succeed([catalog]),
+					})
+				const before = yield* selected(runtimeStore, chat)
+				const log = yield* runtimeStore.items(chat)
 				const service = ConversationContextOperations.make({
 					store: runtimeStore,
 					runtime,
-					session: view.session.id,
+					chat,
 					request,
 				})
 				const result = yield* service.compact({ targetTokens: 20 })
 				assert.ok(Option.isNone(result.summary))
 				assert.equal(result.afterTokens, 10)
 				assert.equal(test.compactions, 1)
-				const compacted = yield* runtimeStore.read(view.session.id)
+				const compacted = yield* runtimeStore.read(chat)
+				assert.deepEqual(yield* runtimeStore.items(chat), log)
+				assert.equal(compacted.chat.revision, before.chat.revision + 1)
+				assert.equal(compacted.state.conversation.context._tag, "Native")
 				assert.deepEqual(
-					compacted.state.value.conversation.history,
-					before.state.value.conversation.history,
+					(
+						compacted.state.conversation.context as Extract<
+							ContextWindow.Window,
+							{ _tag: "Native" }
+						>
+					).items,
+					[
+						{
+							type: "message",
+							content: [{ type: "output_text", text: "retained" }],
+						},
+						{
+							type: "compaction",
+							encrypted_content: "encrypted",
+							opaque: { v: 1 },
+						},
+					],
 				)
-				assert.deepEqual(compacted.state.version.parents, [before.session.head])
-				assert.equal(compacted.state.value.conversation.context._tag, "Native")
-				const freshStore = yield* SessionStoreRepository.make({
-					definition: definition,
-					persistence: yield* MemoryPersistence.make,
+				const freshStore = yield* ChatStoreRepository.make({
+					definition,
+					persistence,
 				})
-				const fresh = yield* SessionRuntime.make({
+				const fresh = yield* ChatRuntime.make({
 					store: freshStore,
 					bot: { compaction: test.service },
 				})
-				const codec = RecordSerialization.make<{}>()
-				const record = yield* runtimeStore.export(view.session.id)
-				const restored = yield* freshStore.import({
-					record: yield* codec.decode({
-						definition,
-						input: yield* codec.encode({ definition, record }),
-					}),
-					expected: null,
-				})
+				const restored = yield* freshStore.read(chat)
 				assert.deepEqual(
-					restored.state.value.conversation.context,
-					compacted.state.value.conversation.context,
+					restored.state.conversation.context,
+					compacted.state.conversation.context,
 				)
-				const continued = yield* fresh.execute({
-					base: {
-						session: restored.session.id,
-						revision: restored.session.revision,
-					},
-					input: "continue",
-				})
-				assert.equal(continued.state.value.conversation.context._tag, "Native")
+				const continued = yield* fresh.execute({ chat, input: "continue" })
+				assert.equal(continued.state.conversation.context._tag, "Native")
 				assert.match(
-					JSON.stringify(continued.state.value.conversation.history),
-					/whole history|continue/,
+					JSON.stringify(yield* freshStore.items(chat)),
+					/whole history.*continue/,
 				)
 				const load = yield* service.load({ additional: "tail" })
 				assert.equal(load.window._tag, "Native")
@@ -193,28 +195,24 @@ test("invalid targets, large input, provider failure and a missed target never c
 			Effect.scoped(
 				Effect.gen(function* () {
 					const test = ContextCompactionTest(entry.options)
-					const { runtime, runtimeStore, view } = yield* SessionTest({
+					const { runtime, runtimeStore, chat } = yield* ChatTest({
 						compaction: test.service,
 						modelCatalog: Effect.succeed([catalog]),
 					})
-					const before = yield* selected(runtimeStore, view.session.id)
+					const before = yield* selected(runtimeStore, chat)
 					const error = yield* runtime
-						.compact({
-							session: view.session.id,
-							targetTokens: entry.target,
-							request,
-						})
+						.compact({ chat, targetTokens: entry.target, request })
 						.pipe(Effect.flip)
 					assert.ok(Predicate.hasProperty(error, "reason"))
 					assert.equal(error.reason, entry.reason)
 					assert.equal(test.compactions, entry.calls)
-					assert.deepEqual(yield* runtimeStore.read(view.session.id), before)
+					assert.deepEqual(yield* runtimeStore.read(chat), before)
 				}),
 			),
 		)
 })
 
-test("compaction uses compare-and-set on the head after network work and rejects a competing update", async () => {
+test("compaction checks the revision after its network work and rejects a competing change", async () => {
 	const start = Deferred.makeUnsafe<void>(),
 		finish = Deferred.makeUnsafe<void>()
 	await Effect.runPromise(
@@ -233,45 +231,41 @@ test("compaction uses compare-and-set on the head after network work and rejects
 							}),
 						),
 				})
-				const { runtime, runtimeStore, view } = yield* SessionTest({
+				const { runtime, runtimeStore, chat } = yield* ChatTest({
 					compaction: test.service,
 					modelCatalog: Effect.succeed([catalog]),
 				})
-				yield* selected(runtimeStore, view.session.id)
+				yield* selected(runtimeStore, chat)
 				const fiber = yield* Effect.forkChild(
 					runtime
-						.compact({ session: view.session.id, targetTokens: 20, request })
+						.compact({ chat, targetTokens: 20, request })
 						.pipe(Effect.flip),
 				)
 				yield* Deferred.await(start)
-				const changed = yield* runtimeStore
-					.modifyEffect({
-						session: view.session.id,
-						update: (current) =>
-							Effect.gen(function* () {
-								return [
-									undefined,
-									Option.some({
-										value: ((v: typeof current.state.value) => ({
-											...v,
-											conversation: {
-												...v.conversation,
-												context: ContextWindow.append(
-													v.conversation.context,
-													"competing Timeline edit",
-												),
-											},
-										}))(current.state.value),
-									}),
-								] as const
+				const changed = (yield* runtimeStore.modifyEffect({
+					chat,
+					update: (current) =>
+						Effect.succeed([
+							undefined,
+							Option.some({
+								value: {
+									...current.state,
+									conversation: {
+										...current.state.conversation,
+										context: ContextWindow.append(
+											current.state.conversation.context,
+											"competing change",
+										),
+									},
+								},
 							}),
-					})
-					.pipe(Effect.map(({ view }) => view))
+						] as const),
+				})).view
 				yield* Deferred.succeed(finish, undefined)
 				const error = yield* Fiber.join(fiber)
 				assert.ok(Predicate.hasProperty(error, "reason"))
 				assert.equal(error.reason, "reference-conflict")
-				assert.deepEqual(yield* runtimeStore.read(view.session.id), changed)
+				assert.deepEqual(yield* runtimeStore.read(chat), changed)
 			}),
 		),
 	)
@@ -281,7 +275,7 @@ for (const strategy of [
 	Config.Compaction.Native(),
 	Config.Compaction.NonNative({ keepRecentMessages: 1 }),
 ]) {
-	test(`automatic ${strategy._tag} compaction defaults to 90 percent, runs once and gives CurrentWindow to the model call`, async () => {
+	test(`automatic ${strategy._tag} compaction starts at 90 percent, runs once and gives CurrentWindow to the model call`, async () => {
 		let windows: ReadonlyArray<ContextWindow.Window> = []
 		const test = ContextCompactionTest()
 		let summaries = 0
@@ -306,7 +300,7 @@ for (const strategy of [
 		await Effect.runPromise(
 			Effect.scoped(
 				Effect.gen(function* () {
-					const { runtime, runtimeStore, view } = yield* SessionTest({
+					const { runtime, runtimeStore, chat } = yield* ChatTest({
 						compaction: {
 							...test.service,
 							count: (request) =>
@@ -319,43 +313,17 @@ for (const strategy of [
 							Config.Model.make({ ...catalog, compaction: strategy }),
 						]),
 					})
-					const before = yield* selected(runtimeStore, view.session.id)
-					const result = yield* runtime.execute({
-						base: {
-							session: view.session.id,
-							revision: before.session.revision,
-						},
-						input: "new",
-					})
-					assert.equal(
-						test.compactions,
-						Match.value(strategy).pipe(
-							Match.tag("Native", () => 1),
-							Match.orElse(() => 0),
-						),
+					yield* selected(runtimeStore, chat)
+					const result = yield* runtime.execute({ chat, input: "new" })
+					const expected = Match.value(strategy).pipe(
+						Match.tag("Native", () => "Native" as const),
+						Match.orElse(() => "Prompt" as const),
 					)
-					assert.equal(
-						summaries,
-						Match.value(strategy).pipe(
-							Match.tag("NonNative", () => 1),
-							Match.orElse(() => 0),
-						),
-					)
-					assert.equal(
-						windows[0]?._tag,
-						Match.value(strategy).pipe(
-							Match.tag("Native", () => "Native" as const),
-							Match.orElse(() => "Prompt" as const),
-						),
-					)
-					assert.equal(
-						result.state.value.conversation.context._tag,
-						Match.value(strategy).pipe(
-							Match.tag("Native", () => "Native" as const),
-							Match.orElse(() => "Prompt" as const),
-						),
-					)
-					assert.equal(result.state.value.conversation.history.length, 3)
+					assert.equal(test.compactions, expected === "Native" ? 1 : 0)
+					assert.equal(summaries, expected === "Native" ? 0 : 1)
+					assert.equal(windows[0]?._tag, expected)
+					assert.equal(result.state.conversation.context._tag, expected)
+					assert.equal((yield* runtimeStore.items(chat)).length, 3)
 					assert.match(
 						JSON.stringify(test.requests[0]?.instructions),
 						/instructions|content/,
@@ -366,21 +334,21 @@ for (const strategy of [
 	})
 }
 
-test("summarize only returns text and does not change any version data", async () => {
+test("summarize only returns text and changes nothing", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
-				const { runtime, runtimeStore, view } = yield* SessionTest()
-				const before = yield* selected(runtimeStore, view.session.id)
+				const { runtime, runtimeStore, chat } = yield* ChatTest()
+				const before = yield* selected(runtimeStore, chat)
 				const summary = yield* ConversationContextOperations.make({
 					store: runtimeStore,
 					runtime,
-					session: view.session.id,
+					chat,
 					request,
 				}).summarize
 				assert.equal(summary.text, "summary")
 				assert.equal(summary.sourceMessages, 1)
-				assert.deepEqual(yield* runtimeStore.read(view.session.id), before)
+				assert.deepEqual(yield* runtimeStore.read(chat), before)
 			}),
 		).pipe(
 			Effect.provide(
@@ -394,46 +362,74 @@ test("summarize only returns text and does not change any version data", async (
 	)
 })
 
-test("Fork keeps compatible native context and rebuilds input for an incompatible model from the selected full history", async () => {
+test("a native window stays for its own model, and another model gets a Prompt window with a note first", async () => {
+	let prompts: ReadonlyArray<Prompt.Prompt> = []
+	let windows: ReadonlyArray<ContextWindow.Window> = []
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
 				const test = ContextCompactionTest(),
-					{ runtime, runtimeStore, view } = yield* SessionTest({
+					{ runtime, runtimeStore, chat } = yield* ChatTest({
 						compaction: test.service,
 						modelCatalog: Effect.succeed([catalog]),
 					})
-				const source = yield* selected(runtimeStore, view.session.id)
-				const compacted = (yield* runtime.compact({
-					session: source.session.id,
+				const source = yield* selected(runtimeStore, chat)
+				yield* runtime.compact({
+					chat: source.chat.id,
 					targetTokens: 20,
 					request,
-				})).view
-				const same = yield* runtimeStore.fork({ source: source.session.id })
-				assert.deepEqual(
-					same.state.value.conversation.context,
-					compacted.state.value.conversation.context,
-				)
-				const other = yield* runtimeStore.fork({
-					source: source.session.id,
-					settings: {
-						model: Config.Selection.make({
-							provider,
-							model: Model.Id.make("other"),
-						}),
-					},
 				})
-				assert.equal(other.state.value.conversation.context._tag, "Prompt")
+				const same = yield* runtime.execute({ chat, input: "same model" })
+				assert.equal(windows[0]?._tag, "Native")
+				assert.equal(same.state.conversation.context._tag, "Native")
+				const other = Config.Selection.make({
+					provider,
+					model: Model.Id.make("other"),
+				})
+				yield* runtimeStore.modifyEffect({
+					chat,
+					update: (current) =>
+						Effect.succeed([
+							undefined,
+							Option.some({
+								chat: { settings: { ...current.chat.settings, model: other } },
+							}),
+						] as const),
+				})
+				const switched = yield* runtime.execute({ chat, input: "other model" })
+				assert.equal(windows[1]?._tag, "Prompt")
+				assert.equal(switched.state.conversation.context._tag, "Prompt")
+				const shown = prompts[1]!.content
+				const note = shown[0]
+				assert.ok(note !== undefined && note.role === "user")
+				assert.match(JSON.stringify(note), /compacted/)
+				assert.doesNotMatch(JSON.stringify(prompts[1]), /whole history/)
+				assert.match(JSON.stringify(prompts[1]), /same model.*other model/)
 				assert.match(
-					JSON.stringify(other.state.value.conversation.context),
+					JSON.stringify(yield* runtimeStore.items(chat)),
 					/whole history/,
-				)
-				assert.deepEqual(
-					(yield* runtimeStore.read(source.session.id)).state.value,
-					compacted.state.value,
 				)
 				assert.equal(test.compactions, 1)
 			}),
+		).pipe(
+			Effect.provide(
+				LanguageModelTest({
+					streamText: ({ prompt }) =>
+						Stream.unwrap(
+							Effect.map(
+								Effect.serviceOption(ContextWindow.CurrentWindow),
+								(window) => {
+									prompts = EffectArray.append(prompts, prompt)
+									windows = EffectArray.append(
+										windows,
+										Option.getOrThrow(window),
+									)
+									return Stream.fromArray(textParts("answer"))
+								},
+							),
+						),
+				}),
+			),
 		),
 	)
 })

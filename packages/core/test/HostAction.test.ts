@@ -2,18 +2,39 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import {
+	Chat,
+	ChatRuntime,
+	ChatStoreRepository,
 	MemoryPersistence,
-	Session,
-	SessionRuntime,
-	SessionStoreRepository,
 	Store,
 } from "@openbot-build/core"
-import { Deferred, Effect, Match, Schema } from "effect"
+import { Array as EffectArray, Deferred, Effect, Match, Schema } from "effect"
 import { Tool, Toolkit } from "effect/ai"
-import * as TimelineState from "../src/timeline/TimelineState.ts"
+import { settled } from "./ChatTest.ts"
 
-test("host-selected actions check and approve the exact parameters without the model, and cannot reuse an approval from history", async () => {
+const setup = Effect.gen(function* () {
+	const definition = yield* Store.define({
+		stores: {},
+		schemaVersion: "host-action/1",
+	})
+	return yield* ChatStoreRepository.make({
+		definition,
+		persistence: yield* MemoryPersistence.make,
+	})
+})
+const approvalRequests = (view: Chat.View<{}>) =>
+	view.state.conversation.context.prompt.content.flatMap((message) =>
+		Match.value(message).pipe(
+			Match.when({ role: "assistant" }, (message) =>
+				message.content.filter((part) => part.type === "tool-approval-request"),
+			),
+			Match.orElse(() => []),
+		),
+	)
+
+test("a host action checks the exact parameters without the model, and runs only when a decider allows it", async () => {
 	let calls: ReadonlyArray<string> = []
+	let decisions: ReadonlyArray<Chat.ApprovalRequest> = []
 	const write = Tool.make("Write", {
 		parameters: Schema.Struct({ text: Schema.String }),
 		success: Schema.String,
@@ -23,15 +44,8 @@ test("host-selected actions check and approve the exact parameters without the m
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
-				const definition = yield* Store.define({
-					stores: {},
-					schemaVersion: "host-action/1",
-				})
-				const store = yield* SessionStoreRepository.make({
-					definition,
-					persistence: yield* MemoryPersistence.make,
-				})
-				const runtime = yield* SessionRuntime.make({
+				const store = yield* setup
+				const runtime = yield* ChatRuntime.make({
 					store,
 					bot: {
 						toolkit,
@@ -40,111 +54,70 @@ test("host-selected actions check and approve the exact parameters without the m
 						),
 					},
 				})
-				const session = yield* store.create({
-					metadata: {},
-					value: TimelineState.initial({}),
-				})
-				const settled = () =>
-					Effect.gen(function* () {
-						let view = yield* store.read(session.session.id)
-						for (let index = 0; index < 30; index++) {
-							const active = yield* runtime.isActive(view.session.id)
-							if (
-								!active &&
-								Session.currentTurn(view.session)?.status._tag !== "Running"
-							)
-								return view
-							view = yield* runtime.wait({
-								session: view.session.id,
-								after: view.session.revision,
-								afterActive: active,
-								timeout: 1000,
-							})
-						}
-						return yield* Effect.die("The host action did not stop running")
-					})
+				const chat = (yield* store.create({})).chat.id
 				const receipt = yield* runtime.startAction({
-					base: {
-						session: session.session.id,
-						revision: session.session.revision,
-					},
+					chat,
 					action: {
 						name: "Write",
 						arguments: { text: "Exact host selection" },
 						source: { surface: "test" },
 					},
 				})
-				const pending = yield* settled()
-				assert.equal(calls.length, 0)
-				assert.equal(
-					Session.currentTurn(pending.session)?.status._tag,
-					"Waiting",
-				)
-				assert.deepEqual(
-					Session.currentTurn(pending.session)?.action?.arguments,
-					{ text: "Exact host selection" },
-				)
-				const request = pending.state.value.conversation.context.prompt.content
-					.flatMap((message) =>
-						Match.value(message).pipe(
-							Match.when({ role: "assistant" }, (message) =>
-								message.content.filter(
-									(part) => part.type === "tool-approval-request",
-								),
-							),
-							Match.orElse(() => []),
-						),
-					)
-					.find((part) => part.type === "tool-approval-request")
+				assert.equal(receipt.callId, "host-action-" + receipt.turn)
+				const pending = yield* settled(runtime, chat)
+				const pendingTurn = Chat.currentTurn(pending.chat)!
+				assert.equal(pendingTurn.id, receipt.turn)
+				assert.equal(pendingTurn.status._tag, "Completed")
+				assert.deepEqual(pendingTurn.action?.arguments, {
+					text: "Exact host selection",
+				})
+				assert.equal(pendingTurn.usage?.length ?? 0, 0)
+				assert.deepEqual(calls, [])
+				const [request] = approvalRequests(pending)
 				assert.ok(request)
-				const busy = yield* Effect.result(
-					runtime.startAction({
-						base: {
-							session: session.session.id,
-							revision: pending.session.revision,
-						},
-						action: {
-							name: "Write",
-							arguments: { text: "Unapproved replacement" },
-						},
-					}),
-				)
-				assert.equal(busy._tag, "Failure")
-				const restored = yield* SessionRuntime.make({
+				assert.equal(request.toolCallId, receipt.callId)
+				// A new runtime over the same store has a decider, as after a restart.
+				const restored = yield* ChatRuntime.make({
 					store,
-					bot: { toolkit },
+					bot: {
+						toolkit,
+						approvals: {
+							decide: (request) =>
+								Effect.sync(() => {
+									decisions = EffectArray.append(decisions, request)
+									return Chat.Decision.Allow()
+								}),
+						},
+					},
 				})
-				// A new runtime over the same store can answer, as after a restart.
-				yield* restored.resolveAction({
-					session: session.session.id,
-					turn: receipt.turn,
-					approval: request.approvalId,
-					outcome: Session.Outcome.Approved(),
-					expectedRevision: pending.session.revision,
+				const allowed = yield* restored.startAction({
+					chat,
+					action: {
+						name: "Write",
+						arguments: { text: "Exact host selection" },
+					},
 				})
-				const completed = yield* settled()
-				assert.equal(
-					Session.currentTurn(completed.session)?.status._tag,
-					"Completed",
-				)
+				assert.notEqual(allowed.turn, receipt.turn)
+				const completed = yield* settled(restored, chat)
+				assert.equal(Chat.status(completed.chat)._tag, "Completed")
 				assert.deepEqual(calls, ["Exact host selection"])
+				assert.equal(decisions.length, 1)
+				assert.equal(decisions[0]!.toolCall.id, allowed.callId)
+				assert.deepEqual(decisions[0]!.toolCall.params, {
+					text: "Exact host selection",
+				})
 				assert.match(
-					JSON.stringify(completed.state.value.conversation.history),
+					JSON.stringify(yield* store.items(chat, { turn: allowed.turn })),
 					/Actual receipt: Exact host selection/,
 				)
-				assert.equal(
-					Session.currentTurn(completed.session)?.usage?.length ?? 0,
-					0,
-				)
-				const invalid = yield* runtime.startAction({
-					base: {
-						session: session.session.id,
-						revision: completed.session.revision,
-					},
+				const invalid = yield* restored.startAction({
+					chat,
 					action: { name: "Write", arguments: { text: 17 } },
 				})
-				assert.notEqual(invalid.turn, receipt.turn)
-				yield* settled()
+				assert.notEqual(invalid.turn, allowed.turn)
+				const after = yield* settled(restored, chat)
+				assert.equal(Chat.currentTurn(after.chat)!.id, invalid.turn)
+				assert.equal(Chat.status(after.chat)._tag, "Failed")
 				assert.deepEqual(calls, ["Exact host selection"])
 			}),
 		).pipe(
@@ -161,7 +134,7 @@ test("host-selected actions check and approve the exact parameters without the m
 	)
 })
 
-test("host actions share cancellation and admission, and independent Sessions keep running", async () => {
+test("host actions share cancellation and admission, and other Chats keep running", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
@@ -172,26 +145,10 @@ test("host actions share cancellation and admission, and independent Sessions ke
 					success: Schema.String,
 				})
 				const toolkit = Toolkit.make(gate)
-				const definition = yield* Store.define({
-					stores: {},
-					schemaVersion: "host-action/1",
-				})
-				const store = yield* SessionStoreRepository.make({
-					definition,
-					persistence: yield* MemoryPersistence.make,
-				})
-				const runtime = yield* SessionRuntime.make({
-					store,
-					bot: { toolkit },
-				})
-				const first = yield* store.create({
-					metadata: {},
-					value: TimelineState.initial({}),
-				})
-				const second = yield* store.create({
-					metadata: {},
-					value: TimelineState.initial({}),
-				})
+				const store = yield* setup
+				const runtime = yield* ChatRuntime.make({ store, bot: { toolkit } })
+				const first = (yield* store.create({})).chat.id
+				const second = (yield* store.create({})).chat.id
 				const handlers = yield* toolkit.toHandlers({
 					Gate: ({ hold }) =>
 						hold
@@ -203,51 +160,35 @@ test("host actions share cancellation and admission, and independent Sessions ke
 				})
 				const held = yield* runtime
 					.startAction({
-						base: {
-							session: first.session.id,
-							revision: first.session.revision,
-						},
+						chat: first,
 						action: { name: "Gate", arguments: { hold: true } },
 					})
 					.pipe(Effect.provideContext(handlers))
 				yield* Deferred.await(entered)
+				const busy = yield* runtime
+					.startAction({
+						chat: first,
+						action: { name: "Gate", arguments: { hold: false } },
+					})
+					.pipe(Effect.provideContext(handlers), Effect.flip)
+				assert.equal(busy._tag, "ChatConflict")
 				const other = yield* runtime
 					.startAction({
-						base: {
-							session: second.session.id,
-							revision: second.session.revision,
-						},
+						chat: second,
 						action: { name: "Gate", arguments: { hold: false } },
 					})
 					.pipe(Effect.provideContext(handlers))
 				assert.notEqual(held.turn, other.turn)
 				const stopped = yield* runtime.interrupt({
-					session: held.session,
+					chat: held.chat,
 					turn: held.turn,
 				})
 				yield* Deferred.await(released)
-				assert.equal(
-					Session.currentTurn(stopped.session)?.status._tag,
-					"Interrupted",
-				)
-				let view = yield* store.read(second.session.id)
-				for (
-					let index = 0;
-					index < 30 && (yield* runtime.isActive(second.session.id));
-					index++
-				)
-					view = yield* runtime.wait({
-						session: second.session.id,
-						after: view.session.revision,
-						afterActive: true,
-						timeout: 1000,
-					})
-				assert.equal(
-					Session.currentTurn(view.session)?.status._tag,
-					"Completed",
-				)
+				assert.equal(Chat.status(stopped.chat)._tag, "Interrupted")
+				const view = yield* settled(runtime, second)
+				assert.equal(Chat.status(view.chat)._tag, "Completed")
 				assert.match(
-					JSON.stringify(view.state.value.conversation.history),
+					JSON.stringify(yield* store.items(second)),
 					/Independent receipt/,
 				)
 			}),
@@ -255,8 +196,9 @@ test("host actions share cancellation and admission, and independent Sessions ke
 	)
 })
 
-test("a related host action waits in the active Turn and keeps its own approval and Item", async () => {
+test("a related host action waits in the running Turn and keeps its own approval and Item", async () => {
 	let writes = 0
+	let decisions: ReadonlyArray<Chat.ApprovalRequest> = []
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
@@ -281,36 +223,28 @@ test("a related host action waits in the active Turn and keeps its own approval 
 							return "Related receipt: " + text
 						}),
 				})
-				const definition = yield* Store.define({
-					stores: {},
-					schemaVersion: "host-action/1",
-				})
-				const store = yield* SessionStoreRepository.make({
-					definition,
-					persistence: yield* MemoryPersistence.make,
-				})
-				const runtime = yield* SessionRuntime.make({
+				const store = yield* setup
+				const runtime = yield* ChatRuntime.make({
 					store,
-					bot: { toolkit },
+					bot: {
+						toolkit,
+						approvals: {
+							decide: (request) =>
+								Effect.sync(() => {
+									decisions = EffectArray.append(decisions, request)
+									return Chat.Decision.Allow()
+								}),
+						},
+					},
 				})
-				const view = yield* store.create({
-					metadata: {},
-					value: TimelineState.initial({}),
-				})
+				const chat = (yield* store.create({})).chat.id
 				const original = yield* runtime
-					.startAction({
-						base: { session: view.session.id, revision: view.session.revision },
-						action: { name: "Gate", arguments: {} },
-					})
+					.startAction({ chat, action: { name: "Gate", arguments: {} } })
 					.pipe(Effect.provideContext(handlers))
 				yield* Deferred.await(entered)
-				const running = yield* store.read(view.session.id)
 				const related = yield* runtime
 					.startAction({
-						base: {
-							session: view.session.id,
-							revision: running.session.revision,
-						},
+						chat,
 						turn: original.turn,
 						action: {
 							name: "Write",
@@ -320,79 +254,67 @@ test("a related host action waits in the active Turn and keeps its own approval 
 					.pipe(Effect.provideContext(handlers))
 				assert.equal(related.turn, original.turn)
 				assert.notEqual(related.item, original.item)
+				assert.equal(related.callId, "host-action-" + related.item)
+				const waiting = yield* store.read(chat)
+				assert.deepEqual(
+					waiting.chat.inbox.map((entry) => [entry.id, entry.kind, entry.turn]),
+					[[related.item, "action", original.turn]],
+				)
 				assert.equal(writes, 0)
 				yield* Deferred.succeed(release, undefined)
-				let pending = yield* store.read(view.session.id)
-				for (let index = 0; index < 30; index++) {
-					const active = yield* runtime.isActive(view.session.id)
-					if (
-						!active &&
-						Session.currentTurn(pending.session)?.status._tag === "Waiting"
-					)
-						break
-					pending = yield* runtime.wait({
-						session: view.session.id,
-						after: pending.session.revision,
-						afterActive: active,
-						timeout: 1000,
-					})
-				}
-				assert.equal(
-					Session.currentTurn(pending.session)?.status._tag,
-					"Waiting",
+				const completed = yield* settled(runtime, chat)
+				const turn = Chat.currentTurn(completed.chat)!
+				assert.equal(turn.id, original.turn)
+				assert.equal(turn.status._tag, "Completed")
+				assert.equal(turn.activeAction, undefined)
+				assert.ok(turn.items.includes(related.item))
+				assert.equal(writes, 1)
+				assert.equal(decisions.length, 1)
+				assert.equal(decisions[0]!.turn, original.turn)
+				assert.equal(decisions[0]!.toolCall.id, related.callId)
+				const [request] = approvalRequests(completed).filter(
+					(part) => part.toolCallId === related.callId,
 				)
-				assert.equal(
-					Session.currentTurn(pending.session)?.activeAction?.item,
-					related.item,
+				assert.ok(request)
+				const items = JSON.stringify(yield* store.items(chat))
+				assert.match(items, /Original receipt/)
+				assert.match(items, /Related receipt: Specific selection/)
+			}),
+		),
+	)
+})
+
+test("a related host action needs the Turn to run in this runtime", async () => {
+	await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const toolkit = Toolkit.make(
+					Tool.make("Gate", { success: Schema.String }),
 				)
-				const request = pending.state.value.conversation.context.prompt.content
-					.flatMap((message) =>
-						Match.value(message).pipe(
-							Match.when({ role: "assistant" }, (message) =>
-								message.content.filter(
-									(part) => part.type === "tool-approval-request",
-								),
-							),
-							Match.orElse(() => []),
+				const store = yield* setup
+				const runtime = yield* ChatRuntime.make({ store, bot: { toolkit } })
+				const chat = (yield* store.create({})).chat.id
+				const done = yield* runtime
+					.startAction({ chat, action: { name: "Gate", arguments: {} } })
+					.pipe(
+						Effect.provide(
+							toolkit.toLayer({ Gate: () => Effect.succeed("done") }),
 						),
 					)
-					.find((part) => part.type === "tool-approval-request")
-				assert.ok(request)
-				assert.equal(request.toolCallId, related.callId)
-				yield* runtime
-					.resolveAction({
-						session: view.session.id,
-						turn: related.turn,
-						approval: request.approvalId,
-						outcome: Session.Outcome.Approved(),
-						expectedRevision: pending.session.revision,
+				yield* settled(runtime, chat)
+				const late = yield* runtime
+					.startAction({
+						chat,
+						turn: done.turn,
+						action: { name: "Gate", arguments: {} },
 					})
-					.pipe(Effect.provideContext(handlers))
-				let completed = yield* store.read(view.session.id)
-				for (
-					let index = 0;
-					index < 30 && (yield* runtime.isActive(view.session.id));
-					index++
-				)
-					completed = yield* runtime.wait({
-						session: view.session.id,
-						after: completed.session.revision,
-						afterActive: true,
-						timeout: 1000,
-					})
-				assert.equal(
-					Session.currentTurn(completed.session)?.status._tag,
-					"Completed",
-				)
-				assert.equal(
-					Session.currentTurn(completed.session)?.activeAction,
-					undefined,
-				)
-				assert.equal(writes, 1)
-				assert.match(
-					JSON.stringify(completed.state.value.conversation.history),
-					/Related receipt: Specific selection/,
-				)
+					.pipe(
+						Effect.provide(
+							toolkit.toLayer({ Gate: () => Effect.succeed("late") }),
+						),
+						Effect.flip,
+					)
+				assert.equal(late._tag, "TurnConflict")
 			}),
 		),
 	)

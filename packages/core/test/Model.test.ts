@@ -1,11 +1,11 @@
-import { Session } from "@openbot-build/core"
-import { Match } from "effect"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import {
 	Effect,
 	Layer,
 	ManagedRuntime,
+	Match,
+	Option,
 	Schema,
 	Stream,
 	Predicate,
@@ -18,9 +18,10 @@ import {
 	Toolkit,
 } from "effect/ai"
 import {
-	TimelineState,
-	SessionStoreMemory,
-	SessionRuntime,
+	Chat,
+	ChatState,
+	ChatStoreMemory,
+	ChatRuntime,
 	ContextWindow,
 	Item,
 	Store,
@@ -30,7 +31,7 @@ import {
 	Provider,
 } from "@openbot-build/core"
 import * as ConfigModule from "@openbot-build/core/Config"
-import { SessionTest } from "./SessionTest.ts"
+import { ChatTest } from "./ChatTest.ts"
 import { LanguageModelTest } from "./LanguageModelTest.ts"
 
 const providerId = Provider.Id.make("test-provider")
@@ -173,7 +174,7 @@ test("a runtime model gives native generation and model identity only when first
 	assert.equal(requests, 1)
 })
 
-test("a provider uses selection options and returns a model that a Session can use", async () => {
+test("a provider uses selection options and returns a model that a Chat can use", async () => {
 	let constructions = 0
 	const provider = new Provider.Provider({
 		id: providerId,
@@ -205,7 +206,7 @@ test("a provider uses selection options and returns a model that a Session can u
 	})
 	const program = Effect.scoped(
 		Effect.gen(function* () {
-			const { runtime, runtimeStore, view } = yield* SessionTest({
+			const { runtime, runtimeStore, chat } = yield* ChatTest({
 				toolkit: Toolkit.empty,
 				providers: [provider],
 				modelCatalog: Effect.succeed([
@@ -229,7 +230,7 @@ test("a provider uses selection options and returns a model that a Session can u
 						serviceTiers: ["priority"],
 					}),
 				],
-				session: view.session.id,
+				chat,
 				providers: [
 					{
 						id: providerId,
@@ -239,11 +240,7 @@ test("a provider uses selection options and returns a model that a Session can u
 				],
 			})
 			yield* configuration.select(selection)
-			const selected = yield* runtimeStore.read(view.session.id)
-			return yield* runtime.execute({
-				base: { session: view.session.id, revision: selected.session.revision },
-				input: "answer",
-			})
+			return yield* runtime.execute({ chat, input: "answer" })
 		}),
 	)
 	await using runtime = ManagedRuntime.make(
@@ -254,10 +251,11 @@ test("a provider uses selection options and returns a model that a Session can u
 	assert.equal(constructions, 0)
 	const result = await runtime.runPromise(program)
 	assert.equal(constructions, 1)
-	const status = Session.status(result.session)
+	const status = Chat.status(result.chat)
 	assert.ok(status._tag === "Completed")
 	assert.equal(status.result.text, "test-model:high:priority")
-	assert.equal(Session.currentTurn(result.session)!.steps, 1)
+	assert.equal(Chat.currentTurn(result.chat)!.steps, 1)
+	assert.deepEqual(Chat.currentTurn(result.chat)!.settings.model, selection)
 })
 
 test("provider model creation keeps host failures unchanged", async () => {
@@ -275,41 +273,40 @@ test("provider model creation keeps host failures unchanged", async () => {
 	)
 })
 
-test("model and mode updates keep the Timeline and each change Session settings with one revision", async () => {
-	let expectedPrompt = Prompt.empty
-	let requests = 0
+test("model and mode updates keep the state, and each changes the Chat settings with one revision", async () => {
+	let prompts: ReadonlyArray<Prompt.Prompt> = []
 	await using host = ManagedRuntime.make(
 		LanguageModelTest({
 			streamText: ({ prompt }) => {
-				requests++
-				assert.deepEqual(prompt, expectedPrompt)
+				prompts = [...prompts, prompt]
 				return Stream.make(finish)
 			},
 		}),
 	)
+	/** The native window belongs to another model. The new model gets its messages after a note. */
+	const assertRebuilt = (prompt: Prompt.Prompt | undefined, input: string) => {
+		assert.ok(prompt)
+		const [note, ...rest] = prompt.content
+		assert.ok(note !== undefined && note.role === "user")
+		assert.match(JSON.stringify(note), /compacted for another model/)
+		assert.deepEqual(
+			rest,
+			Prompt.concat(Prompt.make("recent input"), Prompt.make(input)).content,
+		)
+	}
 	await host.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
 				const definition = yield* Store.define({
-					stores: { marker: { scope: "timeline", schema: Schema.String } },
-					schemaVersion: "timeline/1",
+					stores: { marker: { scope: "state", schema: Schema.String } },
+					schemaVersion: "chat/1",
 				})
-				const store = yield* SessionStoreMemory.make(definition)
-				const initial = TimelineState.initial({ marker: "keep plugin data" })
+				const store = yield* ChatStoreMemory.make(definition)
+				const initial = ChatState.initial({ marker: "keep plugin data" })
 				const value = {
 					...initial,
 					conversation: {
 						...initial.conversation,
-						history: [
-							{
-								id: Item.Id.make("first"),
-								content: Prompt.make("first input"),
-							},
-							{
-								id: Item.Id.make("second"),
-								content: Prompt.make("second input"),
-							},
-						],
 						context: ContextWindow.Window.make({
 							_tag: "Native",
 							provider: providerId,
@@ -320,15 +317,31 @@ test("model and mode updates keep the Timeline and each change Session settings 
 					},
 				}
 				const created = yield* store.create({
-					metadata: {},
 					value,
 					settings: { model: selection },
 				})
+				const chat = created.chat.id
+				yield* store.modifyEffect({
+					chat,
+					update: () =>
+						Effect.succeed([
+							undefined,
+							Option.some({
+								append: [
+									{
+										id: Item.Id.make("first"),
+										content: Prompt.make("first input"),
+									},
+								],
+							}),
+						] as const),
+				})
+				const start = yield* store.read(chat)
 				const otherModel = Model.Id.make("other-model")
 				const otherProvider = Provider.Id.make("other-provider")
 				const configuration = ConfigurationOperations.modelConfiguration({
 					store,
-					session: created.session.id,
+					chat,
 					providers: [providerId, otherProvider].map((id) => ({
 						id,
 						name: id,
@@ -352,27 +365,23 @@ test("model and mode updates keep the Timeline and each change Session settings 
 					reasoningEffort: "low",
 				})
 				assert.deepEqual(yield* configuration.select(options), options)
-				const selected = yield* store.read(created.session.id)
-				assert.equal(selected.session.revision, created.session.revision + 1)
-				assert.equal(selected.session.head, created.session.head)
-				assert.deepEqual(selected.state, created.state)
-				assert.deepEqual(selected.session.settings, {
-					...created.session.settings,
+				const selected = yield* store.read(chat)
+				assert.equal(selected.chat.revision, start.chat.revision + 1)
+				assert.equal(selected.chat.seq, start.chat.seq)
+				assert.deepEqual(selected.state, start.state)
+				assert.deepEqual(selected.chat.settings, {
+					...start.chat.settings,
 					model: options,
 				})
 
-				const mode = ConfigurationOperations.executionMode({
-					store,
-					session: created.session.id,
-				})
+				const mode = ConfigurationOperations.executionMode({ store, chat })
 				assert.equal(yield* mode.set("plan"), "plan")
 				assert.equal(yield* mode.get, "plan")
-				const planned = yield* store.read(created.session.id)
-				assert.equal(planned.session.revision, selected.session.revision + 1)
-				assert.equal(planned.session.head, selected.session.head)
+				const planned = yield* store.read(chat)
+				assert.equal(planned.chat.revision, selected.chat.revision + 1)
 				assert.deepEqual(planned.state, selected.state)
-				assert.deepEqual(planned.session.settings, {
-					...selected.session.settings,
+				assert.deepEqual(planned.chat.settings, {
+					...selected.chat.settings,
 					mode: "plan",
 				})
 
@@ -381,81 +390,62 @@ test("model and mode updates keep the Timeline and each change Session settings 
 					model: otherModel,
 				})
 				yield* configuration.select(switched)
-				const changed = yield* store.read(created.session.id)
-				assert.equal(changed.session.revision, planned.session.revision + 1)
-				assert.equal(changed.session.head, planned.session.head)
+				const changed = yield* store.read(chat)
+				assert.equal(changed.chat.revision, planned.chat.revision + 1)
 				assert.deepEqual(changed.state, planned.state)
-				assert.deepEqual(changed.session.settings, {
-					...planned.session.settings,
+				assert.deepEqual(changed.chat.settings, {
+					...planned.chat.settings,
 					model: switched,
 				})
-				assert.equal(
-					(yield* store.export(created.session.id)).versions.length,
-					1,
-				)
-				const runtime = yield* SessionRuntime.make({ store, bot: {} })
-				expectedPrompt = Prompt.concat(
-					TimelineState.fullHistory(value),
-					Prompt.make("model switch input"),
-				)
+				assert.equal(changed.chat.seq, start.chat.seq)
+				const runtime = yield* ChatRuntime.make({ store, bot: {} })
 				const modelTurn = yield* runtime.execute({
-					base: {
-						session: changed.session.id,
-						revision: changed.session.revision,
-					},
+					chat,
 					input: "model switch input",
 				})
-				assert.equal(modelTurn.state.value.conversation.context._tag, "Prompt")
+				assertRebuilt(prompts.at(-1), "model switch input")
+				assert.doesNotMatch(JSON.stringify(prompts.at(-1)), /first input/)
+				assert.equal(modelTurn.state.conversation.context._tag, "Prompt")
 				assert.deepEqual(
-					Session.currentTurn(modelTurn.session)!.settings.model,
+					Chat.currentTurn(modelTurn.chat)!.settings.model,
 					switched,
 				)
-				const native = yield* store.commit({
-					expected: modelTurn.session,
-					value,
-				})
-				assert.deepEqual(native.state.version.parents, [modelTurn.session.head])
+				assert.equal(modelTurn.state["marker"], "keep plugin data")
+				const native = (yield* store.modifyEffect({
+					chat,
+					update: (current) =>
+						Effect.succeed([
+							undefined,
+							Option.some({ value: { ...current.state, ...value } }),
+						] as const),
+				})).view
+				assert.equal(native.chat.revision, modelTurn.chat.revision + 1)
 
 				const providerSwitch = Config.Selection.make({
 					...switched,
 					provider: otherProvider,
 				})
 				yield* configuration.select(providerSwitch)
-				const changedProvider = yield* store.read(created.session.id)
-				assert.equal(
-					changedProvider.session.revision,
-					native.session.revision + 1,
-				)
-				assert.equal(changedProvider.session.head, native.session.head)
+				const changedProvider = yield* store.read(chat)
+				assert.equal(changedProvider.chat.revision, native.chat.revision + 1)
 				assert.deepEqual(changedProvider.state, native.state)
-				assert.deepEqual(changedProvider.session.settings, {
-					...native.session.settings,
+				assert.deepEqual(changedProvider.chat.settings, {
+					...native.chat.settings,
 					model: providerSwitch,
 				})
 				assert.deepEqual(yield* configuration.get, providerSwitch)
-				expectedPrompt = Prompt.concat(
-					TimelineState.fullHistory(value),
-					Prompt.make("provider switch input"),
-				)
 				const providerTurn = yield* runtime.execute({
-					base: {
-						session: changedProvider.session.id,
-						revision: changedProvider.session.revision,
-					},
+					chat,
 					input: "provider switch input",
 				})
-				assert.equal(
-					providerTurn.state.value.conversation.context._tag,
-					"Prompt",
-				)
+				assertRebuilt(prompts.at(-1), "provider switch input")
+				assert.equal(providerTurn.state.conversation.context._tag, "Prompt")
 				assert.deepEqual(
-					Session.currentTurn(providerTurn.session)!.settings.model,
+					Chat.currentTurn(providerTurn.chat)!.settings.model,
 					providerSwitch,
 				)
-				const historical = yield* store.readVersion(created.session.head)
-				assert.deepEqual(historical.value, value)
 			}),
 		),
 	)
-	assert.equal(requests, 2)
+	assert.equal(prompts.length, 2)
 })

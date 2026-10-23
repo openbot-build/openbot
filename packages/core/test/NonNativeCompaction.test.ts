@@ -1,4 +1,6 @@
-import { Item } from "@openbot-build/core"
+// @effect-diagnostics strictEffectProvide:off
+import assert from "node:assert/strict"
+import { test } from "node:test"
 import {
 	Array as EffectArray,
 	Data,
@@ -7,21 +9,20 @@ import {
 	Stream,
 	Predicate,
 } from "effect"
-import { RecordSerialization } from "@openbot-build/core"
-// @effect-diagnostics strictEffectProvide:off
-import assert from "node:assert/strict"
-import { test } from "node:test"
-
 import { AiError, Model as AiModel, Prompt, Response, Toolkit } from "effect/ai"
 import {
+	type Chat,
+	type ChatStore,
+	ChatStoreRepository,
 	Config,
 	ContextCompaction,
 	ContextWindow,
+	Item,
 	Model,
 	SummaryCompaction,
 	Provider,
 } from "@openbot-build/core"
-import { SessionTest } from "./SessionTest.ts"
+import { ChatTest } from "./ChatTest.ts"
 import { finish, LanguageModelTest } from "./LanguageModelTest.ts"
 
 const text = (value: string) =>
@@ -56,31 +57,29 @@ const catalog = Config.Model.make({
 	}),
 })
 
-const populate = (
-	runtimeStore: import("@openbot-build/core").SessionStore.Store,
-	session: import("@openbot-build/core").Session.Id,
-) =>
+/** Gives the Chat one Item for each message, a window with all of them, and the model. */
+const populate = (runtimeStore: ChatStore.Store, chat: Chat.Id) =>
 	runtimeStore
 		.modifyEffect({
-			session,
+			chat,
 			update: (current) =>
 				Effect.succeed([
 					undefined,
 					Option.some({
+						append: conversation.content.map((message, index) => ({
+							id: Item.Id.make(`message-${index}`),
+							content: Prompt.fromMessages([message]),
+						})),
 						value: {
-							...current.state.value,
+							...current.state,
 							conversation: {
-								...current.state.value.conversation,
-								history: conversation.content.map((message, index) => ({
-									id: Item.Id.make(`message-${index}`),
-									content: Prompt.fromMessages([message]),
-								})),
+								...current.state.conversation,
 								context: ContextWindow.fromPrompt(conversation),
 							},
 						},
-						session: {
+						chat: {
 							settings: {
-								...current.session.settings,
+								...current.chat.settings,
 								model: Config.Selection.make({
 									provider: providerId,
 									model: modelId,
@@ -230,7 +229,7 @@ test("repeated compaction summarizes the existing summary and keeps eight recent
 	)
 })
 
-test("the configured summary provider is chosen separately, and committed windows survive a restore", async () => {
+test("the configured summary provider is chosen separately, and committed windows survive a new store", async () => {
 	let selections: ReadonlyArray<Config.Selection> = []
 	let counts: ReadonlyArray<ContextCompaction.Request> = []
 	let summaries = 0
@@ -298,30 +297,29 @@ test("the configured summary provider is chosen separately, and committed window
 					compact: () =>
 						Effect.die("NonNative must not call the native service"),
 				}
-				const { runtime, runtimeStore, view, definition } = yield* SessionTest({
-					modelCatalog: Effect.succeed([catalog]),
-					providers: [summaryProvider],
-					compaction: counter,
-				})
-				const before = yield* populate(runtimeStore, view.session.id)
+				const { runtime, runtimeStore, chat, definition, persistence } =
+					yield* ChatTest({
+						modelCatalog: Effect.succeed([catalog]),
+						providers: [summaryProvider],
+						compaction: counter,
+					})
+				const before = yield* populate(runtimeStore, chat)
+				const log = yield* runtimeStore.items(chat)
 				const result = yield* runtime.compact({
-					session: view.session.id,
+					chat,
 					targetTokens: 50,
 					request,
 				})
 				assert.equal(summaries, 1)
 				assert.deepEqual(selections, [summarySelection])
 				assert.equal(result.afterTokens, 20)
+				assert.deepEqual(yield* runtimeStore.items(chat), log)
 				assert.deepEqual(
-					result.view.state.value.conversation.history,
-					before.state.value.conversation.history,
+					result.view.chat.settings.model,
+					before.chat.settings.model,
 				)
 				assert.deepEqual(
-					result.view.session.settings.model,
-					before.session.settings.model,
-				)
-				assert.deepEqual(
-					result.view.state.value.conversation.context.prompt.content.slice(1),
+					result.view.state.conversation.context.prompt.content.slice(1),
 					conversation.content.slice(-1),
 				)
 				for (const counted of counts) {
@@ -329,19 +327,13 @@ test("the configured summary provider is chosen separately, and committed window
 					assert.equal(counted.instructions, request.instructions)
 					assert.equal(counted.toolkit, request.toolkit)
 				}
-				const saved = yield* runtimeStore.export(view.session.id)
-				const codec = RecordSerialization.make<{}>()
-				const { runtimeStore: restored } = yield* SessionTest()
-				const restoredView = yield* restored.import({
-					record: yield* codec.decode({
-						definition,
-						input: yield* codec.encode({ definition, record: saved }),
-					}),
-					expected: null,
+				const restored = yield* ChatStoreRepository.make({
+					definition,
+					persistence,
 				})
 				assert.deepEqual(
-					restoredView.state.value.conversation.context,
-					result.view.state.value.conversation.context,
+					(yield* restored.read(chat)).state.conversation.context,
+					result.view.state.conversation.context,
 				)
 			}),
 		),
@@ -359,7 +351,7 @@ for (const scenario of [
 	"missed-target",
 	"head-conflict",
 ] as const) {
-	test(`non-native ${scenario} leaves history and context uncommitted`, async () => {
+	test(`non-native ${scenario} leaves the Item log and the window uncommitted`, async () => {
 		let calls = 0
 		const failure = new BuildFailure()
 		await Effect.runPromise(
@@ -415,77 +407,30 @@ for (const scenario of [
 										}),
 									),
 					})
-					const { runtime, runtimeStore, view } = yield* SessionTest({
+					const { runtime, runtimeStore, chat } = yield* ChatTest({
 						modelCatalog: Effect.succeed([catalog]),
 						providers: scenario === "missing-provider" ? [] : [summaryProvider],
 						compaction: counter,
 					})
-					yield* runtimeStore.updateSettings({
-						expected: view.session,
-						settings: {
-							...view.session.settings,
-							model: Config.Selection.make({
-								provider: providerId,
-								model: modelId,
-							}),
-						},
-					})
-					const before = yield* runtimeStore
-						.modifyEffect({
-							session: view.session.id,
-							update: (current) =>
-								Effect.gen(function* () {
-									return [
-										undefined,
-										Option.some({
-											value: ((value: typeof current.state.value) => ({
-												...value,
-												conversation: {
-													...value.conversation,
-													model: Config.Selection.make({
-														provider: providerId,
-														model: modelId,
-													}),
-													history: conversation.content.map(
-														(message, index) => ({
-															id: Item.Id.make(`history-${index}`),
-															content: Prompt.fromMessages([message]),
-														}),
-													),
-													context: ContextWindow.fromPrompt(conversation),
-												},
-											}))(current.state.value),
-										}),
-									] as const
-								}),
-						})
-						.pipe(Effect.map(({ view }) => view))
+					const before = yield* populate(runtimeStore, chat)
+					const log = yield* runtimeStore.items(chat)
 					if (scenario === "head-conflict")
 						race = runtimeStore
 							.modifyEffect({
-								session: view.session.id,
+								chat,
 								update: (current) =>
-									Effect.gen(function* () {
-										return [
-											undefined,
-											Option.some({
-												value: ((value: typeof current.state.value) => ({
-													...value,
-													conversation: {
-														...value.conversation,
-														mode: "plan",
-													},
-												}))(current.state.value),
-											}),
-										] as const
-									}),
+									Effect.succeed([
+										undefined,
+										Option.some({
+											chat: {
+												settings: { ...current.chat.settings, mode: "plan" },
+											},
+										}),
+									] as const),
 							})
-							.pipe(
-								Effect.map(({ view }) => view),
-								Effect.orDie,
-							)
+							.pipe(Effect.orDie)
 					const error = yield* runtime
-						.compact({ session: view.session.id, targetTokens: 50, request })
+						.compact({ chat, targetTokens: 50, request })
 						.pipe(Effect.flip)
 					if (scenario === "build-failure") assert.equal(error, failure)
 					else {
@@ -501,17 +446,14 @@ for (const scenario of [
 										: "request-failed",
 						)
 					}
-					const after = yield* runtimeStore.read(view.session.id)
+					const after = yield* runtimeStore.read(chat)
 					assert.deepEqual(
-						after.state.value.conversation.context,
-						before.state.value.conversation.context,
+						after.state.conversation.context,
+						before.state.conversation.context,
 					)
-					assert.deepEqual(
-						after.state.value.conversation.history,
-						before.state.value.conversation.history,
-					)
+					assert.deepEqual(yield* runtimeStore.items(chat), log)
 					if (scenario !== "head-conflict")
-						assert.equal(after.session.head, before.session.head)
+						assert.equal(after.chat.revision, before.chat.revision)
 					assert.equal(
 						calls,
 						scenario === "missing-provider" || scenario === "build-failure"

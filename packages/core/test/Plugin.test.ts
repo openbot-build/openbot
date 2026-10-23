@@ -1,13 +1,11 @@
-import { Timeline } from "@openbot-build/core"
-import { Turn } from "@openbot-build/core"
-import { Bot } from "@openbot-build/core"
-import { SessionStoreRepository } from "@openbot-build/core"
+// @effect-diagnostics strictEffectProvide:off
+import assert from "node:assert/strict"
+import { test } from "node:test"
 import {
 	Order,
 	Ref,
 	Scope,
 	Array as EffectArray,
-	HashSet,
 	Context,
 	Deferred,
 	Exit,
@@ -20,23 +18,23 @@ import {
 	Stream,
 	Predicate,
 } from "effect"
-import * as MemoryPersistence from "../src/store/MemoryPersistence.ts"
-import { TimelineState, Store } from "@openbot-build/core"
-// @effect-diagnostics strictEffectProvide:off
-import assert from "node:assert/strict"
-import { test } from "node:test"
-
 import { Prompt } from "effect/ai"
 import {
-	Session,
-	SessionRuntime,
-	SessionStore,
-	SessionStoreMemory,
+	Bot,
+	Chat,
+	ChatRuntime,
+	ChatState,
+	ChatStore,
+	ChatStoreMemory,
+	ChatStoreRepository,
+	MemoryPersistence,
 	Plugin,
 	PluginComposition,
 	PluginState,
+	Store,
+	Turn,
 } from "@openbot-build/core"
-import { SessionTest } from "./SessionTest.ts"
+import { ChatTest } from "./ChatTest.ts"
 import { LanguageModelTest, textParts } from "./LanguageModelTest.ts"
 
 const pluginId = <Name extends "a" | "b">(name: Name) =>
@@ -44,7 +42,7 @@ const pluginId = <Name extends "a" | "b">(name: Name) =>
 const declaration = () => {
 	const schema = Schema.Struct({ value: Schema.Natural })
 	return {
-		scope: "timeline" as const,
+		scope: "state" as const,
 		schema,
 	}
 }
@@ -59,7 +57,7 @@ test("host-provided stores are isolated and keep their exact definitions and ope
 		idB = pluginId("b")
 	const unusedWrite = () =>
 		Effect.fail(
-			new Session.SessionError({
+			new Chat.ChatError({
 				reason: "state-conflict",
 				message: "Unused write",
 			}),
@@ -74,9 +72,8 @@ test("host-provided stores are isolated and keep their exact definitions and ope
 			reads++
 			return {
 				at: {
-					session: Session.Id.make("test"),
-					version: Timeline.VersionId.make("version"),
-					revision: Session.Revision.make(0),
+					chat: Chat.Id.make("test"),
+					revision: Chat.Revision.make(0),
 				},
 				value: Option.some({ value: n }),
 			}
@@ -102,7 +99,7 @@ test("host-provided stores are isolated and keep their exact definitions and ope
 		updateSomeAndGetEffect: unusedWrite,
 		setAt: () =>
 			Effect.fail(
-				new Session.SessionError({
+				new Chat.ChatError({
 					reason: "state-conflict",
 					message: "unused",
 				}),
@@ -114,7 +111,7 @@ test("host-provided stores are isolated and keep their exact definitions and ope
 	const pluginA = Plugin.make<
 		typeof idA,
 		typeof a,
-		Session.SessionError,
+		Chat.ChatError,
 		StoreDependency
 	>({ id: idA, store: a })((ctx) =>
 		Effect.succeed((next, options) =>
@@ -134,7 +131,7 @@ test("host-provided stores are isolated and keep their exact definitions and ope
 	const pluginB = Plugin.make<
 		typeof idB,
 		typeof b,
-		Session.SessionError,
+		Chat.ChatError,
 		StoreDependency
 	>({ id: idB, store: b })((ctx) =>
 		Effect.succeed((next, options) =>
@@ -166,24 +163,18 @@ test("host-provided stores are isolated and keep their exact definitions and ope
 			Effect.gen(function* () {
 				const definition = yield* Store.define({
 					stores: combined.stores,
-					schemaVersion: "timeline/1",
+					schemaVersion: "chat/1",
 				})
-				const runtimeStore = yield* SessionStoreRepository.make({
+				const runtimeStore = yield* ChatStoreRepository.make({
 					definition: definition,
 					persistence: yield* MemoryPersistence.make,
 				})
-				const runtime = yield* SessionRuntime.make({
+				const runtime = yield* ChatRuntime.make({
 					store: runtimeStore,
 					bot: { plugin: combined },
 				})
-				const view = yield* runtimeStore.create({
-					metadata: {},
-					value: TimelineState.initial({}),
-				})
-				const task = runtime.execute({
-					base: { session: view.session.id, revision: view.session.revision },
-					input: "hello",
-				})
+				const view = yield* runtimeStore.create({})
+				const task = runtime.execute({ chat: view.chat.id, input: "hello" })
 				const preserved: StoreDependency extends Effect.Services<typeof task>
 					? true
 					: false = true
@@ -224,7 +215,7 @@ test("host-provided stores are isolated and keep their exact definitions and ope
 function yieldSync<A, E>(effect: Effect.Effect<A, E>) {
 	return Effect.runSync(effect)
 }
-test("one plugin builds its runtime and store in order, reads state in middleware and keeps versioned writes", async () => {
+test("one plugin builds its runtime and store in order, reads state in middleware and checks the revision of a write", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
@@ -235,7 +226,7 @@ test("one plugin builds its runtime and store in order, reads state in middlewar
 				let encodes = 0
 				const domain = Schema.Struct({ value: Schema.Natural })
 				const a = {
-						scope: "timeline" as const,
+						scope: "state" as const,
 						schema: domain.pipe(
 							Schema.decodeTo(
 								domain,
@@ -270,26 +261,25 @@ test("one plugin builds its runtime and store in order, reads state in middlewar
 				)
 				const definition = yield* Store.define({
 					stores: { ...plugin.stores, b },
-					schemaVersion: "timeline/1",
+					schemaVersion: "chat/1",
 				})
-				const runtimeStore = yield* SessionStoreRepository.make({
+				const runtimeStore = yield* ChatStoreRepository.make({
 					definition: definition,
 					persistence: yield* MemoryPersistence.make,
 				}).pipe(Effect.provideService(EncodingDependency, 7))
-				const runtime = yield* SessionRuntime.make({
+				const runtime = yield* ChatRuntime.make({
 					store: runtimeStore,
 					bot: { plugin: plugin },
 				})
 				const view = yield* runtimeStore
 					.create({
-						metadata: {},
 						value: {
-							...TimelineState.initial({ a: { value: 1 }, b: { value: 2 } }),
+							...ChatState.initial({ a: { value: 1 }, b: { value: 2 } }),
 							future: { x: 1 },
 						},
 					})
 					.pipe(Effect.provideService(EncodingDependency, 7))
-				const store = yield* SessionStoreMemory.make(definition).pipe(
+				const store = yield* ChatStoreMemory.make(definition).pipe(
 					Effect.provideService(EncodingDependency, 7),
 				)
 				const beforeConstruction = encodes
@@ -301,10 +291,7 @@ test("one plugin builds its runtime and store in order, reads state in middlewar
 				assert.equal(own.definition, plugin.store.definition)
 				assert.deepEqual(observed, [])
 				const completed = yield* runtime
-					.execute({
-						base: { session: view.session.id, revision: view.session.revision },
-						input: "hello",
-					})
+					.execute({ chat: view.chat.id, input: "hello" })
 					.pipe(
 						Effect.provideService(plugin.store, own),
 						Effect.provideService(EncodingDependency, 7),
@@ -315,18 +302,15 @@ test("one plugin builds its runtime and store in order, reads state in middlewar
 						),
 					)
 				assert.deepEqual(observed, [1])
-				assert.deepEqual(completed.state.value.a, { value: 1 })
-				assert.deepEqual(completed.state.value.b, { value: 2 })
-				assert.deepEqual(completed.state.value["future"], { x: 1 })
-				assert.throws(() => Plugin.Id.make("session"))
+				assert.deepEqual(completed.state.a, { value: 1 })
+				assert.deepEqual(completed.state.b, { value: 2 })
+				assert.deepEqual(completed.state["future"], { x: 1 })
+				assert.throws(() => Plugin.Id.make("chat"))
+				assert.throws(() => Plugin.Id.make("conversation"))
 				const context = Bot.Context.of({
 					options: { prompt: Prompt.empty },
-					at: runtimeStore.read(view.session.id).pipe(
-						Effect.map((v) => ({
-							session: v.session.id,
-							version: v.session.head,
-							revision: v.session.revision,
-						})),
+					at: runtimeStore.read(view.chat.id).pipe(
+						Effect.map((v) => Chat.position(v.chat)),
 						Effect.orDie,
 					),
 					turn: Effect.succeed(Turn.Id.make("test-turn")),
@@ -340,18 +324,16 @@ test("one plugin builds its runtime and store in order, reads state in middlewar
 						base: read.at,
 						value: Option.some({ value: 3 }),
 					})
-					const value = (yield* runtimeStore.read(view.session.id)).state.value
+					assert.equal(updated.revision, read.at.revision + 1)
+					const value = (yield* runtimeStore.read(view.chat.id)).state
 					assert.deepEqual(value.a, { value: 3 })
 					assert.deepEqual(value.b, { value: 2 })
 					assert.deepEqual(value["future"], { x: 1 })
-					assert.deepEqual(
-						value.conversation,
-						completed.state.value.conversation,
-					)
+					assert.deepEqual(value.conversation, completed.state.conversation)
 					assert.ok(
 						Option.isNone(
 							yield* store
-								.get(view.session.id)
+								.get(view.chat.id)
 								.pipe(Effect.provideService(EncodingDependency, 7)),
 						),
 					)
@@ -360,34 +342,26 @@ test("one plugin builds its runtime and store in order, reads state in middlewar
 						.pipe(Effect.flip)
 					assert.ok(Predicate.hasProperty(stale, "reason"))
 					assert.equal(stale.reason, "reference-conflict")
-					const branch = yield* runtimeStore
-						.fork({
-							source: updated.id,
-							version: updated.head,
-							metadata: {},
-						})
-						.pipe(Effect.map((view) => view.session))
+					const other = yield* runtimeStore
+						.create({})
+						.pipe(Effect.provideService(EncodingDependency, 7))
 					const wrong = yield* own
 						.setAt({
-							base: Session.position(branch),
+							base: Chat.position(other.chat),
 							value: Option.some({ value: 9 }),
 						})
 						.pipe(Effect.flip)
 					assert.ok(Predicate.hasProperty(wrong, "reason"))
 					assert.equal(wrong.reason, "state-conflict")
 					yield* own.setAt({
-						base: Session.position(updated),
+						base: Chat.position(updated),
 						value: Option.none(),
 					})
-					const removed = (yield* runtimeStore.read(view.session.id)).state
-						.value
+					const removed = (yield* runtimeStore.read(view.chat.id)).state
 					assert.equal(Object.hasOwn(removed, "a"), false)
 					assert.deepEqual(removed.b, { value: 2 })
 					assert.deepEqual(removed["future"], { x: 1 })
-					assert.deepEqual(
-						removed.conversation,
-						completed.state.value.conversation,
-					)
+					assert.deepEqual(removed.conversation, completed.state.conversation)
 				})
 				yield* program.pipe(Effect.provideService(Bot.Context, context))
 			}),
@@ -397,8 +371,8 @@ test("one plugin builds its runtime and store in order, reads state in middlewar
 
 const counterStore = (
 	beforeSave: (
-		delta: SessionStore.Delta,
-	) => Effect.Effect<void, SessionStore.SessionStoreError> = () => Effect.void,
+		delta: ChatStore.Delta,
+	) => Effect.Effect<void, ChatStore.ChatStoreError> = () => Effect.void,
 ) =>
 	Effect.gen(function* () {
 		const plugin = Plugin.make({ id: pluginId("a"), store: declaration() })(
@@ -406,40 +380,97 @@ const counterStore = (
 		)
 		const definition = yield* Store.define({
 			stores: plugin.stores,
-			schemaVersion: "timeline/1",
+			schemaVersion: "chat/1",
 		})
 		const storage = yield* MemoryPersistence.make
-		const runtimeStore = yield* SessionStoreRepository.make({
+		const runtimeStore = yield* ChatStoreRepository.make({
 			definition: definition,
 			persistence: storage,
 			onCommit: ({ delta }) =>
 				beforeSave(delta).pipe(Effect.andThen(storage.save(delta))),
 		})
-		const runtime = yield* SessionRuntime.make({
+		const runtime = yield* ChatRuntime.make({
 			store: runtimeStore,
 			bot: {},
 		})
 		const initial = yield* runtimeStore.create({
-			metadata: {},
 			value: {
-				...TimelineState.initial({ a: { value: 0 } }),
+				...ChatState.initial({ a: { value: 0 } }),
 				other: { keep: true },
 			},
 		})
 		const own = yield* PluginState.make({ store: runtimeStore, plugin })
 		const context = Bot.Context.of({
 			options: { prompt: Prompt.empty },
-			at: Effect.succeed({
-				session: initial.session.id,
-				version: initial.session.head,
-				revision: initial.session.revision,
-			}),
+			at: Effect.succeed(Chat.position(initial.chat)),
 			turn: Effect.succeed(Turn.Id.make("test-turn")),
 			step: Effect.succeed(0),
 			history: Effect.succeed(Prompt.empty),
 		})
 		return { own, runtime, runtimeStore, storage, initial, context }
 	})
+
+test("a plugin store with record scope keeps its data on the record of the Chat, not in the state", async () => {
+	await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const plugin = Plugin.make({
+					id: pluginId("b"),
+					store: {
+						scope: "record" as const,
+						schema: Schema.Struct({ value: Schema.Natural }),
+					},
+				})(() => Effect.succeed((next, options) => next(options)))
+				const definition = yield* Store.define({
+					stores: plugin.stores,
+					schemaVersion: "chat/1",
+				})
+				const persistence = yield* MemoryPersistence.make
+				const runtimeStore = yield* ChatStoreRepository.make({
+					definition,
+					persistence,
+				})
+				const initial = yield* runtimeStore.create({})
+				const chat = initial.chat.id
+				const own = yield* PluginState.make({ store: runtimeStore, plugin })
+				const context = Bot.Context.of({
+					options: { prompt: Prompt.empty },
+					at: runtimeStore.read(chat).pipe(
+						Effect.map((view) => Chat.position(view.chat)),
+						Effect.orDie,
+					),
+					turn: Effect.succeed(Turn.Id.make("test-turn")),
+					step: Effect.succeed(0),
+					history: Effect.succeed(Prompt.empty),
+				})
+				yield* Effect.gen(function* () {
+					assert.deepEqual(yield* own.get, Option.none())
+					yield* own.set(Option.some({ value: 4 }))
+					const view = yield* runtimeStore.read(chat)
+					assert.equal(view.chat.revision, initial.chat.revision + 1)
+					assert.deepEqual(view.chat.business["b"], { value: 4 })
+					assert.deepEqual(view.state, initial.state)
+					const fresh = yield* ChatStoreRepository.make({
+						definition,
+						persistence,
+					})
+					assert.deepEqual((yield* fresh.read(chat)).chat.business["b"], {
+						value: 4,
+					})
+					const invalid = yield* own
+						.set(Option.some({ value: -1 }))
+						.pipe(Effect.flip)
+					assert.ok(Predicate.hasProperty(invalid, "reason"))
+					assert.equal(invalid.reason, "encode-failed")
+					yield* own.set(Option.none())
+					const removed = yield* runtimeStore.read(chat)
+					assert.equal(Object.hasOwn(removed.chat.business, "b"), false)
+					assert.deepEqual(removed.state, initial.state)
+				}).pipe(Effect.provideService(Bot.Context, context))
+			}),
+		),
+	)
+})
 
 test("Store safe methods match SynchronizedRef return values and commit only selected writes", async () => {
 	await Effect.runPromise(
@@ -460,33 +491,26 @@ test("Store safe methods match SynchronizedRef return values and commit only sel
 					writes = true,
 				) =>
 					Effect.gen(function* () {
-						const previous = yield* runtimeStore.export(initial.session.id)
+						const previous = yield* runtimeStore.read(initial.chat.id)
 						assert.deepEqual(yield* actual, yield* expected, name)
 						assert.deepEqual(
 							yield* own.get,
 							yield* SynchronizedRef.get(native),
 							name,
 						)
-						const view = yield* runtimeStore.read(initial.session.id)
-						assert.deepEqual(view.state.value["other"], { keep: true }, name)
+						const view = yield* runtimeStore.read(initial.chat.id)
+						assert.deepEqual(view.state["other"], { keep: true }, name)
 						assert.deepEqual(
-							view.state.value.conversation,
-							initial.state.value.conversation,
+							view.state.conversation,
+							initial.state.conversation,
 							name,
 						)
-						const record = yield* runtimeStore.export(initial.session.id)
 						assert.equal(
-							record.versions.length,
-							previous.versions.length + Number(writes),
+							view.chat.revision,
+							previous.chat.revision + Number(writes),
 							name,
 						)
-						if (writes)
-							assert.deepEqual(
-								view.state.version.parents,
-								[previous.session.head],
-								name,
-							)
-						else assert.equal(view.session.head, previous.session.head, name)
+						assert.deepEqual(view.chat.business, initial.chat.business, name)
 					})
 				const program = Effect.gen(function* () {
 					yield* check("get", own.get, SynchronizedRef.get(native), false)
@@ -716,15 +740,10 @@ test("Store safe methods match SynchronizedRef return values and commit only sel
 					)
 					assert.equal(
 						Object.hasOwn(
-							(yield* runtimeStore.read(initial.session.id)).state.value,
+							(yield* runtimeStore.read(initial.chat.id)).state,
 							"a",
 						),
 						false,
-					)
-					assert.deepEqual(
-						(yield* runtimeStore.read(initial.session.id, initial.session.head))
-							.value,
-						initial.state.value,
 					)
 				})
 				yield* program.pipe(Effect.provideService(Bot.Context, context))
@@ -742,7 +761,7 @@ test("concurrent Store Effect updates use committed state and keep failures and 
 					yield* counterStore(() =>
 						reject
 							? Effect.fail(
-									new SessionStore.SessionStoreError({
+									new ChatStore.ChatStoreError({
 										reason: "storage-failed",
 										message: "Fixture storage failure",
 									}),
@@ -751,15 +770,15 @@ test("concurrent Store Effect updates use committed state and keep failures and 
 					)
 				const observer = yield* runtime
 					.events({
-						session: initial.session.id,
-						after: initial.session.revision,
+						chat: initial.chat.id,
+						after: initial.chat.revision,
 					})
 					.pipe(
-						Stream.filter((event) => event._tag === "VersionCreated"),
-						Stream.map((event) => event.view.session.head),
+						Stream.filter((event) => event._tag === "ChatUpdated"),
+						Stream.map((event) => event.view.chat.revision),
 						Stream.take(21),
 						Stream.runCollect,
-						Effect.forkChild,
+						Effect.forkChild({ startImmediately: true }),
 					)
 				const program = Effect.gen(function* () {
 					const refs = yield* Effect.forEach(
@@ -784,11 +803,8 @@ test("concurrent Store Effect updates use committed state and keep failures and 
 						Array.from({ length: 20 }, (_, i) => i + 1),
 					)
 					assert.deepEqual(yield* own.get, Option.some({ value: 20 }))
-					assert.equal(
-						(yield* runtimeStore.export(initial.session.id)).versions.length,
-						21,
-					)
-					const before = yield* runtimeStore.export(initial.session.id)
+					const before = yield* runtimeStore.read(initial.chat.id)
+					assert.equal(before.chat.revision, initial.chat.revision + 20)
 					const invalid = yield* own
 						.set(Option.some({ value: -1 }))
 						.pipe(Effect.flip)
@@ -814,10 +830,7 @@ test("concurrent Store Effect updates use committed state and keep failures and 
 						.pipe(Effect.forkChild)
 					yield* Deferred.await(entered)
 					yield* Fiber.interrupt(interrupted)
-					assert.deepEqual(
-						yield* runtimeStore.export(initial.session.id),
-						before,
-					)
+					assert.deepEqual(yield* runtimeStore.read(initial.chat.id), before)
 					reject = true
 					const failure = yield* own
 						.set(Option.some({ value: 99 }))
@@ -825,21 +838,14 @@ test("concurrent Store Effect updates use committed state and keep failures and 
 					assert.ok(Predicate.hasProperty(failure, "reason"))
 					assert.equal(failure.reason, "storage-failed")
 					assert.deepEqual(yield* own.get, Option.some({ value: 20 }))
-					assert.deepEqual(
-						yield* runtimeStore.export(initial.session.id),
-						before,
-					)
+					assert.deepEqual(yield* runtimeStore.read(initial.chat.id), before)
 					reject = false
 					yield* own.set(Option.some({ value: 21 }))
 					assert.deepEqual(yield* own.get, Option.some({ value: 21 }))
 					const observed = yield* Fiber.join(observer)
-					const committed = yield* runtimeStore.export(initial.session.id)
 					assert.deepEqual(
-						[...HashSet.fromIterable(observed)].toSorted(),
-						committed.versions
-							.filter((version) => version.id !== initial.session.head)
-							.map((version) => version.id)
-							.toSorted(),
+						EffectArray.sort(observed, Order.Number),
+						Array.from({ length: 21 }, (_, i) => initial.chat.revision + i + 1),
 					)
 				})
 				yield* program.pipe(Effect.provideService(Bot.Context, context))
@@ -848,14 +854,14 @@ test("concurrent Store Effect updates use committed state and keep failures and 
 	)
 })
 
-test("Store writes return and notify only after the Version is saved", async () => {
+test("Store writes return and notify only after the change is saved", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
 				const started = yield* Deferred.make<void>()
 				const release = yield* Deferred.make<void>()
 				let blocked = false
-				const { own, runtime, runtimeStore, storage, initial, context } =
+				const { own, runtime, runtimeStore, initial, context } =
 					yield* counterStore(() =>
 						blocked
 							? Deferred.succeed(started, undefined).pipe(
@@ -867,8 +873,8 @@ test("Store writes return and notify only after the Version is saved", async () 
 				let returned = false
 				const waiting = yield* runtime
 					.wait({
-						session: initial.session.id,
-						after: initial.session.revision,
+						chat: initial.chat.id,
+						after: initial.chat.revision,
 						timeout: "1 minute",
 					})
 					.pipe(Effect.forkChild)
@@ -884,20 +890,20 @@ test("Store writes return and notify only after the Version is saved", async () 
 				yield* Deferred.await(started)
 				assert.equal(returned, false)
 				assert.deepEqual(
-					yield* storage.getRef(initial.session.id),
-					Option.some(initial.session),
+					yield* runtimeStore.get(initial.chat.id),
+					Option.some(initial.chat),
 				)
-				assert.deepEqual(yield* runtimeStore.read(initial.session.id), initial)
+				assert.deepEqual(yield* runtimeStore.read(initial.chat.id), initial)
 				yield* Deferred.succeed(release, undefined)
 				yield* Fiber.join(writing)
 				assert.equal(returned, true)
 				const observed = yield* Fiber.join(waiting)
 				assert.deepEqual(
-					Option.some(observed.session),
-					yield* storage.getRef(initial.session.id),
+					Option.some(observed.chat),
+					yield* runtimeStore.get(initial.chat.id),
 				)
-				assert.deepEqual(observed.state.value.a, { value: 1 })
-				assert.notEqual(observed.session.head, initial.session.head)
+				assert.deepEqual(observed.state.a, { value: 1 })
+				assert.equal(observed.chat.revision, initial.chat.revision + 1)
 			}),
 		),
 	)
@@ -953,42 +959,36 @@ test("scoped plugin construction waits until first use, lasts across Turns and k
 				const parent = yield* Effect.scope
 				const firstScope = yield* Scope.fork(parent)
 				const secondScope = yield* Scope.fork(parent)
-				const first = yield* SessionTest({ plugin: combined }).pipe(
+				const first = yield* ChatTest({ plugin: combined }).pipe(
 					Scope.provide(firstScope),
 				)
 				assert.equal(constructions, 1)
 				assert.equal(services, 1)
-				const done = yield* first.runtime.execute({
-					base: first.base,
-					input: "one",
-				})
+				yield* first.runtime.execute({ chat: first.chat, input: "one" })
 				yield* first.runtime
-					.stream({
-						base: { session: done.session.id, revision: done.session.revision },
-						input: "two",
-					})
+					.stream({ chat: first.chat, input: "two" })
 					.pipe(Stream.runDrain)
 				assert.equal(services, 1)
 				assert.equal(constructions, 1)
 				assert.deepEqual(uses, [1, 2])
-				const second = yield* SessionTest({ plugin: combined }).pipe(
+				const second = yield* ChatTest({ plugin: combined }).pipe(
 					Scope.provide(secondScope),
 				)
 				yield* second.runtime.execute({
-					base: second.base,
+					chat: second.chat,
 					input: "independent",
 				})
 				assert.equal(services, 2)
 				assert.deepEqual(uses, [1, 2, 1])
-				const current = yield* first.runtimeStore.read(first.base.session)
-				const receipt = yield* first.runtime.start({
-					base: Session.position(current.session),
+				const receipt = yield* first.runtime.deliver({
+					chat: first.chat,
 					input: "block",
 				})
+				assert.equal(receipt.delivery, "started")
 				yield* Deferred.await(blocked)
 				yield* first.runtime.interrupt({
-					session: receipt.session,
-					turn: receipt.turn,
+					chat: receipt.chat,
+					turn: receipt.turn!,
 				})
 				assert.equal(services, 2)
 				yield* Scope.close(firstScope, Exit.succeed(undefined))
@@ -1053,8 +1053,8 @@ test("combined constructors keep onion order and release partly built plugins on
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
-				const { runtime, base } = yield* SessionTest({ plugin: combined })
-				yield* runtime.execute({ base, input: "one" })
+				const { runtime, chat } = yield* ChatTest({ plugin: combined })
+				yield* runtime.execute({ chat, input: "one" })
 			}),
 		).pipe(
 			Effect.provide(
@@ -1080,7 +1080,7 @@ test("combined constructors keep onion order and release partly built plugins on
 	)
 	const result = await Effect.runPromise(
 		Effect.scoped(
-			SessionTest({ plugin: PluginComposition.merge(plugin("a"), failed) }),
+			ChatTest({ plugin: PluginComposition.merge(plugin("a"), failed) }),
 		).pipe(Effect.result),
 	)
 	assert.equal(result._tag, "Failure")

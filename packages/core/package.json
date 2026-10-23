@@ -13,6 +13,11 @@
 	"exports": {
 		".": "./dist/index.js",
 		"./Bot": "./dist/bot/Bot.js",
+		"./Chat": "./dist/chat/Chat.js",
+		"./ChatRuntime": "./dist/chat/ChatRuntime.js",
+		"./ChatState": "./dist/chat/ChatState.js",
+		"./Item": "./dist/chat/Item.js",
+		"./Turn": "./dist/chat/Turn.js",
 		"./ContextCompaction": "./dist/context/ContextCompaction.js",
 		"./ContextWindow": "./dist/context/ContextWindow.js",
 		"./ConversationContext": "./dist/context/ConversationContext.js",
@@ -25,18 +30,13 @@
 		"./Plugin": "./dist/plugins/Plugin.js",
 		"./PluginComposition": "./dist/plugins/PluginComposition.js",
 		"./PluginState": "./dist/plugins/PluginState.js",
-		"./Chat": "./dist/chat/Chat.js",
-		"./ChatState": "./dist/chat/ChatState.js",
-		"./ChatRuntime": "./dist/chat/ChatRuntime.js",
-		"./Turn": "./dist/chat/Turn.js",
 		"./Skill": "./dist/skills/Skill.js",
 		"./SkillMap": "./dist/skills/SkillMap.js",
-		"./MemoryPersistence": "./dist/store/MemoryPersistence.js",
 		"./ChatStore": "./dist/store/ChatStore.js",
 		"./ChatStoreMemory": "./dist/store/ChatStoreMemory.js",
 		"./ChatStoreRepository": "./dist/store/ChatStoreRepository.js",
-		"./Store": "./dist/store/Store.js",
-		"./Item": "./dist/chat/Item.js"
+		"./MemoryPersistence": "./dist/store/MemoryPersistence.js",
+		"./Store": "./dist/store/Store.js"
 	},
 	"scripts": {
 		"build": "tsdown",

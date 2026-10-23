@@ -1,14 +1,13 @@
 import {
 	Bot,
+	Chat,
+	ChatRuntime,
+	ChatStore,
+	ChatStoreRepository,
 	Item,
-	Timeline,
 	Plugin,
-	PluginState,
 	PluginComposition,
-	Session,
-	SessionRuntime,
-	SessionStore,
-	SessionStoreRepository,
+	PluginState,
 	Store,
 	Turn,
 } from "@openbot-build/core"
@@ -30,22 +29,19 @@ export const checkLiveChannels = (input: {
 		DecodeDependency,
 		EncodeDependency
 	>
-	readonly persistence: SessionStore.Persistence
-	readonly session: Session.Id
-	readonly ref: Session.Ref
-	readonly version: Timeline.VersionId
-	readonly record: SessionStore.Record
+	readonly persistence: ChatStore.Persistence
+	readonly chat: Chat.Id
 }) =>
 	Effect.gen(function* () {
 		const declaration = {
-			scope: "timeline" as const,
+			scope: "state" as const,
 			schema: input.schema,
 		}
 		const definition = yield* Store.define({
 			stores: { counter: declaration },
-			schemaVersion: "timeline/1",
+			schemaVersion: "chat/1",
 		})
-		const construction = SessionStoreRepository.make({
+		const construction = ChatStoreRepository.make({
 			definition,
 			persistence: input.persistence,
 		})
@@ -62,11 +58,11 @@ export const checkLiveChannels = (input: {
 			),
 		)
 		const own = yield* PluginState.make({ store, plugin })
-		const runtime = yield* SessionRuntime.make({ store, bot: { plugin } })
-		const read = store.read(input.session),
-			imported = store.import({ record: input.record, expected: null })
+		const runtime = yield* ChatRuntime.make({ store, bot: { plugin } })
+		const read = store.read(input.chat),
+			items = store.items(input.chat, { order: "desc" })
 		const modified = store.modifyEffect({
-			session: input.session,
+			chat: input.chat,
 			update: (current) =>
 				Effect.flatMap(PluginDependency, (value) =>
 					value < 0
@@ -74,15 +70,13 @@ export const checkLiveChannels = (input: {
 						: Effect.succeed([
 								value,
 								Option.some({
-									value: { ...current.state.value, counter: value },
+									value: { ...current.state, counter: value },
 								}),
 							] as const),
 				),
 		})
-		const execution = runtime.execute({
-			base: { session: input.session, revision: input.ref.revision },
-			input: "input",
-		})
+		const execution = runtime.execute({ chat: input.chat, input: "input" })
+		const delivery = runtime.deliver({ chat: input.chat, input: "input" })
 		const ownUpdate = own.modifyEffect((value) =>
 			Effect.flatMap(PluginDependency, (number) =>
 				number < 0
@@ -102,7 +96,7 @@ export const checkLiveChannels = (input: {
 					: false
 			>,
 			Assert<Effect.Services<typeof read> extends never ? true : false>,
-			Assert<Effect.Services<typeof imported> extends never ? true : false>,
+			Assert<Effect.Services<typeof items> extends never ? true : false>,
 			Assert<
 				"update-error" extends Effect.Error<typeof modified> ? true : false
 			>,
@@ -123,49 +117,69 @@ export const checkLiveChannels = (input: {
 					: true
 			>,
 			Assert<
+				PluginDependency extends Effect.Services<typeof delivery> ? true : false
+			>,
+			Assert<
+				"plugin-error" extends Effect.Error<typeof delivery> ? false : true
+			>,
+			Assert<
 				Bot.Context extends Effect.Services<typeof ownUpdate> ? true : false
 			>,
 			Assert<
 				"own-update-error" extends Effect.Error<typeof ownUpdate> ? true : false
 			>,
-		] = [true, true, true, true, true, true, true, true, true, true, true]
+		] = [
+			true,
+			true,
+			true,
+			true,
+			true,
+			true,
+			true,
+			true,
+			true,
+			true,
+			true,
+			true,
+			true,
+		]
 		return checks
 	})
 export const checkIdentities = ({
-	session,
+	chat,
 	turn,
 	item,
-	version,
+	seq,
 	revision,
 }: {
-	readonly session: Session.Id
+	readonly chat: Chat.Id
 	readonly turn: Turn.Id
 	readonly item: Item.Id
-	readonly version: Timeline.VersionId
-	readonly revision: Session.Revision
+	readonly seq: Item.Seq
+	readonly revision: Chat.Revision
 }) => {
-	// @ts-expect-error A Turn cannot identify a Session.
-	const wrongSession: Session.Id = turn
-	// @ts-expect-error A Timeline version cannot identify a Turn.
-	const wrongTurn: Turn.Id = version
-	// @ts-expect-error An Item cannot identify a Timeline version.
-	const wrongVersion: Timeline.VersionId = item
+	// @ts-expect-error A Turn cannot identify a Chat.
+	const wrongChat: Chat.Id = turn
+	// @ts-expect-error An Item cannot identify a Turn.
+	const wrongTurn: Turn.Id = item
+	// @ts-expect-error A Chat cannot identify an Item.
+	const wrongItem: Item.Id = chat
 	// @ts-expect-error A model step cannot identify a Turn.
 	const wrongStep: Turn.Id = 1
-	// @ts-expect-error A Timeline head is not a Session revision.
-	const wrongRevision: Session.Expected = { session, revision: version }
-	const expected: Session.Expected = { session, revision }
-	const control: { readonly session: Session.Id; readonly turn: Turn.Id } = {
-		session,
+	// @ts-expect-error The place of an Item is not a Chat revision.
+	const wrongRevision: Chat.Position = { chat, revision: seq }
+	const position: Chat.Position = { chat, revision }
+	const control: { readonly chat: Chat.Id; readonly turn: Turn.Id } = {
+		chat,
 		turn,
 	}
 	return {
-		wrongSession,
+		wrongChat,
 		wrongTurn,
-		wrongVersion,
+		wrongItem,
 		wrongStep,
 		wrongRevision,
-		expected,
+		position,
 		control,
 	}
 }
@@ -175,8 +189,8 @@ class ConstructionDependency extends Context.Service<
 	number
 >()("@openbot-build/core/test/Runtime.types/ConstructionDependency") {}
 export const checkHostConstructionChannels = (input: {
-	readonly store: SessionStore.Store
-	readonly base: Session.Input["base"]
+	readonly store: ChatStore.Store
+	readonly chat: Chat.Id
 }) =>
 	Effect.gen(function* () {
 		const hostPlugin = Plugin.make({ id: Plugin.Id.make("host-channels") })(
@@ -194,12 +208,12 @@ export const checkHostConstructionChannels = (input: {
 						)
 				}),
 		)
-		const construction = SessionRuntime.make({
+		const construction = ChatRuntime.make({
 			store: input.store,
 			bot: { hostPlugin },
 		})
 		const runtime = yield* construction
-		const execution = runtime.execute({ base: input.base, input: "Continue" })
+		const execution = runtime.execute({ chat: input.chat, input: "Continue" })
 		const checks: [
 			Assert<
 				ConstructionDependency extends Effect.Services<typeof construction>
@@ -231,10 +245,10 @@ export const checkHostConstructionChannels = (input: {
 	})
 export const checkConstructionChannels = ({
 	store,
-	base,
+	chat,
 }: {
-	readonly store: SessionStore.Store
-	readonly base: Session.Expected
+	readonly store: ChatStore.Store
+	readonly chat: Chat.Id
 }) =>
 	Effect.gen(function* () {
 		const plugin = Plugin.make({ id: Plugin.Id.make("constructed") })(() =>
@@ -254,15 +268,15 @@ export const checkConstructionChannels = ({
 				Plugin.make({ id: Plugin.Id.make("plain") })(() =>
 					Effect.succeed((next, options) => next(options)),
 				),
-				{ scope: "session", schema: Schema.String },
+				{ scope: "record", schema: Schema.String },
 			),
 		)
-		const construction = SessionRuntime.make({
+		const construction = ChatRuntime.make({
 			store,
 			bot: { plugin: combined },
 		})
 		const runtime = yield* construction
-		const execution = runtime.execute({ base, input: "input" })
+		const execution = runtime.execute({ chat, input: "input" })
 		const checks: [
 			Assert<
 				ConstructionDependency extends Effect.Services<typeof construction>

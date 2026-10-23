@@ -20,6 +20,7 @@ export { Id, Revision } from "./ChatIdentity.ts"
 /**
  * A tool call that a decider allowed after its Turn went on without it.
  * The Turn that reads the input runs the call with this ID and does not ask again.
+ * The ID must be new, because the call that waited has a result already.
  */
 export const ApprovedCall = Schema.Struct({
 	id: Schema.NonEmptyString,
@@ -133,6 +134,8 @@ export interface DeliverInput {
 	readonly author?: Turn.Author
 	readonly notice?: Item.Notice
 	readonly approved?: ApprovedCall
+	/** Wait for the next Turn, also when a Turn of the same author runs. */
+	readonly queue?: boolean
 }
 /** Input that starts a Turn at once. */
 export interface StartInput extends DeliverInput {

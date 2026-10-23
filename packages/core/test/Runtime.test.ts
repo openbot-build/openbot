@@ -1,345 +1,172 @@
-import { Item } from "@openbot-build/core"
-import { SessionStoreRepository, MemoryPersistence } from "@openbot-build/core"
-import {
-	Array as EffectArray,
-	Order,
-	Effect,
-	Exit,
-	Layer,
-	Option,
-	Schema,
-	Stream,
-	Predicate,
-} from "effect"
-import * as TimelineState from "../src/timeline/TimelineState.ts"
-import * as RecordSerialization from "../src/store/RecordSerialization.ts"
-import * as Store from "../src/store/Store.ts"
 // @effect-diagnostics strictEffectProvide:off
 import assert from "node:assert/strict"
 import { test } from "node:test"
+import {
+	Array as EffectArray,
+	Effect,
+	Fiber,
+	HashMap,
+	Layer,
+	Order,
+	Schema,
+	Stream,
+} from "effect"
+import { AiError, Response, Tool, Toolkit } from "effect/ai"
+import { Bot, Chat, ChatState } from "@openbot-build/core"
+import { ChatTest } from "./ChatTest.ts"
+import { LanguageModelTest, textParts } from "./LanguageModelTest.ts"
 
-import { LanguageModel, Prompt, Response } from "effect/ai"
-import * as Session from "../src/session/Session.ts"
-import * as SessionRuntime from "../src/session/SessionRuntime.ts"
-import * as SessionStoreMemory from "../src/store/SessionStoreMemory.ts"
-
-const setup = Effect.gen(function* () {
-	const definition = yield* Store.define({
-		stores: {},
-		schemaVersion: "timeline/1",
-	})
-	const runtimeStore = yield* SessionStoreRepository.make({
-		definition: definition,
-		persistence: yield* MemoryPersistence.make,
-	})
-	const runtime = yield* SessionRuntime.make({ store: runtimeStore, bot: {} })
-	const view = yield* runtimeStore.create({
-		metadata: {},
-		value: TimelineState.initial({}),
-	})
-	return { definition, runtime, runtimeStore, view }
-})
-
-test("store compare-and-set includes metadata and rejects conflicts with immutable versions in one step", async () => {
-	await Effect.runPromise(
-		Effect.scoped(
-			Effect.gen(function* () {
-				const { definition, runtimeStore, view } = yield* setup
-				const store = yield* SessionStoreMemory.make(definition)
-				const before = yield* runtimeStore.export(view.session.id)
-				yield* store.import({ record: before, expected: null })
-				yield* runtimeStore.read(view.session.id).pipe(
-					Effect.flatMap((current) =>
-						runtimeStore.updateMetadata({
-							expected: current.session,
-							metadata: { ...current.session.metadata, title: "new" },
-						}),
-					),
-				)
-				const renamed = yield* runtimeStore.export(view.session.id)
-				yield* store.import({ record: renamed, expected: before.session })
-				const stale = yield* Effect.exit(
-					store.import({ record: before, expected: before.session }),
-				)
-				assert.equal(Exit.isFailure(stale), true)
-				const conflict = {
-					...renamed,
-					versions: renamed.versions.map((v) => ({
-						...v,
-						schemaVersion: "different",
-					})),
-				}
-				assert.equal(
-					Exit.isFailure(
-						yield* Effect.exit(
-							store.import({ record: conflict, expected: renamed.session }),
-						),
-					),
-					true,
-				)
-				const loaded = yield* store.read(view.session.id)
-				assert.equal(loaded.session.metadata.title, "new")
-				assert.equal(
-					Option.getOrThrow(yield* store.getVersion(before.session.head))
-						.schemaVersion,
-					"timeline/1",
-				)
-				yield* store.remove(loaded.session)
-				assert.equal(Option.isNone(yield* store.get(view.session.id)), true)
-				assert.equal(
-					Option.isSome(yield* store.getVersion(before.session.head)),
-					true,
-				)
-			}),
-		),
-	)
-})
-test("media and unknown namespaces round-trip with the same runtime and encoded layout", async () => {
-	await Effect.runPromise(
-		Effect.scoped(
-			Effect.gen(function* () {
-				const { definition, runtimeStore, view } = yield* setup
-				const prompt = Prompt.make([
-					{
-						role: "user",
-						content: [
-							Prompt.filePart({
-								mediaType: "image/png",
-								data: Uint8Array.from([1, 2, 255]),
-							}),
-							Prompt.filePart({
-								mediaType: "image/png",
-								data: new URL("https://example.com/image"),
-							}),
-							Prompt.filePart({ mediaType: "image/png", data: "AQI=" }),
-						],
-					},
-				])
-				yield* runtimeStore
-					.modifyEffect({
-						session: view.session.id,
-						update: (current) =>
-							Effect.gen(function* () {
-								return [
-									undefined,
-									Option.some({
-										value: ((value: typeof current.state.value) => ({
-											...value,
-											future: { tokens: 4, encrypted: "secret" },
-											conversation: {
-												...value.conversation,
-												history: [
-													{
-														id: Item.Record.fields.id.make("media"),
-														content: prompt,
-													},
-												],
-												context: { _tag: "Prompt", prompt },
-											},
-										}))(current.state.value),
-									}),
-								] as const
-							}),
-					})
-					.pipe(Effect.map(({ view }) => view))
-				const codec = RecordSerialization.make<{}>(),
-					record = yield* runtimeStore.export(view.session.id)
-				const restored = yield* codec.materialize({
-					definition,
-					record: yield* codec.decode({
-						definition,
-						input: yield* codec.encode({ definition, record }),
-					}),
-				})
-				assert.deepEqual(
-					restored.value.conversation.history[0]!.content,
-					prompt,
-				)
-				assert.deepEqual(restored.value["future"], {
-					tokens: 4,
-					encrypted: "secret",
-				})
-				const json = yield* Schema.encodeEffect(definition.schema)(
-					restored.value,
-				)
-				assert.deepEqual(
-					EffectArray.sort(
-						Object.keys(json as Schema.JsonObject),
-						Order.String,
-					),
-					["conversation", "future"],
-				)
-				assert.deepEqual(
-					EffectArray.sort(Object.keys(restored.value), Order.String),
-					["conversation", "future"],
-				)
-				assert.equal(
-					Object.hasOwn(record.versions.at(-1)!.value, "history"),
-					false,
-				)
-				assert.equal(
-					Object.hasOwn(
-						record.versions.at(-1)!.value["conversation"] as object,
-						"history",
-					),
-					false,
-				)
-				assert.ok(
-					Exit.isFailure(
-						yield* Effect.exit(
-							Schema.decodeUnknownEffect(definition.schema)({
-								...TimelineState.initial({}).conversation,
-								plugins: {},
-								unrecognizedPlugins: {},
-							}),
-						),
-					),
-				)
-			}),
-		),
-	)
-})
-
-const LanguageModelTest = (onRequest: (prompt: Prompt.Prompt) => void) =>
-	Layer.effect(
-		LanguageModel.LanguageModel,
-		LanguageModel.make({
-			generateText: () => Effect.succeed([]),
-			streamText: (options) =>
-				Stream.suspend(() => {
-					onRequest(options.prompt)
-					return Stream.fromArray([
-						Response.makePart("text-start", { id: "text" }),
-						Response.makePart("text-delta", { id: "text", delta: "answer" }),
-						Response.makePart("text-end", { id: "text" }),
-						Response.makePart("finish", {
-							reason: "stop",
-							usage: Response.Usage.make({
-								inputTokens: {
-									total: 1,
-									uncached: 1,
-									cacheRead: undefined,
-									cacheWrite: undefined,
-								},
-								outputTokens: { total: 1, text: 1, reasoning: undefined },
-							}),
-						}),
-					])
-				}),
-		}),
-	)
-
-test("execute commits the input and the completed turn, and a stale head fails before any model call", async () => {
+test("execute saves the input and the completed Turn", async () => {
 	let calls = 0
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
-				const { runtime, runtimeStore, view } = yield* setup
-				const input = {
-					base: { session: view.session.id, revision: view.session.revision },
-					input: "hello",
-				}
-				const result = yield* runtime.execute(input)
-				assert.equal(Session.status(result.session)._tag, "Completed")
-				assert.equal(Session.currentTurn(result.session)!.steps, 1)
-				assert.equal(result.state.value.conversation.history.length, 2)
-				assert.equal(
-					(yield* runtimeStore.export(view.session.id)).versions.length,
-					3,
+				const { runtime, runtimeStore, chat } = yield* ChatTest()
+				const result = yield* runtime.execute({ chat, input: "hello" })
+				const turn = Chat.currentTurn(result.chat)!
+				assert.equal(turn.status._tag, "Completed")
+				assert.ok(turn.status._tag === "Completed")
+				assert.equal(turn.status.result.text, "answer")
+				assert.equal(turn.steps, 1)
+				assert.equal(turn.usage?.length, 1)
+				assert.ok(turn.completedAt !== undefined)
+				assert.equal(result.state.conversation.closed, true)
+				assert.deepEqual(
+					result.state.conversation.context.prompt.content.map(
+						(message) => message.role,
+					),
+					["user", "assistant"],
 				)
-				const failure = yield* Effect.exit(runtime.execute(input))
-				assert.equal(Exit.isFailure(failure), true)
+				const items = yield* runtimeStore.items(chat)
+				assert.equal(items.length, 2)
+				assert.deepEqual(
+					items.map((item) => item.origin?.turn),
+					[turn.id, turn.id],
+				)
+				assert.deepEqual(yield* runtimeStore.turns(chat), [turn])
 				assert.equal(calls, 1)
 			}),
 		).pipe(
 			Effect.provide(
-				LanguageModelTest(() => {
-					calls++
+				LanguageModelTest({
+					streamText: () =>
+						Stream.suspend(() => {
+							calls++
+							return Stream.fromArray(textParts("answer"))
+						}),
 				}),
 			),
 		),
 	)
 })
 
-test("serialization tells apart invalid JSON, unsupported formats and corrupt graphs, and restores no partial state", async () => {
+const Echo = Tool.make("Echo", {
+	parameters: Schema.Struct({ text: Schema.String }),
+	success: Schema.String,
+})
+const tools = Toolkit.make(Echo)
+const failure = AiError.make({
+	module: "test",
+	method: "streamText",
+	reason: AiError.InternalProviderError.make({
+		description: "the model broke",
+	}),
+})
+
+for (const scenario of [
+	{
+		name: "a model failure",
+		stream: Stream.fail(failure),
+		code: "model_error",
+	},
+	{ name: "a defect", stream: Stream.die("broken"), code: "internal_error" },
+] as const)
+	test(`${scenario.name} ends the Turn as Failed with ${scenario.code}, and every open call gets a result`, async () => {
+		await Effect.runPromise(
+			Effect.scoped(
+				Effect.gen(function* () {
+					const { runtime, runtimeStore, chat } = yield* ChatTest({
+						toolkit: tools,
+					})
+					const exit = yield* Effect.exit(
+						runtime.execute({ chat, input: "fail" }),
+					)
+					assert.equal(exit._tag, "Failure")
+					const view = yield* runtimeStore.read(chat)
+					const status = Chat.status(view.chat)
+					assert.equal(status._tag, "Failed")
+					assert.ok(status._tag === "Failed")
+					assert.equal(status.code, scenario.code)
+					assert.equal(view.state.conversation.closed, true)
+					const items = yield* runtimeStore.items(chat)
+					assert.match(JSON.stringify(items), /"name":"Echo"/)
+					assert.equal(HashMap.size(ChatState.unansweredCalls(items)), 0)
+				}),
+			).pipe(
+				Effect.provide(
+					Layer.merge(
+						tools.toLayer({ Echo: () => Effect.never }),
+						LanguageModelTest({
+							streamText: () =>
+								Stream.concat(
+									Stream.make(
+										Response.makePart("tool-call", {
+											id: "echo-1",
+											name: "Echo",
+											params: { text: "value" },
+											providerExecuted: false,
+										}),
+									),
+									scenario.stream,
+								),
+						}),
+					),
+				),
+			),
+		)
+	})
+
+test("events after a revision give the changes and Turn events of one Chat only", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
-				const { definition, runtimeStore, view } = yield* setup
-				const codec = RecordSerialization.make<{}>()
-				const record = yield* runtimeStore.export(view.session.id)
-				const version = record.versions[0]!
-				const freshStore = yield* SessionStoreRepository.make({
-					definition: definition,
-					persistence: yield* MemoryPersistence.make,
-				})
-
-				const cases = [
-					{ input: "{", reason: "invalid-json" },
-					{
-						input: JSON.stringify({ ...record, formatVersion: 99 }),
-						reason: "unsupported-format",
-					},
-					{
-						input: JSON.stringify({
-							...record,
-							session: { ...record.session, head: "missing" },
-						}),
-						reason: "reference-invalid",
-					},
-					{
-						input: JSON.stringify({ ...record, versions: [version, version] }),
-						reason: "version-conflict",
-					},
-					{
-						input: JSON.stringify({
-							...record,
-							versions: [{ ...version, parents: ["missing"] }],
-						}),
-						reason: "parent-missing",
-					},
-					{
-						input: JSON.stringify({
-							...record,
-							versions: [{ ...version, parents: [version.id] }],
-						}),
-						reason: "version-cycle",
-					},
-					{
-						input: JSON.stringify({
-							...record,
-							versions: [
-								{ ...version, parents: [version.id, version.id, version.id] },
-							],
-						}),
-						reason: "decode-failed",
-					},
-					{
-						input: JSON.stringify({
-							...record,
-							versions: [{ ...version, schemaVersion: "session/unknown" }],
-						}),
-						reason: "unsupported-format",
-					},
-				]
-				for (const scenario of cases) {
-					const error = yield* codec
-						.decode({ definition, input: scenario.input })
-						.pipe(Effect.flip)
-					assert.equal(error.reason, scenario.reason)
-				}
-				const broken = {
-					...record,
-					versions: [{ ...version, parents: [version.id] as const }],
-				}
-				const error = yield* freshStore
-					.import({ record: broken, expected: null })
-					.pipe(Effect.flip)
-				assert.ok(Predicate.hasProperty(error, "reason"))
-				assert.equal(error.reason, "version-cycle")
-				assert.deepEqual(yield* freshStore.list(), [])
-				assert.deepEqual(yield* runtimeStore.read(view.session.id), view)
+				const { runtime, runtimeStore, chat, view } = yield* ChatTest()
+				const other = yield* runtimeStore.create({})
+				const observed = yield* runtime
+					.events({ chat, after: view.chat.revision })
+					.pipe(
+						Stream.takeUntil((event) => event._tag === "TurnCompleted"),
+						Stream.runCollect,
+						Effect.forkChild({ startImmediately: true }),
+					)
+				yield* runtime.execute({ chat: other.chat.id, input: "elsewhere" })
+				const done = yield* runtime.execute({ chat, input: "here" })
+				const events = yield* Fiber.join(observed)
+				const tags = events.map((event) => event._tag)
+				assert.ok(tags.includes("TurnStarted"))
+				assert.ok(tags.includes("ModelStepStarted"))
+				assert.ok(tags.includes("ResponsePart"))
+				assert.equal(tags.at(-1), "TurnCompleted")
+				const position = (event: Bot.Event) =>
+					"view" in event ? Chat.position(event.view.chat) : event.at
+				assert.ok(events.every((event) => position(event).chat === chat))
+				const revisions = events
+					.filter((event) => event._tag === "ChatUpdated")
+					.map((event) => event.view.chat.revision)
+				assert.ok(revisions.length > 0)
+				assert.ok(revisions.every((revision) => revision > view.chat.revision))
+				assert.deepEqual(
+					revisions,
+					EffectArray.sort(EffectArray.dedupe(revisions), Order.Number),
+				)
+				assert.equal(revisions.at(-1), done.chat.revision)
 			}),
+		).pipe(
+			Effect.provide(
+				LanguageModelTest({
+					streamText: () => Stream.fromArray(textParts("answer")),
+				}),
+			),
 		),
 	)
 })

@@ -1,44 +1,57 @@
-import { Timeline } from "@openbot-build/core"
-import { Item } from "@openbot-build/core"
-import { Option } from "effect"
-import { SessionStoreRepository } from "@openbot-build/core"
-import {
-	Array as EffectArray,
-	HashMap,
-	Effect,
-	Exit,
-	Schema,
-	Deferred,
-	Fiber,
-	Stream,
-} from "effect"
-import * as TimelineState from "../src/timeline/TimelineState.ts"
-import * as MemoryPersistence from "../src/store/MemoryPersistence.ts"
-import * as RecordSerialization from "../src/store/RecordSerialization.ts"
-import * as Store from "../src/store/Store.ts"
-import * as VersionGraph from "../src/store/VersionGraph.ts"
-import { batches } from "../src/store/GraphTraversal.ts"
-
+// @effect-diagnostics strictEffectProvide:off
 import assert from "node:assert/strict"
 import { test } from "node:test"
+import {
+	Array as EffectArray,
+	Deferred,
+	Effect,
+	Exit,
+	Fiber,
+	Option,
+	Order,
+	Schema,
+	Stream,
+} from "effect"
+import { LanguageModel, Prompt } from "effect/ai"
+import {
+	Chat,
+	ChatRuntime,
+	ChatState,
+	ChatStore,
+	ChatStoreRepository,
+	ContextWindow,
+	Item,
+	MemoryPersistence,
+	Model,
+	Provider,
+	Store,
+	Turn,
+} from "@openbot-build/core"
 
-import { Prompt, LanguageModel } from "effect/ai"
-import { Session, SessionRuntime, SessionStore } from "../src/index.ts"
+const define = Store.define({ stores: {}, schemaVersion: "chat/1" })
+const settingsChange = (store: ChatStore.Store, chat: Chat.Id) =>
+	store.modifyEffect({
+		chat,
+		update: (current) =>
+			Effect.succeed([
+				undefined,
+				Option.some({
+					chat: { settings: { ...current.chat.settings, mode: "plan" } },
+				}),
+			] as const),
+	})
 
-test("host commits happen before Timeline changes, and hydration has no side effects", async () => {
+test("a failed save changes nothing, and a new store over the same persistence reads the same Chat", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
-				const definition = yield* Store.define({
-					stores: {},
-					schemaVersion: "timeline/1",
-				})
+				const definition = yield* define
 				let fail = true
 				let saved = 0
 				const persist = Effect.suspend(() =>
 					fail
 						? Effect.fail(
-								new SessionStore.SessionStoreError({
+								new ChatStore.ChatStoreError({
 									reason: "storage-failed",
 									message: "fixture",
 								}),
@@ -48,452 +61,218 @@ test("host commits happen before Timeline changes, and hydration has no side eff
 							}),
 				)
 				const persistence = yield* MemoryPersistence.make
-				const runtimeStore = yield* SessionStoreRepository.make({
+				const store = yield* ChatStoreRepository.make({
 					definition,
 					persistence,
 					onCommit: ({ delta }) =>
 						persist.pipe(Effect.andThen(persistence.save(delta))),
 					onRemove: (ref) =>
-						persist.pipe(Effect.andThen(persistence.remove(ref))),
+						persist.pipe(Effect.andThen(persistence.remove(ref.id))),
 				})
-
-				const input = {
-					metadata: {},
-					value: TimelineState.initial({}),
-				}
-				assert.ok(
-					Exit.isFailure(yield* Effect.exit(runtimeStore.create(input))),
-				)
-				assert.equal((yield* runtimeStore.list()).length, 0)
+				assert.ok(Exit.isFailure(yield* Effect.exit(store.create({}))))
+				assert.equal((yield* store.list).length, 0)
 				fail = false
-				const view = yield* runtimeStore.create(input)
+				const view = yield* store.create({})
 				assert.equal(saved, 1)
 				fail = true
+				const chat = view.chat.id
 				for (const operation of [
-					runtimeStore.read(view.session.id).pipe(
-						Effect.flatMap((current) =>
-							runtimeStore.updateMetadata({
-								expected: current.session,
-								metadata: { ...current.session.metadata, title: "changed" },
-							}),
-						),
-					),
-					runtimeStore.read(view.session.id).pipe(
-						Effect.flatMap((current) =>
-							runtimeStore.updateMetadata({
-								expected: current.session,
-								metadata: { ...current.session.metadata, archived: true },
-							}),
-						),
-					),
-					runtimeStore
-						.fork({
-							source: view.session.id,
-							version: view.session.head,
-							metadata: input.metadata,
-						})
-						.pipe(Effect.map((view) => view.session)),
-					runtimeStore
-						.modifyEffect({
-							session: view.session.id,
-							update: (current) =>
-								Effect.gen(function* () {
-									return [
-										undefined,
-										Option.some({
-											value: ((value: typeof current.state.value) => ({
-												...value,
-												conversation: {
-													...value.conversation,
-													mode: "plan",
-												},
-											}))(current.state.value),
-										}),
-									] as const
+					settingsChange(store, chat),
+					store.modifyEffect({
+						chat,
+						update: () =>
+							Effect.succeed([
+								undefined,
+								Option.some({
+									append: [
+										{ id: Item.Id.make("lost"), content: Prompt.make("lost") },
+									],
 								}),
-						})
-						.pipe(Effect.map(({ view }) => view)),
-					runtimeStore
-						.read(view.session.id)
-						.pipe(
-							Effect.flatMap((current) => runtimeStore.remove(current.session)),
-						),
-				] satisfies ReadonlyArray<
-					Effect.Effect<
-						unknown,
-						| Session.SessionNotFound
-						| Timeline.VersionError
-						| SessionStore.SessionStoreError
-					>
-				>)
+							] as const),
+					}),
+					store.modifyEffect({
+						chat,
+						update: (current) =>
+							Effect.succeed([
+								undefined,
+								Option.some({
+									value: {
+										...current.state,
+										conversation: {
+											...current.state.conversation,
+											closed: false,
+										},
+									},
+								}),
+							] as const),
+					}),
+					store.remove(view.chat),
+				])
 					assert.ok(
 						Exit.isFailure(
 							yield* Effect.exit<
 								unknown,
-								| Session.SessionNotFound
-								| Timeline.VersionError
-								| SessionStore.SessionStoreError,
+								Chat.ChatNotFound | ChatStore.ChatStoreError,
 								never
 							>(operation),
 						),
 					)
-				assert.deepEqual(yield* runtimeStore.read(view.session.id), view)
-				assert.equal((yield* runtimeStore.list()).length, 1)
-				const record = yield* runtimeStore.export(view.session.id)
-				const freshPersistence = yield* MemoryPersistence.make
-				const freshStore = yield* SessionStoreRepository.make({
+				assert.deepEqual(yield* store.read(chat), view)
+				assert.deepEqual(yield* store.items(chat), [])
+				assert.equal((yield* store.list).length, 1)
+				const fresh = yield* ChatStoreRepository.make({
 					definition,
-					persistence: freshPersistence,
+					persistence,
 				})
-				const durableStore = yield* SessionStoreRepository.make({
-					definition,
-					persistence: freshPersistence,
-					onCommit: () => persist,
-				})
-
-				const restored = yield* freshStore.import({
-					record: record,
-					expected: null,
-				})
-				assert.deepEqual(restored.session, view.session)
-				assert.deepEqual(yield* freshStore.export(view.session.id), record)
+				assert.deepEqual(yield* fresh.read(chat), view)
 				assert.equal(saved, 1)
-				assert.ok(
-					Exit.isFailure(
-						yield* Effect.exit(
-							durableStore.import({ record: record, expected: view.session }),
-						),
-					),
-				)
-				assert.deepEqual(yield* freshStore.read(view.session.id), restored)
 			}),
 		),
 	)
 })
 
-test("construction and listing read no snapshots, commits save only changes, and historical state stays bounded", async () => {
+test("a change saves only the record, its new Items and a changed state, and a read loads only the record", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
-				const definition = yield* Store.define({
-					stores: {},
-					schemaVersion: "timeline/1",
-				})
+				const definition = yield* define
 				const base = yield* MemoryPersistence.make
-				let reads: ReadonlyArray<Timeline.VersionId> = [],
-					saves: ReadonlyArray<SessionStore.Delta> = []
+				let gets = 0,
+					logReads = 0,
+					saves: ReadonlyArray<ChatStore.Delta> = []
 				let reject = false
-				const storage: SessionStore.Persistence = {
+				const storage: ChatStore.Persistence = {
 					...base,
-					snapshot: (id) =>
+					get: (chat) =>
 						Effect.gen(function* () {
-							reads = EffectArray.append(reads, id)
+							gets++
 							if (reject)
-								return yield* new SessionStore.SessionStoreError({
+								return yield* new ChatStore.ChatStoreError({
 									reason: "storage-failed",
 									message: "Fixture unavailable",
 								})
-							return yield* base.snapshot(id)
+							return yield* base.get(chat)
+						}),
+					items: (chat, query) =>
+						Effect.suspend(() => {
+							logReads++
+							return base.items(chat, query)
+						}),
+					turns: (chat, query) =>
+						Effect.suspend(() => {
+							logReads++
+							return base.turns(chat, query)
 						}),
 					save: (delta) =>
-						Effect.gen(function* () {
+						Effect.suspend(() => {
 							saves = EffectArray.append(saves, delta)
-							yield* base.save(delta)
+							return base.save(delta)
 						}),
 				}
-				const runtimeStore = yield* SessionStoreRepository.make({
-					definition: definition,
+				const store = yield* ChatStoreRepository.make({
+					definition,
 					persistence: storage,
 				})
-
-				assert.deepEqual(reads, [])
-				const initial = yield* runtimeStore.create({
-					metadata: {},
-					value: TimelineState.initial({}),
-				})
-				let refs = [initial.session]
-				for (let index = 0; index < 70; index++)
-					refs = EffectArray.append(
-						refs,
-						(yield* runtimeStore.create({
-							metadata: initial.session.metadata,
-							value: TimelineState.initial({}),
-						})).session,
-					)
-				assert.equal((yield* runtimeStore.list()).length, 71)
-				assert.deepEqual(reads, [])
-				yield* runtimeStore.read(initial.session.id)
-				assert.deepEqual(reads, [initial.session.head])
-				for (const ref of refs.slice(1)) yield* runtimeStore.read(ref.id)
-				reads = []
-				yield* runtimeStore.read(initial.session.id)
-				assert.deepEqual(reads, [initial.session.head])
-				reads = []
+				assert.equal(gets, 0)
+				const initial = yield* store.create({})
+				for (let index = 0; index < 70; index++) yield* store.create({})
+				assert.equal((yield* store.list).length, 71)
+				assert.equal(gets, 0)
+				assert.equal(logReads, 0)
+				yield* store.read(initial.chat.id)
+				assert.equal(gets, 1)
+				assert.equal(logReads, 0)
+				const chat = initial.chat.id
 				saves = []
-				const next = yield* runtimeStore
-					.modifyEffect({
-						session: initial.session.id,
-						update: (current) =>
-							Effect.gen(function* () {
-								return [
-									undefined,
-									Option.some({
-										value: ((value: typeof current.state.value) => ({
-											...value,
-											conversation: {
-												...value.conversation,
-												mode: "plan",
-											},
-										}))(current.state.value),
-									}),
-								] as const
-							}),
-					})
-					.pipe(Effect.map(({ view }) => view))
+				const settings = yield* settingsChange(store, chat)
 				assert.equal(saves.length, 1)
-				assert.equal(saves[0]!.versions.length, 1)
-				assert.equal(saves[0]!.messages.length, 0)
-				assert.equal(Object.hasOwn(saves[0]!, "record"), false)
-				assert.deepEqual(reads, [])
-				const freshStore = yield* SessionStoreRepository.make({
-					definition: definition,
-					persistence: storage,
-				})
-
-				assert.deepEqual(reads, [])
-				reject = true
-				assert.ok(
-					Exit.isFailure(
-						yield* Effect.exit(freshStore.read(initial.session.id)),
-					),
-				)
-				reject = false
-				assert.equal(
-					(yield* freshStore.read(initial.session.id)).session.head,
-					next.session.head,
-				)
-				reads = []
-				assert.equal(
-					(yield* freshStore.read(initial.session.id, initial.session.head))
-						.value.conversation.closed,
-					true,
-				)
-				assert.deepEqual(reads, [initial.session.head])
-			}),
-		),
-	)
-})
-
-test("content revisions share identity and keep old bodies, without merging distinct messages", async () => {
-	await Effect.runPromise(
-		Effect.scoped(
-			Effect.gen(function* () {
-				const definition = yield* Store.define({
-					stores: {},
-					schemaVersion: "timeline/1",
-				})
-				const storage = yield* MemoryPersistence.make
-				const runtimeStore = yield* SessionStoreRepository.make({
-					definition: definition,
-					persistence: storage,
-				})
-
-				const firstId = Item.Id.make("first"),
-					secondId = Item.Id.make("second")
-				const content = Prompt.make("shared text")
-				const created = yield* runtimeStore.create({
-					metadata: {},
-					value: {
-						...TimelineState.initial({}),
-						conversation: {
-							...TimelineState.initial({}).conversation,
-							history: [{ id: firstId, content }],
-						},
-					},
-				})
-				const first = yield* runtimeStore.export(created.session.id)
-				yield* runtimeStore
-					.modifyEffect({
-						session: created.session.id,
-						update: (current) =>
-							Effect.gen(function* () {
-								return [
-									undefined,
-									Option.some({
-										value: ((value: typeof current.state.value) => ({
-											...value,
-											conversation: {
-												...value.conversation,
-												mode: "plan",
-											},
-										}))(current.state.value),
-									}),
-								] as const
+				assert.equal(saves[0]!.expected, initial.chat.revision)
+				assert.equal(saves[0]!.revision, settings.view.chat.revision)
+				assert.equal(saves[0]!.items.length, 0)
+				assert.equal(Object.hasOwn(saves[0]!, "state"), false)
+				assert.equal(Object.hasOwn(saves[0]!, "turn"), false)
+				saves = []
+				yield* store.modifyEffect({
+					chat,
+					update: () =>
+						Effect.succeed([
+							undefined,
+							Option.some({
+								append: [
+									{ id: Item.Id.make("first"), content: Prompt.make("first") },
+								],
 							}),
-					})
-					.pipe(Effect.map(({ view }) => view))
-				assert.equal(
-					(yield* runtimeStore.export(created.session.id)).messages.length,
-					1,
-				)
-				yield* runtimeStore
-					.modifyEffect({
-						session: created.session.id,
-						update: (current) =>
-							Effect.gen(function* () {
-								return [
-									undefined,
-									Option.some({
-										value: ((value: typeof current.state.value) => ({
-											...value,
-											conversation: {
-												...value.conversation,
-												history: [
-													...value.conversation.history,
-													{ id: secondId, content },
-												],
-											},
-										}))(current.state.value),
-									}),
-								] as const
-							}),
-					})
-					.pipe(Effect.map(({ view }) => view))
-				const duplicate = yield* runtimeStore.export(created.session.id)
-				assert.equal(duplicate.messages.length, 2)
-				assert.notEqual(duplicate.messages[0]!.id, duplicate.messages[1]!.id)
-				yield* runtimeStore
-					.modifyEffect({
-						session: created.session.id,
-						update: (current) =>
-							Effect.gen(function* () {
-								return [
-									undefined,
-									Option.some({
-										value: ((value: typeof current.state.value) => ({
-											...value,
-											conversation: {
-												...value.conversation,
-												history: value.conversation.history.map((entry) =>
-													entry.id === firstId
-														? {
-																...entry,
-																content: Prompt.concat(
-																	entry.content,
-																	Prompt.make([
-																		{ role: "assistant", content: "result" },
-																	]),
-																),
-															}
-														: entry,
-												),
-											},
-										}))(current.state.value),
-									}),
-								] as const
-							}),
-					})
-					.pipe(Effect.map(({ view }) => view))
-				const revised = yield* runtimeStore.export(created.session.id)
-				assert.equal(revised.messages.length, 3)
+						] as const),
+				})
 				assert.deepEqual(
-					(yield* runtimeStore.read(created.session.id, created.session.head))
-						.value.conversation.history[0]!.content,
-					content,
+					saves[0]!.items.map((item) => [item.seq, item.id, item.turn]),
+					[[1, "first", null]],
 				)
-				assert.deepEqual(
-					yield* RecordSerialization.original(first),
-					yield* RecordSerialization.original(revised, created.session.head),
-				)
-				const renamed = {
-					...revised,
-					messages: revised.messages.map((m) => ({
-						...m,
-						id: `import-${m.id}`,
-					})),
-					versions: revised.versions.map((v) => ({
-						...v,
-						history: v.history.map((ref) => ({
-							...ref,
-							content: `import-${ref.content}`,
-						})),
-					})),
+				assert.equal(Object.hasOwn(saves[0]!, "state"), false)
+				saves = []
+				const turn: Turn.Record = {
+					id: Turn.Id.make("turn"),
+					chat,
+					settings: settings.view.chat.settings,
+					status: { _tag: "Running" },
+					steps: 0,
+					input: [],
+					items: [],
+					startedAt: 0,
 				}
-				yield* storage.save({ ...renamed, expected: revised.session })
-				assert.deepEqual(
-					yield* runtimeStore.export(created.session.id),
-					revised,
-				)
-				const foreign = yield* runtimeStore.create({
-					metadata: created.session.metadata,
-					value: {
-						...TimelineState.initial({}),
-						conversation: {
-							...TimelineState.initial({}).conversation,
-							history: [
-								{
-									id: Item.Id.make("foreign"),
-									content: Prompt.make("foreign body"),
+				for (const mutation of [
+					{ chat: { turn } },
+					{ chat: { turn, inbox: [] } },
+				])
+					yield* store.modifyEffect({
+						chat,
+						update: () =>
+							Effect.succeed([undefined, Option.some(mutation)] as const),
+					})
+				assert.equal(saves[0]!.turn?.id, "turn")
+				assert.equal(Object.hasOwn(saves[1]!, "turn"), false)
+				saves = []
+				const changed = yield* store.modifyEffect({
+					chat,
+					update: (current) =>
+						Effect.succeed([
+							undefined,
+							Option.some({
+								value: {
+									...current.state,
+									conversation: {
+										...current.state.conversation,
+										closed: false,
+									},
 								},
-							],
-						},
-					},
+							}),
+						] as const),
 				})
-				const foreignContent = (yield* runtimeStore.export(foreign.session.id))
-					.messages[0]!.id
-				const originalContent = revised.messages[0]!.id
-				const conflicting = {
-					...revised,
-					messages: revised.messages.map((m) =>
-						m.id === originalContent ? { ...m, id: foreignContent } : m,
-					),
-					versions: revised.versions.map((v) => ({
-						...v,
-						history: v.history.map((ref) =>
-							ref.content === originalContent
-								? { ...ref, content: foreignContent }
-								: ref,
-						),
-					})),
-				}
-				assert.equal(
-					(yield* storage
-						.save({ ...conflicting, expected: revised.session })
-						.pipe(Effect.flip)).reason,
-					"message-conflict",
-				)
-
-				const incomplete = { ...revised, messages: [] }
-				const empty = yield* MemoryPersistence.make
-				assert.equal(
-					(yield* empty
-						.save({ ...incomplete, expected: null })
-						.pipe(Effect.flip)).reason,
-					"message-missing",
-				)
-				assert.ok(Option.isNone(yield* empty.getRef(created.session.id)))
-				const encoded = yield* Schema.encodeEffect(
-					Schema.fromJsonString(SessionStore.Record),
-				)(revised)
-				assert.equal(JSON.parse(encoded).formatVersion, 3)
+				assert.equal(Object.hasOwn(saves[0]!, "state"), true)
+				const fresh = yield* ChatStoreRepository.make({
+					definition,
+					persistence: storage,
+				})
+				reject = true
+				assert.ok(Exit.isFailure(yield* Effect.exit(fresh.read(chat))))
+				reject = false
+				assert.deepEqual(yield* fresh.read(chat), changed.view)
+				assert.deepEqual(yield* fresh.turn(chat, turn.id), Option.some(turn))
 			}),
 		),
 	)
 })
 
-test("interruption before durable commit does not publish a reference or snapshot", async () => {
+test("an interruption before the durable save publishes no Chat", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
-				const definition = yield* Store.define({
-					stores: {},
-					schemaVersion: "timeline/1",
-				})
+				const definition = yield* define
 				const storage = yield* MemoryPersistence.make
 				const entered = yield* Deferred.make<void>(),
 					release = yield* Deferred.make<void>()
-				const runtimeStore = yield* SessionStoreRepository.make({
-					definition: definition,
+				const store = yield* ChatStoreRepository.make({
+					definition,
 					persistence: storage,
 					onCommit: ({ delta }) =>
 						Deferred.succeed(entered, undefined).pipe(
@@ -501,38 +280,25 @@ test("interruption before durable commit does not publish a reference or snapsho
 							Effect.andThen(storage.save(delta)),
 						),
 				})
-
-				const fiber = yield* Effect.forkChild(
-					runtimeStore.create({
-						metadata: {},
-						value: TimelineState.initial({}),
-					}),
-				)
+				const fiber = yield* Effect.forkChild(store.create({}))
 				yield* Deferred.await(entered)
 				yield* Fiber.interrupt(fiber)
-				assert.deepEqual(yield* runtimeStore.list(), [])
+				assert.deepEqual(yield* store.list, [])
 			}),
 		),
 	)
 })
 
-test("cache eviction keeps active execution and scoped interruption working", async () => {
+test("many other Chats do not stop an active Turn, and scoped interruption still works", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
 			Effect.gen(function* () {
-				const definition = yield* Store.define({
-					stores: {},
-					schemaVersion: "timeline/1",
+				const definition = yield* define
+				const store = yield* ChatStoreRepository.make({
+					definition,
+					persistence: yield* MemoryPersistence.make,
 				})
-				const storage = yield* MemoryPersistence.make
-				const runtimeStore = yield* SessionStoreRepository.make({
-					definition: definition,
-					persistence: storage,
-				})
-				const runtime = yield* SessionRuntime.make({
-					store: runtimeStore,
-					bot: {},
-				})
+				const runtime = yield* ChatRuntime.make({ store, bot: {} })
 				const entered = yield* Deferred.make<void>()
 				const model = yield* LanguageModel.make({
 					generateText: () => Effect.succeed([]),
@@ -541,19 +307,10 @@ test("cache eviction keeps active execution and scoped interruption working", as
 							Stream.flatMap(() => Stream.never),
 						),
 				})
-				const first = yield* runtimeStore.create({
-					metadata: {},
-					value: TimelineState.initial({}),
-				})
+				const first = yield* store.create({})
 				const fiber = yield* Effect.forkChild(
 					runtime
-						.stream({
-							base: {
-								session: first.session.id,
-								revision: first.session.revision,
-							},
-							input: "work",
-						})
+						.stream({ chat: first.chat.id, input: "work" })
 						.pipe(
 							Stream.runDrain,
 							Effect.provideService(LanguageModel.LanguageModel, model),
@@ -561,74 +318,165 @@ test("cache eviction keeps active execution and scoped interruption working", as
 				)
 				yield* Deferred.await(entered)
 				for (let index = 0; index < 70; index++) {
-					const other = yield* runtimeStore.create({
-						metadata: first.session.metadata,
-						value: TimelineState.initial({}),
-					})
-					yield* runtimeStore.read(other.session.id)
+					const other = yield* store.create({})
+					yield* store.read(other.chat.id)
 				}
-				assert.equal(yield* runtime.isActive(first.session.id), true)
+				assert.equal(yield* runtime.isActive(first.chat.id), true)
 				assert.equal(
-					Session.status((yield* runtimeStore.read(first.session.id)).session)
-						._tag,
+					Chat.status((yield* store.read(first.chat.id)).chat)._tag,
 					"Running",
 				)
 				yield* Fiber.interrupt(fiber)
 				assert.equal(
-					Session.status((yield* runtimeStore.read(first.session.id)).session)
-						._tag,
+					Chat.status((yield* store.read(first.chat.id)).chat)._tag,
 					"Interrupted",
 				)
-				assert.equal(yield* runtime.isActive(first.session.id), false)
+				assert.equal(yield* runtime.isActive(first.chat.id), false)
 			}),
 		),
 	)
 })
 
-test("recursive storage reads keep batch boundaries and walk deep ancestry", async () => {
+test("media bytes, a native window, unknown data and Item IDs survive a new store over the same persistence", async () => {
 	await Effect.runPromise(
-		Effect.gen(function* () {
-			let calls: ReadonlyArray<ReadonlyArray<number>> = []
-			const ids = EffectArray.range(0, 400)
-			const read = (batch: ReadonlyArray<number>) =>
-				Effect.sync(() => {
-					calls = EffectArray.append(calls, batch)
-					return batch
+		Effect.scoped(
+			Effect.gen(function* () {
+				const definition = yield* define
+				const persistence = yield* MemoryPersistence.make
+				const store = yield* ChatStoreRepository.make({
+					definition,
+					persistence,
 				})
-			assert.deepEqual(yield* batches([], read), [])
-			assert.equal(calls.length, 0)
-			assert.deepEqual(yield* batches(ids, read), ids)
-			assert.deepEqual(
-				calls.map((batch) => batch.length),
-				[200, 200, 1],
-			)
+				const media = Prompt.make([
+					{
+						role: "user",
+						content: [
+							Prompt.filePart({
+								mediaType: "image/png",
+								data: Uint8Array.from([1, 2, 255]),
+							}),
+							Prompt.filePart({
+								mediaType: "image/png",
+								data: new URL("https://example.com/image"),
+							}),
+							Prompt.filePart({ mediaType: "image/png", data: "AQI=" }),
+						],
+					},
+				])
+				const value = ChatState.initial({ future: { tokens: 4, secret: "x" } })
+				const created = yield* store.create({
+					value: {
+						...value,
+						conversation: {
+							...value.conversation,
+							context: {
+								_tag: "Native",
+								provider: Provider.Id.make("provider"),
+								model: Model.Id.make("model"),
+								items: [{ type: "reasoning", encrypted_content: "opaque" }],
+								prompt: media,
+							},
+						},
+					},
+					business: { unknown: { archived: [1, null] } },
+				})
+				const chat = created.chat.id
+				const appended = yield* store.modifyEffect({
+					chat,
+					update: (current) =>
+						Effect.succeed([
+							undefined,
+							Option.some({
+								append: [{ id: Item.Id.make("media"), content: media }],
+								value: {
+									...current.state,
+									conversation: {
+										...current.state.conversation,
+										context: ContextWindow.append(
+											current.state.conversation.context,
+											media,
+										),
+									},
+								},
+							}),
+						] as const),
+				})
+				const fresh = yield* ChatStoreRepository.make({
+					definition,
+					persistence,
+				})
+				const restored = yield* fresh.read(chat)
+				assert.deepEqual(restored, appended.view)
+				assert.equal(restored.state.conversation.context._tag, "Native")
+				const [item] = yield* fresh.items(chat)
+				assert.ok(item)
+				assert.equal(item.id, "media")
+				assert.equal(item.seq, 1)
+				assert.deepEqual(item.content, media)
+				assert.deepEqual(restored.state["future"], { tokens: 4, secret: "x" })
+				assert.deepEqual(restored.chat.business["unknown"], {
+					archived: [1, null],
+				})
+				const json = yield* Schema.encodeEffect(definition.schema)(
+					restored.state,
+				)
+				assert.deepEqual(
+					EffectArray.sort(
+						Object.keys(json as Schema.JsonObject),
+						Order.String,
+					),
+					["conversation", "future"],
+				)
+				assert.ok(
+					Exit.isFailure(
+						yield* Effect.exit(
+							Schema.decodeEffect(definition.schema)({
+								plugins: {},
+								unrecognizedPlugins: {},
+							}),
+						),
+					),
+				)
+			}),
+		),
+	)
+})
 
-			const base = yield* MemoryPersistence.make
-			const depth = 12000
-			let reads = 0
-			const storage: SessionStore.Persistence = {
-				...base,
-				headers: (ids) =>
-					Effect.sync(() => {
-						reads++
-						return ids.map((id): Timeline.Version => ({
-							id,
-							schemaVersion: "timeline/1",
-							parents:
-								Number(id) === 0
-									? []
-									: [Timeline.VersionId.make(String(Number(id) - 1))],
-						}))
-					}),
-			}
-			const head = Timeline.VersionId.make(String(depth - 1))
-			const graph = yield* VersionGraph.graph(storage, head)
-			assert.equal(HashMap.size(graph), depth)
-			assert.equal(reads, depth)
-			assert.deepEqual(
-				HashMap.getUnsafe(graph, Timeline.VersionId.make("0")).parents,
-				[],
-			)
-		}),
+test("stored data that does not decode fails with decode-failed, and an old revision fails with reference-conflict", async () => {
+	await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const definition = yield* define
+				const persistence = yield* MemoryPersistence.make
+				const store = yield* ChatStoreRepository.make({
+					definition,
+					persistence,
+				})
+				const broken = Chat.Id.make("broken")
+				yield* persistence.save({
+					chat: broken,
+					ref: { id: broken },
+					revision: 0,
+					expected: null,
+					state: {},
+					items: [],
+				})
+				const error = yield* store.read(broken).pipe(Effect.flip)
+				assert.ok(error._tag === "ChatStoreError")
+				assert.equal(error.reason, "decode-failed")
+				const view = yield* store.create({})
+				const conflict = yield* persistence
+					.save({
+						chat: view.chat.id,
+						ref: null,
+						revision: 1,
+						expected: null,
+						items: [],
+					})
+					.pipe(Effect.flip)
+				assert.equal(conflict.reason, "reference-conflict")
+				assert.deepEqual(yield* store.read(view.chat.id), view)
+			}),
+		),
 	)
 })

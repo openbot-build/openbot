@@ -119,3 +119,39 @@ export const openApprovals = (
 			: [{ approvalId: part.approvalId, toolCall }]
 	})
 }
+
+/**
+ * Puts the results of earlier tool calls first. Effect AI runs an approved call before the
+ * model answers, but it gives the result after the answer. A provider needs each result
+ * right after its call, so such a result moves in front of the new messages.
+ */
+export const resultsFirst = (prompt: Prompt.Prompt): Prompt.Prompt => {
+	const calls = HashSet.fromIterable(
+		prompt.content.flatMap((message) =>
+			message.role === "assistant"
+				? message.content.flatMap((part) =>
+						part.type === "tool-call" ? [part.id] : [],
+					)
+				: [],
+		),
+	)
+	const earlier = (part: Prompt.ToolMessagePart) =>
+		part.type === "tool-result" && !HashSet.has(calls, part.id)
+	const early = prompt.content.flatMap((message) =>
+		message.role === "tool" ? message.content.filter(earlier) : [],
+	)
+	if (early.length === 0) return prompt
+	const rest = prompt.content.flatMap(
+		(message): ReadonlyArray<Prompt.Message> => {
+			if (message.role !== "tool") return [message]
+			const kept = message.content.filter((part) => !earlier(part))
+			return kept.length === 0
+				? []
+				: [Prompt.makeMessage("tool", { content: kept })]
+		},
+	)
+	return Prompt.fromMessages([
+		Prompt.makeMessage("tool", { content: early }),
+		...rest,
+	])
+}

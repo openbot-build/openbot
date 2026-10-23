@@ -2,15 +2,15 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import {
+	Chat,
+	ChatRuntime,
+	ChatStoreRepository,
 	MemoryPersistence,
 	Plugin,
-	SessionRuntime,
-	SessionStoreRepository,
 	Store,
 } from "@openbot-build/core"
-import { Context, Effect, Match, Schema, Stream } from "effect"
+import { Context, Effect, Schema, Stream } from "effect"
 import { LanguageModel, Response, Tool, Toolkit } from "effect/ai"
-import * as TimelineState from "../src/timeline/TimelineState.ts"
 
 class CallerDependency extends Context.Service<CallerDependency, string>()(
 	"@openbot-build/core/test/HostPlugin.test/CallerDependency",
@@ -111,37 +111,25 @@ test("a scoped host plugin owns its dynamic handlers, and caller tools keep the 
 					stores: {},
 					schemaVersion: "hosted/1",
 				})
-				const store = yield* SessionStoreRepository.make({
+				const store = yield* ChatStoreRepository.make({
 					definition,
 					persistence: yield* MemoryPersistence.make,
 				})
-				const runtime = yield* SessionRuntime.make({
+				const runtime = yield* ChatRuntime.make({
 					store,
 					bot: { toolkit: callerToolkit, hostPlugin },
 				})
-				const view = yield* store.create({
-					metadata: {},
-					value: TimelineState.initial({}),
-				})
+				const view = yield* store.create({})
 				assert.equal(opened, 0)
 				for (const input of ["First Turn", "Second Turn"]) {
-					const current = yield* store.read(view.session.id)
 					const completed = yield* runtime.execute({
-						base: {
-							session: current.session.id,
-							revision: current.session.revision,
-						},
+						chat: view.chat.id,
 						input,
 					})
-					assert.equal(
-						Match.value(completed.session.turns.at(-1)?.status).pipe(
-							Match.when({ _tag: "Completed" }, () => true),
-							Match.orElse(() => false),
-						),
-						true,
-					)
+					assert.equal(Chat.status(completed.chat)._tag, "Completed")
 					assert.equal(opened, closed)
 				}
+				assert.equal((yield* store.turns(view.chat.id)).length, 2)
 			}),
 		).pipe(
 			Effect.provideService(LanguageModel.LanguageModel, model),

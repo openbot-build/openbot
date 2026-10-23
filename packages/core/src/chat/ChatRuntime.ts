@@ -925,7 +925,9 @@ export const make = <
 															)
 														)
 															return
-														const added = Prompt.fromResponseParts(received)
+														const added = ChatState.resultsFirst(
+															Prompt.fromResponseParts(received),
+														)
 														if (added.content.length === 0) return
 														yield* store
 															.modifyEffect({
@@ -985,8 +987,12 @@ export const make = <
 											const finish = Stream.unwrap(
 												Effect.gen(function* () {
 													const completed = yield* Ref.get(chat.history),
-														added = Prompt.fromMessages(
-															completed.content.slice(starting.content.length),
+														added = ChatState.resultsFirst(
+															Prompt.fromMessages(
+																completed.content.slice(
+																	starting.content.length,
+																),
+															),
 														)
 													// A Turn never waits: each approval request gets an answer now.
 													const open = approval
@@ -1382,6 +1388,10 @@ export const make = <
 		const drain: Chat.Runtime<P, Tools, E, R, HostTools>["drain"] = (chat) =>
 			Effect.uninterruptibleMask((restore) =>
 				Effect.gen(function* () {
+					// While the runtime closes, its Turns stop and try to drain the inbox.
+					// A fiber forked into the closed scope never starts, so `launch` would
+					// wait for ever. The input stays in the inbox for the next runtime.
+					if (scope.state._tag === "Closed") return undefined
 					const view = yield* store.read(chat)
 					const current = Chat.currentTurn(view.chat)
 					if (
@@ -1438,7 +1448,9 @@ export const make = <
 							const running =
 								current !== undefined && current.status._tag === "Running"
 							const placed: Chat.InboxEntry =
-								running && current.author === input.author
+								running &&
+								current.author === input.author &&
+								input.queue !== true
 									? { ...entry, kind: "steer", turn: current.id }
 									: entry
 							return [
@@ -1534,7 +1546,12 @@ export const make = <
 						onSome: (running) => Fiber.interrupt(running.fiber),
 					},
 				)
-				return yield* close(input.chat, input.turn, { _tag: "Interrupted" })
+				// When the fiber stops, it closes the Turn, and the next input in the inbox
+				// can start a new Turn at once. Then the target Turn is no longer current,
+				// but it has ended, so this is not a conflict.
+				return yield* close(input.chat, input.turn, {
+					_tag: "Interrupted",
+				}).pipe(Effect.catchTag("TurnConflict", () => store.read(input.chat)))
 			})
 		/** An event with a view takes its position from it. Other events carry `at`. */
 		const positionOf = (event: Event) =>
