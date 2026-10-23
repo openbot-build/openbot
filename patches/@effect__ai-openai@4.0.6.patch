@@ -1,0 +1,428 @@
+Workaround for two bugs in Effect AI 4.0.6. Remove this patch when a
+release includes both fixes.
+
+1. Tool results cannot carry images. The providers send every tool result
+   that is not a string as JSON text, so the model never sees the image.
+   Fix: a new `toModelContent` option on `Tool.make` and `Tool.dynamic`.
+   Issue: https://github.com/Effect-TS/effect/issues/9857
+   Pull request: https://github.com/Effect-TS/effect/pull/9860
+2. When the parameters of a tool are not an object schema, the error does
+   not name the tool, or the request fails at the provider.
+   Fix: a clear error that names the tool and suggests `Tool.EmptyParams`.
+   Pull request: https://github.com/Effect-TS/effect/pull/9859
+
+Made from the commits of both pull requests on top of the effect@4.0.6 tag.
+
+diff --git a/dist/OpenAiLanguageModel.js b/dist/OpenAiLanguageModel.js
+index 4e1694f5ee6bfde869c04b3fb7b92ed4cb18beec..525a6743f5d4c29a985109595660045f28f0d99c 100644
+--- a/dist/OpenAiLanguageModel.js
++++ b/dist/OpenAiLanguageModel.js
+@@ -322,75 +322,11 @@ const prepareMessages = /*#__PURE__*/Effect.fnUntraced(function* ({
+           const content = [];
+           for (let index = 0; index < message.content.length; index++) {
+             const part = message.content[index];
+-            switch (part.type) {
+-              case "text":
+-                {
+-                  content.push({
+-                    type: "input_text",
+-                    text: part.text,
+-                    ...getPromptCacheBreakpoint(part)
+-                  });
+-                  break;
+-                }
+-              case "file":
+-                {
+-                  const promptCacheBreakpoint = getPromptCacheBreakpoint(part);
+-                  if (part.mediaType.startsWith("image/")) {
+-                    const detail = getImageDetail(part);
+-                    const mediaType = part.mediaType === "image/*" ? "image/jpeg" : part.mediaType;
+-                    if (typeof part.data === "string" && isFileId(part.data, config)) {
+-                      content.push({
+-                        type: "input_image",
+-                        file_id: part.data,
+-                        detail,
+-                        ...promptCacheBreakpoint
+-                      });
+-                    } else {
+-                      const imageUrl = part.data instanceof URL ? part.data.toString() : part.data instanceof Uint8Array ? `data:${mediaType};base64,${Base64.encode(part.data)}` : /^(data:|https?:\/\/)/i.test(part.data) ? part.data : `data:${mediaType};base64,${part.data}`;
+-                      content.push({
+-                        type: "input_image",
+-                        image_url: imageUrl,
+-                        detail,
+-                        ...promptCacheBreakpoint
+-                      });
+-                    }
+-                  } else if (part.mediaType === "application/pdf") {
+-                    if (typeof part.data === "string" && isFileId(part.data, config)) {
+-                      content.push({
+-                        type: "input_file",
+-                        file_id: part.data,
+-                        ...promptCacheBreakpoint
+-                      });
+-                    }
+-                    if (part.data instanceof URL) {
+-                      content.push({
+-                        type: "input_file",
+-                        file_url: part.data.toString(),
+-                        ...promptCacheBreakpoint
+-                      });
+-                    }
+-                    if (part.data instanceof Uint8Array) {
+-                      const base64 = Base64.encode(part.data);
+-                      const fileName = part.fileName ?? `part-${index}.pdf`;
+-                      const fileData = `data:application/pdf;base64,${base64}`;
+-                      content.push({
+-                        type: "input_file",
+-                        filename: fileName,
+-                        file_data: fileData,
+-                        ...promptCacheBreakpoint
+-                      });
+-                    }
+-                  } else {
+-                    return yield* AiError.make({
+-                      module: "OpenAiLanguageModel",
+-                      method: "prepareMessages",
+-                      reason: new AiError.InvalidRequestError({
+-                        description: `Detected unsupported media type for file: '${part.mediaType}'`
+-                      })
+-                    });
+-                  }
+-                }
++            const items = makeInputContent(part, index, config);
++            if (Predicate.isUndefined(items)) {
++              return yield* unsupportedFileError(part);
+             }
++            content.push(...items);
+           }
+           messages.push({
+             role: "user",
+@@ -729,10 +665,25 @@ const prepareMessages = /*#__PURE__*/Effect.fnUntraced(function* ({
+               });
+               continue;
+             }
++            // Send content from the tool's `toModelContent` as input content,
++            // so the model can see images and files
++            let output;
++            if (Predicate.isNotUndefined(part.content)) {
++              output = [];
++              for (let index = 0; index < part.content.length; index++) {
++                const items = makeInputContent(part.content[index], index, config);
++                if (Predicate.isUndefined(items)) {
++                  return yield* unsupportedFileError(part.content[index]);
++                }
++                output.push(...items);
++              }
++            } else {
++              output = typeof part.result === "string" ? part.result : JSON.stringify(part.result);
++            }
+             messages.push({
+               type: "function_call_output",
+               call_id: part.id,
+-              output: typeof part.result === "string" ? part.result : JSON.stringify(part.result),
++              output,
+               ...(Predicate.isNotNull(status) ? {
+                 status
+               } : {})
+@@ -2398,6 +2349,76 @@ const makeItemIdMetadata = itemId => Predicate.isNotUndefined(itemId) ? {
+ const makeEncryptedContentMetadata = encryptedContent => Predicate.isNotNullish(encryptedContent) ? {
+   encryptedContent
+ } : undefined;
++// Converts a text or file part to OpenAI input content. Returns `undefined`
++// for a file media type that OpenAI does not support.
++const makeInputContent = (part, index, config) => {
++  const content = [];
++  if (part.type === "text") {
++    content.push({
++      type: "input_text",
++      text: part.text,
++      ...getPromptCacheBreakpoint(part)
++    });
++    return content;
++  }
++  const promptCacheBreakpoint = getPromptCacheBreakpoint(part);
++  if (part.mediaType.startsWith("image/")) {
++    const detail = getImageDetail(part);
++    const mediaType = part.mediaType === "image/*" ? "image/jpeg" : part.mediaType;
++    if (typeof part.data === "string" && isFileId(part.data, config)) {
++      content.push({
++        type: "input_image",
++        file_id: part.data,
++        detail,
++        ...promptCacheBreakpoint
++      });
++    } else {
++      const imageUrl = part.data instanceof URL ? part.data.toString() : part.data instanceof Uint8Array ? `data:${mediaType};base64,${Base64.encode(part.data)}` : /^(data:|https?:\/\/)/i.test(part.data) ? part.data : `data:${mediaType};base64,${part.data}`;
++      content.push({
++        type: "input_image",
++        image_url: imageUrl,
++        detail,
++        ...promptCacheBreakpoint
++      });
++    }
++  } else if (part.mediaType === "application/pdf") {
++    if (typeof part.data === "string" && isFileId(part.data, config)) {
++      content.push({
++        type: "input_file",
++        file_id: part.data,
++        ...promptCacheBreakpoint
++      });
++    }
++    if (part.data instanceof URL) {
++      content.push({
++        type: "input_file",
++        file_url: part.data.toString(),
++        ...promptCacheBreakpoint
++      });
++    }
++    if (part.data instanceof Uint8Array) {
++      const base64 = Base64.encode(part.data);
++      const fileName = part.fileName ?? `part-${index}.pdf`;
++      const fileData = `data:application/pdf;base64,${base64}`;
++      content.push({
++        type: "input_file",
++        filename: fileName,
++        file_data: fileData,
++        ...promptCacheBreakpoint
++      });
++    }
++  } else {
++    return undefined;
++  }
++  return content;
++};
++const unsupportedFileError = part => AiError.make({
++  module: "OpenAiLanguageModel",
++  method: "prepareMessages",
++  reason: new AiError.InvalidRequestError({
++    description: `Detected unsupported media type for file: '${part.type === "file" ? part.mediaType : "text"}'`
++  })
++});
+ const unsupportedSchemaError = (error, method) => AiError.make({
+   module: "OpenAiLanguageModel",
+   method,
+@@ -2419,8 +2440,18 @@ const tryToolJsonSchema = (tool, method) => Effect.try({
+   try: () => Tool.getJsonSchema(tool, {
+     transformer: toCodecOpenAI
+   }),
+-  catch: error => unsupportedSchemaError(error, method)
++  catch: error => toolParametersError(tool, error, method)
++}).pipe(Effect.flatMap(jsonSchema => checkToolJsonSchema(tool, jsonSchema, method)));
++const toolParametersError = (tool, cause, method) => AiError.make({
++  module: "OpenAiLanguageModel",
++  method,
++  reason: new AiError.UnsupportedSchemaError({
++    description: `The parameters of tool "${tool.name}" must be an object schema (JSON Schema type "object"). ` + "For a tool without parameters, omit `parameters` or use `Tool.EmptyParams`. " + `Cause: ${cause instanceof Error ? cause.message : String(cause)}`
++  })
+ });
++const checkToolJsonSchema = (tool, jsonSchema, method) =>
++// A JSON Schema given directly to a dynamic tool is sent as it is
++Tool.isDynamic(tool) && tool.jsonSchema !== undefined || jsonSchema.type === "object" ? Effect.succeed(jsonSchema) : Effect.fail(toolParametersError(tool, `received ${JSON.stringify(jsonSchema)}`, method));
+ const prepareResponseFormat = /*#__PURE__*/Effect.fnUntraced(function* ({
+   config,
+   options
+diff --git a/src/OpenAiLanguageModel.ts b/src/OpenAiLanguageModel.ts
+index 35310ceaa24362eae881ebab6b679bda2af45dc0..e4de9c55c673799f55722fa864970b206027d013 100644
+--- a/src/OpenAiLanguageModel.ts
++++ b/src/OpenAiLanguageModel.ts
+@@ -965,65 +965,11 @@ const prepareMessages = Effect.fnUntraced(
+           for (let index = 0; index < message.content.length; index++) {
+             const part = message.content[index]
+ 
+-            switch (part.type) {
+-              case "text": {
+-                content.push({
+-                  type: "input_text",
+-                  text: part.text,
+-                  ...getPromptCacheBreakpoint(part)
+-                })
+-                break
+-              }
+-
+-              case "file": {
+-                const promptCacheBreakpoint = getPromptCacheBreakpoint(part)
+-                if (part.mediaType.startsWith("image/")) {
+-                  const detail = getImageDetail(part)
+-                  const mediaType = part.mediaType === "image/*" ? "image/jpeg" : part.mediaType
+-
+-                  if (typeof part.data === "string" && isFileId(part.data, config)) {
+-                    content.push({ type: "input_image", file_id: part.data, detail, ...promptCacheBreakpoint })
+-                  } else {
+-                    const imageUrl = part.data instanceof URL
+-                      ? part.data.toString()
+-                      : part.data instanceof Uint8Array
+-                      ? `data:${mediaType};base64,${Base64.encode(part.data)}`
+-                      : /^(data:|https?:\/\/)/i.test(part.data)
+-                      ? part.data
+-                      : `data:${mediaType};base64,${part.data}`
+-                    content.push({ type: "input_image", image_url: imageUrl, detail, ...promptCacheBreakpoint })
+-                  }
+-                } else if (part.mediaType === "application/pdf") {
+-                  if (typeof part.data === "string" && isFileId(part.data, config)) {
+-                    content.push({ type: "input_file", file_id: part.data, ...promptCacheBreakpoint })
+-                  }
+-
+-                  if (part.data instanceof URL) {
+-                    content.push({ type: "input_file", file_url: part.data.toString(), ...promptCacheBreakpoint })
+-                  }
+-
+-                  if (part.data instanceof Uint8Array) {
+-                    const base64 = Base64.encode(part.data)
+-                    const fileName = part.fileName ?? `part-${index}.pdf`
+-                    const fileData = `data:application/pdf;base64,${base64}`
+-                    content.push({
+-                      type: "input_file",
+-                      filename: fileName,
+-                      file_data: fileData,
+-                      ...promptCacheBreakpoint
+-                    })
+-                  }
+-                } else {
+-                  return yield* AiError.make({
+-                    module: "OpenAiLanguageModel",
+-                    method: "prepareMessages",
+-                    reason: new AiError.InvalidRequestError({
+-                      description: `Detected unsupported media type for file: '${part.mediaType}'`
+-                    })
+-                  })
+-                }
+-              }
++            const items = makeInputContent(part, index, config)
++            if (Predicate.isUndefined(items)) {
++              return yield* unsupportedFileError(part)
+             }
++            content.push(...items)
+           }
+ 
+           messages.push({ role: "user", content })
+@@ -1411,10 +1357,26 @@ const prepareMessages = Effect.fnUntraced(
+               continue
+             }
+ 
++            // Send content from the tool's `toModelContent` as input content,
++            // so the model can see images and files
++            let output: string | Array<typeof OpenAiSchema.InputContent.Encoded>
++            if (Predicate.isNotUndefined(part.content)) {
++              output = []
++              for (let index = 0; index < part.content.length; index++) {
++                const items = makeInputContent(part.content[index], index, config)
++                if (Predicate.isUndefined(items)) {
++                  return yield* unsupportedFileError(part.content[index])
++                }
++                output.push(...items)
++              }
++            } else {
++              output = typeof part.result === "string" ? part.result : JSON.stringify(part.result)
++            }
++
+             messages.push({
+               type: "function_call_output",
+               call_id: part.id,
+-              output: typeof part.result === "string" ? part.result : JSON.stringify(part.result),
++              output,
+               ...(Predicate.isNotNull(status) ? { status } : {})
+             })
+           }
+@@ -3201,6 +3163,70 @@ const makeItemIdMetadata = (itemId: string | undefined) => Predicate.isNotUndefi
+ const makeEncryptedContentMetadata = (encryptedContent: string | null | undefined) =>
+   Predicate.isNotNullish(encryptedContent) ? { encryptedContent } : undefined
+ 
++// Converts a text or file part to OpenAI input content. Returns `undefined`
++// for a file media type that OpenAI does not support.
++const makeInputContent = (
++  part: Prompt.TextPart | Prompt.FilePart,
++  index: number,
++  config: typeof Config.Service
++): Array<typeof OpenAiSchema.InputContent.Encoded> | undefined => {
++  const content: Array<typeof OpenAiSchema.InputContent.Encoded> = []
++  if (part.type === "text") {
++    content.push({ type: "input_text", text: part.text, ...getPromptCacheBreakpoint(part) })
++    return content
++  }
++  const promptCacheBreakpoint = getPromptCacheBreakpoint(part)
++  if (part.mediaType.startsWith("image/")) {
++    const detail = getImageDetail(part)
++    const mediaType = part.mediaType === "image/*" ? "image/jpeg" : part.mediaType
++
++    if (typeof part.data === "string" && isFileId(part.data, config)) {
++      content.push({ type: "input_image", file_id: part.data, detail, ...promptCacheBreakpoint })
++    } else {
++      const imageUrl = part.data instanceof URL
++        ? part.data.toString()
++        : part.data instanceof Uint8Array
++        ? `data:${mediaType};base64,${Base64.encode(part.data)}`
++        : /^(data:|https?:\/\/)/i.test(part.data)
++        ? part.data
++        : `data:${mediaType};base64,${part.data}`
++      content.push({ type: "input_image", image_url: imageUrl, detail, ...promptCacheBreakpoint })
++    }
++  } else if (part.mediaType === "application/pdf") {
++    if (typeof part.data === "string" && isFileId(part.data, config)) {
++      content.push({ type: "input_file", file_id: part.data, ...promptCacheBreakpoint })
++    }
++
++    if (part.data instanceof URL) {
++      content.push({ type: "input_file", file_url: part.data.toString(), ...promptCacheBreakpoint })
++    }
++
++    if (part.data instanceof Uint8Array) {
++      const base64 = Base64.encode(part.data)
++      const fileName = part.fileName ?? `part-${index}.pdf`
++      const fileData = `data:application/pdf;base64,${base64}`
++      content.push({
++        type: "input_file",
++        filename: fileName,
++        file_data: fileData,
++        ...promptCacheBreakpoint
++      })
++    }
++  } else {
++    return undefined
++  }
++  return content
++}
++
++const unsupportedFileError = (part: Prompt.TextPart | Prompt.FilePart): AiError.AiError =>
++  AiError.make({
++    module: "OpenAiLanguageModel",
++    method: "prepareMessages",
++    reason: new AiError.InvalidRequestError({
++      description: `Detected unsupported media type for file: '${part.type === "file" ? part.mediaType : "text"}'`
++    })
++  })
++
+ const unsupportedSchemaError = (error: unknown, method: string): AiError.AiError =>
+   AiError.make({
+     module: "OpenAiLanguageModel",
+@@ -3225,9 +3251,30 @@ const tryJsonSchema = <S extends Schema.Constraint>(schema: S, method: string) =
+ const tryToolJsonSchema = <T extends Tool.Any>(tool: T, method: string) =>
+   Effect.try({
+     try: () => Tool.getJsonSchema(tool, { transformer: toCodecOpenAI }),
+-    catch: (error) => unsupportedSchemaError(error, method)
++    catch: (error) => toolParametersError(tool, error, method)
++  }).pipe(Effect.flatMap((jsonSchema) => checkToolJsonSchema(tool, jsonSchema, method)))
++
++const toolParametersError = (tool: Tool.Any | Tool.AnyDynamic, cause: unknown, method: string): AiError.AiError =>
++  AiError.make({
++    module: "OpenAiLanguageModel",
++    method,
++    reason: new AiError.UnsupportedSchemaError({
++      description: `The parameters of tool "${tool.name}" must be an object schema (JSON Schema type "object"). ` +
++        "For a tool without parameters, omit `parameters` or use `Tool.EmptyParams`. " +
++        `Cause: ${cause instanceof Error ? cause.message : String(cause)}`
++    })
+   })
+ 
++const checkToolJsonSchema = <T extends Tool.Any | Tool.AnyDynamic>(
++  tool: T,
++  jsonSchema: ReturnType<typeof Tool.getJsonSchema>,
++  method: string
++): Effect.Effect<ReturnType<typeof Tool.getJsonSchema>, AiError.AiError> =>
++  // A JSON Schema given directly to a dynamic tool is sent as it is
++  (Tool.isDynamic(tool) && tool.jsonSchema !== undefined) || jsonSchema.type === "object"
++    ? Effect.succeed(jsonSchema)
++    : Effect.fail(toolParametersError(tool, `received ${JSON.stringify(jsonSchema)}`, method))
++
+ const prepareResponseFormat = Effect.fnUntraced(function*({ config, options }: {
+   readonly config: typeof Config.Service
+   readonly options: LanguageModel.ProviderOptions

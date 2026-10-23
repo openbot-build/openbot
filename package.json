@@ -20,5 +20,13 @@
 		"build": "pnpm -r build",
 		"images": "docker buildx bake -f deploy/docker/docker-bake.hcl --load",
 		"images:check": "bash deploy/docker/check.sh"
+	},
+	"pnpm": {
+		"patchedDependencies": {
+			"effect@4.0.6": "patches/effect@4.0.6.patch",
+			"@effect/ai-anthropic@4.0.6": "patches/@effect__ai-anthropic@4.0.6.patch",
+			"@effect/ai-openai@4.0.6": "patches/@effect__ai-openai@4.0.6.patch",
+			"@effect/ai-openai-compat@4.0.6": "patches/@effect__ai-openai-compat@4.0.6.patch"
+		}
 	}
 }

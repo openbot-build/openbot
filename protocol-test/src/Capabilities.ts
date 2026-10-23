@@ -120,7 +120,7 @@ export const register = (options: {
 					input.output === undefined
 						? undefined
 						: Schema.toJsonSchemaDocument(input.output)
-				const tool = yield* Schema.decodeUnknownEffect(McpSchema.Tool)({
+				const tool = yield* Schema.decodeEffect(McpSchema.Tool)({
 					name: input.name,
 					description: input.description,
 					inputSchema: {
@@ -503,7 +503,13 @@ export const register = (options: {
 									return yield* invalid(
 										"The continuation was already completed.",
 									)
-								return result({ kind, response })
+								// Since effect 4.0.6, input responses are not typed as JSON
+								return result({
+									kind,
+									response: yield* Schema.decodeUnknownEffect(Schema.Json)(
+										response,
+									).pipe(Effect.mapError((error) => invalid(error.message))),
+								})
 							}
 							if (context.inputResponses !== undefined)
 								return yield* invalid(

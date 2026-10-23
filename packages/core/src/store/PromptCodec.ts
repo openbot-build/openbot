@@ -29,38 +29,51 @@ export const omitOptional = (value: unknown): unknown => {
 	return value
 }
 
+/**
+ * Since effect 4.0.6, the Prompt schema encodes bytes as `{ _tag: "Uint8Array", base64 }`
+ * and URLs as `{ _tag: "URL", href }`. The stored format stays `String`, `Bytes` or `Url`.
+ */
+const encodeFileData = (
+	data: Prompt.FilePartEncoded["data"],
+): Effect.Effect<typeof FileData.Type, Schema.SchemaError> =>
+	Predicate.isString(data)
+		? Effect.succeed({ _tag: "String", value: data })
+		: data instanceof URL
+			? Effect.succeed({ _tag: "Url", value: data.href })
+			: data instanceof Uint8Array
+				? Effect.succeed({ _tag: "Bytes", value: Array.from(data) })
+				: data._tag === "URL"
+					? Effect.succeed({ _tag: "Url", value: data.href })
+					: Schema.decodeEffect(Schema.Uint8ArrayFromBase64)(data.base64).pipe(
+							Effect.map((bytes) => ({
+								_tag: "Bytes",
+								value: Array.from(bytes),
+							})),
+						)
+
 const encodePrompt = (prompt: Prompt.Prompt) =>
-	Schema.encodeEffect(Prompt.Prompt)(prompt).pipe(
-		Effect.map((encoded) => ({
-			...encoded,
-			content: encoded.content.map((message) =>
-				Predicate.isString(message.content)
-					? message
-					: {
-							...message,
-							content: message.content.map((part) =>
-								Match.value(part).pipe(
-									Match.when({ type: "file" }, (part) => ({
-										...part,
-										data: Predicate.isString(part.data)
-											? { _tag: "String" as const, value: part.data }
-											: part.data instanceof URL
-												? { _tag: "Url" as const, value: part.data.href }
-												: {
-														_tag: "Bytes" as const,
-														value: Array.from(part.data),
-													},
-									})),
-									Match.orElse((part) => part),
-								),
-							),
-						},
-			),
-		})),
-		Effect.flatMap((value) =>
-			Schema.decodeUnknownEffect(Schema.Json)(omitOptional(value)),
-		),
-	)
+	Effect.gen(function* () {
+		const encoded = yield* Schema.encodeEffect(Prompt.Prompt)(prompt)
+		const content = yield* Effect.forEach(encoded.content, (message) =>
+			Effect.gen(function* () {
+				if (Predicate.isString(message.content)) return message
+				const parts: ReadonlyArray<(typeof message.content)[number]> =
+					message.content
+				return {
+					...message,
+					content: yield* Effect.forEach(parts, (part) =>
+						Effect.gen(function* () {
+							if (part.type !== "file") return part
+							return { ...part, data: yield* encodeFileData(part.data) }
+						}),
+					),
+				}
+			}),
+		)
+		return yield* Schema.decodeUnknownEffect(Schema.Json)(
+			omitOptional({ ...encoded, content }),
+		)
+	})
 
 /** Media data has explicit tags, so a URL and a base64 string can always be told apart. */
 export const PromptJson = Schema.Json.pipe(
