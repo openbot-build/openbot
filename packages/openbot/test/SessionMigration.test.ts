@@ -15,6 +15,11 @@ import * as Db from "../src/database/Database.ts"
 const migrations = fileURLToPath(new URL("../migrations", import.meta.url))
 /** The first migration after the Workflows. */
 const firstMigration = "20261022111338_drop_workflows"
+/**
+ * The last migration that this test is about. Later migrations, such as the one that
+ * replaces Sessions with Chats, do not run.
+ */
+const lastMigration = "20261022121205_drop_workflow_audit"
 const host = "@openbot-build/openbot/session-host"
 
 const session = (id: string, kind: string, spaced: boolean) => {
@@ -47,17 +52,23 @@ const session = (id: string, kind: string, spaced: boolean) => {
 test("old Sessions get the mode build, Sessions of Runs become direct, Workflow audit entries go, and old organizations get the default plan approval", async () => {
 	const database = await PostgresTest.start()
 	const before = await mkdtemp(join(tmpdir(), "openbot-migrations-"))
+	const through = await mkdtemp(join(tmpdir(), "openbot-migrations-"))
 	await using runtime = ManagedRuntime.make(
 		DatabasePostgres.layer({ databaseUrl: Redacted.make(database.url) }).pipe(
 			Layer.provide(NodeServices.layer),
 		),
 	)
 	try {
-		for (const name of await readdir(migrations))
+		for (const name of await readdir(migrations)) {
 			if (name < firstMigration)
 				await cp(join(migrations, name), join(before, name), {
 					recursive: true,
 				})
+			if (name <= lastMigration)
+				await cp(join(migrations, name), join(through, name), {
+					recursive: true,
+				})
+		}
 		await runtime.runPromise(
 			Effect.gen(function* () {
 				const db = yield* Db.make
@@ -89,7 +100,12 @@ test("old Sessions get the mode build, Sessions of Runs become direct, Workflow 
 				yield* sql`create table openbot_cluster_runners (id text)`
 			}),
 		)
-		await runtime.runPromise(DatabasePostgres.migrate)
+		await runtime.runPromise(
+			Effect.gen(function* () {
+				const db = yield* Db.make
+				yield* migrate(db, { migrationsFolder: through })
+			}),
+		)
 		await runtime.runPromise(
 			Effect.gen(function* () {
 				const sql = yield* PgClient.PgClient
@@ -136,6 +152,7 @@ test("old Sessions get the mode build, Sessions of Runs become direct, Workflow 
 		)
 	} finally {
 		await rm(before, { recursive: true, force: true })
+		await rm(through, { recursive: true, force: true })
 		await database.close()
 	}
 })

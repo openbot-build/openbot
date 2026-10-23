@@ -13,10 +13,16 @@ import * as Db from "../src/database/Database.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
 const migrations = fileURLToPath(new URL("../migrations", import.meta.url))
+/**
+ * The migration that this test is about. Later migrations do not run, so the table and
+ * the settings key still have the names of that time: Agents, not Bots.
+ */
+const ownMigration = "20261023052657_main_agent_to_default"
 
 test("each old Main Bot becomes a lasting Bot and the default Bot of its member", async () => {
 	const database = await PostgresTest.start()
 	const before = await mkdtemp(join(tmpdir(), "openbot-migrations-"))
+	const through = await mkdtemp(join(tmpdir(), "openbot-migrations-"))
 	await using runtime = ManagedRuntime.make(
 		DatabasePostgres.layer({ databaseUrl: Redacted.make(database.url) }).pipe(
 			Layer.provide(NodeServices.layer),
@@ -43,11 +49,16 @@ test("each old Main Bot becomes a lasting Bot and the default Bot of its member"
 	})
 	const approval = { approver: "person", timeoutMs: 1000, onTimeout: "run" }
 	try {
-		for (const name of await readdir(migrations))
-			if (name < "20261023052657_main_agent_to_default")
+		for (const name of await readdir(migrations)) {
+			if (name < ownMigration)
 				await cp(join(migrations, name), join(before, name), {
 					recursive: true,
 				})
+			if (name <= ownMigration)
+				await cp(join(migrations, name), join(through, name), {
+					recursive: true,
+				})
+		}
 		await runtime.runPromise(
 			Effect.gen(function* () {
 				const db = yield* Db.make
@@ -69,7 +80,12 @@ test("each old Main Bot becomes a lasting Bot and the default Bot of its member"
 				})}`
 			}),
 		)
-		await runtime.runPromise(DatabasePostgres.migrate)
+		await runtime.runPromise(
+			Effect.gen(function* () {
+				const db = yield* Db.make
+				yield* migrate(db, { migrationsFolder: through })
+			}),
+		)
 		await runtime.runPromise(
 			Effect.gen(function* () {
 				const sql = yield* PgClient.PgClient
@@ -77,7 +93,7 @@ test("each old Main Bot becomes a lasting Bot and the default Bot of its member"
 					readonly id: string
 					readonly status: string
 					readonly body: string
-				}>`select id, status, body from openbot_bot_records order by id`
+				}>`select id, status, body from openbot_agent_records order by id`
 				assert.deepEqual(
 					bots.map((row) => [row.id, row.status, JSON.parse(row.body).kind]),
 					[
@@ -100,12 +116,12 @@ test("each old Main Bot becomes a lasting Bot and the default Bot of its member"
 					[
 						[
 							"org_a/user_a",
-							{ planApproval: null, defaultBot: "bot_main_a" },
+							{ planApproval: null, defaultAgent: "bot_main_a" },
 							1,
 						],
 						[
 							"org_a/user_b",
-							{ planApproval: approval, defaultBot: "bot_main_b" },
+							{ planApproval: approval, defaultAgent: "bot_main_b" },
 							4,
 						],
 					],
@@ -114,6 +130,7 @@ test("each old Main Bot becomes a lasting Bot and the default Bot of its member"
 		)
 	} finally {
 		await rm(before, { recursive: true, force: true })
+		await rm(through, { recursive: true, force: true })
 		await database.close()
 	}
 })

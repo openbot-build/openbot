@@ -1,0 +1,1125 @@
+{
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "fa28824d-adfe-411c-8c20-4b1739b7d821",
+	"prevIds": ["354d47fa-c3e1-43dd-a016-07bb185052da"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_chat_items"],
+			"writes": [
+				"s|tbl|public.openbot_chat_items",
+				"n|tbl|public.openbot_chat_items",
+				"e|tbl|public.openbot_chat_items",
+				"n|rel|public.openbot_chat_items",
+				"n|type|public.openbot_chat_items",
+				"n|rel|public.openbot_chat_items_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_chat_turns"],
+			"writes": [
+				"s|tbl|public.openbot_chat_turns",
+				"n|tbl|public.openbot_chat_turns",
+				"e|tbl|public.openbot_chat_turns",
+				"n|rel|public.openbot_chat_turns",
+				"n|type|public.openbot_chat_turns",
+				"n|rel|public.openbot_chat_turns_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_chats"],
+			"writes": [
+				"s|tbl|public.openbot_chats",
+				"n|tbl|public.openbot_chats",
+				"e|tbl|public.openbot_chats",
+				"n|rel|public.openbot_chats",
+				"n|type|public.openbot_chats",
+				"n|rel|public.openbot_chats_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": ["table", "public", "openbot_timeline_contents"],
+			"writes": [
+				"s|tbl|public.openbot_timeline_contents",
+				"n|tbl|public.openbot_timeline_contents",
+				"e|tbl|public.openbot_timeline_contents",
+				"n|rel|public.openbot_timeline_contents",
+				"n|type|public.openbot_timeline_contents"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": ["table", "public", "openbot_session_references"],
+			"writes": [
+				"s|tbl|public.openbot_session_references",
+				"n|tbl|public.openbot_session_references",
+				"e|tbl|public.openbot_session_references",
+				"n|rel|public.openbot_session_references",
+				"n|type|public.openbot_session_references"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "drop_table",
+			"statementTarget": ["table", "public", "openbot_timeline_versions"],
+			"writes": [
+				"s|tbl|public.openbot_timeline_versions",
+				"n|tbl|public.openbot_timeline_versions",
+				"e|tbl|public.openbot_timeline_versions",
+				"n|rel|public.openbot_timeline_versions",
+				"n|type|public.openbot_timeline_versions"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "rename_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_app_invocations",
+				"session"
+			],
+			"writes": [
+				"s|col|public.openbot_app_invocations.session",
+				"n|col|public.openbot_app_invocations.session",
+				"s|col|public.openbot_app_invocations.chat",
+				"n|col|public.openbot_app_invocations.chat"
+			],
+			"reads": ["n|tbl|public.openbot_app_invocations", "n|sch|public"]
+		},
+		{
+			"statementType": "rename_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_conversations",
+				"session"
+			],
+			"writes": [
+				"s|col|public.openbot_channel_conversations.session",
+				"n|col|public.openbot_channel_conversations.session",
+				"s|col|public.openbot_channel_conversations.chat",
+				"n|col|public.openbot_channel_conversations.chat"
+			],
+			"reads": ["n|tbl|public.openbot_channel_conversations", "n|sch|public"]
+		},
+		{
+			"statementType": "rename_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_channel_deliveries",
+				"session"
+			],
+			"writes": [
+				"s|col|public.openbot_channel_deliveries.session",
+				"n|col|public.openbot_channel_deliveries.session",
+				"s|col|public.openbot_channel_deliveries.chat",
+				"n|col|public.openbot_channel_deliveries.chat"
+			],
+			"reads": ["n|tbl|public.openbot_channel_deliveries", "n|sch|public"]
+		},
+		{
+			"statementType": "rename_column",
+			"statementTarget": ["column", "public", "openbot_code_runs", "session"],
+			"writes": [
+				"s|col|public.openbot_code_runs.session",
+				"n|col|public.openbot_code_runs.session",
+				"s|col|public.openbot_code_runs.chat",
+				"n|col|public.openbot_code_runs.chat"
+			],
+			"reads": ["n|tbl|public.openbot_code_runs", "n|sch|public"]
+		},
+		{
+			"statementType": "rename_column",
+			"statementTarget": [
+				"column",
+				"public",
+				"openbot_usage_events",
+				"session_id"
+			],
+			"writes": [
+				"s|col|public.openbot_usage_events.session_id",
+				"n|col|public.openbot_usage_events.session_id",
+				"s|col|public.openbot_usage_events.chat_id",
+				"n|col|public.openbot_usage_events.chat_id"
+			],
+			"reads": ["n|tbl|public.openbot_usage_events", "n|sch|public"]
+		},
+		{
+			"statementType": "rename_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_app_invocations",
+				"openbot_app_invocations_session"
+			],
+			"writes": [
+				"s|idx|public.openbot_app_invocations_session",
+				"n|idx|public.openbot_app_invocations_session",
+				"n|rel|public.openbot_app_invocations_session",
+				"s|idx|public.openbot_app_invocations_chat",
+				"n|idx|public.openbot_app_invocations_chat",
+				"n|rel|public.openbot_app_invocations_chat"
+			],
+			"reads": [
+				"e|tbl|public.openbot_app_invocations",
+				"n|sch|public",
+				"e|col|public.openbot_app_invocations.owner",
+				"e|col|public.openbot_app_invocations.chat"
+			]
+		},
+		{
+			"statementType": "rename_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_channel_conversations",
+				"openbot_channel_conversations_session"
+			],
+			"writes": [
+				"s|idx|public.openbot_channel_conversations_session",
+				"n|idx|public.openbot_channel_conversations_session",
+				"n|rel|public.openbot_channel_conversations_session",
+				"s|idx|public.openbot_channel_conversations_chat",
+				"n|idx|public.openbot_channel_conversations_chat",
+				"n|rel|public.openbot_channel_conversations_chat"
+			],
+			"reads": [
+				"e|tbl|public.openbot_channel_conversations",
+				"n|sch|public",
+				"e|col|public.openbot_channel_conversations.chat"
+			]
+		},
+		{
+			"statementType": "rename_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_code_runs",
+				"openbot_code_runs_session"
+			],
+			"writes": [
+				"s|idx|public.openbot_code_runs_session",
+				"n|idx|public.openbot_code_runs_session",
+				"n|rel|public.openbot_code_runs_session",
+				"s|idx|public.openbot_code_runs_chat",
+				"n|idx|public.openbot_code_runs_chat",
+				"n|rel|public.openbot_code_runs_chat"
+			],
+			"reads": [
+				"e|tbl|public.openbot_code_runs",
+				"n|sch|public",
+				"e|col|public.openbot_code_runs.owner",
+				"e|col|public.openbot_code_runs.chat"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_chat_items",
+				"openbot_chat_items_turn"
+			],
+			"writes": [
+				"s|idx|public.openbot_chat_items_turn",
+				"n|idx|public.openbot_chat_items_turn",
+				"e|idx|public.openbot_chat_items_turn",
+				"n|rel|public.openbot_chat_items_turn"
+			],
+			"reads": [
+				"n|tbl|public.openbot_chat_items",
+				"n|sch|public",
+				"n|col|public.openbot_chat_items.namespace",
+				"n|col|public.openbot_chat_items.chat",
+				"n|col|public.openbot_chat_items.turn"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_chat_turns",
+				"openbot_chat_turns_order"
+			],
+			"writes": [
+				"s|idx|public.openbot_chat_turns_order",
+				"n|idx|public.openbot_chat_turns_order",
+				"e|idx|public.openbot_chat_turns_order",
+				"n|rel|public.openbot_chat_turns_order"
+			],
+			"reads": [
+				"n|tbl|public.openbot_chat_turns",
+				"n|sch|public",
+				"n|col|public.openbot_chat_turns.namespace",
+				"n|col|public.openbot_chat_turns.chat",
+				"n|col|public.openbot_chat_turns.position"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_chats",
+				"openbot_chats_bot"
+			],
+			"writes": [
+				"s|idx|public.openbot_chats_bot",
+				"n|idx|public.openbot_chats_bot",
+				"e|idx|public.openbot_chats_bot",
+				"n|rel|public.openbot_chats_bot"
+			],
+			"reads": [
+				"n|tbl|public.openbot_chats",
+				"n|sch|public",
+				"n|col|public.openbot_chats.namespace",
+				"n|col|public.openbot_chats.bot",
+				"n|col|public.openbot_chats.kind"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_chats",
+				"openbot_chats_waiting"
+			],
+			"writes": [
+				"s|idx|public.openbot_chats_waiting",
+				"n|idx|public.openbot_chats_waiting",
+				"e|idx|public.openbot_chats_waiting",
+				"n|rel|public.openbot_chats_waiting"
+			],
+			"reads": [
+				"n|tbl|public.openbot_chats",
+				"n|sch|public",
+				"n|col|public.openbot_chats.status",
+				"n|col|public.openbot_chats.inbox_size"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_chats",
+				"openbot_chats_direct"
+			],
+			"writes": [
+				"s|idx|public.openbot_chats_direct",
+				"n|idx|public.openbot_chats_direct",
+				"e|idx|public.openbot_chats_direct",
+				"n|rel|public.openbot_chats_direct"
+			],
+			"reads": [
+				"n|tbl|public.openbot_chats",
+				"n|sch|public",
+				"n|col|public.openbot_chats.namespace",
+				"n|col|public.openbot_chats.bot"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "rename",
+			"key": "columns\u0000[\"public\",\"openbot_app_invocations\",\"session\"]",
+			"set": {
+				"name": "chat"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "columns\u0000[\"public\",\"openbot_channel_conversations\",\"session\"]",
+			"set": {
+				"name": "chat"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "columns\u0000[\"public\",\"openbot_channel_deliveries\",\"session\"]",
+			"set": {
+				"name": "chat"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "columns\u0000[\"public\",\"openbot_code_runs\",\"session\"]",
+			"set": {
+				"name": "chat"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "columns\u0000[\"public\",\"openbot_usage_events\",\"session_id\"]",
+			"set": {
+				"name": "chat_id"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "indexes\u0000[\"public\",\"openbot_app_invocations_session\"]",
+			"set": {
+				"name": "openbot_app_invocations_chat"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "indexes\u0000[\"public\",\"openbot_channel_conversations_session\"]",
+			"set": {
+				"name": "openbot_channel_conversations_chat"
+			}
+		},
+		{
+			"op": "rename",
+			"key": "indexes\u0000[\"public\",\"openbot_code_runs_session\"]",
+			"set": {
+				"name": "openbot_code_runs_chat"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_chat_items",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_chat_turns",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_chats",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chat_items",
+				"name": "namespace",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chat_items",
+				"name": "chat",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chat_items",
+				"name": "seq",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chat_items",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chat_items",
+				"name": "turn",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chat_items",
+				"name": "value",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chat_turns",
+				"name": "namespace",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chat_turns",
+				"name": "chat",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chat_turns",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chat_turns",
+				"name": "position",
+				"type": "bigserial",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chat_turns",
+				"name": "value",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chats",
+				"name": "namespace",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chats",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chats",
+				"name": "body",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chats",
+				"name": "state",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chats",
+				"name": "bot",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chats",
+				"name": "kind",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chats",
+				"name": "status",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chats",
+				"name": "turn",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chats",
+				"name": "revision",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chats",
+				"name": "inbox_size",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chats",
+				"name": "runner_seen_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chats",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chats",
+				"name": "updated_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chat_items",
+				"name": "openbot_chat_items_turn",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "namespace",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "chat",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "turn",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chat_turns",
+				"name": "openbot_chat_turns_order",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "namespace",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "chat",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "position",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chats",
+				"name": "openbot_chats_bot",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "namespace",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "bot",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "kind",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chats",
+				"name": "openbot_chats_waiting",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "status",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "inbox_size",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": "\"inbox_size\" > 0 OR \"status\" = 'Running'",
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chats",
+				"name": "openbot_chats_direct",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "namespace",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "bot",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": "\"kind\" = 'direct'",
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chat_items",
+				"name": "openbot_chat_items_pkey",
+				"columns": ["namespace", "chat", "seq"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chat_turns",
+				"name": "openbot_chat_turns_pkey",
+				"columns": ["namespace", "chat", "id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_chats",
+				"name": "openbot_chats_pkey",
+				"columns": ["namespace", "id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_timeline_contents\"]"
+		},
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_session_references\"]"
+		},
+		{
+			"op": "drop",
+			"key": "tables\u0000[\"public\",\"openbot_timeline_versions\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_timeline_contents\",\"namespace\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_timeline_contents\",\"id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_timeline_contents\",\"message\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_timeline_contents\",\"content\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_session_references\",\"namespace\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_session_references\",\"id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_session_references\",\"body\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_session_references\",\"head\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_session_references\",\"archived\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_session_references\",\"status\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_session_references\",\"turn\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_session_references\",\"response\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_session_references\",\"response_summary\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_session_references\",\"revision\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_timeline_versions\",\"namespace\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_timeline_versions\",\"id\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_timeline_versions\",\"schema_version\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_timeline_versions\",\"parents\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_timeline_versions\",\"snapshot_format\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_timeline_versions\",\"value\"]"
+		},
+		{
+			"op": "drop",
+			"key": "columns\u0000[\"public\",\"openbot_timeline_versions\",\"history\"]"
+		},
+		{
+			"op": "drop",
+			"key": "indexes\u0000[\"public\",\"openbot_session_references_list\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_timeline_contents\",\"openbot_timeline_contents_pkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_session_references\",\"openbot_session_references_pkey\"]"
+		},
+		{
+			"op": "drop",
+			"key": "pks\u0000[\"public\",\"openbot_timeline_versions\",\"openbot_timeline_versions_pkey\"]"
+		}
+	]
+}
