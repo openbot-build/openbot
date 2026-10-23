@@ -3,7 +3,6 @@ export { OpenBotApi } from "./OpenBotApi.ts"
 export { Account, AccountCaller, Caller, Identity } from "./Identity.ts"
 export * as BotsApi from "./BotsApi.ts"
 export { Name } from "./Name.ts"
-export * as Memory from "./Memory.ts"
 export * as BotMemory from "./BotMemory.ts"
 export * as RequestsApi from "./RequestsApi.ts"
 export * as PlanApproval from "./PlanApproval.ts"
@@ -47,40 +46,37 @@ export {
 	RateLimited,
 } from "./AuthApi.ts"
 export {
-	SessionsApi,
-	SessionModels,
-	SelectSessionModelRequest,
-	SessionModelInvalid,
-	SessionView,
-	SessionSummary,
-	SessionKind,
-	SessionParent,
-	CreateSessionRequest,
-	StartTurnRequest,
-	SessionResponse,
+	ChatsApi,
+	ChatModels,
+	ChatModelInvalid,
+	ChatView,
+	ChatSummary,
+	ChatInfo,
+	ChatKind,
+	ChatParent,
+	ChatStatus,
+	ChatActivity,
+	OpenWork,
+	MessageInput,
+	SendMessageRequest,
+	MessageReceipt,
+	ChatResponse,
 	ResponseStatus,
-	SessionActivity,
-	SessionResponseEvent,
-	SessionResponseEventType,
-	SessionResponseSseEvent,
-	SessionNotFound,
-	SessionBusy,
-	SessionExecutionUnavailable,
-	SessionConflict,
-	SessionInvalidRecord,
-	SessionStorageUnavailable,
-	UpdateSessionRequest,
-	ForkSessionRequest,
-	RestoreSessionRequest,
-	UpdateMemoryRequest,
-	MemoryCommand,
-	MemoryOverrides,
-	SessionMemory,
+	ChatResponseEvent,
+	ChatResponseEventType,
+	ChatResponseSseEvent,
+	ChatNotFound,
+	ChatExecutionUnavailable,
+	ChatConflict,
+	ChatStorageUnavailable,
+	UpdateChatRequest,
+	InterruptChatRequest,
 	Todo,
 	TodoStatus,
-	SessionTodos,
+	ChatTodos,
 	UpdateTodosRequest,
-} from "./SessionsApi.ts"
+} from "./ChatsApi.ts"
+export * as DelegationsApi from "./DelegationsApi.ts"
 
 export {
 	AppsApi,

@@ -2,7 +2,8 @@ import { DeveloperApi, DeveloperPublicApi } from "./DeveloperApi.ts"
 import { AppExperienceApi } from "./AppExperienceApi.ts"
 import { ConnectionsApi } from "./ConnectionsApi.ts"
 import { HttpApi, OpenApi } from "effect/http-api"
-import { SessionsApi } from "./SessionsApi.ts"
+import { ChatsApi } from "./ChatsApi.ts"
+import { DelegationsApi } from "./DelegationsApi.ts"
 import { HealthApi } from "./HealthApi.ts"
 import { AccountApi, BotAuth, SignInApi } from "./AuthApi.ts"
 import { UserTokensApi } from "./UserTokensApi.ts"
@@ -61,7 +62,8 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 		AppsApi.annotate(GroupRequired, { read: apps, write: apps })
 			.middleware(Authorize)
 			.middleware(BotAuth),
-		SessionsApi,
+		ChatsApi,
+		DelegationsApi,
 		BotsApi,
 		BotInvitationsApi,
 		RequestsApi,
@@ -131,5 +133,5 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 	.annotate(OpenApi.Version, "0.1.0")
 	.annotate(
 		OpenApi.Description,
-		"Headless REST API for OpenBot. To authenticate, send `Authorization: Bearer <user token>`. Create tokens at /v1/user/tokens. Every call needs a permission from a role or policy. Browser clients on the same origin can use the session Cookie instead. Then every write must send the exact public Origin.",
+		"Headless REST API for OpenBot. To authenticate, send `Authorization: Bearer <user token>`. Create tokens at /v1/user/tokens. Every call needs a permission from a role or policy. Browser clients on the same origin can use the sign-in session Cookie instead. Then every write must send the exact public Origin.",
 	) {}

@@ -172,8 +172,6 @@ export const UsageSource = Schema.Literals([
 	"turn",
 	/** A summary of old messages, so the conversation fits the model. */
 	"compaction",
-	/** The memory of a Session. */
-	"session_memory",
 	/** The model that judges Rules. */
 	"judge",
 	/** The model that learns Bot memory. */
@@ -187,7 +185,7 @@ export const UsageEvent = Schema.Struct({
 	id: Schema.String,
 	occurredAt: Schema.String,
 	source: UsageSource,
-	sessionId: Schema.NullOr(Schema.String),
+	chatId: Schema.NullOr(Schema.String),
 	turnId: Schema.NullOr(Schema.String),
 	botId: Schema.NullOr(Schema.String),
 	userId: Schema.NullOr(Schema.String),

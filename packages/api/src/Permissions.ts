@@ -7,7 +7,7 @@ export const ResourceKind = Schema.Literals([
 	"platform",
 	"organization",
 	"user",
-	"session",
+	"chat",
 	"bot",
 	"trigger",
 	"channel",
@@ -24,29 +24,29 @@ export type ResourceKind = typeof ResourceKind.Type
  * A permission group is a named set of actions on one kind of resource.
  * Policies grant or deny permission groups on resources.
  * This tree is the only source of permission groups. Each id joins a resource
- * and an action with a dot, such as `sessions.read`.
+ * and an action with a dot, such as `chats.read`.
  */
 const permissionTree = {
 	responses: {
-		scope: "session",
+		scope: "chat",
 		actions: {
 			run: {
 				name: "Responses Run",
-				description: "Start, steer, queue and resume work in a Session.",
+				description: "Send messages to Bots, so that they work in a Chat.",
 			},
 		},
 	},
-	sessions: {
-		scope: "session",
+	chats: {
+		scope: "chat",
 		actions: {
 			read: {
-				name: "Sessions Read",
-				description: "Read Sessions, their history, memory and delegations.",
+				name: "Chats Read",
+				description: "Read Chats, their history and the work that they gave away.",
 			},
 			write: {
-				name: "Sessions Write",
+				name: "Chats Write",
 				description:
-					"Create, change, fork, restore, interrupt and delete Sessions.",
+					"Change, interrupt and delete Chats, and cancel the work that they gave away.",
 			},
 		},
 	},
@@ -200,7 +200,7 @@ const permissionTree = {
 		actions: {
 			use: {
 				name: "Models Use",
-				description: "Choose a model for a Session.",
+				description: "Choose a model for a Chat.",
 			},
 		},
 	},
@@ -364,7 +364,7 @@ export const PermissionGroupId = Schema.Literals(
 )
 export type PermissionGroupId = typeof PermissionGroupId.Type
 
-/** The first part of a permission group id, such as `sessions`. */
+/** The first part of a permission group id, such as `chats`. */
 export type PermissionResource = keyof PermissionTree
 /** The permission groups of one resource, such as `tokens.read` and `tokens.write`. */
 export const permissionGroupsOf = (
@@ -386,7 +386,7 @@ export const permissionGroups: ReadonlyArray<PermissionGroup> =
 	permissionGroupList
 /**
  * A resource key names one resource, such as
- * `openbot.org.<org>.user.<user>.session.<session>`.
+ * `openbot.org.<org>.user.<user>.chat.<chat>`.
  * A key covers itself and every key below it. Policies can use `{org}` for the
  * current organization and `{self}` for the user of the caller.
  * `openbot.platform` is the whole deployment. Only the policies of tokens can name it.
@@ -433,8 +433,8 @@ const sharedComputers = "openbot.org.{org}.computer"
 const sharedComputerProviders = "openbot.org.{org}.computer_provider"
 const own: ReadonlyArray<PermissionGroupId> = [
 	"responses.run",
-	"sessions.read",
-	"sessions.write",
+	"chats.read",
+	"chats.write",
 	"requests.resolve",
 	"bots.read",
 	"bots.write",
@@ -517,7 +517,7 @@ export const builtinRoles = [
 		id: "administrator",
 		name: "Administrator",
 		description:
-			"Manage the organization, its members, its shared Bots, its shared triggers, its shared Computers and its Channels. Work only with your own Sessions and connections.",
+			"Manage the organization, its members, its shared Bots, its shared triggers, its shared Computers and its Channels. Work only with your own Chats and connections.",
 		policies: [
 			ownWork,
 			useSharedBots,
@@ -567,7 +567,7 @@ export const builtinRoles = [
 		id: "administrator_read_only",
 		name: "Administrator Read Only",
 		description:
-			"Read the organization, its members, usage, budgets and the audit log. Work only with your own Sessions and connections.",
+			"Read the organization, its members, usage, budgets and the audit log. Work only with your own Chats and connections.",
 		policies: [
 			ownWork,
 			useSharedBots,
@@ -595,7 +595,7 @@ export const builtinRoles = [
 		id: "member",
 		name: "Member",
 		description:
-			"Work with your own Bots, Sessions, triggers, Computers, connections and tokens, and use the shared Bots, triggers, Computers, Channels and models of the organization.",
+			"Work with your own Bots, Chats, triggers, Computers, connections and tokens, and use the shared Bots, triggers, Computers, Channels and models of the organization.",
 		policies: [
 			ownWork,
 			useSharedBots,

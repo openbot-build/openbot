@@ -1,4 +1,4 @@
-import { Session, Turn } from "@openbot-build/core"
+import { Chat, Turn } from "@openbot-build/core"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api"
 import * as AppExecution from "./AppExecution.ts"
@@ -83,7 +83,7 @@ export type CodeRunStatus = typeof CodeRunStatus.Type
 /** One program and all its App calls. */
 export const CodeRun = Schema.Struct({
 	id: Schema.String,
-	session: Session.Id,
+	chat: Chat.Id,
 	turn: Turn.Id,
 	/** The tool call of the Bot that started the program. */
 	callId: Schema.String,
@@ -113,9 +113,9 @@ export const CodeRunsApi = HttpApiGroup.make("codeRuns").add(
 		success: CodeRun,
 		error: ExperienceErrors,
 	}),
-	HttpApiEndpoint.get("list", "/v1/sessions/:sessionId/code-runs", {
-		params: { sessionId: Session.Id },
+	HttpApiEndpoint.get("list", "/v1/chats/:chatId/code-runs", {
+		params: { chatId: Chat.Id },
 		success: Schema.Array(CodeRun),
 		error: ExperienceErrors,
-	}).annotate(Required, [requires("sessions.read").on("session", "sessionId")]),
+	}).annotate(Required, [requires("chats.read").on("chat", "chatId")]),
 )

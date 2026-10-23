@@ -1,11 +1,11 @@
-import { Item, Timeline, Session, Turn } from "@openbot-build/core"
+import { Chat, Item, Turn } from "@openbot-build/core"
 import { Client, Ui } from "@openbot-build/protocol"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 import { Source, Invocation, InvocationStatus } from "./AppExecution.ts"
 import { ExperienceErrors } from "./ExperienceErrors.ts"
 import { AppRestricted } from "./ConnectionsApi.ts"
-import { SessionConflict } from "./SessionsApi.ts"
+import { ChatConflict } from "./ChatsApi.ts"
 
 export const Interaction = Schema.Struct({
 	revision: Schema.Natural,
@@ -16,7 +16,7 @@ export const Binding = Schema.Struct({
 	id: Schema.String,
 	operationId: Schema.String,
 	readOnly: Schema.Boolean,
-	session: Session.Id,
+	chat: Chat.Id,
 	turn: Turn.Id,
 	item: Item.Id,
 	source: Source,
@@ -67,12 +67,11 @@ export const ViewReadAction = Client.ListAction.pick([
 ])
 export type ViewReadAction = typeof ViewReadAction.Type
 export const ActionTicket = Schema.Struct({
-	session: Session.Id,
+	chat: Chat.Id,
 	turn: Turn.Id,
 	item: Item.Id,
 	callId: Schema.String,
-	revision: Session.Revision,
-	version: Timeline.VersionId,
+	revision: Chat.Revision,
 })
 export type ActionTicket = typeof ActionTicket.Type
 export const Observation = Schema.Struct({
@@ -98,15 +97,14 @@ const errors = [
 	...ExperienceErrors,
 	AppViewUnavailable.pipe(HttpApiSchema.status(409)),
 	AppRestricted.pipe(HttpApiSchema.status(403)),
-	SessionConflict.pipe(HttpApiSchema.status(409)),
+	ChatConflict.pipe(HttpApiSchema.status(409)),
 ]
 export const AppViewsApi = HttpApiGroup.make("appViews").add(
 	HttpApiEndpoint.post("open", "/v1/app-operations/:operationId/view", {
 		params: { operationId: Schema.String },
 		payload: Schema.Struct({
-			sessionId: Session.Id,
+			chatId: Chat.Id,
 			itemId: Item.Id,
-			version: Schema.optionalKey(Timeline.VersionId),
 		}),
 		success: Opened,
 		error: errors,
@@ -155,7 +153,7 @@ export const AppViewsApi = HttpApiGroup.make("appViews").add(
 		"/v1/app-operations/:operationId/interaction",
 		{
 			params: { operationId: Schema.String },
-			query: { sessionId: Session.Id },
+			query: { chatId: Chat.Id },
 			success: Interaction,
 			error: errors,
 		},

@@ -1,4 +1,4 @@
-import { Session } from "@openbot-build/core"
+import { DelegationId } from "./DelegationsApi.ts"
 import { Schema } from "effect"
 import {
 	HttpApi,
@@ -38,8 +38,9 @@ const Prompt = Schema.String.check(
 )
 
 /**
- * A trigger starts a new Session for one Bot with one prompt, on a schedule or
- * from a webhook. It does nothing else. The Bot decides how to do the work.
+ * A trigger gives one task with one prompt to one Bot, on a schedule or from a webhook.
+ * It does nothing else. The Bot decides how to do the work. When the task ends, its
+ * result goes to the Chat of the actor with the Bot.
  */
 export const Trigger = Schema.Struct({
 	id: TriggerId,
@@ -50,7 +51,7 @@ export const Trigger = Schema.Struct({
 	/** True when the trigger has a webhook secret. */
 	webhook: Schema.Boolean,
 	/**
-	 * The member that the new Sessions work for. It is the last member who changed
+	 * The member that the tasks work for. It is the last member who changed
 	 * the trigger or its webhook.
 	 */
 	actor: Schema.String,
@@ -151,7 +152,7 @@ export class TriggersApi extends HttpApiGroup.make("triggers")
 			error: TriggerErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Changes a trigger. The caller becomes its actor, so the new Sessions work for the caller.",
+			"Changes a trigger. The caller becomes its actor, so the new tasks work for the caller.",
 		),
 		HttpApiEndpoint.delete("deleteTrigger", "/v1/triggers/:triggerId", {
 			params: triggerParams,
@@ -193,7 +194,7 @@ export class TriggerHooksApi extends HttpApiGroup.make("triggerHooks").add(
 		params: triggerParams,
 		headers: { authorization: Schema.String },
 		payload: Schema.Json,
-		success: Schema.Struct({ session: Session.Id }).pipe(
+		success: Schema.Struct({ delegation: DelegationId }).pipe(
 			HttpApiSchema.status(202),
 		),
 		error: [
@@ -202,6 +203,6 @@ export class TriggerHooksApi extends HttpApiGroup.make("triggerHooks").add(
 		],
 	}).annotate(
 		OpenApi.Description,
-		"Starts a new Session with the prompt of the trigger. Send `Authorization: Bearer <webhook secret>`. The JSON body goes to the Bot as data, not as instructions. The Session works for the actor of the trigger.",
+		"Gives the task of the trigger to its Bot. Send `Authorization: Bearer <webhook secret>`. The JSON body goes to the Bot as data, not as instructions. The task works for the actor of the trigger.",
 	),
 ) {}

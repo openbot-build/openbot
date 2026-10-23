@@ -24,8 +24,8 @@ export class MemberSettingsApi extends HttpApiGroup.make("memberSettings")
 		),
 	)
 	.annotate(GroupRequired, {
-		read: [requires("sessions.read").on("user")],
-		write: [requires("sessions.write").on("user")],
+		read: [requires("chats.read").on("user")],
+		write: [requires("chats.write").on("user")],
 	})
 	.middleware(Authorize)
 	.middleware(BotAuth) {}

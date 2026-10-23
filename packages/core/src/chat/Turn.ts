@@ -1,8 +1,7 @@
 import { Data, Schema } from "effect"
 import { Id } from "./TurnIdentity.ts"
-import * as SessionIdentity from "./SessionIdentity.ts"
-import * as Item from "../timeline/Item.ts"
-import { VersionId } from "../timeline/TimelineIdentity.ts"
+import * as ChatIdentity from "./ChatIdentity.ts"
+import * as Item from "./Item.ts"
 import * as Config from "../models/Config.ts"
 import { Response } from "effect/ai"
 export { Id } from "./TurnIdentity.ts"
@@ -27,10 +26,12 @@ export type Output = typeof Output.Type
 /** Why a Turn failed. */
 export const FailureCode = Schema.Literals(["model_error", "internal_error"])
 export type FailureCode = typeof FailureCode.Type
+/**
+ * A Turn never waits. It runs, and then it ends. Work that takes outside time,
+ * such as a decision, comes back later as new input.
+ */
 export const StatusSchema = Schema.TaggedUnion({
 	Running: {},
-	/** The Turn waits for answers to tool approval requests. They are in the history. */
-	Waiting: { result: Output },
 	Completed: { result: Output },
 	Failed: {
 		message: Schema.String,
@@ -48,13 +49,13 @@ export type StatusTag = typeof StatusTag.Type
 export const Status = Data.taggedEnum<Status>()
 /**
  * Who a Turn works for. The host chooses the value, such as a user ID, when many people
- * talk in one Session. The runtime only keeps it and compares it.
+ * talk in one Chat. The runtime only keeps it and compares it.
  */
 export const Author = Schema.String.check(Schema.isMinLength(1))
 export type Author = typeof Author.Type
 export const Record = Schema.Struct({
 	id: Id,
-	session: SessionIdentity.Id,
+	chat: ChatIdentity.Id,
 	settings: Settings,
 	action: Schema.optionalKey(Action),
 	author: Schema.optionalKey(Author),
@@ -66,16 +67,13 @@ export const Record = Schema.Struct({
 	usage: Schema.optionalKey(Schema.Array(Response.Usage)),
 	input: Schema.Array(Item.Id),
 	items: Schema.Array(Item.Id),
-	start: VersionId,
-	end: Schema.optionalKey(VersionId),
 	startedAt: Schema.Finite,
 	completedAt: Schema.optionalKey(Schema.Finite),
 })
 export type Record = typeof Record.Type
 export class Conflict extends Data.TaggedError("TurnConflict")<{
-	readonly session: SessionIdentity.Id
+	readonly chat: ChatIdentity.Id
 	readonly turn: Id
 	readonly message: string
 }> {}
-export const isTerminal = (status: Status) =>
-	status._tag !== "Running" && status._tag !== "Waiting"
+export const isTerminal = (status: Status) => status._tag !== "Running"

@@ -5,7 +5,7 @@ import {
 	GroupRequired,
 	PermissionErrors,
 } from "./Permissions.ts"
-import { Config, Item, Session, Turn } from "@openbot-build/core"
+import { Chat, Config } from "@openbot-build/core"
 import * as BotMemory from "./BotMemory.ts"
 import { Name } from "./Name.ts"
 import { Schema } from "effect"
@@ -33,20 +33,15 @@ export type BotId = typeof BotId.Type
 /**
  * Who owns a Bot.
  * A member owns their own Bots. The organization owns shared Bots.
- * A Session owns a Session Bot: the Session Bot lives as long as that Session.
- * `bot` is the Bot of that Session.
- * A Bot can own lasting Bots too. `userId` is the member at the top of this tree.
+ * A Bot can own Bots too. `userId` is the member at the top of this tree.
  * It is `null` when the organization owns the Bot at the top.
  */
 export const BotOwner = Schema.TaggedUnion({
 	Member: { userId: Schema.String },
 	Organization: {},
-	Session: { userId: Schema.String, session: Session.Id, bot: BotId },
 	Bot: { bot: BotId, userId: Schema.NullOr(Schema.String) },
 })
 export type BotOwner = typeof BotOwner.Type
-
-export const BotKind = Schema.Literals(["persistent", "session"])
 
 /** A Bot in another organization. */
 export const BotSource = Schema.Struct({
@@ -65,17 +60,15 @@ export const BotMember = Schema.Struct({
 	joinedAt: Schema.Finite,
 })
 export type BotMember = typeof BotMember.Type
-export type BotKind = typeof BotKind.Type
 
 export const Bot = Schema.Struct({
 	id: BotId,
-	kind: BotKind,
 	owner: BotOwner,
 	name: Schema.String,
 	role: Schema.String,
 	/** The lasting instructions of the Bot, like a job description. */
 	instructions: Schema.String,
-	/** The default model for new Sessions of this Bot. */
+	/** The model of the Chats of this Bot, when a Chat does not choose its own. */
 	model: Schema.optionalKey(Config.Selection),
 	/** How the plans of this Bot are approved. Without it, the settings of the member count. */
 	planApproval: Schema.optionalKey(PlanApproval),
@@ -118,13 +111,6 @@ export const UpdateBotRequest = Schema.Struct({
 })
 export type UpdateBotRequest = typeof UpdateBotRequest.Type
 
-export const PromoteBotRequest = Schema.Struct({
-	expected: Schema.Natural,
-	/** The Bot that owns the promoted Bot. Without it, the caller owns it. */
-	bot: Schema.optionalKey(BotId),
-})
-export type PromoteBotRequest = typeof PromoteBotRequest.Type
-
 /**
  * What a capability is: an action, the thing it acts on, and optional exact arguments.
  * `target` is `*` for every target.
@@ -132,11 +118,9 @@ export type PromoteBotRequest = typeof PromoteBotRequest.Type
 export const CapabilityAction = Schema.Literals([
 	"tools.call",
 	"apps.call",
-	"bots.spawn",
 	"bots.create",
-	"bots.promote",
 	"bots.delegate",
-	/** A Bot in plan mode wants to carry out its plan. The target is the Session. */
+	/** A Bot in plan mode wants to carry out its plan. The target is the Chat. */
 	"plans.run",
 	/** A Bot posts to a chat of a Channel. The target is the Channel. */
 	"channels.send",
@@ -167,9 +151,9 @@ export type Decider = typeof Decider.Type
 
 /**
  * How long a decision lasts.
- * `once` is used up by one call. `session` lasts for one Session. `lifetime` lasts until it is revoked.
+ * `once` is used up by one call. `chat` lasts in one Chat. `lifetime` lasts until it is revoked.
  */
-export const GrantScope = Schema.Literals(["once", "session", "lifetime"])
+export const GrantScope = Schema.Literals(["once", "chat", "lifetime"])
 export type GrantScope = typeof GrantScope.Type
 
 /** `used` means a `once` Grant was used up. */
@@ -183,7 +167,7 @@ export const Grant = Schema.Struct({
 	capability: Capability,
 	effect: Decision,
 	scope: GrantScope,
-	session: Schema.optionalKey(Session.Id),
+	chat: Schema.optionalKey(Chat.Id),
 	grantedBy: Decider,
 	reason: Schema.optionalKey(Schema.String),
 	/** The Grant of the decider that this Grant came from. Revoking it revokes this one too. */
@@ -241,77 +225,6 @@ export const UpdateBotMemoryRequest = Schema.Struct({
 export type UpdateBotMemoryRequest = typeof UpdateBotMemoryRequest.Type
 /** Only entries with all of these tags. Separate the tags with commas. */
 const memoryQuery = { tags: Schema.optionalKey(Schema.NonEmptyString) }
-
-/** What a delegating Bot sends to another Bot. */
-export const Brief = Schema.Struct({
-	task: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20000)),
-	/** The words of the person, unchanged. */
-	userRequest: Schema.String.check(Schema.isMaxLength(20000)),
-	context: Schema.Array(Schema.String),
-	references: Schema.Array(
-		Schema.Struct({ session: Session.Id, item: Item.Id }),
-	),
-	constraints: Schema.Array(Schema.String),
-	expectedOutput: Schema.String,
-	/** Continue this Session of the Bot. Without it, the work starts in a new Session. */
-	session: Schema.optionalKey(Session.Id),
-})
-export type Brief = typeof Brief.Type
-
-export const Artifact = Schema.Struct({
-	kind: Schema.String,
-	ref: Schema.String,
-	description: Schema.optionalKey(Schema.String),
-})
-/** The status of a Delegation that has ended. */
-export const DelegationResultStatus = Schema.Literals([
-	"completed",
-	"failed",
-	"cancelled",
-])
-export type DelegationResultStatus = typeof DelegationResultStatus.Type
-/** The status of a Delegation that has not ended yet. */
-export const OpenDelegationStatus = Schema.Literals([
-	"authorizing",
-	"queued",
-	"running",
-])
-export type OpenDelegationStatus = typeof OpenDelegationStatus.Type
-export const DelegationStatus = Schema.Literals([
-	...OpenDelegationStatus.literals,
-	...DelegationResultStatus.literals,
-])
-export type DelegationStatus = typeof DelegationStatus.Type
-
-/** What the other Bot sends back. It never holds the full history. */
-export const DelegationResult = Schema.Struct({
-	status: DelegationResultStatus,
-	summary: Schema.String,
-	artifacts: Schema.Array(Artifact),
-	openQuestions: Schema.Array(Schema.String),
-	child: Schema.Struct({ session: Session.Id, turn: Schema.NullOr(Turn.Id) }),
-})
-export type DelegationResult = typeof DelegationResult.Type
-
-/** The link from the tool call of one Session to the work of another Bot. */
-export const Delegation = Schema.Struct({
-	id: Schema.String,
-	parent: Schema.Struct({
-		session: Session.Id,
-		turn: Turn.Id,
-		toolCallId: Schema.String,
-	}),
-	bot: BotId,
-	child: Schema.NullOr(
-		Schema.Struct({ session: Session.Id, turn: Schema.NullOr(Turn.Id) }),
-	),
-	status: DelegationStatus,
-	brief: Brief,
-	result: Schema.NullOr(DelegationResult),
-	createdAt: Schema.Finite,
-	updatedAt: Schema.Finite,
-})
-export type Delegation = typeof Delegation.Type
 
 export class BotNotFound extends Schema.TaggedError<BotNotFound>()(
 	"BotNotFound",
@@ -413,14 +326,13 @@ export class BotsApi extends HttpApiGroup.make("bots")
 		HttpApiEndpoint.get("listBots", "/v1/bots", {
 			query: {
 				archived: Schema.optionalKey(Schema.Literals(["true", "false"])),
-				session: Schema.optionalKey(Session.Id),
 				bot: Schema.optionalKey(BotId),
 			},
 			success: Schema.Array(Bot),
 			error: BotErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Lists the Bots that the caller can use: their own Bots and the shared Bots. With `session`, it lists the Session Bots of that Session. With `bot`, it lists the Bots that this Bot owns.",
+			"Lists the Bots that the caller can use: their own Bots and the shared Bots. With `bot`, it lists the Bots that this Bot owns.",
 		),
 		HttpApiEndpoint.post("createBot", "/v1/bots", {
 			payload: CreateBotRequest,
@@ -438,15 +350,6 @@ export class BotsApi extends HttpApiGroup.make("bots")
 			success: Bot,
 			error: BotErrors,
 		}),
-		HttpApiEndpoint.post("promoteBot", "/v1/bots/:botId/promote", {
-			params: botParams,
-			payload: PromoteBotRequest,
-			success: Bot,
-			error: BotErrors,
-		}).annotate(
-			OpenApi.Description,
-			"Makes a Session Bot a lasting Bot of the caller, or of the Bot in `bot`. Its Session memory becomes its Bot memory.",
-		),
 		HttpApiEndpoint.get("botMemory", "/v1/bots/:botId/memory", {
 			params: botParams,
 			query: memoryQuery,
@@ -480,7 +383,7 @@ export class BotsApi extends HttpApiGroup.make("bots")
 			error: BotErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Removes every entry with one tag of OpenBot, like `from:<userId>` or `session:<id>`, without showing them. It needs `bots.write` on a Bot that is not linked.",
+			"Removes every entry with one tag of OpenBot, like `from:<userId>` or `chat:<id>`, without showing them. It needs `bots.write` on a Bot that is not linked.",
 		),
 		HttpApiEndpoint.get("memoryBot", "/v1/bots/:botId/memory/bot", {
 			params: botParams,

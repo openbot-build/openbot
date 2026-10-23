@@ -1,6 +1,6 @@
 import { Document } from "@openbot-build/protocol"
 import { Schema } from "effect"
-import { Session, Turn } from "@openbot-build/core"
+import { Chat, Turn } from "@openbot-build/core"
 import * as Index from "./AppIndexApi.ts"
 import { Availability } from "./ConnectionsApi.ts"
 
@@ -52,7 +52,7 @@ export const InvocationStatus = Schema.Literals([
 export type InvocationStatus = typeof InvocationStatus.Type
 export const Invocation = Schema.Struct({
 	id: Schema.String,
-	session: Session.Id,
+	chat: Chat.Id,
 	turn: Turn.Id,
 	callId: Schema.String,
 	toolName: Schema.String,

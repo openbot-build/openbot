@@ -1,18 +1,20 @@
-import { Item, Session, Turn } from "@openbot-build/core"
+import { Chat, Item, Turn } from "@openbot-build/core"
 import { Schema } from "effect"
-import { EntryStatus } from "./Memory.ts"
 
 /**
- * Bot memory is what one Bot learns over many Sessions.
+ * Bot memory is what one Bot learns over all its Chats.
  * Each Bot has one pool of entries. A memory Bot keeps the pool: it reads all of it,
  * learns new entries, and decides what goes into the work of the Bot.
  * Tags sort the entries. Some tags come from OpenBot and say where an entry comes from
  * and who may see it. Other tags name topics, and the memory Bot chooses them.
- * The memory does not follow a Timeline, so a Fork never changes it.
  */
 
+/** A `retracted` entry is kept, so later runs do not learn it again. */
+export const EntryStatus = Schema.Literals(["active", "retracted"])
+export type EntryStatus = typeof EntryStatus.Type
+
 /**
- * - `fact`: something that a Session shows, with its Items as sources.
+ * - `fact`: something that a Chat shows, with its Items as sources.
  * - `observation`: what the memory Bot concluded from other entries.
  * - `pinned`: what a person told OpenBot to remember.
  */
@@ -21,15 +23,15 @@ export type Layer = typeof Layer.Type
 
 /**
  * A topic tag, like `testing` or `trip-planning`. It has no colon, because tags with a colon
- * belong to OpenBot: `from:`, `for:`, `session:`, `org:`, `channel:` and `app:`.
+ * belong to OpenBot: `from:`, `for:`, `chat:`, `org:`, `channel:` and `app:`.
  */
 export const TopicTag = Schema.String.check(
 	Schema.isPattern(/^[a-z0-9][a-z0-9-]{0,63}$/),
 )
 export type TopicTag = typeof TopicTag.Type
 
-/** One Item in one Session that supports an entry. */
-export const ItemSource = Schema.Struct({ session: Session.Id, item: Item.Id })
+/** One Item in one Chat that supports an entry. */
+export const ItemSource = Schema.Struct({ chat: Chat.Id, item: Item.Id })
 export type ItemSource = typeof ItemSource.Type
 /** Another entry that supports an observation. */
 export const EntrySource = Schema.Struct({ entry: Schema.String })
@@ -89,11 +91,11 @@ export const LogEntry = Schema.Struct({
 export type LogEntry = typeof LogEntry.Type
 
 /**
- * The tags that a purge takes. Each one names people, Sessions, organizations or Channels,
+ * The tags that a purge takes. Each one names people, Chats, organizations or Channels,
  * so an owner can remove memory without reading it.
  */
 export const PurgeTag = Schema.String.check(
-	Schema.isPattern(/^(from|session|org|channel):[^\s]+$/),
+	Schema.isPattern(/^(from|chat|org|channel):[^\s]+$/),
 )
 export const PurgeRequest = Schema.Struct({ tag: PurgeTag })
 export type PurgeRequest = typeof PurgeRequest.Type
@@ -136,7 +138,7 @@ export type UpdateMemoryBotRequest = typeof UpdateMemoryBotRequest.Type
 /** What a Bot said with `confide`, and the answer that it got. */
 export const Confession = Schema.Struct({
 	id: Schema.String,
-	session: Session.Id,
+	chat: Chat.Id,
 	turn: Turn.Id,
 	text: Schema.String,
 	reply: Schema.String,
@@ -146,7 +148,7 @@ export type Confession = typeof Confession.Type
 
 /** What the memory Bot added to the input of one Turn, and the entries it used. */
 export const Enrichment = Schema.Struct({
-	session: Session.Id,
+	chat: Chat.Id,
 	turn: Turn.Id,
 	/** The input as the model saw it. */
 	text: Schema.String,

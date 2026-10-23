@@ -113,7 +113,7 @@ export type ChannelCredentialsView = typeof ChannelCredentialsView.Type
 
 /**
  * A Channel is one bot of the organization on one platform, such as a Slack app.
- * People talk with its Bot in direct chats and group chats. Each chat is one Session.
+ * People talk with its Bot in direct chats and group chats. Each chat is one Chat.
  */
 export const Channel = Schema.Struct({
 	id: ChannelId,
@@ -122,7 +122,7 @@ export const Channel = Schema.Struct({
 	/** The persistent Bot of the organization that answers in this Channel. */
 	bot: BotId,
 	/**
-	 * The member that owns the Sessions of the Channel. It is the last member who
+	 * The member that owns the Chats of the Channel. It is the last member who
 	 * created or changed the Channel. Each Turn works for the person who spoke.
 	 */
 	actor: Schema.String,
@@ -362,7 +362,7 @@ export class ChannelsApi extends HttpApiGroup.make("channels")
 			},
 		).annotate(
 			OpenApi.Description,
-			"Deletes a Channel with its linked people. Its Sessions stay.",
+			"Deletes a Channel with its linked people. Its Chats stay.",
 		),
 		HttpApiEndpoint.put(
 			"setChannelSecret",

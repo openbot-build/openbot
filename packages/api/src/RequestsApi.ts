@@ -1,6 +1,6 @@
 import { BotAuth } from "./AuthApi.ts"
 import { Authorize, Decision, GroupRequired, requires } from "./Permissions.ts"
-import { Session, Turn } from "@openbot-build/core"
+import { Chat, Turn } from "@openbot-build/core"
 import { Schema } from "effect"
 import {
 	HttpApi,
@@ -27,6 +27,8 @@ export type RequestStatus = typeof RequestStatus.Type
  * A Bot tried to use a capability that no Grant or Rule covers.
  * The request waits for the decider above the Bot: its owning Bot, then the Bot above
  * that, up to the top Bot of the tree. Then it waits for the person.
+ * The Bot does not wait. Its tool call gets a pending result, and the answer comes
+ * back to its Chat as a message later. When the call is allowed, it runs then.
  */
 export const CapabilityRequest = Schema.Struct({
 	id: Schema.String,
@@ -40,7 +42,7 @@ export const CapabilityRequest = Schema.Struct({
 	}),
 	/** The owner chain of the requesting Bot, from the top: each Bot decides for the one after it. */
 	chain: Schema.Array(BotId),
-	session: Session.Id,
+	chat: Chat.Id,
 	turn: Turn.Id,
 	toolCallId: Schema.String,
 	app: Schema.optionalKey(AppExecution.Invocation),
@@ -127,7 +129,7 @@ export class RequestsApi extends HttpApiGroup.make("requests")
 			error: RequestErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Allows or denies a request. The waiting work goes on at once.",
+			"Allows or denies a request. The Chat of the Bot gets the answer as a message at once. An allowed call runs then.",
 		),
 	)
 	.annotate(HttpApi.PayloadParseOptions, { onExcessProperty: "error" })

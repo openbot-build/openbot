@@ -3,7 +3,6 @@ import { Schema } from "effect"
 import { HttpApiSchema } from "effect/http-api"
 import { BotId } from "./BotsApi.ts"
 import { Restriction } from "./AppIndexApi.ts"
-import * as Memory from "./Memory.ts"
 import { Policy, RoleId } from "./Permissions.ts"
 import { PlanApproval } from "./PlanApproval.ts"
 
@@ -233,12 +232,10 @@ export const OrganizationSettings = Schema.Struct({
 	botMemoryModel: Schema.NullOr(Config.Selection),
 	/** The decision model, such as Jev. It must be a model of type `decision`. Null means none. */
 	decisionModel: Schema.NullOr(Config.Selection),
-	/** The memory switches of a new Session. */
-	memory: Memory.Settings,
-	/** Let the memory Bot learn from Sessions and add to the input of Turns. */
+	/** Let the memory Bot learn from Chats and add to the input of Turns. */
 	botMemory: Schema.Boolean,
 	requestTimeoutMs: RequestTimeout,
-	/** How plans are approved when no member, Bot or Session sets it. */
+	/** How plans are approved when no member, Bot or Chat sets it. */
 	planApproval: PlanApproval,
 	appReadRules: AppReadRules,
 	/** The roles of a new member. */
@@ -258,7 +255,6 @@ export const UpdateOrganizationSettingsRequest = Schema.Struct({
 	rulesModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
 	botMemoryModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
 	decisionModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
-	memory: Schema.optionalKey(Memory.Settings),
 	botMemory: Schema.optionalKey(Schema.Boolean),
 	requestTimeoutMs: Schema.optionalKey(RequestTimeout),
 	planApproval: Schema.optionalKey(PlanApproval),
@@ -276,7 +272,7 @@ export const MemberSettings = Schema.Struct({
 	/** How the plans of your Bots are approved. `null` follows the organization. */
 	planApproval: Schema.NullOr(PlanApproval),
 	/**
-	 * The Bot that works when you start a Session or a trigger without a Bot.
+	 * The Bot that a trigger without a Bot gives its task to. Clients talk to it first.
 	 * It is one of your own top Bots or a shared Bot. `null` means that you have none.
 	 */
 	defaultBot: Schema.NullOr(BotId),
