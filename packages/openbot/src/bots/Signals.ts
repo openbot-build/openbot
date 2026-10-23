@@ -1,20 +1,31 @@
-import type { Session, Turn } from "@openbot-build/core"
+import type { Chat, Turn } from "@openbot-build/core"
 import { Context, Data, Effect, Layer, PubSub } from "effect"
 
-/** News that the coordinator acts on. Recovery after a restart covers news that got lost. */
+/** News that the coordinator acts on. Recovery and the sweep cover news that got lost. */
 export type Signal = Data.TaggedEnum<{
-	/** The current Turn of a Session changed its status. */
+	/** The current Turn of a Chat changed. */
 	TurnChanged: {
 		readonly organizationId: string
 		readonly userId: string
-		readonly session: Session.Id
+		readonly chat: Chat.Id
 		readonly turn: Turn.Id
 		readonly status: Turn.Status["_tag"]
 	}
-	/** A tool call started to wait until a time. */
-	WaitStarted: {
+	/** A delegation was made, or it may start now. */
+	DelegationChanged: {
 		readonly organizationId: string
-		readonly wait: string
+		readonly delegation: string
+	}
+	/** The Bot that gave a delegation stops it. Its own Chat gets no message about it. */
+	DelegationCancelled: {
+		readonly organizationId: string
+		readonly delegation: string
+		readonly reason: string
+	}
+	/** A reminder was set for a time. */
+	ReminderStarted: {
+		readonly organizationId: string
+		readonly reminder: string
 	}
 	/** A request was made, decided or passed up. */
 	RequestChanged: {

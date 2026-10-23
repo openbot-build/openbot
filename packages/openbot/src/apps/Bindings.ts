@@ -18,7 +18,7 @@ import type { Invocations, Position } from "./Invocations.ts"
 import type { ActionPolicy } from "./ActionPolicy.ts"
 import * as StoredConnections from "./StoredConnections.ts"
 import { organizationOf } from "./StoredConnections.ts"
-import type { Gate } from "../capabilities/Gate.ts"
+import { type Gate, Answer, remember } from "../capabilities/Gate.ts"
 import type { Secrets } from "../secrets/Secrets.ts"
 import type { CodeRunsApi } from "@openbot-build/api"
 import * as Db from "../database/Database.ts"
@@ -445,15 +445,16 @@ export interface Check {
 }
 
 /**
- * Proposes an App call and checks it. "allow" records the approval, so the call can run.
- * "pause" means that a request waits for a decision. When anything fails, the call waits.
+ * Proposes an App call and checks it. `Allow` records the approval, so the call can run.
+ * `Pending` means that a request waits for a decision. When anything fails, the call
+ * does not run.
  */
 export const decide = (
 	services: Services,
 	position: Position,
 	binding: Binding,
 	check: Check,
-): Effect.Effect<"allow" | "pause"> =>
+): Effect.Effect<Answer> =>
 	Effect.gen(function* () {
 		const invocation = yield* services.invocations.propose({
 			...position,
@@ -477,13 +478,18 @@ export const decide = (
 				source: binding.source,
 			}),
 		})
-		if (answer === "allow")
+		if (answer._tag === "Allow")
 			yield* services.invocations.approve(position, check.callId, true)
 		return answer
 	}).pipe(
 		Effect.catch((error) =>
 			Effect.logWarning("Could not check an App action.", error).pipe(
-				Effect.as("pause" as const),
+				Effect.as(
+					Answer.Deny({ reason: "OpenBot could not check this App call." }),
+				),
+				Effect.tap((answer) =>
+					remember(check.toolCallId ?? check.callId, answer),
+				),
 			),
 		),
 	)

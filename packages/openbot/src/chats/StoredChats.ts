@@ -1,371 +1,403 @@
+import { Chat, type ChatStore } from "@openbot-build/core"
+import { Array, Clock, Effect, Option, Schema } from "effect"
 import {
-	DeltaValidation,
-	Item,
-	Timeline,
-	TimelineSnapshots,
-	Session,
-	SessionStore,
-} from "@openbot-build/core"
-import { SessionResponse, SessionSummary } from "@openbot-build/api"
-import * as SessionEncoding from "./SessionEncoding.ts"
-import { botFields } from "./SessionHost.ts"
-import { Array, Match, Effect, Equal, Schema, Option } from "effect"
-import { and, eq, inArray } from "drizzle-orm"
-import { refs, versions, contents } from "../database/Schema.ts"
+	and,
+	asc,
+	desc,
+	eq,
+	gt,
+	inArray,
+	isNull,
+	lt,
+	or,
+	sql,
+} from "drizzle-orm"
+import { chats, chatItems, chatTurns } from "../database/Schema.ts"
 import * as Db from "../database/Database.ts"
+import { chatHostId } from "./ChatHost.ts"
+import { conflict, databaseError, decode } from "./ChatEncoding.ts"
 
-/** The Sessions of each namespace, kept in Postgres. */
-const { decode, databaseError, conflict, responseSummary } = SessionEncoding
-const json = <S extends Schema.ConstraintDecoder<unknown>>(
-	schema: S,
-	value: string,
-) => decode(Schema.fromJsonString(schema))(value)
+/** The Chats of each namespace, kept in Postgres. */
 type Database = Db.Database
-const readers = (
+const parse = decode(Schema.fromJsonString(Schema.Json))
+const decodeRef = decode(Schema.fromJsonString(Chat.Ref))
+
+/** The fields of a record that the table copies into its own columns. */
+const Columns = Schema.Struct({
+	createdAt: Schema.Finite,
+	inbox: Schema.Array(Schema.Unknown),
+	turn: Schema.optionalKey(
+		Schema.Struct({
+			id: Schema.String,
+			status: Schema.Struct({ _tag: Schema.String }),
+		}),
+	),
+	business: Schema.Struct({
+		[chatHostId]: Schema.Struct({ bot: Schema.String, kind: Schema.String }),
+	}),
+})
+const columnsOf = (ref: Schema.Json) =>
+	Effect.gen(function* () {
+		const record = yield* decode(Columns)(ref)
+		const host = record.business[chatHostId]
+		if (host === undefined) return yield* conflict()
+		return {
+			bot: host.bot,
+			kind: host.kind,
+			status: record.turn?.status._tag ?? "Idle",
+			turn: record.turn?.id ?? null,
+			inboxSize: record.inbox.length,
+			createdAt: record.createdAt,
+		}
+	})
+
+/** The core Chat store persistence of one namespace. */
+export const persistence = (
 	db: Database,
 	namespace: string,
-	client: Pick<Database, "select">,
-) => {
-	const refRow = (id: Session.Id) =>
-		client
-			.select()
-			.from(refs)
-			.where(and(eq(refs.namespace, namespace), eq(refs.id, id)))
-			.pipe(Effect.map(Array.head))
-	const storage: SessionStore.Persistence = {
-		getRef: (id) =>
-			refRow(id).pipe(
+): ChatStore.Persistence => ({
+	get: (chat) =>
+		db
+			.select({ body: chats.body, state: chats.state })
+			.from(chats)
+			.where(and(eq(chats.namespace, namespace), eq(chats.id, chat)))
+			.pipe(
+				Effect.map(Array.head),
 				Effect.flatMap(
 					Option.match({
 						onNone: () => Effect.succeedNone,
-						onSome: (row) => json(Session.Ref, row.body).pipe(Effect.asSome),
+						onSome: (row) =>
+							Effect.all({
+								ref: parse(row.body),
+								state: parse(row.state),
+							}).pipe(Effect.asSome),
 					}),
 				),
 				Effect.mapError(databaseError),
 			),
-		listRefs: (input) =>
-			client
-				.select({ body: refs.body })
-				.from(refs)
+	list: db
+		.select({ body: chats.body })
+		.from(chats)
+		.where(eq(chats.namespace, namespace))
+		.orderBy(asc(chats.createdAt), asc(chats.id))
+		.pipe(
+			Effect.flatMap((rows) => Effect.forEach(rows, (row) => parse(row.body))),
+			Effect.mapError(databaseError),
+		),
+	items: (chat, query) =>
+		db
+			.select({ value: chatItems.value })
+			.from(chatItems)
+			.where(
+				and(
+					eq(chatItems.namespace, namespace),
+					eq(chatItems.chat, chat),
+					query.turn === undefined ? undefined : eq(chatItems.turn, query.turn),
+					query.after === undefined
+						? undefined
+						: gt(chatItems.seq, query.after),
+					query.before === undefined
+						? undefined
+						: lt(chatItems.seq, query.before),
+				),
+			)
+			.orderBy(
+				query.order === "desc" ? desc(chatItems.seq) : asc(chatItems.seq),
+			)
+			.limit(query.limit ?? Number.MAX_SAFE_INTEGER)
+			.pipe(
+				Effect.flatMap((rows) =>
+					Effect.forEach(rows, (row) => parse(row.value)),
+				),
+				Effect.mapError(databaseError),
+			),
+	turns: (chat, query) =>
+		Effect.gen(function* () {
+			const after =
+				query.after === undefined
+					? undefined
+					: (yield* db
+							.select({ position: chatTurns.position })
+							.from(chatTurns)
+							.where(
+								and(
+									eq(chatTurns.namespace, namespace),
+									eq(chatTurns.chat, chat),
+									eq(chatTurns.id, query.after),
+								),
+							))[0]?.position
+			if (query.after !== undefined && after === undefined) return []
+			const rows = yield* db
+				.select({ value: chatTurns.value })
+				.from(chatTurns)
 				.where(
 					and(
-						eq(refs.namespace, namespace),
-						input?.archived === undefined
-							? undefined
-							: eq(refs.archived, Number(input.archived)),
+						eq(chatTurns.namespace, namespace),
+						eq(chatTurns.chat, chat),
+						after === undefined ? undefined : gt(chatTurns.position, after),
 					),
 				)
-				.orderBy(refs.id)
-				.pipe(
-					Effect.flatMap((rows) =>
-						Effect.forEach(rows, (row) => json(Session.Ref, row.body)),
-					),
-					Effect.mapError(databaseError),
+				.orderBy(asc(chatTurns.position))
+				.limit(query.limit ?? Number.MAX_SAFE_INTEGER)
+			return yield* Effect.forEach(rows, (row) => parse(row.value))
+		}).pipe(Effect.mapError(databaseError)),
+	turn: (chat, turn) =>
+		db
+			.select({ value: chatTurns.value })
+			.from(chatTurns)
+			.where(
+				and(
+					eq(chatTurns.namespace, namespace),
+					eq(chatTurns.chat, chat),
+					eq(chatTurns.id, turn),
 				),
-		headers: (ids) =>
-			ids.length === 0
-				? Effect.succeed([])
-				: client
-						.select({
-							id: versions.id,
-							schemaVersion: versions.schemaVersion,
-							parents: versions.parents,
-						})
-						.from(versions)
-						.where(
-							and(
-								eq(versions.namespace, namespace),
-								inArray(versions.id, [...ids]),
-							),
-						)
-						.pipe(
-							Effect.flatMap((rows) =>
-								Effect.forEach(rows, (row) =>
-									Effect.gen(function* () {
-										return yield* decode(Timeline.Version)({
-											...row,
-											parents: yield* json(Timeline.Parents, row.parents),
-										})
-									}),
-								),
-							),
-							Effect.mapError(databaseError),
-						),
-		snapshot: (id) =>
-			Effect.gen(function* () {
-				const row = (yield* client
-					.select()
-					.from(versions)
-					.where(
-						and(eq(versions.namespace, namespace), eq(versions.id, id)),
-					))[0]
-				if (row === undefined) return Option.none()
-				return Option.some(
-					yield* decode(SessionStore.Snapshot)({
-						...row,
-						snapshotFormatVersion: row.format,
-						parents: yield* json(Timeline.Parents, row.parents),
-						value: yield* json(Schema.JsonObject, row.value),
-						history: yield* json(
-							SessionStore.Snapshot.fields.history,
-							row.history,
-						),
+			)
+			.pipe(
+				Effect.map(Array.head),
+				Effect.flatMap(
+					Option.match({
+						onNone: () => Effect.succeedNone,
+						onSome: (row) => parse(row.value).pipe(Effect.asSome),
 					}),
-				)
-			}).pipe(Effect.mapError(databaseError)),
-		contentHeaders: (ids) =>
-			ids.length === 0
-				? Effect.succeed([])
-				: client
-						.select({ id: contents.id, message: contents.message })
-						.from(contents)
-						.where(
-							and(
-								eq(contents.namespace, namespace),
-								inArray(contents.id, [...ids]),
-							),
-						)
-						.pipe(
-							Effect.flatMap((rows) =>
-								Effect.forEach(rows, (row) =>
-									decode(
-										Schema.Struct({
-											id: Schema.String,
-											message: Item.Record.fields.id,
-										}),
-									)(row),
-								),
-							),
-							Effect.mapError(databaseError),
-						),
-		contents: (ids) =>
-			ids.length === 0
-				? Effect.succeed([])
-				: client
-						.select({
-							id: contents.id,
-							message: contents.message,
-							content: contents.content,
-						})
-						.from(contents)
-						.where(
-							and(
-								eq(contents.namespace, namespace),
-								inArray(contents.id, [...ids]),
-							),
-						)
-						.pipe(
-							Effect.flatMap((rows) =>
-								Effect.forEach(rows, (row) =>
-									Effect.gen(function* () {
-										return yield* decode(SessionStore.Content)({
-											...row,
-											content: yield* json(Schema.Json, row.content),
-										})
-									}),
-								),
-							),
-							Effect.mapError(databaseError),
-						),
-		save: (delta) => save(db, namespace, { delta, response: Option.none() }),
-		remove: (ref) => remove(db, namespace, ref),
-	}
-	return { storage, refRow }
-}
-/** The core Session store persistence of one namespace. */
-export const persistence = (
-	db: Database,
-	namespace: string,
-): SessionStore.Persistence => readers(db, namespace, db).storage
+				),
+				Effect.mapError(databaseError),
+			),
+	save: (delta) => save(db, namespace, delta),
+	remove: (chat) => remove(db, namespace, chat),
+})
+
+/** Saves one change of a Chat in one transaction. An old revision fails with a conflict. */
 export const save = (
 	db: Database,
 	namespace: string,
-	input: {
-		readonly delta: SessionStore.Delta
-		/** The response of the current Turn, when the Session has one. */
-		readonly response: Option.Option<SessionResponse>
-	},
-): Effect.Effect<void, SessionStore.SessionStoreError> =>
+	delta: ChatStore.Delta,
+): Effect.Effect<void, ChatStore.ChatStoreError> =>
 	db
 		.transaction((tx) =>
 			Effect.gen(function* () {
-				const { storage, refRow } = readers(db, namespace, tx)
-				const previous = yield* refRow(input.delta.session.id)
-				const delta = yield* DeltaValidation.validateDelta(storage, input.delta)
-				for (const message of delta.messages) {
-					yield* tx
-						.insert(contents)
-						.values({
-							namespace,
-							...message,
-							content: JSON.stringify(message.content),
-						})
-						.onConflictDoNothing()
-					const saved = (yield* storage.contents([message.id]))[0]
-					if (saved === undefined || !Equal.equals(saved, message))
-						return yield* new SessionStore.SessionStoreError({
-							reason: "message-conflict",
-							message: "Immutable message content conflict",
-						})
-				}
-				for (const version of delta.versions) {
-					const inserted = yield* tx
-						.insert(versions)
-						.values({
-							namespace,
-							id: version.id,
-							schemaVersion: version.schemaVersion,
-							parents: JSON.stringify(version.parents),
-							format: version.snapshotFormatVersion,
-							value: JSON.stringify(version.value),
-							history: JSON.stringify(version.history),
-						})
-						.onConflictDoNothing()
-						.returning({ id: versions.id })
-					if (inserted.length === 0) {
-						const saved = yield* TimelineSnapshots.readRaw(storage, version.id)
-						const raw = yield* TimelineSnapshots.unpack(version, [
-							...(yield* storage.contents(
-								version.history.map((ref) => ref.content),
-							)),
-							...delta.messages,
-						])
-						if (
-							!Equal.equals(
-								{
-									id: saved.snapshot.id,
-									schemaVersion: saved.snapshot.schemaVersion,
-									parents: saved.snapshot.parents,
-								},
-								{
-									id: version.id,
-									schemaVersion: version.schemaVersion,
-									parents: version.parents,
-								},
-							) ||
-							!TimelineSnapshots.same(saved.raw, raw)
-						)
-							return yield* new SessionStore.SessionStoreError({
-								reason: "version-conflict",
-								version: version.id,
-								message: "Immutable version conflict",
-							})
-					}
-				}
-				const session = delta.session
+				const columns = yield* columnsOf(delta.ref)
+				const now = yield* Clock.currentTimeMillis
 				const values = {
-					body: JSON.stringify(session),
-					head: session.head,
-					archived: Number(session.metadata.archived),
-					status: Session.status(session)._tag,
-					turn: Session.currentTurn(session)?.id ?? null,
-					response: Option.getOrNull(
-						Option.map(input.response, (response) => JSON.stringify(response)),
-					),
-					responseSummary: Option.getOrNull(
-						Option.map(input.response, (response) =>
-							JSON.stringify(responseSummary(response)),
-						),
-					),
-					revision: session.revision,
+					body: JSON.stringify(delta.ref),
+					bot: columns.bot,
+					kind: columns.kind,
+					status: columns.status,
+					turn: columns.turn,
+					revision: delta.revision,
+					inboxSize: columns.inboxSize,
+					// A change of a running Turn shows that its process still runs.
+					runnerSeenAt: columns.status === "Running" ? now : null,
+					updatedAt: now,
 				}
-				const written = yield* Option.match(previous, {
-					onNone: () =>
-						tx
-							.insert(refs)
-							.values({ namespace, id: session.id, ...values })
-							.onConflictDoNothing()
-							.returning({ id: refs.id }),
-					onSome: (previous) =>
-						tx
-							.update(refs)
-							.set(values)
-							.where(
-								and(
-									eq(refs.namespace, namespace),
-									eq(refs.id, session.id),
-									eq(refs.revision, previous.revision),
-								),
-							)
-							.returning({ id: refs.id }),
-				})
+				const written =
+					delta.expected === null
+						? yield* tx
+								.insert(chats)
+								.values({
+									namespace,
+									id: delta.chat,
+									state: JSON.stringify(delta.state ?? null),
+									createdAt: columns.createdAt,
+									...values,
+								})
+								.onConflictDoNothing()
+								.returning({ id: chats.id })
+						: yield* tx
+								.update(chats)
+								.set({
+									...values,
+									...(delta.state === undefined
+										? {}
+										: { state: JSON.stringify(delta.state) }),
+								})
+								.where(
+									and(
+										eq(chats.namespace, namespace),
+										eq(chats.id, delta.chat),
+										eq(chats.revision, delta.expected),
+									),
+								)
+								.returning({ id: chats.id })
 				if (written.length !== 1) return yield* conflict()
+				if (delta.items.length > 0)
+					yield* tx.insert(chatItems).values(
+						delta.items.map((item) => ({
+							namespace,
+							chat: delta.chat,
+							seq: item.seq,
+							id: item.id,
+							turn: item.turn,
+							value: JSON.stringify(item.value),
+						})),
+					)
+				if (delta.turn !== undefined)
+					yield* tx
+						.insert(chatTurns)
+						.values({
+							namespace,
+							chat: delta.chat,
+							id: delta.turn.id,
+							value: JSON.stringify(delta.turn.value),
+						})
+						.onConflictDoUpdate({
+							target: [chatTurns.namespace, chatTurns.chat, chatTurns.id],
+							set: { value: JSON.stringify(delta.turn.value) },
+						})
 			}),
 		)
 		.pipe(Effect.mapError(databaseError))
+
+/** Deletes a Chat with its Items and Turns. */
 export const remove = (
 	db: Database,
 	namespace: string,
-	ref: Session.Ref,
-): Effect.Effect<void, SessionStore.SessionStoreError> =>
+	chat: Chat.Id,
+): Effect.Effect<void, ChatStore.ChatStoreError> =>
 	db
 		.transaction((tx) =>
 			Effect.gen(function* () {
-				const found = yield* readers(db, namespace, tx).refRow(ref.id)
-				if (Option.isNone(found)) return yield* conflict()
-				const row = found.value
-				if (!Equal.equals(yield* json(Session.Ref, row.body), ref))
-					return yield* conflict()
-				const result = yield* tx
-					.delete(refs)
+				yield* tx
+					.delete(chatItems)
 					.where(
-						and(
-							eq(refs.namespace, namespace),
-							eq(refs.id, ref.id),
-							eq(refs.revision, row.revision),
-						),
+						and(eq(chatItems.namespace, namespace), eq(chatItems.chat, chat)),
 					)
-					.returning({ id: refs.id })
-				if (result.length !== 1) return yield* conflict()
+				yield* tx
+					.delete(chatTurns)
+					.where(
+						and(eq(chatTurns.namespace, namespace), eq(chatTurns.chat, chat)),
+					)
+				yield* tx
+					.delete(chats)
+					.where(and(eq(chats.namespace, namespace), eq(chats.id, chat)))
 			}),
 		)
 		.pipe(Effect.mapError(databaseError))
+
+/** The records of the Chats of a namespace, oldest first. */
 export const list = (
 	db: Database,
 	namespace: string,
-	input?: Parameters<SessionStore.Persistence["listRefs"]>[0],
-): Effect.Effect<
-	ReadonlyArray<SessionSummary>,
-	SessionStore.SessionStoreError
-> =>
+	input: {
+		readonly bot?: string
+		readonly kinds?: ReadonlyArray<string>
+	} = {},
+): Effect.Effect<ReadonlyArray<Chat.Ref>, ChatStore.ChatStoreError> =>
 	db
-		.select({
-			body: refs.body,
-			status: refs.status,
-			turn: refs.turn,
-			response: refs.responseSummary,
-		})
-		.from(refs)
+		.select({ body: chats.body })
+		.from(chats)
 		.where(
 			and(
-				eq(refs.namespace, namespace),
-				input?.archived === undefined
+				eq(chats.namespace, namespace),
+				input.bot === undefined ? undefined : eq(chats.bot, input.bot),
+				input.kinds === undefined
 					? undefined
-					: eq(refs.archived, Number(input.archived)),
+					: inArray(chats.kind, [...input.kinds]),
 			),
 		)
-		.orderBy(refs.id)
+		.orderBy(asc(chats.createdAt), asc(chats.id))
+		.pipe(
+			Effect.flatMap((rows) =>
+				Effect.forEach(rows, (row) => decodeRef(row.body)),
+			),
+			Effect.mapError(databaseError),
+		)
+
+/** The ID of the direct Chat of a namespace with a Bot, when it has one. */
+export const direct = (
+	db: Database,
+	namespace: string,
+	bot: string,
+): Effect.Effect<Option.Option<Chat.Id>, ChatStore.ChatStoreError> =>
+	db
+		.select({ id: chats.id })
+		.from(chats)
+		.where(
+			and(
+				eq(chats.namespace, namespace),
+				eq(chats.bot, bot),
+				eq(chats.kind, "direct"),
+			),
+		)
+		.pipe(
+			Effect.map((rows) =>
+				Option.map(Array.head(rows), (row) => Chat.Id.make(row.id)),
+			),
+			Effect.mapError(databaseError),
+		)
+
+/** Shows that the running Turn of a Chat still runs on this server. */
+export const heartbeat = (
+	db: Database,
+	namespace: string,
+	chat: Chat.Id,
+): Effect.Effect<void, ChatStore.ChatStoreError> =>
+	Effect.gen(function* () {
+		const now = yield* Clock.currentTimeMillis
+		yield* db
+			.update(chats)
+			.set({ runnerSeenAt: now })
+			.where(
+				and(
+					eq(chats.namespace, namespace),
+					eq(chats.id, chat),
+					eq(chats.status, "Running"),
+				),
+			)
+	}).pipe(Effect.mapError(databaseError))
+
+/** A Chat that needs the sweep: its body tells whose it is. */
+export interface Swept {
+	readonly namespace: string
+	readonly id: Chat.Id
+	readonly ref: Chat.Ref
+}
+
+/**
+ * Chats in every namespace whose input waits while no Turn runs, and Chats whose
+ * running Turn has not said that it runs since `staleBefore`.
+ */
+export const needingSweep = (
+	db: Database,
+	staleBefore: number,
+): Effect.Effect<ReadonlyArray<Swept>, ChatStore.ChatStoreError> =>
+	db
+		.select({ namespace: chats.namespace, id: chats.id, body: chats.body })
+		.from(chats)
+		.where(
+			or(
+				and(gt(chats.inboxSize, 0), sql`${chats.status} <> 'Running'`),
+				and(
+					eq(chats.status, "Running"),
+					or(isNull(chats.runnerSeenAt), lt(chats.runnerSeenAt, staleBefore)),
+				),
+			),
+		)
+		.limit(500)
 		.pipe(
 			Effect.flatMap((rows) =>
 				Effect.forEach(rows, (row) =>
-					Effect.gen(function* () {
-						const session = yield* json(Session.Ref, row.body)
-						return yield* decode(SessionSummary)({
-							session,
-							...botFields(session),
-							status: row.status,
-							turn: row.turn,
-							response:
-								row.response === null
-									? null
-									: yield* json(SessionSummary.fields.response, row.response),
-							activity: Match.value(row).pipe(
-								Match.when({ status: "Running" }, () => "historical" as const),
-								Match.orElse(() => "inactive" as const),
-							),
-						})
-					}),
+					decodeRef(row.body).pipe(
+						Effect.map((ref) => ({
+							namespace: row.namespace,
+							id: Chat.Id.make(row.id),
+							ref,
+						})),
+					),
 				),
 			),
+			Effect.mapError(databaseError),
+		)
+
+/** The Chats of a namespace whose Turn says that it runs. */
+export const running = (
+	db: Database,
+	namespace: string,
+): Effect.Effect<ReadonlyArray<Chat.Id>, ChatStore.ChatStoreError> =>
+	db
+		.select({ id: chats.id })
+		.from(chats)
+		.where(and(eq(chats.namespace, namespace), eq(chats.status, "Running")))
+		.pipe(
+			Effect.map((rows) => rows.map((row) => Chat.Id.make(row.id))),
 			Effect.mapError(databaseError),
 		)

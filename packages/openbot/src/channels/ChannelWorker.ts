@@ -1,6 +1,6 @@
 import type { Caller, RequestsApi } from "@openbot-build/api"
-import { Session, Turn } from "@openbot-build/core"
-import type { SessionResponseSseEvent } from "@openbot-build/api"
+import { Chat, Turn } from "@openbot-build/core"
+import type { ChatResponseSseEvent } from "@openbot-build/api"
 import {
 	Clock,
 	Deferred,
@@ -73,7 +73,7 @@ export const answerOf = (response: {
 
 const decisions = {
 	once: { decision: "allow", scope: "once" },
-	session: { decision: "allow", scope: "session" },
+	chat: { decision: "allow", scope: "chat" },
 	deny: { decision: "deny" },
 } as const
 type Choice = keyof typeof decisions
@@ -116,8 +116,8 @@ const outcome = (request: RequestsApi.CapabilityRequest) => {
 		case "pending":
 			return "Waiting for a decision."
 		case "allowed":
-			return request.decision?.scope === "session"
-				? "Allowed for this Session."
+			return request.decision?.scope === "chat"
+				? "Allowed in this chat."
 				: request.decision?.scope === "lifetime"
 					? "Allowed."
 					: "Allowed once."
@@ -153,8 +153,8 @@ const requestCard = (
 						style: "primary" as const,
 					},
 					{
-						label: "Allow for this Session",
-						value: buttonValue(request.id, "session", request.revision),
+						label: "Allow in this chat",
+						value: buttonValue(request.id, "chat", request.revision),
 					},
 					{
 						label: "Deny",
@@ -258,8 +258,8 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 						})
 				})
 
-			/** The Session of a chat. A new chat gets a new Session of the actor of the Channel. */
-			const sessionOf = (
+			/** The Chat of a chat. A new chat gets a new Chat of the actor of the Channel. */
+			const chatOf = (
 				organizationId: string,
 				stored: StoredChannel,
 				event: ChannelEvent,
@@ -269,11 +269,20 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 						stored.id,
 						event.conversation.key,
 					)
-					if (Option.isSome(found))
-						return {
-							session: found.value.session as Session.Id,
-							owner: found.value.owner,
-						}
+					if (Option.isSome(found)) {
+						// The owner may have deleted the Chat. Then the chat starts again.
+						const chat = Chat.Id.make(found.value.chat)
+						const owned = yield* backend.forCaller({
+							kind: "member",
+							organizationId,
+							userId: found.value.owner,
+						})
+						const exists = yield* owned.read(chat).pipe(
+							Effect.as(true),
+							Effect.catchTag("ChatNotFound", () => Effect.succeed(false)),
+						)
+						if (exists) return { chat, owner: found.value.owner }
+					}
 					const actor: Caller = {
 						kind: "member",
 						organizationId,
@@ -282,20 +291,20 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 					const bot = yield* bots
 						.access(actor, stored.bot, "bots.delegate")
 						.pipe(Effect.provideContext(services))
-					const sessions = yield* backend.forCaller(actor)
+					const chats = yield* backend.forCaller(actor)
 					const title =
 						event.conversation.title ??
 						(event.conversation.kind === "direct"
 							? `${stored.name}: ${event.sender.displayName}`
 							: stored.name)
-					const created = yield* sessions.create({
+					const created = yield* chats.create({
 						bot,
 						kind: "channel",
 						chain: {
 							organizationId,
 							userId: stored.actor,
 							bots: [bot.id],
-							sessions: [],
+							chats: [],
 						},
 						channel: {
 							channel: stored.id,
@@ -310,10 +319,10 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 						key: event.conversation.key,
 						kind: event.conversation.kind,
 						title: event.conversation.title ?? null,
-						session: created.session.id,
+						chat: created.chat.id,
 						owner: stored.actor,
 					})
-					return { session: created.session.id, owner: stored.actor }
+					return { chat: created.chat.id, owner: stored.actor }
 				})
 
 			/** Shows the text of a running Turn in its message, at most once each 1.5 seconds. */
@@ -322,8 +331,8 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 				readonly stored: StoredChannel
 				readonly channel: Channel
 				readonly conversation: string
-				readonly session: string
-				readonly events: Stream.Stream<SessionResponseSseEvent>
+				readonly chat: string
+				readonly events: Stream.Stream<ChatResponseSseEvent>
 			}) =>
 				Effect.gen(function* () {
 					let started = false,
@@ -351,7 +360,7 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 										target: Target.Conversation({
 											conversation: input.conversation,
 										}),
-										session: input.session,
+										chat: input.chat,
 										turn: data.turn,
 										ref,
 									})
@@ -409,12 +418,12 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 							event,
 							"You may not use this Channel. Ask an administrator of your organization.",
 						)
-					const chat = yield* sessionOf(organizationId, stored, event).pipe(
+					const found = yield* chatOf(organizationId, stored, event).pipe(
 						Effect.catchTag(["BotNotFound", "PermissionDenied"], () =>
 							Effect.succeed(null),
 						),
 					)
-					if (chat === null)
+					if (found === null)
 						return yield* tellSender(
 							organizationId,
 							stored,
@@ -422,8 +431,8 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 							event,
 							"This Channel cannot work now: its actor cannot give work to its Bot. Ask an administrator to check the Channel.",
 						)
-					const { session, owner } = chat
-					const sessions = yield* backend.forCaller({
+					const { chat, owner } = found
+					const chats = yield* backend.forCaller({
 						kind: "member",
 						organizationId,
 						userId: owner,
@@ -433,42 +442,30 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 						event.conversation.kind === "group"
 							? `${yield* nameOf(organizationId, userId)}: ${event.text}`
 							: event.text
-					// The queued message runs after the current Turn, as its own Turn.
-					const enqueue = sessions
-						.enqueue(session, { input, author: userId })
-						.pipe(Effect.asVoid)
-					const view = yield* sessions.get(session)
-					const current = Session.currentTurn(view.session)
-					if (current !== undefined && !Turn.isTerminal(current.status))
-						return yield* enqueue
-					// The stream lives in its own fiber until the Turn ends. This event is done
-					// as soon as the Session takes the Turn.
+					// A message for a running Turn of the same person goes into it. A message of
+					// another person waits for its own Turn. The final answer of each Turn goes
+					// to the chat when the Turn ends.
+					// The live text of a new Turn shows in its own fiber until the Turn ends.
+					// This event is done as soon as the Chat takes the message.
 					const accepted = yield* Deferred.make<boolean>()
 					const run = Effect.scoped(
 						Effect.gen(function* () {
-							const events = yield* sessions.sendStream(session, {
-								expected: view.session.revision,
+							const result = yield* chats.deliverStream(chat, {
 								input,
 								author: userId,
 							})
 							yield* Deferred.succeed(accepted, true)
-							yield* follow({
-								organizationId,
-								stored,
-								channel,
-								conversation: event.conversation.key,
-								session,
-								events,
-							})
+							if (Option.isSome(result.events))
+								yield* follow({
+									organizationId,
+									stored,
+									channel,
+									conversation: event.conversation.key,
+									chat,
+									events: result.events.value,
+								})
 						}),
-					).pipe(
-						Effect.catchTags({
-							// Another message started a Turn first. This one waits after it.
-							SessionBusy: () => enqueue,
-							SessionConflict: () => enqueue,
-						}),
-						Effect.onExit(() => Deferred.succeed(accepted, false)),
-					)
+					).pipe(Effect.onExit(() => Deferred.succeed(accepted, false)))
 					const fiber = yield* Effect.forkIn(run, scope)
 					if (!(yield* Deferred.await(accepted))) yield* Fiber.join(fiber)
 				})
@@ -609,21 +606,19 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 			/** Puts the final answer of a Turn in a chat of a Channel. */
 			const finishTurn = (input: {
 				readonly organizationId: string
-				readonly session: string
+				readonly chat: string
 				readonly turn: string
 			}) =>
 				Effect.gen(function* () {
-					const conversation = yield* channels.conversationOfSession(
-						input.session,
-					)
+					const conversation = yield* channels.conversationOfChat(input.chat)
 					if (Option.isNone(conversation)) return
-					const sessions = yield* backend.forCaller({
+					const chats = yield* backend.forCaller({
 						kind: "member",
 						organizationId: input.organizationId,
 						userId: conversation.value.owner,
 					})
-					const result = yield* sessions.turn(
-						input.session as Session.Id,
+					const result = yield* chats.turn(
+						Chat.Id.make(input.chat),
 						input.turn as Turn.Id,
 					)
 					if (!Turn.isTerminal(result.turn.status)) return
@@ -633,7 +628,7 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 						target: Target.Conversation({
 							conversation: conversation.value.key,
 						}),
-						session: input.session,
+						chat: input.chat,
 						turn: input.turn,
 						message: { markdown: answerOf(result.response) },
 					})
@@ -671,11 +666,11 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 					const found = yield* requests.find(organizationId, id)
 					if (Option.isNone(found)) return
 					const { request, chain } = found.value
-					// The work may run in a Session below the chat, such as a delegated one.
+					// The work may run in a Chat below the chat, such as a task Chat.
 					let conversation = Option.none<Conversation>()
-					for (const session of [request.session, ...chain.sessions].reverse())
+					for (const chat of [request.chat, ...chain.chats].reverse())
 						if (Option.isNone(conversation))
-							conversation = yield* channels.conversationOfSession(session)
+							conversation = yield* channels.conversationOfChat(chat)
 					if (Option.isNone(conversation)) return
 					const known =
 						(yield* queue.requestRef(conversation.value.channelId, id)) !== null
@@ -703,14 +698,10 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 
 			const onSignal = (signal: Signal) =>
 				Effect.gen(function* () {
-					if (
-						signal._tag === "TurnChanged" &&
-						signal.status !== "Running" &&
-						signal.status !== "Waiting"
-					)
+					if (signal._tag === "TurnChanged" && signal.status !== "Running")
 						yield* finishTurn({
 							organizationId: signal.organizationId,
-							session: signal.session,
+							chat: signal.chat,
 							turn: signal.turn,
 						})
 					if (signal._tag === "RequestChanged")

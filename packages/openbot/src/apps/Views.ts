@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto"
-import { Item, Timeline, Session } from "@openbot-build/core"
+import { Chat, Item } from "@openbot-build/core"
 import {
 	AppViewsApi as Api,
 	ExperienceNotFound,
 	Identity,
-	SessionConflict,
+	ChatConflict,
 } from "@openbot-build/api"
 import { AppUi, Client } from "@openbot-build/protocol"
 import {
@@ -38,9 +38,9 @@ const unavailable = (reason: Api.AppViewUnavailable["reason"] = "Protocol") =>
 			"This App view is unavailable. Its recorded text and business result are still available.",
 	})
 const conflict = () =>
-	SessionConflict.make({
+	ChatConflict.make({
 		message:
-			"The Session or App view changed. Read its current state before continuing.",
+			"The Chat or App view changed. Read its current state before continuing.",
 	})
 export const make = Effect.gen(function* () {
 	const backend = yield* Backend
@@ -99,16 +99,12 @@ export const make = Effect.gen(function* () {
 				),
 				Effect.mapError(StoredViews.failure),
 			)
-	const readInteraction = (
-		owner: string,
-		session: string,
-		operationId: string,
-	) =>
+	const readInteraction = (owner: string, chat: string, operationId: string) =>
 		Effect.gen(function* () {
 			const found = yield* read(
 				owner,
 				"app-ui-state",
-				StoredViews.interactionKey(session, operationId),
+				StoredViews.interactionKey(chat, operationId),
 			)
 			return yield* Option.match(found, {
 				onNone: () => Effect.succeed(StoredViews.initial),
@@ -122,7 +118,7 @@ export const make = Effect.gen(function* () {
 		context: Schema.JsonObject,
 	) =>
 		Effect.gen(function* () {
-			const id = StoredViews.interactionKey(view.session, view.operationId)
+			const id = StoredViews.interactionKey(view.chat, view.operationId)
 			const initialBody = yield* StoredViews.seal(
 				secrets,
 				Api.Interaction,
@@ -262,7 +258,7 @@ export const make = Effect.gen(function* () {
 				}),
 			)
 			.pipe(Effect.mapError(StoredViews.failure))
-	const sessions = (identity: typeof Identity.Service) =>
+	const chats = (identity: typeof Identity.Service) =>
 		backend.forCaller(identity).pipe(Effect.mapError(conflict))
 	const bound = (identity: typeof Identity.Service, id: string) =>
 		Effect.gen(function* () {
@@ -315,12 +311,12 @@ export const make = Effect.gen(function* () {
 				}),
 			})
 			.pipe(Effect.mapError(() => unavailable("ConnectionChanged")))
+	/** The Item with the result of an App operation, in the Turn of the operation. */
 	const historyBinding = (
 		identity: typeof Identity.Service,
 		operationId: string,
-		sessionId: Session.Id,
+		chatId: Chat.Id,
 		itemId?: Item.Id,
-		version?: Timeline.VersionId,
 	) =>
 		Effect.gen(function* () {
 			const operation = yield* StoredInvocations.get(
@@ -329,11 +325,11 @@ export const make = Effect.gen(function* () {
 				ownerKey(identity),
 				operationId,
 			)
-			const service = yield* sessions(identity)
-			const history = yield* service
-				.history(sessionId, version)
+			const service = yield* chats(identity)
+			const items = yield* service
+				.turnLog(chatId, operation.turn)
 				.pipe(Effect.mapError(conflict))
-			const item = history.value.conversation.history.find(
+			const item = items.find(
 				(item) =>
 					(itemId === undefined || item.id === itemId) &&
 					item.content.content.some(
@@ -361,13 +357,13 @@ export const make = Effect.gen(function* () {
 				id: view.id,
 				operationId: view.operationId,
 				readOnly: view.readOnly,
-				session: view.session,
+				chat: view.chat,
 				turn: view.turn,
 				item: view.item,
 				source: operation.source,
 				interaction: yield* readInteraction(
 					ownerKey(identity),
-					view.session,
+					view.chat,
 					view.operationId,
 				),
 			}
@@ -376,18 +372,16 @@ export const make = Effect.gen(function* () {
 		open: (
 			identity: typeof Identity.Service,
 			operationId: string,
-			sessionId: Session.Id,
+			chatId: Chat.Id,
 			itemId: Item.Id,
-			version?: Timeline.VersionId,
 		) =>
 			Effect.scoped(
 				Effect.gen(function* () {
 					const { operation, item } = yield* historyBinding(
 						identity,
 						operationId,
-						sessionId,
+						chatId,
 						itemId,
-						version,
 					)
 					if (operation.source.kind !== "tool")
 						return yield* unavailable("Declaration")
@@ -423,8 +417,8 @@ export const make = Effect.gen(function* () {
 					const view: View = {
 						id: randomUUID(),
 						operationId,
-						readOnly: version !== undefined,
-						session: sessionId,
+						readOnly: false,
+						chat: chatId,
 						turn: operation.turn,
 						item: item.id,
 						connectionId: operation.source.connectionId,
@@ -522,14 +516,13 @@ export const make = Effect.gen(function* () {
 							return existing.value.ticket
 						}
 
-						const service = yield* sessions(identity)
+						const service = yield* chats(identity)
 						const current = yield* service
-							.get(view.session)
+							.get(view.chat)
 							.pipe(Effect.mapError(conflict))
 						if (
 							current.activity === "historical" ||
-							(current.activity === "active" &&
-								Session.currentTurn(current.session)?.id !== view.turn)
+							(current.activity === "active" && current.turn?.id !== view.turn)
 						)
 							return yield* conflict()
 						const opened = yield* openClient(identity, view.connectionId)
@@ -570,8 +563,8 @@ export const make = Effect.gen(function* () {
 							target,
 						}
 						const ticket = yield* service
-							.startAction(view.session, {
-								expected: current.session.revision,
+							.startAction(view.chat, {
+								author: identity.userId,
 								action: {
 									name: "openbot_ui_" + randomUUID().replaceAll("-", ""),
 									arguments: args,
@@ -605,7 +598,7 @@ export const make = Effect.gen(function* () {
 						db,
 						secrets,
 						ownerKey(identity),
-						ticket.session,
+						ticket.chat,
 					),
 					(operation) =>
 						operation.turn === ticket.turn &&
@@ -617,20 +610,17 @@ export const make = Effect.gen(function* () {
 						status: recorded.value.status,
 						operation: recorded.value,
 					}
-				const service = yield* sessions(identity)
-				const current = yield* service
-					.get(ticket.session)
-					.pipe(Effect.mapError(conflict))
-				const turn = current.session.turns.find(
-					(turn) => turn.id === ticket.turn,
+				const service = yield* chats(identity)
+				const turn = yield* service.turn(ticket.chat, ticket.turn).pipe(
+					Effect.map((found) => Option.some(found.turn)),
+					Effect.catchTag("ChatConflict", () => Effect.succeedNone),
+					Effect.mapError(conflict),
 				)
 				return {
 					ticket,
-					status:
-						turn === undefined ||
-						(turn.status._tag !== "Running" && turn.status._tag !== "Waiting")
-							? ("Failed" as const)
-							: ("Queued" as const),
+					status: Option.exists(turn, (turn) => turn.status._tag === "Running")
+						? ("Queued" as const)
+						: ("Failed" as const),
 					operation: null,
 				}
 			}),
@@ -652,15 +642,11 @@ export const make = Effect.gen(function* () {
 		interaction: (
 			identity: typeof Identity.Service,
 			operationId: string,
-			sessionId: Session.Id,
+			chatId: Chat.Id,
 		) =>
 			Effect.gen(function* () {
-				yield* historyBinding(identity, operationId, sessionId)
-				return yield* readInteraction(
-					ownerKey(identity),
-					sessionId,
-					operationId,
-				)
+				yield* historyBinding(identity, operationId, chatId)
+				return yield* readInteraction(ownerKey(identity), chatId, operationId)
 			}),
 		message: (
 			identity: typeof Identity.Service,
@@ -683,19 +669,17 @@ export const make = Effect.gen(function* () {
 							),
 						}),
 					)(content).pipe(Effect.mapError(() => unavailable("Unsupported")))
-					const service = yield* sessions(identity)
-					const current = yield* service
-						.get(view.session)
-						.pipe(Effect.mapError(conflict))
-					if (current.activity !== "inactive") return yield* conflict()
+					// The message reaches the Bot at its next step, or starts a Turn.
+					const service = yield* chats(identity)
 					yield* service
-						.send(view.session, {
-							expected: current.session.revision,
+						.deliver(view.chat, {
 							input:
 								"Confirmed message from App " +
 								view.connectionId +
 								":\n" +
 								message.content.map((part) => part.text).join("\n"),
+							author: identity.userId,
+							notice: { kind: "app", ref: view.connectionId },
 						})
 						.pipe(Effect.mapError(conflict))
 				}),

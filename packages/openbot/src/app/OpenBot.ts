@@ -49,7 +49,7 @@ import * as Pairings from "../computers/Pairings.ts"
 import * as ComputerWorker from "../computers/Worker.ts"
 import * as ComputerPlugin from "../plugins/computers/ComputerPlugin.ts"
 import * as Judge from "../capabilities/Judge.ts"
-import * as Sessions from "../sessions/Sessions.ts"
+import * as Chats from "../chats/Chats.ts"
 import { Config } from "@openbot-build/core"
 import * as Backend from "./Backend.ts"
 import type { PgClient } from "@effect/sql-pg"
@@ -91,10 +91,7 @@ export interface Options<
 	readonly appNetwork?: Layer.Layer<AppHost.AppNetwork>
 	readonly auth: Configuration
 	readonly indexSources?: ReadonlyArray<AppIndex.SourceProvider>
-	readonly sessions?: Omit<
-		Sessions.Options<Tools, E, R, BuildE, BuildR>,
-		"namespace"
-	>
+	readonly chats?: Omit<Chats.Options<Tools, E, R, BuildE, BuildR>, "namespace">
 	/**
 	 * Models that the program gives itself, such as the simulated model of
 	 * development. Every organization can use them. All other models come from
@@ -136,32 +133,31 @@ export const layer = <
 >(
 	options: Options<Tools, E, R, BuildE, BuildR>,
 ) => {
-	// A Session names its model. OpenBot never picks one for it.
+	// A Chat names its model. OpenBot never picks one for it.
 	const noModel = Effect.fail(
 		new Config.ModelConfigurationError({
 			reason: "missing",
-			message: "The Session has no model.",
+			message: "The Chat has no model.",
 		}),
 	)
 	/**
-	 * Each member gets the models and memory switches of their organization.
+	 * Each member gets the models of their organization.
 	 * A host that gives its own `resolveModel`, such as a test, keeps it.
 	 */
-	const sessions: Layer.Layer<
+	const chats: Layer.Layer<
 		Backend.Backend,
 		never,
 		| PgClient.PgClient
-		| Sessions.ExecutionServices<Tools, R>
+		| Chats.ExecutionServices<Tools, R>
 		| BuildR
 		| ModelRegistry.ModelRegistry
 		| Settings
 	> = Layer.unwrap(
 		Effect.gen(function* () {
 			const registry = yield* ModelRegistry.ModelRegistry
-			const settings = yield* Settings
 			const organization = (
 				organizationId: string,
-			): Sessions.OrganizationOptions => ({
+			): Chats.OrganizationOptions => ({
 				modelCatalog: registry
 					.catalog(organizationId)
 					.pipe(Effect.orElseSucceed(() => ({ providers: [], models: [] }))),
@@ -169,10 +165,6 @@ export const layer = <
 					selection === undefined
 						? noModel
 						: registry.resolve(organizationId, selection),
-				memoryDefaults: settings.organization(organizationId).pipe(
-					Effect.map((current) => current.document.memory),
-					Effect.orElseSucceed(() => ({})),
-				),
 			})
 			// A runtime without an owner has no organization. It can use only the built-in models.
 			const builtin = options.builtinModels
@@ -188,9 +180,9 @@ export const layer = <
 								selection === undefined ? noModel : builtin.resolve(selection),
 						}
 			return BackendLayers.layer(
-				options.sessions?.resolveModel === undefined
-					? { ...fallback, ...options.sessions, organization }
-					: options.sessions,
+				options.chats?.resolveModel === undefined
+					? { ...fallback, ...options.chats, organization }
+					: options.chats,
 			)
 		}),
 	)
@@ -202,7 +194,7 @@ export const layer = <
 		Effect.gen(function* () {
 			const registry = yield* ModelRegistry.ModelRegistry
 			const settings = yield* Settings
-			const resolve = options.sessions?.resolveModel
+			const resolve = options.chats?.resolveModel
 			const model = (
 				organizationId: string,
 				name: "rulesModel" | "botMemoryModel",
@@ -320,7 +312,7 @@ export const layer = <
 	).pipe(Layer.provideMerge(IndexStore.layer))
 
 	const base = Layer.merge(
-		sessions,
+		chats,
 		Layer.unwrap(
 			Effect.map(
 				Schema.decodeEffect(ResolvedConfiguration)(options.auth).pipe(

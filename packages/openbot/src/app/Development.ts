@@ -93,7 +93,7 @@ export const layer = (
 ) =>
 	Layer.unwrap(
 		Effect.gen(function* () {
-			const { sessions, builtinModels } = yield* DevelopmentModel.make
+			const { chats, builtinModels } = yield* DevelopmentModel.make
 			const publication = yield* DevelopmentApps.Publication
 			const authorization = yield* DevelopmentAuthorization.Authorization
 			const scenarios = yield* DevelopmentScenarios.Scenarios
@@ -108,7 +108,7 @@ export const layer = (
 				...settings,
 				// The development entry owns its platform, so a new port just replaces the origin.
 				force: true,
-				sessions,
+				chats,
 				builtinModels,
 				discovery: layerDiscovery(scenarios),
 				appNetwork: DevelopmentApps.layerNetwork.pipe(

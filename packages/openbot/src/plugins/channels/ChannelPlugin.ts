@@ -1,9 +1,4 @@
-import {
-	Bot,
-	Plugin,
-	type Session,
-	type SessionStore,
-} from "@openbot-build/core"
+import { Bot, Plugin, type Chat, type ChatStore } from "@openbot-build/core"
 import {
 	Context,
 	Effect,
@@ -15,12 +10,12 @@ import {
 	Stream,
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
-import { Gate } from "../../capabilities/Gate.ts"
+import { Answer, Gate, remember } from "../../capabilities/Gate.ts"
 import { Work } from "../../capabilities/Work.ts"
 import { Target } from "../../channels/Channel.ts"
 import { ChannelQueue } from "../../channels/ChannelQueue.ts"
 import { Channels } from "../../channels/Channels.ts"
-import * as SessionHost from "../../sessions/SessionHost.ts"
+import * as ChatHost from "../../chats/ChatHost.ts"
 
 export const pluginId = Plugin.Id.make("@openbot-build/openbot/channels")
 
@@ -49,18 +44,18 @@ const SendInput = Schema.Struct({
 const json = (value: unknown): Schema.Json =>
 	JSON.parse(JSON.stringify(value)) as Schema.Json
 
-/** What the Sessions of one member give to the Channel plugin. */
+/** What the Chats of one member give to the Channel plugin. */
 interface ForOwnerInput {
 	readonly read: (
-		session: Session.Id,
+		chat: Chat.Id,
 	) => Effect.Effect<
-		Session.View<SessionHost.Values>,
-		Session.SessionNotFound | SessionStore.SessionStoreError
+		Chat.View<ChatHost.Values>,
+		Chat.ChatNotFound | ChatStore.ChatStoreError
 	>
 }
 
 /**
- * Builds the Channel plugin for the Sessions of one member. In a channel Session, it tells
+ * Builds the Channel plugin for the Chats of one member. In a channel Chat, it tells
  * the Bot where it talks, and lets it post to other chats of the same Channel.
  * It runs inside the Bot plugin, so a post goes through the capability gate.
  */
@@ -84,8 +79,8 @@ export const make = Effect.gen(function* () {
 						Effect.gen(function* () {
 							const context = yield* Bot.Context
 							const at = yield* context.at
-							const view = yield* input.read(at.session)
-							const state = SessionHost.hostState(view.session)
+							const view = yield* input.read(at.chat)
+							const state = ChatHost.hostState(view.chat)
 							if (state.kind !== "channel" || state.channel === undefined)
 								return next(options)
 							const organizationId = state.chain.organizationId
@@ -133,13 +128,23 @@ export const make = Effect.gen(function* () {
 												toolCallId: call.toolCallId,
 											}),
 										),
-										Effect.map((answer) => answer === "pause"),
-										// When the check fails, the post waits for a decision.
+										Effect.map((answer) => answer._tag !== "Allow"),
+										// When the check fails, the post never goes out.
 										Effect.catchCause((cause) =>
 											Effect.logWarning(
 												"A Channel post could not be checked",
 												cause,
-											).pipe(Effect.as(true)),
+											).pipe(
+												Effect.andThen(
+													remember(
+														call.toolCallId,
+														Answer.Deny({
+															reason: "OpenBot could not check this post.",
+														}),
+													),
+												),
+												Effect.as(true),
+											),
 										),
 									),
 							}) as Tools[string]
@@ -210,7 +215,7 @@ export const make = Effect.gen(function* () {
 									Toolkit.merge(incoming, own),
 								),
 							}).pipe(Stream.provideContext(handlers))
-							// Without its Session, a Turn cannot run, so it fails.
+							// Without its Chat, a Turn cannot run, so it fails.
 						}).pipe(Effect.orDie),
 					),
 				),

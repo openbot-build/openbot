@@ -11,9 +11,8 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "appViews", (handlers) =>
 					views.open(
 						identity,
 						params.operationId,
-						payload.sessionId,
+						payload.chatId,
 						payload.itemId,
-						payload.version,
 					),
 				),
 			)
@@ -54,7 +53,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "appViews", (handlers) =>
 			)
 			.handle("interaction", ({ params, query }) =>
 				Effect.flatMap(Identity, (identity) =>
-					views.interaction(identity, params.operationId, query.sessionId),
+					views.interaction(identity, params.operationId, query.chatId),
 				),
 			)
 			.handle("message", ({ params, payload }) =>

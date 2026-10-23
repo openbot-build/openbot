@@ -15,7 +15,7 @@ import { ActionPolicy } from "../apps/ActionPolicy.ts"
 import * as Bindings from "../apps/Bindings.ts"
 import { Capabilities } from "../apps/Capabilities.ts"
 import { Invocations, type Position } from "../apps/Invocations.ts"
-import { Gate } from "../capabilities/Gate.ts"
+import { Answer, Gate, remember } from "../capabilities/Gate.ts"
 import { Work } from "../capabilities/Work.ts"
 import { Secrets } from "../secrets/Secrets.ts"
 import { codeModeOf } from "../settings/Documents.ts"
@@ -225,7 +225,7 @@ export class CodeRuns extends Context.Service<
 		}) => Effect.Effect<Option.Option<Stored.Run>, Stored.Error>
 		readonly forCall: (
 			owner: string,
-			session: string,
+			chat: string,
 			callId: string,
 		) => Effect.Effect<Option.Option<Stored.Run>, Stored.ReadError>
 		readonly get: (
@@ -234,14 +234,14 @@ export class CodeRuns extends Context.Service<
 		) => Effect.Effect<Stored.Run, Stored.ReadError>
 		readonly list: (
 			owner: string,
-			session: string,
+			chat: string,
 		) => Effect.Effect<ReadonlyArray<Stored.Run>, Stored.ReadError>
 		/** Runs that a stopped host left behind. */
 		readonly stale: Effect.Effect<
 			ReadonlyArray<{
 				readonly owner: string
 				readonly id: string
-				readonly session: string
+				readonly chat: string
 			}>,
 			Stored.Error
 		>
@@ -439,7 +439,7 @@ export const make: Effect.Effect<
 										code: initial.code,
 									},
 								})
-							: ("allow" as const)
+							: Answer.Allow()
 						const operation = yield* services.invocations
 							.pending(position, callId)
 							.pipe(Effect.map(Option.map((value) => value.id)))
@@ -449,7 +449,15 @@ export const make: Effect.Effect<
 							outcome: { _tag: "Waiting" },
 						}
 						yield* record(waiting)
-						if (answer === "pause") {
+						if (answer._tag !== "Allow") {
+							// The program waits for the decision, also for a denial: when it
+							// runs again, the call gets the reason. Until then, the tool call
+							// of the program is pending.
+							if (answer._tag === "Deny" && answer.request !== undefined)
+								yield* remember(
+									initial.callId,
+									Answer.Pending({ request: answer.request }),
+								)
 							paused = true
 							break
 						}
@@ -594,7 +602,7 @@ export const make: Effect.Effect<
 			const id = Stored.idOf({ ...input.position, callId: input.callId })
 			const fresh: Stored.Run = {
 				id,
-				session: input.position.session,
+				chat: input.position.chat,
 				turn: input.position.turn,
 				callId: input.callId,
 				status: "Running",
@@ -698,7 +706,7 @@ export const make: Effect.Effect<
 			const run = claimed.value
 			const position: Position = {
 				owner: input.owner,
-				session: run.session,
+				chat: run.chat,
 				turn: run.turn,
 			}
 			if (Option.isNone(limits)) {
@@ -728,10 +736,10 @@ export const make: Effect.Effect<
 		settings,
 		start,
 		resume,
-		forCall: (owner, session, callId) =>
-			Stored.forCall(db, secrets, owner, session, callId),
+		forCall: (owner, chat, callId) =>
+			Stored.forCall(db, secrets, owner, chat, callId),
 		get: (owner, id) => Stored.get(db, secrets, owner, id),
-		list: (owner, session) => Stored.list(db, secrets, owner, session),
+		list: (owner, chat) => Stored.list(db, secrets, owner, chat),
 		stale: Effect.flatMap(Clock.currentTimeMillis, (now) =>
 			Stored.stale(db, now),
 		),

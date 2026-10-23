@@ -7,10 +7,10 @@ const request = (url, init = {}) =>
 
 const openbot = "http://openbot:3000"
 
-const anonymous = await request(`${openbot}/v1/sessions`)
+const anonymous = await request(`${openbot}/v1/chats`)
 assert.equal(anonymous.status, 401, "The API does not require authentication")
 
-const keyed = await request(`${openbot}/v1/sessions`, {
+const keyed = await request(`${openbot}/v1/chats`, {
 	headers: { authorization: "Bearer ob_invalid" },
 })
 assert.equal(keyed.status, 401, "The API does not reject invalid API keys")

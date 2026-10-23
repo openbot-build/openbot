@@ -3,7 +3,7 @@ import {
 	AppExecution,
 	ExperienceNotFound,
 	ExperienceStorageUnavailable,
-	SessionConflict,
+	ChatConflict,
 } from "@openbot-build/api"
 import { Context, Effect, Layer, Match, Option, Schema } from "effect"
 import type { PgClient } from "@effect/sql-pg"
@@ -19,7 +19,7 @@ import * as Db from "../database/Database.ts"
 
 export interface Position {
 	readonly owner: string
-	readonly session: AppExecution.Invocation["session"]
+	readonly chat: AppExecution.Invocation["chat"]
 	readonly turn: AppExecution.Invocation["turn"]
 }
 export interface Proposal extends Position {
@@ -71,7 +71,7 @@ export const make: Effect.Effect<
 		.where(eq(appInvocations.status, "Sending"))
 		.pipe(Effect.mapError(StoredInvocations.unavailable))
 	const conflict = () =>
-		SessionConflict.make({
+		ChatConflict.make({
 			message:
 				"This App operation changed or was already submitted. Review its recorded result.",
 		})
@@ -85,14 +85,14 @@ export const make: Effect.Effect<
 				.values({
 					owner,
 					id: value.id,
-					session: value.session,
+					chat: value.chat,
 					status: value.status,
 					body,
 				})
 				.onConflictDoNothing()
 			const saved = yield* get(owner, value.id)
 			if (
-				saved.session !== value.session ||
+				saved.chat !== value.chat ||
 				saved.turn !== value.turn ||
 				saved.callId !== value.callId ||
 				saved.toolName !== value.toolName ||
@@ -151,7 +151,7 @@ export const make: Effect.Effect<
 			.pipe(Effect.mapError(StoredInvocations.failure))
 	const id = (input: Position, callId: string) =>
 		createHash("sha256")
-			.update(JSON.stringify([input.owner, input.session, input.turn, callId]))
+			.update(JSON.stringify([input.owner, input.chat, input.turn, callId]))
 			.digest("hex")
 	const valid = (owner: string, value: AppExecution.Invocation) =>
 		Effect.gen(function* () {
@@ -162,7 +162,7 @@ export const make: Effect.Effect<
 				value.source.connectionId,
 			).pipe(
 				Effect.mapError(() =>
-					SessionConflict.make({
+					ChatConflict.make({
 						message: "The App connection is no longer available.",
 					}),
 				),
@@ -171,7 +171,7 @@ export const make: Effect.Effect<
 				connection.revision !== value.source.revision ||
 				connection.connection.state !== "Enabled"
 			)
-				return yield* SessionConflict.make({
+				return yield* ChatConflict.make({
 					message:
 						"The App connection changed. Review the current operation before continuing.",
 				})
@@ -186,7 +186,7 @@ export const make: Effect.Effect<
 			const covered = input.source.kind !== "tool"
 			return yield* put(input.owner, {
 				id: id(input, input.callId),
-				session: input.session,
+				chat: input.chat,
 				turn: input.turn,
 				callId: input.callId,
 				toolName: input.toolName,
@@ -266,7 +266,7 @@ export const make: Effect.Effect<
 					})).pipe(
 						// After a normal finish the status is no longer "Sending", so this
 						// change fails with a conflict. That is expected and safe to skip.
-						Effect.catchTag("SessionConflict", () => Effect.void),
+						Effect.catchTag("ChatConflict", () => Effect.void),
 						Effect.catch((error) =>
 							Effect.logWarning("App operation status could not be closed", {
 								source: "apps",

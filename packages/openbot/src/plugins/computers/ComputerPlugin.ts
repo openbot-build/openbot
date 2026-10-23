@@ -13,7 +13,7 @@ import {
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
 import type { Services as AuthorizationServices } from "../../authorization/Authorize.ts"
-import { Gate } from "../../capabilities/Gate.ts"
+import { Answer, Gate, remember } from "../../capabilities/Gate.ts"
 import { Work } from "../../capabilities/Work.ts"
 import type { Machine } from "../../computers/Computer.ts"
 import { ComputerProviders } from "../../computers/ComputerProviders.ts"
@@ -242,14 +242,20 @@ export const make = Effect.gen(function* () {
 		above.delete(current.bot.id)
 		return [...above] as unknown as ReadonlyArray<BotsApi.BotId>
 	}
-	/** Asks the gate. A failed check waits for a decision. */
+	/** Asks the gate. A failed check never lets the action run. */
 	const ask = (
 		input: Parameters<typeof gate.check>[0],
 	): Effect.Effect<boolean> =>
 		gate.check(input).pipe(
-			Effect.map((answer) => answer === "pause"),
+			Effect.map((answer) => answer._tag !== "Allow"),
 			Effect.catchCause((cause) =>
 				Effect.logWarning("A Computer action could not be checked", cause).pipe(
+					Effect.andThen(
+						remember(
+							input.toolCallId,
+							Answer.Deny({ reason: "OpenBot could not check this action." }),
+						),
+					),
 					Effect.as(true),
 				),
 			),

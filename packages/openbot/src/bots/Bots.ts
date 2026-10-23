@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
-import type { Config, Session } from "@openbot-build/core"
+import type { Config } from "@openbot-build/core"
 import { BotsApi, type Caller, Permissions } from "@openbot-build/api"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { can } from "../authorization/Check.ts"
@@ -26,7 +26,7 @@ export interface Subject {
 
 export const newId = () => "bot_" + randomUUID().replaceAll("-", "")
 
-/** The Bots of an organization: lasting Bots and Session Bots. */
+/** The Bots of an organization. */
 export class Bots extends Context.Service<
 	Bots,
 	{
@@ -44,7 +44,6 @@ export class Bots extends Context.Service<
 			caller: Caller,
 			input: {
 				readonly archived?: boolean
-				readonly session?: Session.Id
 				readonly bot?: BotId
 			},
 		) => Effect.Effect<ReadonlyArray<Bot>, Failure, AuthorizationServices>
@@ -60,19 +59,6 @@ export class Bots extends Context.Service<
 			organizationId: string,
 			owner: Bot,
 			input: {
-				readonly name: string
-				readonly role: string
-				readonly instructions: string
-				readonly model?: Config.Selection
-			},
-		) => Effect.Effect<Bot, BotsApi.BotStorageUnavailable>
-		/** Makes a Session Bot. The Session owns it, and it lives as long as the Session. */
-		readonly createSessionBot: (
-			subject: Subject,
-			input: {
-				readonly session: Session.Id
-				/** The Bot of the Session. */
-				readonly bot: BotId
 				readonly name: string
 				readonly role: string
 				readonly instructions: string
@@ -108,16 +94,6 @@ export class Bots extends Context.Service<
 			userId: string,
 		) => Effect.Effect<boolean, BotsApi.BotStorageUnavailable>
 		/**
-		 * Makes a Session Bot a lasting Bot.
-		 * The owner is the Bot `owner`, or the member of its Session without it.
-		 */
-		readonly promote: (
-			caller: Caller,
-			id: string,
-			expected: number,
-			owner?: BotId,
-		) => Effect.Effect<Bot, Failure, AuthorizationServices>
-		/**
 		 * The deciders of a Bot: its owner chain from the top, ending with the Bot.
 		 * The top is a Bot that a member or the organization owns. Archived Bots are left out.
 		 * `subject` is the member who works with the Bot now.
@@ -126,19 +102,6 @@ export class Bots extends Context.Service<
 			subject: Subject,
 			bot: Bot,
 		) => Effect.Effect<ReadonlyArray<BotId>, BotsApi.BotStorageUnavailable>
-		/** The Session Bots that a Session owns. */
-		readonly ownedBy: (
-			subject: Subject,
-			session: Session.Id,
-		) => Effect.Effect<ReadonlyArray<Bot>, BotsApi.BotStorageUnavailable>
-		/**
-		 * Archives the Session Bots of a Session, for example when the Session goes away.
-		 * The Bots that they own are archived too.
-		 */
-		readonly archiveOwnedBy: (
-			subject: Subject,
-			session: Session.Id,
-		) => Effect.Effect<ReadonlyArray<Bot>, BotsApi.BotStorageUnavailable>
 	}
 >()("@openbot-build/openbot/bots/Bots") {}
 
@@ -148,8 +111,8 @@ const Membership = Schema.Struct({
 	...BotsApi.BotMember.fields,
 })
 
-/** The status key of a Bot record: its kind, or `archived`. */
-const RecordStatus = Schema.Literals(["archived", ...BotsApi.BotKind.literals])
+/** The status key of a Bot record. */
+const RecordStatus = Schema.Literals(["active", "archived"])
 type RecordStatus = typeof RecordStatus.Type
 
 /** The owner and scope keys of a Bot record. */
@@ -157,13 +120,8 @@ const keys = (organizationId: string, bot: Bot): Keys<RecordStatus> => ({
 	organizationId,
 	id: bot.id,
 	owner: rootOf(bot.owner) ?? "",
-	scope:
-		bot.owner._tag === "Session"
-			? bot.owner.session
-			: bot.owner._tag === "Bot"
-				? bot.owner.bot
-				: "",
-	status: bot.archived ? "archived" : bot.kind,
+	scope: bot.owner._tag === "Bot" ? bot.owner.bot : "",
+	status: bot.archived ? "archived" : "active",
 })
 
 export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
@@ -322,7 +280,6 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 		const above = (organizationId: string, bot: Bot) => {
 			switch (bot.owner._tag) {
 				case "Bot":
-				case "Session":
 					return find(organizationId, bot.owner.bot)
 				case "Member":
 				case "Organization":
@@ -362,11 +319,9 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 			readonly instructions: string
 			readonly model?: Config.Selection
 			readonly planApproval?: BotsApi.Bot["planApproval"]
-			readonly kind: "persistent" | "session"
 			readonly now: number
 		}): Bot => ({
 			id: BotsApi.BotId.make(newId()),
-			kind: input.kind,
 			owner: input.owner,
 			name: input.name,
 			role: input.role,
@@ -411,21 +366,10 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 						)
 					}
 					const own = yield* bots
-						.list(caller.organizationId, {
-							owner: caller.userId,
-							...(input.session === undefined ? {} : { scope: input.session }),
-						})
+						.list(caller.organizationId, { owner: caller.userId })
 						.pipe(Effect.flatMap(resolveAll))
-					const shared =
-						input.session === undefined
-							? yield* bots.list(caller.organizationId, { owner: "" })
-							: []
-					const all = yield* visible(caller, [
-						...own.filter(
-							(bot) => input.session !== undefined || bot.kind !== "session",
-						),
-						...shared,
-					])
+					const shared = yield* bots.list(caller.organizationId, { owner: "" })
+					const all = yield* visible(caller, [...own, ...shared])
 					return all.filter(
 						(bot) =>
 							input.archived === undefined || bot.archived === input.archived,
@@ -446,7 +390,6 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 					const bot = fresh({
 						...input,
 						owner,
-						kind: "persistent",
 						now: yield* Clock.currentTimeMillis,
 					})
 					yield* writable(caller, bot)
@@ -459,24 +402,6 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 						fresh({
 							...input,
 							owner: ownerFor(owner),
-							kind: "persistent",
-							now: yield* Clock.currentTimeMillis,
-						}),
-					)
-				}),
-			createSessionBot: (subject, input) =>
-				Effect.gen(function* () {
-					return yield* put(
-						subject.organizationId,
-						fresh({
-							...input,
-							owner: {
-								_tag: "Session",
-								userId: subject.userId,
-								session: input.session,
-								bot: input.bot,
-							},
-							kind: "session",
 							now: yield* Clock.currentTimeMillis,
 						}),
 					)
@@ -539,45 +464,6 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 						)
 					return bot
 				}),
-			promote: (caller, id, expected, owner) =>
-				Effect.gen(function* () {
-					const parent =
-						owner === undefined
-							? Option.none<Bot>()
-							: Option.some(yield* access(caller, owner, "bots.read"))
-					const bot = yield* change(
-						caller,
-						id,
-						"bots.write",
-						expected,
-						(bot) => {
-							const from = bot.owner
-							return bot.kind !== "session" || from._tag !== "Session"
-								? Effect.fail(
-										BotsApi.BotInvalid.make({
-											message: "Only a Session Bot can be promoted.",
-										}),
-									)
-								: Effect.gen(function* () {
-										const next: Bot = {
-											...bot,
-											kind: "persistent",
-											owner: Option.match(parent, {
-												onNone: () => ({
-													_tag: "Member" as const,
-													userId: from.userId,
-												}),
-												onSome: ownerFor,
-											}),
-										}
-										// The new owner can move the Bot to another place.
-										yield* writable(caller, next)
-										return next
-									})
-						},
-					)
-					return bot
-				}),
 			link: (caller, source) =>
 				records.transaction(
 					"bot_member:" +
@@ -602,7 +488,6 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 								name: source.bot.name,
 								role: source.bot.role,
 								instructions: source.bot.instructions,
-								kind: "persistent",
 								now,
 							}),
 							source: {
@@ -650,27 +535,6 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 					return true
 				}),
 			ownerChain: (subject, bot) => climb(subject, bot, [bot.id], [bot.id]),
-			ownedBy: (subject, session) =>
-				bots
-					.list(subject.organizationId, {
-						owner: subject.userId,
-						scope: session,
-					})
-					.pipe(
-						Effect.map((list) => list.filter((bot) => bot.kind === "session")),
-					),
-			archiveOwnedBy: (subject, session) =>
-				Effect.gen(function* () {
-					const owned = yield* bots.list(subject.organizationId, {
-						owner: subject.userId,
-						scope: session,
-					})
-					return yield* archiveTree(
-						subject.organizationId,
-						owned.filter((bot) => bot.kind === "session" && !bot.archived),
-						yield* Clock.currentTimeMillis,
-					)
-				}),
 		})
 	})
 export const layer = Layer.effect(Bots, make)

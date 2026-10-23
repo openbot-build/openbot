@@ -2,7 +2,7 @@ import {
 	AppExecution,
 	ExperienceNotFound,
 	ExperienceStorageUnavailable,
-	SessionConflict,
+	ChatConflict,
 } from "@openbot-build/api"
 import { and, eq } from "drizzle-orm"
 import { Effect, Schema } from "effect"
@@ -12,11 +12,11 @@ import * as Db from "../database/Database.ts"
 
 /** The App operations of each owner, kept sealed in Postgres. */
 export type Error =
-	ExperienceNotFound | ExperienceStorageUnavailable | SessionConflict
+	ExperienceNotFound | ExperienceStorageUnavailable | ChatConflict
 export const unavailable = () => ExperienceStorageUnavailable.make({})
 /** Keep the errors that callers handle. Every other storage failure becomes one error. */
 export const failure = (error: unknown) =>
-	error instanceof SessionConflict || error instanceof ExperienceNotFound
+	error instanceof ChatConflict || error instanceof ExperienceNotFound
 		? error
 		: unavailable()
 const codec = Schema.fromJsonString(AppExecution.Invocation)
@@ -79,14 +79,12 @@ export const list = (
 	db: Db.Database,
 	secrets: Sealer,
 	owner: string,
-	session: string,
+	chat: string,
 ) =>
 	db
 		.select()
 		.from(appInvocations)
-		.where(
-			and(eq(appInvocations.owner, owner), eq(appInvocations.session, session)),
-		)
+		.where(and(eq(appInvocations.owner, owner), eq(appInvocations.chat, chat)))
 		.pipe(
 			Effect.flatMap((rows) =>
 				Effect.forEach(rows, (row) => open(secrets, row)),

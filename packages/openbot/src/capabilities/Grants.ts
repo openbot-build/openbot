@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import type { Session } from "@openbot-build/core"
+import type { Chat } from "@openbot-build/core"
 import { BotsApi } from "@openbot-build/api"
 import { Clock, Context, Effect, Layer, Option } from "effect"
 import { BotRecords } from "../bots/BotRecords.ts"
@@ -13,13 +13,13 @@ export class Grants extends Context.Service<
 	{
 		/**
 		 * The Grant that decides a request, if there is one. A deny Grant wins over an allow Grant.
-		 * Session Grants only count in their own Session.
+		 * Chat Grants only count in their own Chat.
 		 */
 		readonly match: (input: {
 			readonly organizationId: string
 			readonly bot: string
 			readonly capability: BotsApi.Capability
-			readonly session: Session.Id
+			readonly chat: Chat.Id
 		}) => Effect.Effect<Option.Option<Grant>, BotsApi.BotStorageUnavailable>
 		/** Marks a `once` Grant as used, so it does not count again. */
 		readonly use: (
@@ -103,8 +103,7 @@ export const make: Effect.Effect<typeof Grants.Service, never, BotRecords> =
 										stored: grant.capability,
 										request: input.capability,
 									}) &&
-									(grant.scope !== "session" ||
-										grant.session === input.session),
+									(grant.scope !== "chat" || grant.chat === input.chat),
 							)
 							return Option.orElse(
 								Option.fromNullishOr(

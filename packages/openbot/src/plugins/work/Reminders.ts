@@ -1,107 +1,120 @@
-import { Session, Turn } from "@openbot-build/core"
+import { Chat, Turn } from "@openbot-build/core"
 import type { BotsApi } from "@openbot-build/api"
 import { Clock, Context, Effect, Layer, type Option, Schema } from "effect"
 import { BotRecords } from "../../bots/BotRecords.ts"
 import { hash } from "../../capabilities/Capability.ts"
 
-export const WaitStatus = Schema.Literals(["waiting", "done", "cancelled"])
-export type WaitStatus = typeof WaitStatus.Type
+export const ReminderStatus = Schema.Literals(["waiting", "done", "cancelled"])
+export type ReminderStatus = typeof ReminderStatus.Type
 
-/** One `openbot_wait` call. The tool call waits until `dueAt`, and then goes on. */
-export const Wait = Schema.Struct({
+/**
+ * One `openbot_remind` call. At `dueAt`, `note` goes to the Chat as a message.
+ * `author` is the person that the message is for.
+ */
+export const Reminder = Schema.Struct({
 	id: Schema.String,
 	userId: Schema.String,
-	session: Session.Id,
+	author: Turn.Author,
+	chat: Chat.Id,
 	turn: Turn.Id,
 	toolCallId: Schema.String,
+	note: Schema.String,
 	createdAt: Schema.Finite,
 	dueAt: Schema.Finite,
-	status: WaitStatus,
+	status: ReminderStatus,
 })
-export type Wait = typeof Wait.Type
+export type Reminder = typeof Reminder.Type
 
-/** The waits of the tool `openbot_wait`. They are saved, so they last over a restart. */
-export class Waits extends Context.Service<
-	Waits,
+/** The reminders of the tool `openbot_remind`. They are saved, so they last over a restart. */
+export class Reminders extends Context.Service<
+	Reminders,
 	{
-		/** Saves a wait for a tool call. A second call for the same tool call keeps the first. */
+		/** Saves a reminder for a tool call. A second call for the same tool call keeps the first. */
 		readonly start: (
 			organizationId: string,
-			input: Pick<Wait, "userId" | "session" | "turn" | "toolCallId" | "dueAt">,
-		) => Effect.Effect<Wait, BotsApi.BotStorageUnavailable>
+			input: Pick<
+				Reminder,
+				"userId" | "author" | "chat" | "turn" | "toolCallId" | "note" | "dueAt"
+			>,
+		) => Effect.Effect<Reminder, BotsApi.BotStorageUnavailable>
 		readonly find: (
 			organizationId: string,
 			id: string,
-		) => Effect.Effect<Option.Option<Wait>, BotsApi.BotStorageUnavailable>
-		/** The open waits in every organization. */
+		) => Effect.Effect<Option.Option<Reminder>, BotsApi.BotStorageUnavailable>
+		/** The open reminders in every organization. */
 		readonly open: Effect.Effect<
-			ReadonlyArray<{ readonly organizationId: string; readonly value: Wait }>,
+			ReadonlyArray<{
+				readonly organizationId: string
+				readonly value: Reminder
+			}>,
 			BotsApi.BotStorageUnavailable
 		>
-		/** The waits whose time came, in every organization. */
+		/** The reminders whose time came, in every organization. */
 		readonly due: Effect.Effect<
-			ReadonlyArray<{ readonly organizationId: string; readonly value: Wait }>,
+			ReadonlyArray<{
+				readonly organizationId: string
+				readonly value: Reminder
+			}>,
 			BotsApi.BotStorageUnavailable
 		>
 		readonly close: (
 			organizationId: string,
-			wait: Wait,
-			status: Exclude<WaitStatus, "waiting">,
+			reminder: Reminder,
+			status: Exclude<ReminderStatus, "waiting">,
 		) => Effect.Effect<void, BotsApi.BotStorageUnavailable>
-		/** The open waits of a Session. */
-		readonly forSession: (
+		/** The open reminders of a Chat. */
+		readonly forChat: (
 			organizationId: string,
-			session: Session.Id,
-		) => Effect.Effect<ReadonlyArray<Wait>, BotsApi.BotStorageUnavailable>
+			chat: Chat.Id,
+		) => Effect.Effect<ReadonlyArray<Reminder>, BotsApi.BotStorageUnavailable>
 	}
->()("@openbot-build/openbot/plugins/work/Waits") {}
+>()("@openbot-build/openbot/plugins/work/Reminders") {}
 
-export const make: Effect.Effect<typeof Waits.Service, never, BotRecords> =
+export const make: Effect.Effect<typeof Reminders.Service, never, BotRecords> =
 	Effect.gen(function* () {
 		const records = yield* BotRecords
-		const waits = records.collection("wait", Wait, WaitStatus)
-		const keys = (organizationId: string, wait: Wait) => ({
+		const reminders = records.collection("reminder", Reminder, ReminderStatus)
+		const keys = (organizationId: string, reminder: Reminder) => ({
 			organizationId,
-			id: wait.id,
-			owner: wait.userId,
-			scope: wait.session,
-			status: wait.status,
+			id: reminder.id,
+			owner: reminder.userId,
+			scope: reminder.chat,
+			status: reminder.status,
 		})
-		return Waits.of({
+		return Reminders.of({
 			start: (organizationId, input) =>
 				Effect.gen(function* () {
-					const id =
-						"wat_" + hash([input.session, input.toolCallId]).slice(0, 32)
+					const id = "rem_" + hash([input.chat, input.toolCallId]).slice(0, 32)
 					return yield* records.transaction(
 						id,
 						Effect.gen(function* () {
-							const found = yield* waits.find(organizationId, id)
+							const found = yield* reminders.find(organizationId, id)
 							if (found._tag === "Some") return found.value
-							const wait: Wait = {
+							const reminder: Reminder = {
 								...input,
 								id,
 								createdAt: yield* Clock.currentTimeMillis,
 								status: "waiting",
 							}
-							yield* waits.put(keys(organizationId, wait), wait)
-							return wait
+							yield* reminders.put(keys(organizationId, reminder), reminder)
+							return reminder
 						}),
 					)
 				}),
-			find: waits.find,
-			open: waits.withStatus("waiting"),
+			find: reminders.find,
+			open: reminders.withStatus("waiting"),
 			due: Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
-				const open = yield* waits.withStatus("waiting")
+				const open = yield* reminders.withStatus("waiting")
 				return open.filter((entry) => entry.value.dueAt <= now)
 			}),
-			close: (organizationId, wait, status) =>
-				waits.put(keys(organizationId, { ...wait, status }), {
-					...wait,
+			close: (organizationId, reminder, status) =>
+				reminders.put(keys(organizationId, { ...reminder, status }), {
+					...reminder,
 					status,
 				}),
-			forSession: (organizationId, session) =>
-				waits.list(organizationId, { scope: session, status: "waiting" }),
+			forChat: (organizationId, chat) =>
+				reminders.list(organizationId, { scope: chat, status: "waiting" }),
 		})
 	})
-export const layer = Layer.effect(Waits, make)
+export const layer = Layer.effect(Reminders, make)

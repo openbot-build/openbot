@@ -275,13 +275,13 @@ export const appInvocations = table(
 	{
 		owner: text().notNull(),
 		id: text().notNull(),
-		session: text().notNull(),
+		chat: text().notNull(),
 		status: text().notNull(),
 		body: text().notNull(),
 	},
 	(t) => [
 		primaryKey({ columns: [t.owner, t.id] }),
-		index("openbot_app_invocations_session").on(t.owner, t.session),
+		index("openbot_app_invocations_chat").on(t.owner, t.chat),
 	],
 )
 /**
@@ -294,7 +294,7 @@ export const codeRuns = table(
 	{
 		owner: text().notNull(),
 		id: text().notNull(),
-		session: text().notNull(),
+		chat: text().notNull(),
 		callId: text("call_id").notNull(),
 		status: text().notNull(),
 		/** While a host runs the program, other hosts leave it alone until this time. */
@@ -303,7 +303,7 @@ export const codeRuns = table(
 	},
 	(t) => [
 		primaryKey({ columns: [t.owner, t.id] }),
-		index("openbot_code_runs_session").on(t.owner, t.session),
+		index("openbot_code_runs_chat").on(t.owner, t.chat),
 	],
 )
 export const appAuthorizations = table("openbot_app_authorizations", {
@@ -402,46 +402,71 @@ export const appIndexEntries = table(
 	(t) => [primaryKey({ columns: [t.namespace, t.cardUrl] })],
 )
 
-export const versions = table(
-	"openbot_timeline_versions",
-	{
-		namespace: text().notNull(),
-		id: text().notNull(),
-		schemaVersion: text("schema_version").notNull(),
-		parents: text().notNull(),
-		format: integer("snapshot_format").notNull(),
-		value: text().notNull(),
-		history: text().notNull(),
-	},
-	(t) => [primaryKey({ columns: [t.namespace, t.id] })],
-)
-export const contents = table(
-	"openbot_timeline_contents",
-	{
-		namespace: text().notNull(),
-		id: text().notNull(),
-		message: text().notNull(),
-		content: text().notNull(),
-	},
-	(t) => [primaryKey({ columns: [t.namespace, t.id] })],
-)
-export const refs = table(
-	"openbot_session_references",
+/**
+ * One Chat of a namespace. `body` is its small record, and `state` is what its model
+ * sees. The other columns copy some fields of the record, so lists and sweeps can
+ * read them without decoding JSON.
+ */
+export const chats = table(
+	"openbot_chats",
 	{
 		namespace: text().notNull(),
 		id: text().notNull(),
 		body: text().notNull(),
-		head: text().notNull(),
-		archived: integer().notNull(),
+		state: text().notNull(),
+		bot: text().notNull(),
+		kind: text().notNull(),
 		status: text().notNull(),
 		turn: text(),
-		response: text(),
-		responseSummary: text("response_summary"),
 		revision: integer().notNull(),
+		/** The number of inputs that wait for a Turn. */
+		inboxSize: integer("inbox_size").notNull(),
+		/** The last time that a running Turn of this Chat said that it still runs. */
+		runnerSeenAt: time("runner_seen_at"),
+		createdAt: time("created_at").notNull(),
+		updatedAt: time("updated_at").notNull(),
 	},
 	(t) => [
 		primaryKey({ columns: [t.namespace, t.id] }),
-		index("openbot_session_references_list").on(t.namespace, t.archived, t.id),
+		index("openbot_chats_bot").on(t.namespace, t.bot, t.kind),
+		index("openbot_chats_waiting")
+			.on(t.status, t.inboxSize)
+			.where(sql`${t.inboxSize} > 0 OR ${t.status} = 'Running'`),
+		// Each member has one direct Chat with each Bot.
+		uniqueIndex("openbot_chats_direct")
+			.on(t.namespace, t.bot)
+			.where(sql`${t.kind} = 'direct'`),
+	],
+)
+/** The Items of the Chats. A Chat only adds Items, so a row never changes. */
+export const chatItems = table(
+	"openbot_chat_items",
+	{
+		namespace: text().notNull(),
+		chat: text().notNull(),
+		seq: integer().notNull(),
+		id: text().notNull(),
+		turn: text(),
+		value: text().notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.namespace, t.chat, t.seq] }),
+		index("openbot_chat_items_turn").on(t.namespace, t.chat, t.turn),
+	],
+)
+/** The Turns of the Chats. `position` keeps them in the order that they started. */
+export const chatTurns = table(
+	"openbot_chat_turns",
+	{
+		namespace: text().notNull(),
+		chat: text().notNull(),
+		id: text().notNull(),
+		position: bigserial({ mode: "number" }).notNull(),
+		value: text().notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.namespace, t.chat, t.id] }),
+		index("openbot_chat_turns_order").on(t.namespace, t.chat, t.position),
 	],
 )
 
@@ -1065,8 +1090,8 @@ export const computerUsage = table(
 )
 
 /**
- * Each chat of a Channel is one long-lived Session. `owner` is the actor of the Channel when
- * the chat began. The Session stays with that member when the actor changes.
+ * Each chat of a Channel is one Chat that lasts. `owner` is the actor of the Channel when
+ * the chat began. The Chat stays with that member when the actor changes.
  */
 export const channelConversations = table(
 	"openbot_channel_conversations",
@@ -1076,7 +1101,7 @@ export const channelConversations = table(
 		conversationKey: text("conversation_key").notNull(),
 		kind: text().notNull(),
 		title: text(),
-		session: text().notNull(),
+		chat: text().notNull(),
 		owner: text().notNull(),
 		createdAt: time("created_at").notNull(),
 	},
@@ -1086,7 +1111,7 @@ export const channelConversations = table(
 			columns: [t.organizationId, t.channelId],
 			foreignColumns: [channels.organizationId, channels.id],
 		}).onDelete("cascade"),
-		uniqueIndex("openbot_channel_conversations_session").on(t.session),
+		uniqueIndex("openbot_channel_conversations_chat").on(t.chat),
 	],
 )
 
@@ -1134,7 +1159,7 @@ export const channelDeliveries = table(
 		/** `reply` for the answer of a Turn, `request` for a request card, `notice` otherwise. */
 		kind: text().notNull(),
 		target: text().notNull(),
-		session: text(),
+		chat: text(),
 		turn: text(),
 		request: text(),
 		body: text().notNull(),
@@ -1152,7 +1177,7 @@ export const channelDeliveries = table(
 			columns: [t.organizationId, t.channelId],
 			foreignColumns: [channels.organizationId, channels.id],
 		}).onDelete("cascade"),
-		uniqueIndex("openbot_channel_deliveries_turn").on(t.session, t.turn),
+		uniqueIndex("openbot_channel_deliveries_turn").on(t.chat, t.turn),
 		uniqueIndex("openbot_channel_deliveries_request").on(
 			t.channelId,
 			t.request,
@@ -1174,9 +1199,9 @@ export const usageEvents = table(
 		id: text().primaryKey(),
 		organizationId: text("organization_id").notNull(),
 		occurredAt: time("occurred_at").notNull(),
-		/** `turn`, `compaction`, `session_memory`, `judge`, `bot_memory` or `other`. */
+		/** `turn`, `compaction`, `judge`, `bot_memory` or `other`. */
 		source: text().notNull(),
-		sessionId: text("session_id"),
+		chatId: text("chat_id"),
 		turnId: text("turn_id"),
 		botId: text("bot_id"),
 		userId: text("user_id"),

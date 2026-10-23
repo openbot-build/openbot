@@ -3,7 +3,7 @@ import {
 	CodeRunsApi,
 	ExperienceNotFound,
 	ExperienceStorageUnavailable,
-	SessionConflict,
+	ChatConflict,
 } from "@openbot-build/api"
 import { and, eq, isNull, lt, or } from "drizzle-orm"
 import { Effect, Option, Schema } from "effect"
@@ -33,11 +33,11 @@ export const Run = Schema.Struct({
 export type Run = typeof Run.Type
 
 export type Error =
-	ExperienceNotFound | ExperienceStorageUnavailable | SessionConflict
+	ExperienceNotFound | ExperienceStorageUnavailable | ChatConflict
 export const unavailable = () => ExperienceStorageUnavailable.make({})
 /** Keep the errors that callers handle. Every other storage failure becomes one error. */
 export const failure = (error: unknown) =>
-	error instanceof SessionConflict || error instanceof ExperienceNotFound
+	error instanceof ChatConflict || error instanceof ExperienceNotFound
 		? error
 		: unavailable()
 /** Reads only find nothing or fail to reach the database. */
@@ -46,7 +46,7 @@ const readFailure = (error: unknown): ReadError =>
 	error instanceof ExperienceNotFound ? error : unavailable()
 const notFound = () => ExperienceNotFound.make({ id: "Code run" })
 const conflict = () =>
-	SessionConflict.make({
+	ChatConflict.make({
 		message: "The code run changed. Read it again before you continue.",
 	})
 const codec = Schema.fromJsonString(Run)
@@ -55,20 +55,18 @@ type Sealer = typeof Secrets.Service
 /** The id of the program of one tool call. The same call always gets the same id. */
 export const idOf = (input: {
 	readonly owner: string
-	readonly session: string
+	readonly chat: string
 	readonly turn: string
 	readonly callId: string
 }) =>
 	createHash("sha256")
-		.update(
-			JSON.stringify([input.owner, input.session, input.turn, input.callId]),
-		)
+		.update(JSON.stringify([input.owner, input.chat, input.turn, input.callId]))
 		.digest("hex")
 
 /** The API form of a run. It leaves out what only the host needs. */
 export const view = (run: Run): CodeRunsApi.CodeRun => ({
 	id: run.id,
-	session: run.session,
+	chat: run.chat,
 	turn: run.turn,
 	callId: run.callId,
 	status: run.status,
@@ -109,12 +107,12 @@ export const list = (
 	db: Db.Database,
 	secrets: Sealer,
 	owner: string,
-	session: string,
+	chat: string,
 ): Effect.Effect<ReadonlyArray<Run>, ReadError> =>
 	db
 		.select()
 		.from(codeRuns)
-		.where(and(eq(codeRuns.owner, owner), eq(codeRuns.session, session)))
+		.where(and(eq(codeRuns.owner, owner), eq(codeRuns.chat, chat)))
 		.pipe(
 			Effect.flatMap((rows) =>
 				Effect.forEach(rows, (row) => open(secrets, row)),
@@ -123,12 +121,12 @@ export const list = (
 			Effect.mapError(unavailable),
 		)
 
-/** The program of a tool call in a Session, if the call is a Code Mode call. */
+/** The program of a tool call in a Chat, if the call is a Code Mode call. */
 export const forCall = (
 	db: Db.Database,
 	secrets: Sealer,
 	owner: string,
-	session: string,
+	chat: string,
 	callId: string,
 ): Effect.Effect<Option.Option<Run>, ReadError> =>
 	db
@@ -137,7 +135,7 @@ export const forCall = (
 		.where(
 			and(
 				eq(codeRuns.owner, owner),
-				eq(codeRuns.session, session),
+				eq(codeRuns.chat, chat),
 				eq(codeRuns.callId, callId),
 			),
 		)
@@ -168,7 +166,7 @@ export const insert = (
 			.values({
 				owner,
 				id: value.id,
-				session: value.session,
+				chat: value.chat,
 				callId: value.callId,
 				status: value.status,
 				leaseUntil,
@@ -229,7 +227,7 @@ export const stale = (
 	ReadonlyArray<{
 		readonly owner: string
 		readonly id: string
-		readonly session: string
+		readonly chat: string
 	}>,
 	Error
 > =>
@@ -237,7 +235,7 @@ export const stale = (
 		.select({
 			owner: codeRuns.owner,
 			id: codeRuns.id,
-			session: codeRuns.session,
+			chat: codeRuns.chat,
 		})
 		.from(codeRuns)
 		.where(

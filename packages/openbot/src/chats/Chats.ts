@@ -1,75 +1,63 @@
+import { Bot, Chat, ChatStore, Config, Item, Turn } from "@openbot-build/core"
 import {
-	Bot,
-	Config,
-	Item,
-	Timeline,
-	Session,
-	SessionStore,
-	Turn,
-} from "@openbot-build/core"
-import {
-	SessionBusy,
-	SessionModelInvalid,
-	type SessionModels,
-	type SelectSessionModelRequest,
-	SessionNotFound,
-	SessionConflict,
-	SessionInvalidRecord,
-	SessionStorageUnavailable,
-	SessionExecutionUnavailable,
+	ChatModelInvalid,
+	ChatNotFound,
+	ChatConflict,
+	ChatStorageUnavailable,
+	ChatExecutionUnavailable,
+	type ChatModels,
+	type ChatActivity,
+	type ChatResponse,
+	type ChatResponseSseEvent,
+	type ChatView,
+	type ChatSummary,
+	type ChatKind,
+	type ChatParent,
+	type ChatTodos,
 	type Identity,
-	type UpdateSessionRequest,
-	type ForkSessionRequest,
-	type RestoreSessionRequest,
-	type SessionActivity,
-	type SessionResponse,
-	type SessionResponseSseEvent,
-	type SessionView,
-	type SessionSummary,
-	type CreateSessionRequest,
-	type StartTurnRequest,
-	type MemoryCommand,
-	type BotsApi,
-	type SessionKind,
-	type SessionParent,
-	type SessionMemory,
-	type SessionTodos,
+	type MessageInput,
+	type MessageReceipt,
+	type UpdateChatRequest,
 	type UpdateTodosRequest,
+	type BotsApi,
+	type PlanApproval,
 } from "@openbot-build/api"
-import { Context, Effect, Layer, Scope, Stream } from "effect"
-import { LanguageModel, type Tool, type Toolkit } from "effect/ai"
-import type * as Memory from "../plugins/memory/Memory.ts"
+import { Context, Effect, Layer, Scope, Stream, Option } from "effect"
+import { LanguageModel, type Prompt, type Tool, type Toolkit } from "effect/ai"
 import type { Tools as AppTools } from "../plugins/apps/AppPlugin.ts"
-import type * as SessionHost from "./SessionHost.ts"
+import type * as ChatHost from "./ChatHost.ts"
 
-/** What a new Session needs: the Bot that works in it and where the work came from. */
+/** What a new Chat needs: the Bot that works in it and where the work came from. */
 export interface CreateInput {
+	/** A fixed ID, so a second attempt finds the first Chat. */
+	readonly id?: Chat.Id
 	readonly bot: BotsApi.Bot
-	readonly kind: SessionKind
-	readonly chain: SessionHost.Chain
-	readonly parent?: SessionParent
+	readonly kind: ChatKind
+	readonly chain: ChatHost.Chain
+	readonly parent?: ChatParent
 	readonly review?: string
-	readonly planApproval?: SessionHost.SessionHostState["planApproval"]
+	readonly planApproval?: PlanApproval.PlanApproval
 	readonly trigger?: string
-	readonly channel?: SessionHost.SessionHostState["channel"]
+	readonly channel?: ChatHost.ChatHostState["channel"]
 	readonly title?: string
-	readonly settings?: CreateSessionRequest["settings"]
 }
 
 /**
- * A Turn request from inside OpenBot. `author` is the member that the Turn works for,
- * when it is not the owner of the Session, such as the speaker in a chat Channel.
- * The HTTP API does not take it.
+ * Input from inside OpenBot or from a client. `author` is the member that the input is
+ * for. OpenBot always sets it, so the Turns of one person steer each other.
+ * A `notice` marks input from OpenBot, such as the end of a delegation.
  */
-export type SendInput = StartTurnRequest & { readonly author?: Turn.Author }
+export interface DeliverInput {
+	readonly input: MessageInput | Prompt.Prompt
+	readonly author: Turn.Author
+	readonly notice?: Item.Notice
+	readonly approved?: Chat.ApprovedCall
+	/** Wait for the next Turn, also when a Turn of the same author runs. */
+	readonly queue?: boolean
+}
 
 export type ServiceError =
-	| SessionNotFound
-	| SessionBusy
-	| SessionConflict
-	| SessionInvalidRecord
-	| SessionStorageUnavailable
-	| SessionModelInvalid
+	ChatNotFound | ChatConflict | ChatStorageUnavailable | ChatModelInvalid
 
 export type ExecutionServices<Tools extends Record<string, Tool.Any>, R> =
 	| R
@@ -94,9 +82,9 @@ export interface Options<
 		readonly models: ReadonlyArray<Config.Model>
 	}>
 	/**
-	 * Settings that the host gives to each new Session, such as the simulated
+	 * Settings that the host gives to each new Chat, such as the simulated
 	 * model of a development platform or of a test. They come before the model
-	 * of the Bot. A real platform never sets them: each Session gets its model
+	 * of the Bot. A real platform never sets them: each Chat gets its model
 	 * from its own settings or from its Bot.
 	 */
 	readonly defaults?: Effect.Effect<Partial<Turn.Settings>>
@@ -107,15 +95,6 @@ export interface Options<
 		Config.ModelConfigurationError
 	>
 	/**
-	 * Your own model and policy for learned memory, and the server default for the switches.
-	 * A Session can override each switch. Both switches are on when you do not set them.
-	 */
-	readonly memory?: Memory.Options & {
-		readonly defaults?: Partial<Memory.Settings>
-	}
-	/** The memory switches of the organization. They come after `memory.defaults`. */
-	readonly memoryDefaults?: Effect.Effect<Partial<Memory.Settings>>
-	/**
 	 * The settings of the organization of the owner, read on each use.
 	 * They come before the static options above.
 	 */
@@ -123,136 +102,108 @@ export interface Options<
 	readonly namespace?: string
 	readonly runtime?: Bot.Definition<Tools, E, R, BuildE, BuildR>
 	readonly layerExecution?: (
-		ref: Session.Ref,
+		ref: Chat.Ref,
 		namespace: string,
 	) => Layer.Layer<ExecutionServices<Tools, R>, E>
 }
 
 /** The options that come from the settings of an organization. */
 export type OrganizationOptions = Required<
-	Pick<Options, "modelCatalog" | "resolveModel" | "memoryDefaults">
+	Pick<Options, "modelCatalog" | "resolveModel">
 >
 
-export class Sessions extends Context.Service<
-	Sessions,
+export class Chats extends Context.Service<
+	Chats,
 	{
-		readonly selectMode: (
-			id: Session.Id,
-			input: {
-				readonly expected: Session.Revision
-				readonly mode: Config.Mode
-			},
-		) => Effect.Effect<SessionView, ServiceError>
-		readonly versions: (
-			id: Session.Id,
-		) => Effect.Effect<ReadonlyArray<Timeline.Version>, ServiceError>
-		/** The tool calls of the current Turn that wait for an answer. */
-		readonly waits: (
-			id: Session.Id,
-		) => Effect.Effect<ReadonlyArray<Session.Wait>, ServiceError>
-		readonly models: (
-			id: Session.Id,
-		) => Effect.Effect<SessionModels, ServiceError>
-		readonly selectModel: (
-			id: Session.Id,
-			input: SelectSessionModelRequest,
-		) => Effect.Effect<
-			SessionView,
-			ServiceError | SessionModelInvalid | SessionExecutionUnavailable
-		>
-		readonly memory: (
-			id: Session.Id,
-		) => Effect.Effect<SessionMemory, ServiceError>
-		readonly updateMemory: (
-			id: Session.Id,
-			input: {
-				readonly expected: Timeline.VersionId
-				readonly revision: Session.Revision
-				readonly command: MemoryCommand
-			},
-		) => Effect.Effect<SessionView, ServiceError>
-		readonly todos: (
-			id: Session.Id,
-		) => Effect.Effect<SessionTodos, ServiceError>
-		readonly updateTodos: (
-			id: Session.Id,
-			input: UpdateTodosRequest,
-		) => Effect.Effect<SessionView, ServiceError>
-		readonly list: (input?: {
-			readonly archived?: boolean
-			readonly bot?: string
-			readonly kind?: SessionKind
-		}) => Effect.Effect<ReadonlyArray<SessionSummary>, ServiceError>
-		readonly update: (
-			id: Session.Id,
-			input: UpdateSessionRequest,
-		) => Effect.Effect<SessionView, ServiceError>
-		readonly remove: (id: Session.Id) => Effect.Effect<void, ServiceError>
-		readonly fork: (
-			id: Session.Id,
-			input: ForkSessionRequest,
-		) => Effect.Effect<SessionView, ServiceError>
-		readonly history: (
-			id: Session.Id,
-			version?: Timeline.VersionId,
-		) => Effect.Effect<Timeline.State, ServiceError>
-		readonly exportRecord: (
-			id: Session.Id,
-		) => Effect.Effect<SessionStore.Record, ServiceError>
-		readonly restore: (
-			id: Session.Id,
-			input: RestoreSessionRequest,
-		) => Effect.Effect<SessionView, ServiceError>
-		readonly wait: (
-			id: Session.Id,
-			after: Session.Revision,
-			timeoutMs?: number,
-			afterActivity?: SessionActivity,
-		) => Effect.Effect<SessionView, ServiceError>
-		readonly interrupt: (
-			id: Session.Id,
-			turn: Turn.Id,
-		) => Effect.Effect<SessionView, ServiceError>
 		readonly create: (
 			input: CreateInput,
-		) => Effect.Effect<SessionView, ServiceError>
-		readonly get: (id: Session.Id) => Effect.Effect<SessionView, ServiceError>
-		readonly send: (
-			id: Session.Id,
-			input: SendInput,
+		) => Effect.Effect<ChatView, ServiceError>
+		/**
+		 * The direct Chat of a member with a Bot. OpenBot makes it the first time.
+		 * Each member has one direct Chat with each Bot.
+		 */
+		readonly direct: (
+			bot: BotsApi.Bot,
+			chain: ChatHost.Chain,
+		) => Effect.Effect<Chat.Id, ServiceError>
+		readonly get: (id: Chat.Id) => Effect.Effect<ChatView, ServiceError>
+		/** The record of a Chat, with its OpenBot data. */
+		readonly read: (
+			id: Chat.Id,
+		) => Effect.Effect<Chat.View<ChatHost.Values>, ServiceError>
+		readonly list: (input?: {
+			readonly bot?: string
+			readonly kind?: ChatKind
+			readonly kinds?: ReadonlyArray<ChatKind>
+		}) => Effect.Effect<ReadonlyArray<ChatSummary>, ServiceError>
+		readonly update: (
+			id: Chat.Id,
+			input: UpdateChatRequest,
+		) => Effect.Effect<ChatView, ServiceError | ChatExecutionUnavailable>
+		readonly change: (
+			id: Chat.Id,
+			update: (state: ChatHost.ChatHostState) => ChatHost.ChatHostState,
+		) => Effect.Effect<void, ServiceError>
+		readonly remove: (id: Chat.Id) => Effect.Effect<void, ServiceError>
+		readonly models: (id: Chat.Id) => Effect.Effect<ChatModels, ServiceError>
+		readonly todos: (id: Chat.Id) => Effect.Effect<ChatTodos, ServiceError>
+		readonly updateTodos: (
+			id: Chat.Id,
+			input: UpdateTodosRequest,
+		) => Effect.Effect<ChatView, ServiceError>
+		readonly wait: (
+			id: Chat.Id,
+			after: Chat.Revision,
+			timeoutMs?: number,
+			afterActivity?: ChatActivity,
+		) => Effect.Effect<ChatView, ServiceError>
+		/** Stops the running Turn. It does nothing when no Turn runs. */
+		readonly interrupt: (id: Chat.Id) => Effect.Effect<ChatView, ServiceError>
+		/**
+		 * Gives input to a Chat. It starts a Turn when the Chat is free, steers the
+		 * running Turn of the same author, or waits in the inbox.
+		 */
+		readonly deliver: (
+			id: Chat.Id,
+			input: DeliverInput,
+		) => Effect.Effect<MessageReceipt, ServiceError | ChatExecutionUnavailable>
+		/**
+		 * Like deliver. When the input starts a Turn, it also gives the live events
+		 * of that Turn.
+		 */
+		readonly deliverStream: (
+			id: Chat.Id,
+			input: DeliverInput,
 		) => Effect.Effect<
-			SessionResponse,
-			ServiceError | SessionExecutionUnavailable
+			{
+				readonly receipt: MessageReceipt
+				readonly events: Option.Option<Stream.Stream<ChatResponseSseEvent>>
+			},
+			ServiceError | ChatExecutionUnavailable,
+			Scope.Scope
 		>
+		/** Starts the next Turn from the inbox, when the Chat is free and input waits. */
+		readonly drain: (
+			id: Chat.Id,
+		) => Effect.Effect<void, ServiceError | ChatExecutionUnavailable>
+		/**
+		 * Ends a Turn that says it runs while no process runs it, for example after a
+		 * crash. Its unread input goes back to the inbox.
+		 */
+		readonly closeStale: (
+			id: Chat.Id,
+			turn: Turn.Id,
+		) => Effect.Effect<void, ServiceError>
 		readonly startAction: (
-			id: Session.Id,
+			id: Chat.Id,
 			input: {
-				readonly expected: Session.Revision
 				readonly action: Turn.Action
 				readonly turn?: Turn.Id
+				readonly author?: Turn.Author
 			},
-		) => Effect.Effect<Session.ActionReceipt, ServiceError>
-		/**
-		 * Answers a waiting tool call of the current Turn. It does nothing when the call
-		 * does not wait any more, so a second answer is safe.
-		 */
-		readonly resolveCall: (
-			id: Session.Id,
-			toolCallId: string,
-			outcome: Session.Outcome,
-		) => Effect.Effect<void, ServiceError | SessionExecutionUnavailable>
-		readonly resume: (
-			id: Session.Id,
-		) => Effect.Effect<SessionView, ServiceError>
-		readonly settings: (
-			id: Session.Id,
-			input: {
-				readonly expected: Session.Revision
-				readonly settings: Turn.Settings
-			},
-		) => Effect.Effect<SessionView, ServiceError | SessionModelInvalid>
+		) => Effect.Effect<Chat.ActionReceipt, ServiceError>
 		readonly turns: (
-			id: Session.Id,
+			id: Chat.Id,
 			input: { readonly after?: Turn.Id; readonly limit?: number },
 		) => Effect.Effect<
 			{
@@ -262,14 +213,14 @@ export class Sessions extends Context.Service<
 			ServiceError
 		>
 		readonly turn: (
-			id: Session.Id,
+			id: Chat.Id,
 			turn: Turn.Id,
 		) => Effect.Effect<
-			{ readonly turn: Turn.Record; readonly response: SessionResponse },
+			{ readonly turn: Turn.Record; readonly response: ChatResponse },
 			ServiceError
 		>
-		readonly items: (
-			id: Session.Id,
+		readonly turnItems: (
+			id: Chat.Id,
 			turn: Turn.Id,
 			input: { readonly after?: Item.Id; readonly limit?: number },
 		) => Effect.Effect<
@@ -279,61 +230,46 @@ export class Sessions extends Context.Service<
 			},
 			ServiceError
 		>
-		readonly steer: (
-			id: Session.Id,
+		/** All the Items of one Turn, oldest first. */
+		readonly turnLog: (
+			id: Chat.Id,
 			turn: Turn.Id,
-			input: StartTurnRequest["input"],
-			author?: Turn.Author,
-		) => Effect.Effect<Session.Receipt, ServiceError>
-		readonly enqueue: (
-			id: Session.Id,
-			input: {
-				readonly input: StartTurnRequest["input"]
-				readonly expected?: Session.Revision
-				readonly author?: Turn.Author
-			},
+		) => Effect.Effect<ReadonlyArray<Item.Record>, ServiceError>
+		/** The Items after a place in the log, oldest first, with the authors of their Turns. */
+		readonly itemsAfter: (
+			id: Chat.Id,
+			after: number,
 		) => Effect.Effect<
 			{
-				readonly session: Session.Id
-				readonly item: Item.Id
-				readonly revision: Session.Revision
+				readonly items: ReadonlyArray<Item.Record>
+				readonly authors: ReadonlyMap<Turn.Id, Turn.Author>
 			},
 			ServiceError
 		>
-
-		readonly sendStream: (
-			id: Session.Id,
-			input: SendInput,
+		readonly items: (
+			id: Chat.Id,
+			input: { readonly before?: Item.Seq; readonly limit?: number },
 		) => Effect.Effect<
-			Stream.Stream<SessionResponseSseEvent>,
-			ServiceError | SessionExecutionUnavailable,
-			Scope.Scope
+			{
+				readonly items: ReadonlyArray<Item.Record>
+				readonly next: Item.Seq | null
+			},
+			ServiceError
 		>
 	}
->()("@openbot-build/openbot/sessions/Sessions") {}
+>()("@openbot-build/openbot/chats/Chats") {}
 
 export type Instance<
 	Tools extends Record<string, Tool.Any> = {},
 	E = never,
 	R = never,
-> = typeof Sessions.Service & {
-	readonly runtime: Session.Runtime<
-		SessionHost.Values,
+> = typeof Chats.Service & {
+	readonly runtime: Chat.Runtime<
+		ChatHost.Values,
 		Tools,
-		| E
-		| Timeline.VersionError
-		| Session.SessionNotFound
-		| Session.SessionError
-		| SessionStore.SessionStoreError,
+		E | Chat.ChatNotFound | Chat.ChatError | ChatStore.ChatStoreError,
 		R,
 		AppTools
 	>
-	readonly store: SessionStore.Store<SessionHost.Values>
-	readonly consolidate: (
-		session: Session.Id,
-	) => Effect.Effect<
-		Session.View<SessionHost.Values>,
-		ServiceError,
-		LanguageModel.LanguageModel
-	>
+	readonly store: ChatStore.Store<ChatHost.Values>
 }

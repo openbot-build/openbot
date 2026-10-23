@@ -3,7 +3,7 @@ import { Array as Arr, HashMap, HashSet, Option, Schema } from "effect"
 import * as Audience from "./Audience.ts"
 
 /**
- * Bot memory is what one Bot learns over many Sessions: one pool of tagged entries,
+ * Bot memory is what one Bot learns over all its Chats: one pool of tagged entries,
  * kept by a memory Bot. The schemas are part of the HTTP contract, so they live in the api package.
  */
 export const Layer = Api.Layer
@@ -21,7 +21,7 @@ export type Edit = Api.Edit
 export const LogEntry = Api.LogEntry
 export type LogEntry = Api.LogEntry
 
-const sourceKey = (source: ItemSource) => source.session + "/" + source.item
+const sourceKey = (source: ItemSource) => source.chat + "/" + source.item
 
 /** One Item that the memory Bot may learn from. */
 export interface Evidence {
@@ -33,11 +33,11 @@ export interface Evidence {
 	readonly tool?: string
 	/** The person of the Turn of the Item. */
 	readonly author: string
-	/** The organization of the Session. */
+	/** The organization of the Chat. */
 	readonly organizationId: string
 	/** Who saw the Item when it happened: the person, or the Channel group. */
 	readonly audience: Audience.Audience
-	/** The Channel of the Session, when it has one. */
+	/** The Channel of the Chat, when it has one. */
 	readonly channel?: string
 	readonly text: string
 }
@@ -45,7 +45,7 @@ export interface Evidence {
 /** The tags of OpenBot for one Item. */
 export const evidenceTags = (evidence: Evidence): ReadonlyArray<string> => [
 	Audience.fromTag(evidence.author),
-	Audience.sessionTag(evidence.source.session),
+	Audience.chatTag(evidence.source.chat),
 	Audience.orgTag(evidence.organizationId),
 	Audience.forTag(evidence.audience),
 	...(evidence.channel === undefined

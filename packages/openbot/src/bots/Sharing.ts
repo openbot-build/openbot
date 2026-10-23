@@ -6,7 +6,6 @@ import type { BotsApi } from "@openbot-build/api"
  * Above it there is only the person, so in another organization it works like their own Bot.
  */
 export const shareable = (bot: BotsApi.Bot) =>
-	bot.kind === "persistent" &&
 	!bot.archived &&
 	bot.source === undefined &&
 	(bot.owner._tag === "Member" || bot.owner._tag === "Organization")

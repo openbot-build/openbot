@@ -2,18 +2,18 @@ import { PlanApproval } from "@openbot-build/api"
 import type { BotsApi } from "@openbot-build/api"
 import { Effect } from "effect"
 import type { Settings } from "../../settings/Settings.ts"
-import type * as SessionHost from "../../sessions/SessionHost.ts"
+import type * as ChatHost from "../../chats/ChatHost.ts"
 
 /**
- * How a plan in this Session is approved. The most specific setting wins:
- * the Session, then its Bot, then the member, then the organization.
+ * How a plan in this Chat is approved. The most specific setting wins:
+ * the Chat, then its Bot, then the member, then the organization.
  * A more specific setting may be looser than a less specific one.
  */
 export const approvalFor = (input: {
 	readonly settings: typeof Settings.Service
-	readonly state: SessionHost.SessionHostState
+	readonly state: ChatHost.ChatHostState
 	/** Who the current Turn works for. Their own setting counts, not the owner's. */
-	readonly chain: SessionHost.Chain
+	readonly chain: ChatHost.Chain
 	readonly bot: BotsApi.Bot
 }) =>
 	Effect.gen(function* () {

@@ -30,7 +30,7 @@ export const resourceKey = (target: {
 	readonly id: Option.Option<string>
 }): string => {
 	const { subject, kind, id } = target
-	// The kind is the name of its key part, such as `session`.
+	// The kind is the name of its key part, such as `chat`.
 	const child = (parent: string) =>
 		Option.match(id, {
 			onNone: () => parent + "." + kind,
@@ -45,7 +45,7 @@ export const resourceKey = (target: {
 			return userKey(subject)
 		case "apps":
 			return userKey(subject) + "." + kind
-		case "session":
+		case "chat":
 		case "connection":
 		case "request":
 			return child(userKey(subject))
@@ -70,7 +70,6 @@ export const rootOf = (owner: BotsApi.BotOwner): string | null => {
 		case "Organization":
 			return null
 		case "Member":
-		case "Session":
 		case "Bot":
 			return owner.userId
 	}

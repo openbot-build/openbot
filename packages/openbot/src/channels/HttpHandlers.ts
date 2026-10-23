@@ -73,7 +73,7 @@ export const layer = (publicOrigin: string) =>
 					),
 				)
 			/**
-			 * The Sessions of a Channel work for the caller, who becomes its actor. So the caller
+			 * The Chats of a Channel work for the caller, who becomes its actor. So the caller
 			 * must be able to give work to the Bot, and the Bot must belong to the organization.
 			 */
 			const checkBot = (caller: Caller, id: BotsApi.BotId) =>
@@ -86,11 +86,11 @@ export const layer = (publicOrigin: string) =>
 						BotStorageUnavailable: () => Effect.fail(unavailable()),
 					}),
 					Effect.flatMap((bot) =>
-						bot.kind === "persistent" && bot.owner._tag === "Organization"
+						bot.owner._tag === "Organization"
 							? Effect.void
 							: Effect.fail(
 									invalid(
-										"The Bot of a Channel must be a persistent Bot of the organization.",
+										"The Bot of a Channel must be a shared Bot of the organization.",
 									),
 								),
 					),

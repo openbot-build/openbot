@@ -46,8 +46,8 @@ export interface Conversation {
 	readonly key: string
 	readonly kind: "direct" | "group"
 	readonly title: string | null
-	readonly session: string
-	/** The member that owns the Session. */
+	readonly chat: string
+	/** The member that owns the Chat. */
 	readonly owner: string
 }
 
@@ -178,7 +178,7 @@ type Failure = ChannelsApi.ChannelsUnavailable
 
 /**
  * The Channels of each organization: their secrets, the people linked to them,
- * and the Session of each chat.
+ * and the Chat of each chat.
  */
 export class Channels extends Context.Service<
 	Channels,
@@ -283,8 +283,8 @@ export class Channels extends Context.Service<
 			channelId: string,
 			key: string,
 		) => Effect.Effect<Option.Option<Conversation>, Failure>
-		readonly conversationOfSession: (
-			session: string,
+		readonly conversationOfChat: (
+			chat: string,
 		) => Effect.Effect<Option.Option<Conversation>, Failure>
 		readonly conversations: (
 			channelId: string,
@@ -347,7 +347,7 @@ export const make = Effect.gen(function* () {
 		key: row.conversationKey,
 		kind: row.kind === "direct" ? "direct" : "group",
 		title: row.title,
-		session: row.session,
+		chat: row.chat,
 		owner: row.owner,
 	})
 	return Channels.of({
@@ -609,12 +609,12 @@ export const make = Effect.gen(function* () {
 					Option.map(Option.fromNullishOr(rows[0]), conversationOf),
 				),
 			),
-		conversationOfSession: (session) =>
+		conversationOfChat: (chat) =>
 			stored(
 				db
 					.select()
 					.from(channelConversations)
-					.where(eq(channelConversations.session, session)),
+					.where(eq(channelConversations.chat, chat)),
 			).pipe(
 				Effect.map((rows) =>
 					Option.map(Option.fromNullishOr(rows[0]), conversationOf),
@@ -640,7 +640,7 @@ export const make = Effect.gen(function* () {
 							conversationKey: conversation.key,
 							kind: conversation.kind,
 							title: conversation.title,
-							session: conversation.session,
+							chat: conversation.chat,
 							owner: conversation.owner,
 							createdAt: now,
 						})
@@ -650,7 +650,7 @@ export const make = Effect.gen(function* () {
 								channelConversations.conversationKey,
 							],
 							set: {
-								session: conversation.session,
+								chat: conversation.chat,
 								owner: conversation.owner,
 								title: conversation.title,
 							},

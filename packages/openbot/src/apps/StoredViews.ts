@@ -2,9 +2,9 @@ import {
 	AppViewsApi as Api,
 	ExperienceNotFound,
 	ExperienceStorageUnavailable,
-	SessionConflict,
+	ChatConflict,
 } from "@openbot-build/api"
-import { Item, Session, Turn } from "@openbot-build/core"
+import { Chat, Item, Turn } from "@openbot-build/core"
 import { and, eq, like } from "drizzle-orm"
 import { Array as Arr, Effect, Option, Schema } from "effect"
 import { appSecrets } from "../database/Schema.ts"
@@ -13,12 +13,12 @@ import * as Db from "../database/Database.ts"
 
 /** The open App views, their actions and their confirmed interaction state, kept sealed in Postgres. */
 export type Error =
-	ExperienceNotFound | ExperienceStorageUnavailable | SessionConflict
+	ExperienceNotFound | ExperienceStorageUnavailable | ChatConflict
 export const View = Schema.Struct({
 	id: Schema.String,
 	operationId: Schema.String,
 	readOnly: Schema.Boolean,
-	session: Session.Id,
+	chat: Chat.Id,
 	turn: Turn.Id,
 	item: Item.Id,
 	connectionId: Schema.String,
@@ -37,19 +37,19 @@ export type Action = typeof Action.Type
 
 export const unavailable = () => ExperienceStorageUnavailable.make({})
 export const conflict = () =>
-	SessionConflict.make({
+	ChatConflict.make({
 		message:
 			"The App view or confirmed interaction changed. Read its current state before continuing.",
 	})
 export const missing = () => ExperienceNotFound.make({ id: "App view" })
 /** Keep the errors that callers handle. Every other storage failure becomes one error. */
 export const failure = (value: unknown) =>
-	value instanceof ExperienceNotFound || value instanceof SessionConflict
+	value instanceof ExperienceNotFound || value instanceof ChatConflict
 		? value
 		: unavailable()
 export const initial: Api.Interaction = { revision: 0, context: null }
-export const interactionKey = (session: string, operationId: string) =>
-	JSON.stringify([session, operationId])
+export const interactionKey = (chat: string, operationId: string) =>
+	JSON.stringify([chat, operationId])
 export const actionKey = (viewId: string, requestId: string) =>
 	JSON.stringify([viewId, requestId])
 type Sealer = typeof Secrets.Service
@@ -86,12 +86,12 @@ export const open = <S extends Schema.Top>(
 			),
 		)
 
-/** The confirmed interaction context of each App operation in a Session. */
+/** The confirmed interaction context of each App operation in a Chat. */
 export const contexts = (
 	db: Db.Database,
 	secrets: Sealer,
 	owner: string,
-	session: string,
+	chat: string,
 ): Effect.Effect<
 	ReadonlyArray<{
 		readonly operationId: string
@@ -101,10 +101,8 @@ export const contexts = (
 > =>
 	Effect.gen(function* () {
 		const prefix =
-			(JSON.stringify([session]).slice(0, -1) + ",").replace(
-				/[\\%_]/g,
-				"\\$&",
-			) + "%"
+			(JSON.stringify([chat]).slice(0, -1) + ",").replace(/[\\%_]/g, "\\$&") +
+			"%"
 		const rows = yield* db
 			.select()
 			.from(appSecrets)
@@ -117,11 +115,11 @@ export const contexts = (
 			)
 		const values = yield* Effect.forEach(rows, (row) =>
 			Effect.gen(function* () {
-				const [boundSession, operationId] = yield* Schema.decodeEffect(
+				const [boundChat, operationId] = yield* Schema.decodeEffect(
 					Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
 				)(row.id)
 				const state = yield* open(secrets, Api.Interaction, row)
-				return boundSession === session && state.context !== null
+				return boundChat === chat && state.context !== null
 					? Option.some({ operationId, context: state.context })
 					: Option.none()
 			}),

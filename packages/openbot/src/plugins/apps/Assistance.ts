@@ -106,7 +106,7 @@ export const entries = (input: {
 		),
 		entry(
 			names.access,
-			"Check this user's App account labels and what setup or authorization they need. Ask the user to choose an account when more than one could do the task. After adding or authorizing, the user must explicitly continue in the original Session.",
+			"Check this user's App account labels and what setup or authorization they need. Ask the user to choose an account when more than one could do the task. After adding or authorizing, the user must say in the same Chat that the work can go on.",
 			{ type: "object", properties: {}, additionalProperties: false },
 			() =>
 				input.connections.listConnections.pipe(

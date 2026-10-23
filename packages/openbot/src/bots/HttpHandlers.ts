@@ -9,7 +9,6 @@ import {
 } from "@openbot-build/api"
 import { Effect, Option, Schema } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
-import { Backend } from "../app/Backend.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { botKey } from "../authorization/Policy.ts"
 import { Grants } from "../capabilities/Grants.ts"
@@ -32,7 +31,6 @@ export const layer = (publicOrigin: string) =>
 			const rules = yield* Rules
 			const grants = yield* Grants
 			const audit = yield* AuditLog
-			const backend = yield* Backend
 			const organization = yield* Organization
 			const services = yield* Effect.context<
 				AuthorizationServices | Effect.Services<typeof InvitationLinks.make>
@@ -99,9 +97,6 @@ export const layer = (publicOrigin: string) =>
 								...(query.archived === undefined
 									? {}
 									: { archived: query.archived === "true" }),
-								...(query.session === undefined
-									? {}
-									: { session: query.session }),
 								...(query.bot === undefined ? {} : { bot: query.bot }),
 							})
 							.pipe(Effect.provideContext(services))
@@ -134,37 +129,6 @@ export const layer = (publicOrigin: string) =>
 						yield* record(caller, "bot.updated", bot, {
 							revision: bot.revision,
 						})
-						return bot
-					}),
-				)
-				.handle("promoteBot", ({ params, payload }) =>
-					Effect.gen(function* () {
-						const caller = yield* Identity
-						const bot = yield* bots
-							.promote(caller, params.botId, payload.expected, payload.bot)
-							.pipe(Effect.provideContext(services))
-						// The memory of its delegated Sessions becomes its long-term memory.
-						const sessions = yield* backend
-							.forCaller(caller)
-							.pipe(Effect.mapError(unavailable))
-						const worked = yield* sessions
-							.list({ bot: bot.id, kind: "delegated" })
-							.pipe(Effect.mapError(unavailable))
-						for (const row of worked) {
-							const memory = yield* sessions
-								.memory(row.session.id)
-								.pipe(Effect.mapError(unavailable))
-							yield* memories.adopt(
-								homeOf(caller.organizationId, bot),
-								{
-									userId: caller.userId,
-									organizationId: caller.organizationId,
-								},
-								row.session.id,
-								memory,
-							)
-						}
-						yield* record(caller, "bot.promoted", bot, {})
 						return bot
 					}),
 				)
@@ -291,10 +255,10 @@ export const layer = (publicOrigin: string) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
 						const bot = yield* access(caller, params.botId, "bots.write")
-						if (payload.scope === "session")
+						if (payload.scope === "chat")
 							return yield* BotsApi.BotInvalid.make({
 								message:
-									"A person gives a Session Grant by answering a request in that Session.",
+									"A person gives a Chat Grant by answering a request in that Chat.",
 							})
 						const grant = yield* grants.create(caller.organizationId, {
 							bot: bot.id,

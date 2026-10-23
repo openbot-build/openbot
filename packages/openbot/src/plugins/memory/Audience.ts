@@ -6,7 +6,7 @@ import { Array as Arr } from "effect"
  *
  * - `from:<userId>`: a person who said or did what the entry is about.
  * - `for:person:<userId>`, `for:channel:<channelId>`, `for:bot`: who may see the entry.
- * - `session:<id>`, `channel:<id>`: where the entry comes from.
+ * - `chat:<id>`, `channel:<id>`: where the entry comes from.
  * - `org:<organizationId>`: the organization where it happened. Only work in that
  *   organization sees the entry.
  * - `app:<tool>`: a tool result from an App supports the entry.
@@ -23,7 +23,7 @@ export const channel = (id: string): Audience => ({ _tag: "Channel", id })
 export const everyone: Audience = { _tag: "Bot" }
 
 export const fromTag = (userId: string) => "from:" + userId
-export const sessionTag = (session: string) => "session:" + session
+export const chatTag = (chat: string) => "chat:" + chat
 export const orgTag = (organizationId: string) => "org:" + organizationId
 export const channelTag = (channelId: string) => "channel:" + channelId
 export const appTag = (tool: string) => "app:" + tool
@@ -93,7 +93,7 @@ export const combine = (
 			tags.filter(
 				(tag) =>
 					tag.startsWith("from:") ||
-					tag.startsWith("session:") ||
+					tag.startsWith("chat:") ||
 					tag.startsWith("channel:") ||
 					tag.startsWith("app:"),
 			),

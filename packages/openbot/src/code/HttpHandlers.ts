@@ -5,7 +5,7 @@ import { ownerKey } from "../apps/StoredConnections.ts"
 import { CodeRuns } from "./CodeRuns.ts"
 import { view } from "./StoredCodeRuns.ts"
 
-/** Each caller reads only the programs of their own Sessions. */
+/** Each caller reads only the programs of their own Chats. */
 export const layer = HttpApiBuilder.group(OpenBotApi, "codeRuns", (handlers) =>
 	Effect.gen(function* () {
 		const runs = yield* CodeRuns
@@ -19,7 +19,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "codeRuns", (handlers) =>
 			.handle("list", ({ params }) =>
 				Effect.flatMap(owner, (owner) =>
 					runs
-						.list(owner, params.sessionId)
+						.list(owner, params.chatId)
 						.pipe(Effect.map((list) => list.map(view))),
 				),
 			)

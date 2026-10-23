@@ -36,7 +36,7 @@ export interface Delivery {
 	readonly channelId: string
 	readonly kind: DeliveryKind
 	readonly target: Target
-	readonly session: string | null
+	readonly chat: string | null
 	readonly turn: string | null
 	readonly request: string | null
 	readonly message: OutboundMessage
@@ -80,7 +80,7 @@ export class ChannelQueue extends Context.Service<
 			readonly organizationId: string
 			readonly channelId: string
 			readonly target: Target
-			readonly session: string
+			readonly chat: string
 			readonly turn: string
 			readonly ref: MessageRef | null
 		}) => Effect.Effect<void, Failure>
@@ -89,7 +89,7 @@ export class ChannelQueue extends Context.Service<
 			readonly organizationId: string
 			readonly channelId: string
 			readonly target: Target
-			readonly session: string
+			readonly chat: string
 			readonly turn: string
 			readonly message: OutboundMessage
 		}) => Effect.Effect<void, Failure>
@@ -122,7 +122,7 @@ export class ChannelQueue extends Context.Service<
 				readonly organizationId: string
 				readonly channelId: string
 				readonly target: Target
-				readonly session: string
+				readonly chat: string
 				readonly turn: string
 			}>,
 			Failure
@@ -142,7 +142,7 @@ const deliveryOf = (
 	channelId: row.channelId,
 	kind: row.kind as DeliveryKind,
 	target: JSON.parse(row.target) as Target,
-	session: row.session,
+	chat: row.chat,
 	turn: row.turn,
 	request: row.request,
 	message: JSON.parse(row.body) as OutboundMessage,
@@ -286,7 +286,7 @@ export const make = Effect.gen(function* () {
 							channelId: input.channelId,
 							kind: "reply",
 							target: JSON.stringify(input.target),
-							session: input.session,
+							chat: input.chat,
 							turn: input.turn,
 							body: JSON.stringify({ markdown: "" }),
 							ref: input.ref === null ? null : JSON.stringify(input.ref),
@@ -309,7 +309,7 @@ export const make = Effect.gen(function* () {
 							channelId: input.channelId,
 							kind: "reply",
 							target: JSON.stringify(input.target),
-							session: input.session,
+							chat: input.chat,
 							turn: input.turn,
 							body: JSON.stringify(input.message),
 							state: "pending",
@@ -317,7 +317,7 @@ export const make = Effect.gen(function* () {
 							updatedAt: now,
 						})
 						.onConflictDoUpdate({
-							target: [channelDeliveries.session, channelDeliveries.turn],
+							target: [channelDeliveries.chat, channelDeliveries.turn],
 							set: {
 								body: JSON.stringify(input.message),
 								state: "pending",
@@ -448,14 +448,14 @@ export const make = Effect.gen(function* () {
 		).pipe(
 			Effect.map((rows) =>
 				rows.flatMap((row) =>
-					row.session === null || row.turn === null
+					row.chat === null || row.turn === null
 						? []
 						: [
 								{
 									organizationId: row.organizationId,
 									channelId: row.channelId,
 									target: JSON.parse(row.target) as Target,
-									session: row.session,
+									chat: row.chat,
 									turn: row.turn,
 								},
 							],

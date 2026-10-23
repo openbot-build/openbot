@@ -1,5 +1,5 @@
 import { organizationOf } from "./StoredConnections.ts"
-import { AppExecution, SessionConflict } from "@openbot-build/api"
+import { AppExecution, ChatConflict } from "@openbot-build/api"
 import { Client, McpClient } from "@openbot-build/protocol"
 import { Context, Effect, Layer, Match, Schema } from "effect"
 import { failed, json } from "./AppResults.ts"
@@ -25,7 +25,7 @@ export class Operations extends Context.Service<
 >()("@openbot-build/openbot/apps/Operations") {}
 
 const invalid = () =>
-	SessionConflict.make({
+	ChatConflict.make({
 		message:
 			"This App input request is no longer available or does not match its operation.",
 	})

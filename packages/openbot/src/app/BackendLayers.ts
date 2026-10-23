@@ -1,4 +1,4 @@
-import { Session, SessionStore } from "@openbot-build/core"
+import { Chat, ChatStore } from "@openbot-build/core"
 import {
 	Context,
 	Option,
@@ -9,10 +9,10 @@ import {
 	Scope,
 	SynchronizedRef,
 } from "effect"
-import * as ManagedSessions from "../sessions/ManagedSessions.ts"
+import * as ManagedChats from "../chats/ManagedChats.ts"
 
 import { type LanguageModel, type Tool, type Toolkit } from "effect/ai"
-import * as Sessions from "../sessions/Sessions.ts"
+import * as Chats from "../chats/Chats.ts"
 import type { PgClient } from "@effect/sql-pg"
 import { Backend } from "./Backend.ts"
 import type { Identity } from "@openbot-build/api"
@@ -26,10 +26,7 @@ export const layer = <
 	BuildE = never,
 	BuildR = never,
 >(
-	options: Omit<
-		Sessions.Options<Tools, E, R, BuildE, BuildR>,
-		"namespace"
-	> = {},
+	options: Omit<Chats.Options<Tools, E, R, BuildE, BuildR>, "namespace"> = {},
 ) =>
 	Layer.effect(
 		Backend,
@@ -49,7 +46,7 @@ export const layer = <
 					string,
 					{
 						readonly owner: typeof Identity.Service | undefined
-						readonly sessions: typeof Sessions.Sessions.Service
+						readonly chats: typeof Chats.Chats.Service
 					}
 				>(),
 			)
@@ -61,13 +58,12 @@ export const layer = <
 							(existing.owner === undefined ||
 								ownerKey(owner) !== ownerKey(existing.owner))
 								? Effect.fail(
-										new Session.SessionError({
+										new Chat.ChatError({
 											reason: "unavailable",
-											message:
-												"This Session runtime belongs to another account.",
+											message: "This Chat runtime belongs to another account.",
 										}),
 									)
-								: Effect.succeed([existing.sessions, map] as const),
+								: Effect.succeed([existing.chats, map] as const),
 						onNone: () =>
 							Effect.gen(function* () {
 								const runtimeScope = yield* Scope.fork(scope)
@@ -75,17 +71,17 @@ export const layer = <
 									owner === undefined || options.organization === undefined
 										? {}
 										: options.organization(owner.organizationId)
-								const instance = yield* ManagedSessions.make({
+								const instance = yield* ManagedChats.make({
 									...options,
 									...organization,
 									namespace,
 									...(owner === undefined ? {} : { owner }),
 								}).pipe(
 									Effect.mapError((error) =>
-										error instanceof Session.SessionError ||
-										error instanceof SessionStore.SessionStoreError
+										error instanceof Chat.ChatError ||
+										error instanceof ChatStore.ChatStoreError
 											? error
-											: new Session.SessionError({
+											: new Chat.ChatError({
 													reason: "unavailable",
 													message: String(error),
 												}),
@@ -101,7 +97,7 @@ export const layer = <
 								)
 								return [
 									instance,
-									HashMap.set(map, namespace, { owner, sessions: instance }),
+									HashMap.set(map, namespace, { owner, chats: instance }),
 								] as const
 							}),
 					}),

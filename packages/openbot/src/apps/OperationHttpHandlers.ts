@@ -1,5 +1,4 @@
-import { Identity, OpenBotApi, SessionConflict } from "@openbot-build/api"
-import { Session } from "@openbot-build/core"
+import { ChatConflict, Identity, OpenBotApi } from "@openbot-build/api"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Secrets } from "../secrets/Secrets.ts"
@@ -27,7 +26,7 @@ export const layer = HttpApiBuilder.group(
 				)
 				.handle("list", ({ params }) =>
 					Effect.flatMap(owner, (owner) =>
-						StoredInvocations.list(db, secrets, owner, params.sessionId),
+						StoredInvocations.list(db, secrets, owner, params.chatId),
 					),
 				)
 				.handle("respond", ({ params, payload }) =>
@@ -40,21 +39,20 @@ export const layer = HttpApiBuilder.group(
 							params.id,
 						)
 						const conflict = () =>
-							SessionConflict.make({
+							ChatConflict.make({
 								message:
-									"The operation's Session is unavailable or is running another Turn.",
+									"The Chat of the operation is not there, or it runs another Turn.",
 							})
-						const sessions = yield* backend
+						const chats = yield* backend
 							.forCaller(identity)
 							.pipe(Effect.mapError(conflict))
-						const view = yield* sessions
-							.get(operation.session)
+						const view = yield* chats
+							.get(operation.chat)
 							.pipe(Effect.mapError(conflict))
-						if (
-							!view.session.turns.some((turn) => turn.id === operation.turn) ||
-							(view.activity === "active" &&
-								Session.currentTurn(view.session)?.id !== operation.turn)
-						)
+						yield* chats
+							.turn(operation.chat, operation.turn)
+							.pipe(Effect.mapError(conflict))
+						if (view.activity === "active" && view.turn?.id !== operation.turn)
 							return yield* conflict()
 						return yield* operations.respond(
 							ownerKey(identity),

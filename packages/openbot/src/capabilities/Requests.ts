@@ -1,6 +1,6 @@
 import { Settings } from "../settings/Settings.ts"
 import { randomUUID } from "node:crypto"
-import type { Session, Turn } from "@openbot-build/core"
+import type { Chat, Turn } from "@openbot-build/core"
 import {
 	BotsApi,
 	type AppExecution,
@@ -9,7 +9,7 @@ import {
 } from "@openbot-build/api"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { BotRecords } from "../bots/BotRecords.ts"
-import { Chain } from "../sessions/SessionHost.ts"
+import { Chain } from "../chats/ChatHost.ts"
 import { Grants } from "./Grants.ts"
 import { Rules, deciderKey } from "./Rules.ts"
 
@@ -19,10 +19,20 @@ type Approver = Request["approver"]
 /**
  * A request as it is stored: the public record and the delegation chain it came through.
  * The deciders are the owner chain in `request.chain`.
+ * `call` is the tool call that waits for the request. When the request is allowed,
+ * OpenBot gives it back to the Chat, and the call runs then.
  */
 export const Stored = Schema.Struct({
 	request: RequestsApi.CapabilityRequest,
 	chain: Chain,
+	call: Schema.optionalKey(
+		Schema.Struct({
+			name: Schema.String,
+			params: Schema.Json,
+			/** The source of a host action, such as an action of an App view. */
+			source: Schema.optionalKey(Schema.JsonObject),
+		}),
+	),
 })
 export type Stored = typeof Stored.Type
 
@@ -53,22 +63,23 @@ const above = (stored: Stored, bot: string) =>
 	})
 
 /**
- * The Session where a Bot of the delegation chain works. The last Bot works in `current`.
- * A decider outside the delegation chain gets `current` too.
+ * The Chat where a Bot of the delegation chain works. The last Bot works in `current`.
+ * A decider outside the delegation chain gets `current` too. A Bot can come more than
+ * once, when it gave work to itself, so the nearest place counts.
  */
-export const sessionOf = ({
+export const chatOf = ({
 	chain,
 	bot,
 	current,
 }: {
 	readonly chain: Chain
 	readonly bot: string
-	readonly current: Session.Id
+	readonly current: Chat.Id
 }) => {
-	const index = chain.bots.indexOf(bot as BotsApi.BotId)
-	return index >= 0 && index < chain.sessions.length
-		? chain.sessions[index]!
-		: current
+	const index = chain.bots
+		.slice(0, chain.chats.length)
+		.lastIndexOf(bot as BotsApi.BotId)
+	return index >= 0 ? chain.chats[index]! : current
 }
 
 const approverKey = (approver: Approver) =>
@@ -121,7 +132,7 @@ export class Requests extends Context.Service<
 				readonly deciders: ReadonlyArray<BotsApi.BotId>
 				readonly capability: BotsApi.Capability
 				readonly reason: string
-				readonly session: Session.Id
+				readonly chat: Chat.Id
 				readonly turn: Turn.Id
 				readonly toolCallId: string
 				readonly app?: AppExecution.Invocation
@@ -145,11 +156,17 @@ export class Requests extends Context.Service<
 			userId: string,
 			status?: Request["status"],
 		) => Effect.Effect<ReadonlyArray<Request>, BotsApi.BotStorageUnavailable>
-		/** The requests of one Session. */
-		readonly forSession: (
+		/** The requests of one Chat. */
+		readonly forChat: (
 			organizationId: string,
-			session: Session.Id,
+			chat: Chat.Id,
 		) => Effect.Effect<ReadonlyArray<Stored>, BotsApi.BotStorageUnavailable>
+		/** Keeps the tool call that waits for a request, so it can run when it is allowed. */
+		readonly setCall: (
+			organizationId: string,
+			id: string,
+			call: NonNullable<Stored["call"]>,
+		) => Effect.Effect<void, BotsApi.BotStorageUnavailable>
 		readonly pending: Effect.Effect<
 			ReadonlyArray<{
 				readonly organizationId: string
@@ -189,10 +206,10 @@ export class Requests extends Context.Service<
 			}>,
 			BotsApi.BotStorageUnavailable
 		>
-		/** Closes the pending requests of a Session, for example when its Turn stops. */
+		/** Closes the pending requests of a Chat, for example when its work is cancelled. */
 		readonly cancel: (
 			organizationId: string,
-			session: Session.Id,
+			chat: Chat.Id,
 		) => Effect.Effect<void, BotsApi.BotStorageUnavailable>
 	}
 >()("@openbot-build/openbot/capabilities/Requests") {}
@@ -227,7 +244,7 @@ export const make: Effect.Effect<
 					organizationId,
 					id: stored.request.id,
 					owner: approverKey(stored.request.approver),
-					scope: stored.request.session,
+					scope: stored.request.chat,
 					status: stored.request.status,
 				},
 				stored,
@@ -273,12 +290,12 @@ export const make: Effect.Effect<
 						capability: request.capability,
 						effect: "allow",
 						scope: giver.scope,
-						...(giver.scope === "session"
+						...(giver.scope === "chat"
 							? {
-									session: sessionOf({
+									chat: chatOf({
 										chain: stored.chain,
 										bot,
-										current: request.session,
+										current: request.chat,
 									}),
 								}
 							: {}),
@@ -286,7 +303,7 @@ export const make: Effect.Effect<
 						...(giver.reason === undefined ? {} : { reason: giver.reason }),
 						...(parent === undefined ? {} : { parent }),
 					},
-					// The waiting call uses a `once` decision now.
+					// The call that waits uses a `once` decision when it runs.
 					true,
 				)
 				parent = grant.id
@@ -364,9 +381,7 @@ export const make: Effect.Effect<
 						capability: request.capability,
 						effect: "deny",
 						scope: decision.scope,
-						...(decision.scope === "session"
-							? { session: request.session }
-							: {}),
+						...(decision.scope === "chat" ? { chat: request.chat } : {}),
 						grantedBy: decision.by,
 						...(decision.reason === undefined
 							? {}
@@ -417,7 +432,7 @@ export const make: Effect.Effect<
 						? "Nobody answered the request in time, and the settings allow it then."
 						: status === "expired"
 							? "Nobody answered the request in time."
-							: "The work stopped before the request was answered.",
+							: "The work was cancelled before the request was answered.",
 					at: now,
 				},
 				revision: stored.request.revision + 1,
@@ -452,7 +467,7 @@ export const make: Effect.Effect<
 										bot: input.bot,
 									}),
 						chain: input.deciders,
-						session: input.session,
+						chat: input.chat,
 						turn: input.turn,
 						toolCallId: input.toolCallId,
 						...(input.app === undefined ? {} : { app: input.app }),
@@ -486,8 +501,17 @@ export const make: Effect.Effect<
 					...(status === undefined ? {} : { status }),
 				})
 				.pipe(Effect.map((list) => list.map((stored) => stored.request))),
-		forSession: (organizationId, session) =>
-			requests.list(organizationId, { scope: session }),
+		forChat: (organizationId, chat) =>
+			requests.list(organizationId, { scope: chat }),
+		setCall: (organizationId, id, call) =>
+			records.transaction(
+				"request:" + organizationId + ":" + id,
+				Effect.gen(function* () {
+					const found = yield* requests.find(organizationId, id)
+					if (Option.isNone(found)) return
+					yield* put(organizationId, { ...found.value, call })
+				}),
+			),
 		pending: requests.withStatus("pending"),
 		decide,
 		pass: (organizationId, id, from) =>
@@ -545,11 +569,11 @@ export const make: Effect.Effect<
 					),
 			)
 		}),
-		cancel: (organizationId, session) =>
+		cancel: (organizationId, chat) =>
 			Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
 				const list = yield* requests.list(organizationId, {
-					scope: session,
+					scope: chat,
 					status: "pending",
 				})
 				yield* Effect.forEach(list, (stored) =>

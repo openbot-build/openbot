@@ -1,7 +1,8 @@
+import { ChatStore } from "@openbot-build/core"
 import { Effect } from "effect"
 import { migrate } from "drizzle-orm/effect-postgres/migrator"
 import { fileURLToPath } from "node:url"
-import * as Shared from "../sessions/SessionEncoding.ts"
+import * as Shared from "../chats/ChatEncoding.ts"
 import {
 	appInvocations,
 	developerClaims,
@@ -23,9 +24,9 @@ import {
 	appConnections,
 	appDrafts,
 	appSecrets,
-	refs,
-	versions,
-	contents,
+	chats,
+	chatItems,
+	chatTurns,
 	organizations,
 	settings,
 	platformAdmins,
@@ -94,12 +95,9 @@ export const check = Effect.gen(function* () {
 	yield* db.select().from(appConnections).limit(0)
 	yield* db.select().from(appDrafts).limit(0)
 	yield* db.select().from(appSecrets).limit(0)
-	yield* db
-		.select({ id: refs.id, revision: refs.revision, turn: refs.turn })
-		.from(refs)
-		.limit(0)
-	yield* db.select({ id: versions.id }).from(versions).limit(0)
-	yield* db.select({ id: contents.id }).from(contents).limit(0)
+	yield* db.select().from(chats).limit(0)
+	yield* db.select().from(chatItems).limit(0)
+	yield* db.select().from(chatTurns).limit(0)
 	yield* db.select().from(organizations).limit(0)
 	yield* db.select().from(settings).limit(0)
 	yield* db.select().from(platformAdmins).limit(0)
@@ -156,6 +154,15 @@ export const check = Effect.gen(function* () {
 /** Apply the current schema with the standard Drizzle migrator, which keeps a journal. */
 export const initialize = Effect.gen(function* () {
 	const db = yield* Db.make
-	yield* migrate(db, { migrationsFolder: folder })
+	yield* migrate(db, { migrationsFolder: folder }).pipe(
+		// Keep the words of the database, so a broken migration says what broke.
+		Effect.mapError(
+			(error) =>
+				new ChatStore.ChatStoreError({
+					reason: "storage-failed",
+					message: "A database migration failed: " + String(error),
+				}),
+		),
+	)
 	yield* check
 }).pipe(Effect.mapError(Shared.databaseError))

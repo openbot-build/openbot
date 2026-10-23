@@ -44,7 +44,7 @@ export const layer = (publicOrigin: string) =>
 						details,
 					})
 					.pipe(Effect.mapError(unavailable))
-			/** The Sessions of a trigger work for the caller, so the caller must be able to give work to its Bot. */
+			/** The tasks of a trigger work for the caller, so the caller must be able to give work to its Bot. */
 			const botFor = (caller: Caller, bot: string | undefined) =>
 				(bot === undefined
 					? DefaultBot.resolve(caller)
@@ -164,7 +164,7 @@ export const layer = (publicOrigin: string) =>
 		}),
 	)
 
-/** Webhooks: the secret is the only credential. The Session works for the actor of the trigger. */
+/** Webhooks: the secret is the only credential. The task works for the actor of the trigger. */
 export const layerHooks = HttpApiBuilder.group(
 	OpenBotApi,
 	"triggerHooks",
@@ -180,10 +180,13 @@ export const layerHooks = HttpApiBuilder.group(
 					if (match === null) return yield* denied
 					const found = yield* triggers.verifyHook(params.triggerId, match[1]!)
 					if (Option.isNone(found)) return yield* denied
-					const session = yield* fire({ ...found.value, data: payload }).pipe(
+					const delegation = yield* fire({
+						...found.value,
+						data: payload,
+					}).pipe(
 						Effect.provideContext(context),
-						// The actor can no longer give work to the Bot, or the Session
-						// could not start. The caller of the webhook learns only that it failed.
+						// The actor can no longer give work to the Bot, or the task could
+						// not be saved. The caller of the webhook learns only that it failed.
 						Effect.catchCause((cause) =>
 							Effect.logWarning(
 								"A webhook could not fire its trigger",
@@ -191,7 +194,7 @@ export const layerHooks = HttpApiBuilder.group(
 							).pipe(Effect.andThen(Effect.fail(unavailable()))),
 						),
 					)
-					return { session }
+					return { delegation }
 				}),
 			)
 		}),

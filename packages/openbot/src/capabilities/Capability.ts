@@ -52,7 +52,7 @@ export const hash = (value: unknown) =>
 export const permission = (input: {
 	readonly caller: Caller
 	readonly capability: Capability
-	readonly session: string
+	readonly chat: string
 	/** The target Bot, for actions on a Bot. */
 	readonly bot?: BotsApi.Bot
 	/** The Bot that tries the action. The Bots it makes go below its owner tree. */
@@ -87,13 +87,7 @@ export const permission = (input: {
 				permission: "apps.use",
 				key: resourceKey({ subject, kind: "apps", id: Option.none() }),
 			}
-		case "bots.spawn":
-			return {
-				permission: "bots.write",
-				key: resourceKey({ subject, kind: "user", id: Option.none() }) + ".bot",
-			}
 		case "bots.create":
-		case "bots.promote":
 			return {
 				permission: "bots.write",
 				key: botPlace({
@@ -103,15 +97,15 @@ export const permission = (input: {
 			}
 		case "bots.delegate":
 			return onBot("bots.delegate")
-		// Carrying out a plan is work in the Session, like a tool call.
+		// Carrying out a plan is work in the Chat, like a tool call.
 		case "plans.run":
 		case "tools.call":
 			return {
 				permission: "responses.run",
 				key: resourceKey({
 					subject,
-					kind: "session",
-					id: Option.some(input.session),
+					kind: "chat",
+					id: Option.some(input.chat),
 				}),
 			}
 		// A Bot makes a Computer with an account at a provider, for its member.

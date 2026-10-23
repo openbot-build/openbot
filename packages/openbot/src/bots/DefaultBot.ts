@@ -22,7 +22,7 @@ export const check = (
 		const top =
 			bot.owner._tag === "Organization" ||
 			(bot.owner._tag === "Member" && bot.owner.userId === caller.userId)
-		if (bot.kind !== "persistent" || !top)
+		if (!top)
 			return yield* BotsApi.BotInvalid.make({
 				message:
 					"A default Bot must be one of your own top Bots or a shared Bot.",

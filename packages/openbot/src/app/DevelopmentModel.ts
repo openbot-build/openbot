@@ -1,11 +1,11 @@
-import { Item, Config, Model, Provider } from "@openbot-build/core"
+import { Config, Model, Provider } from "@openbot-build/core"
 import { AppExecution } from "@openbot-build/api"
-import * as Memory from "../plugins/memory/Memory.ts"
 import {
 	Context,
 	Effect,
 	Layer,
 	Match,
+	Predicate,
 	Record as EffectRecord,
 	Schema,
 	Stream,
@@ -73,10 +73,6 @@ export const layerTools = toolkit.toLayer({
 		Effect.succeed({ confirmed: description }),
 })
 
-const ExtractionRequest = Schema.Struct({
-	state: Memory.State,
-	history: Schema.Array(Item.Record),
-})
 const invalidRequest = (description: string) =>
 	AiError.make({
 		module: "DevelopmentModel",
@@ -140,36 +136,26 @@ const textParts = (scenario: Scenario, text: string): Array<GeneratedPart> => [
 	finish(scenario),
 ]
 
+/** The development models answer no structured requests. They check the input first. */
 const structured = Effect.fn("DevelopmentModel.structured")(function* (
 	objectName: string,
 	prompt: Prompt.Prompt,
 ) {
-	const { text } = yield* currentInput(prompt)
-	return yield* Match.value(objectName).pipe(
-		Match.when("memory_changes", () =>
-			Schema.decodeEffect(Schema.fromJsonString(ExtractionRequest))(text).pipe(
-				Effect.andThen(Schema.decodeEffect(Memory.Extraction)({ changes: [] })),
-			),
-		),
-		Match.orElse(() =>
-			Effect.fail(
-				invalidRequest(
-					`Unsupported structured development request: ${objectName}`,
-				),
-			),
-		),
-		Effect.catchTag("SchemaError", () =>
-			Effect.fail(invalidRequest(`Invalid input or result for ${objectName}`)),
-		),
-		Effect.map((value) => JSON.stringify(value)),
+	yield* currentInput(prompt)
+	return yield* invalidRequest(
+		`Unsupported structured development request: ${objectName}`,
 	)
 })
+
+/** A call that waits for a decision has a pending result. Its answer comes later. */
+const isPending = (result: unknown) => Predicate.hasProperty(result, "pending")
 
 const toolParts = Effect.fn("DevelopmentModel.toolParts")(function* (
 	options: LanguageModel.ProviderOptions,
 ) {
 	const { text, index } = yield* currentInput(options.prompt)
 	const id = `development-confirmation-${index}`
+	// The result of the call of this step, or of a call that a decider allowed later.
 	const result = options.prompt.content
 		.slice(index + 1)
 		.flatMap((message) =>
@@ -177,9 +163,7 @@ const toolParts = Effect.fn("DevelopmentModel.toolParts")(function* (
 				Match.when({ role: "tool" }, (message) =>
 					message.content.filter(
 						(part) =>
-							part.type === "tool-result" &&
-							part.name === confirmation.name &&
-							part.id === id,
+							part.type === "tool-result" && part.name === confirmation.name,
 					),
 				),
 				Match.orElse(() => []),
@@ -187,6 +171,11 @@ const toolParts = Effect.fn("DevelopmentModel.toolParts")(function* (
 		)
 		.findLast((part) => part.type === "tool-result")
 	if (result !== undefined) {
+		if (isPending(result.result))
+			return textParts(
+				"mock-tool",
+				"Development confirmation waits for a decision.",
+			)
 		if (result.isFailure)
 			return textParts(
 				"mock-tool",
@@ -240,6 +229,11 @@ const appParts = Effect.fn("DevelopmentModel.appParts")(function* (
 		)
 		.findLast((part) => part.type === "tool-result")
 	if (result !== undefined) {
+		if (isPending(result.result))
+			return textParts(
+				"mock-app",
+				"The simulated App call waits for a decision.",
+			)
 		const value = yield* Schema.decodeUnknownEffect(AppExecution.ToolResult)(
 			result.result,
 		).pipe(
@@ -271,7 +265,7 @@ const appParts = Effect.fn("DevelopmentModel.appParts")(function* (
 				Match.tag(
 					"AppAccess",
 					() =>
-						"Choose which App account should do this task, or finish its configuration and authorization in My Apps. Then explicitly continue this Session.",
+						"Choose which App account should do this task, or finish its configuration and authorization in My Apps. Then say in this Chat that the work can go on.",
 				),
 				Match.tag("AppAssistanceFailed", ({ message }) => message),
 				Match.exhaustive,
@@ -307,7 +301,7 @@ const appParts = Effect.fn("DevelopmentModel.appParts")(function* (
 		if (assistance === undefined)
 			return textParts(
 				"mock-app",
-				"App discovery is unavailable in this host. Add an App by address and explicitly continue this Session.",
+				"App discovery is unavailable in this host. Add an App by address and say in this Chat that the work can go on.",
 			)
 		return [
 			Response.makePart("tool-call", {
@@ -488,10 +482,10 @@ export const make = Effect.gen(function* () {
 			models: list,
 			resolve: (selection: Config.Selection) => resolve(selection),
 		},
-		sessions: {
+		chats: {
 			runtime: { toolkit },
 			layerExecution: () => layerTools,
-			// A development platform is a simulation, so it gives each new Session a
+			// A development platform is a simulation, so it gives each new Chat a
 			// simulated model. A real platform has no such default.
 			defaults: Effect.succeed({ model: selection }),
 		},

@@ -1,68 +1,69 @@
+import { randomUUID } from "node:crypto"
 import {
 	Bot,
+	Chat,
+	ChatRuntime,
+	ChatStore,
+	ChatStoreRepository,
 	Config,
 	ConfigurationOperations,
 	Item,
 	Plugin,
 	PluginComposition,
-	PluginState,
-	Session,
-	SessionRuntime,
-	SessionStore,
-	SessionStoreRepository,
 	Store,
-	Timeline,
 	Turn,
 } from "@openbot-build/core"
-import * as Memory from "../plugins/memory/Memory.ts"
-import * as MemoryRules from "../plugins/memory/MemoryRules.ts"
-import * as LanguageModelMemory from "../plugins/memory/LanguageModelMemory.ts"
-import * as MemoryOperations from "../plugins/memory/MemoryOperations.ts"
-import * as MemoryPlugin from "../plugins/memory/MemoryPlugin.ts"
 import * as Todos from "../plugins/work/Todos.ts"
 import { WorkPlugin } from "../plugins/work/WorkPlugin.ts"
 import { ChannelPlugin } from "../plugins/channels/ChannelPlugin.ts"
 import { ComputerPlugin } from "../plugins/computers/ComputerPlugin.ts"
 import {
 	Array,
-	Cause,
 	Context,
-	Deferred,
+	Duration,
 	Effect,
-	Exit,
 	HashMap,
 	Layer,
-	Match,
 	Option,
 	Predicate,
+	Ref,
+	Schedule,
 	Scope,
 	Stream,
 } from "effect"
-import { LanguageModel, Toolkit, type Response, type Tool } from "effect/ai"
 import {
-	SessionBusy,
-	SessionConflict,
-	SessionExecutionUnavailable,
-	SessionInvalidRecord,
-	SessionModelInvalid,
-	type SessionResponse,
-	type SessionView,
+	AiError,
+	LanguageModel,
+	Toolkit,
+	type Response,
+	type Tool,
+} from "effect/ai"
+import {
+	ChatConflict,
+	ChatExecutionUnavailable,
+	ChatModelInvalid,
+	type ChatInfo,
+	type ChatResponse,
+	type ChatSummary,
+	type ChatView,
+	type MessageReceipt,
 } from "@openbot-build/api"
 import type { PgClient } from "@effect/sql-pg"
-import * as StoredSessions from "./StoredSessions.ts"
+import * as StoredChats from "./StoredChats.ts"
 import { withAttribution } from "../billing/MeteredModel.ts"
 import {
-	Sessions,
+	Chats,
 	type Options,
 	type Instance,
 	type ExecutionServices,
-	type SendInput,
 	type ServiceError,
-} from "./Sessions.ts"
+} from "./Chats.ts"
 import { publicError, inputPrompt, response } from "./ResponseMapping.ts"
-import * as SessionEvents from "./SessionEvents.ts"
-import * as SessionHost from "./SessionHost.ts"
-import { sessionHostId } from "./SessionHost.ts"
+import * as ChatEvents from "./ChatEvents.ts"
+import * as ChatHost from "./ChatHost.ts"
+import * as Compaction from "./Compaction.ts"
+import { chatHostId } from "./ChatHost.ts"
+import { OpenWork, none as noOpenWork } from "./OpenWork.ts"
 import * as ErrorReporting from "../app/ErrorReporting.ts"
 import {
 	AppPlugin,
@@ -72,36 +73,62 @@ import { BotPlugin } from "../plugins/bots/BotPlugin.ts"
 import { Signal, publish } from "../bots/Signals.ts"
 import * as Db from "../database/Database.ts"
 
-/** The response of the current Turn, when the Session has one. */
-const currentResponse = (view: Session.View) =>
-	Option.map(Option.fromNullishOr(Session.currentTurn(view.session)), (turn) =>
-		response(view, turn),
-	)
+/** New Chats get IDs like the other resources of OpenBot. */
+const newId = () => Chat.Id.make("chat_" + randomUUID().replaceAll("-", ""))
+/** How often a server says that its running Turns still run. */
+const heartbeatEvery = Duration.seconds(30)
 
-/** One page of records after an optional cursor. The cursor must be a known record. */
-const page = <A extends { readonly id: unknown }>(
-	all: ReadonlyArray<A>,
-	input: { readonly after?: A["id"]; readonly limit?: number },
-	unknownCursor: string,
-): Effect.Effect<
-	{ readonly items: ReadonlyArray<A>; readonly next: A["id"] | null },
-	SessionConflict
-> => {
-	const offset =
-		input.after === undefined
-			? 0
-			: all.findIndex((entry) => entry.id === input.after) + 1
-	if (input.after !== undefined && offset === 0)
-		return Effect.fail(SessionConflict.make({ message: unknownCursor }))
-	const limit = Math.max(1, Math.min(100, Math.floor(input.limit ?? 50)))
-	const items = all.slice(offset, offset + limit)
-	return Effect.succeed({
-		items,
-		next:
-			offset + limit < all.length
-				? Option.getOrNull(Option.map(Array.last(items), (entry) => entry.id))
-				: null,
+/** The parts of a model that a router passes on. */
+interface Methods {
+	readonly generateText: (
+		options: unknown,
+	) => Effect.Effect<unknown, AiError.AiError>
+	readonly generateObject: (
+		options: unknown,
+	) => Effect.Effect<unknown, AiError.AiError>
+	readonly streamText: (
+		options: unknown,
+	) => Stream.Stream<Response.StreamPart<{}>, AiError.AiError>
+}
+const unavailable = (method: string) =>
+	AiError.make({
+		module: "OpenBot",
+		method,
+		reason: AiError.UnknownError.make({
+			description: "No model is available for this Chat.",
+		}),
 	})
+/**
+ * A model that finds the real model at the time of each call. A Turn that starts by
+ * itself, after another Turn ends, then uses the model of its own settings.
+ */
+const route = (
+	template: LanguageModel.LanguageModel,
+	select: Effect.Effect<LanguageModel.LanguageModel, ChatExecutionUnavailable>,
+): LanguageModel.LanguageModel => {
+	const plain = (method: string) =>
+		select.pipe(
+			Effect.mapError(() => unavailable(method)),
+			Effect.map((model) => model as unknown as Methods),
+		)
+	const methods: Methods = {
+		generateText: (options) =>
+			Effect.flatMap(plain("generateText"), (model) =>
+				model.generateText(options),
+			),
+		generateObject: (options) =>
+			Effect.flatMap(plain("generateObject"), (model) =>
+				model.generateObject(options),
+			),
+		streamText: (options) =>
+			Stream.unwrap(
+				Effect.map(plain("streamText"), (model) => model.streamText(options)),
+			),
+	}
+	return {
+		...template,
+		...(methods as unknown as Pick<LanguageModel.LanguageModel, keyof Methods>),
+	}
 }
 
 export const make = <
@@ -114,7 +141,7 @@ export const make = <
 	options: Options<Tools, E, R, BuildE, BuildR> = {},
 ): Effect.Effect<
 	Instance<Tools, E, R>,
-	Session.SessionError | SessionStore.SessionStoreError | BuildE,
+	Chat.ChatError | ChatStore.ChatStoreError | BuildE,
 	BuildR | PgClient.PgClient | Scope.Scope | ExecutionServices<Tools, R>
 > =>
 	Effect.gen(function* () {
@@ -128,109 +155,102 @@ export const make = <
 		const workPlugin = yield* Effect.serviceOption(WorkPlugin)
 		const channelPlugin = yield* Effect.serviceOption(ChannelPlugin)
 		const computerPlugin = yield* Effect.serviceOption(ComputerPlugin)
-		const modelFor = (view: Session.View, turn?: Turn.Record) =>
-			options.resolveModel === undefined
-				? Effect.serviceOption(LanguageModel.LanguageModel).pipe(
-						Effect.flatMap((current) =>
-							Effect.fromOption(Option.orElse(current, () => fallback)).pipe(
-								Effect.mapError(() =>
-									SessionExecutionUnavailable.make({
-										session: view.session.id,
-									}),
-								),
-							),
-						),
-					)
-				: options
-						.resolveModel(turn?.settings.model ?? view.session.settings.model)
-						.pipe(
-							Effect.map((model) =>
-								withAttribution(model, attribution(view, turn)),
-							),
-							Effect.mapError(() =>
-								SessionExecutionUnavailable.make({ session: view.session.id }),
-							),
-						)
+		const openWork = Option.getOrUndefined(
+			yield* Effect.serviceOption(OpenWork),
+		)
 		/**
-		 * Who a model call of the Session works for. It reads the running Turn at
-		 * the time of the call, because a model can serve many Turns.
+		 * Who a model call of a Chat works for. It reads the running Turn at the time
+		 * of the call, because a Turn can have its own author.
 		 */
-		const attribution = (view: Session.View, turn?: Turn.Record) =>
+		const attribution = (chat: Chat.Id) =>
 			Effect.gen(function* () {
 				const context = yield* Effect.serviceOption(Bot.Context)
 				const turnId = Option.isSome(context)
 					? yield* context.value.turn
-					: turn?.id
-				// The Turn may be newer than the view, and a Turn can have its own author.
-				const session =
-					turnId === undefined ||
-					view.session.turns.some((record) => record.id === turnId)
-						? view.session
-						: yield* store.read(view.session.id).pipe(
-								Effect.map((current) => current.session),
-								Effect.orElseSucceed(() => view.session),
-							)
-				const state = session.business[SessionHost.sessionHostId] as
-					SessionHost.SessionHostState | undefined
+					: undefined
+				const ref = yield* store
+					.get(chat)
+					.pipe(Effect.orElseSucceed(Option.none))
+				const state = Option.getOrUndefined(
+					Option.map(
+						ref,
+						(ref) =>
+							ref.business[chatHostId] as ChatHost.ChatHostState | undefined,
+					),
+				)
+				const turn = Option.getOrUndefined(
+					Option.flatMap(ref, (ref) => Option.fromUndefinedOr(ref.turn)),
+				)
 				const chain =
-					state === undefined
+					state === undefined || Option.isNone(ref)
 						? undefined
-						: SessionHost.turnChain(session, turnId)
+						: ChatHost.turnChain(
+								ref.value,
+								turn?.id === turnId ? turn?.author : undefined,
+							)
 				return {
 					source: "turn" as const,
-					sessionId: view.session.id,
+					chatId: chat,
 					...(turnId === undefined ? {} : { turnId }),
 					...(state === undefined ? {} : { botId: state.bot }),
 					...(chain === undefined ? {} : { userId: chain.userId }),
 					...(chain?.tokenId === undefined ? {} : { tokenId: chain.tokenId }),
 				}
 			})
-		const memoryPolicy = options.memory?.policy ?? MemoryRules.policy,
-			memoryModel = options.memory?.model ?? LanguageModelMemory.model,
-			memoryDefaults: Memory.Settings = {
-				use: true,
-				generate: true,
-				...options.memory?.defaults,
-			}
-		const memoryPlugin = MemoryPlugin.make({
-			policy: memoryPolicy,
-			model: memoryModel,
-			settings: Effect.gen(function* (): Effect.fn.Return<
-				Memory.Settings,
-				Session.SessionNotFound | SessionStore.SessionStoreError,
-				Bot.Context
-			> {
-				const context = yield* Bot.Context,
-					at = yield* context.at,
-					view = yield* store.read(at.session)
-				const organizationDefaults =
-					options.memoryDefaults === undefined
-						? {}
-						: yield* options.memoryDefaults
-				return SessionHost.settings({
-					defaults: { ...memoryDefaults, ...organizationDefaults },
-					session: view.session,
-				})
-			}),
-			languageModel: Effect.gen(function* (): Effect.fn.Return<
-				LanguageModel.LanguageModel,
-				| Session.SessionNotFound
-				| SessionStore.SessionStoreError
-				| SessionExecutionUnavailable,
-				Bot.Context
-			> {
-				const context = yield* Bot.Context,
-					at = yield* context.at,
-					view = yield* store.read(at.session)
-				return yield* modelFor(view, Session.currentTurn(view.session))
-			}),
+		/** The model of a Chat: the model of its Turn, or of the Chat. */
+		const modelFor = (chat: Chat.Ref, turn?: Turn.Record) =>
+			options.resolveModel === undefined
+				? Effect.fromOption(fallback).pipe(
+						Effect.mapError(() =>
+							ChatExecutionUnavailable.make({ chat: chat.id }),
+						),
+					)
+				: options
+						.resolveModel(turn?.settings.model ?? chat.settings.model)
+						.pipe(
+							Effect.map((model) =>
+								withAttribution(model, attribution(chat.id)),
+							),
+							Effect.mapError(() =>
+								ChatExecutionUnavailable.make({ chat: chat.id }),
+							),
+						)
+		const template = yield* LanguageModel.make({
+			generateText: () => Effect.die("The router passes every call on"),
+			streamText: () => Stream.die("The router passes every call on"),
 		})
+		const router = route(
+			template,
+			Effect.gen(function* () {
+				const context = yield* Effect.serviceOption(Bot.Context)
+				if (Option.isNone(context))
+					return yield* Effect.fromOption(fallback).pipe(
+						Effect.mapError(() =>
+							ChatExecutionUnavailable.make({ chat: Chat.Id.make("") }),
+						),
+					)
+				const at = yield* context.value.at.pipe(
+					Effect.mapError(() =>
+						ChatExecutionUnavailable.make({ chat: Chat.Id.make("") }),
+					),
+				)
+				const view = yield* store
+					.read(at.chat)
+					.pipe(
+						Effect.mapError(() =>
+							ChatExecutionUnavailable.make({ chat: at.chat }),
+						),
+					)
+				return yield* modelFor(view.chat, Chat.currentTurn(view.chat))
+			}),
+		)
+		const routed = Context.add(environment, LanguageModel.LanguageModel, router)
 		const host = Plugin.make({
-			id: sessionHostId,
-			store: SessionHost.sessionHostStore,
+			id: chatHostId,
+			store: ChatHost.chatHostStore,
 		})<
 			Tools,
-			E | Session.SessionNotFound | SessionStore.SessionStoreError,
+			E | Chat.ChatNotFound | ChatStore.ChatStoreError,
 			R,
 			BuildE,
 			BuildR
@@ -245,7 +265,7 @@ export const make = <
 						Effect.gen(function* () {
 							const context = yield* Bot.Context,
 								at = yield* context.at,
-								view = yield* store.read(at.session)
+								view = yield* store.read(at.chat)
 							const configured = options.runtime?.toolkit
 							const supplied = {
 								...input,
@@ -270,9 +290,9 @@ export const make = <
 							if (options.layerExecution === undefined) return stream
 							const currentEnvironment = yield* Effect.context<R>()
 							const execution = yield* Layer.build(
-								options.layerExecution(view.session, namespace),
+								options.layerExecution(view.chat, namespace),
 							)
-							// Each Turn owns the host resources built for its Session.
+							// Each Turn owns the host resources built for its Chat.
 							return stream.pipe(
 								Stream.provideContext(
 									Context.merge(
@@ -285,101 +305,49 @@ export const make = <
 					)
 			}),
 		)
-		// Memory runs outside the host plugin, so the user plugin sees the memory instructions.
-		const composed = yield* PluginComposition.mergeState(
-			sessionHostId,
-			memoryPlugin,
-			host,
-		).pipe(
-			// The two plugins have different IDs, so their stores cannot conflict.
-			Effect.orDie,
-		)
 		const definition = yield* Store.define({
-			stores: { ...composed.stores, ...Todos.stores },
-			schemaVersion: "timeline/1",
+			stores: { ...host.stores, ...Todos.stores },
+			schemaVersion: "chat/1",
 		})
-		const store: SessionStore.Store<SessionHost.Values> =
-			yield* SessionStoreRepository.make({
+		const store: ChatStore.Store<ChatHost.Values> =
+			yield* ChatStoreRepository.make({
 				definition,
-				persistence: StoredSessions.persistence(db, namespace),
-				onCommit: ({ delta, view }) =>
-					StoredSessions.save(db, namespace, {
-						delta,
-						response: Option.flatMap(
-							Option.fromNullishOr(view),
-							currentResponse,
-						),
-					}).pipe(
+				persistence: StoredChats.persistence(db, namespace),
+				onCommit: ({ delta, previous, view }) =>
+					StoredChats.save(db, namespace, delta).pipe(
 						Effect.tap(() => {
-							if (view === undefined) return Effect.void
-							const turn = Session.currentTurn(view.session)
-							const previous = delta.expected?.turns.find(
-								(entry) => entry.id === turn?.id,
-							)
-							return turn === undefined ||
-								previous === undefined ||
-								previous.status._tag === "Failed"
-								? Effect.void
-								: ErrorReporting.failedTurn(turn)
-						}),
-						Effect.tap(() => {
-							if (view === undefined) return Effect.void
-							const turn = Session.currentTurn(view.session)
-							const previous = delta.expected?.turns.find(
-								(entry) => entry.id === turn?.id,
-							)
-							// Code that writes the store directly may make a Session without OpenBot data.
+							const turn = Chat.currentTurn(view.chat)
+							const before =
+								previous?.turn?.id === turn?.id ? previous?.turn : undefined
+							// Each change of the status of a Turn counts once. Code that writes
+							// the store directly may make a Chat without OpenBot data.
 							if (
 								turn === undefined ||
-								previous?.status._tag === turn.status._tag ||
-								view.session.business[sessionHostId] === undefined
+								before?.status._tag === turn.status._tag ||
+								view.chat.business[chatHostId] === undefined
 							)
 								return Effect.void
-							const state = SessionHost.hostState(view.session)
-							// Delegation, reviews and memory react to changes of the Turn status.
-							return publish(
-								Signal.TurnChanged({
-									organizationId: state.chain.organizationId,
-									// The member whose Sessions hold this Session.
-									userId: SessionHost.ownerOf(state.chain),
-									session: view.session.id,
-									turn: turn.id,
-									status: turn.status._tag,
-								}),
+							const state = ChatHost.hostState(view.chat)
+							return Effect.andThen(
+								turn.status._tag === "Failed"
+									? ErrorReporting.failedTurn(turn)
+									: Effect.void,
+								// Delegation, reviews and memory react to changes of the Turn status.
+								publish(
+									Signal.TurnChanged({
+										organizationId: state.chain.organizationId,
+										// The member whose Chats hold this Chat.
+										userId: ChatHost.ownerOf(state.chain),
+										chat: view.chat.id,
+										turn: turn.id,
+										status: turn.status._tag,
+									}),
+								),
 							)
 						}),
 					),
-				onRemove: (ref) => StoredSessions.remove(db, namespace, ref),
+				onRemove: (ref) => StoredChats.remove(db, namespace, ref.id),
 			})
-		const memories = MemoryOperations.make({
-			store,
-			policy: memoryPolicy,
-			model: memoryModel,
-		})
-		const memoryStore = yield* PluginState.make({ store, plugin: memoryPlugin })
-		// The root plugin gives the memory plugin its store for each Turn.
-		const plugin = Plugin.make({ id: sessionHostId })<
-			Tools,
-			| E
-			| Timeline.VersionError
-			| Session.SessionNotFound
-			| Session.SessionError
-			| SessionStore.SessionStoreError,
-			R,
-			BuildE,
-			BuildR
-		>(() =>
-			Effect.map(
-				composed.middleware,
-				(middleware) => (next, input) =>
-					middleware(next, input).pipe(
-						Stream.provideService(memoryPlugin.store, memoryStore),
-						// The memory plugin adds no tools, so the merged tools are Tools.
-						// TypeScript cannot reduce MergedTools<[{}, Tools]> to Tools for a generic Tools.
-						Stream.map((event) => event as Bot.Event<Tools>),
-					),
-			),
-		)
 		const apps =
 			options.owner === undefined || Option.isNone(appPlugin)
 				? emptyAppPlugin
@@ -392,19 +360,9 @@ export const make = <
 				owner,
 				namespace,
 				read: (id) => store.read(id),
-				delegatedMemory: (bot) =>
-					list({ bot, kind: "delegated" }).pipe(
-						Effect.flatMap((rows) =>
-							Effect.forEach(rows, (row) =>
-								store.read(row.session.id).pipe(
-									Effect.map((view) => ({
-										session: row.session.id,
-										memory: view.state.value[Memory.storeKey] ?? Memory.empty(),
-									})),
-								),
-							),
-						),
-					),
+				items: (chat, query) => store.items(chat, query),
+				// The plugin is made before `deliver`, so it calls it later.
+				deliver: (chat, input) => Effect.suspend(() => deliver(chat, input)),
 			})
 		// The Bot plugin runs inside the App plugin, so it sees every tool of the Turn.
 		// The work, Channel and Computer plugins run inside the Bot plugin, so they see the current Bot.
@@ -436,48 +394,97 @@ export const make = <
 						apps,
 						withInner(botPluginFor(botPlugin.value, options.owner)),
 					) as unknown as typeof apps)
-		const runtime = yield* SessionRuntime.make({
+		const catalog =
+			options.modelCatalog ?? Effect.succeed({ providers: [], models: [] })
+		const runtime = yield* ChatRuntime.make({
 			store,
 			bot: {
 				...options.runtime,
-				plugin,
+				plugin: host,
 				hostPlugin,
+				// Each Chat gets a summary of its context when it gets near the window of its model.
+				modelCatalog:
+					options.runtime?.modelCatalog ??
+					catalog.pipe(
+						Effect.map((current) => current.models.map(Compaction.withSummary)),
+					),
+				compaction: options.runtime?.compaction ?? Compaction.service,
 			},
 		})
-		const read = (id: Session.Id) =>
+		const read = (id: Chat.Id) =>
 			store.read(id).pipe(Effect.mapError(publicError))
+		const info = (ref: Chat.Ref): ChatInfo => {
+			const state = ChatHost.hostState(ref)
+			return {
+				id: ref.id,
+				revision: ref.revision,
+				kind: state.kind,
+				bot: state.bot,
+				parent: state.parent ?? null,
+				...(state.title === undefined ? {} : { title: state.title }),
+				settings: ref.settings,
+				...(state.planApproval === undefined
+					? {}
+					: { planApproval: state.planApproval }),
+				createdAt: ref.createdAt,
+			}
+		}
+		const activityOf = (ref: Chat.Ref, active: boolean) =>
+			active
+				? ("active" as const)
+				: ref.turn?.status._tag === "Running"
+					? ("historical" as const)
+					: ("inactive" as const)
+		const responseOf = (ref: Chat.Ref, turn: Turn.Record) =>
+			store.items(ref.id, { turn: turn.id }).pipe(
+				Effect.map((items) => response(ref.id, turn, items)),
+				Effect.mapError(publicError),
+			)
 		const project = (
-			view: Session.View<SessionHost.Values>,
-		): Effect.Effect<SessionView> =>
+			view: Chat.View<ChatHost.Values>,
+		): Effect.Effect<ChatView, ServiceError> =>
 			Effect.gen(function* () {
-				const active = yield* runtime.isActive(view.session.id)
-				const planApproval = SessionHost.hostState(view.session)?.planApproval
+				const turn = Chat.currentTurn(view.chat)
+				const active = yield* runtime.isActive(view.chat.id)
+				const open =
+					openWork === undefined
+						? noOpenWork
+						: yield* openWork.count(
+								ChatHost.hostState(view.chat).chain.organizationId,
+								view.chat.id,
+							)
 				return {
-					...view,
-					...SessionHost.botFields(view.session),
-					...(planApproval === undefined ? {} : { planApproval }),
-					response: Option.getOrNull(currentResponse(view)),
-					activity: active
-						? ("active" as const)
-						: Match.value(Session.status(view.session)).pipe(
-								Match.tag("Running", () => "historical" as const),
-								Match.orElse(() => "inactive" as const),
-							),
+					chat: info(view.chat),
+					status: Chat.status(view.chat)._tag,
+					turn: turn ?? null,
+					response:
+						turn === undefined ? null : yield* responseOf(view.chat, turn),
+					activity: activityOf(view.chat, active),
+					inbox: view.chat.inbox.length,
+					open,
 				}
 			})
-		const get = (id: Session.Id) => read(id).pipe(Effect.flatMap(project))
-		const idle = (id: Session.Id) =>
-			runtime
-				.isActive(id)
-				.pipe(
-					Effect.flatMap((active) =>
-						active
-							? Effect.fail(SessionBusy.make({ session: id }))
-							: Effect.void,
-					),
-				)
-		const catalog =
-			options.modelCatalog ?? Effect.succeed({ providers: [], models: [] })
+		const summary = (ref: Chat.Ref): Effect.Effect<ChatSummary> =>
+			Effect.map(runtime.isActive(ref.id), (active) => {
+				const turn = ref.turn
+				const latest =
+					turn === undefined ? undefined : response(ref.id, turn, [])
+				return {
+					chat: info(ref),
+					status: Chat.status(ref)._tag,
+					turn: turn?.id ?? null,
+					response:
+						latest === undefined
+							? null
+							: {
+									id: latest.id,
+									created_at: latest.created_at,
+									status: latest.status,
+								},
+					activity: activityOf(ref, active),
+				}
+			})
+		const get = (id: Chat.Id) => read(id).pipe(Effect.flatMap(project))
 		const validateSelection = (selection: Config.Selection) =>
 			Effect.gen(function* () {
 				const problem = ConfigurationOperations.selectionProblem(
@@ -485,16 +492,16 @@ export const make = <
 					selection,
 				)
 				if (Option.isSome(problem))
-					return yield* SessionModelInvalid.make(problem.value)
+					return yield* ChatModelInvalid.make(problem.value)
 				return options.modelDefaults === undefined
 					? selection
 					: yield* options.modelDefaults(selection)
 			})
-		const create: typeof Sessions.Service.create = (input) =>
+		const create: typeof Chats.Service.create = (input) =>
 			Effect.gen(function* () {
 				const defaults = yield* options.defaults ?? Effect.succeed({})
 				// A linked Bot comes from another organization. This organization may not
-				// have its model, and then the Session uses the defaults of the host.
+				// have its model, and then the Chat uses the defaults of the host.
 				const botModel =
 					input.bot.model === undefined
 						? undefined
@@ -507,20 +514,18 @@ export const make = <
 				const settings = {
 					...defaults,
 					...(botModel === undefined ? {} : { model: botModel }),
-					...input.settings,
 				}
-				// A host that resolves models by selection needs a model for each Session.
+				// A host that resolves models by selection needs a model for each Chat.
 				if (settings.model === undefined && options.resolveModel !== undefined)
-					return yield* SessionModelInvalid.make({
+					return yield* ChatModelInvalid.make({
 						reason: "missing",
-						message:
-							"Choose a model for the Session, or set the model of the Bot.",
+						message: "Set the model of the Bot.",
 					})
 				const model =
 					settings.model === undefined
 						? undefined
 						: yield* validateSelection(settings.model)
-				const state: SessionHost.SessionHostState = {
+				const state: ChatHost.ChatHostState = {
 					bot: input.bot.id,
 					kind: input.kind,
 					chain: input.chain,
@@ -531,809 +536,580 @@ export const make = <
 						: { planApproval: input.planApproval }),
 					...(input.trigger === undefined ? {} : { trigger: input.trigger }),
 					...(input.channel === undefined ? {} : { channel: input.channel }),
+					...(input.title === undefined ? {} : { title: input.title }),
 				}
 				return yield* store
 					.create({
-						metadata: {
-							...(input.title === undefined ? {} : { title: input.title }),
-						},
+						id: input.id ?? newId(),
 						settings: {
 							...settings,
 							...(model === undefined ? {} : { model }),
 						},
-						business: { [sessionHostId]: state },
+						business: { [chatHostId]: state },
 					})
 					.pipe(Effect.mapError(publicError), Effect.flatMap(project))
 			})
-		const models: typeof Sessions.Service.models = (id) =>
+		const direct: typeof Chats.Service.direct = (bot, chain) =>
 			Effect.gen(function* () {
-				const view = yield* read(id),
-					available = yield* catalog
-				return {
-					...available,
-					...(view.session.settings.model === undefined
-						? {}
-						: { selected: view.session.settings.model }),
-				}
+				const found = yield* StoredChats.direct(db, namespace, bot.id).pipe(
+					Effect.mapError(publicError),
+				)
+				if (Option.isSome(found)) return found.value
+				return yield* create({ bot, kind: "direct", chain }).pipe(
+					Effect.map((view) => view.chat.id),
+					// Another request made the Chat at the same time. Use that one.
+					Effect.catchTag("ChatConflict", (error) =>
+						StoredChats.direct(db, namespace, bot.id).pipe(
+							Effect.mapError(publicError),
+							Effect.flatMap((again) =>
+								Effect.fromOption(again).pipe(Effect.mapError(() => error)),
+							),
+						),
+					),
+				)
 			})
-		const settings: typeof Sessions.Service.settings = (id, input) =>
+		const list: typeof Chats.Service.list = (input) =>
+			StoredChats.list(db, namespace, {
+				...(input?.bot === undefined ? {} : { bot: input.bot }),
+				kinds:
+					input?.kind !== undefined
+						? [input.kind]
+						: (input?.kinds ?? ["direct", "channel"]),
+			}).pipe(
+				Effect.mapError(publicError),
+				Effect.flatMap((refs) => Effect.forEach(refs, summary)),
+			)
+		const update: typeof Chats.Service.update = (id, input) =>
 			Effect.gen(function* () {
-				const selection =
-					input.settings.model === undefined
-						? undefined
-						: yield* validateSelection(input.settings.model)
+				const model =
+					input.model === undefined || input.model === null
+						? input.model
+						: yield* validateSelection(input.model)
 				const { view } = yield* store
 					.modifyEffect({
-						session: id,
+						chat: id,
 						expectedRevision: input.expected,
-						update: () =>
-							Effect.succeed([
+						update: (current) => {
+							const { model: _model, ...rest } = current.chat.settings
+							const settings: Turn.Settings = {
+								...(model === null ? rest : current.chat.settings),
+								...(input.mode === undefined ? {} : { mode: input.mode }),
+								...(model === undefined || model === null ? {} : { model }),
+							}
+							const state = ChatHost.hostState(current.chat)
+							// A `null` makes the Chat follow its Bot and the member again.
+							const { planApproval: _approval, ...kept } = state
+							const business =
+								input.planApproval === undefined
+									? {}
+									: {
+											business: {
+												...current.chat.business,
+												[chatHostId]:
+													input.planApproval === null
+														? kept
+														: { ...kept, planApproval: input.planApproval },
+											},
+										}
+							return Effect.succeed([
 								undefined,
-								Option.some({
-									session: {
-										settings: {
-											...input.settings,
-											...(selection === undefined ? {} : { model: selection }),
-										},
-									},
-								}),
-							] as const),
+								Option.some({ chat: { settings, ...business } }),
+							] as const)
+						},
 					})
 					.pipe(Effect.mapError(publicError))
 				return yield* project(view)
 			})
-		const selectModel: typeof Sessions.Service.selectModel = (id, input) =>
-			Effect.gen(function* () {
-				const view = yield* read(id)
-				return yield* settings(id, {
-					expected: input.expected,
-					settings: { ...view.session.settings, model: input.selection },
-				})
-			})
-		const selectMode: typeof Sessions.Service.selectMode = (id, input) =>
+		const change: typeof Chats.Service.change = (id, f) =>
 			store
 				.modifyEffect({
-					session: id,
-					expectedRevision: input.expected,
-					update: (view) =>
+					chat: id,
+					update: (current) =>
 						Effect.succeed([
 							undefined,
 							Option.some({
-								session: {
-									settings: { ...view.session.settings, mode: input.mode },
+								chat: {
+									business: {
+										...current.chat.business,
+										[chatHostId]: f(ChatHost.hostState(current.chat)),
+									},
 								},
 							}),
 						] as const),
 				})
-				.pipe(
-					Effect.mapError(publicError),
-					Effect.flatMap(({ view }) => project(view)),
-				)
-		const update: typeof Sessions.Service.update = (id, input) =>
-			store
-				.modifyEffect({
-					session: id,
-					expectedRevision: input.expected,
-					update: (view) => {
-						const state = SessionHost.hostState(view.session)
-						// A `null` makes the Session follow its Bot and the member again.
-						const { planApproval: _approval, ...kept } = state
-						const business =
-							input.planApproval === undefined
-								? {}
-								: {
-										business: {
-											...view.session.business,
-											[sessionHostId]:
-												input.planApproval === null
-													? kept
-													: { ...kept, planApproval: input.planApproval },
-										},
-									}
-						// A `null` title removes the title.
-						const title =
-							input.title === undefined
-								? view.session.metadata.title
-								: (input.title ?? undefined)
-						return Effect.succeed([
-							undefined,
-							Option.some({
-								session: {
-									metadata: {
-										...(title === undefined ? {} : { title }),
-										archived: input.archived ?? view.session.metadata.archived,
-									},
-									...business,
-								},
-							}),
-						] as const)
-					},
-				})
-				.pipe(
-					Effect.mapError(publicError),
-					Effect.flatMap(({ view }) => project(view)),
-				)
-		const list: typeof Sessions.Service.list = (input) =>
-			StoredSessions.list(db, namespace, input).pipe(
-				Effect.mapError(publicError),
-				// Review Sessions are hidden unless the caller asks for them.
-				Effect.map((rows) =>
-					rows.filter(
-						(row) =>
-							(input?.bot === undefined || row.bot === input.bot) &&
-							(input?.kind === undefined
-								? row.kind !== "review"
-								: row.kind === input.kind),
-					),
-				),
-				Effect.flatMap((rows) =>
-					Effect.forEach(rows, (row) =>
-						runtime.isActive(row.session.id).pipe(
-							Effect.map((active) => ({
-								...row,
-								activity: active ? ("active" as const) : row.activity,
-							})),
-						),
-					),
-				),
-			)
-		const history: typeof Sessions.Service.history = (id, version) =>
-			version === undefined
-				? read(id).pipe(Effect.map((view) => view.state))
-				: store.read(id, version).pipe(Effect.mapError(publicError))
-		const forked = ({
-			parent: _parent,
-			review: _review,
-			trigger: _trigger,
-			channel: _channel,
-			...kept
-		}: SessionHost.SessionHostState): SessionHost.SessionHostState => ({
-			...kept,
-			kind: "direct",
-		})
-		const fork: typeof Sessions.Service.fork = (id, input) =>
-			Effect.gen(function* () {
-				const source = yield* read(id)
-				const settings =
-					input.settings?.model === undefined
-						? input.settings
-						: {
-								...input.settings,
-								model: yield* validateSelection(input.settings.model),
-							}
-				const title = input.title ?? source.session.metadata.title
-				return yield* store
-					.fork({
-						source: id,
-						...(input.version === undefined ? {} : { version: input.version }),
-						metadata: title === undefined ? {} : { title },
-						...(settings === undefined ? {} : { settings }),
-						// The Fork keeps the OpenBot data of its source, such as the Bot and the
-						// memory switches. It is new direct work, so it has no parent tool call.
-						business: {
-							[sessionHostId]: forked(SessionHost.hostState(source.session)),
-						},
-					})
-					.pipe(Effect.mapError(publicError), Effect.flatMap(project))
-			})
-		const restore: typeof Sessions.Service.restore = (id, input) =>
-			Effect.gen(function* () {
-				yield* idle(id)
-				if (input.expected !== null) yield* read(id)
-				if (
-					input.record.session.id !== id ||
-					(input.expected !== null && input.expected.id !== id)
-				)
-					return yield* SessionInvalidRecord.make({
-						message: "The record identity does not match the target Session",
-					})
-				return yield* store
-					.import(input)
-					.pipe(Effect.mapError(publicError), Effect.flatMap(project))
-			})
-		const waits: typeof Sessions.Service.waits = (id) =>
-			read(id).pipe(
-				Effect.map((view) =>
-					Option.match(
-						Option.fromNullishOr(Session.currentTurn(view.session)),
-						{
-							onNone: () => [],
-							onSome: (turn) =>
-								turn.status._tag === "Waiting" ? Session.waits(view) : [],
-						},
-					),
-				),
-			)
-		const turns: typeof Sessions.Service.turns = (id, input) =>
-			Effect.flatMap(read(id), (view) =>
-				page(
-					[...view.session.inheritedTurns, ...view.session.turns],
-					input,
-					"The Turn cursor does not belong to this Session",
-				),
-			)
-		const turn: typeof Sessions.Service.turn = (id, turn) =>
-			Effect.gen(function* () {
-				const view = yield* read(id),
-					selected = [
-						...view.session.inheritedTurns,
-						...view.session.turns,
-					].find((entry) => entry.id === turn)
-				if (selected === undefined)
-					return yield* SessionConflict.make({
-						message: "The Turn does not belong to this Session",
-					})
-				return { turn: selected, response: response(view, selected) }
-			})
-		const items: typeof Sessions.Service.items = (id, turnId, input) =>
+				.pipe(Effect.asVoid, Effect.mapError(publicError))
+		const interrupt: typeof Chats.Service.interrupt = (id) =>
 			Effect.gen(function* () {
 				const view = yield* read(id)
-				yield* turn(id, turnId)
-				return yield* page(
-					view.state.value.conversation.history.filter(
-						(entry) => entry.origin?.turn === turnId,
-					),
-					input,
-					"The Item cursor does not belong to this Turn",
+				const turn = Chat.currentTurn(view.chat)
+				if (turn === undefined || Turn.isTerminal(turn.status))
+					return yield* project(view)
+				return yield* runtime.interrupt({ chat: id, turn: turn.id }).pipe(
+					Effect.catchTag("TurnConflict", () => store.read(id)),
+					Effect.mapError(publicError),
+					Effect.flatMap(project),
 				)
 			})
-		const start = (
-			id: Session.Id,
-			input: SendInput,
-			sink?: SessionEvents.Sink,
-		): Effect.Effect<
-			SessionResponse,
-			ServiceError | SessionExecutionUnavailable
-		> =>
+		const receipt = (
+			delivery: Chat.Delivery,
+		): Effect.Effect<MessageReceipt, ServiceError> =>
+			Effect.gen(function* () {
+				const view = yield* read(delivery.chat)
+				const turn =
+					delivery.turn === undefined
+						? undefined
+						: view.chat.turn?.id === delivery.turn
+							? view.chat.turn
+							: Option.getOrUndefined(
+									yield* store
+										.turn(delivery.chat, delivery.turn)
+										.pipe(Effect.mapError(publicError)),
+								)
+				return {
+					delivery: delivery.delivery,
+					chat: delivery.chat,
+					item: delivery.item,
+					turn: delivery.turn ?? null,
+					response:
+						turn === undefined ? null : yield* responseOf(view.chat, turn),
+				}
+			})
+		const deliver: typeof Chats.Service.deliver = (id, input) =>
 			Effect.gen(function* () {
 				const view = yield* read(id)
-				const overrides =
-					input.overrides?.model === undefined
-						? input.overrides
-						: {
-								...input.overrides,
-								model: yield* validateSelection(input.overrides.model),
-							}
-				const model = yield* modelFor({
-					...view,
-					session: {
-						...view.session,
-						settings: { ...view.session.settings, ...overrides },
-					},
-				})
-				const current = Session.currentTurn(view.session)
-				if (current !== undefined && !Turn.isTerminal(current.status))
-					return yield* SessionBusy.make({ session: id })
-				const accepted = yield* Deferred.make<SessionResponse, ServiceError>()
-				let acknowledged = false,
-					terminal = false,
-					reportedFailure = false,
-					selectedTurn: Turn.Id | undefined,
-					step: number | undefined
-				let outputs = HashMap.empty<
-					Item.Id,
-					{ readonly index: number; readonly text: string }
-				>()
-				const emit = (event: SessionEvents.Payload) =>
-					sink === undefined || selectedTurn === undefined
-						? Effect.void
-						: sink
-								.emit({
-									...event,
-									session: id,
-									turn: selectedTurn,
-									...(step === undefined ? {} : { step }),
-								})
-								.pipe(Effect.asVoid)
-				const finish = (result: SessionResponse) =>
-					sink === undefined
-						? Effect.void
-						: sink
-								.finish([
-									{
-										session: id,
-										turn: result.id,
-										...(step === undefined ? {} : { step }),
-										// The final event names the final status. A response that
-										// still runs here did not finish, so it is incomplete.
-										type:
-											result.status === "in_progress"
-												? "response.incomplete"
-												: (`response.${result.status}` as const),
-										response: result,
-									},
-								])
-								.pipe(Effect.asVoid)
-				const execution = runtime
-					.stream({
-						base: { session: id, revision: input.expected },
+				// A person learns at once when no model can run the work of this Chat.
+				// A message from OpenBot waits in the Chat all the same.
+				if (input.notice === undefined) yield* modelFor(view.chat)
+				const delivery = yield* runtime
+					.deliver({
+						chat: id,
 						input: inputPrompt(input.input),
-						...(overrides === undefined ? {} : { overrides }),
-						...(input.author === undefined ? {} : { author: input.author }),
+						author: input.author,
+						...(input.notice === undefined ? {} : { notice: input.notice }),
+						...(input.approved === undefined
+							? {}
+							: { approved: input.approved }),
+						...(input.queue === undefined ? {} : { queue: input.queue }),
 					})
-					.pipe(
-						Stream.provideContext(
-							Context.add(environment, LanguageModel.LanguageModel, model),
-						),
-						Stream.runForEach((event) =>
-							Match.value(event).pipe(
-								Match.tag("TurnStarted", (event) =>
-									Effect.gen(function* () {
-										selectedTurn = event.turn
-										const current = yield* read(id),
-											record = Session.currentTurn(current.session)!
-										const result = response(current, record)
-										acknowledged = true
-										yield* Deferred.succeed(accepted, result)
-										yield* emit({ type: "response.created", response: result })
-										yield* emit({
-											type: "response.in_progress",
-											response: result,
-										})
-									}),
-								),
-								Match.tag("ResponsePart", (event) =>
-									Effect.gen(function* () {
-										step = event.step
-										if (sink === undefined) return
-										const output = yield* Option.match(
-											HashMap.get(outputs, event.item),
-											{
-												onSome: (entry) => Effect.succeed(entry),
-												onNone: () =>
-													Effect.gen(function* () {
-														const entry = {
-															index: HashMap.size(outputs),
-															text: "",
-														}
-														outputs = HashMap.set(outputs, event.item, entry)
-														yield* emit({
-															type: "response.output_item.added",
-															output_index: entry.index,
-															item: {
-																id: event.item,
-																type: "message",
-																role: "assistant",
-																status: "in_progress",
-																content: [],
-															},
-														})
-														yield* emit({
-															type: "response.content_part.added",
-															item_id: event.item,
-															output_index: entry.index,
-															content_index: 0,
-															part: {
-																type: "output_text",
-																text: "",
-																annotations: [] as const,
-															},
-														})
-														return entry
-													}),
-											},
-										)
-										const indices = {
-											item_id: event.item,
-											output_index: output.index,
-											content_index: 0,
-										}
-										yield* Match.value<
-											Response.StreamPart<Record<string, Tool.Any>>
-										>(event.part).pipe(
-											Match.discriminator("type")("text-delta", (part) =>
-												Effect.gen(function* () {
-													outputs = HashMap.set(outputs, event.item, {
-														...output,
-														text: output.text + part.delta,
-													})
-													yield* emit({
-														type: "response.output_text.delta",
-														...indices,
-														delta: part.delta,
-														logprobs: [],
-													})
-												}),
-											),
-											Match.discriminator("type")("finish", (part) =>
-												Effect.gen(function* () {
-													const text = Option.match(
-															HashMap.get(outputs, event.item),
-															{
-																onNone: () => output.text,
-																onSome: (entry) => entry.text,
-															},
-														),
-														content = {
-															type: "output_text" as const,
-															text,
-															annotations: [] as const,
-														}
-													yield* emit({
-														type: "response.output_text.done",
-														...indices,
-														text,
-														logprobs: [],
-													})
-													yield* emit({
-														type: "response.content_part.done",
-														...indices,
-														part: content,
-													})
-													yield* emit({
-														type: "response.output_item.done",
-														output_index: output.index,
-														item: {
-															id: event.item,
-															type: "message",
-															role: "assistant",
-															status: ["stop", "tool-calls"].includes(
-																part.reason,
-															)
-																? "completed"
-																: "incomplete",
-															content: [content],
-														},
-													})
-												}),
-											),
-											Match.orElse(() => Effect.void),
-										)
-									}),
-								),
-								Match.tag("TurnCompleted", "TurnWaiting", (event) =>
-									Effect.gen(function* () {
-										terminal = true
-										reportedFailure = event.turn.status._tag === "Failed"
-										yield* finish(response(event.view, event.turn))
-									}),
-								),
-								Match.orElse(() => Effect.void),
-							),
-						),
-						Effect.onExit((exit) =>
-							Effect.gen(function* () {
-								if (!acknowledged) {
-									const failed = Exit.isFailure(exit)
-										? Cause.findErrorOption(exit.cause)
-										: Option.none()
-									if (
-										Exit.isFailure(exit) &&
-										Option.isNone(failed) &&
-										!Cause.hasInterruptsOnly(exit.cause)
-									)
-										yield* ErrorReporting.record({
-											source: "turn",
-											operation: "turn.accept",
-											sessionId: id,
-											cause: exit.cause,
-										})
-									yield* Deferred.fail(
-										accepted,
-										Option.match(
-											Option.filter(
-												failed,
-												(error) =>
-													error instanceof SessionStore.SessionStoreError,
-											),
-											{
-												onSome: publicError,
-												onNone: () =>
-													SessionConflict.make({
-														message: "The Turn could not be accepted",
-													}),
-											},
-										),
-									)
-									if (sink !== undefined) yield* sink.finish([])
-									return
-								}
-								if (
-									Exit.isFailure(exit) &&
-									!reportedFailure &&
-									!Cause.hasInterruptsOnly(exit.cause)
-								) {
-									const saved = yield* Effect.exit(store.read(id))
-									const persistedFailure =
-										Exit.isSuccess(saved) &&
-										saved.value.session.turns.some(
-											(turn) =>
-												turn.id === selectedTurn &&
-												turn.status._tag === "Failed",
-										)
-									if (!persistedFailure)
-										yield* ErrorReporting.record({
-											source: "turn",
-											operation: terminal ? "turn.postprocess" : "turn.execute",
-											sessionId: id,
-											...(selectedTurn === undefined
-												? {}
-												: { turnId: selectedTurn }),
-											cause: exit.cause,
-										})
-								}
-								if (
-									terminal &&
-									selectedTurn !== undefined &&
-									Exit.isSuccess(exit)
-								) {
-									const current = yield* store.read(id).pipe(Effect.exit)
-									if (
-										Exit.isSuccess(current) &&
-										Session.currentTurn(current.value.session)?.id ===
-											selectedTurn
-									)
-										yield* runtime.runQueued(id).pipe(
-											Effect.provideContext(
-												Context.add(
-													environment,
-													LanguageModel.LanguageModel,
-													model,
-												),
-											),
-											Effect.catch((error) =>
-												(error instanceof SessionStore.SessionStoreError &&
-													error.reason === "storage-failed") ||
-												(error instanceof Session.SessionError &&
-													error.reason === "unavailable")
-													? ErrorReporting.record({
-															source: "turn",
-															operation: "turn.runQueued",
-															sessionId: id,
-															cause: Cause.fail(error),
-														})
-													: Effect.logDebug(
-															"The queued Turn could not start",
-															error,
-														),
-											),
-											Effect.tapCause((cause) =>
-												Cause.hasInterruptsOnly(cause)
-													? Effect.void
-													: ErrorReporting.record({
-															source: "turn",
-															operation: "turn.runQueued",
-															sessionId: id,
-															cause,
-														}),
-											),
-										)
-									return
-								}
-								if (terminal || selectedTurn === undefined) return
-								const latest = yield* Effect.exit(store.read(id))
-								if (Exit.isSuccess(latest)) {
-									const record = latest.value.session.turns.find(
-										(entry) => entry.id === selectedTurn,
-									)
-									if (record !== undefined && Turn.isTerminal(record.status)) {
-										yield* finish(response(latest.value, record))
-										return
-									}
-								}
-								if (sink !== undefined) yield* sink.finish([])
-							}),
-						),
-					)
-				yield* Effect.forkIn(execution, scope)
-				return yield* Deferred.await(accepted)
+					.pipe(Effect.provideContext(routed), Effect.mapError(publicError))
+				return yield* receipt(delivery)
 			})
-		const send: typeof Sessions.Service.send = (id, input) => start(id, input)
-		const sendStream: typeof Sessions.Service.sendStream = (id, input) =>
-			Effect.gen(function* () {
-				const sink = yield* SessionEvents.make
-				yield* start(id, input, sink)
-				return sink.stream
-			})
-		const startAction: typeof Sessions.Service.startAction = (id, input) =>
-			Effect.gen(function* () {
-				yield* read(id)
-				return yield* runtime
-					.startAction({
-						base: { session: id, revision: input.expected },
-						action: input.action,
-						...(input.turn === undefined ? {} : { turn: input.turn }),
-					})
-					.pipe(
-						Effect.provideContext(environment),
-						Effect.mapError(publicError),
-					)
-			})
-		const resolveCall: typeof Sessions.Service.resolveCall = (
-			id,
-			toolCallId,
-			outcome,
+		/** Turns the core events of one Turn into Responses events. */
+		const follow = <E>(
+			chat: Chat.Id,
+			turn: Turn.Id,
+			events: Stream.Stream<
+				Bot.Event<Record<string, Tool.Any>, ChatHost.Values>,
+				E
+			>,
+			sink: ChatEvents.Sink,
 		) =>
 			Effect.gen(function* () {
-				const view = yield* read(id)
-				const turn = Session.currentTurn(view.session)
-				const wait = Session.waits(view).find(
-					(entry) => entry.toolCallId === toolCallId,
+				const outputs = yield* Ref.make(
+					HashMap.empty<
+						Item.Id,
+						{ readonly index: number; readonly text: string }
+					>(),
 				)
-				if (
-					turn === undefined ||
-					turn.status._tag !== "Waiting" ||
-					wait === undefined
-				)
-					return
-				// A Turn of a host-selected action has no model. Its driver runs the action again.
-				const model =
-					turn.action !== undefined || turn.activeAction !== undefined
-						? undefined
-						: yield* modelFor(view, turn)
-				const input = {
-					session: id,
-					turn: turn.id,
-					approval: wait.approvalId,
-					outcome,
-					expectedRevision: view.session.revision,
-				}
-				yield* (
-					model === undefined
-						? runtime
-								.resolveAction(input)
-								.pipe(Effect.provideContext(environment))
-						: runtime
-								.resolve(input)
-								.pipe(
-									Effect.provideContext(
-										Context.add(
-											environment,
-											LanguageModel.LanguageModel,
-											model,
-										),
-									),
+				const step = yield* Ref.make<number | undefined>(undefined)
+				const emit = (event: ChatEvents.Payload) =>
+					Effect.flatMap(Ref.get(step), (current) =>
+						sink.emit({
+							...event,
+							chat,
+							turn,
+							...(current === undefined ? {} : { step: current }),
+						}),
+					).pipe(Effect.asVoid)
+				const finish = (result: ChatResponse) =>
+					Effect.flatMap(Ref.get(step), (current) =>
+						sink.finish([
+							{
+								chat,
+								turn: result.id,
+								...(current === undefined ? {} : { step: current }),
+								// The final event names the final status. A response that
+								// still runs here did not finish, so it is incomplete.
+								type:
+									result.status === "in_progress"
+										? "response.incomplete"
+										: (`response.${result.status}` as const),
+								response: result,
+							},
+						]),
+					).pipe(Effect.asVoid)
+				const latest = Effect.gen(function* () {
+					const view = yield* read(chat)
+					const record =
+						view.chat.turn?.id === turn
+							? view.chat.turn
+							: Option.getOrUndefined(
+									yield* store
+										.turn(chat, turn)
+										.pipe(Effect.mapError(publicError)),
 								)
-				).pipe(
-					// Another answer came first. The call does not wait any more.
+					return record === undefined
+						? undefined
+						: yield* responseOf(view.chat, record)
+				})
+				const started = yield* latest
+				if (started !== undefined) {
+					yield* emit({ type: "response.created", response: started })
+					yield* emit({ type: "response.in_progress", response: started })
+				}
+				/** Starts a new output message in the Response. */
+				const added = (item: Item.Id) =>
+					Effect.gen(function* () {
+						const entry = {
+							index: HashMap.size(yield* Ref.get(outputs)),
+							text: "",
+						}
+						yield* Ref.update(outputs, HashMap.set(item, entry))
+						yield* emit({
+							type: "response.output_item.added",
+							output_index: entry.index,
+							item: {
+								id: item,
+								type: "message",
+								role: "assistant",
+								status: "in_progress",
+								content: [],
+							},
+						})
+						yield* emit({
+							type: "response.content_part.added",
+							item_id: item,
+							output_index: entry.index,
+							content_index: 0,
+							part: {
+								type: "output_text",
+								text: "",
+								annotations: [] as const,
+							},
+						})
+						return entry
+					})
+				yield* events.pipe(
+					Stream.filter(
+						(event) =>
+							("turn" in event && event.turn === turn) ||
+							(event._tag === "TurnCompleted" && event.turn.id === turn),
+					),
+					Stream.takeUntil((event) => event._tag === "TurnCompleted"),
+					Stream.runForEach((event) =>
+						Effect.gen(function* () {
+							if (event._tag === "TurnCompleted") {
+								const result = yield* latest
+								if (result !== undefined) yield* finish(result)
+								return
+							}
+							if (event._tag !== "ResponsePart") return
+							yield* Ref.set(step, event.step)
+							const known = HashMap.get(yield* Ref.get(outputs), event.item)
+							const output = Option.isSome(known)
+								? known.value
+								: yield* added(event.item)
+							const indices = {
+								item_id: event.item,
+								output_index: output.index,
+								content_index: 0,
+							}
+							const part = event.part as Response.StreamPart<
+								Record<string, Tool.Any>
+							>
+							if (part.type === "text-delta") {
+								yield* Ref.update(
+									outputs,
+									HashMap.set(event.item, {
+										...output,
+										text: output.text + part.delta,
+									}),
+								)
+								yield* emit({
+									type: "response.output_text.delta",
+									...indices,
+									delta: part.delta,
+									logprobs: [],
+								})
+							}
+							if (part.type === "finish") {
+								const text = Option.match(
+									HashMap.get(yield* Ref.get(outputs), event.item),
+									{ onNone: () => output.text, onSome: (entry) => entry.text },
+								)
+								const content = {
+									type: "output_text" as const,
+									text,
+									annotations: [] as const,
+								}
+								yield* emit({
+									type: "response.output_text.done",
+									...indices,
+									text,
+									logprobs: [],
+								})
+								yield* emit({
+									type: "response.content_part.done",
+									...indices,
+									part: content,
+								})
+								yield* emit({
+									type: "response.output_item.done",
+									output_index: output.index,
+									item: {
+										id: event.item,
+										type: "message",
+										role: "assistant",
+										status: ["stop", "tool-calls"].includes(part.reason)
+											? "completed"
+											: "incomplete",
+										content: [content],
+									},
+								})
+							}
+						}),
+					),
+				)
+			}).pipe(
+				Effect.ensuring(sink.finish([])),
+				Effect.catchCause((cause) =>
+					Effect.logWarning("The live events of a Turn stopped", cause),
+				),
+			)
+		const deliverStream: typeof Chats.Service.deliverStream = (id, input) =>
+			Effect.gen(function* () {
+				const before = yield* read(id)
+				const result = yield* deliver(id, input)
+				if (result.delivery !== "started" || result.turn === null)
+					return { receipt: result, events: Option.none() }
+				const sink = yield* ChatEvents.make
+				const events = runtime.events({ chat: id, after: before.chat.revision })
+				yield* Effect.forkIn(follow(id, result.turn, events, sink), scope)
+				return { receipt: result, events: Option.some(sink.stream) }
+			})
+		const drain: typeof Chats.Service.drain = (id) =>
+			runtime
+				.drain(id)
+				.pipe(
+					Effect.provideContext(routed),
+					Effect.asVoid,
+					Effect.mapError(publicError),
+				)
+		const closeStale: typeof Chats.Service.closeStale = (id, turn) =>
+			Effect.gen(function* () {
+				if (yield* runtime.isActive(id)) return
+				yield* runtime.interrupt({ chat: id, turn }).pipe(
+					// The Turn ended already.
 					Effect.catchTag("TurnConflict", () => Effect.void),
 					Effect.mapError(publicError),
 				)
+				yield* drain(id).pipe(
+					Effect.catchTag("ChatExecutionUnavailable", () => Effect.void),
+				)
 			})
-		const updateMemory: typeof Sessions.Service.updateMemory = (id, input) =>
+		const startAction: typeof Chats.Service.startAction = (id, input) =>
+			read(id).pipe(
+				Effect.andThen(
+					runtime.startAction({
+						chat: id,
+						action: input.action,
+						...(input.turn === undefined ? {} : { turn: input.turn }),
+						...(input.author === undefined ? {} : { author: input.author }),
+					}),
+				),
+				Effect.provideContext(routed),
+				Effect.mapError(publicError),
+			)
+		const pageSize = (limit: number | undefined) =>
+			Math.max(1, Math.min(100, Math.floor(limit ?? 50)))
+		const turns: typeof Chats.Service.turns = (id, input) =>
+			Effect.gen(function* () {
+				yield* read(id)
+				const limit = pageSize(input.limit)
+				if (input.after !== undefined) {
+					const cursor = yield* store
+						.turn(id, input.after)
+						.pipe(Effect.mapError(publicError))
+					if (Option.isNone(cursor))
+						return yield* ChatConflict.make({
+							message: "The Turn cursor does not belong to this Chat",
+						})
+				}
+				const rows = yield* store
+					.turns(id, {
+						...(input.after === undefined ? {} : { after: input.after }),
+						limit: limit + 1,
+					})
+					.pipe(Effect.mapError(publicError))
+				const items = rows.slice(0, limit)
+				return {
+					items,
+					next:
+						rows.length > limit
+							? Option.getOrNull(
+									Option.map(Array.last(items), (turn) => turn.id),
+								)
+							: null,
+				}
+			})
+		const turnRecord = (id: Chat.Id, turn: Turn.Id) =>
 			Effect.gen(function* () {
 				const view = yield* read(id)
-				const changed = yield* Match.value(input.command).pipe(
-					Match.tag("Configure", (command) =>
-						store
-							.modifyEffect({
-								session: id,
-								expectedHead: input.expected,
-								expectedRevision: input.revision,
-								update: (current) =>
-									Effect.succeed([
-										undefined,
-										Option.some({
-											session: {
-												business: {
-													...current.session.business,
-													[sessionHostId]: {
-														...SessionHost.hostState(current.session),
-														memory: SessionHost.configure({
-															current: SessionHost.overrides(current.session),
-															command,
-														}),
-													},
-												},
-											},
-										}),
-									] as const),
-							})
-							.pipe(
-								Effect.map((changed) => changed.view),
-								Effect.mapError(publicError),
-							),
-					),
-					Match.tag("Refresh", () =>
-						Effect.gen(function* () {
-							if (
-								!SessionHost.settings({
-									defaults: memoryDefaults,
-									session: view.session,
-								}).generate
-							)
-								return view
-							const model = yield* modelFor(view).pipe(
-								Effect.mapError(() =>
-									SessionConflict.make({
-										message: "Memory extraction needs an available model",
-									}),
-								),
-							)
-							return yield* memories
-								.consolidate(id)
-								.pipe(
-									Effect.provideService(LanguageModel.LanguageModel, model),
-									Effect.mapError(publicError),
+				const record =
+					view.chat.turn?.id === turn
+						? Option.some(view.chat.turn)
+						: yield* store.turn(id, turn).pipe(Effect.mapError(publicError))
+				if (Option.isNone(record))
+					return yield* ChatConflict.make({
+						message: "The Turn does not belong to this Chat",
+					})
+				return { view, record: record.value }
+			})
+		const turn: typeof Chats.Service.turn = (id, turnId) =>
+			Effect.gen(function* () {
+				const { view, record } = yield* turnRecord(id, turnId)
+				return { turn: record, response: yield* responseOf(view.chat, record) }
+			})
+		const turnItems: typeof Chats.Service.turnItems = (id, turnId, input) =>
+			Effect.gen(function* () {
+				yield* turnRecord(id, turnId)
+				const all = yield* store
+					.items(id, { turn: turnId })
+					.pipe(Effect.mapError(publicError))
+				const offset =
+					input.after === undefined
+						? 0
+						: all.findIndex((entry) => entry.id === input.after) + 1
+				if (input.after !== undefined && offset === 0)
+					return yield* ChatConflict.make({
+						message: "The Item cursor does not belong to this Turn",
+					})
+				const limit = pageSize(input.limit)
+				const items = all.slice(offset, offset + limit)
+				return {
+					items,
+					next:
+						offset + limit < all.length
+							? Option.getOrNull(
+									Option.map(Array.last(items), (item) => item.id),
 								)
-						}),
-					),
-					Match.orElse((command) =>
-						memories
-							.update(
-								{
-									session: id,
-									version: input.expected,
-									revision: input.revision,
-								},
-								command,
-							)
-							.pipe(Effect.mapError(publicError)),
+							: null,
+				}
+			})
+		const items: typeof Chats.Service.items = (id, input) =>
+			Effect.gen(function* () {
+				yield* read(id)
+				const limit = pageSize(input.limit)
+				const rows = yield* store
+					.items(id, {
+						...(input.before === undefined ? {} : { before: input.before }),
+						limit: limit + 1,
+						order: "desc",
+					})
+					.pipe(Effect.mapError(publicError))
+				const page = rows.slice(0, limit)
+				return {
+					items: page,
+					next:
+						rows.length > limit
+							? Option.getOrNull(
+									Option.map(Array.last(page), (item) => item.seq),
+								)
+							: null,
+				}
+			})
+		const itemsAfter: typeof Chats.Service.itemsAfter = (id, after) =>
+			Effect.gen(function* () {
+				const items = yield* store
+					.items(id, { after })
+					.pipe(Effect.mapError(publicError))
+				const turns = Array.dedupe(
+					items.flatMap((item) =>
+						item.origin === undefined ? [] : [item.origin.turn],
 					),
 				)
-				return yield* project(changed)
+				const records = yield* Effect.forEach(turns, (turn) =>
+					store.turn(id, turn).pipe(Effect.mapError(publicError)),
+				)
+				return {
+					items,
+					authors: new Map(
+						records.flatMap((record) =>
+							Option.isSome(record) && record.value.author !== undefined
+								? [[record.value.id, record.value.author] as const]
+								: [],
+						),
+					),
+				}
 			})
+		// A running Turn says often that it still runs, so another server does not end it.
+		yield* Effect.forkIn(
+			StoredChats.running(db, namespace).pipe(
+				Effect.flatMap((ids) =>
+					Effect.forEach(ids, (id) =>
+						runtime
+							.isActive(id)
+							.pipe(
+								Effect.flatMap((active) =>
+									active
+										? StoredChats.heartbeat(db, namespace, id)
+										: Effect.void,
+								),
+							),
+					),
+				),
+				Effect.catchCause((cause) =>
+					Effect.logWarning("OpenBot could not mark its running Turns", cause),
+				),
+				Effect.repeat(Schedule.spaced(heartbeatEvery)),
+			),
+			scope,
+		)
 		return {
-			...Sessions.of({
+			...Chats.of({
 				create,
+				direct,
 				get,
+				read,
 				list,
 				update,
-				fork,
-				restore,
-				models,
-				selectModel,
-				selectMode,
-				settings,
-				turns,
-				turn,
-				items,
-				waits,
-				send,
-				startAction,
-				sendStream,
-				resolveCall,
-				updateMemory,
+				change,
+				remove: (id) =>
+					Effect.gen(function* () {
+						yield* interrupt(id)
+						const view = yield* read(id)
+						yield* store.remove(view.chat).pipe(Effect.mapError(publicError))
+					}),
+				models: (id) =>
+					Effect.gen(function* () {
+						const view = yield* read(id),
+							available = yield* catalog
+						return {
+							...available,
+							...(view.chat.settings.model === undefined
+								? {}
+								: { selected: view.chat.settings.model }),
+						}
+					}),
 				todos: (id) => read(id).pipe(Effect.map(Todos.of)),
 				updateTodos: (id, input) =>
 					Todos.replace({
 						store,
-						session: id,
+						chat: id,
 						items: input.items,
-						base: input,
+						revision: input.revision,
 					}).pipe(
 						Effect.mapError((error) =>
-							error._tag === "SessionConflict" ? error : publicError(error),
+							error._tag === "ChatConflict" && !(error instanceof Chat.Conflict)
+								? error
+								: publicError(error),
 						),
 						Effect.flatMap(project),
 					),
-				history,
-				versions: (id) =>
-					read(id).pipe(
-						Effect.flatMap((view) =>
-							store
-								.log({ from: view.session.head })
-								.pipe(Effect.mapError(publicError)),
-						),
-					),
-				memory: (id) =>
-					read(id).pipe(
-						Effect.map((view) => ({
-							...(view.state.value[Memory.storeKey] ?? Memory.empty()),
-							settings: SessionHost.settings({
-								defaults: memoryDefaults,
-								session: view.session,
-							}),
-							overrides: SessionHost.overrides(view.session),
-						})),
-					),
-				exportRecord: (id) =>
-					store.export(id).pipe(Effect.mapError(publicError)),
-				remove: (id) =>
-					idle(id).pipe(
-						Effect.andThen(read(id)),
-						Effect.flatMap((view) =>
-							store.remove(view.session).pipe(Effect.mapError(publicError)),
-						),
-					),
-				resume: (id) =>
-					runtime
-						.resume(id)
-						.pipe(Effect.mapError(publicError), Effect.flatMap(project)),
 				wait: (id, after, timeoutMs, afterActivity) =>
 					runtime
 						.wait({
-							session: id,
+							chat: id,
 							after,
 							...(afterActivity === undefined
 								? {}
@@ -1341,35 +1117,22 @@ export const make = <
 							timeout: Math.min(timeoutMs ?? 30000, 30000),
 						})
 						.pipe(Effect.mapError(publicError), Effect.flatMap(project)),
-				interrupt: (id, turn) =>
-					runtime
-						.interrupt({ session: id, turn })
-						.pipe(Effect.mapError(publicError), Effect.flatMap(project)),
-				steer: (id, turn, input, author) =>
-					runtime
-						.steer({
-							session: id,
-							turn,
-							input: inputPrompt(input),
-							...(author === undefined ? {} : { author }),
-						})
-						.pipe(Effect.mapError(publicError)),
-				enqueue: (id, input) =>
-					runtime
-						.enqueue({
-							session: id,
-							message: inputPrompt(input.input),
-							...(input.expected === undefined
-								? {}
-								: { expectedRevision: input.expected }),
-							...(input.author === undefined ? {} : { author: input.author }),
-						})
-						.pipe(Effect.mapError(publicError)),
+				interrupt,
+				deliver,
+				deliverStream,
+				drain,
+				closeStale,
+				startAction,
+				turns,
+				turn,
+				turnItems,
+				turnLog: (id, turn) =>
+					store.items(id, { turn }).pipe(Effect.mapError(publicError)),
+				itemsAfter,
+				items,
 			}),
 			runtime,
 			store,
-			consolidate: (id) =>
-				memories.consolidate(id).pipe(Effect.mapError(publicError)),
 		}
 	})
 export const layer = <
@@ -1380,4 +1143,4 @@ export const layer = <
 	BuildR = never,
 >(
 	options: Options<Tools, E, R, BuildE, BuildR> = {},
-) => Layer.effect(Sessions, make(options))
+) => Layer.effect(Chats, make(options))

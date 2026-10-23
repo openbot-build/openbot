@@ -10,7 +10,8 @@ import * as CodeRunHandlers from "../code/HttpHandlers.ts"
 import * as IndexHandlers from "../apps/IndexHttpHandlers.ts"
 import * as AppAuthorizationHandlers from "../apps/AuthorizationHttpHandlers.ts"
 import * as ConnectionHandlers from "../apps/ConnectionHttpHandlers.ts"
-import * as SessionHandlers from "../sessions/SessionHandlers.ts"
+import * as ChatHandlers from "../chats/ChatHandlers.ts"
+import * as DelegationHandlers from "../bots/DelegationHandlers.ts"
 import * as BotHandlers from "../bots/HttpHandlers.ts"
 import * as RequestHandlers from "../capabilities/HttpHandlers.ts"
 import * as OrganizationHandlers from "../organization/HttpHandlers.ts"
@@ -44,7 +45,8 @@ export const layerPlatform = (publicOrigin: string) =>
 					IndexHandlers.layer,
 					AppAuthorizationHandlers.layer(publicOrigin),
 					ConnectionHandlers.layer,
-					SessionHandlers.layerPlatform,
+					ChatHandlers.layerPlatform,
+					DelegationHandlers.layerPlatform,
 					BotHandlers.layer(publicOrigin),
 					BotHandlers.layerInvitations,
 					RequestHandlers.layer,

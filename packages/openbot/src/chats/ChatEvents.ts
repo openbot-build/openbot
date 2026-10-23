@@ -1,31 +1,31 @@
 import {
-	type SessionResponseEvent,
-	type SessionResponseSseEvent,
+	type ChatResponseEvent,
+	type ChatResponseSseEvent,
 } from "@openbot-build/api"
 import { Effect, Stream, Cause, Deferred, Queue, Scope } from "effect"
 
 type WithoutSequence<T> = T extends unknown ? Omit<T, "sequence_number"> : never
 
-export type EventInput = WithoutSequence<SessionResponseEvent>
+export type EventInput = WithoutSequence<ChatResponseEvent>
 type WithoutContext<T> = T extends unknown
-	? Omit<T, "session" | "turn" | "step">
+	? Omit<T, "chat" | "turn" | "step">
 	: never
 export type Payload = WithoutContext<EventInput>
 
 export interface Sink {
 	readonly emit: (event: EventInput) => Effect.Effect<boolean>
 	readonly finish: (events: ReadonlyArray<EventInput>) => Effect.Effect<boolean>
-	readonly stream: Stream.Stream<SessionResponseSseEvent>
+	readonly stream: Stream.Stream<ChatResponseSseEvent>
 }
 
-/** The observer owns the buffer. The Sessions scope owns the producer. */
+/** The observer owns the buffer. The Chats scope owns the producer. */
 export const make: Effect.Effect<Sink, never, Scope.Scope> = Effect.gen(
 	function* () {
 		const queue = yield* Queue.bounded<EventInput, Cause.Done>(64)
 		const terminal = yield* Deferred.make<ReadonlyArray<EventInput>>()
 		yield* Effect.addFinalizer(() => Queue.shutdown(queue))
 		let sequence = 0
-		const numbered = (event: EventInput): SessionResponseEvent => ({
+		const numbered = (event: EventInput): ChatResponseEvent => ({
 			...event,
 			sequence_number: sequence++,
 		})
@@ -42,7 +42,7 @@ export const make: Effect.Effect<Sink, never, Scope.Scope> = Effect.gen(
 					Stream.flatMap(Stream.fromIterable),
 				),
 			).pipe(
-				Stream.map((event): SessionResponseSseEvent => {
+				Stream.map((event): ChatResponseSseEvent => {
 					const data = numbered(event)
 					return { event: data.type, data }
 				}),

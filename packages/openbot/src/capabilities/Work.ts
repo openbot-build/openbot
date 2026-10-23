@@ -1,7 +1,8 @@
-import type { Session, Turn } from "@openbot-build/core"
+import type { Chat, Turn } from "@openbot-build/core"
 import type { BotsApi, Caller } from "@openbot-build/api"
-import { Context } from "effect"
-import type { Chain } from "../sessions/SessionHost.ts"
+import { Context, type HashMap, type Ref } from "effect"
+import type { Chain } from "../chats/ChatHost.ts"
+import type { Answer } from "./Gate.ts"
 
 /**
  * The Bot that runs the current Turn, and who it works for.
@@ -18,8 +19,13 @@ export class Work extends Context.Service<
 		readonly chain: Chain
 		/** The owner chain of the Bot, from the top, ending with the Bot. They decide its requests. */
 		readonly deciders: ReadonlyArray<BotsApi.BotId>
-		readonly session: Session.Id
+		readonly chat: Chat.Id
 		readonly turn: Turn.Id
+		/**
+		 * The answer of each capability check in this Turn, by tool call. When a tool
+		 * asks for approval, its answer comes from here.
+		 */
+		readonly checks: Ref.Ref<HashMap.HashMap<string, Answer>>
 	}
 >()("@openbot-build/openbot/capabilities/Work") {}
 

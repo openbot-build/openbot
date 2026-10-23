@@ -151,7 +151,7 @@ export const entries = (input: {
 				: input.codeRuns
 						.forCall(
 							input.position.owner,
-							input.position.session,
+							input.position.chat,
 							context.toolCallId,
 						)
 						.pipe(

@@ -8,7 +8,7 @@ interface Failure {
 	readonly operation: string
 	readonly cause?: Cause.Cause<unknown>
 	readonly errorType?: string
-	readonly sessionId?: string
+	readonly chatId?: string
 	readonly turnId?: string
 	readonly requestId?: string
 	readonly method?: string
@@ -32,7 +32,7 @@ export const failedTurn = (turn: Turn.Record): Effect.Effect<void> =>
 			record({
 				source: "turn",
 				operation: "turn.execute",
-				sessionId: turn.session,
+				chatId: turn.chat,
 				turnId: turn.id,
 				errorType: status.code,
 				cause: Cause.fail(status),

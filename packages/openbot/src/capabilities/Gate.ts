@@ -1,4 +1,4 @@
-import type { Session } from "@openbot-build/core"
+import type { Chat } from "@openbot-build/core"
 import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
 import type {
 	BotsApi,
@@ -6,18 +6,27 @@ import type {
 	CodeRunsApi,
 	ComputersApi,
 } from "@openbot-build/api"
-import { Context, Effect, Layer, Option } from "effect"
+import { Context, Data, Effect, HashMap, Layer, Option, Ref } from "effect"
 import { can } from "../authorization/Check.ts"
 import { Signal, Signals } from "../bots/Signals.ts"
 import { type Capability, describe, permission } from "./Capability.ts"
 import { Grants } from "./Grants.ts"
 import { Judge } from "./Judge.ts"
-import { type Ask, Requests } from "./Requests.ts"
+import { type Ask, Requests, chatOf } from "./Requests.ts"
 import { Rules } from "./Rules.ts"
 import { Work } from "./Work.ts"
 
-/** What a tool call does after the check: run now, or wait for an answer. */
-export type Answer = "allow" | "pause"
+/**
+ * What a tool call does after the check. `Allow` runs it now. `Deny` does not run it,
+ * and the Bot gets the reason. `Pending` waits for a decider: the Bot goes on at once,
+ * and the answer comes back to its Chat later.
+ */
+export type Answer = Data.TaggedEnum<{
+	Allow: {}
+	Deny: { readonly request?: string; readonly reason: string }
+	Pending: { readonly request: string }
+}>
+export const Answer = Data.taggedEnum<Answer>()
 
 export interface Attempt {
 	readonly capability: Capability
@@ -46,8 +55,8 @@ export class Gate extends Context.Service<
 	Gate,
 	{
 		/**
-		 * Never fails. When anything goes wrong, the answer is "pause", so the call waits
-		 * and never runs without a decision.
+		 * Never fails. When anything goes wrong, the answer is `Deny`, so the call never
+		 * runs without a decision.
 		 */
 		readonly check: (attempt: Attempt) => Effect.Effect<Answer>
 		/** True when a Bot may use the capability without asking anybody. */
@@ -55,10 +64,23 @@ export class Gate extends Context.Service<
 			readonly organizationId: string
 			readonly bot: BotsApi.Bot
 			readonly capability: Capability
-			readonly session: Session.Id
+			readonly chat: Chat.Id
 		}) => Effect.Effect<boolean>
 	}
 >()("@openbot-build/openbot/capabilities/Gate") {}
+
+/**
+ * Keeps the answer for a tool call with the Turn, so an approval of the call finds it.
+ * A tool whose own check fails before the Gate keeps a `Deny` here, so the call never runs.
+ */
+export const remember = (toolCallId: string, answer: Answer) =>
+	Effect.serviceOption(Work).pipe(
+		Effect.flatMap((work) =>
+			Option.isNone(work)
+				? Effect.void
+				: Ref.update(work.value.checks, HashMap.set(toolCallId, answer)),
+		),
+	)
 
 export const make: Effect.Effect<
 	typeof Gate.Service,
@@ -96,7 +118,7 @@ export const make: Effect.Effect<
 		readonly organizationId: string
 		readonly bot: BotsApi.Bot
 		readonly capability: Capability
-		readonly session: Session.Id
+		readonly chat: Chat.Id
 		readonly depth?: number
 	}): Effect.Effect<boolean> =>
 		Effect.gen(function* () {
@@ -105,7 +127,7 @@ export const make: Effect.Effect<
 				organizationId: input.organizationId,
 				bot: input.bot.id,
 				capability: input.capability,
-				session: input.session,
+				chat: input.chat,
 			})
 			if (Option.isSome(grant)) return grant.value.effect === "allow"
 			const { verdict, authors } = yield* judged({
@@ -118,8 +140,9 @@ export const make: Effect.Effect<
 	const check: typeof Gate.Service.check = (attempt) =>
 		Effect.gen(function* () {
 			const work = yield* Effect.serviceOption(Work)
-			// Without the current Bot nothing can decide, so the call waits.
-			if (Option.isNone(work)) return "pause" as const
+			// Without the current Bot nothing can decide, so the call does not run.
+			if (Option.isNone(work))
+				return Answer.Deny({ reason: "No Bot runs this work." })
 			const current = work.value
 			const organizationId = current.caller.organizationId
 			const record = (decided?: {
@@ -134,7 +157,7 @@ export const make: Effect.Effect<
 						deciders: current.deciders,
 						capability: attempt.capability,
 						reason: attempt.reason,
-						session: current.session,
+						chat: current.chat,
 						turn: current.turn,
 						toolCallId: attempt.toolCallId,
 						...(attempt.app === undefined ? {} : { app: attempt.app }),
@@ -151,12 +174,21 @@ export const make: Effect.Effect<
 								}),
 							),
 						),
-						Effect.as("pause" as const),
+						Effect.map((stored): Answer =>
+							stored.request.status === "denied"
+								? Answer.Deny({
+										request: stored.request.id,
+										reason:
+											stored.request.decision?.reason ??
+											"The request was denied.",
+									})
+								: Answer.Pending({ request: stored.request.id }),
+						),
 					)
 			const needed = permission({
 				caller: current.caller,
 				capability: attempt.capability,
-				session: current.session,
+				chat: current.chat,
 				self: current.bot,
 				...(attempt.target === undefined ? {} : { bot: attempt.target }),
 				...(attempt.computerOwner === undefined
@@ -180,14 +212,14 @@ export const make: Effect.Effect<
 						describe(attempt.capability) +
 						".",
 				})
-			if (attempt.implicit === true) return "allow" as const
+			if (attempt.implicit === true) return Answer.Allow()
 			// Some attempts must go to the person, so Grants and Rules do not answer them.
 			if (attempt.ask?.person === true) return yield* record()
 			const grant = yield* grants.match({
 				organizationId,
 				bot: current.bot.id,
 				capability: attempt.capability,
-				session: current.session,
+				chat: current.chat,
 			})
 			if (Option.isSome(grant)) {
 				if (grant.value.effect === "deny")
@@ -197,7 +229,7 @@ export const make: Effect.Effect<
 						reason: grant.value.reason ?? "A Grant denies this.",
 					})
 				yield* grants.use(organizationId, grant.value)
-				return "allow" as const
+				return Answer.Allow()
 			}
 			const { verdict, authors } = yield* judged({
 				organizationId,
@@ -218,29 +250,38 @@ export const make: Effect.Effect<
 						? Effect.gen(function* () {
 								// Only a Bot above this one in its owner chain can set its Rules.
 								if (!current.deciders.includes(author.bot)) return false
-								const index = current.chain.bots.indexOf(author.bot)
 								return yield* holds({
 									organizationId,
 									bot: { ...current.bot, id: author.bot },
 									capability: attempt.capability,
-									session:
-										(index < 0 ? undefined : current.chain.sessions[index]) ??
-										current.session,
+									chat: chatOf({
+										chain: current.chain,
+										bot: author.bot,
+										current: current.chat,
+									}),
 									depth: 1,
 								})
 							})
 						: Effect.succeed(true),
 				)
-				if (all.every(Boolean)) return "allow" as const
+				if (all.every(Boolean)) return Answer.Allow()
 			}
 			return yield* record()
 		}).pipe(
 			Effect.catchCause((cause) =>
 				Effect.logWarning(
-					"A capability check failed, so the call waits",
+					"A capability check failed, so the call does not run",
 					cause,
-				).pipe(Effect.as("pause" as const)),
+				).pipe(
+					Effect.as(
+						Answer.Deny({
+							reason: "OpenBot could not check this now. Try again later.",
+						}),
+					),
+				),
 			),
+			// The answer stays with the Turn, so an approval of the call finds it.
+			Effect.tap((answer) => remember(attempt.toolCallId, answer)),
 		)
 	return Gate.of({ check, holds })
 })

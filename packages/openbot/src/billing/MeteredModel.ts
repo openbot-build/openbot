@@ -12,7 +12,7 @@ import type { TokenThrottle } from "./TokenThrottle.ts"
 
 /**
  * Finds who makes a model call, at the time of the call. The code that gives a
- * model to a Session, the Rules judge or Bot memory provides it. It runs in the
+ * model to a Chat, the Rules judge or Bot memory provides it. It runs in the
  * fiber of the call, so it can read the Turn that is running.
  */
 export const CurrentAttribution = Context.Reference<Effect.Effect<Attribution>>(
@@ -31,8 +31,8 @@ export const attribute =
 		)
 
 /**
- * A Session streams its model steps. The same model also writes summaries
- * (compaction) with `generateText` and Session memory with `generateObject`.
+ * A Chat streams its model steps. The same model also writes summaries
+ * (compaction) with `generateText`. Other calls of it count as `other`.
  */
 const refine = (
 	attribution: Attribution,
@@ -42,7 +42,7 @@ const refine = (
 		? attribution
 		: {
 				...attribution,
-				source: method === "generateText" ? "compaction" : "session_memory",
+				source: method === "generateText" ? "compaction" : "other",
 			}
 
 const blocked = (

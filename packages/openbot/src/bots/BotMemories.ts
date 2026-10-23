@@ -1,10 +1,8 @@
 import { randomUUID } from "node:crypto"
 import { PgClient } from "@effect/sql-pg"
-import type { Session } from "@openbot-build/core"
 import { BotMemory as Api, BotsApi } from "@openbot-build/api"
 import * as BotMemory from "../plugins/memory/BotMemory.ts"
 import * as Audience from "../plugins/memory/Audience.ts"
-import type * as Memory from "../plugins/memory/Memory.ts"
 import {
 	Array as Arr,
 	Clock,
@@ -38,9 +36,6 @@ export interface Change<A> {
 	readonly reasons?: ReadonlyArray<string>
 	readonly result: A
 }
-
-/** Session memory kinds that last. They become topic tags when a Session Bot is promoted. */
-const lasting = HashSet.make("procedure", "preference", "decision")
 
 export const newId = () => "mem_" + randomUUID().replaceAll("-", "")
 
@@ -92,16 +87,6 @@ export class BotMemories extends Context.Service<
 			home: Home,
 			tag: string,
 		) => Effect.Effect<number, BotsApi.BotStorageUnavailable>
-		/**
-		 * Adds the lasting entries of a Session memory, when a Session Bot is promoted.
-		 * They become facts for the person who promotes it.
-		 */
-		readonly adopt: (
-			home: Home,
-			person: BotMemory.Person,
-			session: Session.Id,
-			memory: Memory.State,
-		) => Effect.Effect<void, BotsApi.BotStorageUnavailable>
 	}
 >()("@openbot-build/openbot/bots/BotMemories") {}
 
@@ -355,39 +340,6 @@ export const make: Effect.Effect<
 					return removed.length
 				}),
 			),
-		adopt: (home, person, session, memory) =>
-			Effect.gen(function* () {
-				const now = yield* Clock.currentTimeMillis
-				const entries = Object.values(memory.entries)
-					.filter(
-						(entry) =>
-							entry.status === "active" && HashSet.has(lasting, entry.kind),
-					)
-					.map((entry): BotMemory.Entry => ({
-						id: newId(),
-						layer: "fact",
-						content: entry.content,
-						tags: [
-							Audience.fromTag(person.userId),
-							Audience.sessionTag(session),
-							Audience.orgTag(person.organizationId),
-							Audience.forTag(Audience.person(person.userId)),
-							entry.kind,
-						],
-						sources: entry.sources.map((item) => ({ session, item })),
-						status: "active",
-						createdAt: now,
-						updatedAt: now,
-					}))
-				if (entries.length === 0) return
-				yield* change(home, () =>
-					Effect.succeed({
-						entries,
-						by: "promotion" as const,
-						result: undefined,
-					}),
-				)
-			}),
 	})
 })
 export const layer = Layer.effect(BotMemories, make)

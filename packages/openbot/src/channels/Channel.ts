@@ -1,7 +1,7 @@
 import type { ChannelsApi } from "@openbot-build/api"
 import { Data, type Effect } from "effect"
 
-/** One chat on a platform. Each chat of a Channel is one Session. */
+/** One chat on a platform. Each chat of a Channel is one Chat. */
 export interface Conversation {
 	/** The ID of the chat on the platform, such as a Slack channel ID. */
 	readonly key: string

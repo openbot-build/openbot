@@ -13,7 +13,7 @@ export interface Call {
 /** Who and what made a model call. Each part is missing when the call has none. */
 export interface Attribution {
 	readonly source: BillingApi.UsageSource
-	readonly sessionId?: string
+	readonly chatId?: string
 	readonly turnId?: string
 	readonly botId?: string
 	readonly userId?: string
