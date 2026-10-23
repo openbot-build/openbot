@@ -1,9 +1,7 @@
 // @effect-diagnostics strictEffectProvide:off
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { Config, Item, Model, Provider } from "@openbot-build/core"
-import * as LanguageModelMemory from "../src/plugins/memory/LanguageModelMemory.ts"
-import * as Memory from "../src/plugins/memory/Memory.ts"
+import { Config, Model, Provider } from "@openbot-build/core"
 import {
 	Array as EffectArray,
 	Cause,
@@ -20,15 +18,6 @@ import { LanguageModel, Prompt } from "effect/ai"
 import { TestClock } from "effect/testing"
 import * as DevelopmentModel from "../src/app/DevelopmentModel.ts"
 
-const evidence = {
-	state: Memory.empty(),
-	history: [
-		{
-			id: Item.Id.make("evidence"),
-			content: Prompt.make("A one-time instruction"),
-		},
-	],
-}
 test("the default directory runs, rejects unknown choices and labels synthetic usage", async () => {
 	await Effect.runPromise(
 		Effect.scoped(
@@ -41,7 +30,7 @@ test("the default directory runs, rejects unknown choices and labels synthetic u
 				assert.ok(
 					models.models.every((model) => model.name.includes("simulated")),
 				)
-				// The first model is the default of a new Session.
+				// The first model is the default of a new Chat.
 				assert.equal(models.models[0]?.id, DevelopmentModel.selection.model)
 				const model = yield* models.resolve(DevelopmentModel.selection)
 				const response = yield* model.generateText({ prompt: "Hello" })
@@ -121,40 +110,27 @@ test(
 	},
 )
 
-test("all scenarios check consolidation evidence and return no made-up Memory", async () => {
+test("every scenario refuses structured requests, so it never makes up data", async () => {
 	await Effect.runPromise(
 		Effect.forEach(DevelopmentModel.Scenario.literals, (scenario) =>
 			Effect.gen(function* () {
-				assert.deepEqual(yield* LanguageModelMemory.model.extract(evidence), {
-					changes: [],
-				})
+				for (const [objectName, schema] of [
+					["unknown", Schema.Struct({})],
+					[
+						"memory_changes",
+						Schema.Struct({ changes: Schema.Array(Schema.String) }),
+					],
+					["answer", Schema.Struct({ required: Schema.String })],
+				] as const) {
+					const error = yield* LanguageModel.generateObject({
+						objectName,
+						schema,
+						prompt: "Give a structured answer",
+					}).pipe(Effect.flip)
+					assert.equal(error.reason._tag, "InvalidRequestError", scenario)
+				}
 			}).pipe(Effect.provide(DevelopmentModel.layer(scenario))),
 		),
-	)
-})
-
-test("structured input and output checks reject malformed or unsupported requests", async () => {
-	await Effect.runPromise(
-		Effect.gen(function* () {
-			const unknown = yield* LanguageModel.generateObject({
-				objectName: "unknown",
-				schema: Memory.Extraction,
-				prompt: JSON.stringify(evidence),
-			}).pipe(Effect.flip)
-			assert.equal(unknown.reason._tag, "InvalidRequestError")
-			const malformed = yield* LanguageModel.generateObject({
-				objectName: "memory_changes",
-				schema: Memory.Extraction,
-				prompt: "{}",
-			}).pipe(Effect.flip)
-			assert.equal(malformed.reason._tag, "InvalidRequestError")
-			const invalidOutput = yield* LanguageModel.generateObject({
-				objectName: "memory_changes",
-				schema: Schema.Struct({ required: Schema.String }),
-				prompt: JSON.stringify(evidence),
-			}).pipe(Effect.flip)
-			assert.equal(invalidOutput.reason._tag, "StructuredOutputError")
-		}).pipe(Effect.provide(DevelopmentModel.layer("mock-text"))),
 	)
 })
 
@@ -228,9 +204,6 @@ test("tool continuation waits for real approval, runs once and shows the real re
 				approved.text,
 			)
 			assert.equal(executions, 1)
-			assert.deepEqual(yield* LanguageModelMemory.model.extract(evidence), {
-				changes: [],
-			})
 			const next = yield* LanguageModel.generateText({
 				prompt: "Another independent turn",
 				toolkit: DevelopmentModel.toolkit,

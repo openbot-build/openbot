@@ -1,7 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { Session } from "@openbot-build/core"
-import { ComputersApi, RequestsApi, SessionView } from "@openbot-build/api"
+import { ChatView, ComputersApi, RequestsApi } from "@openbot-build/api"
 import { Effect, Layer, Redacted, Schema, Stream } from "effect"
 import { LanguageModel, Prompt, Response } from "effect/ai"
 import { Machine, Provider } from "../src/computers/Computer.ts"
@@ -11,6 +10,7 @@ import {
 	names,
 } from "../src/plugins/computers/ComputerPlugin.ts"
 import * as BrowserHost from "./BrowserHost.ts"
+import { settled, talk, type Send } from "./Messages.ts"
 
 const publicOrigin = "https://computers.example.com"
 const usage = {
@@ -570,47 +570,21 @@ test(
 					source: { _tag: "Provider", provider: provider.id, template: null },
 				}),
 			)
-			await host.defaultBot(alice.session)
-			const created = await json(
-				SessionView,
-				send(alice.session, "/v1/sessions", "POST", {}),
-			)
-			const path = "/v1/sessions/" + created.session.id
-			const view = () => json(SessionView, send(alice.session, path))
-			// Work after a Turn, such as Session memory, can move the revision, so try again.
-			const start = (input: string) =>
-				until("the Turn starts", async () => {
-					const current = await view()
-					const started = await send(alice.session, path + "/turns", "POST", {
-						expected: current.session.revision,
-						input,
-					})
-					if (started.status === 409) return undefined
-					assert.equal(started.status, 202, await started.clone().text())
-					return current.session.turns.length
-				})
-			const status = (tag: string, turns: number) =>
-				until("the Turn is " + tag, async () => {
-					const next = await view()
-					return next.session.turns.length > turns &&
-						Session.status(next.session)._tag === tag
-						? next
-						: undefined
-				})
-			const lastText = (next: SessionView) =>
-				JSON.stringify(next.session.turns.at(-1))
+			const bot = await host.defaultBot(alice.session)
+			const asAlice: Send = (path, method, payload) =>
+				send(alice.session, path, method, payload)
+			const lastText = (next: ChatView) => JSON.stringify(next.response)
 
 			// Without the right, the command does not run.
-			const denied = await status(
-				"Completed",
-				await start("run " + computer.id),
-			)
-			assert.match(lastText(denied), /may not use the Computer/)
+			const denied = await talk(asAlice, bot, "run " + computer.id)
+			assert.equal(denied.view.status, "Completed")
+			assert.match(lastText(denied.view), /may not use the Computer/)
 			assert.ok(!fake.log.some((line) => line.startsWith("run ")))
 
-			// The Bot asks. The request goes to Alice, and she allows it.
-			const asked = await start("get " + computer.id)
-			await status("Waiting", asked)
+			// The Bot asks. The request goes to Alice. The Turn does not wait for her.
+			const asked = await talk(asAlice, bot, "get " + computer.id)
+			assert.equal(asked.view.status, "Completed")
+			assert.equal(asked.view.open.requests, 1)
 			const request = await until("a request", async () => {
 				const list = await json(
 					Schema.Array(RequestsApi.CapabilityRequest),
@@ -621,6 +595,7 @@ test(
 				)
 			})
 			assert.equal(request.capability.target, computer.id)
+			assert.equal(request.chat, asked.receipt.chat)
 			const resolved = await send(
 				alice.session,
 				"/v1/requests/" + request.id,
@@ -628,10 +603,19 @@ test(
 				{ expected: request.revision, decision: "allow" },
 			)
 			assert.equal(resolved.status, 200, await resolved.clone().text())
-			await status("Completed", asked)
+			// She allows it, and the call runs in a new Turn of the same Chat.
+			const allowed = await until("the allowed call runs", async () => {
+				const current = await settled(asAlice, asked.receipt.chat)
+				return current.turn !== null && current.turn.id !== asked.view.turn?.id
+					? current
+					: undefined
+			})
+			assert.equal(allowed.status, "Completed")
+			assert.equal(allowed.open.requests, 0)
 
-			const ran = await status("Completed", await start("run " + computer.id))
-			assert.match(lastText(ran), /ran: echo hi/)
+			const ran = await talk(asAlice, bot, "run " + computer.id)
+			assert.equal(ran.view.status, "Completed")
+			assert.match(lastText(ran.view), /ran: echo hi/)
 			assert.ok(fake.log.includes("run sbx-0 echo hi"))
 		} finally {
 			await host.close()

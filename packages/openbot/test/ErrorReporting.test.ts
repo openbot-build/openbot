@@ -3,7 +3,7 @@ import * as BotFixture from "./BotFixture.ts"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { NodeServices } from "@effect/platform-node"
-import { Session } from "@openbot-build/core"
+import { Chat } from "@openbot-build/core"
 import {
 	Cause,
 	ConfigProvider,
@@ -15,11 +15,12 @@ import {
 	References,
 	Stream,
 } from "effect"
-import { LanguageModel } from "effect/ai"
+import { LanguageModel, type Prompt } from "effect/ai"
 import { HttpRouter, HttpServerResponse } from "effect/http"
 import * as ErrorReporting from "../src/app/ErrorReporting.ts"
 import * as EnvironmentConfiguration from "../src/configuration/EnvironmentConfiguration.ts"
-import * as ManagedSessions from "../src/sessions/ManagedSessions.ts"
+import * as ChatHost from "../src/chats/ChatHost.ts"
+import * as ManagedChats from "../src/chats/ManagedChats.ts"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
@@ -147,61 +148,56 @@ test(
 				Effect.scoped(
 					Effect.gen(function* () {
 						yield* DatabasePostgres.migrate
-						const sessions = yield* ManagedSessions.make({
-							memory: { defaults: { generate: false } },
+						// The model fails for one Chat and never answers in the other.
+						const failsOrWaits = (prompt: Prompt.Prompt) =>
+							JSON.stringify(prompt.content).includes("Cancel")
+						const model = yield* LanguageModel.make({
+							generateText: ({ prompt }) =>
+								failsOrWaits(prompt)
+									? Effect.never
+									: Effect.die(new Error("Model unavailable")),
+							streamText: ({ prompt }) =>
+								failsOrWaits(prompt)
+									? Stream.never
+									: Stream.die(new Error("Model unavailable")),
 						})
-						const failing = yield* LanguageModel.make({
-							generateText: () => Effect.die(new Error("Model unavailable")),
-							streamText: () => Stream.die(new Error("Model unavailable")),
+						const chats = yield* ManagedChats.make().pipe(
+							Effect.provideService(LanguageModel.LanguageModel, model),
+						)
+						const author = ChatHost.authorOf("test-user")
+						const created = yield* chats.create(BotFixture.direct())
+						const receipt = yield* chats.deliver(created.chat.id, {
+							input: "Private input",
+							author,
 						})
-						const slow = yield* LanguageModel.make({
-							generateText: () => Effect.never,
-							streamText: () => Stream.never,
-						})
-						const created = yield* sessions.create(BotFixture.direct())
-						const receipt = yield* sessions
-							.send(created.session.id, {
-								input: "Private input",
-								expected: created.session.revision,
-							})
-							.pipe(Effect.provideService(LanguageModel.LanguageModel, failing))
-						const wait = (id: Session.Id): ReturnType<typeof sessions.get> =>
+						const wait = (id: Chat.Id): ReturnType<typeof chats.get> =>
 							Effect.gen(function* () {
-								const view = yield* sessions.get(id)
+								const view = yield* chats.get(id)
 								if (view.activity !== "active") return view
-								yield* sessions.wait(
-									id,
-									view.session.revision,
-									50,
-									view.activity,
-								)
+								yield* chats.wait(id, view.chat.revision, 50, view.activity)
 								return yield* wait(id)
 							})
-						const failed = yield* wait(created.session.id)
+						const failed = yield* wait(created.chat.id)
 						assert.equal(failed.response?.status, "failed")
 						assert.equal(logs.length, 1)
-						assert.equal(logs[0]!["sessionId"], created.session.id)
-						assert.equal(logs[0]!["turnId"], receipt.id)
-						yield* sessions.update(created.session.id, {
-							expected: failed.session.revision,
-							title: "Renamed",
+						assert.equal(logs[0]!["chatId"], created.chat.id)
+						assert.equal(logs[0]!["turnId"], receipt.turn)
+						yield* chats.update(created.chat.id, {
+							expected: failed.chat.revision,
+							mode: "plan",
 						})
 						assert.equal(logs.length, 1)
-						const other = yield* sessions.create(BotFixture.direct())
-						const pending = yield* sessions
-							.send(other.session.id, {
-								input: "Cancel",
-								expected: other.session.revision,
-							})
-							.pipe(Effect.provideService(LanguageModel.LanguageModel, slow))
-						yield* sessions.interrupt(
-							other.session.id,
-							Session.currentTurn(
-								(yield* sessions.get(other.session.id)).session,
-							)!.id,
-						)
-						const cancelled = yield* wait(other.session.id)
-						assert.equal(cancelled.response?.id, pending.id)
+						const other = yield* chats.create({
+							...BotFixture.direct(),
+							kind: "task",
+						})
+						const pending = yield* chats.deliver(other.chat.id, {
+							input: "Cancel",
+							author,
+						})
+						yield* chats.interrupt(other.chat.id)
+						const cancelled = yield* wait(other.chat.id)
+						assert.equal(cancelled.response?.id, pending.turn)
 						assert.equal(cancelled.response?.status, "cancelled")
 						assert.equal(logs.length, 1)
 					}),

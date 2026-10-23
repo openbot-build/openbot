@@ -2,9 +2,10 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import * as BrowserHost from "./BrowserHost.ts"
 import { withCookie, withToken } from "./Caller.ts"
+import { message, view } from "./Messages.ts"
 
 test(
-	"Bot names and Session titles lose outer spaces, and a Session can have no title",
+	"Bot names lose outer spaces, and a direct Chat has no title",
 	{ timeout: 60000 },
 	async () => {
 		const publicOrigin = "https://names.example.com"
@@ -47,51 +48,31 @@ test(
 				name: " Editor ",
 			})
 			assert.equal(renamed.status, 200, await renamed.clone().text())
-			assert.equal((await renamed.json()).name, "Editor")
+			const second = await renamed.json()
+			assert.equal(second.name, "Editor")
 
-			// A Session without a title has no title field.
-			const untitled = await account(alice.session, "/v1/sessions", "POST", {})
-			assert.equal(untitled.status, 201, await untitled.clone().text())
-			const first = await untitled.json()
-			assert.equal("title" in first.session.metadata, false)
-			assert.equal(
-				(await account(alice.session, "/v1/sessions", "POST", { title: "" }))
-					.status,
-				400,
-			)
-
-			// API keys rename Sessions in the same way as the session cookie.
+			// API keys rename Bots in the same way as the session cookie.
 			const token = await account(alice.session, "/v1/user/tokens", "POST", {
 				name: "Names",
 			})
 			const { secret } = await token.json()
-			const sessionPath = "/v1/sessions/" + first.session.id
-			const titled = await keyed(secret, sessionPath, "PATCH", {
-				expected: first.session.revision,
-				title: "  Plan  ",
+			const keyedRename = await keyed(secret, botPath, "PATCH", {
+				expected: second.revision,
+				name: "  Planner  ",
 			})
-			assert.equal(titled.status, 200, await titled.clone().text())
-			const second = await titled.json()
-			assert.equal(second.session.metadata.title, "Plan")
+			assert.equal(keyedRename.status, 200, await keyedRename.clone().text())
+			assert.equal((await keyedRename.json()).name, "Planner")
 
-			// A Fork without a title keeps the title of its source.
-			const fork = await account(
-				alice.session,
-				sessionPath + "/fork",
-				"POST",
-				{},
-			)
-			assert.equal(fork.status, 201, await fork.clone().text())
-			assert.equal((await fork.json()).session.metadata.title, "Plan")
-
-			const cleared = await account(alice.session, sessionPath, "PATCH", {
-				expected: second.session.revision,
-				title: null,
-			})
-			assert.equal(cleared.status, 200, await cleared.clone().text())
-			const third = await cleared.json()
-			assert.equal("title" in third.session.metadata, false)
-			assert.equal(third.session.metadata.archived, false)
+			// Only a channel Chat has a title: the name of its chat on the platform.
+			const send = (
+				path: string,
+				method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
+				payload?: unknown,
+			) => keyed(secret, path, method, payload)
+			const receipt = await message(send, created.id, "Hello")
+			const current = await view(send, receipt.chat)
+			assert.equal(current.chat.kind, "direct")
+			assert.equal("title" in current.chat, false)
 		} finally {
 			await host.close()
 		}

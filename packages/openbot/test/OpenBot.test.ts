@@ -22,7 +22,7 @@ import {
 	DatabasePostgres,
 } from "@openbot-build/openbot"
 import * as Backend from "../dist/app/Backend.js"
-import { Config, Model, Provider, Session } from "@openbot-build/core"
+import { Chat, Config, Model, Provider } from "@openbot-build/core"
 import { AuthApi } from "@openbot-build/api"
 
 import { LanguageModel, Response } from "effect/ai"
@@ -401,7 +401,7 @@ test(
 			}
 			assert.equal(
 				(
-					await request("/v1/sessions", {
+					await request("/v1/chats", {
 						headers: { authorization: "Bearer retired" },
 					})
 				).status,
@@ -424,24 +424,24 @@ test(
 					},
 					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
 				})
-			assert.equal((await request("/v1/sessions")).status, 401)
-			const cookieSessions = await request("/v1/sessions", {
+			assert.equal((await request("/v1/chats")).status, 401)
+			const cookieChats = await request("/v1/chats", {
 				headers: { cookie: alice.session },
 			})
-			assert.equal(cookieSessions.status, 200)
-			assert.deepEqual(await cookieSessions.json(), [])
+			assert.equal(cookieChats.status, 200)
+			assert.deepEqual(await cookieChats.json(), [])
 			const defaultBot = (cookie: string) =>
 				DefaultBot.ensure((path, method, payload) =>
 					session(cookie, path, method, payload),
 				)
-			await defaultBot(alice.session)
+			const aliceDefault = await defaultBot(alice.session)
 			await defaultBot(bobSession)
-			// A Session needs a model from its settings or its Bot. There is no default model.
+			// A Chat needs a model from its Bot. There is no default model.
 			const withoutModel = await session(
 				alice.session,
-				"/v1/sessions",
+				`/v1/bots/${aliceDefault}/messages`,
 				"POST",
-				{ title: "Saved" },
+				{ input: "hello" },
 			)
 			assert.equal(withoutModel.status, 400)
 			assert.equal((await withoutModel.json()).reason, "missing")
@@ -450,27 +450,42 @@ test(
 				provider: "test",
 				model: "answer",
 			}
-			const createdSession = await session(
+			const createdBot = await session(alice.session, "/v1/bots", "POST", {
+				name: "Answers",
+				role: "Answers questions",
+				instructions: "Answer the person.",
+				model,
+			})
+			assert.equal(createdBot.status, 201)
+			const aliceBot: { readonly id: string } = await createdBot.json()
+			const message = await session(
 				alice.session,
-				"/v1/sessions",
+				`/v1/bots/${aliceBot.id}/messages`,
 				"POST",
-				{ title: "Saved", settings: { model } },
+				{ input: "hello" },
 			)
-			assert.equal(createdSession.status, 201)
-			const first: { session: { id: string; head: string; revision: number } } =
-				await createdSession.json()
-			const path = "/v1/sessions/" + first.session.id
-			const cookieSession = await request(path, {
+			assert.equal(message.status, 202)
+			const receipt: {
+				readonly chat: string
+				readonly turn: string
+				readonly delivery: string
+			} = await message.json()
+			assert.equal(receipt.delivery, "started")
+			const path = "/v1/chats/" + receipt.chat
+			const cookieChat = await request(path, {
 				headers: { cookie: alice.session },
 			})
-			assert.equal(cookieSession.status, 200)
-			assert.deepEqual(await cookieSession.json(), first)
+			assert.equal(cookieChat.status, 200)
+			assert.equal((await cookieChat.json()).chat.id, receipt.chat)
 			for (const suffix of [
 				"",
-				"/history",
-				"/record",
-				"/memory",
-				"/wait?after=" + first.session.revision + "&timeoutMs=0",
+				"/items",
+				"/turns",
+				"/turns/" + receipt.turn,
+				"/todos",
+				"/models",
+				"/delegations",
+				"/wait?after=0&timeoutMs=0",
 			]) {
 				assert.equal((await session(bobSession, path + suffix)).status, 404)
 				assert.equal(
@@ -480,78 +495,32 @@ test(
 				)
 			}
 			for (const [suffix, method, payload] of [
-				["", "PATCH", { title: "foreign", expected: first.session.revision }],
+				["", "PATCH", { expected: 0, mode: "plan" }],
 				["", "DELETE", undefined],
-				["/fork", "POST", {}],
-				["/turns/foreign/interrupt", "POST", {}],
-				[
-					"/turns",
-					"POST",
-					{ input: "foreign", expected: first.session.revision },
-				],
-				[
-					"/memory",
-					"POST",
-					{
-						expected: first.session.head,
-						revision: first.session.revision,
-						command: {
-							_tag: "Remember",
-							key: "foreign",
-							content: "Foreign memory",
-							kind: "fact",
-						},
-					},
-				],
+				["/interrupt", "POST", {}],
+				["/messages", "POST", { input: "foreign" }],
+				["/todos", "PUT", { revision: 0, items: [] }],
 			] as const)
 				assert.equal(
 					(await session(bobSession, path + suffix, method, payload)).status,
 					404,
 				)
 			assert.deepEqual(
-				await (await session(bobSession, "/v1/sessions")).json(),
+				await (await session(bobSession, "/v1/chats")).json(),
 				[],
 			)
-			const bobConversation: { session: { id: string; head: string } } = await (
-				await session(bobSession, "/v1/sessions", "POST", {
-					settings: { model },
-				})
-			).json()
+			// Bob cannot talk to the Bot of Alice, so he cannot reach her Chat through it.
 			assert.equal(
 				(
 					await session(
 						bobSession,
-						"/v1/sessions/" + bobConversation.session.id + "/merge",
+						`/v1/bots/${aliceBot.id}/messages`,
 						"POST",
-						{
-							source: {
-								session: first.session.id,
-								version: first.session.head,
-							},
-							targetVersion: bobConversation.session.head,
-						},
+						{ input: "foreign" },
 					)
 				).status,
 				404,
 			)
-			const foreignRecord = await (
-				await session(alice.session, path + "/record")
-			).json()
-			assert.equal(
-				(
-					await session(bobSession, path + "/record", "PUT", {
-						record: foreignRecord,
-						expected: first.session,
-					})
-				).status,
-				404,
-			)
-			const message = await session(alice.session, path + "/turns", "POST", {
-				input: "hello",
-				expected: first.session.revision,
-			})
-			assert.equal(message.status, 202)
-			const receipt: { id: string } = await message.json()
 			const completeView = await runtime.runPromise(
 				Effect.gen(function* () {
 					const identity = yield* (yield* Auth.Auth).resolveSession(
@@ -565,21 +534,21 @@ test(
 					const wait = (
 						view: Effect.Success<ReturnType<typeof service.get>>,
 					): ReturnType<typeof service.get> =>
-						view.activity === "active"
+						view.activity === "active" || view.status === "Running"
 							? service
-									.wait(view.session.id, view.session.revision, 20)
+									.wait(view.chat.id, view.chat.revision, 20)
 									.pipe(Effect.flatMap(wait))
 							: Effect.succeed(view)
-					return yield* wait(
-						yield* service.get(Session.Id.make(first.session.id)),
-					)
+					return yield* wait(yield* service.get(Chat.Id.make(receipt.chat)))
 				}),
 			)
-			assert.equal(completeView.response?.id, receipt.id)
+			assert.equal(completeView.response?.id, receipt.turn)
 			assert.equal(completeView.response?.status, "completed")
-			const record = await (
-				await session(alice.session, path + "/record")
-			).json()
+			const before = {
+				view: await (await session(alice.session, path)).json(),
+				items: await (await session(alice.session, path + "/items")).json(),
+			}
+			assert.ok(before.items.items.length >= 2)
 			await runtime.dispose()
 			runtime = server()
 			address = await runtime.runPromise(
@@ -588,8 +557,11 @@ test(
 				),
 			)
 			assert.deepEqual(
-				await (await session(alice.session, path + "/record")).json(),
-				record,
+				{
+					view: await (await session(alice.session, path)).json(),
+					items: await (await session(alice.session, path + "/items")).json(),
+				},
+				before,
 			)
 			const nextAlice = await complete("alice")
 			const sessionA = await (
@@ -636,7 +608,7 @@ test(
 					.status,
 				401,
 			)
-			assert.equal((await session(bobSession, "/v1/sessions")).status, 200)
+			assert.equal((await session(bobSession, "/v1/chats")).status, 200)
 			assert.equal((await request("/health")).status, 200)
 			assert.equal((await request("/docs")).status, 200)
 			await runtime.dispose()

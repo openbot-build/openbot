@@ -339,7 +339,7 @@ test("OpenBot completes real CIMD and PKCE flows once, resumes callbacks after l
 		for (const returnTo of [
 			"/apps?query=documents",
 			"/connections?input=publisher.test",
-			"/sessions/existing-session",
+			"/chats/existing-chat",
 		]) {
 			assert.equal(
 				(await host.login("return-user", returnTo)).returnLocation,

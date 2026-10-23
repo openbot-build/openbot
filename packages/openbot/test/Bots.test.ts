@@ -1,11 +1,14 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { Session } from "@openbot-build/core"
+import { Item } from "@openbot-build/core"
 import {
 	BotMemory,
 	BotsApi,
+	ChatInfo,
+	ChatView,
+	DelegationsApi,
+	MessageReceipt,
 	RequestsApi,
-	SessionView,
 	Settings,
 } from "@openbot-build/api"
 import { Effect, Redacted, Schema, Stream } from "effect"
@@ -24,7 +27,6 @@ const known: {
 	programmer?: string
 	helper?: string
 	worker?: string
-	scout?: string
 } = {}
 
 const textOf = (message: Prompt.Message) =>
@@ -101,7 +103,7 @@ const model = Effect.runSync(
 				if (system.includes("You keep the memory of an AI Bot.")) {
 					const input = JSON.parse(user) as {
 						evidence: ReadonlyArray<{
-							session: string
+							chat: string
 							item: string
 							role: string
 							text: string
@@ -123,7 +125,7 @@ const model = Effect.runSync(
 													ref: "tea",
 													content: "Alice likes green tea.",
 													topics: ["drinks"],
-													sources: [{ session: tea.session, item: tea.item }],
+													sources: [{ chat: tea.chat, item: tea.item }],
 												},
 											],
 							}),
@@ -182,47 +184,35 @@ const model = Effect.runSync(
 							})
 				}
 				const name = /You are (\w+)\./.exec(system)?.[1]
+				// The Programmer reads something first, so its history holds more than the result.
 				if (name === "Programmer")
-					return has(names.report)
-						? answer("Reported.")
-						: call(names.report, {
-								status: "completed",
-								summary: "Programmer did it",
-							})
+					return has(names.list)
+						? answer("Programmer did it")
+						: call(names.list, {})
 				if (name === "Helper") {
 					if (!has("ConfirmChange"))
 						return call("ConfirmChange", { description: "helper change" })
-					return has(names.report)
-						? answer("Reported.")
-						: call(names.report, {
-								status: "completed",
-								summary: "Helper confirmed it",
-							})
+					return answer(
+						JSON.stringify(results.at(-1)?.result).includes("pending")
+							? "Helper waits for a decision."
+							: "Helper confirmed it",
+					)
 				}
 				if (name === "Worker") {
-					if (input.includes("spawn a scout"))
-						return has(names.spawn)
-							? answer("Started.")
-							: call(names.spawn, {
+					if (input.includes("create a scout"))
+						return has(names.create)
+							? answer("Asked for a scout.")
+							: call(names.create, {
 									name: "Scout",
 									role: "Looks around",
-									instructions: "Look around, then report.",
-									reason: "This Session needs a scout.",
+									instructions: "Look around.",
+									reason: "I need a scout.",
 								})
-					if (input.includes("promote the scout"))
-						return has(names.promote)
-							? answer("Promoted.")
-							: call(names.promote, {
-									bot: known.scout,
-									reason: "The scout is useful later too.",
-								})
-					return has(names.report)
-						? answer("Reported.")
-						: call(names.report, {
-								status: "completed",
-								summary: "Worker did it",
-							})
+					return answer("Worker did it")
 				}
+				// A message from OpenBot about work that ended.
+				if (input.includes("[OpenBot] The work dlg_"))
+					return answer("Assistant read: " + input)
 				const done = results.at(-1)
 				if (done !== undefined)
 					return answer("Assistant got: " + JSON.stringify(done.result))
@@ -231,38 +221,24 @@ const model = Effect.runSync(
 						bot: known.programmer,
 						reason: "Code work needs the Programmer.",
 						task: "Write the change.",
-						userRequest: input,
-						expectedOutput: "A short summary.",
 					})
 				if (input.includes("create a worker"))
 					return call(names.create, {
 						name: "Worker",
 						role: "Does work",
-						instructions: "Do the work, then report.",
+						instructions: "Do the work.",
 						reason: "I need a lasting worker.",
 					})
 				if (input.includes("delegate to worker"))
 					return call(names.delegate, {
 						bot: known.worker,
-						reason: "The Worker does this work.",
 						task: "Do the work.",
-						userRequest: input,
-						expectedOutput: "A short summary.",
-					})
-				if (input.includes("spawn a helper"))
-					return call(names.spawn, {
-						name: "Helper",
-						role: "Confirms changes",
-						instructions: "Confirm the change, then report.",
-						reason: "This Session needs a helper.",
 					})
 				if (input.includes("confirm via helper"))
 					return call(names.delegate, {
 						bot: known.helper,
 						reason: "The Helper confirms changes.",
 						task: "Confirm the change.",
-						userRequest: input,
-						expectedOutput: "Whether it is confirmed.",
 					})
 				if (input.includes("confirm directly"))
 					return call("ConfirmChange", { description: "a change" })
@@ -343,16 +319,95 @@ const client = (host: Awaited<ReturnType<typeof BrowserHost.start>>) => {
 		assert.equal(updated.defaultBot, bot.id)
 		return bot
 	}
-	return { send, json, until, defaultBot }
+	/**
+	 * The direct Chat of a person with a Bot. `message` sends and answers at once;
+	 * `rested` waits until no Turn runs and nothing waits in the inbox.
+	 */
+	const talk = (credential: Redacted.Redacted<string>, bot: string) => {
+		let chat = ""
+		const view = () => json(ChatView, send(credential, "/v1/chats/" + chat))
+		const message = async (input: string) => {
+			const sent = await send(
+				credential,
+				"/v1/bots/" + bot + "/messages",
+				"POST",
+				{
+					input,
+				},
+			)
+			assert.equal(sent.status, 202, await sent.clone().text())
+			const receipt = Schema.decodeUnknownSync(MessageReceipt)(
+				await sent.json(),
+			)
+			chat = receipt.chat
+			return receipt
+		}
+		const rested = () =>
+			until("the Chat comes to rest", async () => {
+				const current = await view()
+				return current.status !== "Running" &&
+					current.activity !== "active" &&
+					current.inbox === 0
+					? current
+					: undefined
+			})
+		/** The text of every Item, oldest first. */
+		const history = async (id = chat) =>
+			(
+				await json(
+					Schema.Struct({ items: Schema.Array(Item.Record) }),
+					send(credential, "/v1/chats/" + id + "/items?limit=500"),
+				)
+			).items
+				.toReversed()
+				.map((item) => JSON.stringify(item.content))
+				.join("\n")
+		const delegations = () =>
+			json(
+				Schema.Array(DelegationsApi.Delegation),
+				send(credential, "/v1/chats/" + chat + "/delegations"),
+			)
+		return {
+			chat: () => chat,
+			view,
+			message,
+			rested,
+			history,
+			delegations,
+			/** Sends a message and waits until the Chat comes to rest. */
+			turn: async (input: string) => {
+				await message(input)
+				return rested()
+			},
+			/** Waits until the history says something. */
+			says: (text: string, id?: string) =>
+				until("the history says " + text, async () =>
+					(await history(id)).includes(text) ? true : undefined,
+				),
+		}
+	}
+	const pendingFor = (
+		credential: Redacted.Redacted<string>,
+		check: (request: RequestsApi.CapabilityRequest) => boolean,
+	) =>
+		until("a pending request", async () =>
+			(
+				await json(
+					Schema.Array(RequestsApi.CapabilityRequest),
+					send(credential, "/v1/requests?status=pending"),
+				)
+			).find(check),
+		)
+	return { send, json, until, defaultBot, talk, pendingFor }
 }
 
 test(
-	"the default Bot gives work to a lasting Bot after the person allows it, and gets only the result back, also after a restart",
+	"the default Bot gives work to another Bot after the person allows it, does not wait, and gets only the result back as a message, also after a restart",
 	{ timeout: 120000 },
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
 		try {
-			const { send, json, until, defaultBot } = client(host)
+			const { send, json, until, defaultBot, talk, pendingFor } = client(host)
 			const alice = await host.login("bots-alice")
 			const bob = await host.login("bots-bob")
 			const main = await defaultBot(alice.session)
@@ -369,39 +424,16 @@ test(
 				(await send(bob.session, "/v1/bots/" + programmer.id)).status,
 				404,
 			)
-			const created = await json(
-				SessionView,
-				send(alice.session, "/v1/sessions", "POST", {}),
-			)
-			assert.equal(created.bot, main.id)
-			const path = "/v1/sessions/" + created.session.id
-			const view = () => json(SessionView, send(alice.session, path))
-			const turn = async (input: string) => {
-				const current = await view()
-				const started = await send(alice.session, path + "/turns", "POST", {
-					expected: current.session.revision,
-					input,
-				})
-				assert.equal(started.status, 202, await started.clone().text())
-			}
-			const completed = () =>
-				until("the Turn completes", async () => {
-					const current = await view()
-					return Session.status(current.session)._tag === "Completed"
-						? current
-						: undefined
-				})
-			const pending = () =>
-				until("a pending request", async () => {
-					const list = await json(
-						Schema.Array(RequestsApi.CapabilityRequest),
-						send(alice.session, "/v1/requests?status=pending"),
-					)
-					return list[0]
-				})
+			const chat = talk(alice.session, main.id)
 
-			await turn("delegate to programmer")
-			const request = await pending()
+			// The Bot gives the work away and answers at once. The work waits for a decision.
+			const asked = await chat.turn("delegate to programmer")
+			assert.equal(asked.chat.kind, "direct")
+			assert.equal(asked.chat.bot, main.id)
+			assert.equal(asked.status, "Completed")
+			assert.equal(asked.open.delegations, 1)
+			assert.match(await chat.history(), /authorizing/)
+			const request = await pendingFor(alice.session, () => true)
 			assert.deepEqual(request.capability, {
 				action: "bots.delegate",
 				target: programmer.id,
@@ -410,20 +442,12 @@ test(
 				_tag: "Person",
 				userId: alice.identity.userId,
 			})
-			// The request is made inside the model step, just before the Turn saves that it waits.
-			await until("the Turn waits", async () => {
-				const current = await view()
-				return Session.status(current.session)._tag === "Waiting"
-					? current
-					: undefined
-			})
-			const waiting = await json(
-				Schema.Array(BotsApi.Delegation),
-				send(alice.session, path + "/delegations"),
-			)
+			assert.equal(request.chat, chat.chat())
+			const waiting = await chat.delegations()
 			assert.equal(waiting[0]?.status, "authorizing")
+			assert.equal(waiting[0]?.chat, null)
 
-			// The wait is saved, so a restart does not lose it.
+			// The work is saved, so a restart does not lose it.
 			await host.restart()
 			const allowed = await json(
 				RequestsApi.CapabilityRequest,
@@ -434,33 +458,44 @@ test(
 				}),
 			)
 			assert.equal(allowed.status, "allowed")
-			const done = await completed()
+			const finished = await until("the work ends", async () => {
+				const list = await chat.delegations()
+				return list[0]?.status === "completed" ? list[0] : undefined
+			})
+			assert.equal(finished.result, "Programmer did it")
+			assert.equal(finished.parent.chat, chat.chat())
+			// The result comes back as a message, and the Bot answers it in a new Turn.
+			await chat.says("Assistant read: [OpenBot] The work " + finished.id)
+			const done = await chat.rested()
+			assert.equal(done.open.delegations, 0)
 			assert.match(JSON.stringify(done.response?.output), /Programmer did it/)
-			const delegations = await json(
-				Schema.Array(BotsApi.Delegation),
-				send(alice.session, path + "/delegations"),
+
+			// The work ran in its own task Chat.
+			assert.ok(finished.chat !== null)
+			const task = await json(
+				ChatView,
+				send(alice.session, "/v1/chats/" + finished.chat),
 			)
-			assert.equal(delegations[0]?.status, "completed")
-			assert.equal(delegations[0]?.result?.summary, "Programmer did it")
-			const child = await json(
-				SessionView,
-				send(alice.session, "/v1/sessions/" + delegations[0]!.child!.session),
-			)
-			assert.equal(child.kind, "delegated")
-			assert.equal(child.bot, programmer.id)
-			assert.equal(child.parent?.session, created.session.id)
+			assert.equal(task.chat.kind, "task")
+			assert.equal(task.chat.bot, programmer.id)
+			assert.deepEqual(task.chat.parent, {
+				chat: chat.chat(),
+				delegation: finished.id,
+			})
 			// Only the result went back, never the history of the other Bot.
-			assert.equal(
-				JSON.stringify(done.state.value.conversation.history).includes(
-					"Write the change.",
-				),
-				true,
+			const parentHistory = await chat.history()
+			assert.ok(parentHistory.includes("Write the change."))
+			assert.ok(parentHistory.includes("Programmer did it"))
+			assert.ok(!parentHistory.includes(names.list))
+			assert.ok((await chat.history(finished.chat)).includes(names.list))
+			// Task Chats are not in the list of Chats of a person.
+			const listed = await json(
+				Schema.Array(Schema.Struct({ chat: ChatInfo })),
+				send(alice.session, "/v1/chats"),
 			)
-			assert.equal(
-				JSON.stringify(done.state.value.conversation.history).includes(
-					"Reported.",
-				),
-				false,
+			assert.deepEqual(
+				listed.map((entry) => entry.chat.id),
+				[chat.chat()],
 			)
 
 			// The decision is kept as a Grant, so the second time needs no request.
@@ -470,16 +505,13 @@ test(
 			)
 			assert.equal(grants.length, 1)
 			assert.equal(grants[0]?.scope, "lifetime")
-			await turn("delegate to programmer")
-			await completed()
-			const again = await json(
-				Schema.Array(BotsApi.Delegation),
-				send(alice.session, path + "/delegations"),
-			)
-			assert.equal(
-				again.filter((entry) => entry.status === "completed").length,
-				2,
-			)
+			await chat.turn("delegate to programmer")
+			await until("the second work ends", async () => {
+				const list = await chat.delegations()
+				return list.filter((entry) => entry.status === "completed").length === 2
+					? list
+					: undefined
+			})
 			assert.deepEqual(
 				await json(
 					Schema.Array(RequestsApi.CapabilityRequest),
@@ -487,6 +519,7 @@ test(
 				),
 				[],
 			)
+			await chat.rested()
 
 			// A person can change Bot memory directly.
 			const memory = await json(
@@ -528,7 +561,7 @@ test(
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
 		try {
-			const { send, json, until } = client(host)
+			const { send, json, until, talk } = client(host)
 			// Bob joins the organization of Alice.
 			const alice = await host.login("memory-alice")
 			const bob = await host.login("memory-bob")
@@ -559,50 +592,27 @@ test(
 				}),
 			)
 			const memoryPath = "/v1/bots/" + shared.id + "/memory"
-			const run = async (
-				credential: Redacted.Redacted<string>,
-				input: string,
-			) => {
-				const created = await json(
-					SessionView,
-					send(credential, "/v1/sessions", "POST", { bot: shared.id }),
-				)
-				const path = "/v1/sessions/" + created.session.id
-				const started = await send(credential, path + "/turns", "POST", {
-					expected: created.session.revision,
-					input,
-				})
-				assert.equal(started.status, 202, await started.text())
-				const done = await until("the Turn completes", async () => {
-					const current = await json(SessionView, send(credential, path))
-					return Session.status(current.session)._tag === "Completed"
-						? current
-						: undefined
-				})
-				return { path, done }
-			}
+			const aliceChat = talk(alice.session, shared.id)
+			const bobChat = talk(bob.session, shared.id)
 
 			// The Bot confides and gets a calm answer. It does not hear about memory.
-			const first = await run(
-				alice.session,
+			const first = await aliceChat.turn(
 				"I drink green tea every morning. confide about tea",
 			)
 			assert.ok(
-				JSON.stringify(first.done.response).includes("Tell the person plainly"),
-				JSON.stringify(first.done.response),
+				JSON.stringify(first.response).includes("Tell the person plainly"),
+				JSON.stringify(first.response),
 			)
+			const path = "/v1/chats/" + aliceChat.chat()
 			const confessions = await json(
 				Schema.Array(BotMemory.Confession),
-				send(alice.session, first.path + "/confessions"),
+				send(alice.session, path + "/confessions"),
 			)
 			assert.deepEqual(
 				confessions.map((confession) => confession.text),
 				["I feel unsure about tea"],
 			)
-			assert.equal(
-				(await send(bob.session, first.path + "/confessions")).status,
-				404,
-			)
+			assert.equal((await send(bob.session, path + "/confessions")).status, 404)
 
 			// After the Turn, the memory Bot learns a fact for Alice only.
 			const learned = await until("the memory Bot learns", async () => {
@@ -615,23 +625,24 @@ test(
 			assert.ok(fact?.tags.includes("from:" + alice.identity.userId))
 			assert.ok(fact?.tags.includes("for:person:" + alice.identity.userId))
 			assert.ok(fact?.tags.includes("drinks"))
+			const [source] = fact?.sources ?? []
+			assert.ok(source !== undefined && "chat" in source)
+			assert.equal(source.chat, aliceChat.chat())
 			assert.deepEqual(
 				(await json(BotMemory.View, send(bob.session, memoryPath))).entries,
 				[],
 			)
 
-			// In a new Session, the model sees the fact in the input of Alice.
+			// Later, the model sees the fact in the input of Alice.
 			// The stored input keeps her own words.
-			const second = await run(alice.session, "What should I drink?")
+			const second = await aliceChat.turn("What should I drink?")
 			assert.ok(
-				JSON.stringify(second.done.response).includes(
+				JSON.stringify(second.response).includes(
 					"Remembered: What should I drink? (Alice likes green tea.)",
 				),
-				JSON.stringify(second.done.response),
+				JSON.stringify(second.response),
 			)
-			const history = await (
-				await send(alice.session, second.path + "/history")
-			).text()
+			const history = await aliceChat.history()
 			// The input Item holds exactly her words. Only the answer quotes the added part.
 			assert.ok(history.includes('"What should I drink?"'))
 			assert.ok(
@@ -639,7 +650,7 @@ test(
 			)
 			const enrichments = await json(
 				Schema.Array(BotMemory.Enrichment),
-				send(alice.session, second.path + "/memory/enrichments"),
+				send(alice.session, path + "/enrichments"),
 			)
 			assert.deepEqual(
 				enrichments.map((enrichment) => [
@@ -649,16 +660,17 @@ test(
 				[[["(Alice likes green tea.)"], [fact!.id]]],
 			)
 
-			// Bob asks the same, and nothing about Alice reaches his input.
-			const third = await run(bob.session, "What should I drink?")
+			// Bob asks the same in his own Chat, and nothing about Alice reaches his input.
+			const third = await bobChat.turn("What should I drink?")
+			assert.notEqual(bobChat.chat(), aliceChat.chat())
 			assert.ok(
-				JSON.stringify(third.done.response).includes("Hello."),
-				JSON.stringify(third.done.response),
+				JSON.stringify(third.response).includes("Hello."),
+				JSON.stringify(third.response),
 			)
 			assert.deepEqual(
 				await json(
 					Schema.Array(BotMemory.Enrichment),
-					send(bob.session, third.path + "/memory/enrichments"),
+					send(bob.session, "/v1/chats/" + bobChat.chat() + "/enrichments"),
 				),
 				[],
 			)
@@ -669,98 +681,37 @@ test(
 )
 
 test(
-	"a Session Bot asks, its owning Bot reviews and passes it up, and the person decides at the top",
+	"a Bot that another Bot owns asks, its owner reviews and passes it up, and the person decides at the top",
 	{ timeout: 120000 },
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
 		try {
-			const { send, json, until, defaultBot } = client(host)
+			const { send, json, until, defaultBot, talk, pendingFor } = client(host)
 			const alice = await host.login("bots-carol")
-			const listed = await defaultBot(alice.session)
-			// A new Bot gets the model of the Bot that makes it.
-			const mainModel = {
-				_tag: "Config.Selection",
-				provider: "fixture",
-				model: "fixture-model",
-			} as const
-			const main = await json(
+			const main = await defaultBot(alice.session)
+			const helper = await json(
 				BotsApi.Bot,
-				send(alice.session, "/v1/bots/" + listed.id, "PATCH", {
-					expected: listed.revision,
-					model: mainModel,
+				send(alice.session, "/v1/bots", "POST", {
+					name: "Helper",
+					role: "Confirms changes",
+					instructions: "Confirm the change.",
+					bot: main.id,
 				}),
-			)
-			const created = await json(
-				SessionView,
-				send(alice.session, "/v1/sessions", "POST", {}),
-			)
-			const path = "/v1/sessions/" + created.session.id
-			const view = () => json(SessionView, send(alice.session, path))
-			const turn = async (input: string) => {
-				const current = await view()
-				const started = await send(alice.session, path + "/turns", "POST", {
-					expected: current.session.revision,
-					input,
-				})
-				assert.equal(started.status, 202, await started.clone().text())
-			}
-			const completed = () =>
-				until("the Turn completes", async () => {
-					const current = await view()
-					return Session.status(current.session)._tag === "Completed"
-						? current
-						: undefined
-				})
-			const pendingFor = (
-				check: (request: RequestsApi.CapabilityRequest) => boolean,
-			) =>
-				until("a pending request", async () =>
-					(
-						await json(
-							Schema.Array(RequestsApi.CapabilityRequest),
-							send(alice.session, "/v1/requests?status=pending"),
-						)
-					).find(check),
-				)
-
-			// Starting a Session Bot is a capability, so the person decides it first.
-			await turn("spawn a helper")
-			const spawn = await pendingFor(
-				(request) => request.capability.action === "bots.spawn",
-			)
-			await json(
-				RequestsApi.CapabilityRequest,
-				send(alice.session, "/v1/requests/" + spawn.id, "POST", {
-					expected: spawn.revision,
-					decision: "allow",
-				}),
-			)
-			await completed()
-			const sessionBots = await json(
-				Schema.Array(BotsApi.Bot),
-				send(alice.session, "/v1/bots?session=" + created.session.id),
-			)
-			assert.equal(sessionBots.length, 1)
-			const helper = sessionBots[0]!
-			assert.equal(helper.kind, "session")
-			assert.deepEqual(
-				helper.model === undefined
-					? undefined
-					: { ...helper.model, _tag: "Config.Selection" },
-				mainModel,
 			)
 			assert.deepEqual(helper.owner, {
-				_tag: "Session",
-				userId: alice.identity.userId,
-				session: created.session.id,
+				_tag: "Bot",
 				bot: main.id,
+				userId: alice.identity.userId,
 			})
 			known.helper = helper.id
+			const chat = talk(alice.session, main.id)
 
-			// The helper needs a tool. Its owner reviews it, cannot allow it alone, and passes it up.
+			// The default Bot gives work to the Bot it owns without a request.
+			// The Helper needs a tool. Its owner reviews it, cannot allow it alone, and passes it up.
 			const toolsBefore = host.toolCalls()
-			await turn("confirm via helper")
+			await chat.turn("confirm via helper")
 			const passedUp = await pendingFor(
+				alice.session,
 				(request) =>
 					request.capability.action === "tools.call" &&
 					request.endorsements.length === 1,
@@ -773,17 +724,28 @@ test(
 				reason: "It fits the task I gave.",
 			})
 			assert.equal(host.toolCalls(), toolsBefore)
+			// The Helper does not wait. Its work stays open while the request is open.
+			const [work] = await chat.delegations()
+			assert.equal(work?.status, "running")
+			assert.equal(passedUp.chat, work?.chat)
+			await chat.says("Helper waits for a decision.", work!.chat!)
+
 			await json(
 				RequestsApi.CapabilityRequest,
 				send(alice.session, "/v1/requests/" + passedUp.id, "POST", {
 					expected: passedUp.revision,
 					decision: "allow",
-					scope: "session",
+					scope: "chat",
 				}),
 			)
-			const done = await completed()
-			assert.match(JSON.stringify(done.response?.output), /Helper confirmed it/)
+			// The allowed call runs in the task Chat, the work ends, and its result comes back.
+			await chat.says("Helper confirmed it")
 			assert.equal(host.toolCalls(), toolsBefore + 1)
+			const [ended] = await chat.delegations()
+			assert.equal(ended?.status, "completed")
+			assert.equal(ended?.result, "Helper confirmed it")
+			await chat.rested()
+
 			// Each Bot on the way got a Grant with the scope that its decider chose.
 			const mainGrants = await json(
 				Schema.Array(BotsApi.Grant),
@@ -796,18 +758,11 @@ test(
 			const mainTool = mainGrants.find(
 				(grant) => grant.capability.action === "tools.call",
 			)
-			assert.equal(mainTool?.scope, "session")
-			assert.equal(mainTool?.session, created.session.id)
+			// A Grant for one Chat holds where that Bot works: the default Bot in its direct Chat.
+			assert.equal(mainTool?.scope, "chat")
+			assert.equal(mainTool?.chat, chat.chat())
 			assert.equal(helperGrants[0]?.scope, "lifetime")
 			assert.equal(helperGrants[0]?.parent, mainTool?.id)
-			const reviews = await until("the review is archived", async () => {
-				const list = await json(
-					Schema.Array(Schema.Unknown),
-					send(alice.session, "/v1/sessions?kind=review"),
-				)
-				return list.length > 0 ? list : undefined
-			})
-			assert.equal(reviews.length, 1)
 
 			// Revoking the Grant of the owner also revokes the Grant that it gave to the helper.
 			const revoked = await send(
@@ -827,13 +782,26 @@ test(
 				[],
 			)
 
-			// Deleting the Session archives its Session Bots.
-			assert.equal((await send(alice.session, path, "DELETE")).status, 204)
-			const after = await json(
-				BotsApi.Bot,
-				send(alice.session, "/v1/bots/" + helper.id),
+			// Deleting the direct Chat removes its history. The next message starts again.
+			assert.equal(
+				(await send(alice.session, "/v1/chats/" + chat.chat(), "DELETE"))
+					.status,
+				204,
 			)
-			assert.equal(after.archived, true)
+			assert.equal(
+				(await send(alice.session, "/v1/chats/" + chat.chat())).status,
+				404,
+			)
+			const old = chat.chat()
+			await chat.turn("hello")
+			assert.notEqual(chat.chat(), old)
+			assert.ok(!(await chat.history()).includes("confirm via helper"))
+			await until("the helper is still there", async () =>
+				(await json(BotsApi.Bot, send(alice.session, "/v1/bots/" + helper.id)))
+					.archived
+					? undefined
+					: true,
+			)
 		} finally {
 			await host.close()
 		}
@@ -846,7 +814,7 @@ test(
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
 		try {
-			const { send, json, until, defaultBot } = client(host)
+			const { send, json, defaultBot, talk } = client(host)
 			const alice = await host.login("bots-dana")
 			// The judge reads Rules only with the Rules model of the organization.
 			const settings = await (
@@ -867,27 +835,7 @@ test(
 			)
 			assert.equal(configured.status, 200, await configured.clone().text())
 			const main = await defaultBot(alice.session)
-			const created = await json(
-				SessionView,
-				send(alice.session, "/v1/sessions", "POST", {}),
-			)
-			const path = "/v1/sessions/" + created.session.id
-			const view = () => json(SessionView, send(alice.session, path))
-			const run = async (input: string) => {
-				const current = await view()
-				const started = await send(alice.session, path + "/turns", "POST", {
-					expected: current.session.revision,
-					input,
-				})
-				assert.equal(started.status, 202, await started.clone().text())
-				return until("the Turn completes", async () => {
-					const next = await view()
-					return next.session.turns.length > current.session.turns.length &&
-						Session.status(next.session)._tag === "Completed"
-						? next
-						: undefined
-				})
-			}
+			const chat = talk(alice.session, main.id)
 			const rule = await json(
 				BotsApi.Rule,
 				send(alice.session, "/v1/bots/" + main.id + "/rules", "POST", {
@@ -896,7 +844,7 @@ test(
 			)
 			assert.equal(rule.status, "active")
 			const before = host.toolCalls()
-			await run("confirm directly")
+			await chat.turn("confirm directly")
 			assert.equal(host.toolCalls(), before + 1)
 			assert.deepEqual(
 				await json(
@@ -914,14 +862,19 @@ test(
 					reason: "No more changes today.",
 				}),
 			)
-			const denied = await run("confirm directly")
+			// The deny is decided at once, in the same Turn. The Bot reads the reason.
+			const denied = await chat.turn("confirm directly")
 			assert.equal(host.toolCalls(), before + 1)
-			assert.match(JSON.stringify(denied.state.value), /No more changes today/)
-			const closed = await json(
-				Schema.Array(RequestsApi.CapabilityRequest),
-				send(alice.session, "/v1/requests?status=denied"),
+			assert.equal(denied.status, "Completed")
+			assert.equal(denied.open.requests, 0)
+			assert.match(await chat.history(), /No more changes today/)
+			assert.deepEqual(
+				await json(
+					Schema.Array(RequestsApi.CapabilityRequest),
+					send(alice.session, "/v1/requests?status=pending"),
+				),
+				[],
 			)
-			assert.equal(closed.length, 1)
 			assert.equal(
 				(
 					await send(
@@ -932,7 +885,7 @@ test(
 				).status,
 				204,
 			)
-			await run("confirm directly")
+			await chat.turn("confirm directly")
 			assert.equal(host.toolCalls(), before + 2)
 		} finally {
 			await host.close()
@@ -941,67 +894,14 @@ test(
 )
 
 test(
-	"a Bot makes lasting Bots that it owns, and their requests go up the owner chain",
+	"a Bot makes Bots that it owns, and their requests go up the owner chain",
 	{ timeout: 120000 },
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
 		try {
-			const { send, json, until, defaultBot } = client(host)
+			const { send, json, until, defaultBot, talk, pendingFor } = client(host)
 			const dave = await host.login("bots-dave")
 			const main = await defaultBot(dave.session)
-			const open = async (bot?: string) => {
-				const created = await json(
-					SessionView,
-					send(
-						dave.session,
-						"/v1/sessions",
-						"POST",
-						bot === undefined ? {} : { bot },
-					),
-				)
-				const path = "/v1/sessions/" + created.session.id
-				const view = () => json(SessionView, send(dave.session, path))
-				return {
-					id: created.session.id,
-					turn: async (input: string) => {
-						// Work after a Turn, such as learning memory, can still change the
-						// Session. Like any client, read it again and retry on a conflict.
-						for (let tries = 0; ; tries++) {
-							const current = await view()
-							const started = await send(
-								dave.session,
-								path + "/turns",
-								"POST",
-								{
-									expected: current.session.revision,
-									input,
-								},
-							)
-							if (started.status === 409 && tries < 5) continue
-							assert.equal(started.status, 202, await started.clone().text())
-							return
-						}
-					},
-					completed: () =>
-						until("the Turn completes", async () => {
-							const current = await view()
-							return Session.status(current.session)._tag === "Completed"
-								? current
-								: undefined
-						}),
-				}
-			}
-			const pendingFor = (
-				check: (request: RequestsApi.CapabilityRequest) => boolean,
-			) =>
-				until("a pending request", async () =>
-					(
-						await json(
-							Schema.Array(RequestsApi.CapabilityRequest),
-							send(dave.session, "/v1/requests?status=pending"),
-						)
-					).find(check),
-				)
 			const allow = (request: RequestsApi.CapabilityRequest) =>
 				json(
 					RequestsApi.CapabilityRequest,
@@ -1018,10 +918,13 @@ test(
 					send(dave.session, "/v1/bots?bot=" + id),
 				)
 
-			// The default Bot makes a lasting Bot. It is at the top, so the person decides.
-			const mainSession = await open()
-			await mainSession.turn("create a worker")
+			// The default Bot makes a Bot. It is at the top, so the person decides.
+			// The Bot does not wait for the decision. When it comes, the call runs.
+			const mainChat = talk(dave.session, main.id)
+			const asked = await mainChat.turn("create a worker")
+			assert.equal(asked.open.requests, 1)
 			const create = await pendingFor(
+				dave.session,
 				(request) => request.capability.action === "bots.create",
 			)
 			assert.deepEqual(create.approver, {
@@ -1030,29 +933,31 @@ test(
 			})
 			assert.deepEqual(create.chain, [main.id])
 			await allow(create)
-			await mainSession.completed()
-			const owned = await ownedBy(main.id)
-			assert.equal(owned.length, 1)
+			const owned = await until("the worker exists", async () => {
+				const list = await ownedBy(main.id)
+				return list.length === 1 ? list : undefined
+			})
 			const worker = owned[0]!
-			assert.equal(worker.kind, "persistent")
 			assert.deepEqual(worker.owner, {
 				_tag: "Bot",
 				bot: main.id,
 				userId: dave.identity.userId,
 			})
 			known.worker = worker.id
+			await mainChat.rested()
 
 			// The default Bot gives work to the Bot it owns without a request.
-			await mainSession.turn("delegate to worker")
-			const delegated = await mainSession.completed()
-			assert.match(JSON.stringify(delegated.response?.output), /Worker did it/)
+			await mainChat.turn("delegate to worker")
+			await mainChat.says("Worker did it")
+			await mainChat.rested()
 
 			// The person works with the Worker directly. Its owner still decides first.
-			const workerSession = await open(worker.id)
-			await workerSession.turn("spawn a scout")
+			const workerChat = talk(dave.session, worker.id)
+			await workerChat.turn("create a scout")
 			const passedUp = await pendingFor(
+				dave.session,
 				(request) =>
-					request.capability.action === "bots.spawn" &&
+					request.capability.action === "bots.create" &&
 					request.endorsements.length === 1,
 			)
 			assert.equal(passedUp.bot, worker.id)
@@ -1063,45 +968,17 @@ test(
 				userId: dave.identity.userId,
 			})
 			await allow(passedUp)
-			await workerSession.completed()
-			const scouts = await json(
-				Schema.Array(BotsApi.Bot),
-				send(dave.session, "/v1/bots?session=" + workerSession.id),
-			)
-			assert.equal(scouts.length, 1)
+			const scouts = await until("the scout exists", async () => {
+				const list = await ownedBy(worker.id)
+				return list.length === 1 ? list : undefined
+			})
 			const scout = scouts[0]!
 			assert.deepEqual(scout.owner, {
-				_tag: "Session",
-				userId: dave.identity.userId,
-				session: workerSession.id,
-				bot: worker.id,
-			})
-			known.scout = scout.id
-
-			// The Worker promotes its Session Bot to a lasting Bot that it owns.
-			await workerSession.turn("promote the scout")
-			const promote = await pendingFor(
-				(request) =>
-					request.capability.action === "bots.promote" &&
-					request.endorsements.length === 1,
-			)
-			assert.deepEqual(promote.capability, {
-				action: "bots.promote",
-				target: scout.id,
-			})
-			await allow(promote)
-			await workerSession.completed()
-			const promoted = await bot(scout.id)
-			assert.equal(promoted.kind, "persistent")
-			assert.deepEqual(promoted.owner, {
 				_tag: "Bot",
 				bot: worker.id,
 				userId: dave.identity.userId,
 			})
-			assert.deepEqual(
-				(await ownedBy(worker.id)).map((entry) => entry.id),
-				[scout.id],
-			)
+			await workerChat.rested()
 
 			// A person can make an owned Bot too, but not a shared one.
 			const mixed = await send(dave.session, "/v1/bots", "POST", {
@@ -1151,7 +1028,7 @@ test(
 			})
 			assert.equal(notTop.status, 400, await notTop.clone().text())
 
-			// An archived default Bot does no new work.
+			// An archived Bot does no new work.
 			const top = await bot(main.id)
 			await json(
 				BotsApi.Bot,
@@ -1160,7 +1037,12 @@ test(
 					archived: true,
 				}),
 			)
-			const archived = await send(dave.session, "/v1/sessions", "POST", {})
+			const archived = await send(
+				dave.session,
+				"/v1/bots/" + main.id + "/messages",
+				"POST",
+				{ input: "hello" },
+			)
 			assert.equal(archived.status, 400, await archived.clone().text())
 		} finally {
 			await host.close()
@@ -1169,14 +1051,15 @@ test(
 )
 
 test(
-	"a person without a default Bot must name a Bot, and cannot pick a Bot of someone else",
+	"a person talks only to Bots that they may use, and a trigger needs a Bot",
 	{ timeout: 120000 },
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
 		try {
-			const { send, json } = client(host)
-			const erin = await host.login("bots-erin")
+			const { send, json, talk } = client(host)
+			// Frank comes first and runs the organization. Erin is a member.
 			const frank = await host.login("bots-frank")
+			const erin = await host.login("bots-erin")
 			assert.deepEqual(
 				await json(Schema.Array(BotsApi.Bot), send(erin.session, "/v1/bots")),
 				[],
@@ -1186,8 +1069,6 @@ test(
 				send(erin.session, "/v1/me/settings"),
 			)
 			assert.equal(settings.defaultBot, null)
-			const none = await send(erin.session, "/v1/sessions", "POST", {})
-			assert.equal(none.status, 400, await none.clone().text())
 			const trigger = await send(erin.session, "/v1/triggers", "POST", {
 				prompt: "Say hello.",
 			})
@@ -1206,6 +1087,13 @@ test(
 				defaultBot: theirs.id,
 			})
 			assert.equal(other.status, 400, await other.clone().text())
+			const hidden = await send(
+				erin.session,
+				"/v1/bots/" + theirs.id + "/messages",
+				"POST",
+				{ input: "hello" },
+			)
+			assert.equal(hidden.status, 404, await hidden.clone().text())
 
 			const named = await json(
 				BotsApi.Bot,
@@ -1215,11 +1103,20 @@ test(
 					instructions: "Help Erin.",
 				}),
 			)
-			const created = await json(
-				SessionView,
-				send(erin.session, "/v1/sessions", "POST", { bot: named.id }),
+			const chat = talk(erin.session, named.id)
+			const first = await chat.message("hello")
+			assert.equal(first.delivery, "started")
+			const view = await chat.rested()
+			assert.equal(view.chat.bot, named.id)
+			// The same Bot and person always use the same Chat.
+			const again = await chat.message("hello again")
+			assert.equal(again.chat, first.chat)
+			await chat.rested()
+			// Frank cannot read the Chat of Erin.
+			assert.equal(
+				(await send(frank.session, "/v1/chats/" + first.chat)).status,
+				404,
 			)
-			assert.equal(created.bot, named.id)
 		} finally {
 			await host.close()
 		}

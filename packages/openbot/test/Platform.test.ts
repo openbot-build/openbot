@@ -39,7 +39,7 @@ test(
 			assert.equal(settings.organizationCreation, "anyone")
 
 			// A deny in the ceiling wins over every allow of an organization.
-			assert.equal((await account(alice.session, "/v1/sessions")).status, 200)
+			assert.equal((await account(alice.session, "/v1/chats")).status, 200)
 			const ceiling = await account(
 				root.session,
 				"/v1/platform/settings",
@@ -49,7 +49,7 @@ test(
 					policyCeiling: [
 						{
 							effect: "deny",
-							permissionGroups: ["sessions.read"],
+							permissionGroups: ["chats.read"],
 							resources: ["openbot.org.{org}"],
 						},
 					],
@@ -57,7 +57,7 @@ test(
 			)
 			assert.equal(ceiling.status, 200, await ceiling.clone().text())
 			const updated = await ceiling.json()
-			assert.equal((await account(alice.session, "/v1/sessions")).status, 403)
+			assert.equal((await account(alice.session, "/v1/chats")).status, 403)
 
 			// Without self-service, a new account gets no organization.
 			assert.equal(

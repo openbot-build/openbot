@@ -4,7 +4,16 @@ import { NodeServices } from "@effect/platform-node"
 import { Auth, DatabasePostgres, Server } from "@openbot-build/openbot"
 import { AuthApi, Caller, Identity, OpenBotApi } from "@openbot-build/api"
 import { Config, Model, Provider } from "@openbot-build/core"
-import { Effect, Layer, ManagedRuntime, Option, Redacted, Schema } from "effect"
+import {
+	Effect,
+	Layer,
+	ManagedRuntime,
+	Option,
+	Redacted,
+	Schema,
+	Stream,
+} from "effect"
+import { LanguageModel, Response as ModelResponse } from "effect/ai"
 import { HttpRouter, HttpServer } from "effect/http"
 import {
 	HttpApi,
@@ -18,6 +27,7 @@ import * as Development from "../dist/Development.js"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
 import * as DefaultBot from "./DefaultBot.ts"
 import * as Organizations from "./Organizations.ts"
+import { bot, message, type Send } from "./Messages.ts"
 
 const publicOrigin = "https://localhost:8443"
 const authSecret = "DevelopmentIntegrationSecretMustStayStable123456"
@@ -56,7 +66,7 @@ test("development authentication accepts only loopback HTTPS origins in standard
 })
 
 test(
-	"local login keeps normal sign-in sessions and work Sessions across a restart",
+	"local login keeps normal sign-in sessions and Chats across a restart",
 	{ timeout: 60000 },
 	async (t) => {
 		const database = await PostgresTest.start()
@@ -84,7 +94,7 @@ test(
 		const options = {
 			host: "127.0.0.1",
 			port: 0,
-			// A Session needs a model. This test runs no Turn, so the model never answers.
+			// A Chat needs a model. This one gives the same short answer to each Turn.
 			builtinModels: {
 				providers: [{ id: model.provider, name: "Test" }],
 				models: [
@@ -96,7 +106,29 @@ test(
 						serviceTiers: [],
 					}),
 				],
-				resolve: () => Effect.die("This test runs no Turn."),
+				resolve: () =>
+					LanguageModel.make({
+						generateText: () =>
+							Effect.succeed([
+								ModelResponse.makePart("text", { text: "answer" }),
+							]),
+						streamText: () =>
+							Stream.make(
+								ModelResponse.makePart("text-start", { id: "text" }),
+								ModelResponse.makePart("text-delta", {
+									id: "text",
+									delta: "answer",
+								}),
+								ModelResponse.makePart("text-end", { id: "text" }),
+								ModelResponse.makePart("finish", {
+									reason: "stop",
+									usage: ModelResponse.Usage.make({
+										inputTokens: { total: 1 },
+										outputTokens: { total: 1 },
+									}),
+								}),
+							),
+					}),
 			},
 			databaseUrl: Redacted.make(database.url),
 			secretKeys: Redacted.make(
@@ -167,7 +199,7 @@ test(
 			assert.equal(info.profile.name, "Local Developer")
 			assert.equal(info.profile.email, "developer@localhost.test")
 			assert.equal(
-				(await request("/v1/sessions", { headers: accountHeaders })).status,
+				(await request("/v1/chats", { headers: accountHeaders })).status,
 				200,
 			)
 			assert.equal(
@@ -183,22 +215,29 @@ test(
 			assert.equal(same.userId, info.userId)
 			assert.deepEqual(same.memberships, info.memberships)
 			assert.notEqual(secondSession, session)
+			const newBot = {
+				name: "Blocked",
+				role: "Helps in tests",
+				instructions: "Help the person.",
+			}
 			for (const origin of [undefined, "https://foreign.example"]) {
-				const blocked = await request("/v1/sessions", {
+				const blocked = await request("/v1/bots", {
 					method: "POST",
 					headers: {
 						cookie: session,
 						...(origin === undefined ? {} : { origin }),
 						"content-type": "application/json",
 					},
-					body: JSON.stringify({ title: "Blocked" }),
+					body: JSON.stringify(newBot),
 				})
 				assert.equal(blocked.status, 403)
 			}
 			assert.deepEqual(
-				await (
-					await request("/v1/sessions", { headers: accountHeaders })
-				).json(),
+				await (await request("/v1/bots", { headers: accountHeaders })).json(),
+				[],
+			)
+			assert.deepEqual(
+				await (await request("/v1/chats", { headers: accountHeaders })).json(),
 				[],
 			)
 			for (const authorization of [
@@ -207,7 +246,7 @@ test(
 				"Bearer",
 				"",
 			]) {
-				const denied = await request("/v1/sessions", {
+				const denied = await request("/v1/chats", {
 					headers: { authorization },
 				})
 				assert.equal(denied.status, 401)
@@ -222,17 +261,15 @@ test(
 					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
 				}),
 			)
-			const created = await request("/v1/sessions", {
-				method: "POST",
-				headers: { ...accountHeaders, "content-type": "application/json" },
-				body: JSON.stringify({
-					title: "Saved development Session",
-					settings: { model },
-				}),
-			})
-			assert.equal(created.status, 201)
-			const saved: { session: { id: string } } = await created.json()
-			const path = "/v1/sessions/" + saved.session.id
+			const send: Send = (path, method, payload) =>
+				request(path, {
+					method,
+					headers: { ...accountHeaders, "content-type": "application/json" },
+					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+				})
+			const saved = await bot(send, { name: "Saved", model })
+			const receipt = await message(send, saved, "Keep this Chat")
+			const path = "/v1/chats/" + receipt.chat
 			assert.equal(
 				(await request(path, { headers: accountHeaders })).status,
 				200,
@@ -260,14 +297,14 @@ test(
 			)
 			t.mock.timers.setTime(startedAt + 2 * 86400000)
 			for (const origin of [undefined, "https://foreign.example"]) {
-				const denied = await request("/v1/sessions", {
+				const denied = await request(`/v1/bots/${saved}/messages`, {
 					method: "POST",
 					headers: {
 						cookie: session,
 						...(origin === undefined ? {} : { origin }),
 						"content-type": "application/json",
 					},
-					body: JSON.stringify({ title: "Blocked renewal" }),
+					body: JSON.stringify({ input: "Blocked renewal" }),
 				})
 				assert.equal(denied.status, 403)
 				assert.equal(denied.headers.getSetCookie().length, 0)
@@ -292,7 +329,7 @@ test(
 			assert.equal(businessRenewal.status, 200)
 			accountHeaders.cookie = renewalCookie(businessRenewal)
 			t.mock.timers.tick(2 * 86400000)
-			const missing = await request("/v1/sessions/" + crypto.randomUUID(), {
+			const missing = await request("/v1/chats/" + crypto.randomUUID(), {
 				headers: accountHeaders,
 			})
 			assert.equal(missing.status, 404)
@@ -303,10 +340,8 @@ test(
 				200,
 			)
 			const openapi = await (await request("/openapi.json")).json()
-			assert.deepEqual(openapi.paths["/v1/sessions"].post.security, [
-				{ token: [] },
-				{ session: [] },
-			])
+			const sendPath = openapi.paths["/v1/bots/{botId}/messages"]
+			assert.deepEqual(sendPath.post.security, [{ token: [] }, { session: [] }])
 			assert.deepEqual(openapi.components.securitySchemes.token, {
 				type: "http",
 				scheme: "Bearer",
@@ -316,8 +351,8 @@ test(
 				in: "cookie",
 				name: AuthApi.SessionCookie,
 			})
-			assert.ok(openapi.paths["/v1/sessions"].post.responses[403])
-			assert.ok(openapi.paths["/v1/sessions"].post.responses[503])
+			assert.ok(sendPath.post.responses[403])
+			assert.ok(sendPath.post.responses[503])
 			await runtime.dispose()
 			runtime = server()
 			address = await runtime.runPromise(
@@ -525,7 +560,7 @@ test("business authentication keeps session Origin checks and typed failures", a
 			tokenId: "key-1",
 		})
 		const spec = OpenApi.fromApi(OpenBotApi)
-		assert.deepEqual(spec.paths["/v1/sessions"]?.post?.security, [
+		assert.deepEqual(spec.paths["/v1/bots/{botId}/messages"]?.post?.security, [
 			{ token: [] },
 			{ session: [] },
 		])
@@ -547,7 +582,7 @@ test("return destinations accept same-origin client paths and reject open redire
 		"/docs",
 		"/developer/tests/test-1",
 		"/apps?query=documents",
-		"/sessions/session-1",
+		"/chats/chat-1",
 	])
 		assert.equal(accepts(target), true, target)
 	for (const target of [
@@ -556,7 +591,7 @@ test("return destinations accept same-origin client paths and reject open redire
 		"/\\external.example",
 		"/developer/../auth/callback",
 		"/auth/login",
-		"/v1/sessions",
+		"/v1/chats",
 		"/development/sign-in",
 	])
 		assert.equal(accepts(target), false, target)

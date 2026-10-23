@@ -1,10 +1,10 @@
 import { Effect, Layer, Schema, Stream } from "effect"
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { Session, Plugin, PluginComposition } from "@openbot-build/core"
+import { Chat, Plugin, PluginComposition } from "@openbot-build/core"
 import { LanguageModel, Prompt, Response, Tool, Toolkit } from "effect/ai"
 import * as TokenLimiter from "../src/plugins/token-limiter/TokenLimiter.ts"
-import { SessionTest } from "./SessionTest.ts"
+import { ChatTest } from "./ChatTest.ts"
 // @effect-diagnostics strictEffectProvide:off
 
 // Each model step uses 3 input tokens and 2 output tokens.
@@ -65,9 +65,9 @@ const toolPlugin = Plugin.make({ id: Plugin.Id.make("tools") })(() =>
 test("invalid token limits fail before any model request", async () => {
 	let calls = 0
 	for (const maxTokens of [0, -1, 0.5, NaN, Infinity]) {
-		const session = SessionTest(TokenLimiter.make({ maxTokens }))
+		const chat = ChatTest(TokenLimiter.make({ maxTokens }))
 		const error = await Effect.runPromise(
-			session.execute({ input: "hello" }).pipe(
+			chat.execute({ input: "hello" }).pipe(
 				Effect.flip,
 				Effect.provide(
 					LanguageModelTest(() => {
@@ -92,11 +92,11 @@ test("blocks the next model step when the used tokens reach the limit", async ()
 		[11, 3],
 	] as const) {
 		let calls = 0
-		const session = SessionTest(
+		const chat = ChatTest(
 			PluginComposition.merge(TokenLimiter.make({ maxTokens }), toolPlugin),
 		)
 		const error = await Effect.runPromise(
-			session.execute({ input: "echo" }).pipe(
+			chat.execute({ input: "echo" }).pipe(
 				Effect.flip,
 				Effect.provide(
 					Layer.merge(
@@ -127,11 +127,11 @@ test("blocks the next model step when the used tokens reach the limit", async ()
 })
 
 test("a Turn that ends under the limit completes", async () => {
-	const session = SessionTest(
+	const chat = ChatTest(
 		PluginComposition.merge(TokenLimiter.make({ maxTokens: 6 }), toolPlugin),
 	)
 	const view = await Effect.runPromise(
-		session.execute({ input: "echo" }).pipe(
+		chat.execute({ input: "echo" }).pipe(
 			Effect.provide(
 				Layer.merge(
 					LanguageModelTest(({ prompt }) =>
@@ -144,17 +144,17 @@ test("a Turn that ends under the limit completes", async () => {
 			),
 		),
 	)
-	assert.equal(Session.currentTurn(view.session)!.steps, 2)
-	assert.equal(Session.status(view.session)._tag, "Completed")
+	assert.equal(Chat.currentTurn(view.chat)!.steps, 2)
+	assert.equal(Chat.status(view.chat)._tag, "Completed")
 })
 
 test("each execution counts its own tokens", async () => {
-	const session = SessionTest(TokenLimiter.make({ maxTokens: 5 }))
+	const chat = ChatTest(TokenLimiter.make({ maxTokens: 5 }))
 	const model = LanguageModelTest(() => answer())
 	for (const input of ["first", "second"]) {
 		const view = await Effect.runPromise(
-			session.execute({ input }).pipe(Effect.provide(model)),
+			chat.execute({ input }).pipe(Effect.provide(model)),
 		)
-		assert.equal(Session.status(view.session)._tag, "Completed")
+		assert.equal(Chat.status(view.chat)._tag, "Completed")
 	}
 })

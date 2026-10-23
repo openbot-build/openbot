@@ -90,7 +90,7 @@ test("Markdown turns into the format of each platform, and long text splits at w
 })
 
 test(
-	"a Slack Channel links people, keeps one Session for each chat, works for the speaker, and decides requests with buttons",
+	"a Slack Channel links people, keeps one Chat for each chat, works for the speaker, and decides requests with buttons",
 	{ timeout: 180000 },
 	async () => {
 		const signingSecret = "slack-signing-secret-for-tests"
@@ -263,18 +263,19 @@ test(
 						),
 					{ form: true },
 				)
-			const channelSessions = async () =>
+			const channelChats = async () =>
 				(await json(
-					send(alice.session, "/v1/sessions?kind=channel"),
-				)) as ReadonlyArray<{
-					readonly session: {
-						readonly id: string
-						readonly turns: ReadonlyArray<{
+					send(alice.session, "/v1/chats?kind=channel"),
+				)) as ReadonlyArray<{ readonly chat: { readonly id: string } }>
+			const turnsOf = async (chat: string) =>
+				(
+					(await json(send(alice.session, "/v1/chats/" + chat + "/turns"))) as {
+						readonly items: ReadonlyArray<{
 							readonly author?: string
 							readonly status: { readonly _tag: string }
 						}>
 					}
-				}>
+				).items
 
 			// A person who is not linked gets a link in the direct chat, and nothing runs.
 			assert.equal(
@@ -299,7 +300,7 @@ test(
 			const code = decodeURIComponent(
 				/code=([^\s)]+)/.exec(String(prompt.body["text"]))![1]!,
 			)
-			assert.equal((await channelSessions()).length, 0)
+			assert.equal((await channelChats()).length, 0)
 
 			// The person opens the link in OpenBot and accepts it. A code works once.
 			const link = await json(
@@ -330,7 +331,7 @@ test(
 				1,
 			)
 
-			// Now the Bot answers. The Session belongs to the actor, and the Turn works for Bob.
+			// Now the Bot answers. The Chat belongs to the actor, and the Turn works for Bob.
 			await message({
 				user: "UBOB",
 				text: "hello again",
@@ -353,9 +354,13 @@ test(
 						call.body["text"] === "Working…",
 				),
 			)
-			const [direct] = await channelSessions()
-			assert.ok(direct !== undefined)
-			assert.equal(direct.session.turns.at(-1)?.author, bob.identity.userId)
+			const [first] = await channelChats()
+			assert.ok(first !== undefined)
+			let direct = first
+			assert.equal(
+				(await turnsOf(direct.chat.id)).at(-1)?.author,
+				bob.identity.userId,
+			)
 			// Slack sends an event again when it is not sure. It runs only once.
 			await message({
 				user: "UBOB",
@@ -365,9 +370,33 @@ test(
 				id: "EvSame",
 			})
 			await new Promise((resolve) => setTimeout(resolve, 400))
-			assert.equal((await channelSessions())[0]?.session.turns.length, 1)
+			assert.equal((await turnsOf(direct.chat.id)).length, 1)
 
-			// A group message that names the bot starts the Session of that group.
+			// The actor deletes the Chat. The next message in that chat starts a new Chat.
+			assert.equal(
+				(await send(alice.session, "/v1/chats/" + direct.chat.id, "DELETE"))
+					.status,
+				204,
+			)
+			await message({
+				user: "UBOB",
+				text: "hello after the delete",
+				channel: "DUBOB",
+				direct: true,
+				id: "EvAfterDelete",
+			})
+			direct = await until("a new Chat for the chat", async () => {
+				const list = await channelChats()
+				const fresh = list.find((entry) => entry.chat.id !== first.chat.id)
+				if (fresh === undefined) return undefined
+				const turns = await turnsOf(fresh.chat.id)
+				return turns.length === 1 && turns[0]?.status._tag === "Completed"
+					? fresh
+					: undefined
+			})
+			assert.equal((await channelChats()).length, 1)
+
+			// A group message that names the bot starts the Chat of that group.
 			// The tool needs approval, and the card goes to Bob, who spoke.
 			await message({
 				user: "UBOB",
@@ -410,25 +439,10 @@ test(
 						call.body["channel"] === "DUEVE",
 				),
 			)
-			// Bob allows it once. The Turn goes on, and the card shows the decision.
+			// The Turn does not wait for the decision: the call is pending, and the Bot answers.
+			// Bob allows it once. Then the call runs, and the card shows the decision.
+			assert.equal(host.toolCalls(), 0)
 			await action("UBOB", values[1]!)
-			console.log(
-				JSON.stringify(
-					slack.map((call) => [
-						call.method,
-						call.body["channel"],
-						String(call.body["text"]).slice(0, 80),
-					]),
-				),
-			)
-			console.log(JSON.stringify(await json(send(bob.session, "/v1/requests"))))
-			console.log(
-				JSON.stringify(
-					(await channelSessions()).map((entry) =>
-						entry.session.turns.map((turn) => turn.status),
-					),
-				),
-			)
 			await until("the answer in the group", () =>
 				// The answer changes the message that showed the waiting Turn.
 				slack.find(
@@ -445,12 +459,17 @@ test(
 						String(call.body["text"]).includes("Allowed once."),
 				),
 			)
-			const group = (await channelSessions()).find(
-				(entry) => entry.session.id !== direct.session.id,
+			const group = (await channelChats()).find(
+				(entry) => entry.chat.id !== direct.chat.id,
 			)
 			assert.ok(group !== undefined)
-			assert.equal(group.session.turns[0]?.author, bob.identity.userId)
-			assert.equal(host.toolCalls(), 1)
+			assert.equal(
+				(await turnsOf(group.chat.id))[0]?.author,
+				bob.identity.userId,
+			)
+			await until("the allowed call", async () =>
+				host.toolCalls() === 1 ? true : undefined,
+			)
 
 			// An administrator can unlink a person. Then the bot asks again.
 			assert.equal(

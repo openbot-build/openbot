@@ -2,13 +2,7 @@
 import { PgClient } from "@effect/sql-pg"
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import {
-	AuthApi,
-	CodeRunsApi,
-	RequestsApi,
-	SessionView,
-} from "@openbot-build/api"
-import { Session } from "@openbot-build/core"
+import { AuthApi, CodeRunsApi, RequestsApi } from "@openbot-build/api"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import {
 	Array as Arr,
@@ -30,6 +24,7 @@ import { make as makeSandbox, type Program } from "../src/code/Sandbox.ts"
 import { Settings } from "../src/settings/Settings.ts"
 import * as Fixture from "./AppFixture.ts"
 import * as BrowserHost from "./BrowserHost.ts"
+import { message, settled, type Send } from "./Messages.ts"
 
 const limits = {
 	timeoutMs: 2_000,
@@ -246,7 +241,7 @@ test("each binding gets a stable short name and a TypeScript declaration", () =>
 	assert.equal(text.includes("work_calendar_2"), false)
 })
 
-test("Code Mode sends App calls through the same checks, waits for decisions, and never sends a call twice", async () => {
+test("Code Mode sends App calls through the same checks, goes on after decisions, and never sends a call twice", async () => {
 	const publisher = await Fixture.start({ capabilities: true })
 	let observed: ReadonlyArray<ReadonlyArray<string>> = []
 	const usage = {
@@ -278,6 +273,8 @@ test("Code Mode sends App calls through the same checks, waits for decisions, an
 						),
 						Match.orElse(() => ""),
 					)
+					// A message from OpenBot, such as the end of a program, is not a program.
+					if (input.startsWith("[OpenBot]")) return answer(input)
 					observed = Arr.append(
 						observed,
 						tools.map((tool) => tool.name),
@@ -337,7 +334,7 @@ test("Code Mode sends App calls through the same checks, waits for decisions, an
 	try {
 		const alice = await host.login("code-alice")
 		const bob = await host.login("code-bob")
-		await host.defaultBot(alice.session)
+		const bot = await host.defaultBot(alice.session)
 		await host.defaultBot(bob.session)
 		const headers = (session = alice.session) => ({
 			cookie:
@@ -355,10 +352,12 @@ test("Code Mode sends App calls through the same checks, waits for decisions, an
 			})
 		const read = (path: string, session = alice.session) =>
 			fetch(host.address + path, { headers: headers(session) })
-		const created = await post("/v1/sessions", {})
-		assert.equal(created.status, 201)
-		const work = Schema.decodeUnknownSync(SessionView)(await created.json())
-		const id = work.session.id
+		const asAlice: Send = (path, method, payload) =>
+			fetch(host.address + path, {
+				method,
+				headers: headers(),
+				...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+			})
 		for (const [path, connectionName, account] of [
 			["/card", "Work documents", "Work"],
 			["/second", "Personal documents", "Personal"],
@@ -380,58 +379,34 @@ test("Code Mode sends App calls through the same checks, waits for decisions, an
 			})
 			assert.equal(response.status, 201, await response.clone().text())
 		}
-		const get = async () =>
-			Schema.decodeUnknownSync(SessionView)(
-				await (await read("/v1/sessions/" + id)).json(),
-			)
-		const wait = async () => {
-			let view = await get()
-			for (let index = 0; view.activity === "active" && index < 30; index++)
-				view = Schema.decodeUnknownSync(SessionView)(
-					await (
-						await read(
-							"/v1/sessions/" +
-								id +
-								"/wait?" +
-								new URLSearchParams({
-									after: String(view.session.revision),
-									afterActivity: view.activity,
-									timeoutMs: "1000",
-								}),
-						)
-					).json(),
-				)
-			assert.notEqual(view.activity, "active")
-			return view
-		}
+		let chat = ""
 		const pending = async () => {
 			for (let tries = 0; tries < 200; tries++) {
 				const list = Schema.decodeUnknownSync(
 					Schema.Array(RequestsApi.CapabilityRequest),
 				)(await (await read("/v1/requests?status=pending")).json()).filter(
-					(entry) => entry.session === id,
+					(entry) => entry.chat === chat,
 				)
 				if (list.length > 0) return list
 				await new Promise((resolve) => setTimeout(resolve, 25))
 			}
 			return []
 		}
-		const settled = async () => {
-			for (let tries = 0; tries < 400; tries++) {
-				const view = await wait()
-				if (Session.status(view.session)._tag !== "Waiting") return view
+		/** Waits until the Chat is at rest and its last answer has this text. */
+		const answered = async (text: RegExp) => {
+			for (let tries = 0; tries < 200; tries++) {
+				const view = await settled(asAlice, chat)
+				if (text.test(JSON.stringify(view.response))) return view
 				await new Promise((resolve) => setTimeout(resolve, 25))
 			}
-			return wait()
+			throw new Error("The Chat did not answer with " + text)
 		}
 		const start = async (code: string) => {
-			const current = await get()
-			const response = await post("/v1/sessions/" + id + "/turns", {
-				input: code,
-				expected: current.session.revision,
-			})
-			assert.equal(response.status, 202, await response.clone().text())
-			return wait()
+			const receipt = await message(asAlice, bot, code)
+			if (chat === "") chat = receipt.chat
+			assert.equal(receipt.chat, chat)
+			assert.equal(receipt.delivery, "started")
+			return settled(asAlice, chat)
 		}
 		const decide = async (decision: "allow" | "deny") => {
 			const [request] = await pending()
@@ -442,6 +417,12 @@ test("Code Mode sends App calls through the same checks, waits for decisions, an
 			})
 			assert.equal(decided.status, 200, await decided.clone().text())
 			return request
+		}
+		/** While a call waits, the Turn ends, and the Bot reads that the call is pending. */
+		const paused = (view: Awaited<ReturnType<typeof settled>>) => {
+			assert.equal(view.status, "Completed")
+			assert.equal(view.open.requests, 1)
+			assert.match(JSON.stringify(view.response), /pending/)
 		}
 
 		// Reads that need no decision run at once, and together.
@@ -472,18 +453,18 @@ test("Code Mode sends App calls through the same checks, waits for decisions, an
 				return error.name
 			}
 		`)
-		assert.equal(Session.status(deniedTurn.session)._tag, "Waiting")
+		paused(deniedTurn)
 		const denial = await decide("deny")
 		assert.equal(denial.code?.index, 0)
 		assert.match(denial.code?.code ?? "", /write_board/)
 		assert.equal(denial.app?.source.connectionName, "Personal documents")
-		const denied = await settled()
-		assert.match(JSON.stringify(denied.response), /AppCallDenied/)
+		// The program goes on in the background. Its result comes back as a message.
+		await answered(/AppCallDenied/)
 		assert.equal(publisher.writes().length, 0)
 		assert.equal(publisher.businessCalls(), 2)
 
-		// The program waits for the write. After the decision it runs again,
-		// and the read before the write is not sent again.
+		// The program waits for the write. After the decision it runs again in the
+		// background, and the read before the write is not sent again.
 		const waiting = await start(`
 			const document = await apps.work_documents.read_document({ id: "plan" })
 			await apps.personal_documents.write_board({
@@ -492,18 +473,17 @@ test("Code Mode sends App calls through the same checks, waits for decisions, an
 			})
 			return "written"
 		`)
-		assert.equal(Session.status(waiting.session)._tag, "Waiting")
+		paused(waiting)
 		assert.equal(publisher.businessCalls(), 3)
 		assert.equal(publisher.writes().length, 0)
 		const allowed = await decide("allow")
 		assert.equal(allowed.code?.index, 1)
-		const written = await settled()
+		const written = await answered(/written/)
 		assert.equal(
 			written.response?.status,
 			"completed",
 			JSON.stringify(written.response),
 		)
-		assert.match(JSON.stringify(written.response), /written/)
 		assert.equal(publisher.businessCalls(), 4)
 		assert.deepEqual(publisher.writes(), [
 			{ account: "Personal", text: "Document content plan" },
@@ -516,7 +496,7 @@ test("Code Mode sends App calls through the same checks, waits for decisions, an
 			await apps.personal_documents.write_board({ id: "check", text: "Never sent" })
 			return count
 		`)
-		assert.equal(Session.status(changing.session)._tag, "Waiting")
+		paused(changing)
 		assert.equal(publisher.businessCalls(), 5)
 		const connections = (await (
 			await read("/v1/connections")
@@ -543,14 +523,13 @@ test("Code Mode sends App calls through the same checks, waits for decisions, an
 		)
 		assert.equal(disabled.status, 200, await disabled.clone().text())
 		await decide("allow")
-		const mismatch = await settled()
-		assert.match(JSON.stringify(mismatch.response), /ReplayMismatch/)
+		await answered(/ReplayMismatch/)
 		assert.equal(publisher.businessCalls(), 5)
 		assert.equal(publisher.writes().length, 1)
 
-		// People read the programs of their Sessions with the cookie or with a token.
+		// People read the programs of their Chats with the cookie or with a token.
 		const runs = Schema.decodeUnknownSync(Schema.Array(CodeRunsApi.CodeRun))(
-			await (await read("/v1/sessions/" + id + "/code-runs")).json(),
+			await (await read("/v1/chats/" + chat + "/code-runs")).json(),
 		)
 		assert.deepEqual(
 			runs.map((run) => [run.status, run.calls.length]),
@@ -584,7 +563,7 @@ test("Code Mode sends App calls through the same checks, waits for decisions, an
 		)
 		// Each App call of a program is also an App operation.
 		const operations = (await (
-			await read("/v1/sessions/" + id + "/app-operations")
+			await read("/v1/chats/" + chat + "/app-operations")
 		).json()) as ReadonlyArray<{ readonly callId: string }>
 		assert.equal(
 			operations.filter((operation) => operation.callId.includes(":")).length,

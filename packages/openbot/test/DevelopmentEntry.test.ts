@@ -4,7 +4,7 @@ import { once } from "node:events"
 import { createServer } from "node:net"
 import { test } from "node:test"
 import {
-	SessionView,
+	ChatSummary,
 	AppDiscoveryFailed,
 	AppDiscoveryResult,
 	AuthApi,
@@ -141,8 +141,8 @@ test(
 						...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
 					}),
 				)
-				const create = async (address: string) => {
-					await DefaultBot.ensure((path, method, payload) =>
+				const defaultBot = (address: string) =>
+					DefaultBot.ensure((path, method, payload) =>
 						fetch(address + path, {
 							method,
 							headers,
@@ -151,16 +151,6 @@ test(
 								: { body: JSON.stringify(payload) }),
 						}),
 					)
-					return Schema.decodeUnknownSync(SessionView)(
-						await (
-							await fetch(address + "/v1/sessions", {
-								method: "POST",
-								headers,
-								body: JSON.stringify({}),
-							})
-						).json(),
-					)
-				}
 				const discover = (address: string, input: string) =>
 					fetch(address + "/v1/apps/discover", {
 						method: "POST",
@@ -190,15 +180,14 @@ test(
 						.reason,
 					"NoDeclaration",
 				)
-				const bot = await create(development.address)
+				const bot = await defaultBot(development.address)
 				const answer = await fetch(
-					development.address + `/v1/sessions/${bot.session.id}/turns`,
+					development.address + `/v1/bots/${bot}/messages`,
 					{
 						method: "POST",
 						headers,
 						body: JSON.stringify({
 							input: "Verify the built entry",
-							expected: bot.session.revision,
 							stream: true,
 						}),
 					},
@@ -208,6 +197,17 @@ test(
 					await answer.text(),
 					/Development response: Verify the built entry/,
 				)
+				// The development platform gives the new direct Chat a simulated model.
+				const [chat] = Schema.decodeUnknownSync(Schema.Array(ChatSummary))(
+					await (
+						await fetch(development.address + `/v1/chats?bot=${bot}`, {
+							headers,
+						})
+					).json(),
+				)
+				assert.ok(chat !== undefined)
+				const simulatedModel = chat.chat.settings.model
+				assert.ok(simulatedModel !== undefined)
 				await development.stop()
 				const production = await start("Main")
 				try {
@@ -222,20 +222,31 @@ test(
 						"BlockedTarget",
 					)
 					// Production has no default model and no simulated models.
-					const post = (settings: object) =>
-						fetch(production.address + "/v1/sessions", {
+					const talkTo = async (model?: object) => {
+						const created = await fetch(production.address + "/v1/bots", {
 							method: "POST",
 							headers,
-							body: JSON.stringify(settings),
+							body: JSON.stringify({
+								name: "Production helper",
+								role: "Helps in production",
+								instructions: "Help the person.",
+								...(model === undefined ? {} : { model }),
+							}),
 						})
-					const withoutModel = await post({})
+						assert.equal(created.status, 201, await created.clone().text())
+						const { id } = (await created.json()) as { readonly id: string }
+						return fetch(production.address + `/v1/bots/${id}/messages`, {
+							method: "POST",
+							headers,
+							body: JSON.stringify({ input: "Hello" }),
+						})
+					}
+					const withoutModel = await talkTo()
 					assert.equal(withoutModel.status, 400)
 					assert.equal((await withoutModel.json()).reason, "missing")
-					const simulated = await post({
-						settings: { model: bot.session.settings.model },
-					})
+					const simulated = await talkTo(simulatedModel)
 					assert.equal(simulated.status, 400)
-					assert.equal((await simulated.json())._tag, "SessionModelInvalid")
+					assert.equal((await simulated.json())._tag, "ChatModelInvalid")
 					assert.equal(
 						production.output().includes("Development login:"),
 						false,

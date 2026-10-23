@@ -1,10 +1,10 @@
 import { Effect, Layer, Schema, Stream } from "effect"
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { Session, Plugin, PluginComposition } from "@openbot-build/core"
+import { Chat, Plugin, PluginComposition } from "@openbot-build/core"
 import { LanguageModel, Prompt, Response, Tool, Toolkit } from "effect/ai"
 import * as TimeLimiter from "../src/plugins/time-limiter/TimeLimiter.ts"
-import { SessionTest } from "./SessionTest.ts"
+import { ChatTest } from "./ChatTest.ts"
 // @effect-diagnostics strictEffectProvide:off
 
 const usage = Response.Usage.make({
@@ -54,9 +54,9 @@ const toolPlugin = Plugin.make({ id: Plugin.Id.make("tools") })(() =>
 test("invalid time limits fail before any model request", async () => {
 	let calls = 0
 	for (const maxDuration of [0, -1, "Infinity", "-Infinity"] as const) {
-		const session = SessionTest(TimeLimiter.make({ maxDuration }))
+		const chat = ChatTest(TimeLimiter.make({ maxDuration }))
 		const error = await Effect.runPromise(
-			session.execute({ input: "hello" }).pipe(
+			chat.execute({ input: "hello" }).pipe(
 				Effect.flip,
 				Effect.provide(
 					LanguageModelTest(() => {
@@ -74,9 +74,9 @@ test("invalid time limits fail before any model request", async () => {
 
 test("stops a model step that runs past the limit", async () => {
 	let released = 0
-	const session = SessionTest(TimeLimiter.make({ maxDuration: "20 millis" }))
+	const chat = ChatTest(TimeLimiter.make({ maxDuration: "20 millis" }))
 	const error = await Effect.runPromise(
-		session.execute({ input: "slow" }).pipe(
+		chat.execute({ input: "slow" }).pipe(
 			Effect.flip,
 			Effect.provide(
 				LanguageModelTest(() =>
@@ -100,14 +100,14 @@ test("stops a model step that runs past the limit", async () => {
 })
 
 test("stops a tool call that runs past the limit and keeps earlier history", async () => {
-	const session = SessionTest(
+	const chat = ChatTest(
 		PluginComposition.merge(
 			TimeLimiter.make({ maxDuration: "20 millis" }),
 			toolPlugin,
 		),
 	)
 	const error = await Effect.runPromise(
-		session.execute({ input: "wait" }).pipe(
+		chat.execute({ input: "wait" }).pipe(
 			Effect.flip,
 			Effect.provide(
 				Layer.merge(
@@ -132,11 +132,11 @@ test("stops a tool call that runs past the limit and keeps earlier history", asy
 })
 
 test("a Turn that ends in time completes", async () => {
-	const session = SessionTest(TimeLimiter.make({ maxDuration: "1 minute" }))
+	const chat = ChatTest(TimeLimiter.make({ maxDuration: "1 minute" }))
 	const view = await Effect.runPromise(
-		session
+		chat
 			.execute({ input: "hello" })
 			.pipe(Effect.provide(LanguageModelTest(() => answer()))),
 	)
-	assert.equal(Session.status(view.session)._tag, "Completed")
+	assert.equal(Chat.status(view.chat)._tag, "Completed")
 })

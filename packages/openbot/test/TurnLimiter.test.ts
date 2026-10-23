@@ -13,10 +13,10 @@ import {
 import assert from "node:assert/strict"
 import * as TurnLimiter from "../src/plugins/turn-limiter/TurnLimiter.ts"
 import { test } from "node:test"
-import { Session, Plugin, PluginComposition } from "@openbot-build/core"
+import { Chat, Plugin, PluginComposition } from "@openbot-build/core"
 
 import { LanguageModel, Prompt, Response, Tool, Toolkit } from "effect/ai"
-import { SessionTest } from "./SessionTest.ts"
+import { ChatTest } from "./ChatTest.ts"
 // @effect-diagnostics strictEffectProvide:off
 
 const usage = Response.Usage.make({
@@ -89,10 +89,10 @@ test("invalid limits fail only when run, before inner middleware or any model re
 		Infinity,
 		Number.MAX_SAFE_INTEGER + 1,
 	]) {
-		const session = SessionTest(
+		const chat = ChatTest(
 			PluginComposition.merge(TurnLimiter.make({ maxSteps }), inner),
 		)
-		const task = session.execute({ input: "hello" })
+		const task = chat.execute({ input: "hello" })
 		assert.equal(enters, 0)
 		const error = await Effect.runPromise(
 			task.pipe(
@@ -116,13 +116,13 @@ test("blocks the next request after tool versions complete and keeps their typed
 			let calls = 0,
 				released = 0
 			let observed: ReadonlyArray<Bot.Event<typeof tools.tools>> = []
-			const session = SessionTest(
+			const chat = ChatTest(
 				PluginComposition.merge(TurnLimiter.make({ maxSteps }), toolPlugin),
 			)
 			const task =
 				mode === "advance"
-					? session.execute({ input: "echo" })
-					: session.stream({ input: "echo" }).pipe(
+					? chat.execute({ input: "echo" })
+					: chat.stream({ input: "echo" }).pipe(
 							Stream.tap((e) =>
 								Effect.sync(() => {
 									observed = EffectArray.append(observed, e)
@@ -174,9 +174,9 @@ test("blocks the next request after tool versions complete and keeps their typed
 						.map((e) => e.step),
 					Array.from({ length: maxSteps }, (_, i) => i + 1),
 				)
-				assert.equal(observed.at(-1)?._tag, "VersionCreated")
+				assert.equal(observed.at(-1)?._tag, "ChatUpdated")
 				assert.equal(
-					observed.filter((e) => e._tag === "VersionCreated").length,
+					observed.filter((e) => e._tag === "ChatUpdated").length,
 					maxSteps + 1,
 				)
 				for (const e of observed)
@@ -193,7 +193,7 @@ test("blocks the next request after tool versions complete and keeps their typed
 })
 test("a normal finish at the exact limit succeeds through execute and stream", async () => {
 	for (const maxSteps of [1, 2]) {
-		const session = SessionTest(
+		const chat = ChatTest(
 			PluginComposition.merge(TurnLimiter.make({ maxSteps }), toolPlugin),
 		)
 		const model = LanguageModelTest(({ prompt }) =>
@@ -203,56 +203,70 @@ test("a normal finish at the exact limit succeeds through execute and stream", a
 		)
 		const layer = Layer.merge(model, handlers)
 		const view = await Effect.runPromise(
-			session.execute({ input: "echo" }).pipe(Effect.provide(layer)),
+			chat.execute({ input: "echo" }).pipe(Effect.provide(layer)),
 		)
-		assert.equal(Session.currentTurn(view.session)!.steps, maxSteps)
-		assert.equal(Session.status(view.session)._tag, "Completed")
+		assert.equal(Chat.currentTurn(view.chat)!.steps, maxSteps)
+		assert.equal(Chat.status(view.chat)._tag, "Completed")
 		const events = await Effect.runPromise(
-			session
+			chat
 				.stream({ input: "echo" })
 				.pipe(Stream.runCollect, Effect.provide(layer)),
 		)
 		const final = events.at(-1)
 		assert.ok(final?._tag === "TurnCompleted")
-		assert.equal(Session.status(final.view.session)._tag, "Completed")
+		assert.equal(Chat.status(final.view.chat)._tag, "Completed")
 	}
 })
-test("approval waits and incomplete finishes keep their core state at the limit", async () => {
-	for (const reason of ["approval", "length"]) {
-		const selected =
-			reason === "approval" ? Toolkit.make(Echo.setNeedsApproval(true)) : tools
-		const plugin = Plugin.make({ id: Plugin.Id.make("selected") })(() =>
-			Effect.succeed((next, options) =>
-				next({ ...options, toolkit: Effect.succeed(selected) }),
-			),
-		)
-		const session = SessionTest(
-			PluginComposition.merge(TurnLimiter.make({ maxSteps: 1 }), plugin),
-		)
-		const view = await Effect.runPromise(
-			session.execute({ input: "echo" }).pipe(
-				Effect.provide(
-					Layer.merge(
-						LanguageModelTest(() =>
-							Stream.make(
-								call(1),
-								finish(reason === "length" ? "length" : "tool-calls"),
-							),
-						),
-						selected.toLayer({ Echo: () => Effect.succeed("done") }),
-					),
+test("an incomplete finish keeps its core state at the limit", async () => {
+	const chat = ChatTest(
+		PluginComposition.merge(TurnLimiter.make({ maxSteps: 1 }), toolPlugin),
+	)
+	const view = await Effect.runPromise(
+		chat.execute({ input: "echo" }).pipe(
+			Effect.provide(
+				Layer.merge(
+					LanguageModelTest(() => Stream.make(call(1), finish("length"))),
+					handlers,
 				),
 			),
-		)
-		assert.equal(Session.currentTurn(view.session)!.steps, 1)
-		assert.equal(
-			Session.status(view.session)._tag,
-			reason === "approval" ? "Waiting" : "Completed",
-		)
-	}
+		),
+	)
+	assert.equal(Chat.currentTurn(view.chat)!.steps, 1)
+	assert.equal(Chat.status(view.chat)._tag, "Completed")
+})
+test("a pending approval does not wait, so the next step meets the limit", async () => {
+	const selected = Toolkit.make(Echo.setNeedsApproval(true))
+	const plugin = Plugin.make({ id: Plugin.Id.make("selected") })(() =>
+		Effect.succeed((next, options) =>
+			next({ ...options, toolkit: Effect.succeed(selected) }),
+		),
+	)
+	const chat = ChatTest(
+		PluginComposition.merge(TurnLimiter.make({ maxSteps: 1 }), plugin),
+	)
+	const error = await Effect.runPromise(
+		chat.execute({ input: "echo" }).pipe(
+			Effect.flip,
+			Effect.provide(
+				Layer.merge(
+					LanguageModelTest(() => Stream.make(call(1), finish("tool-calls"))),
+					selected.toLayer({ Echo: () => Effect.succeed("done") }),
+				),
+			),
+		),
+	)
+	assert.ok(error instanceof TurnLimiter.ModelStepLimitExceeded)
+	// The pending result of the call is in the history, so no call is left open.
+	assert.ok(
+		error.history.content.some(
+			(message) =>
+				message.role === "tool" &&
+				message.content.some((part) => part.type === "tool-result"),
+		),
+	)
 })
 test("repeated and concurrent executions keep limiter history separate", async () => {
-	const session = SessionTest(
+	const chat = ChatTest(
 		PluginComposition.merge(TurnLimiter.make({ maxSteps: 1 }), toolPlugin),
 	)
 	const model = LanguageModelTest(() =>
@@ -261,7 +275,7 @@ test("repeated and concurrent executions keep limiter history separate", async (
 	const outcomes = await Effect.runPromise(
 		Effect.forEach(
 			["first", "second"],
-			(input) => session.execute({ input }).pipe(Effect.flip),
+			(input) => chat.execute({ input }).pipe(Effect.flip),
 			{ concurrency: "unbounded" },
 		).pipe(Effect.provide(Layer.merge(model, handlers))),
 	)
@@ -290,7 +304,7 @@ test("interruption unwinds limiter middleware and keeps native cancellation", as
 				}),
 			),
 		)
-	const session = SessionTest(
+	const chat = ChatTest(
 		PluginComposition.merge(
 			track("outer"),
 			PluginComposition.merge(
@@ -303,7 +317,7 @@ test("interruption unwinds limiter middleware and keeps native cancellation", as
 		Effect.scoped(
 			Effect.gen(function* () {
 				const fiber = yield* Effect.forkChild(
-					Stream.runDrain(session.stream({ input: "wait" })),
+					Stream.runDrain(chat.stream({ input: "wait" })),
 				)
 				yield* Deferred.await(started)
 				yield* Fiber.interrupt(fiber)

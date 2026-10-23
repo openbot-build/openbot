@@ -1,10 +1,10 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { Turn } from "@openbot-build/core"
-import { SessionView } from "@openbot-build/api"
-import { type Redacted, Schema } from "effect"
+import { type Redacted } from "effect"
 import * as BrowserHost from "./BrowserHost.ts"
 import { withCookie } from "./Caller.ts"
+import { bot, message, settled, type Send } from "./Messages.ts"
 import { costOf, ratesOf, tokensOf } from "../src/billing/Billing.ts"
 
 const publicOrigin = "https://billing.example.com"
@@ -178,17 +178,6 @@ test(
 				assert.equal(value.status, status, body)
 				return body.length === 0 ? undefined : JSON.parse(body)
 			}
-			const until = async <A>(
-				label: string,
-				check: () => Promise<A | undefined>,
-			): Promise<A> => {
-				for (let tries = 0; tries < 600; tries++) {
-					const value = await check()
-					if (value !== undefined) return value
-					await new Promise((resolve) => setTimeout(resolve, 25))
-				}
-				throw new Error("Timed out: " + label)
-			}
 
 			// Alice signs in first, so the others join her organization.
 			const alice = await host.login("alice")
@@ -283,42 +272,28 @@ test(
 				price.output,
 			)
 
-			const sessionWith = async (provider: string, model: string) => {
-				const created = await json(
-					send(alice.session, "/v1/sessions", "POST", {
-						settings: { model: { _tag: "Config.Selection", provider, model } },
-					}),
-					201,
+			const asAlice: Send = (path, method, payload) =>
+				send(alice.session, path, method, payload)
+			/** A Bot of Alice that uses this model. Its Chats use the model too. */
+			const botWith = (provider: string, model: string) =>
+				bot(asAlice, {
+					name: "Billing " + model,
+					model: { _tag: "Config.Selection", provider, model },
+				})
+			/** Sends one message to the Bot and gives the status that its Turn ends with. */
+			const turn = async (botId: string) => {
+				const receipt = await message(asAlice, botId, "Say done")
+				assert.equal(receipt.delivery, "started")
+				assert.ok(receipt.turn !== null)
+				await settled(asAlice, receipt.chat)
+				const read = await json(
+					send(
+						alice.session,
+						`/v1/chats/${receipt.chat}/turns/${receipt.turn}`,
+					),
 				)
-				return "/v1/sessions/" + created.session.id
-			}
-			const read = async (path: string) =>
-				Schema.decodeUnknownSync(SessionView)(
-					await json(send(alice.session, path)),
-				).session
-			/** Runs one Turn and gives the status that it ends with. */
-			const turn = async (path: string) => {
-				const current = await read(path)
-				// Work after a Turn, such as Session memory, can still run. Then start again.
-				await until("the Turn starts", async () => {
-					const latest = await read(path)
-					const started = await send(alice.session, path + "/turns", "POST", {
-						expected: latest.revision,
-						input: "Say done",
-					})
-					if (started.status === 409) return undefined
-					assert.equal(started.status, 202, await started.text())
-					return true
-				})
-				return until("the Turn ends", async () => {
-					const session = await read(path)
-					const last = session.turns.at(-1)
-					return session.turns.length > current.turns.length &&
-						last !== undefined &&
-						Turn.isTerminal(last.status)
-						? last.status._tag
-						: undefined
-				})
+				assert.ok(Turn.isTerminal(read.turn.status))
+				return read.turn.status._tag as string
 			}
 			const events = async () =>
 				(
@@ -330,11 +305,15 @@ test(
 				(await events()).filter((event) => event["source"] === "turn")
 
 			// A Turn on the platform model is metered.
-			const platformSession = await sessionWith(platformProvider.id, "large")
-			assert.equal(await turn(platformSession), "Completed")
+			const platformBot = await botWith(platformProvider.id, "large")
+			assert.equal(await turn(platformBot), "Completed")
 			const [first] = await turnEvents()
 			assert.ok(first !== undefined)
-			assert.equal(first["sessionId"], platformSession.split("/").at(-1))
+			const platformChat = await json(
+				send(alice.session, `/v1/chats?bot=${platformBot}`),
+			)
+			assert.equal(platformChat.length, 1)
+			assert.equal(first["chatId"], platformChat[0].chat.id)
 			assert.equal(first["userId"], alice.identity.userId)
 			assert.equal(typeof first["turnId"], "string")
 			assert.equal(typeof first["botId"], "string")
@@ -345,12 +324,6 @@ test(
 			assert.equal(first["costMicros"], callCost)
 			assert.equal(first["priced"], true)
 			assert.equal(first["charged"], false)
-			// The Session memory call of the same Turn has its own source.
-			const memory = await until("the memory call", async () =>
-				(await events()).find((event) => event["source"] === "session_memory"),
-			)
-			assert.equal(memory["turnId"], first["turnId"])
-			assert.equal(memory["userId"], alice.identity.userId)
 
 			const byMember = await json(
 				send(alice.session, "/v1/organization/usage?groupBy=member"),
@@ -377,7 +350,7 @@ test(
 			assert.equal((await send(alice.session, credits)).status, 403)
 			await json(send(root.session, credits, "PATCH", { enabled: true }))
 			const before = (await turnEvents()).length
-			assert.notEqual(await turn(platformSession), "Completed")
+			assert.notEqual(await turn(platformBot), "Completed")
 			assert.equal((await turnEvents()).length, before)
 			const grant = await json(
 				send(root.session, credits + "/grants", "POST", {
@@ -387,8 +360,7 @@ test(
 				201,
 			)
 			assert.equal(grant.amountMicros, 10_000)
-			assert.equal(await turn(platformSession), "Completed")
-			// Each Turn also learns Session memory with the same model, so it makes more than one call.
+			assert.equal(await turn(platformBot), "Completed")
 			const charged = (await events())
 				.filter((event) => event["charged"] === true)
 				.reduce((sum, event) => sum + Number(event["costMicros"]), 0)
@@ -399,8 +371,8 @@ test(
 			assert.equal((await turnEvents())[0]?.["charged"], true)
 
 			// The own key of the organization never takes credits.
-			const ownSession = await sessionWith(ownProvider.id, "small")
-			assert.equal(await turn(ownSession), "Completed")
+			const ownBot = await botWith(ownProvider.id, "small")
+			assert.equal(await turn(ownBot), "Completed")
 			const own = (await turnEvents())[0]
 			assert.equal(own?.["providerOwner"], "organization")
 			assert.equal(own?.["charged"], false)
@@ -456,7 +428,7 @@ test(
 				400,
 			)
 			assert.equal(stranger._tag, "BudgetInvalid")
-			assert.notEqual(await turn(ownSession), "Completed")
+			assert.notEqual(await turn(ownBot), "Completed")
 			const raised = await json(
 				send(alice.session, "/v1/organization/budgets/" + hard.id, "PATCH", {
 					expectedVersion: hard.version,
@@ -464,7 +436,7 @@ test(
 				}),
 			)
 			assert.equal(raised.exceeded, false)
-			assert.equal(await turn(ownSession), "Completed")
+			assert.equal(await turn(ownBot), "Completed")
 			await json(
 				send(alice.session, "/v1/organization/budgets/" + hard.id, "DELETE"),
 				204,
@@ -504,12 +476,12 @@ test(
 			const statuses: Array<number> = []
 			for (let index = 0; index < 10; index++)
 				statuses.push(
-					(await send(bob.session as Redacted.Redacted<string>, "/v1/sessions"))
+					(await send(bob.session as Redacted.Redacted<string>, "/v1/chats"))
 						.status,
 				)
 			// At most two windows of one minute, so at most six requests pass.
 			assert.ok(statuses.filter((status) => status === 429).length >= 4)
-			const refused = await send(bob.session, "/v1/sessions")
+			const refused = await send(bob.session, "/v1/chats")
 			if (refused.status === 429) {
 				const body = await refused.json()
 				assert.equal(body._tag, "RateLimited")
@@ -521,7 +493,7 @@ test(
 					rateLimit: { requestsPerMinute: null },
 				}),
 			)
-			assert.equal((await send(bob.session, "/v1/sessions")).status, 200)
+			assert.equal((await send(bob.session, "/v1/chats")).status, 200)
 
 			// Token rates slow the work down. They never make it fail.
 			const platform = await json(send(root.session, "/v1/platform/settings"))
@@ -557,8 +529,8 @@ test(
 				}),
 			)
 			// Each call has 1500 tokens, so the bucket goes into debt after each one.
-			assert.equal(await turn(ownSession), "Completed")
-			assert.equal(await turn(ownSession), "Completed")
+			assert.equal(await turn(ownBot), "Completed")
+			assert.equal(await turn(ownBot), "Completed")
 		} finally {
 			await host.close()
 		}

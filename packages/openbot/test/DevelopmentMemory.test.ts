@@ -3,15 +3,17 @@ import * as BotFixture from "./BotFixture.ts"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { NodeServices } from "@effect/platform-node"
-import { Session } from "@openbot-build/core"
-import { Effect, Layer, ManagedRuntime, Redacted, Stream } from "effect"
-import * as ManagedSessions from "../src/sessions/ManagedSessions.ts"
+import type { ChatView } from "@openbot-build/api"
+import { Effect, Layer, ManagedRuntime, Redacted } from "effect"
+import * as ManagedChats from "../src/chats/ManagedChats.ts"
+import type { ServiceError } from "../src/chats/Chats.ts"
+import { authorOf } from "../src/chats/ChatHost.ts"
 import * as DevelopmentModel from "../src/app/DevelopmentModel.ts"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as PostgresTest from "./PostgresTest.ts"
 
 test(
-	"development Session Memory survives forks and a restart without replay or leaks between owners",
+	"a development Chat survives a restart without replay or leaks between owners",
 	{ timeout: 30000 },
 	async () => {
 		const database = await PostgresTest.start()
@@ -28,138 +30,66 @@ test(
 				Effect.scoped(
 					Effect.gen(function* () {
 						yield* DatabasePostgres.migrate
-						const { builtinModels: models, sessions: options } =
+						const { builtinModels: models, chats: options } =
 							yield* DevelopmentModel.make
-						const sessions = yield* ManagedSessions.make({
+						const chats = yield* ManagedChats.make({
 							...options,
 							modelCatalog: Effect.succeed(models),
 							defaults: Effect.succeed({ model: DevelopmentModel.selection }),
 							resolveModel: (selection) =>
 								models.resolve(selection ?? DevelopmentModel.selection),
-							namespace: "memory-owner",
+							namespace: "first-owner",
 						})
-						let source = yield* sessions.create(BotFixture.direct())
-						source = yield* sessions.updateMemory(source.session.id, {
-							expected: source.session.head,
-							revision: source.session.revision,
-							command: {
-								_tag: "Remember",
-								key: "shared",
-								content: "User supplied fact",
-								kind: "fact",
-							},
-						})
-						source = yield* sessions.updateMemory(source.session.id, {
-							expected: source.session.head,
-							revision: source.session.revision,
-							command: {
-								_tag: "Remember",
-								key: "retired",
-								content: "Retracted fact",
-								kind: "fact",
-							},
-						})
-						source = yield* sessions.updateMemory(source.session.id, {
-							expected: source.session.head,
-							revision: source.session.revision,
-							command: { _tag: "Forget", key: "retired" },
-						})
-						yield* (yield* sessions.sendStream(source.session.id, {
-							expected: source.session.revision,
+						const created = yield* chats.create(BotFixture.direct())
+						const id = created.chat.id
+						const receipt = yield* chats.deliver(id, {
 							input: "Persist this conversation",
-						})).pipe(Stream.runDrain)
+							author: authorOf("test-user"),
+						})
+						assert.equal(receipt.delivery, "started")
 						const settle = (
-							view: import("@openbot-build/api").SessionView,
-						): Effect.Effect<
-							import("@openbot-build/api").SessionView,
-							import("../src/sessions/Sessions.ts").ServiceError
-						> =>
-							view.activity !== "active"
+							view: ChatView,
+						): Effect.Effect<ChatView, ServiceError> =>
+							view.activity !== "active" &&
+							view.status !== "Running" &&
+							view.inbox === 0
 								? Effect.succeed(view)
-								: sessions
-										.wait(
-											view.session.id,
-											view.session.revision,
-											1000,
-											view.activity,
-										)
+								: chats
+										.wait(id, view.chat.revision, 1000, view.activity)
 										.pipe(Effect.flatMap(settle))
-						source = yield* sessions
-							.get(source.session.id)
-							.pipe(Effect.flatMap(settle))
-						assert.equal(Session.status(source.session)._tag, "Completed")
-						const memory = yield* sessions.memory(source.session.id)
-						assert.equal(
-							memory.entries["shared"]?.content,
-							"User supplied fact",
+						const source = yield* chats.get(id).pipe(Effect.flatMap(settle))
+						assert.equal(source.status, "Completed")
+						assert.equal(source.turn?.id, receipt.turn)
+						assert.match(
+							JSON.stringify(source.response?.output),
+							/Development response: Persist this conversation/,
 						)
-						assert.equal(memory.entries["retired"]?.status, "retracted")
-						assert.deepEqual(
-							memory.processed,
-							source.state.value.conversation.history.map((item) => item.id),
-						)
-						assert.ok(memory.processed.length >= 2)
-						const fork = yield* sessions.fork(source.session.id, {
-							version: source.session.head,
-						})
-						assert.equal(Session.status(fork.session)._tag, "Idle")
-						assert.deepEqual(
-							fork.state.value.conversation.history,
-							source.state.value.conversation.history,
-						)
-						assert.deepEqual(yield* sessions.memory(fork.session.id), memory)
-						const changed = yield* sessions.updateMemory(fork.session.id, {
-							expected: fork.session.head,
-							revision: fork.session.revision,
-							command: {
-								_tag: "Remember",
-								key: "shared",
-								content: "Fork only fact",
-								kind: "fact",
-							},
-						})
-						assert.equal(
-							(yield* sessions.memory(changed.session.id)).entries["shared"]
-								?.content,
-							"Fork only fact",
-						)
-						assert.deepEqual(yield* sessions.memory(source.session.id), memory)
-						const stale = yield* sessions
-							.updateMemory(fork.session.id, {
-								expected: fork.session.head,
-								revision: fork.session.revision,
-								command: {
-									_tag: "Remember",
-									key: "stale",
-									content: "Must not commit",
-									kind: "fact",
-								},
-							})
-							.pipe(Effect.flip)
-						assert.equal(stale._tag, "SessionConflict")
-						assert.equal(
-							(yield* sessions.memory(fork.session.id)).entries["stale"],
-							undefined,
-						)
-						const restored = yield* ManagedSessions.make({
+						const items = yield* chats.items(id, {})
+						assert.ok(items.items.length >= 2)
+						const turns = yield* chats.turns(id, {})
+						assert.equal(turns.items.length, 1)
+						// A new instance reads the same Chat. It does not run the Turn again.
+						const restored = yield* ManagedChats.make({
 							...options,
-							namespace: "memory-owner",
+							namespace: "first-owner",
 						})
-						assert.deepEqual(yield* restored.memory(source.session.id), memory)
-						const resumed = yield* restored.get(source.session.id)
-						assert.deepEqual(resumed.session, source.session)
-						assert.deepEqual(
-							resumed.state.value.conversation.history,
-							source.state.value.conversation.history,
-						)
+						const resumed = yield* restored.get(id)
+						assert.deepEqual(resumed, { ...source, activity: "inactive" })
+						assert.deepEqual(yield* restored.items(id, {}), items)
+						assert.deepEqual(yield* restored.turns(id, {}), turns)
 						assert.equal(resumed.activity, "inactive")
-						const other = yield* ManagedSessions.make({
+						// Another owner does not see the Chat.
+						const other = yield* ManagedChats.make({
 							...options,
 							namespace: "other-owner",
 						})
 						assert.equal(
-							(yield* other.get(source.session.id).pipe(Effect.flip))._tag,
-							"SessionNotFound",
+							(yield* other.get(id).pipe(Effect.flip))._tag,
+							"ChatNotFound",
+						)
+						assert.equal(
+							(yield* other.items(id, {}).pipe(Effect.flip))._tag,
+							"ChatNotFound",
 						)
 					}),
 				),

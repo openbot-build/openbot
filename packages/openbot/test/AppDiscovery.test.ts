@@ -3,6 +3,7 @@ import * as TriggerStore from "../src/triggers/Triggers.ts"
 import * as Channels from "../src/channels/Channels.ts"
 import { ComputerProviders } from "../src/computers/ComputerProviders.ts"
 import { Computers } from "../src/computers/Computers.ts"
+import { Coordinator } from "../src/bots/Coordinator.ts"
 import { Connectors } from "../src/computers/connector/Connectors.ts"
 import { Drivers } from "../src/computers/Drivers.ts"
 import { Pairings } from "../src/computers/Pairings.ts"
@@ -530,6 +531,8 @@ const startApi = async (
 				Layer.succeed(Connectors, {} as Connectors["Service"]),
 				Layer.succeed(Drivers, {} as Drivers["Service"]),
 				Layer.succeed(Pairings, {} as Pairings["Service"]),
+				// Discovery never uses Chats. Their handlers only need the Coordinator to exist.
+				Layer.succeed(Coordinator, {} as Coordinator["Service"]),
 			]),
 			Layer.provideMerge(
 				DatabasePostgres.layer({

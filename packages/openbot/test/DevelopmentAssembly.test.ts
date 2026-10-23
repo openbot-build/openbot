@@ -1,17 +1,18 @@
 import { memberOf } from "./Caller.ts"
 // @effect-diagnostics strictEffectProvide:off
-import * as BotFixture from "./BotFixture.ts"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { NodeServices } from "@effect/platform-node"
-import { Session, Config, Model } from "@openbot-build/core"
+import { Chat, Config, Item, Model } from "@openbot-build/core"
 import * as Client from "@openbot-build/client"
 import { Discovery } from "@openbot-build/protocol"
 import {
-	SessionView,
+	ChatSummary,
+	ChatView,
 	AppDiscoveryFailed,
 	AppDiscoveryResult,
 	AuthApi,
+	RequestsApi,
 } from "@openbot-build/api"
 import {
 	Context,
@@ -27,7 +28,8 @@ import {
 	Stream,
 } from "effect"
 import { FetchHttpClient, HttpServer } from "effect/http"
-import * as Sessions from "../src/sessions/Sessions.ts"
+import type * as Chats from "../src/chats/Chats.ts"
+import { authorOf } from "../src/chats/ChatHost.ts"
 import * as Backend from "../dist/app/Backend.js"
 import * as Development from "../dist/Development.js"
 import * as Server from "../dist/app/Server.js"
@@ -36,6 +38,7 @@ import * as DatabasePostgres from "../dist/database/DatabasePostgres.js"
 import * as PostgresTest from "./PostgresTest.ts"
 import * as DefaultBot from "./DefaultBot.ts"
 import * as Organizations from "./Organizations.ts"
+import { bot, message, model, settled, type Send } from "./Messages.ts"
 
 const settings = (databaseUrl: string) => ({
 	host: "127.0.0.1",
@@ -51,39 +54,59 @@ const settings = (databaseUrl: string) => ({
 		secret: Redacted.make("DevelopmentAssemblySecretMustRemainStable123456"),
 	},
 })
-const wait = (
-	sessions: typeof Sessions.Sessions.Service,
-	id: Session.Id,
-	processedMemory = false,
-) => {
+/** Waits until no Turn runs in a Chat and no input waits in its inbox. */
+const wait = (chats: typeof Chats.Chats.Service, id: Chat.Id) => {
 	const next = (
-		view: SessionView,
+		view: ChatView,
 		remaining: number,
-	): Effect.Effect<SessionView, Sessions.ServiceError> =>
+	): Effect.Effect<ChatView, Chats.ServiceError> =>
 		Effect.gen(function* () {
-			const memory = processedMemory ? yield* sessions.memory(id) : undefined
 			if (
 				view.activity !== "active" &&
-				(memory === undefined ||
-					view.state.value.conversation.history.every((entry) =>
-						memory.processed.includes(entry.id),
-					))
+				view.status !== "Running" &&
+				view.inbox === 0
 			)
-				return processedMemory ? yield* sessions.get(id) : view
-			assert.ok(remaining > 0, "The Session reached the expected state")
-			const updated = yield* sessions.wait(
+				return view
+			assert.ok(remaining > 0, "The Chat came to rest")
+			const updated = yield* chats.wait(
 				id,
-				view.session.revision,
+				view.chat.revision,
 				1000,
 				view.activity,
 			)
 			return yield* next(updated, remaining - 1)
 		})
-	return sessions.get(id).pipe(Effect.flatMap((view) => next(view, 20)))
+	return chats.get(id).pipe(Effect.flatMap((view) => next(view, 20)))
+}
+/** Signs in to a development server and gives the headers of the browser. */
+const signIn = async (address: string, publicOrigin: string) => {
+	const login = await fetch(address + "/auth/development/sign-in", {
+		method: "POST",
+		headers: { origin: publicOrigin, "content-type": "application/json" },
+		body: "{}",
+	})
+	assert.equal(login.status, 200)
+	const cookie = login.headers
+		.getSetCookie()
+		.find((value) => value.startsWith(AuthApi.SessionCookie + "="))!
+		.split(";")[0]!
+	const headers = {
+		cookie,
+		origin: publicOrigin,
+		"content-type": "application/json",
+	}
+	const send: Send = (path, method, payload) =>
+		fetch(address + path, {
+			method,
+			headers,
+			...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+		})
+	await Organizations.ensure(send)
+	return { cookie, headers, send }
 }
 
 test(
-	"development assembly streams through the API and restores processed memory after restart",
+	"development assembly streams through the API and keeps the Chat after a restart",
 	{ timeout: 30000 },
 	async () => {
 		const database = await PostgresTest.start()
@@ -101,55 +124,20 @@ test(
 					HttpServer.formatAddress(server.address),
 				),
 			)
-			const login = await fetch(address + "/auth/development/sign-in", {
-				method: "POST",
-				headers: {
-					origin: options.auth.publicOrigin,
-					"content-type": "application/json",
-				},
-				body: "{}",
-			})
-			assert.equal(login.status, 200)
-			const cookie = login.headers
-				.getSetCookie()
-				.find((value) => value.startsWith(AuthApi.SessionCookie + "="))!
-				.split(";")[0]!
-			const headers = {
-				cookie,
-				origin: options.auth.publicOrigin,
-				"content-type": "application/json",
-			}
-			await Organizations.ensure((path, method, payload) =>
+			const { cookie, headers } = await signIn(
+				address,
+				options.auth.publicOrigin,
+			)
+			const send: Send = (path, method, payload) =>
 				fetch(address + path, {
 					method,
 					headers,
 					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
-				}),
-			)
-			await DefaultBot.ensure((path, method, payload) =>
-				fetch(address + path, {
-					method,
-					headers,
-					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
-				}),
-			)
-			const created = await fetch(address + "/v1/sessions", {
-				method: "POST",
-				headers,
-				body: JSON.stringify({}),
-			})
-			assert.equal(created.status, 201)
-			const work = Schema.decodeUnknownSync(SessionView)(await created.json())
-			assert.deepEqual(work.session.settings.model, DevelopmentModel.selection)
-			const path = `/v1/sessions/${work.session.id}`
-			const response = await fetch(address + path + "/turns", {
-				method: "POST",
-				headers,
-				body: JSON.stringify({
-					input: "Persist this development conversation",
-					expected: work.session.revision,
-					stream: true,
-				}),
+				})
+			const defaultBot = await DefaultBot.ensure(send)
+			const response = await send(`/v1/bots/${defaultBot}/messages`, "POST", {
+				input: "Persist this development conversation",
+				stream: true,
 			})
 			assert.equal(response.status, 200)
 			const events = await response.text()
@@ -159,27 +147,28 @@ test(
 				/Development response: Persist this development conversation/,
 			)
 			assert.match(events, /response.completed/)
-			let saved = Schema.decodeUnknownSync(SessionView)(
-				await (await fetch(address + path, { headers })).json(),
+			const [summary] = Schema.decodeUnknownSync(Schema.Array(ChatSummary))(
+				await (await send(`/v1/chats?bot=${defaultBot}`, "GET")).json(),
 			)
-			assert.equal(Session.status(saved.session)._tag, "Completed")
+			assert.ok(summary !== undefined)
+			const id = summary.chat.id
+			const path = `/v1/chats/${id}`
+			// The development platform gives each new Chat a simulated model.
+			assert.deepEqual(summary.chat.settings.model, DevelopmentModel.selection)
 			const backend = await runtime.runPromise(Backend.Backend)
 			const session = Schema.decodeUnknownSync(AuthApi.SessionInfo)(
 				await (
 					await fetch(address + "/auth/session", { headers: { cookie } })
 				).json(),
 			)
-			const sessions = await runtime.runPromise(
+			const author = authorOf(session.userId)
+			const chats = await runtime.runPromise(
 				backend.forCaller({ kind: "member", ...memberOf(session) }),
 			)
-			saved = await runtime.runPromise(wait(sessions, work.session.id, true))
-			const memory = await runtime.runPromise(sessions.memory(work.session.id))
-			assert.deepEqual(memory.entries, {})
-			assert.deepEqual(
-				memory.processed,
-				saved.state.value.conversation.history.map((entry) => entry.id),
-			)
-			assert.ok(memory.processed.length >= 2)
+			const saved = await runtime.runPromise(wait(chats, id))
+			assert.equal(saved.status, "Completed")
+			const savedItems = await (await send(path + "/items", "GET")).json()
+			assert.ok(savedItems.items.length >= 2)
 			await runtime.dispose()
 			runtime = server()
 			address = await runtime.runPromise(
@@ -187,103 +176,81 @@ test(
 					HttpServer.formatAddress(server.address),
 				),
 			)
-			const restored = Schema.decodeUnknownSync(SessionView)(
-				await (await fetch(address + path, { headers })).json(),
+			const restored = Schema.decodeUnknownSync(ChatView)(
+				await (await send(path, "GET")).json(),
 			)
 			assert.deepEqual(restored, saved)
-			const continuation = await fetch(address + path + "/turns", {
-				method: "POST",
-				headers,
-				body: JSON.stringify({
-					input: "Continue once",
-					stream: true,
-					expected: restored.session.revision,
-				}),
+			assert.deepEqual(
+				await (await send(path + "/items", "GET")).json(),
+				savedItems,
+			)
+			const continuation = await send(path + "/messages", "POST", {
+				input: "Continue once",
+				stream: true,
 			})
 			assert.match(
 				await continuation.text(),
 				/Development response: Continue once/,
 			)
-			let continued = Schema.decodeUnknownSync(SessionView)(
-				await (await fetch(address + path, { headers })).json(),
-			)
-			assert.equal(
-				continued.state.value.conversation.history.length,
-				saved.state.value.conversation.history.length + 2,
-			)
-			const restartedSessions = await runtime.runPromise(
+			const restartedChats = await runtime.runPromise(
 				Effect.flatMap(Backend.Backend, (backend) =>
 					backend.forCaller({ kind: "member", ...memberOf(session) }),
 				),
 			)
-			continued = await runtime.runPromise(
-				wait(restartedSessions, work.session.id, true),
+			const continued = await runtime.runPromise(wait(restartedChats, id))
+			assert.equal(
+				(await runtime.runPromise(restartedChats.items(id, {}))).items.length,
+				savedItems.items.length + 2,
 			)
-			await runtime.runPromise(
-				restartedSessions.selectModel(work.session.id, {
-					expected: continued.session.revision,
-					selection: Config.Selection.make({
-						provider: DevelopmentModel.provider,
-						model: Model.Id.make("mock-slow"),
-					}),
-				}),
-			)
-			const partial = await runtime.runPromise(
-				Effect.scoped(
-					Effect.flatMap(
-						restartedSessions.sendStream(work.session.id, {
-							expected: (
-								await runtime.runPromise(restartedSessions.get(work.session.id))
-							).session.revision,
-							input: "Interrupt this slow response",
+			const select = (current: ChatView, name: string) =>
+				runtime!.runPromise(
+					restartedChats.update(id, {
+						expected: current.chat.revision,
+						model: Config.Selection.make({
+							provider: DevelopmentModel.provider,
+							model: Model.Id.make(name),
 						}),
-						(stream) =>
-							stream.pipe(
-								Stream.filter(
-									(event) => event.event === "response.output_text.delta",
-								),
-								Stream.take(1),
-								Stream.runCollect,
-							),
+					}),
+				)
+			/** Sends a message and reads the live events of the Turn that it starts. */
+			const live = <A>(
+				input: string,
+				read: (
+					events: Stream.Stream<{ readonly event: string }>,
+				) => Effect.Effect<A>,
+			) =>
+				runtime!.runPromise(
+					Effect.scoped(
+						Effect.gen(function* () {
+							const result = yield* restartedChats.deliverStream(id, {
+								input,
+								author,
+							})
+							assert.equal(result.receipt.delivery, "started")
+							assert.ok(Option.isSome(result.events))
+							return yield* read(result.events.value)
+						}),
 					),
+				)
+			await select(continued, "mock-slow")
+			const partial = await live("Interrupt this slow response", (stream) =>
+				stream.pipe(
+					Stream.filter(
+						(event) => event.event === "response.output_text.delta",
+					),
+					Stream.take(1),
+					Stream.runCollect,
 				),
 			)
 			assert.equal(partial.length, 1)
-			await runtime.runPromise(
-				restartedSessions.interrupt(
-					work.session.id,
-					Session.currentTurn(
-						(await runtime.runPromise(restartedSessions.get(work.session.id)))
-							.session,
-					)!.id,
-				),
-			)
-			const interrupted = await runtime.runPromise(
-				wait(restartedSessions, work.session.id),
-			)
-			assert.equal(Session.status(interrupted.session)._tag, "Interrupted")
+			await runtime.runPromise(restartedChats.interrupt(id))
+			const interrupted = await runtime.runPromise(wait(restartedChats, id))
+			assert.equal(interrupted.status, "Interrupted")
 			assert.equal(interrupted.response?.status, "cancelled")
-			await runtime.runPromise(
-				restartedSessions.selectModel(work.session.id, {
-					expected: interrupted.session.revision,
-					selection: Config.Selection.make({
-						provider: DevelopmentModel.provider,
-						model: Model.Id.make("mock-failure"),
-					}),
-				}),
-			)
-			const failedEvents = await runtime.runPromise(
-				Effect.scoped(
-					Effect.flatMap(
-						restartedSessions.sendStream(work.session.id, {
-							expected: (
-								await runtime.runPromise(restartedSessions.get(work.session.id))
-							).session.revision,
-							input: "Save this failed input",
-						}),
-						Stream.runCollect,
-					),
-				),
+			await select(interrupted, "mock-failure")
+			const failedEvents = await live(
+				"Save this failed input",
+				Stream.runCollect,
 			)
 			assert.ok(
 				failedEvents.some(
@@ -291,37 +258,24 @@ test(
 				),
 			)
 			assert.ok(failedEvents.some((event) => event.event === "response.failed"))
-			const failed = await runtime.runPromise(
-				wait(restartedSessions, work.session.id),
-			)
-			assert.equal(Session.status(failed.session)._tag, "Failed")
+			const failed = await runtime.runPromise(wait(restartedChats, id))
+			assert.equal(failed.status, "Failed")
 			assert.equal(failed.response?.status, "failed")
 			assert.match(
-				JSON.stringify(failed.state.value.conversation.history),
+				JSON.stringify(
+					(await runtime.runPromise(restartedChats.items(id, {}))).items,
+				),
 				/Save this failed input/,
 			)
 			await runtime.runPromise(
-				restartedSessions.selectModel(work.session.id, {
-					expected: failed.session.revision,
-					selection: DevelopmentModel.selection,
+				restartedChats.update(id, {
+					expected: failed.chat.revision,
+					model: DevelopmentModel.selection,
 				}),
 			)
-			await runtime.runPromise(
-				Effect.scoped(
-					Effect.flatMap(
-						restartedSessions.sendStream(work.session.id, {
-							expected: (
-								await runtime.runPromise(restartedSessions.get(work.session.id))
-							).session.revision,
-							input: "Recover after failure",
-						}),
-						Stream.runDrain,
-					),
-				),
-			)
+			await live("Recover after failure", Stream.runDrain)
 			assert.equal(
-				(await runtime.runPromise(wait(restartedSessions, work.session.id)))
-					.response?.status,
+				(await runtime.runPromise(wait(restartedChats, id))).response?.status,
 				"completed",
 			)
 		} finally {
@@ -332,21 +286,21 @@ test(
 )
 
 test(
-	"server assembly keeps extra per-Session handlers and approvals",
-	{ timeout: 30000 },
+	"server assembly keeps extra per-Chat handlers and approvals",
+	{ timeout: 60000 },
 	async () => {
 		const database = await PostgresTest.start()
 		const options = settings(database.url)
-		let calls = HashMap.empty<Session.Id, number>()
+		let calls = HashMap.empty<Chat.Id, number>()
 		const layer = Layer.unwrap(
 			Effect.gen(function* () {
-				const { builtinModels, sessions } = yield* DevelopmentModel.make
+				const { builtinModels, chats } = yield* DevelopmentModel.make
 				return Server.layerFixed({
 					...options,
 					builtinModels,
-					sessions: {
-						...sessions,
-						layerExecution: (ref) =>
+					chats: {
+						...chats,
+						layerExecution: (ref: Chat.Ref) =>
 							DevelopmentModel.toolkit.toLayer({
 								DevelopmentConfirmation: ({ description }) =>
 									Effect.sync(() => {
@@ -370,84 +324,126 @@ test(
 				DatabasePostgres.layer(options).pipe(Layer.provide(NodeServices.layer)),
 			)
 			await migration.runPromise(DatabasePostgres.migrate)
-			const sessions = await runtime.runPromise(
-				Effect.flatMap(Backend.Backend, (backend) =>
-					backend.get("extra-tools"),
+			const address = await runtime.runPromise(
+				Effect.map(HttpServer.HttpServer, (server) =>
+					HttpServer.formatAddress(server.address),
 				),
 			)
-			const create = () =>
-				runtime.runPromise(
-					Effect.gen(function* () {
-						const view = yield* sessions.create(BotFixture.direct())
-						return yield* sessions.selectModel(view.session.id, {
-							expected: view.session.revision,
-							selection: Config.Selection.make({
-								provider: DevelopmentModel.provider,
-								model: Model.Id.make("mock-tool"),
-							}),
-						})
-					}),
-				)
-			const first = await create()
-			const second = await create()
-			await runtime.runPromise(
-				Effect.forEach(
-					[first, second],
-					(view) =>
-						sessions.send(view.session.id, {
-							expected: view.session.revision,
-							input: "Confirm independently",
-						}),
-					{ concurrency: "unbounded" },
-				),
-			)
-			const waiting = await runtime.runPromise(
-				Effect.forEach([first, second], (view) =>
-					wait(sessions, view.session.id),
-				),
-			)
-			assert.ok(
-				waiting.every(
-					(view) => Session.status(view.session)._tag === "Waiting",
-				),
-			)
-			assert.equal(HashMap.size(calls), 0)
-			const approve = async (view: SessionView, approved: boolean) => {
-				const pending = await runtime.runPromise(
-					sessions.waits(view.session.id),
-				)
-				assert.equal(pending.length, 1)
-				await runtime.runPromise(
-					sessions.resolveCall(
-						view.session.id,
-						pending[0]!.toolCallId,
-						approved
-							? Session.Outcome.Approved()
-							: Session.Outcome.Denied({ reason: "rejected" }),
-					),
-				)
-				return runtime.runPromise(wait(sessions, view.session.id))
+			const { send } = await signIn(address, options.auth.publicOrigin)
+			// Two Bots with the tool model, so each one has its own Chat.
+			const talk = async (name: string) => {
+				const id = await bot(send, { name, model: model("mock-tool") })
+				return message(send, id, "Confirm independently")
 			}
-			const approved = await approve(waiting[0]!, true)
-			const denied = await approve(waiting[1]!, false)
+			const [first, second] = await Promise.all([talk("First"), talk("Second")])
+			assert.ok(first !== undefined && second !== undefined)
+			assert.notEqual(first.chat, second.chat)
+			const pendingOf = async (chat: string) => {
+				for (let tries = 0; tries < 200; tries++) {
+					const list = Schema.decodeUnknownSync(
+						Schema.Array(RequestsApi.CapabilityRequest),
+					)(
+						await (await send("/v1/requests?status=pending", "GET")).json(),
+					).filter((entry) => entry.chat === chat)
+					if (list.length > 0) return list
+					await new Promise((resolve) => setTimeout(resolve, 25))
+				}
+				return []
+			}
+			const [firstRequests, secondRequests] = await Promise.all([
+				pendingOf(first.chat),
+				pendingOf(second.chat),
+			])
+			assert.equal(firstRequests?.length, 1)
+			assert.equal(secondRequests?.length, 1)
+			for (const entry of [...firstRequests!, ...secondRequests!])
+				assert.deepEqual(
+					[entry.capability.action, entry.capability.target],
+					["tools.call", "DevelopmentConfirmation"],
+				)
+			// The Turns do not wait for the decisions, and no call runs before one.
+			const turnStatus = async (receipt: typeof first) =>
+				(
+					await (
+						await send(`/v1/chats/${receipt.chat}/turns/${receipt.turn}`, "GET")
+					).json()
+				).turn.status._tag as string
+			await Promise.all([settled(send, first.chat), settled(send, second.chat)])
+			const firstTurns = [await turnStatus(first), await turnStatus(second)]
+			assert.equal(HashMap.size(calls), 0)
+			const decide = async (
+				entry: RequestsApi.CapabilityRequest,
+				decision: "allow" | "deny",
+			) =>
+				assert.equal(
+					(
+						await send("/v1/requests/" + entry.id, "POST", {
+							expected: entry.revision,
+							decision,
+							...(decision === "deny" ? { reason: "rejected" } : {}),
+						})
+					).status,
+					200,
+				)
+			await decide(firstRequests![0]!, "allow")
+			await decide(secondRequests![0]!, "deny")
+			const itemsOf = async (chat: string) =>
+				Schema.decodeUnknownSync(
+					Schema.Struct({ items: Schema.Array(Item.Record) }),
+				)(await (await send(`/v1/chats/${chat}/items?limit=100`, "GET")).json())
+					.items
+			const noticeOf = async (chat: string, ref: string) => {
+				for (let tries = 0; tries < 200; tries++) {
+					const found = (await itemsOf(chat)).find(
+						(item) =>
+							item.origin?.notice?.kind === "request" &&
+							item.origin.notice.ref === ref,
+					)
+					if (found !== undefined) return found
+					await new Promise((resolve) => setTimeout(resolve, 25))
+				}
+				return undefined
+			}
+			// The allowed call runs once, with the handlers of its own Chat.
+			assert.ok(
+				(await noticeOf(first.chat, firstRequests![0]!.id)) !== undefined,
+			)
+			for (
+				let tries = 0;
+				tries < 200 && !HashMap.has(calls, Chat.Id.make(first.chat));
+				tries++
+			)
+				await new Promise((resolve) => setTimeout(resolve, 25))
+			const approved = await settled(send, first.chat)
 			assert.equal(
-				HashMap.get(calls, first.session.id).pipe(Option.getOrElse(() => 0)),
+				HashMap.get(calls, Chat.Id.make(first.chat)).pipe(
+					Option.getOrElse(() => 0),
+				),
 				1,
 			)
-			assert.equal(HashMap.has(calls, second.session.id), false)
+			assert.match(
+				JSON.stringify(await itemsOf(first.chat)),
+				new RegExp(first.chat + ": Confirm independently"),
+			)
+			// The denial comes back as a notice, and the call never runs.
+			const denial = await noticeOf(second.chat, secondRequests![0]!.id)
+			assert.ok(denial !== undefined)
+			assert.match(JSON.stringify(denial.content), /rejected/)
+			await settled(send, second.chat)
+			assert.equal(HashMap.has(calls, Chat.Id.make(second.chat)), false)
+			assert.equal(HashMap.size(calls), 1)
+			// A pending result lets the first Turns end well. After the allowed call,
+			// the model answers with its result and asks for nothing more.
+			assert.deepEqual(firstTurns, ["Completed", "Completed"])
 			assert.match(
 				JSON.stringify(approved.response),
-				new RegExp(first.session.id + ": Confirm independently"),
+				new RegExp(
+					"Development confirmation result: " +
+						first.chat +
+						": Confirm independently",
+				),
 			)
-			assert.match(
-				JSON.stringify(denied.response),
-				/rejected.*execution-denied/,
-			)
-			assert.deepEqual(
-				await runtime.runPromise(sessions.waits(first.session.id)),
-				[],
-			)
-			assert.equal(HashMap.size(calls), 1)
+			assert.equal(approved.open.requests, 0)
 		} finally {
 			await runtime.dispose()
 			await database.close()

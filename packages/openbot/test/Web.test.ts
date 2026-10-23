@@ -2,17 +2,21 @@ import { Effect, Match, Redacted, Schema, Stream } from "effect"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import {
-	SessionMemory,
-	SessionView,
-	SessionResponseEvent,
+	ChatResponse,
+	ChatResponseEvent,
+	ChatSummary,
+	ChatView,
 	RequestsApi,
 } from "@openbot-build/api"
+import { Item } from "@openbot-build/core"
 import { AiError, LanguageModel, Response } from "effect/ai"
-import { Timeline, Session } from "@openbot-build/core"
 import * as BrowserHost from "./BrowserHost.ts"
+import { bot, message, settled, view, type Send } from "./Messages.ts"
+
+const pause = () => new Promise((resolve) => setTimeout(resolve, 25))
 
 test(
-	"public Sessions, Turns, approvals, historical Fork and detached SSE share one execution",
+	"public Chats, Turns, approvals and detached SSE share one execution",
 	{ timeout: 60000 },
 	async () => {
 		const host = await BrowserHost.start({
@@ -42,6 +46,8 @@ test(
 					},
 					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
 				})
+			const asAlice: Send = (path, method, payload) =>
+				request(alice.session, path, method, payload)
 			// Bots learn memory only with the Bot memory model of the organization.
 			const settings = await (
 				await request(alice.session, "/v1/organization/settings")
@@ -60,28 +66,36 @@ test(
 				},
 			)
 			assert.equal(configured.status, 200, await configured.clone().text())
-			const decode = Schema.decodeUnknownSync(SessionView)
-			const get = async (path: string) =>
-				decode(await (await request(alice.session, path)).json())
-			const created = await request(alice.session, "/v1/sessions", "POST", {
-				title: "A workflow",
-			})
-			assert.equal(created.status, 201)
-			const initial = decode(await created.json()),
-				path = "/v1/sessions/" + initial.session.id
+			const decode = Schema.decodeUnknownSync(ChatView)
+			// The first message to a Bot makes the direct Chat of the member with it.
+			const first = await message(asAlice, aliceBot, "Say hello")
+			assert.equal(first.delivery, "started")
+			const chat = first.chat,
+				path = "/v1/chats/" + chat
+			const initial = await settled(asAlice, chat)
+			assert.equal(initial.chat.bot, aliceBot)
+			assert.equal(initial.chat.kind, "direct")
+			assert.equal(initial.chat.parent, null)
+			assert.equal(initial.status, "Completed")
+			assert.equal(initial.response?.id, first.turn)
+			assert.deepEqual(
+				Schema.decodeUnknownSync(Schema.Array(ChatSummary))(
+					await (
+						await request(alice.session, "/v1/chats?bot=" + aliceBot)
+					).json(),
+				).map((summary) => summary.chat.id),
+				[chat],
+			)
 			assert.equal(
 				(
-					await request(alice.session, "/v1/sessions", "POST", {
-						settings: { mode: "invalid" },
+					await request(alice.session, path, "PATCH", {
+						expected: initial.chat.revision,
+						mode: "invalid",
 					})
 				).status,
 				400,
 			)
-			const versions = Schema.decodeUnknownSync(Schema.Array(Timeline.Version))(
-				await (await request(alice.session, path + "/versions")).json(),
-			)
-			assert.deepEqual(versions, [initial.state.version])
-			for (const suffix of ["", "/versions", "/delegations", "/turns"])
+			for (const suffix of ["", "/items", "/delegations", "/turns"])
 				assert.equal((await request(bob.session, path + suffix)).status, 404)
 			assert.equal(
 				(
@@ -93,36 +107,24 @@ test(
 				).status,
 				200,
 			)
-			const wait = async (target = path): Promise<SessionView> => {
-				let view = await get(target)
-				for (let tries = 0; tries < 200 && view.activity === "active"; tries++)
-					view = decode(
-						await (
-							await request(
-								alice.session,
-								target +
-									"/wait?after=" +
-									view.session.revision +
-									"&afterActivity=" +
-									view.activity +
-									"&timeoutMs=100",
-							)
-						).json(),
-					)
-				assert.notEqual(view.activity, "active")
-				return view
-			}
-			assert.equal(
-				(
-					await request(alice.session, path + "/turns", "POST", {
-						expected: initial.session.revision,
-						input: "request approval",
-					})
-				).status,
-				202,
-			)
-			const waiting = await wait()
-			assert.equal(Session.status(waiting.session)._tag, "Waiting")
+			// The routes of versioned Sessions are gone.
+			for (const [suffix, method] of [
+				["/versions", "GET"],
+				["/history", "GET"],
+				["/memory", "GET"],
+				["/fork", "POST"],
+			] as const)
+				assert.equal(
+					(
+						await request(
+							alice.session,
+							path + suffix,
+							method,
+							method === "POST" ? {} : undefined,
+						)
+					).status,
+					404,
+				)
 			const requests = async (
 				credential = alice.session,
 			): Promise<ReadonlyArray<RequestsApi.CapabilityRequest>> =>
@@ -131,28 +133,47 @@ test(
 						await request(credential, "/v1/requests?status=pending")
 					).json(),
 				)
-			// The request appears when OpenBot has seen that the Turn waits.
 			const nextRequest = async () => {
 				for (let tries = 0; tries < 200; tries++) {
 					const list = await requests()
 					if (list.length > 0) return list
-					await new Promise((resolve) => setTimeout(resolve, 25))
+					await pause()
 				}
 				return requests()
 			}
-			/** Waits until the Turn no longer waits for a decision. */
-			const settled = async () => {
+			/** The notice in the Chat about a request, when it has come. */
+			const noticeOf = async (ref: string) => {
 				for (let tries = 0; tries < 200; tries++) {
-					const view = await wait()
-					if (Session.status(view.session)._tag !== "Waiting") return view
-					await new Promise((resolve) => setTimeout(resolve, 25))
+					const page = Schema.decodeUnknownSync(
+						Schema.Struct({ items: Schema.Array(Item.Record) }),
+					)(
+						await (
+							await request(alice.session, path + "/items?limit=100")
+						).json(),
+					)
+					const found = page.items.find(
+						(item) =>
+							item.origin?.notice?.kind === "request" &&
+							item.origin.notice.ref === ref,
+					)
+					if (found !== undefined) return found
+					await pause()
 				}
-				return wait()
+				return undefined
 			}
+			// A call that needs approval gets a pending result at once, so the Turn does not wait.
+			const asked = await message(asAlice, aliceBot, "request approval")
+			assert.equal(asked.chat, chat)
+			assert.equal(asked.delivery, "started")
 			const pending = await nextRequest()
+			const waiting = await settled(asAlice, chat)
+			assert.equal(waiting.status, "Completed")
+			assert.equal(waiting.response?.id, asked.turn)
+			assert.equal(waiting.open.requests, 1)
 			assert.equal(pending.length, 1)
 			assert.equal(pending[0]!.capability.action, "tools.call")
-			assert.equal(pending[0]!.session, initial.session.id)
+			assert.equal(pending[0]!.chat, chat)
+			assert.equal(host.toolCalls(), 0)
 			assert.deepEqual(await requests(bob.session), [])
 			const decide = "/v1/requests/" + pending[0]!.id
 			assert.equal(
@@ -175,23 +196,6 @@ test(
 			)
 			assert.equal(
 				(
-					await request(alice.session, path + "/fork", "POST", {
-						version: waiting.session.head,
-					})
-				).status,
-				400,
-			)
-			const fork = decode(
-				await (await request(alice.session, path + "/fork", "POST", {})).json(),
-			)
-			assert.equal(fork.session.head, initial.session.head)
-			assert.deepEqual(fork.session.turns, [])
-			assert.equal(fork.bot, initial.bot)
-			assert.equal(fork.kind, "direct")
-			assert.equal(fork.parent, null)
-			assert.deepEqual(fork.session.pending, [])
-			assert.equal(
-				(
 					await request(alice.session, decide, "POST", {
 						expected: pending[0]!.revision,
 						decision: "deny",
@@ -200,8 +204,12 @@ test(
 				).status,
 				200,
 			)
-			const denied = await settled()
-			assert.notEqual(Session.status(denied.session)._tag, "Waiting")
+			// The denial comes back to the Chat as a notice, and the call does not run.
+			const denial = await noticeOf(pending[0]!.id)
+			assert.ok(denial !== undefined)
+			assert.match(JSON.stringify(denial.content), /Not now/)
+			const denied = await settled(asAlice, chat)
+			assert.equal(denied.open.requests, 0)
 			assert.equal(host.toolCalls(), 0)
 			assert.equal(
 				(
@@ -212,16 +220,8 @@ test(
 				).status,
 				409,
 			)
-			assert.equal(
-				(
-					await request(alice.session, path + "/turns", "POST", {
-						expected: denied.session.revision,
-						input: "another approval",
-					})
-				).status,
-				202,
-			)
-			await wait()
+			const again = await message(asAlice, aliceBot, "another approval")
+			assert.equal(again.chat, chat)
 			const second = await nextRequest()
 			assert.equal(second.length, 1)
 			assert.equal(
@@ -238,23 +238,25 @@ test(
 				).status,
 				200,
 			)
-			const completed = await settled()
+			// The allowed call runs once, in a new step of the Chat.
+			assert.ok((await noticeOf(second[0]!.id)) !== undefined)
+			for (let tries = 0; tries < 200 && host.toolCalls() < 1; tries++)
+				await pause()
+			const completed = await settled(asAlice, chat)
 			assert.equal(host.toolCalls(), 1)
-			const control =
-				path + "/turns/" + Session.currentTurn(completed.session)!.id
-			assert.equal(
-				(await request(alice.session, control + "/interrupt", "POST", {}))
-					.status,
-				409,
+			assert.equal(completed.open.requests, 0)
+			assert.equal(completed.response?.status, "completed")
+			// Interrupting a Chat that runs no Turn changes nothing.
+			const interrupted = await request(
+				alice.session,
+				path + "/interrupt",
+				"POST",
+				{},
 			)
-			assert.equal(
-				(
-					await request(alice.session, control + "/steer", "POST", {
-						input: "late",
-					})
-				).status,
-				409,
-			)
+			assert.equal(interrupted.status, 200)
+			const unchanged = decode(await interrupted.json())
+			assert.equal(unchanged.chat.revision, completed.chat.revision)
+			assert.equal(unchanged.status, completed.status)
 			const turns: {
 				items: ReadonlyArray<{ id: string }>
 				next: string | null
@@ -277,65 +279,47 @@ test(
 			)
 			const planned = decode(
 				await (
-					await request(alice.session, path + "/mode", "PUT", {
-						expected: completed.session.revision,
+					await request(alice.session, path, "PATCH", {
+						expected: completed.chat.revision,
 						mode: "plan",
 					})
 				).json(),
 			)
-			assert.equal(planned.session.head, completed.session.head)
-			assert.equal(planned.session.settings.mode, "plan")
+			assert.equal(planned.chat.settings.mode, "plan")
+			assert.ok(planned.chat.revision > completed.chat.revision)
 			assert.equal(
 				(
-					await request(alice.session, path + "/mode", "PUT", {
-						expected: completed.session.revision,
+					await request(alice.session, path, "PATCH", {
+						expected: completed.chat.revision,
 						mode: "build",
 					})
 				).status,
 				409,
 			)
-			const historical = Schema.decodeUnknownSync(Timeline.State({}))(
+			assert.equal((await view(asAlice, chat)).chat.settings.mode, "plan")
+			// The Items of the Chat come newest first, one page at a time.
+			const Page = Schema.Struct({
+				items: Schema.Array(Item.Record),
+				next: Schema.NullOr(Item.Seq),
+			})
+			const newest = Schema.decodeUnknownSync(Page)(
+				await (await request(alice.session, path + "/items?limit=2")).json(),
+			)
+			assert.equal(newest.items.length, 2)
+			assert.equal(newest.items[0]!.seq, newest.items[1]!.seq + 1)
+			assert.equal(newest.next, newest.items[1]!.seq)
+			const older = Schema.decodeUnknownSync(Page)(
 				await (
 					await request(
 						alice.session,
-						path + "/history?version=" + initial.session.head,
+						path + "/items?limit=2&before=" + newest.next,
 					)
 				).json(),
 			)
-			assert.equal(historical.value.conversation.history.length, 0)
-			assert.equal((await get(path)).session.head, planned.session.head)
-			const memoryOf = async () =>
-				Schema.decodeUnknownSync(SessionMemory)(
-					await (await request(alice.session, path + "/memory")).json(),
-				)
-			const configure = async (
-				view: typeof planned,
-				command: { use?: boolean | null; generate?: boolean | null },
-			) =>
-				decode(
-					await (
-						await request(alice.session, path + "/memory", "POST", {
-							expected: view.session.head,
-							revision: view.session.revision,
-							command: { _tag: "Configure", ...command },
-						})
-					).json(),
-				)
-			assert.deepEqual((await memoryOf()).settings, {
-				use: true,
-				generate: true,
-			})
-			const generationOff = await configure(planned, { generate: false })
-			assert.equal(generationOff.session.head, planned.session.head)
-			assert.ok(generationOff.session.revision > planned.session.revision)
-			assert.deepEqual((await memoryOf()).overrides, { generate: false })
-			assert.deepEqual((await memoryOf()).settings, {
-				use: true,
-				generate: false,
-			})
+			assert.equal(older.items[0]!.seq, newest.items[1]!.seq - 1)
 			const beforeConsolidations = host.consolidations()
 			const controller = new AbortController()
-			const streaming = await fetch(host.address + path + "/turns", {
+			const streaming = await fetch(host.address + path + "/messages", {
 				method: "POST",
 				signal: controller.signal,
 				headers: {
@@ -345,12 +329,7 @@ test(
 					origin: "https://web.example.com",
 					"content-type": "application/json",
 				},
-				body: JSON.stringify({
-					expected: generationOff.session.revision,
-					input: "slow output",
-					overrides: { mode: "build" },
-					stream: true,
-				}),
+				body: JSON.stringify({ input: "slow output", stream: true }),
 			})
 			assert.equal(streaming.status, 200)
 			const reader = streaming.body!.getReader()
@@ -361,59 +340,23 @@ test(
 				body += new TextDecoder().decode(chunk.value)
 			}
 			assert.match(body, /response.output_text.delta/)
+			// The Turn goes on after the client goes away.
 			controller.abort()
-			const final = await wait()
+			const final = await settled(asAlice, chat)
 			assert.equal(final.response?.status, "completed")
-			assert.equal(final.session.turns.at(-1)!.settings.mode, "build")
-			assert.equal(final.session.settings.mode, "plan")
-			assert.equal(host.consolidations(), beforeConsolidations)
+			assert.equal(final.turn?.settings.mode, "plan")
+			assert.equal(final.chat.settings.mode, "plan")
 			assert.match(final.response.output[0]!.content[0]!.text, /Progress stays/)
-			const configuredFork = decode(
-				await (await request(alice.session, path + "/fork", "POST", {})).json(),
-			)
-			assert.deepEqual(
-				Schema.decodeUnknownSync(SessionMemory)(
-					await (
-						await request(
-							alice.session,
-							"/v1/sessions/" + configuredFork.session.id + "/memory",
-						)
-					).json(),
-				).overrides,
-				{ generate: false },
-			)
-			const generationDefault = await configure(final, { generate: null })
-			assert.deepEqual((await memoryOf()).overrides, {})
-			assert.equal(
-				(
-					await request(alice.session, path + "/turns", "POST", {
-						expected: generationDefault.session.revision,
-						input: "one explicit extraction",
-					})
-				).status,
-				202,
-			)
-			await wait()
-			// One model call learns Session memory. Bot memory learns only after the Bot
-			// confides, and the empty pool gives the memory Bot nothing to add to the input.
-			for (
-				let tries = 0;
-				tries < 200 && host.consolidations() < beforeConsolidations + 1;
-				tries++
-			)
-				await new Promise((resolve) => setTimeout(resolve, 25))
+			// No other model call ran. Bot memory learns only after the Bot confides,
+			// and the empty pool gives the memory Bot nothing to add to the input.
 			await new Promise((resolve) => setTimeout(resolve, 100))
-			assert.equal(host.consolidations(), beforeConsolidations + 1)
+			assert.equal(host.consolidations(), beforeConsolidations)
 			const old = await (
 				await request(alice.session, path + "/turns/" + completed.response!.id)
 			).json()
-			assert.equal(old.response.id, completed.response!.id)
-			assert.equal(old.response.version, completed.response!.version)
-			// Sessions without a Bot belong to the default Bot of the member.
-			assert.equal(initial.bot, aliceBot)
-			assert.equal(
-				(await request(alice.session, path + "/merge", "POST", {})).status,
-				404,
+			assert.deepEqual(
+				Schema.decodeUnknownSync(ChatResponse)(old.response),
+				completed.response,
 			)
 		} finally {
 			await host.close()
@@ -503,10 +446,9 @@ test(
 		})
 		try {
 			const account = await host.login("stream-observer")
-			await host.defaultBot(account.session)
-			const request = (path: string, payload?: unknown) =>
+			const request: Send = (path, method, payload) =>
 				fetch(host.address + path, {
-					method: payload === undefined ? "GET" : "POST",
+					method,
 					headers: {
 						cookie:
 							"__Host-openbot-session=" +
@@ -524,15 +466,13 @@ test(
 				"model-error",
 				"defect",
 			]) {
-				const created = Schema.decodeUnknownSync(SessionView)(
-					await (await request("/v1/sessions", {})).json(),
+				// Each input goes to a new Bot, so it starts a new direct Chat.
+				const observed = await bot(request, { name: "Observer " + input })
+				const stream = await request(
+					"/v1/bots/" + observed + "/messages",
+					"POST",
+					{ input, stream: true },
 				)
-				const path = "/v1/sessions/" + created.session.id
-				const stream = await request(path + "/turns", {
-					input,
-					expected: created.session.revision,
-					stream: true,
-				})
 				assert.equal(stream.status, 200)
 				const events = (await stream.text())
 					.split(/\r?\n\r?\n/)
@@ -543,9 +483,9 @@ test(
 						return data === undefined
 							? []
 							: [
-									Schema.decodeSync(
-										Schema.fromJsonString(SessionResponseEvent),
-									)(data.slice(5).trim()),
+									Schema.decodeSync(Schema.fromJsonString(ChatResponseEvent))(
+										data.slice(5).trim(),
+									),
 								]
 					})
 				assert.deepEqual(
@@ -563,15 +503,17 @@ test(
 				assert.equal(terminal.length, 1)
 				const end = terminal[0]!
 				assert.ok("response" in end)
-				const view = Schema.decodeUnknownSync(SessionView)(
-					await (await request(path)).json(),
+				const [summary] = Schema.decodeUnknownSync(Schema.Array(ChatSummary))(
+					await (await request("/v1/chats?bot=" + observed, "GET")).json(),
 				)
-				assert.deepEqual(end.response, view.response)
+				assert.ok(summary !== undefined)
+				const current = await view(request, summary.chat.id)
+				assert.deepEqual(end.response, current.response)
 				assert.ok(
 					events.every(
 						(event) =>
-							event.session === view.session.id &&
-							event.turn === view.response!.id,
+							event.chat === current.chat.id &&
+							event.turn === current.response!.id,
 					),
 				)
 				const deltas = events.filter(
@@ -581,7 +523,7 @@ test(
 					deltas.every(
 						(event) =>
 							event.step === 1 &&
-							event.item_id === view.response!.output[0]!.id,
+							event.item_id === current.response!.output[0]!.id,
 					),
 				)
 				if (input === "empty") {

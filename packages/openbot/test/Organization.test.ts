@@ -232,7 +232,7 @@ test(
 					policies: [
 						{
 							effect: "allow",
-							permissionGroups: ["sessions.read"],
+							permissionGroups: ["chats.read"],
 							resources: ["openbot.org.{org}"],
 						},
 					],
@@ -371,15 +371,12 @@ test(
 				},
 			)
 			assert.equal(deny.status, 200, await deny.clone().text())
-			await host.defaultBot(carol.session)
-			const created = await (
-				await account(carol.session, "/v1/sessions", "POST", { title: "Hi" })
-			).json()
+			const carolBot = await host.defaultBot(carol.session)
 			const run = await account(
 				carol.session,
-				"/v1/sessions/" + encodeURIComponent(created.session.id) + "/turns",
+				"/v1/bots/" + encodeURIComponent(carolBot) + "/messages",
 				"POST",
-				{ expected: created.session.revision, input: "Hello" },
+				{ input: "Hello" },
 			)
 			assert.equal(run.status, 403)
 			assert.equal((await run.json()).permission, "responses.run")
@@ -390,7 +387,7 @@ test(
 					name: "Carol bot",
 				})
 			).json()
-			assert.equal((await keyed(token.secret, "/v1/sessions")).status, 200)
+			assert.equal((await keyed(token.secret, "/v1/chats")).status, 200)
 			assert.equal(
 				(
 					await account(bob.session, member(carol.identity.userId), "PATCH", {
@@ -399,11 +396,11 @@ test(
 				).status,
 				200,
 			)
-			const suspended = await account(carol.session, "/v1/sessions")
+			const suspended = await account(carol.session, "/v1/chats")
 			assert.equal(suspended.status, 403)
 			assert.equal((await suspended.json())._tag, "MembershipRequired")
 			// A token has no cookie to fall back on, so it gets the plain sign-in error.
-			assert.equal((await keyed(token.secret, "/v1/sessions")).status, 401)
+			assert.equal((await keyed(token.secret, "/v1/chats")).status, 401)
 
 			// Removing a member also revokes their tokens.
 			assert.equal(
@@ -415,7 +412,7 @@ test(
 				(await account(bob.session, member(carol.identity.userId))).status,
 				404,
 			)
-			assert.equal((await keyed(token.secret, "/v1/sessions")).status, 401)
+			assert.equal((await keyed(token.secret, "/v1/chats")).status, 401)
 
 			const audit = await (
 				await account(alice.session, "/v1/organization/audit_logs?limit=100")

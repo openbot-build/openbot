@@ -54,8 +54,8 @@ export async function start(options: {
 	/** People with these emails are platform admins. */
 	readonly platformAdmins?: ReadonlyArray<string>
 	/**
-	 * Sessions use the stored model providers, as in production, instead of the
-	 * fixture model. Then each Session must name its model, and model calls are metered.
+	 * Chats use the stored model providers, as in production, instead of the
+	 * fixture model. Then each Chat or its Bot must name a model, and model calls are metered.
 	 */
 	readonly registryModels?: boolean
 	readonly indexWork?: {
@@ -241,8 +241,8 @@ export async function start(options: {
 					const chunks = Stream.fromIterable([
 						"## A useful result\n\n",
 						"Working through your request. ",
-						"Progress stays with your Session.\n\n",
-						"- Evidence is recorded.\n- You can keep building from this Version.",
+						"Progress stays with your Chat.\n\n",
+						"- Evidence is recorded.\n- You can keep building from here.",
 					]).pipe(
 						Stream.mapEffect((text) =>
 							Effect.sleep(
@@ -330,7 +330,7 @@ export async function start(options: {
 				"IntegrationSecretForBetterAuthMustStayStable123456",
 			),
 		},
-		sessions: {
+		chats: {
 			runtime: { toolkit },
 			layerExecution: () => handlers,
 			...(options.registryModels === true

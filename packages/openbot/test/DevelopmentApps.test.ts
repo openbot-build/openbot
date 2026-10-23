@@ -2,7 +2,7 @@ import { memberOf } from "./Caller.ts"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { NodeServices } from "@effect/platform-node"
-import { AuthApi, SessionView } from "@openbot-build/api"
+import { AuthApi } from "@openbot-build/api"
 import { Effect, Layer, ManagedRuntime, Redacted, Schema } from "effect"
 import { HttpServer } from "effect/http"
 import * as Development from "../dist/Development.js"
@@ -11,8 +11,8 @@ import { Scenarios } from "../src/app/DevelopmentScenarios.ts"
 import { Business } from "../src/app/DevelopmentBusiness.ts"
 import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Postgres from "./PostgresTest.ts"
-import * as DefaultBot from "./DefaultBot.ts"
 import * as Organizations from "./Organizations.ts"
+import { bot, message, model, settled, type Send } from "./Messages.ts"
 
 test("development Apps show protocol, requirement, expiry and cleanup failures through the standard APIs", async () => {
 	const database = await Postgres.start()
@@ -125,70 +125,31 @@ test("development Apps show protocol, requirement, expiry and cleanup failures t
 					business.executions(ownerKey(memberOf(account))),
 				),
 			)
-		await DefaultBot.ensure((path, method, payload) =>
+		const request: Send = (path, method, payload) =>
 			fetch(address + path, {
 				method,
 				headers,
 				...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
-			}),
-		)
-		const created = await post("/v1/sessions", {
-			settings: {
-				model: {
-					_tag: "Config.Selection",
-					provider: "development",
-					model: "mock-app",
-				},
-			},
+			})
+		const appBot = await bot(request, {
+			name: "Reader",
+			model: model("mock-app"),
 		})
-		assert.equal(created.status, 201, await created.clone().text())
-		const session = Schema.decodeUnknownSync(SessionView)(await created.json())
-		const sessionPath = "/v1/sessions/" + session.session.id
-		const wait = async () => {
-			let view = Schema.decodeUnknownSync(SessionView)(
-				await (await fetch(address + sessionPath, { headers })).json(),
-			)
-			for (let index = 0; view.activity === "active" && index < 30; index++) {
-				view = Schema.decodeUnknownSync(SessionView)(
-					await (
-						await fetch(
-							address +
-								sessionPath +
-								"/wait?" +
-								new URLSearchParams({
-									after: String(view.session.revision),
-									afterActivity: view.activity,
-									timeoutMs: "1000",
-								}),
-							{ headers },
-						)
-					).json(),
-				)
-			}
-			assert.notEqual(view.activity, "active")
-			return view
-		}
-		assert.equal(
-			(
-				await post(sessionPath + "/turns", {
-					expected: session.session.revision,
-					input: "Read the simulated document",
-				})
-			).status,
-			202,
-		)
-		await wait()
+		const first = await message(request, appBot, "Read the simulated document")
+		const chatPath = "/v1/chats/" + first.chat
+		// The App call waits for a decision. The Turn does not wait for it.
+		await settled(request, first.chat)
 		let requests: ReadonlyArray<{
 			readonly id: string
 			readonly revision: number
-			readonly session: string
+			readonly chat: string
 		}> = []
 		for (let tries = 0; tries < 200 && requests.length === 0; tries++) {
 			requests = (
 				(await (
 					await fetch(address + "/v1/requests?status=pending", { headers })
 				).json()) as typeof requests
-			).filter((entry) => sessionPath.endsWith(entry.session))
+			).filter((entry) => entry.chat === first.chat)
 			if (requests.length === 0)
 				await new Promise((resolve) => setTimeout(resolve, 25))
 		}
@@ -203,17 +164,27 @@ test("development Apps show protocol, requirement, expiry and cleanup failures t
 			).status,
 			200,
 		)
-		let completed = await wait()
+		// The allowed call runs once in a new Turn of the same Chat.
+		let completed = await settled(request, first.chat)
 		for (
 			let tries = 0;
-			tries < 200 && completed.response?.status !== "completed";
+			tries < 200 &&
+			!(
+				completed.response?.status === "completed" &&
+				JSON.stringify(completed.response).includes("handlerExecutions")
+			);
 			tries++
 		) {
 			await new Promise((resolve) => setTimeout(resolve, 25))
-			completed = await wait()
+			completed = await settled(request, first.chat)
 		}
 		assert.equal(completed.response?.status, "completed")
 		assert.match(JSON.stringify(completed.response), /handlerExecutions/)
+		// The first Turn got a pending result for the call, and ended well.
+		const firstTurn = await (
+			await fetch(address + chatPath + "/turns/" + first.turn, { headers })
+		).json()
+		assert.equal(firstTurn.turn.status._tag, "Completed")
 		assert.equal(await executions(), 1)
 		await mode("available")
 		const protectedApp = await add(1)
@@ -300,7 +271,7 @@ test("development Apps show protocol, requirement, expiry and cleanup failures t
 		assert.equal(finished.removed.length, 1)
 		assert.deepEqual(finished.pending, [])
 		assert.equal(await executions(), 1)
-		assert.equal((await fetch(address + sessionPath, { headers })).status, 200)
+		assert.equal((await fetch(address + chatPath, { headers })).status, 200)
 	} finally {
 		await runtime.dispose()
 		await migration.dispose()

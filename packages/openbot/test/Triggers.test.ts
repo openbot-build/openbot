@@ -1,8 +1,13 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { PgClient } from "@effect/sql-pg"
-import { Session } from "@openbot-build/core"
-import { SessionView, TriggersApi } from "@openbot-build/api"
+import {
+	ChatSummary,
+	ChatView,
+	DelegationsApi,
+	TriggersApi,
+} from "@openbot-build/api"
+import { Item } from "@openbot-build/core"
 import { Effect, Redacted, Schema, Stream } from "effect"
 import { LanguageModel, type Prompt, Response } from "effect/ai"
 import { dataNote } from "../src/triggers/Fire.ts"
@@ -91,7 +96,7 @@ const client = (host: Awaited<ReturnType<typeof BrowserHost.start>>) => {
 }
 
 test(
-	"a trigger starts a Session with its prompt on a schedule and from a webhook, and only for those who may",
+	"a trigger gives its prompt to its Bot on a schedule and from a webhook, the result comes to the Chat of the actor, and only those who may use it",
 	{ timeout: 120000 },
 	async () => {
 		const host = await BrowserHost.start({
@@ -105,29 +110,37 @@ test(
 			const bob = await host.login("triggers-bob")
 			await host.defaultBot(alice.session)
 			await host.defaultBot(bob.session)
-			const sessions = async (credential: Redacted.Redacted<string>) =>
+			const tasks = async (credential: Redacted.Redacted<string>) =>
+				json(Schema.Array(ChatSummary), send(credential, "/v1/chats?kind=task"))
+			const delegation = (id: string) =>
 				json(
-					Schema.Array(
-						Schema.Struct({ session: Session.Ref, kind: Schema.String }),
-					),
-					send(credential, "/v1/sessions?kind=trigger"),
+					DelegationsApi.Delegation,
+					send(alice.session, "/v1/delegations/" + id),
 				)
-			const answered = (id: string) =>
-				until("the trigger Session answers", async () => {
+			const completed = (id: string) =>
+				until("the work of the trigger ends", async () => {
+					const work = await delegation(id)
+					return work.status === "completed" ? work : undefined
+				})
+			const history = async (chat: string) =>
+				JSON.stringify(
+					await json(
+						Schema.Struct({ items: Schema.Array(Item.Record) }),
+						send(alice.session, "/v1/chats/" + chat + "/items?limit=100"),
+					),
+				)
+			const rested = (chat: string) =>
+				until("the Chat comes to rest", async () => {
 					const view = await json(
-						SessionView,
-						send(alice.session, "/v1/sessions/" + id),
+						ChatView,
+						send(alice.session, "/v1/chats/" + chat),
 					)
-					return Session.status(view.session)._tag === "Completed"
+					return view.status !== "Running" &&
+						view.activity !== "active" &&
+						view.inbox === 0
 						? view
 						: undefined
 				})
-			const history = async (id: string) =>
-				JSON.stringify(
-					await (
-						await send(alice.session, "/v1/sessions/" + id + "/history")
-					).json(),
-				)
 
 			// A schedule that is not valid is refused.
 			const wrong = await send(alice.session, "/v1/triggers", "POST", {
@@ -152,12 +165,30 @@ test(
 					yield* sql`update openbot_triggers set next_run_at = 0 where id = ${daily.id}`
 				}),
 			)
-			const scheduled = await until("a scheduled Session", async () => {
-				const list = await sessions(alice.session)
+			const scheduled = await until("a task of the schedule", async () => {
+				const list = await tasks(alice.session)
 				return list[0]
 			})
-			const view = await answered(scheduled.session.id)
-			assert.match(await history(view.session.id), /Got: Check the build\./)
+			assert.ok(scheduled.chat.parent !== null)
+			const work = await completed(scheduled.chat.parent.delegation)
+			assert.equal(work.trigger, daily.id)
+			assert.equal(work.chat, scheduled.chat.id)
+			console.log(
+				"DEBUG",
+				JSON.stringify(work),
+				await history(scheduled.chat.id),
+			)
+			// The task comes in as a note from OpenBot, and the model repeats it.
+			assert.match(work.result ?? "", /^Got: .*Check the build\./s)
+			assert.match(await history(scheduled.chat.id), /Got: .*Check the build\./)
+			// The result comes to the direct Chat of the actor with the Bot as a notice.
+			const direct = work.parent.chat
+			await until("the notice of the result", async () =>
+				(await history(direct)).includes(work.id) ? true : undefined,
+			)
+			const rest = await rested(direct)
+			assert.equal(rest.chat.kind, "direct")
+			assert.equal(rest.status, "Completed")
 			const after = await json(
 				TriggersApi.Trigger,
 				send(alice.session, "/v1/triggers/" + daily.id),
@@ -180,7 +211,7 @@ test(
 			)
 			assert.equal(denied.status, 401)
 			const fired = await json(
-				Schema.Struct({ session: Session.Id }),
+				Schema.Struct({ delegation: DelegationsApi.DelegationId }),
 				send(
 					undefined,
 					"/v1/hooks/triggers/" + daily.id,
@@ -189,8 +220,9 @@ test(
 					{ authorization: "Bearer " + hook.secret },
 				),
 			)
-			await answered(fired.session)
-			const text = await history(fired.session)
+			const hooked = await completed(fired.delegation)
+			assert.ok(hooked.chat !== null)
+			const text = await history(hooked.chat)
 			assert.ok(text.includes(dataNote))
 			assert.match(text, /order/)
 

@@ -4,6 +4,7 @@ import { AuthApi } from "@openbot-build/api"
 import { Redacted } from "effect"
 import * as BrowserHost from "./BrowserHost.ts"
 import { withCookie, withToken } from "./Caller.ts"
+import { message } from "./Messages.ts"
 
 test(
 	"User tokens authenticate headless clients, stay with their member and stop working when revoked",
@@ -14,7 +15,7 @@ test(
 		try {
 			const alice = await host.login("alice")
 			const bob = await host.login("bob")
-			await host.defaultBot(alice.session)
+			const bot = await host.defaultBot(alice.session)
 			const account = withCookie({ address: host.address, publicOrigin })
 			const keyed = withToken(host.address)
 
@@ -34,22 +35,20 @@ test(
 			assert.equal(token.expiresAt, null)
 			assert.equal(token.lastUsedAt, null)
 
-			const writes = await keyed(secret, "/v1/sessions", "POST", {
-				title: "Headless work",
-			})
-			assert.equal(writes.status, 201, await writes.clone().text())
-			const session = await writes.json()
-			const listed = await keyed(secret, "/v1/sessions")
-			assert.equal(listed.status, 200)
-			assert.ok(
-				JSON.stringify(await listed.json()).includes(session.session.id),
+			const receipt = await message(
+				(path, method, payload) => keyed(secret, path, method, payload),
+				bot,
+				"Headless work",
 			)
-			// Members of one organization still do not see each other's Sessions.
+			const listed = await keyed(secret, "/v1/chats")
+			assert.equal(listed.status, 200)
+			assert.ok(JSON.stringify(await listed.json()).includes(receipt.chat))
+			// Members of one organization still do not see each other's Chats.
 			assert.equal(
 				(
 					await account(
 						bob.session,
-						"/v1/sessions/" + encodeURIComponent(session.session.id),
+						"/v1/chats/" + encodeURIComponent(receipt.chat),
 					)
 				).status,
 				404,
@@ -115,7 +114,7 @@ test(
 					policies: [
 						{
 							effect: "allow",
-							permissionGroups: ["sessions.read"],
+							permissionGroups: ["chats.read"],
 							resources: ["openbot.org.someone-else"],
 						},
 					],
@@ -144,8 +143,8 @@ test(
 				).status,
 				204,
 			)
-			assert.equal((await keyed(secret, "/v1/sessions")).status, 401)
-			assert.equal((await keyed("obut_unknown", "/v1/sessions")).status, 401)
+			assert.equal((await keyed(secret, "/v1/chats")).status, 401)
+			assert.equal((await keyed("obut_unknown", "/v1/chats")).status, 401)
 
 			const expiring = await (
 				await account(alice.session, "/v1/user/tokens", "POST", {
@@ -154,10 +153,10 @@ test(
 				})
 			).json()
 			assert.notEqual(expiring.token.expiresAt, null)
-			assert.equal((await keyed(expiring.secret, "/v1/sessions")).status, 200)
+			assert.equal((await keyed(expiring.secret, "/v1/chats")).status, 200)
 			t.mock.timers.enable({ apis: ["Date"], now: Date.now() + 2 * 86400000 })
 			try {
-				assert.equal((await keyed(expiring.secret, "/v1/sessions")).status, 401)
+				assert.equal((await keyed(expiring.secret, "/v1/chats")).status, 401)
 			} finally {
 				t.mock.timers.reset()
 			}
@@ -209,38 +208,68 @@ test(
 				return (await response.json()).secret as string
 			}
 
+			const bot = await host.defaultBot(alice.session)
+			const receipt = await message(
+				(path, method, payload) =>
+					account(alice.session, path, method, payload),
+				bot,
+				"Hello",
+			)
+			const chatPath = "/v1/chats/" + encodeURIComponent(receipt.chat)
+			const messages = "/v1/bots/" + encodeURIComponent(bot) + "/messages"
+
 			const readOnly = await make([
 				{
 					effect: "allow",
-					permissionGroups: ["sessions.read"],
+					permissionGroups: ["chats.read"],
 					resources: ["openbot.org.{org}.user.{self}"],
 				},
 			])
-			assert.equal((await keyed(readOnly, "/v1/sessions")).status, 200)
-			const write = await keyed(readOnly, "/v1/sessions", "POST", {
-				title: "Not allowed",
+			assert.equal((await keyed(readOnly, "/v1/chats")).status, 200)
+			const read = await keyed(readOnly, chatPath)
+			assert.equal(read.status, 200, await read.clone().text())
+			const { chat } = await read.json()
+			const write = await keyed(readOnly, chatPath, "PATCH", {
+				expected: chat.revision,
+				mode: "plan",
 			})
 			assert.equal(write.status, 403)
-			assert.equal((await write.json()).permission, "sessions.write")
-
-			// A deny wins over an allow in the same token.
-			const denied = await make([
-				{
-					effect: "allow",
-					permissionGroups: ["sessions.read", "sessions.write"],
-					resources: ["openbot.org.{org}"],
-				},
-				{
-					effect: "deny",
-					permissionGroups: ["sessions.write"],
-					resources: ["openbot.org.{org}.user.{self}.session"],
-				},
-			])
-			assert.equal((await keyed(denied, "/v1/sessions")).status, 200)
+			assert.equal((await write.json()).permission, "chats.write")
 			assert.equal(
-				(await keyed(denied, "/v1/sessions", "POST", { title: "No" })).status,
+				(await keyed(readOnly, messages, "POST", { input: "Not allowed" }))
+					.status,
 				403,
 			)
+
+			// A deny wins over an allow in the same token.
+			const allowed = [
+				{
+					effect: "allow",
+					permissionGroups: [
+						"responses.run",
+						"chats.read",
+						"chats.write",
+						"bots.read",
+						"bots.delegate",
+					],
+					resources: ["openbot.org.{org}"],
+				},
+			]
+			const full = await make(allowed)
+			const sent = await keyed(full, messages, "POST", { input: "Allowed" })
+			assert.equal(sent.status, 202, await sent.clone().text())
+			const denied = await make([
+				...allowed,
+				{
+					effect: "deny",
+					permissionGroups: ["chats.write"],
+					resources: ["openbot.org.{org}.user.{self}.chat"],
+				},
+			])
+			assert.equal((await keyed(denied, "/v1/chats")).status, 200)
+			const refused = await keyed(denied, messages, "POST", { input: "No" })
+			assert.equal(refused.status, 403)
+			assert.equal((await refused.json()).permission, "chats.write")
 
 			// A token never gets more than its member. Alice is a Super Administrator,
 			// but she loses organization.write here, and so does her broad token.

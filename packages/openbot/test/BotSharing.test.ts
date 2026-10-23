@@ -1,15 +1,10 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { Session } from "@openbot-build/core"
-import {
-	BotMemory,
-	BotsApi,
-	RequestsApi,
-	SessionView,
-} from "@openbot-build/api"
+import { BotMemory, BotsApi, RequestsApi } from "@openbot-build/api"
 import { Schema } from "effect"
 import * as BrowserHost from "./BrowserHost.ts"
 import { withCookie, withToken } from "./Caller.ts"
+import { message, settled, talk } from "./Messages.ts"
 
 const publicOrigin = "https://sharing.example.com"
 
@@ -59,7 +54,7 @@ test(
 				}),
 				201,
 			)
-			// Only a lasting top Bot can be shared.
+			// Only a top Bot can be shared. A Bot that a Bot owns cannot.
 			const child = await json(
 				BotsApi.Bot,
 				send(alice.session, "/v1/bots", "POST", {
@@ -172,36 +167,23 @@ test(
 				"Guide Two",
 			)
 
-			// Carol works with it in her own Session, and decides its requests herself.
-			const created = await json(
-				SessionView,
-				send(carol.session, "/v1/sessions", "POST", { bot: linked.id }),
-				201,
+			// Carol talks to it in her own Chat, and decides its requests herself.
+			const asCarol = (
+				path: string,
+				method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
+				payload?: unknown,
+			) => send(carol.session, path, method, payload)
+			const hello = await talk(asCarol, linked.id, "Hello")
+			assert.equal(hello.view.chat.bot, linked.id)
+			assert.equal(hello.view.chat.kind, "direct")
+			assert.equal(hello.view.status, "Completed")
+			// The Chat is in the organization of Carol. The people of the shared Bot do not see it.
+			assert.equal(
+				(await send(alice.session, "/v1/chats/" + hello.receipt.chat)).status,
+				404,
 			)
-			assert.equal(created.bot, linked.id)
-			const path = "/v1/sessions/" + created.session.id
-			const view = () => json(SessionView, send(carol.session, path))
-			const turn = (input: string) =>
-				until("the Turn starts", async () => {
-					const current = await view()
-					const started = await send(carol.session, path + "/turns", "POST", {
-						expected: current.session.revision,
-						input,
-					})
-					if (started.status === 409) return undefined
-					assert.equal(started.status, 202, await started.text())
-					return true
-				})
-			const completed = () =>
-				until("the Turn completes", async () => {
-					const current = await view()
-					return Session.status(current.session)._tag === "Completed"
-						? current
-						: undefined
-				})
-			await turn("Hello")
-			await completed()
-			await turn("This needs approval")
+			const asked = await message(asCarol, linked.id, "This needs approval")
+			assert.equal(asked.chat, hello.receipt.chat)
 			const pending = await until("a pending request", async () => {
 				const list = await json(
 					Schema.Array(RequestsApi.CapabilityRequest),
@@ -210,6 +192,7 @@ test(
 				return list[0]
 			})
 			assert.equal(pending.bot, linked.id)
+			assert.equal(host.toolCalls(), 0)
 			await json(
 				RequestsApi.CapabilityRequest,
 				send(carol.session, "/v1/requests/" + pending.id, "POST", {
@@ -218,7 +201,11 @@ test(
 					scope: "lifetime",
 				}),
 			)
-			await completed()
+			// The allowed call runs later, in the same Chat.
+			await until("the allowed call runs", async () =>
+				host.toolCalls() === 1 ? true : undefined,
+			)
+			await settled(asCarol, asked.chat)
 			// Her decision is a Grant of her own linked Bot. The shared Bot does not get it.
 			assert.equal(
 				(

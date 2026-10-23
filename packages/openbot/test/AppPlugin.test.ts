@@ -5,10 +5,9 @@ import { test } from "node:test"
 import {
 	AppExecution,
 	AuthApi,
+	ChatView,
 	RequestsApi,
-	SessionView,
 } from "@openbot-build/api"
-import { Session } from "@openbot-build/core"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import {
 	Array as Arr,
@@ -25,6 +24,7 @@ import { AppNetwork } from "../src/apps/AppHost.ts"
 import { AppPlugin } from "../src/plugins/apps/AppPlugin.ts"
 import * as Fixture from "./AppFixture.ts"
 import * as BrowserHost from "./BrowserHost.ts"
+import { message, settled, type Send } from "./Messages.ts"
 
 test("the OpenBot App plugin combines live paged capabilities with caller tools and records real handler results for the current account", async () => {
 	const publisher = await Fixture.start({ capabilities: true })
@@ -76,6 +76,14 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 								id: "answer",
 								delta: JSON.stringify(result.result),
 							}),
+							Response.makePart("text-end", { id: "answer" }),
+							Response.makePart("finish", { reason: "stop", usage }),
+						)
+					// A message from OpenBot, such as a decision, asks for no new App call.
+					if (input.startsWith("[OpenBot]"))
+						return Stream.make(
+							Response.makePart("text-start", { id: "answer" }),
+							Response.makePart("text-delta", { id: "answer", delta: input }),
 							Response.makePart("text-end", { id: "answer" }),
 							Response.makePart("finish", { reason: "stop", usage }),
 						)
@@ -186,8 +194,8 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 	try {
 		const alice = await host.login("plugin-alice")
 		const bob = await host.login("plugin-bob")
-		await host.defaultBot(alice.session)
-		await host.defaultBot(bob.session)
+		const aliceBot = await host.defaultBot(alice.session)
+		const bobBot = await host.defaultBot(bob.session)
 		const headers = (session = alice.session) => ({
 			cookie:
 				AuthApi.SessionCookie +
@@ -202,6 +210,14 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 				headers: headers(session),
 				body: JSON.stringify(body),
 			})
+		const sender =
+			(session: typeof alice.session): Send =>
+			(path, method, payload) =>
+				fetch(host.address + path, {
+					method,
+					headers: headers(session),
+					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+				})
 		await host.runtime.runPromise(
 			Effect.scoped(
 				Effect.gen(function* () {
@@ -210,10 +226,7 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 				}),
 			),
 		)
-		const empty = await post("/v1/sessions", {})
-		assert.equal(empty.status, 201)
 		assert.equal(publisher.requests().length, 0)
-		const work = Schema.decodeUnknownSync(SessionView)(await empty.json())
 		for (const [path, name, account] of [
 			["/card", "Work documents", "Work"],
 			["/second", "Personal documents", "Personal"],
@@ -235,43 +248,13 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 			})
 			assert.equal(response.status, 201, await response.clone().text())
 		}
-		const get = async (id: string, session = alice.session) =>
-			Schema.decodeUnknownSync(SessionView)(
-				await (
-					await fetch(host.address + "/v1/sessions/" + id, {
-						headers: headers(session),
-					})
-				).json(),
-			)
-		const wait = async (id: string, session = alice.session) => {
-			let view = await get(id, session)
-			for (let index = 0; view.activity === "active" && index < 30; index++)
-				view = Schema.decodeUnknownSync(SessionView)(
-					await (
-						await fetch(
-							host.address +
-								"/v1/sessions/" +
-								id +
-								"/wait?" +
-								new URLSearchParams({
-									after: String(view.session.revision),
-									afterActivity: view.activity,
-									timeoutMs: "1000",
-								}),
-							{ headers: headers(session) },
-						)
-					).json(),
-				)
-			assert.notEqual(view.activity, "active")
-			return view
-		}
-		/** The pending requests of a Session. They appear when OpenBot sees that the Turn waits. */
+		/** The pending requests of a Chat. */
 		const requestsFor = async (
-			id: string,
+			chat: string,
 			session: typeof alice.session,
-			view: SessionView,
+			view: ChatView,
 		): Promise<ReadonlyArray<RequestsApi.CapabilityRequest>> => {
-			if (Session.status(view.session)._tag !== "Waiting") return []
+			if (view.open.requests === 0) return []
 			for (let tries = 0; tries < 200; tries++) {
 				const list = Schema.decodeUnknownSync(
 					Schema.Array(RequestsApi.CapabilityRequest),
@@ -281,39 +264,47 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 							headers: headers(session),
 						})
 					).json(),
-				).filter((entry) => entry.session === id)
+				).filter((entry) => entry.chat === chat)
 				if (list.length > 0) return list
 				await new Promise((resolve) => setTimeout(resolve, 25))
 			}
 			return []
 		}
-		/** Waits until the Turn no longer waits for a decision. */
-		const settled = async (id: string, session: typeof alice.session) => {
+		/** Waits until a Turn after `turn` has run, and the Chat is at rest. */
+		const after = async (
+			chat: string,
+			session: typeof alice.session,
+			turn: string | undefined,
+		) => {
 			for (let tries = 0; tries < 200; tries++) {
-				const view = await wait(id, session)
-				if (Session.status(view.session)._tag !== "Waiting") return view
+				const view = await settled(sender(session), chat)
+				if (view.turn !== null && view.turn.id !== turn) return view
 				await new Promise((resolve) => setTimeout(resolve, 25))
 			}
-			return wait(id, session)
+			throw new Error("No new Turn ran in the Chat " + chat)
 		}
-		const run = async (
-			input: string,
-			session = alice.session,
-			id = work.session.id,
-		) => {
-			const current = await get(id, session)
+		/** The direct Chat of each person with their default Bot. */
+		const chats = new Map<typeof alice.session, string>()
+		const run = async (input: string, session = alice.session) => {
+			const send = sender(session)
+			const known = chats.get(session)
+			if (known !== undefined) await settled(send, known)
 			const callsBefore = publisher.businessCalls()
 			const writesBefore = publisher.writes().length
-			const response = await post(
-				"/v1/sessions/" + id + "/turns",
-				{ input, expected: current.session.revision },
-				session,
+			const receipt = await message(
+				send,
+				session === alice.session ? aliceBot : bobBot,
+				input,
 			)
-			assert.equal(response.status, 202, await response.clone().text())
-			let view = await wait(id, session)
-			const pending = await requestsFor(id, session, view)
+			assert.equal(receipt.delivery, "started")
+			chats.set(session, receipt.chat)
+			let view = await settled(send, receipt.chat)
+			const pending = await requestsFor(receipt.chat, session, view)
 			if (input.includes("covered")) assert.equal(pending.length, 0)
 			for (const entry of input.includes("hold") ? [] : pending) {
+				// The Turn does not wait for the decision. The call has not run yet.
+				assert.equal(view.status, "Completed")
+				assert.match(JSON.stringify(view.response), /pending/)
 				assert.equal(publisher.businessCalls(), callsBefore)
 				assert.equal(
 					entry.app?.source.connectionName,
@@ -330,7 +321,8 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 					session,
 				)
 				assert.equal(decided.status, 200, await decided.clone().text())
-				view = await settled(id, session)
+				// The decision comes back to the Chat as a message, and starts a new Turn.
+				view = await after(receipt.chat, session, view.turn?.id)
 			}
 			if (input.includes("hold")) return view
 			assert.equal(
@@ -340,9 +332,43 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 			)
 			return view
 		}
-		const completed = await run("Read the document")
+		/** All Items of a Chat, oldest first, as JSON. */
+		const chatItems = async (chat: string) => {
+			type Page = {
+				readonly items: ReadonlyArray<{
+					readonly content: {
+						readonly content: ReadonlyArray<{
+							readonly role: string
+							readonly content: unknown
+						}>
+					}
+				}>
+				readonly next: number | null
+			}
+			let items: Page["items"] = []
+			let before: number | null = null
+			do {
+				const response: globalThis.Response = await fetch(
+					host.address +
+						`/v1/chats/${chat}/items?` +
+						new URLSearchParams({
+							limit: "100",
+							...(before === null ? {} : { before: String(before) }),
+						}),
+					{ headers: headers() },
+				)
+				assert.equal(response.status, 200, await response.clone().text())
+				const page = (await response.json()) as Page
+				items = [...items, ...page.items]
+				before = page.next
+			} while (before !== null)
+			return items.toReversed()
+		}
+		await run("Read the document")
 		assert.equal(publisher.businessCalls(), 1)
-		const history = JSON.stringify(completed.state.value.conversation.history)
+		const aliceChat = chats.get(alice.session)!
+		const firstItems = await chatItems(aliceChat)
+		const history = JSON.stringify(firstItems)
 		assert.match(history, /handler-executed/)
 		assert.match(history, /Document content release-plan/)
 		assert.match(history, /read_later/)
@@ -381,12 +407,7 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 		assert.equal(publisher.businessCalls(), 2)
 		publisher.setInvalidOutput(false)
 
-		const bobWork = await (await post("/v1/sessions", {}, bob.session)).json()
-		const bobResult = await run(
-			"Bob read the document",
-			bob.session,
-			bobWork.session.id,
-		)
+		const bobResult = await run("Bob read the document", bob.session)
 		assert.match(
 			JSON.stringify(bobResult.response),
 			/No matching App capability/,
@@ -414,7 +435,7 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 		assert.equal(publisher.inputStarts(), 1)
 		assert.equal(publisher.businessCalls(), 3)
 		const operationsResponse = await fetch(
-			host.address + `/v1/sessions/${work.session.id}/app-operations`,
+			host.address + `/v1/chats/${aliceChat}/app-operations`,
 			{ headers: headers() },
 		)
 		const operations = Schema.decodeUnknownSync(
@@ -475,10 +496,9 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 			Schema.Array(AppExecution.Invocation),
 		)(
 			await (
-				await fetch(
-					host.address + `/v1/sessions/${work.session.id}/app-operations`,
-					{ headers: headers() },
-				)
+				await fetch(host.address + `/v1/chats/${aliceChat}/app-operations`, {
+					headers: headers(),
+				})
 			).json(),
 		)
 		assert.equal(
@@ -515,14 +535,10 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 			}),
 		)
 		const held = await run("hold a document operation")
-		const [heldRequest] = await requestsFor(
-			work.session.id,
-			alice.session,
-			held,
-		)
+		const [heldRequest] = await requestsFor(aliceChat, alice.session, held)
 		assert.ok(
 			heldRequest?.app !== undefined,
-			JSON.stringify({ status: Session.status(held.session), heldRequest }),
+			JSON.stringify({ status: held.status, open: held.open, heldRequest }),
 		)
 		const connection = await (
 			await fetch(
@@ -553,7 +569,8 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 			).status,
 			200,
 		)
-		await settled(work.session.id, alice.session)
+		const notRun = await after(aliceChat, alice.session, held.turn?.id)
+		assert.match(JSON.stringify(notRun.response), /connection changed/)
 		assert.equal(publisher.businessCalls(), 8)
 		assert.equal(
 			(
@@ -564,16 +581,24 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 			).status,
 			409,
 		)
-		const resultParts =
-			completed.state.value.conversation.context.prompt.content.flatMap(
-				(message) =>
-					Match.value(message).pipe(
-						Match.when({ role: "tool" }, (message) =>
-							message.content.filter((part) => part.type === "tool-result"),
-						),
-						Match.orElse(() => []),
-					),
-			)
+		// The first App result in the Chat. A call that waits for a decision first
+		// gets a pending result, and its real result comes later.
+		const resultParts = firstItems.flatMap((item) =>
+			item.content.content.flatMap((entry) =>
+				entry.role === "tool" && Array.isArray(entry.content)
+					? (
+							entry.content as ReadonlyArray<{
+								readonly type: string
+								readonly result?: unknown
+							}>
+						).filter(
+							(part) =>
+								part.type === "tool-result" &&
+								!JSON.stringify(part.result).includes('"pending"'),
+						)
+					: [],
+			),
+		)
 		const execution = Schema.decodeUnknownSync(AppExecution.Result)(
 			resultParts[0]?.result,
 		)

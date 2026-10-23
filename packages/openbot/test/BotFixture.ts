@@ -3,10 +3,9 @@ import { Effect, Layer } from "effect"
 import * as BotLayers from "../src/bots/BotLayers.ts"
 import * as Judge from "../src/capabilities/Judge.ts"
 
-/** A lasting Bot for tests that use Sessions without the Bot services. */
+/** A Bot for tests that use Chats without the Bot services. */
 export const bot: BotsApi.Bot = {
 	id: BotsApi.BotId.make("bot_test"),
-	kind: "persistent",
 	owner: { _tag: "Member", userId: "test-user" },
 	name: "Assistant",
 	role: "Helps one person",
@@ -17,7 +16,7 @@ export const bot: BotsApi.Bot = {
 	updatedAt: 0,
 }
 
-/** What a direct Session needs, for the test bot and member. */
+/** What a direct Chat needs, for the test bot and member. */
 export const direct = (
 	member: { readonly organizationId?: string; readonly userId?: string } = {},
 ) => ({
@@ -27,7 +26,7 @@ export const direct = (
 		organizationId: member.organizationId ?? "test-organization",
 		userId: member.userId ?? "test-user",
 		bots: [bot.id],
-		sessions: [],
+		chats: [],
 	},
 })
 

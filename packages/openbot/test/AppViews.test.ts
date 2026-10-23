@@ -1,18 +1,14 @@
 // @effect-diagnostics strictEffectProvide:off
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import {
-	AppViewsApi as Api,
-	AuthApi,
-	SessionView,
-	AppExecution,
-} from "@openbot-build/api"
+import { AppViewsApi as Api, AuthApi, AppExecution } from "@openbot-build/api"
 import { Effect, Layer, Redacted, Schema, Stream } from "effect"
 import { LanguageModel, Response } from "effect/ai"
 import * as Network from "@openbot-build/protocol/NodeHttpServer"
 import { AppNetwork } from "../src/apps/AppHost.ts"
 import * as Fixture from "./AppFixture.ts"
 import * as BrowserHost from "./BrowserHost.ts"
+import { message, settled, type Send } from "./Messages.ts"
 const usage = {
 	inputTokens: { total: 1, uncached: 1, cacheRead: 0, cacheWrite: 0 },
 	outputTokens: { total: 1, text: 1, reasoning: 0 },
@@ -25,13 +21,22 @@ test("App views bind to the real history and account, accept each exact host act
 				Effect.succeed([Response.makePart("text", { text: '{"changes":[]}' })]),
 			streamText: ({ prompt, tools }) => {
 				const last = prompt.content.findLastIndex((m) => m.role === "user")
-				const finished = prompt.content
-					.slice(last + 1)
-					.some(
-						(m) =>
-							m.role === "tool" &&
-							m.content.some((p) => p.type === "tool-result"),
+				const input = prompt.content[last]
+				// A message from OpenBot, such as a decision, asks for no new App call.
+				const notice =
+					input?.role === "user" &&
+					input.content.some(
+						(p) => p.type === "text" && p.text.startsWith("[OpenBot]"),
 					)
+				const finished =
+					notice ||
+					prompt.content
+						.slice(last + 1)
+						.some(
+							(m) =>
+								m.role === "tool" &&
+								m.content.some((p) => p.type === "tool-result"),
+						)
 				const tool = tools.find((tool) =>
 					tool.description?.includes(" / read_document."),
 				)
@@ -68,7 +73,7 @@ test("App views bind to the real history and account, accept each exact host act
 	try {
 		const alice = await host.login("views-alice"),
 			bob = await host.login("views-bob")
-		await host.defaultBot(alice.session)
+		const bot = await host.defaultBot(alice.session)
 		await host.defaultBot(bob.session)
 		const headers = (cookie = alice.session) => ({
 			cookie:
@@ -103,87 +108,100 @@ test("App views bind to the real history and account, accept each exact host act
 			confirmed: true,
 		})
 		assert.equal(added.status, 201, await added.clone().text())
-		const created = Schema.decodeUnknownSync(SessionView)(
-			await (await post("/v1/sessions", {})).json(),
-		)
-		const id = created.session.id
-		const get = async () =>
-			Schema.decodeUnknownSync(SessionView)(
-				await (await request("/v1/sessions/" + id)).json(),
-			)
-		const wait = async () => {
-			let current = await get()
-			for (let n = 0; n < 40 && current.activity === "active"; n++)
-				current = Schema.decodeUnknownSync(SessionView)(
-					await (
-						await request(
-							"/v1/sessions/" +
-								id +
-								"/wait?" +
-								new URLSearchParams({
-									after: String(current.session.revision),
-									afterActivity: current.activity,
-									timeoutMs: "500",
-								}),
-						)
-					).json(),
-				)
-			return current
+		const asAlice: Send = (path, method, payload) =>
+			request(path, method, payload)
+		let id = ""
+		const wait = () => settled(asAlice, id)
+		/** Waits until a Turn after `turn` has run, and the Chat is at rest. */
+		const after = async (turn: string | undefined) => {
+			for (let tries = 0; tries < 200; tries++) {
+				const view = await wait()
+				if (view.turn !== null && view.turn.id !== turn) return view
+				await new Promise((resolve) => setTimeout(resolve, 25))
+			}
+			throw new Error("No new Turn ran in the Chat " + id)
 		}
-		/** Answers the one pending request of the Session, then waits until the Turn goes on. */
+		/** All Items of the Chat. */
+		const items = async () => {
+			type Page = {
+				readonly items: ReadonlyArray<{
+					readonly id: string
+					readonly content: {
+						readonly content: ReadonlyArray<{
+							readonly role: string
+							readonly content: unknown
+						}>
+					}
+				}>
+				readonly next: number | null
+			}
+			let all: Page["items"] = []
+			let before: number | null = null
+			do {
+				const page = (await (
+					await request(
+						"/v1/chats/" +
+							id +
+							"/items?" +
+							new URLSearchParams({
+								limit: "100",
+								...(before === null ? {} : { before: String(before) }),
+							}),
+					)
+				).json()) as Page
+				all = [...all, ...page.items]
+				before = page.next
+			} while (before !== null)
+			return all
+		}
+		/**
+		 * Answers the one pending request of the Chat. The decision comes back to the
+		 * Chat as a message, so this waits until the next Turn has run.
+		 */
 		const approve = async (accepted = true) => {
 			let pending: ReadonlyArray<{
 				readonly id: string
 				readonly revision: number
-				readonly session: string
+				readonly chat: string
 			}> = []
 			for (let tries = 0; tries < 200 && pending.length === 0; tries++) {
 				pending = (
 					(await (
 						await request("/v1/requests?status=pending")
 					).json()) as typeof pending
-				).filter((entry) => entry.session === id)
+				).filter((entry) => entry.chat === id)
 				if (pending.length === 0)
 					await new Promise((resolve) => setTimeout(resolve, 25))
 			}
 			assert.equal(pending.length, 1)
+			const before = (await wait()).turn?.id
 			const response = await post("/v1/requests/" + pending[0]!.id, {
 				expected: pending[0]!.revision,
 				decision: accepted ? "allow" : "deny",
 			})
 			assert.equal(response.status, 200, await response.clone().text())
-			for (let tries = 0; tries < 200; tries++) {
-				const view = await wait()
-				if (view.session.turns.at(-1)?.status._tag !== "Waiting") return view
-				await new Promise((resolve) => setTimeout(resolve, 25))
-			}
-			return wait()
+			return after(before)
 		}
-		assert.equal(
-			(
-				await post("/v1/sessions/" + id + "/turns", {
-					expected: created.session.revision,
-					input: "Read the document",
-				})
-			).status,
-			202,
-		)
+		const receipt = await message(asAlice, bot, "Read the document")
+		id = receipt.chat
 		await wait()
-		const completed = await approve()
+		await approve()
 		const all = Schema.decodeUnknownSync(Schema.Array(AppExecution.Invocation))(
-			await (await request("/v1/sessions/" + id + "/app-operations")).json(),
+			await (await request("/v1/chats/" + id + "/app-operations")).json(),
 		)
 		const original = all[0]!
-		const item = completed.state.value.conversation.history.find((item) =>
+		const item = (await items()).find((item) =>
 			item.content.content.some(
 				(m) =>
 					m.role === "tool" &&
+					Array.isArray(m.content) &&
 					m.content.some(
-						(p) => p.type === "tool-result" && p.id === original.callId,
+						(p: { readonly type: string; readonly id?: string }) =>
+							p.type === "tool-result" && p.id === original.callId,
 					),
 			),
 		)!
-		const opening = { sessionId: id, itemId: item.id }
+		const opening = { chatId: id, itemId: item.id }
 		const openResponse = await post(
 			"/v1/app-operations/" + original.id + "/view",
 			opening,
@@ -225,30 +243,6 @@ test("App views bind to the real history and account, accept each exact host act
 			409,
 		)
 
-		const historicalResponse = await post(
-			"/v1/app-operations/" + original.id + "/view",
-			{ ...opening, version: completed.state.version.id },
-		)
-		assert.equal(
-			historicalResponse.status,
-			200,
-			await historicalResponse.clone().text(),
-		)
-		const historical = Schema.decodeUnknownSync(Api.Opened)(
-			await historicalResponse.json(),
-		)
-		assert.equal(historical.readOnly, true)
-		assert.equal(
-			(
-				await post("/v1/app-views/" + historical.id + "/actions", {
-					kind: "tool",
-					requestId: "historical-denied",
-					name: "write_board",
-					arguments: { id: "alpha", text: "Forbidden" },
-				})
-			).status,
-			409,
-		)
 		const action = {
 			kind: "tool",
 			requestId: "write-one",
@@ -312,7 +306,7 @@ test("App views bind to the real history and account, accept each exact host act
 		await approve(false)
 		assert.equal(publisher.businessCalls(), 2)
 		const record = await (
-			await request("/v1/sessions/" + id + "/app-operations")
+			await request("/v1/chats/" + id + "/app-operations")
 		).json()
 		assert.equal(
 			record.some(
@@ -394,12 +388,9 @@ test("App views bind to the real history and account, accept each exact host act
 			).length,
 			1,
 		)
+		assert.equal((await items()).length > 0, true)
 		assert.equal(
-			(await get()).state.value.conversation.history.length > 0,
-			true,
-		)
-		assert.equal(
-			(await (await request("/v1/sessions/" + id + "/app-operations")).json())
+			(await (await request("/v1/chats/" + id + "/app-operations")).json())
 				.length > 0,
 			true,
 		)

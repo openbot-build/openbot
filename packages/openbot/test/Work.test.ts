@@ -1,11 +1,12 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { Session } from "@openbot-build/core"
+import { Item } from "@openbot-build/core"
 import {
 	BotsApi,
+	ChatTodos,
+	ChatView,
+	MessageReceipt,
 	RequestsApi,
-	SessionTodos,
-	SessionView,
 	Settings,
 } from "@openbot-build/api"
 import { Effect, Redacted, Schema, Stream } from "effect"
@@ -70,7 +71,7 @@ const model = Effect.runSync(
 				const answered = prompt.content
 					.slice(last + 1)
 					.some((message) => message.role === "tool")
-				const reminded = input.startsWith("OpenBot reminder")
+				const reminded = input.includes("These todos are not done yet")
 				const system = prompt.content
 					.filter((message) => message.role === "system")
 					.map(textOf)
@@ -79,6 +80,8 @@ const model = Effect.runSync(
 					prompt.content.slice(last + 1).at(-1)?.content ?? "",
 				)
 				if (system.includes("You are in plan mode")) {
+					if (input.includes("Your plan was not approved"))
+						return answer("I keep planning.")
 					const names = tools.map((tool) => tool.name)
 					// Plan mode keeps only the tools that read.
 					if (names.includes("openbot_create_bot"))
@@ -94,7 +97,7 @@ const model = Effect.runSync(
 						lastResult.includes("approved") ? "Plan sent." : "Still planning.",
 					)
 				}
-				if (input.startsWith("OpenBot: your plan is approved"))
+				if (input.includes("Your plan is approved"))
 					return answered
 						? answer("Built.")
 						: call(names.todos, {
@@ -123,18 +126,24 @@ const model = Effect.runSync(
 						: call(names.todos, {
 								items: [todo("a", "pending"), todo("a", "done")],
 							})
-				if (input.includes("wait a moment"))
+				if (input.includes("Reminder: look at the build"))
+					return answer("The build is green.")
+				if (input.includes("remind me soon"))
 					return answered
-						? answer("Waited.")
-						: call(names.wait, { seconds: 2, reason: "The build needs time." })
-				if (input.includes("wait long"))
+						? answer("I will look later.")
+						: call(names.remind, { seconds: 2, note: "look at the build" })
+				if (input.includes("remind me late"))
 					return answered
-						? answer("Waited long.")
-						: call(names.wait, { seconds: 3600 })
-				if (input.includes("wait wrongly"))
+						? answer("I will look much later.")
+						: call(names.remind, { seconds: 3600, note: "look at the build" })
+				if (input.includes("remind me wrongly"))
 					return answered
-						? answer("Wrong wait.")
-						: call(names.wait, { seconds: 1, until: "2026-10-23T09:00:00Z" })
+						? answer("Wrong reminder.")
+						: call(names.remind, {
+								seconds: 1,
+								until: "2026-10-23T09:00:00Z",
+								note: "never",
+							})
 				return answer("Hello.")
 			}),
 	}),
@@ -184,47 +193,62 @@ const client = (host: Awaited<ReturnType<typeof BrowserHost.start>>) => {
 	return { send, json, until }
 }
 
-/** A new Session of the default Bot, with helpers to start Turns and read it. */
-const session = async (
+/** The direct Chat with the default Bot, with helpers to send messages and read it. */
+const chat = async (
 	host: Awaited<ReturnType<typeof BrowserHost.start>>,
 	credential: Redacted.Redacted<string>,
 ) => {
 	const { send, json, until } = client(host)
-	await host.defaultBot(credential)
-	const created = await json(
-		SessionView,
-		send(credential, "/v1/sessions", "POST", {}),
-	)
-	const path = "/v1/sessions/" + created.session.id
-	const view = () => json(SessionView, send(credential, path))
-	const todos = () => json(SessionTodos, send(credential, path + "/todos"))
-	const turn = async (input: string) => {
-		const current = await view()
-		const started = await send(credential, path + "/turns", "POST", {
-			expected: current.session.revision,
-			input,
-		})
-		assert.equal(started.status, 202, await started.clone().text())
-		return until("the Turn completes", async () => {
+	const bot = await host.defaultBot(credential)
+	let path = ""
+	const view = () => json(ChatView, send(credential, path))
+	const todos = () => json(ChatTodos, send(credential, path + "/todos"))
+	const rested = () =>
+		until("the Chat comes to rest", async () => {
 			const next = await view()
-			return next.session.turns.length > current.session.turns.length &&
-				Session.status(next.session)._tag === "Completed"
+			return next.status !== "Running" &&
+				next.activity !== "active" &&
+				next.inbox === 0
 				? next
 				: undefined
 		})
+	/** Sends a message and waits until its Turn and the Turns after it end. */
+	const turn = async (input: string) => {
+		const sent = await send(
+			credential,
+			"/v1/bots/" + bot + "/messages",
+			"POST",
+			{
+				input,
+			},
+		)
+		assert.equal(sent.status, 202, await sent.clone().text())
+		const receipt = Schema.decodeUnknownSync(MessageReceipt)(await sent.json())
+		path = "/v1/chats/" + receipt.chat
+		return rested()
 	}
-	/** The reminders in the history. The context window holds copies, so it is not counted. */
-	const reminders = async () => {
-		const state = (await (
-			await send(credential, path + "/history")
-		).json()) as {
-			value: { conversation: { history: ReadonlyArray<unknown> } }
-		}
-		return state.value.conversation.history.filter((item) =>
-			JSON.stringify(item).includes("OpenBot reminder"),
+	/** The text of the history, oldest first. */
+	const history = async () => {
+		const page = await json(
+			Schema.Struct({ items: Schema.Array(Item.Record) }),
+			send(credential, path + "/items?limit=500"),
+		)
+		return page.items.toReversed().map((item) => JSON.stringify(item.content))
+	}
+	const reminders = async () =>
+		(await history()).filter((item) =>
+			item.includes("These todos are not done yet"),
 		).length
+	return {
+		bot,
+		path: () => path,
+		view,
+		todos,
+		turn,
+		rested,
+		history,
+		reminders,
 	}
-	return { path, view, todos, turn, reminders, send, json }
 }
 
 test(
@@ -233,17 +257,14 @@ test(
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
 		try {
+			const { send, json } = client(host)
 			const alice = await host.login("work-alice")
-			const work = await session(host, alice.session)
-			assert.deepEqual(await work.todos(), { items: [] })
+			const work = await chat(host, alice.session)
 
 			// The Bot stops after the first step, so OpenBot reminds it once.
-			// It then marks both steps done, and the Turn ends.
+			// It then marks both steps done. A list where every item is done becomes empty.
 			await work.turn("do two steps")
-			assert.deepEqual((await work.todos()).items, [
-				todo("a", "done"),
-				todo("b", "done"),
-			])
+			assert.deepEqual((await work.todos()).items, [])
 			assert.equal(await work.reminders(), 1)
 
 			// A model that will not go on gets one reminder for each state of the list.
@@ -257,54 +278,28 @@ test(
 
 			// A person replaces the list. An old revision is a conflict.
 			const current = await work.view()
-			const replaced = await work.json(
-				SessionView,
-				work.send(alice.session, work.path + "/todos", "PUT", {
-					expected: current.session.head,
-					revision: current.session.revision,
+			const replaced = await json(
+				ChatView,
+				send(alice.session, work.path() + "/todos", "PUT", {
+					revision: current.chat.revision,
 					items: [todo("c", "pending")],
 				}),
 			)
 			assert.deepEqual((await work.todos()).items, [todo("c", "pending")])
-			const stale = await work.send(
-				alice.session,
-				work.path + "/todos",
-				"PUT",
-				{
-					expected: current.session.head,
-					revision: current.session.revision,
-					items: [],
-				},
-			)
+			const stale = await send(alice.session, work.path() + "/todos", "PUT", {
+				revision: current.chat.revision,
+				items: [],
+			})
 			assert.equal(stale.status, 409)
-			const twice = await work.send(
-				alice.session,
-				work.path + "/todos",
-				"PUT",
-				{
-					expected: replaced.session.head,
-					revision: replaced.session.revision,
-					items: [todo("d", "pending"), todo("d", "pending")],
-				},
-			)
+			const twice = await send(alice.session, work.path() + "/todos", "PUT", {
+				revision: replaced.chat.revision,
+				items: [todo("d", "pending"), todo("d", "pending")],
+			})
 			assert.equal(twice.status, 409)
-
-			// The list is part of the Timeline, so a fork of an older version has the older list.
-			const fork = await work.json(
-				SessionView,
-				work.send(alice.session, work.path + "/fork", "POST", {
-					version: current.session.head,
-				}),
-			)
-			const forked = await work.json(
-				SessionTodos,
-				work.send(alice.session, "/v1/sessions/" + fork.session.id + "/todos"),
-			)
-			assert.deepEqual(forked.items, [todo("a", "pending")])
 
 			// Another member cannot read the list.
 			const bob = await host.login("work-bob")
-			const hidden = await work.send(bob.session, work.path + "/todos")
+			const hidden = await send(bob.session, work.path() + "/todos")
 			assert.ok([403, 404].includes(hidden.status), String(hidden.status))
 		} finally {
 			await host.close()
@@ -313,64 +308,43 @@ test(
 )
 
 test(
-	"a Bot waits for some time, also over a restart, and an interrupt ends the wait",
+	"a reminder comes back as a message, also over a restart, and only a stop of all work cancels it",
 	{ timeout: 120000 },
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
 		try {
-			const { until } = client(host)
-			const alice = await host.login("wait-alice")
-			const work = await session(host, alice.session)
-			const start = async (input: string) => {
-				const current = await work.view()
-				const started = await work.send(
-					alice.session,
-					work.path + "/turns",
-					"POST",
-					{ expected: current.session.revision, input },
-				)
-				assert.equal(started.status, 202, await started.clone().text())
-				return until("the Turn waits", async () => {
-					const next = await work.view()
-					return Session.status(next.session)._tag === "Waiting"
-						? next
-						: undefined
-				})
-			}
-			const ended = (tag: string) =>
-				until("the Turn ends as " + tag, async () => {
-					const next = await work.view()
-					return Session.status(next.session)._tag === tag ? next : undefined
-				})
-			const text = async () =>
-				JSON.stringify(
-					await (await work.send(alice.session, work.path + "/history")).json(),
-				)
+			const { send, until } = client(host)
+			const alice = await host.login("remind-alice")
+			const work = await chat(host, alice.session)
+			const text = async () => (await work.history()).join("\n")
 
-			// The wait is saved, so a restart does not lose it.
+			// The Turn does not wait for the reminder. The reminder is saved, so a restart
+			// does not lose it. At its time, its note starts a new Turn.
 			const began = Date.now()
-			await start("wait a moment")
+			const set = await work.turn("remind me soon")
+			assert.equal(set.status, "Completed")
+			assert.equal(set.open.reminders, 1)
+			assert.match(await text(), /I will look later\./)
 			await host.restart()
-			await ended("Completed")
-			assert.ok(Date.now() - began >= 2000)
-			assert.match(await text(), /"waited":true/)
-			assert.match(await text(), /Waited\./)
-
-			// An interrupt ends a long wait.
-			const waiting = await start("wait long")
-			const turn = Session.currentTurn(waiting.session)!
-			const stopped = await work.send(
-				alice.session,
-				work.path + "/turns/" + turn.id + "/interrupt",
-				"POST",
-				{},
+			await until("the reminder", async () =>
+				(await text()).includes("The build is green.") ? true : undefined,
 			)
-			assert.equal(stopped.status, 200, await stopped.clone().text())
-			await ended("Interrupted")
+			assert.ok(Date.now() - began >= 2000)
+			assert.equal((await work.rested()).open.reminders, 0)
 
-			// A wrong input does not wait. The Bot gets an error.
-			await work.turn("wait wrongly")
+			// A plain interrupt stops only the Turn. Stopping all work cancels the reminder.
+			assert.equal((await work.turn("remind me late")).open.reminders, 1)
+			const interrupt = (payload: unknown) =>
+				send(alice.session, work.path() + "/interrupt", "POST", payload)
+			assert.equal((await interrupt({})).status, 200)
+			assert.equal((await work.view()).open.reminders, 1)
+			assert.equal((await interrupt({ delegations: true })).status, 200)
+			assert.equal((await work.view()).open.reminders, 0)
+
+			// A wrong input sets no reminder. The Bot gets an error.
+			await work.turn("remind me wrongly")
 			assert.match(await text(), /Give either seconds or until, not both/)
+			assert.equal((await work.view()).open.reminders, 0)
 		} finally {
 			await host.close()
 		}
@@ -378,7 +352,7 @@ test(
 )
 
 test(
-	"a plan waits for approval as the most specific setting says, and then runs in build mode",
+	"a plan asks for approval as the most specific setting says, and then runs in build mode",
 	{ timeout: 120000 },
 	async () => {
 		const host = await BrowserHost.start({ publicOrigin, model })
@@ -413,29 +387,29 @@ test(
 			})
 			assert.equal(stale.status, 409)
 			const defaultBot = await host.defaultBot(alice.session)
-
-			const plan = async (body: Record<string, unknown>) => {
-				const created = await json(
-					SessionView,
-					send(alice.session, "/v1/sessions", "POST", {
-						settings: { mode: "plan" },
-						...body,
-					}),
-				)
-				const path = "/v1/sessions/" + created.session.id
-				const view = () => json(SessionView, send(alice.session, path))
-				const started = await send(alice.session, path + "/turns", "POST", {
-					expected: created.session.revision,
-					input: "plan the fix",
+			const work = await chat(host, alice.session)
+			await work.turn("hello")
+			/** Asks for a plan in plan mode, with the approval setting of the Chat. */
+			const plan = async (planApproval: unknown) => {
+				const current = await work.view()
+				const changed = await send(alice.session, work.path(), "PATCH", {
+					expected: current.chat.revision,
+					mode: "plan",
+					planApproval,
 				})
-				assert.equal(started.status, 202, await started.clone().text())
-				return { path, view }
+				assert.equal(changed.status, 200, await changed.clone().text())
+				// The plan Turn does not wait for the decision.
+				const asked = await work.turn("plan the fix")
+				assert.equal(asked.status, "Completed")
+				return asked
 			}
-			const settled = (work: Awaited<ReturnType<typeof plan>>, turns: number) =>
-				until("the Session settles", async () => {
+			const built = () =>
+				until("the plan runs in build mode", async () => {
 					const current = await work.view()
-					return current.session.turns.length >= turns &&
-						Session.status(current.session)._tag === "Completed"
+					return current.chat.settings.mode === "build" &&
+						current.turn?.settings.mode === "build" &&
+						current.status === "Completed" &&
+						current.inbox === 0
 						? current
 						: undefined
 				})
@@ -450,20 +424,15 @@ test(
 					)
 				})
 
-			// 1. The Session asks the person and waits. Alice allows it, so the plan runs.
-			const first = await plan({
-				planApproval: {
-					approver: "person",
-					timeoutMs: 600000,
-					onTimeout: "stay",
-				},
-			})
+			// 1. The Chat asks the person. Alice allows it, so the plan runs in a new Turn.
+			await plan({ approver: "person", timeoutMs: 600000, onTimeout: "stay" })
 			const request = await pending()
 			assert.deepEqual(request.approver, {
 				_tag: "Person",
 				userId: alice.identity.userId,
 			})
 			assert.equal(request.onExpire, "deny")
+			assert.equal(request.chat, work.path().split("/").at(-1))
 			const resolved = await send(
 				alice.session,
 				"/v1/requests/" + request.id,
@@ -471,27 +440,29 @@ test(
 				{ expected: request.revision, decision: "allow" },
 			)
 			assert.equal(resolved.status, 200, await resolved.clone().text())
-			const built = await settled(first, 2)
-			assert.equal(built.session.settings.mode, "build")
-			assert.equal(built.session.turns.at(-1)!.settings.mode, "build")
-			assert.deepEqual(
-				(await json(SessionTodos, send(alice.session, first.path + "/todos")))
-					.items,
-				[todo("a", "done"), todo("b", "done")],
+			await built()
+			await until("the built answer", async () =>
+				(await work.history()).some((item) => item.includes("Built."))
+					? true
+					: undefined,
 			)
+			// Every item is done, so the list is empty after the Turn.
+			assert.deepEqual((await work.todos()).items, [])
 
-			// 2. The Session says that silence means yes. It wins over the member setting.
-			const second = await plan({
-				planApproval: { approver: "person", timeoutMs: 1000, onTimeout: "run" },
-			})
-			const ran = await settled(second, 2)
-			assert.equal(ran.session.settings.mode, "build")
+			// 2. The Chat says that silence means yes. It wins over the member setting.
+			await plan({ approver: "person", timeoutMs: 1000, onTimeout: "run" })
+			await built()
 
-			// 3. Without a Session setting, the member setting counts: the plan stays a plan.
-			const third = await plan({})
-			const stayed = await settled(third, 1)
-			assert.equal(stayed.session.settings.mode, "plan")
-			assert.equal(stayed.session.turns.length, 1)
+			// 3. Without a Chat setting, the member setting counts: the plan stays a plan,
+			// and the Bot gets the reason.
+			await plan(null)
+			await until("the answer that the plan stays a plan", async () =>
+				(await work.history()).some((item) => item.includes("I keep planning."))
+					? true
+					: undefined,
+			)
+			const stayed = await work.rested()
+			assert.equal(stayed.chat.settings.mode, "plan")
 
 			// 4. A Bot setting comes before the member setting.
 			const main = await json(
@@ -512,9 +483,8 @@ test(
 				},
 			)
 			assert.equal(changed.status, 200, await changed.clone().text())
-			const fourth = await plan({})
-			const botRan = await settled(fourth, 2)
-			assert.equal(botRan.session.settings.mode, "build")
+			await plan(null)
+			await built()
 		} finally {
 			await host.close()
 		}

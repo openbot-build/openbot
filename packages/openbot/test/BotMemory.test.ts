@@ -1,13 +1,13 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { Item, Session } from "@openbot-build/core"
+import { Chat, Item } from "@openbot-build/core"
 import * as BotMemory from "../src/plugins/memory/BotMemory.ts"
 import * as Audience from "../src/plugins/memory/Audience.ts"
 import { insertions } from "../src/plugins/memory/InsertOnly.ts"
 import { Option } from "effect"
 
 const source = (item: string) => ({
-	session: Session.Id.make("s-1"),
+	chat: Chat.Id.make("c-1"),
 	item: Item.Id.make(item),
 })
 const said = (
@@ -68,7 +68,7 @@ test("a fact gets the tags of OpenBot from its source Items", () => {
 			"for:person:u-ana",
 			"from:u-ana",
 			"org:org-a",
-			"session:s-1",
+			"chat:c-1",
 		].sort(),
 	)
 	assert.ok(
