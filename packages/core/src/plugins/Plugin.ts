@@ -10,14 +10,13 @@ import {
 } from "effect"
 import { type Prompt, type Toolkit, type Tool } from "effect/ai"
 import { Context, type Event, type Options as BotOptions } from "../bot/Bot.ts"
-import type * as Timeline from "../timeline/Timeline.ts"
-import type * as Session from "../session/Session.ts"
-import type * as SessionStore from "../store/SessionStore.ts"
+import type * as Chat from "../chat/Chat.ts"
+import type * as ChatStore from "../store/ChatStore.ts"
 
 export const Id = Schema.String.check(
 	Schema.makeFilter(
 		(id) =>
-			(id !== "session" && id !== "conversation") ||
+			(id !== "chat" && id !== "conversation") ||
 			"Core namespaces are reserved",
 	),
 ).pipe(Schema.brand("@openbot-build/core/PluginId"))
@@ -28,9 +27,13 @@ export interface Definition<I extends Id = Id> {
 	readonly id: I
 }
 
-/** Persistent plugin data with an explicit owner and its current Codec. */
+/**
+ * Persistent plugin data with an explicit owner and its current Codec.
+ * `record` data is kept on the small record of the Chat, which every read loads.
+ * `state` data is kept with the conversation.
+ */
 export interface StateDeclaration {
-	readonly scope: "session" | "timeline"
+	readonly scope: "record" | "state"
 	readonly schema: Schema.ConstraintCodec<
 		unknown,
 		Schema.Json,
@@ -45,21 +48,17 @@ export interface StoreDefinition<
 	readonly schema: S
 }
 
-/** Typed view at the current branch head. Missing plugin data is explicit. */
+/** Typed view of the current Chat. Missing plugin data is explicit. */
 export interface StoreState<A> {
-	readonly at: Session.Position
+	readonly at: Chat.Position
 	readonly value: Option.Option<A>
 }
 
-/** The host binds these operations to one Plugin.Id and the current Session branch. */
+/** The host binds these operations to one Plugin.Id and the current Chat. */
 /** Store operations keep host failures and dependencies, as well as commit failures. */
 export type StoreEffect<A, E, R> = Effect.Effect<
 	A,
-	| Session.SessionNotFound
-	| Timeline.VersionError
-	| Session.SessionError
-	| SessionStore.SessionStoreError
-	| E,
+	Chat.ChatNotFound | Chat.ChatError | ChatStore.ChatStoreError | E,
 	R
 >
 
@@ -67,11 +66,11 @@ export type StoreEffect<A, E, R> = Effect.Effect<
 export interface StoreOperations<A, E = never, R = never> {
 	readonly get: StoreEffect<Option.Option<A>, E, R>
 	readonly snapshot: StoreEffect<StoreState<A>, E, R>
-	/** Replaces the value only if the version that snapshot returned still matches. */
+	/** Replaces the value only if the revision that snapshot returned still matches. */
 	readonly setAt: (input: {
-		readonly base: Session.Position
+		readonly base: Chat.Position
 		readonly value: Option.Option<A>
-	}) => StoreEffect<Session.Ref, E, R>
+	}) => StoreEffect<Chat.Ref, E, R>
 	readonly set: (value: Option.Option<A>) => StoreEffect<void, E, R>
 	readonly getAndSet: (
 		value: Option.Option<A>,
@@ -188,7 +187,7 @@ export interface Stored<
 	E,
 	R,
 	Declaration extends StateDeclaration,
-	StoreE = Session.SessionError,
+	StoreE = Chat.ChatError,
 	StoreR = Context,
 	I extends Id = Id,
 	BuildE = never,
@@ -210,7 +209,7 @@ export interface Factory {
 	readonly make: <
 		const I extends Id,
 		const Declaration extends StateDeclaration,
-		StoreE = Session.SessionError,
+		StoreE = Chat.ChatError,
 		StoreR = Context,
 	>(input: {
 		readonly id: I
@@ -406,7 +405,7 @@ export function make<I extends Id>(input: {
 export function make<
 	I extends Id,
 	D extends StateDeclaration,
-	StoreE = Session.SessionError,
+	StoreE = Chat.ChatError,
 	StoreR = Context,
 >(input: {
 	readonly id: I
@@ -425,7 +424,7 @@ export function make<
 export function make<
 	I extends Id,
 	D extends StateDeclaration,
-	StoreE = Session.SessionError,
+	StoreE = Chat.ChatError,
 	StoreR = Context,
 >(input: { readonly id: I; readonly store?: D | undefined }) {
 	return <

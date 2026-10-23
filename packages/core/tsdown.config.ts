@@ -5,20 +5,15 @@ export default defineConfig({
 	...config,
 	entry: {
 		"bot/Bot": "src/bot/Bot.ts",
-		"session/Turn": "src/session/Turn.ts",
-		"timeline/Timeline": "src/timeline/Timeline.ts",
-		"timeline/Item": "src/timeline/Item.ts",
-		"store/SessionStoreRepository": "src/store/SessionStoreRepository.ts",
-		"store/Snapshots": "src/store/Snapshots.ts",
+		"chat/Turn": "src/chat/Turn.ts",
+		"chat/Item": "src/chat/Item.ts",
+		"chat/ChatState": "src/chat/ChatState.ts",
+		"store/ChatStoreRepository": "src/store/ChatStoreRepository.ts",
 		"store/Store": "src/store/Store.ts",
-		"store/RecordSerialization": "src/store/RecordSerialization.ts",
 		"store/MemoryPersistence": "src/store/MemoryPersistence.ts",
-		"store/VersionGraph": "src/store/VersionGraph.ts",
-		"store/DeltaValidation": "src/store/DeltaValidation.ts",
-		"timeline/TimelineState": "src/timeline/TimelineState.ts",
 
 		index: "src/index.ts",
-		"session/Session": "src/session/Session.ts",
+		"chat/Chat": "src/chat/Chat.ts",
 		"models/Config": "src/models/Config.ts",
 		"context/ConversationContext": "src/context/ConversationContext.ts",
 		"models/Model": "src/models/Model.ts",
@@ -26,9 +21,9 @@ export default defineConfig({
 		"models/Provider": "src/models/Provider.ts",
 		"skills/Skill": "src/skills/Skill.ts",
 		"skills/SkillMap": "src/skills/SkillMap.ts",
-		"store/SessionStore": "src/store/SessionStore.ts",
-		"session/SessionRuntime": "src/session/SessionRuntime.ts",
-		"store/SessionStoreMemory": "src/store/SessionStoreMemory.ts",
+		"store/ChatStore": "src/store/ChatStore.ts",
+		"chat/ChatRuntime": "src/chat/ChatRuntime.ts",
+		"store/ChatStoreMemory": "src/store/ChatStoreMemory.ts",
 		"models/ConfigurationOperations": "src/models/ConfigurationOperations.ts",
 		"context/ContextWindow": "src/context/ContextWindow.ts",
 		"context/SummaryCompaction": "src/context/SummaryCompaction.ts",
@@ -42,15 +37,10 @@ export default defineConfig({
 		...config.exports,
 		customExports(exports) {
 			return Object.fromEntries(
-				Object.entries(exports).map(([key, value]) => {
-					const name = key.split("/").at(-1)
-					return [
-						key === "."
-							? key
-							: `./${name === "Snapshots" ? "TimelineSnapshots" : name}`,
-						value,
-					]
-				}),
+				Object.entries(exports).map(([key, value]) => [
+					key === "." ? key : `./${key.split("/").at(-1)}`,
+					value,
+				]),
 			)
 		},
 	},

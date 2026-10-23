@@ -22,7 +22,7 @@ import {
 } from "effect"
 import { dual } from "effect/Function"
 import {
-	Chat,
+	Chat as AiChat,
 	IdGenerator,
 	LanguageModel,
 	Prompt,
@@ -30,22 +30,38 @@ import {
 	type Tool,
 	type Response,
 } from "effect/ai"
-import * as Session from "./Session.ts"
+import * as Chat from "./Chat.ts"
 import * as HostActionDriver from "./HostActionDriver.ts"
 import * as Turn from "./Turn.ts"
+import * as Item from "./Item.ts"
+import * as ChatState from "./ChatState.ts"
 import * as Bot from "../bot/Bot.ts"
-import * as Timeline from "../timeline/Timeline.ts"
-import * as Item from "../timeline/Item.ts"
-import { fullHistory, unansweredCalls } from "../timeline/TimelineState.ts"
-import * as TimelineState from "../timeline/TimelineState.ts"
 import type * as Config from "../models/Config.ts"
 import * as ConfigurationOperations from "../models/ConfigurationOperations.ts"
 import * as ContextWindow from "../context/ContextWindow.ts"
 import * as ContextCompaction from "../context/ContextCompaction.ts"
 import * as SummaryCompaction from "../context/SummaryCompaction.ts"
-import { SessionStoreError } from "../store/SessionStore.ts"
+import { ChatStoreError } from "../store/ChatStore.ts"
+import type * as ChatStore from "../store/ChatStore.ts"
 import * as Plugin from "../plugins/Plugin.ts"
 import * as PluginComposition from "../plugins/PluginComposition.ts"
+
+/** What the model gets for a tool call that waits for a decision, when no host decides. */
+const pendingResult = {
+	pending: true,
+	note: "This call waits for a decision. The answer comes back to this Chat as a message later.",
+}
+/** The first message of a window that was rebuilt for another model. */
+const compactedNote =
+	"Earlier messages of this Chat were compacted for another model, so they are not shown here."
+
+/** One Turn that the runtime accepted, with its first Items. */
+interface Accepted<P> {
+	readonly view: Chat.View<P>
+	readonly turn: Turn.Id
+	readonly item: Item.Id
+	readonly prompt: Prompt.Prompt
+}
 
 export const make = <
 	P = {},
@@ -56,9 +72,9 @@ export const make = <
 	BuildR = never,
 	HostTools extends Record<string, Tool.Any> = {},
 >(
-	options: Session.RuntimeOptions<P, Tools, E, R, BuildE, BuildR, HostTools>,
+	options: Chat.RuntimeOptions<P, Tools, E, R, BuildE, BuildR, HostTools>,
 ): Effect.Effect<
-	Session.Runtime<P, Tools, E, R, HostTools>,
+	Chat.Runtime<P, Tools, E, R, HostTools>,
 	BuildE,
 	BuildR | Scope.Scope
 > =>
@@ -68,6 +84,7 @@ export const make = <
 			P
 		>
 		const bot = options.bot
+		const store = options.store
 		const scope = yield* Effect.scope
 		const basePlugin =
 			bot.plugin ??
@@ -101,11 +118,23 @@ export const make = <
 			() => IdGenerator.defaultIdGenerator,
 		)
 		const id = () => generator.generateId()
-		// The bot compaction service comes first. Otherwise the host may provide one.
+		// The services of the bot come first. Otherwise the host may provide them.
 		const compactionService =
 			bot.compaction === undefined
 				? Effect.serviceOption(ContextCompaction.ContextCompaction)
 				: Effect.succeedSome(bot.compaction)
+		const approvals =
+			bot.approvals === undefined
+				? yield* Effect.serviceOption(Chat.Approvals)
+				: Option.some(bot.approvals)
+		const decide = (
+			request: Chat.ApprovalRequest,
+		): Effect.Effect<Chat.Decision> =>
+			Option.match(approvals, {
+				onNone: () =>
+					Effect.succeed(Chat.Decision.Pending({ result: pendingResult })),
+				onSome: (service) => service.decide(request),
+			})
 		const findModel = (selection: Config.Selection | undefined) =>
 			(bot.modelCatalog ?? Effect.succeed([])).pipe(
 				Effect.map((models) =>
@@ -118,15 +147,19 @@ export const make = <
 			)
 		const active = yield* SynchronizedRef.make(
 			HashMap.empty<
-				Session.Id,
+				Chat.Id,
 				{
 					readonly turn: Turn.Id
 					readonly fiber: Fiber.Fiber<unknown, unknown>
 				}
 			>(),
 		)
+		const isActive = (chat: Chat.Id) =>
+			SynchronizedRef.get(active).pipe(
+				Effect.map((entries) => HashMap.has(entries, chat)),
+			)
 		const bus = yield* PubSub.unbounded<Event>()
-		const activity = yield* PubSub.unbounded<Session.Id>()
+		const activity = yield* PubSub.unbounded<Chat.Id>()
 		yield* Effect.addFinalizer(() => PubSub.shutdown(bus))
 		yield* Effect.addFinalizer(() => PubSub.shutdown(activity))
 		// The latest events, so a new subscriber can catch up with recent revisions.
@@ -135,177 +168,231 @@ export const make = <
 			Ref.update(retained, (events) =>
 				A.takeRight(A.append(events, event), 64),
 			).pipe(Effect.andThen(PubSub.publish(bus, event)), Effect.asVoid)
-		const versionEvent = (view: Session.View<P>): Event => ({
-			_tag: "VersionCreated",
+		const chatEvent = (view: Chat.View<P>): Event => ({
+			_tag: "ChatUpdated",
 			view,
 		})
 		yield* Effect.forkScoped(
-			options.store.changes().pipe(
-				Stream.runForEach((change) =>
-					Match.value(change).pipe(
-						Match.tag("VersionCommitted", ({ view }) =>
-							publish(versionEvent(view)),
-						),
-						Match.tag("RefUpdated", ({ ref }) =>
-							options.store
-								.readVersion(ref.head)
-								.pipe(
-									Effect.flatMap((state) =>
-										publish(versionEvent({ session: ref, state })),
-									),
-								),
-						),
-						Match.tag("RefRemoved", () => Effect.void),
-						Match.exhaustive,
+			store
+				.changes()
+				.pipe(
+					Stream.runForEach((change) =>
+						change._tag === "Committed"
+							? publish(chatEvent(change.view))
+							: Effect.void,
 					),
 				),
-			),
 			{ startImmediately: true },
 		)
-		const check = (ref: Session.Ref, expected?: Timeline.VersionId) =>
-			expected !== undefined && ref.head !== expected
-				? Effect.fail(
-						new Timeline.VersionError({
-							reason: "head-conflict",
-							version: expected,
-							message: "The Timeline head is out of date",
-						}),
-					)
-				: Effect.void
-		const commit = (input: {
-			readonly session: Session.Id
-			readonly expected?: Timeline.VersionId
-			readonly update: (value: Timeline.Value<P>) => Timeline.Value<P>
-		}) =>
-			options.store
-				.modifyEffect({
-					session: input.session,
-					...(input.expected === undefined
-						? {}
-						: { expectedHead: input.expected }),
-					update: (view) =>
-						Effect.succeed([
-							undefined,
-							Option.some({ value: input.update(view.state.value) }),
-						] as const),
-				})
-				.pipe(Effect.map(({ view }) => view))
-		const requireTurn = (view: Session.View<P>, turn: Turn.Id) => {
-			const current = Session.currentTurn(view.session)
+		const requireTurn = (view: Chat.View<P>, turn: Turn.Id) => {
+			const current = Chat.currentTurn(view.chat)
 			return current?.id === turn
 				? Effect.succeed(current)
 				: Effect.fail(
 						new Turn.Conflict({
-							session: view.session.id,
+							chat: view.chat.id,
 							turn,
 							message: "The target Turn is no longer current",
 						}),
 					)
 		}
-		const receipt = (
-			view: Session.View<P>,
-			turn: Turn.Id,
-			item: Item.Id,
-		): Session.Receipt => ({
-			session: view.session.id,
-			turn,
-			item,
-			revision: view.session.revision,
-			version: view.session.head,
+		/** The changes that add Items to the log and to the window of the model. */
+		const appending = (
+			view: Chat.View<P>,
+			entries: ReadonlyArray<Item.Entry>,
+			conversation: Partial<ChatState.Conversation> = {},
+		): Pick<ChatStore.Mutation<P>, "value" | "append"> => ({
+			append: entries,
+			value: {
+				...view.state,
+				conversation: {
+					...view.state.conversation,
+					context: ContextWindow.append(
+						view.state.conversation.context,
+						ChatState.promptOf(entries),
+					),
+					...conversation,
+				},
+			},
 		})
-		const accept = (input: Session.Input, queued?: Session.Pending) =>
+		/**
+		 * The Items for input from the inbox. An approved call also gets an assistant
+		 * message with the call and a tool message with the approval, so the next model
+		 * request runs the call without asking again.
+		 */
+		const itemsOf = (
+			chat: Chat.Id,
+			turn: Turn.Id,
+			step: number,
+			entries: ReadonlyArray<Chat.InboxEntry>,
+		) =>
+			Effect.forEach(entries, (entry) =>
+				Effect.gen(function* () {
+					const origin: Item.Origin = {
+						chat,
+						turn,
+						step,
+						...(entry.notice === undefined ? {} : { notice: entry.notice }),
+					}
+					const input: Item.Entry = {
+						id: entry.id,
+						content: entry.content,
+						origin,
+					}
+					if (entry.approved === undefined) return [input]
+					const call = entry.approved
+					const approved: Item.Entry = {
+						id: Item.Id.make(yield* id()),
+						content: Prompt.make([
+							{
+								role: "assistant",
+								content: [
+									Prompt.toolCallPart({
+										id: call.id,
+										name: call.name,
+										params: call.params,
+										providerExecuted: false,
+									}),
+									Prompt.toolApprovalRequestPart({
+										approvalId: call.id,
+										toolCallId: call.id,
+									}),
+								],
+							},
+							{
+								role: "tool",
+								content: [
+									Prompt.toolApprovalResponsePart({
+										approvalId: call.id,
+										approved: true,
+									}),
+								],
+							},
+						]),
+						origin,
+					}
+					return [input, approved]
+				}),
+			).pipe(Effect.map(A.flatten))
+		/** A window for the model of a Turn. A native window of another model is rebuilt. */
+		const windowFor = (
+			window: ChatState.Conversation["context"],
+			settings: Turn.Settings,
+		) =>
+			Match.value(window).pipe(
+				Match.tag("Native", (window) =>
+					settings.model?.provider === window.provider &&
+					settings.model.model === window.model
+						? window
+						: ContextWindow.fromPrompt(
+								Prompt.concat(
+									Prompt.make([{ role: "user", content: compactedNote }]),
+									window.prompt,
+								),
+							),
+				),
+				Match.tag("Prompt", (window) => window),
+				Match.exhaustive,
+			)
+		/**
+		 * Starts a Turn in one atomic step. `select` picks the input from the inbox
+		 * of the current Chat. It gives nothing when no Turn should start.
+		 */
+		const accept = (input: {
+			readonly chat: Chat.Id
+			readonly select: (
+				view: Chat.View<P>,
+			) => ReadonlyArray<Chat.InboxEntry> | undefined
+			readonly author?: Turn.Author
+			readonly overrides?: Partial<Turn.Settings>
+			readonly action?: Turn.Action
+			readonly expectedRevision?: Chat.Revision
+		}) =>
 			Effect.gen(function* () {
-				const turn = Turn.Id.make(yield* id()),
-					item = queued?.id ?? Item.Id.make(yield* id())
-				const prompt = Prompt.make(input.input)
-				const changed = yield* options.store.modifyEffect({
-					session: input.base.session,
-					expectedRevision: input.base.revision,
+				const turn = Turn.Id.make(yield* id())
+				const changed = yield* store.modifyEffect({
+					chat: input.chat,
+					...(input.expectedRevision === undefined
+						? {}
+						: { expectedRevision: input.expectedRevision }),
 					update: (view) =>
 						Effect.gen(function* () {
-							if (
-								HashMap.has(yield* SynchronizedRef.get(active), view.session.id)
-							)
-								return yield* new Session.Conflict({
-									session: view.session.id,
+							if (HashMap.has(yield* SynchronizedRef.get(active), view.chat.id))
+								return yield* new Chat.Conflict({
+									chat: view.chat.id,
 									message: "The previous Turn is still releasing its resources",
 								})
-							const previous = Session.currentTurn(view.session)
-
+							const previous = Chat.currentTurn(view.chat)
 							if (previous !== undefined && !Turn.isTerminal(previous.status))
-								return yield* new Session.Conflict({
-									session: view.session.id,
-									message: "The Session already has an unfinished Turn",
+								return yield* new Chat.Conflict({
+									chat: view.chat.id,
+									message: "The Chat already has an unfinished Turn",
 								})
-							const settings = { ...view.session.settings, ...input.overrides }
-							const window = Match.value(
-								view.state.value.conversation.context,
-							).pipe(
-								Match.tag("Native", (window) =>
-									settings.model?.provider === window.provider &&
-									settings.model.model === window.model
-										? window
-										: ContextWindow.fromPrompt(fullHistory(view.state.value)),
-								),
-								Match.tag("Prompt", (window) => window),
-								Match.exhaustive,
-							)
+							const selected = input.select(view)
+							if (selected === undefined || selected.length === 0)
+								return [undefined, Option.none()] as const
+							const author = input.author ?? selected[0]!.author
+							const settings = { ...view.chat.settings, ...input.overrides }
+							const items = yield* itemsOf(view.chat.id, turn, 0, selected)
 							const record: Turn.Record = {
 								...(input.action === undefined ? {} : { action: input.action }),
-								...(input.author === undefined ? {} : { author: input.author }),
+								...(author === undefined ? {} : { author }),
 								id: turn,
-								session: view.session.id,
+								chat: view.chat.id,
 								settings,
 								status: Turn.StatusSchema.make({ _tag: "Running" }),
 								steps: 0,
-								input: [item],
-								items: [item],
-								start: view.session.head,
+								input: selected.map((entry) => entry.id),
+								items: items.map((item) => item.id),
 								startedAt: yield* Clock.currentTimeMillis,
 							}
+							const window = windowFor(
+								view.state.conversation.context,
+								settings,
+							)
+							const prepared: Chat.View<P> = {
+								...view,
+								state: {
+									...view.state,
+									conversation: { ...view.state.conversation, context: window },
+								},
+							}
+							const selectedIds = selected.map((entry) => entry.id)
 							return [
-								undefined,
+								{ items, first: selected[0]!.id },
 								Option.some({
-									value: {
-										...view.state.value,
-										conversation: {
-											...view.state.value.conversation,
-											closed: false,
-											history: A.append(view.state.value.conversation.history, {
-												id: item,
-												content: prompt,
-												origin: { session: view.session.id, turn, step: 0 },
-											}),
-											context: ContextWindow.append(window, prompt),
-										},
-									},
-									session: {
-										turns: A.append(view.session.turns, record),
-										pending:
-											queued === undefined
-												? view.session.pending
-												: view.session.pending.filter(
-														(entry) => entry.id !== queued.id,
-													),
+									...appending(prepared, items, { closed: false }),
+									chat: {
+										turn: record,
+										inbox: view.chat.inbox.filter(
+											(entry) => !selectedIds.includes(entry.id),
+										),
 									},
 								}),
 							] as const
 						}),
 				})
-				return { view: changed.view, turn, item, prompt }
+				if (changed.result === undefined) return undefined
+				const accepted: Accepted<P> = {
+					view: changed.view,
+					turn,
+					item: changed.result.first,
+					prompt: ChatState.promptOf(changed.result.items),
+				}
+				return accepted
 			})
-		const close = (session: Session.Id, turn: Turn.Id, status: Turn.Status) =>
-			options.store
+		const close = (chat: Chat.Id, turn: Turn.Id, status: Turn.Status) =>
+			store
 				.modifyEffect({
-					session,
+					chat,
 					update: (view) =>
 						Effect.gen(function* () {
 							const current = yield* requireTurn(view, turn)
 							if (Turn.isTerminal(current.status))
 								return [false, Option.none()] as const
 							// Record an unavailable result for each unanswered tool call before later input uses this history.
-							const calls = unansweredCalls(
-								view.state.value.conversation.history,
+							const calls = ChatState.unansweredCalls(
+								yield* store.items(chat, { turn }),
 							)
 							const completedAt = yield* Clock.currentTimeMillis
 							const item = Item.Id.make(yield* id())
@@ -328,48 +415,43 @@ export const make = <
 											},
 										],
 							)
-							const history =
+							const items: ReadonlyArray<Item.Entry> =
 								prompt.content.length === 0
-									? view.state.value.conversation.history
-									: A.append(view.state.value.conversation.history, {
-											id: item,
-											content: prompt,
-											origin: {
-												session,
-												turn,
-												step: current.steps,
+									? []
+									: [
+											{
+												id: item,
+												content: prompt,
+												origin: { chat, turn, step: current.steps },
 											},
-										})
+										]
 							return [
 								true,
 								Option.some({
-									value: {
-										...view.state.value,
-										conversation: {
-											...view.state.value.conversation,
-											history,
-											context: ContextWindow.append(
-												view.state.value.conversation.context,
-												prompt,
-											),
-											closed: true,
-										},
-									},
-									session: {
-										pending: view.session.pending.filter(
-											(entry) => entry.turn !== turn,
+									...appending(view, items, { closed: true }),
+									chat: {
+										// Input for this Turn that it did not read waits for the next Turn.
+										inbox: view.chat.inbox.flatMap((entry) =>
+											entry.turn !== turn
+												? [entry]
+												: entry.kind === "steer"
+													? [
+															{
+																...Struct.omit(entry, ["turn"]),
+																kind: "message" as const,
+															},
+														]
+													: [],
 										),
-										turns: view.session.turns.map((entry) => {
-											if (entry.id !== turn) return entry
-											return {
-												...entry,
-												status,
-												completedAt,
-												...(prompt.content.length === 0
-													? {}
-													: { items: A.append(entry.items, item) }),
-											}
-										}),
+										turn: {
+											...current,
+											status,
+											completedAt,
+											items: [
+												...current.items,
+												...items.map((entry) => entry.id),
+											],
+										},
 									},
 								}),
 							] as const
@@ -381,17 +463,17 @@ export const make = <
 							? publish({
 									_tag: "TurnCompleted",
 									view,
-									turn: Session.currentTurn(view.session)!,
+									turn: Chat.currentTurn(view.chat)!,
 								})
 							: Effect.void,
 					),
 					Effect.map(({ view }) => view),
 				)
 		const compact = (input: {
-			session: Session.Id
+			chat: Chat.Id
 			targetTokens: number
 			request: Omit<ContextCompaction.Request, "window" | "selection">
-			expected?: Timeline.VersionId
+			expected?: Chat.Revision
 			selection?: Config.Selection
 		}) =>
 			Effect.gen(function* () {
@@ -403,9 +485,16 @@ export const make = <
 						reason: "invalid-target",
 						message: "The target must be a positive safe integer",
 					})
-				const view = yield* options.store.read(input.session)
-				yield* check(view.session, input.expected)
-				const selection = input.selection ?? view.session.settings.model
+				const view = yield* store.read(input.chat)
+				if (
+					input.expected !== undefined &&
+					view.chat.revision !== input.expected
+				)
+					return yield* new ContextCompaction.ContextCompactionError({
+						reason: "head-conflict",
+						message: "The Chat changed since it was read",
+					})
+				const selection = input.selection ?? view.chat.settings.model
 				const service = yield* compactionService
 				if (selection === undefined || Option.isNone(service))
 					return yield* new ContextCompaction.ContextCompactionError({
@@ -416,16 +505,10 @@ export const make = <
 				const model = yield* findModel(selection)
 				const request = {
 						...input.request,
-						window: Match.value(view.state.value.conversation.context).pipe(
-							Match.tag("Native", (window) =>
-								selection.provider === window.provider &&
-								selection.model === window.model
-									? window
-									: ContextWindow.fromPrompt(fullHistory(view.state.value)),
-							),
-							Match.tag("Prompt", (window) => window),
-							Match.exhaustive,
-						),
+						window: windowFor(view.state.conversation.context, {
+							...view.chat.settings,
+							model: selection,
+						}),
 						selection,
 					},
 					beforeTokens = yield* compaction.count(request)
@@ -448,11 +531,7 @@ export const make = <
 								(p) => p.id === summarySelection.provider,
 							)
 							const program = SummaryCompaction.compact({
-								prompt: Match.value(request.window).pipe(
-									Match.tag("Native", () => fullHistory(view.state.value)),
-									Match.tag("Prompt", (window) => window.prompt),
-									Match.exhaustive,
-								),
+								prompt: request.window.prompt,
 								targetTokens: input.targetTokens,
 								...R.filter(
 									{ keepRecentMessages: configuration.keepRecentMessages },
@@ -496,61 +575,64 @@ export const make = <
 						reason: "target-not-reached",
 						message: `The compacted context has ${afterTokens} tokens, which is more than the target of ${input.targetTokens}`,
 					})
-				const committed = yield* commit({
-					session: input.session,
-					expected: view.session.head,
-					update: (value) => ({
-						...value,
-						conversation: {
-							...value.conversation,
-							context: window,
-						},
-					}),
+				const committed = yield* store.modifyEffect({
+					chat: input.chat,
+					expectedRevision: view.chat.revision,
+					update: (current) =>
+						Effect.succeed([
+							undefined,
+							Option.some({
+								value: {
+									...current.state,
+									conversation: {
+										...current.state.conversation,
+										context: window,
+									},
+								},
+							}),
+						] as const),
 				})
-				return { view: committed, beforeTokens, afterTokens }
+				return { view: committed.view, beforeTokens, afterTokens }
 			})
 
-		const runner = (session: Session.Id, turn: Turn.Id) =>
+		const runner = (chat: Chat.Id, turn: Turn.Id) =>
 			Effect.gen(function* () {
 				const fiber = yield* Effect.fiber
 				yield* Effect.acquireRelease(
 					SynchronizedRef.modifyEffect(active, (entries) =>
 						Effect.gen(function* () {
-							if (HashMap.has(entries, session))
+							if (HashMap.has(entries, chat))
 								return yield* new Turn.Conflict({
-									session,
+									chat,
 									turn,
-									message: "The Session already has an active runner",
+									message: "The Chat already has an active runner",
 								})
 							return [
 								undefined,
-								HashMap.set(entries, session, { turn, fiber }),
+								HashMap.set(entries, chat, { turn, fiber }),
 							] as const
 						}),
-					).pipe(Effect.tap(() => PubSub.publish(activity, session))),
+					).pipe(Effect.tap(() => PubSub.publish(activity, chat))),
 					() =>
 						SynchronizedRef.update(active, (entries) =>
-							HashMap.get(entries, session).pipe(
+							HashMap.get(entries, chat).pipe(
 								Option.exists((entry) => entry.fiber === fiber),
 							)
-								? HashMap.remove(entries, session)
+								? HashMap.remove(entries, chat)
 								: entries,
-						).pipe(Effect.andThen(() => PubSub.publish(activity, session))),
+						).pipe(Effect.andThen(() => PubSub.publish(activity, chat))),
 				)
 			})
-		const run = (accepted: {
-			readonly view: Session.View<P>
-			readonly turn: Turn.Id
-			readonly item: Item.Id
-			readonly prompt: Prompt.Prompt
-		}): Stream.Stream<
+		const run = (
+			accepted: Accepted<P>,
+		): Stream.Stream<
 			Event,
-			Session.RuntimeError | Bot.ExecutionError<Tools, E>,
+			Chat.RuntimeError | Bot.ExecutionError<Tools, E>,
 			Bot.RuntimeServices<Tools, R>
 		> =>
 			Stream.unwrap(
 				Effect.gen(function* () {
-					const session = accepted.view.session.id
+					const chatId = accepted.view.chat.id
 					const turn = accepted.turn
 					const turnRecord = yield* requireTurn(accepted.view, turn)
 					const action = turnRecord.activeAction?.action ?? turnRecord.action
@@ -565,8 +647,8 @@ export const make = <
 
 					const step = yield* Ref.make(0),
 						chatRef = yield* Ref.make(
-							yield* Chat.fromPrompt(
-								accepted.view.state.value.conversation.context.prompt,
+							yield* AiChat.fromPrompt(
+								accepted.view.state.conversation.context.prompt,
 							),
 						)
 					const context = Bot.Context.of({
@@ -581,9 +663,9 @@ export const make = <
 								Predicate.isNotUndefined,
 							),
 						},
-						at: options.store
-							.read(session)
-							.pipe(Effect.map((view) => Session.position(view.session))),
+						at: store
+							.read(chatId)
+							.pipe(Effect.map((view) => Chat.position(view.chat))),
 						turn: Effect.succeed(turn),
 						step: Ref.get(step),
 						history: Ref.get(chatRef).pipe(
@@ -591,7 +673,7 @@ export const make = <
 						),
 					})
 					const next: Plugin.Next<
-						Session.RuntimeError | Bot.ExecutionError<Tools, E>,
+						Chat.RuntimeError | Bot.ExecutionError<Tools, E>,
 						R | Bot.Requirements<Tools, Tool.HandlersFor<Tools>>
 					> = <TK extends Toolkit.Any, ToolkitE, ToolkitR>(
 						inner: Plugin.Options<TK, ToolkitE, ToolkitR>,
@@ -605,83 +687,58 @@ export const make = <
 									n: number,
 								): Stream.Stream<
 									Event,
-									| Session.RuntimeError
-									| Bot.ExecutionError<Tools, E | ToolkitE>,
+									Chat.RuntimeError | Bot.ExecutionError<Tools, E | ToolkitE>,
 									R | Bot.Requirements<Tools, ToolkitR>
 								> =>
 									Stream.unwrap(
 										Effect.gen(function* () {
-											let view = yield* options.store.read(session)
+											let view = yield* store.read(chatId)
 											let record = yield* requireTurn(view, turn)
 											if (Turn.isTerminal(record.status)) return Stream.empty
-											const injected = view.session.pending.filter(
+											const injected = view.chat.inbox.filter(
 												(entry) =>
 													entry.kind === "steer" && entry.turn === turn,
 											)
 											if (injected.length > 0)
-												view = (yield* options.store.modifyEffect({
-													session,
+												view = (yield* store.modifyEffect({
+													chat: chatId,
 													update: (current) =>
 														Effect.gen(function* () {
-															yield* requireTurn(current, turn)
-															const entries = current.session.pending.filter(
+															const currentTurn = yield* requireTurn(
+																current,
+																turn,
+															)
+															const entries = current.chat.inbox.filter(
 																(entry) =>
 																	injected.some(
 																		(selected) => selected.id === entry.id,
 																	),
 															)
-															const history = [
-																...current.state.value.conversation.history,
-																...entries.map((entry): Item.Record => ({
-																	id: entry.id,
-																	content: entry.content,
-																	origin: {
-																		session,
-																		turn,
-																		step: action === undefined ? n : 0,
-																	},
-																})),
-															]
+															const items = yield* itemsOf(
+																chatId,
+																turn,
+																action === undefined ? n : 0,
+																entries,
+															)
 															return [
 																undefined,
 																Option.some({
-																	value: {
-																		...current.state.value,
-																		conversation: {
-																			...current.state.value.conversation,
-																			history,
-																			context: entries.reduce(
-																				(window, entry) =>
-																					ContextWindow.append(
-																						window,
-																						entry.content,
-																					),
-																				current.state.value.conversation
-																					.context,
-																			),
-																		},
-																	},
-																	session: {
-																		pending: current.session.pending.filter(
+																	...appending(current, items),
+																	chat: {
+																		inbox: current.chat.inbox.filter(
 																			(entry) =>
 																				!entries.some(
 																					(selected) =>
 																						selected.id === entry.id,
 																				),
 																		),
-																		turns: current.session.turns.map((entry) =>
-																			entry.id === turn
-																				? {
-																						...entry,
-																						items: [
-																							...entry.items,
-																							...entries.map(
-																								(entry) => entry.id,
-																							),
-																						],
-																					}
-																				: entry,
-																		),
+																		turn: {
+																			...currentTurn,
+																			items: [
+																				...currentTurn.items,
+																				...items.map((item) => item.id),
+																			],
+																		},
 																	},
 																}),
 															] as const
@@ -714,7 +771,7 @@ export const make = <
 											) {
 												const request = {
 													selection,
-													window: view.state.value.conversation.context,
+													window: view.state.conversation.context,
 													toolkit,
 													instructions,
 													...R.filter(
@@ -739,14 +796,14 @@ export const make = <
 													tokens >= autoCompactTokens
 												)
 													view = (yield* compact({
-														session,
-														expected: view.session.head,
+														chat: chatId,
+														expected: view.chat.revision,
 														targetTokens: autoCompactTokens,
 														selection,
 														request,
 													})).view
 											}
-											const window = view.state.value.conversation.context
+											const window = view.state.conversation.context
 											// A changed conversation must keep its messages, because the new
 											// messages of this step are found by their position after it.
 											const shown =
@@ -763,11 +820,11 @@ export const make = <
 																),
 															)
 											const starting = Prompt.concat(instructions, shown)
-											const chat = yield* Chat.fromPrompt(starting)
+											const chat = yield* AiChat.fromPrompt(starting)
 											yield* Ref.set(chatRef, chat)
 											yield* Ref.set(step, action === undefined ? n : 0)
 											const item = Item.Id.make(yield* id()),
-												at = Session.position(view.session)
+												at = Chat.position(view.chat)
 											let text = "",
 												finishReason: Response.FinishReason = "unknown",
 												followUp = false,
@@ -864,75 +921,50 @@ export const make = <
 														if (
 															Option.exists(
 																Cause.findErrorOption(exit.cause),
-																(failure) =>
-																	failure instanceof SessionStoreError,
+																(failure) => failure instanceof ChatStoreError,
 															)
 														)
 															return
 														const added = Prompt.fromResponseParts(received)
 														if (added.content.length === 0) return
-														yield* options.store
+														yield* store
 															.modifyEffect({
-																session,
+																chat: chatId,
 																update: (current) =>
 																	Effect.gen(function* () {
 																		const currentTurn = yield* requireTurn(
 																			current,
 																			turn,
 																		)
-																		if (
-																			current.state.value.conversation.history.some(
-																				(entry) => entry.id === item,
-																			)
-																		)
+																		if (currentTurn.items.includes(item))
 																			return [undefined, Option.none()] as const
 																		return [
 																			undefined,
 																			Option.some({
-																				value: {
-																					...current.state.value,
-																					conversation: {
-																						...current.state.value.conversation,
-																						history: A.append(
-																							current.state.value.conversation
-																								.history,
-																							{
-																								id: item,
-																								content: added,
-																								origin: {
-																									session,
-																									turn,
-																									step:
-																										action === undefined
-																											? n
-																											: 0,
-																								},
-																							},
-																						),
-																						context: ContextWindow.append(
-																							current.state.value.conversation
-																								.context,
-																							added,
+																				...appending(current, [
+																					{
+																						id: item,
+																						content: added,
+																						origin: {
+																							chat: chatId,
+																							turn,
+																							step:
+																								action === undefined ? n : 0,
+																						},
+																					},
+																				]),
+																				chat: {
+																					turn: {
+																						...currentTurn,
+																						steps:
+																							action === undefined
+																								? n
+																								: currentTurn.steps,
+																						items: A.append(
+																							currentTurn.items,
+																							item,
 																						),
 																					},
-																				},
-																				session: {
-																					turns: current.session.turns.map(
-																						(entry) =>
-																							entry.id === turn
-																								? {
-																										...currentTurn,
-																										steps:
-																											action === undefined
-																												? n
-																												: currentTurn.steps,
-																										items: A.append(
-																											currentTurn.items,
-																											item,
-																										),
-																									}
-																								: entry,
-																					),
 																				},
 																			}),
 																		] as const
@@ -956,19 +988,92 @@ export const make = <
 														added = Prompt.fromMessages(
 															completed.content.slice(starting.content.length),
 														)
+													// A Turn never waits: each approval request gets an answer now.
+													const open = approval
+														? ChatState.openApprovals(added)
+														: []
+													const decisions = yield* Effect.forEach(
+														open,
+														(request) =>
+															decide({
+																chat: chatId,
+																turn,
+																approvalId: request.approvalId,
+																toolCall: request.toolCall,
+																...(record.author === undefined
+																	? {}
+																	: { author: record.author }),
+															}).pipe(
+																Effect.map((decision) => ({
+																	request,
+																	decision,
+																})),
+															),
+													)
+													const answers = Prompt.make(
+														decisions.length === 0
+															? []
+															: [
+																	{
+																		role: "tool",
+																		content: decisions.flatMap(
+																			({ request, decision }) =>
+																				Match.value(decision).pipe(
+																					Match.tagsExhaustive({
+																						Allow: () => [
+																							Prompt.toolApprovalResponsePart({
+																								approvalId: request.approvalId,
+																								approved: true,
+																							}),
+																						],
+																						Deny: (decision) => [
+																							Prompt.toolApprovalResponsePart({
+																								approvalId: request.approvalId,
+																								approved: false,
+																								...(decision.reason ===
+																								undefined
+																									? {}
+																									: {
+																											reason: decision.reason,
+																										}),
+																							}),
+																						],
+																						// A tool result next to the approval tells Effect AI that the
+																						// call is done, so it never runs the tool handler.
+																						Pending: (decision) => [
+																							Prompt.toolApprovalResponsePart({
+																								approvalId: request.approvalId,
+																								approved: true,
+																							}),
+																							Prompt.toolResultPart({
+																								id: request.toolCall.id,
+																								name: request.toolCall.name,
+																								isFailure: false,
+																								result: decision.result,
+																								providerExecuted: false,
+																							}),
+																						],
+																					}),
+																				),
+																		),
+																	},
+																],
+													)
+													const content = Prompt.concat(added, answers)
+													const answered = decisions.length > 0
 													let stop =
-														action !== undefined ||
-														approval ||
-														[
-															"length",
-															"content-filter",
-															"error",
-															"pause",
-														].includes(finishReason) ||
-														!followUp
+														!answered &&
+														(action !== undefined ||
+															[
+																"length",
+																"content-filter",
+																"error",
+																"pause",
+															].includes(finishReason) ||
+															!followUp)
 													const output = { text, finishReason }
-													const committed = (yield* options.store.modifyEffect({
-														session,
+													const committed = (yield* store.modifyEffect({
+														chat: chatId,
 														update: (current) =>
 															Effect.gen(function* () {
 																const currentTurn = yield* requireTurn(
@@ -976,114 +1081,91 @@ export const make = <
 																	turn,
 																)
 																if (
-																	!approval &&
+																	!answered &&
 																	![
 																		"length",
 																		"content-filter",
 																		"error",
 																		"pause",
 																	].includes(finishReason) &&
-																	current.session.pending.some(
+																	current.chat.inbox.some(
 																		(entry) =>
 																			entry.kind === "steer" &&
 																			entry.turn === turn,
 																	)
 																)
 																	stop = false
-																const moreActions =
-																	current.session.pending.some(
-																		(entry) =>
-																			entry.kind === "action" &&
-																			entry.turn === turn,
-																	)
-																const terminal =
-																	stop && !approval && !moreActions
+																const moreActions = current.chat.inbox.some(
+																	(entry) =>
+																		entry.kind === "action" &&
+																		entry.turn === turn,
+																)
+																const terminal = stop && !moreActions
 																const now = yield* Clock.currentTimeMillis
-																const status: Turn.Status = approval
-																	? { _tag: "Waiting", result: output }
-																	: terminal
-																		? { _tag: "Completed", result: output }
-																		: { _tag: "Running" }
+																const status: Turn.Status = terminal
+																	? { _tag: "Completed", result: output }
+																	: { _tag: "Running" }
 																return [
 																	undefined,
 																	Option.some({
-																		value: {
-																			...current.state.value,
-																			conversation: {
-																				...current.state.value.conversation,
-																				history: A.append(
-																					current.state.value.conversation
-																						.history,
-																					{
-																						id: item,
-																						content: added,
-																						origin: {
-																							session,
-																							turn,
-																							step:
-																								action === undefined ? n : 0,
-																						},
+																		...appending(
+																			current,
+																			[
+																				{
+																					id: item,
+																					content,
+																					origin: {
+																						chat: chatId,
+																						turn,
+																						step: action === undefined ? n : 0,
 																					},
+																				},
+																			],
+																			{ closed: terminal },
+																		),
+																		chat: {
+																			turn: {
+																				...(answered
+																					? currentTurn
+																					: Struct.omit(currentTurn, [
+																							"activeAction",
+																						])),
+																				status,
+																				steps:
+																					action === undefined
+																						? n
+																						: currentTurn.steps,
+																				items: A.append(
+																					currentTurn.items,
+																					item,
 																				),
-																				context: ContextWindow.append(
-																					current.state.value.conversation
-																						.context,
-																					added,
-																				),
-																				closed: terminal,
+																				usage:
+																					usage === undefined
+																						? (currentTurn.usage ?? [])
+																						: [
+																								...(currentTurn.usage ?? []),
+																								usage,
+																							],
+																				...(terminal
+																					? { completedAt: now }
+																					: {}),
 																			},
-																		},
-																		session: {
-																			turns: current.session.turns.map(
-																				(entry) =>
-																					entry.id === turn
-																						? {
-																								...(approval
-																									? currentTurn
-																									: Struct.omit(currentTurn, [
-																											"activeAction",
-																										])),
-																								status,
-																								steps:
-																									action === undefined
-																										? n
-																										: currentTurn.steps,
-																								items: A.append(
-																									currentTurn.items,
-																									item,
-																								),
-																								usage:
-																									usage === undefined
-																										? (currentTurn.usage ?? [])
-																										: [
-																												...(currentTurn.usage ??
-																													[]),
-																												usage,
-																											],
-																								...(terminal
-																									? { completedAt: now }
-																									: {}),
-																							}
-																						: entry,
-																			),
 																		},
 																	}),
 																] as const
 															}),
 													})).view
-													const ended = Session.currentTurn(committed.session)!
+													const ended = Chat.currentTurn(committed.chat)!
 													return stop && ended.status._tag === "Running"
-														? Stream.succeed(versionEvent(committed))
+														? Stream.succeed(chatEvent(committed))
 														: stop
-															? Stream.make(versionEvent(committed), {
-																	_tag: approval
-																		? "TurnWaiting"
-																		: "TurnCompleted",
+															? Stream.make(chatEvent(committed), {
+																	_tag: "TurnCompleted",
 																	view: committed,
 																	turn: ended,
 																} as Event)
 															: Stream.concat(
-																	Stream.succeed(versionEvent(committed)),
+																	Stream.succeed(chatEvent(committed)),
 																	loop(n + 1),
 																)
 												}),
@@ -1122,9 +1204,9 @@ export const make = <
 					)
 					return Bot.Context.provide(
 						Stream.concat(
-							Stream.make(versionEvent(accepted.view), {
+							Stream.make(chatEvent(accepted.view), {
 								_tag: "TurnStarted",
-								at: Session.position(accepted.view.session),
+								at: Chat.position(accepted.view.chat),
 								turn,
 							} as Event),
 							body,
@@ -1132,26 +1214,21 @@ export const make = <
 						context,
 					).pipe(
 						Stream.tap((event) =>
-							Match.value(event).pipe(
-								Match.tag("VersionCreated", () => Effect.void),
-								Match.orElse(publish),
-							),
+							event._tag === "ChatUpdated" ? Effect.void : publish(event),
 						),
 						Stream.onExit((exit) =>
 							Effect.gen(function* () {
-								const latest = yield* options.store.read(session)
-								const current = Session.currentTurn(latest.session)
+								const latest = yield* store.read(chatId)
+								const current = Chat.currentTurn(latest.chat)
 								if (current?.id === turn && !Turn.isTerminal(current.status)) {
 									const shouldClose =
 										Exit.isFailure(exit) ||
-										(current.status._tag === "Running" &&
-											!latest.session.pending.some(
-												(entry) =>
-													entry.kind === "action" && entry.turn === turn,
-											))
+										!latest.chat.inbox.some(
+											(entry) => entry.kind === "action" && entry.turn === turn,
+										)
 									if (shouldClose)
 										yield* close(
-											session,
+											chatId,
 											turn,
 											Exit.isSuccess(exit) ||
 												Cause.hasInterruptsOnly(exit.cause)
@@ -1166,7 +1243,7 @@ export const make = <
 										)
 								}
 							}).pipe(
-								// Best effort: resume closes the Turn later if this cleanup cannot.
+								// Best effort: the host closes the Turn later if this cleanup cannot.
 								Effect.catchCause((cause) =>
 									Effect.logWarning(
 										"The ended Turn could not be closed",
@@ -1178,46 +1255,38 @@ export const make = <
 					)
 				}),
 			)
-		const phases = (accepted: {
-			readonly view: Session.View<P>
-			readonly turn: Turn.Id
-			readonly item: Item.Id
-			readonly prompt: Prompt.Prompt
-		}): Stream.Stream<
+		const phases = (
+			accepted: Accepted<P>,
+		): Stream.Stream<
 			Event,
-			Session.RuntimeError | Bot.ExecutionError<Tools, E>,
+			Chat.RuntimeError | Bot.ExecutionError<Tools, E>,
 			Bot.RuntimeServices<Tools, R>
 		> => {
 			const next = (
-				phase: typeof accepted,
+				phase: Accepted<P>,
 			): Stream.Stream<
 				Event,
-				Session.RuntimeError | Bot.ExecutionError<Tools, E>,
+				Chat.RuntimeError | Bot.ExecutionError<Tools, E>,
 				Bot.RuntimeServices<Tools, R>
 			> =>
 				Stream.concat(
 					run(phase),
 					Stream.unwrap(
 						Effect.gen(function* () {
-							const current = yield* options.store.read(phase.view.session.id)
+							const current = yield* store.read(phase.view.chat.id)
 							const turn = yield* requireTurn(current, phase.turn)
 							if (turn.status._tag !== "Running") return Stream.empty
-							const changed = yield* options.store.modifyEffect({
-								session: current.session.id,
+							const changed = yield* store.modifyEffect({
+								chat: current.chat.id,
 								update: (view) =>
 									Effect.gen(function* () {
 										const turn = yield* requireTurn(view, phase.turn)
-										const selected = A.findFirst(
-											view.session.pending,
-											(entry) =>
-												entry.kind === "action" &&
-												entry.turn === phase.turn &&
-												entry.action !== undefined
-													? Option.some({
-															pending: entry,
-															action: entry.action,
-														})
-													: Option.none(),
+										const selected = A.findFirst(view.chat.inbox, (entry) =>
+											entry.kind === "action" &&
+											entry.turn === phase.turn &&
+											entry.action !== undefined
+												? Option.some({ pending: entry, action: entry.action })
+												: Option.none(),
 										)
 										if (
 											Option.isNone(selected) ||
@@ -1228,45 +1297,30 @@ export const make = <
 										return [
 											Option.some(pending),
 											Option.some({
-												value: {
-													...view.state.value,
-													conversation: {
-														...view.state.value.conversation,
-														history: A.append(
-															view.state.value.conversation.history,
-															{
-																id: pending.id,
-																content: pending.content,
-																origin: {
-																	session: view.session.id,
-																	turn: phase.turn,
-																	step: turn.steps,
-																},
+												...appending(
+													view,
+													[
+														{
+															id: pending.id,
+															content: pending.content,
+															origin: {
+																chat: view.chat.id,
+																turn: phase.turn,
+																step: turn.steps,
 															},
-														),
-														context: ContextWindow.append(
-															view.state.value.conversation.context,
-															pending.content,
-														),
-														closed: false,
-													},
-												},
-												session: {
-													pending: view.session.pending.filter(
+														},
+													],
+													{ closed: false },
+												),
+												chat: {
+													inbox: view.chat.inbox.filter(
 														(entry) => entry.id !== pending.id,
 													),
-													turns: view.session.turns.map((record) =>
-														record.id === phase.turn
-															? {
-																	...record,
-																	activeAction: {
-																		item: pending.id,
-																		action,
-																	},
-																	items: A.append(record.items, pending.id),
-																}
-															: record,
-													),
+													turn: {
+														...turn,
+														activeAction: { item: pending.id, action },
+														items: A.append(turn.items, pending.id),
+													},
 												},
 											}),
 										] as const
@@ -1287,171 +1341,192 @@ export const make = <
 				)
 			return Stream.scoped(
 				Stream.unwrap(
-					runner(accepted.view.session.id, accepted.turn).pipe(
+					runner(accepted.view.chat.id, accepted.turn).pipe(
 						Effect.as(next(accepted)),
 					),
 				),
 			)
 		}
-		const launch = (accepted: {
-			readonly view: Session.View<P>
-			readonly turn: Turn.Id
-			readonly item: Item.Id
-			readonly prompt: Prompt.Prompt
-		}): Effect.Effect<void, never, Bot.RuntimeServices<Tools, R>> =>
+		/** Runs a Turn in the scope of the runtime. It returns when the Turn has started. */
+		const launch = (
+			accepted: Accepted<P>,
+		): Effect.Effect<void, never, Bot.RuntimeServices<Tools, R>> =>
 			Effect.gen(function* () {
 				const started = yield* Deferred.make<void>()
 				yield* Effect.forkIn(
 					phases(accepted).pipe(
 						Stream.tap((event) =>
-							Match.value(event).pipe(
-								Match.tag("TurnStarted", () =>
-									Deferred.succeed(started, undefined),
-								),
-								Match.orElse(() => Effect.void),
-							),
+							event._tag === "TurnStarted"
+								? Deferred.succeed(started, undefined)
+								: Effect.void,
 						),
 						Stream.runDrain,
 						Effect.ensuring(Deferred.succeed(started, undefined)),
-						Effect.onExit((exit) =>
-							Exit.isSuccess(exit)
-								? drain(accepted.view.session.id)
-								: Effect.void,
-						),
+						// After any end, the next input in the inbox starts the next Turn.
+						Effect.ensuring(drainQuietly(accepted.view.chat.id)),
 					),
 					scope,
 				)
 				yield* Deferred.await(started)
 			})
-		const runQueued: Session.Runtime<P, Tools, E, R, HostTools>["runQueued"] = (
-			session,
-		) =>
-			Effect.gen(function* () {
-				const view = yield* options.store.read(session),
-					current = Session.currentTurn(view.session)
-				const queued = view.session.pending.find(
-					(entry) => entry.kind === "message",
-				)
-				if (
-					queued === undefined ||
-					current === undefined ||
-					current.status._tag !== "Completed"
-				)
-					return Option.none()
-				const accepted = yield* accept(
-					{
-						base: { session, revision: view.session.revision },
-						input: queued.content,
-						...(queued.author === undefined ? {} : { author: queued.author }),
-					},
-					queued,
-				)
-				yield* launch(accepted)
-				return Option.some(receipt(accepted.view, accepted.turn, accepted.item))
-			})
-		const drain = (session: Session.Id) =>
-			runQueued(session).pipe(
-				Effect.catch((error) =>
-					Effect.logDebug("The queued Turn could not start", error),
+		/** The first run of inbox messages that have the same author. */
+		const leading = (view: Chat.View<P>) => {
+			const messages = view.chat.inbox.filter(
+				(entry) => entry.kind === "message",
+			)
+			const first = messages[0]
+			if (first === undefined) return undefined
+			const end = messages.findIndex((entry) => entry.author !== first.author)
+			return end === -1 ? messages : messages.slice(0, end)
+		}
+		const drain: Chat.Runtime<P, Tools, E, R, HostTools>["drain"] = (chat) =>
+			Effect.uninterruptibleMask((restore) =>
+				Effect.gen(function* () {
+					const view = yield* store.read(chat)
+					const current = Chat.currentTurn(view.chat)
+					if (
+						(current !== undefined && !Turn.isTerminal(current.status)) ||
+						(yield* isActive(chat)) ||
+						leading(view) === undefined
+					)
+						return undefined
+					const started = yield* restore(
+						accept({ chat, select: leading }),
+					).pipe(
+						Effect.map(Option.fromUndefinedOr),
+						// Another caller started a Turn first. Its end drains the inbox again.
+						Effect.catchTag("ChatConflict", () => Effect.succeedNone),
+					)
+					if (Option.isNone(started)) return undefined
+					const accepted = started.value
+					yield* launch(accepted)
+					const delivery: Chat.Delivery = {
+						delivery: "started",
+						chat,
+						turn: accepted.turn,
+						item: accepted.item,
+						revision: accepted.view.chat.revision,
+					}
+					return delivery
+				}),
+			)
+		const drainQuietly = (chat: Chat.Id) =>
+			drain(chat).pipe(
+				Effect.catchCause((cause) =>
+					Effect.logDebug("The next Turn could not start", cause),
 				),
 				Effect.asVoid,
 			)
-
-		const stream: Session.Runtime<P, Tools, E, R, HostTools>["stream"] = (
-			input,
-		) => Stream.unwrap(accept(input).pipe(Effect.map(phases)))
-		const start: Session.Runtime<P, Tools, E, R, HostTools>["start"] = (
-			input,
-		) =>
-			Effect.uninterruptibleMask((restore) =>
-				Effect.gen(function* () {
-					const accepted = yield* restore(accept(input))
-					yield* launch(accepted)
-					return receipt(accepted.view, accepted.turn, accepted.item)
-				}),
-			)
-		const steer: Session.Runtime<P, Tools, E, R, HostTools>["steer"] = (
+		const deliver: Chat.Runtime<P, Tools, E, R, HostTools>["deliver"] = (
 			input,
 		) =>
 			Effect.gen(function* () {
 				const item = Item.Id.make(yield* id())
-				const { view } = yield* options.store.modifyEffect({
-					session: input.session,
+				const entry: Chat.InboxEntry = {
+					id: item,
+					content: Prompt.make(input.input),
+					kind: "message",
+					...(input.author === undefined ? {} : { author: input.author }),
+					...(input.notice === undefined ? {} : { notice: input.notice }),
+					...(input.approved === undefined ? {} : { approved: input.approved }),
+				}
+				const placed = yield* store.modifyEffect({
+					chat: input.chat,
 					update: (view) =>
-						Effect.gen(function* () {
-							const turn = yield* requireTurn(view, input.turn)
-							if (turn.status._tag !== "Running")
-								return yield* new Turn.Conflict({
-									session: input.session,
-									turn: input.turn,
-									message: "Steering needs a running Turn",
-								})
-							if (turn.author !== input.author)
-								return yield* new Turn.Conflict({
-									session: input.session,
-									turn: input.turn,
-									message: "Only the author of a Turn can steer it",
-								})
+						Effect.sync(() => {
+							const current = Chat.currentTurn(view.chat)
+							const running =
+								current !== undefined && current.status._tag === "Running"
+							const placed: Chat.InboxEntry =
+								running && current.author === input.author
+									? { ...entry, kind: "steer", turn: current.id }
+									: entry
 							return [
-								undefined,
-								Option.some({
-									session: {
-										pending: A.append(view.session.pending, {
-											id: item,
-											kind: "steer" as const,
-											turn: input.turn,
-											content: Prompt.make(input.input),
-										}),
-									},
-								}),
+								placed,
+								Option.some({ chat: { inbox: [...view.chat.inbox, placed] } }),
 							] as const
 						}),
 				})
-				return receipt(view, input.turn, item)
+				if (placed.result.kind === "steer") {
+					const steered: Chat.Delivery = {
+						delivery: "steered",
+						chat: input.chat,
+						turn: placed.result.turn!,
+						item,
+						revision: placed.view.chat.revision,
+					}
+					return steered
+				}
+				yield* drain(input.chat)
+				const view = yield* store.read(input.chat)
+				const current = Chat.currentTurn(view.chat)
+				const result: Chat.Delivery =
+					current !== undefined && current.input.includes(item)
+						? {
+								delivery: "started",
+								chat: input.chat,
+								turn: current.id,
+								item,
+								revision: view.chat.revision,
+							}
+						: {
+								delivery: "queued",
+								chat: input.chat,
+								item,
+								revision: view.chat.revision,
+							}
+				return result
 			})
-		const enqueue: Session.Runtime<P, Tools, E, R, HostTools>["enqueue"] = (
-			input,
-		) =>
+		const startEntry = (input: Chat.DeliverInput) =>
+			Effect.map(id(), (item): Chat.InboxEntry => ({
+				id: Item.Id.make(item),
+				content: Prompt.make(input.input),
+				kind: "message",
+				...(input.author === undefined ? {} : { author: input.author }),
+				...(input.notice === undefined ? {} : { notice: input.notice }),
+				...(input.approved === undefined ? {} : { approved: input.approved }),
+			}))
+		const acceptNow = (input: Chat.StartInput, action?: Turn.Action) =>
 			Effect.gen(function* () {
-				const item = Item.Id.make(yield* id())
-				const { view } = yield* options.store.modifyEffect({
-					session: input.session,
-					...(input.expectedRevision === undefined
+				const entry = yield* startEntry(input)
+				const accepted = yield* accept({
+					chat: input.chat,
+					select: () => [entry],
+					...(input.author === undefined ? {} : { author: input.author }),
+					...(input.overrides === undefined
 						? {}
-						: { expectedRevision: input.expectedRevision }),
-					update: (view) =>
-						Effect.succeed([
-							undefined,
-							Option.some({
-								session: {
-									pending: A.append(view.session.pending, {
-										id: item,
-										kind: "message" as const,
-										content: Prompt.make(input.message),
-										...(input.author === undefined
-											? {}
-											: { author: input.author }),
-									}),
-								},
-							}),
-						] as const),
+						: { overrides: input.overrides }),
+					...(action === undefined ? {} : { action }),
 				})
-				return { session: input.session, item, revision: view.session.revision }
+				if (accepted === undefined)
+					return yield* new Chat.Conflict({
+						chat: input.chat,
+						message: "The Turn could not start",
+					})
+				return accepted
 			})
-		const interrupt: Session.Runtime<P, Tools, E, R, HostTools>["interrupt"] = (
+		const stream: Chat.Runtime<P, Tools, E, R, HostTools>["stream"] = (input) =>
+			Stream.unwrap(
+				acceptNow(input).pipe(
+					Effect.map((accepted) =>
+						phases(accepted).pipe(Stream.ensuring(drainQuietly(input.chat))),
+					),
+				),
+			)
+		const interrupt: Chat.Runtime<P, Tools, E, R, HostTools>["interrupt"] = (
 			input,
 		) =>
 			Effect.gen(function* () {
-				const view = yield* options.store.read(input.session),
+				const view = yield* store.read(input.chat),
 					turn = yield* requireTurn(view, input.turn)
 				if (Turn.isTerminal(turn.status))
 					return yield* new Turn.Conflict({
-						session: input.session,
+						chat: input.chat,
 						turn: input.turn,
 						message: "The Turn has already ended",
 					})
 				yield* Option.match(
-					HashMap.get(yield* SynchronizedRef.get(active), input.session).pipe(
+					HashMap.get(yield* SynchronizedRef.get(active), input.chat).pipe(
 						Option.filter((running) => running.turn === input.turn),
 					),
 					{
@@ -1459,198 +1534,58 @@ export const make = <
 						onSome: (running) => Fiber.interrupt(running.fiber),
 					},
 				)
-				return yield* close(input.session, input.turn, { _tag: "Interrupted" })
-			})
-		const resolve: Session.Runtime<P, Tools, E, R, HostTools>["resolve"] = (
-			input,
-		) =>
-			Effect.uninterruptibleMask((restore) =>
-				Effect.gen(function* () {
-					const item = Item.Id.make(yield* id())
-					const { view, result: ready } = yield* restore(
-						options.store.modifyEffect({
-							session: input.session,
-							expectedRevision: input.expectedRevision,
-							update: (view) =>
-								Effect.gen(function* () {
-									if (
-										HashMap.has(
-											yield* SynchronizedRef.get(active),
-											input.session,
-										)
-									)
-										return yield* new Turn.Conflict({
-											session: input.session,
-											turn: input.turn,
-											message:
-												"The Turn is still releasing its execution scope",
-										})
-									const turn = yield* requireTurn(view, input.turn)
-									if (turn.status._tag !== "Waiting")
-										return yield* new Turn.Conflict({
-											session: input.session,
-											turn: input.turn,
-											message: "The Turn is not waiting",
-										})
-									const wait = Session.waits(view).find(
-										(entry) => entry.approvalId === input.approval,
-									)
-									if (wait === undefined)
-										return yield* new Turn.Conflict({
-											session: input.session,
-											turn: input.turn,
-											message: "The approval request is no longer pending",
-										})
-									const answer = Prompt.toolApprovalResponsePart({
-										approvalId: input.approval,
-										approved: input.outcome._tag !== "Denied",
-										...(input.outcome._tag === "Denied" &&
-										input.outcome.reason !== undefined
-											? { reason: input.outcome.reason }
-											: {}),
-									})
-									// A tool result next to the approval tells Effect AI that the
-									// call is done, so it never runs the tool handler.
-									const content = Prompt.make([
-										{
-											role: "tool",
-											content:
-												input.outcome._tag === "Result"
-													? [
-															answer,
-															Prompt.toolResultPart({
-																id: wait.toolCallId,
-																name: wait.toolCall.name,
-																isFailure: input.outcome.isFailure,
-																result: input.outcome.result,
-																providerExecuted: false,
-															}),
-														]
-													: [answer],
-										},
-									])
-									const value = {
-										...view.state.value,
-										conversation: {
-											...view.state.value.conversation,
-											closed: false,
-											history: A.append(view.state.value.conversation.history, {
-												id: item,
-												content,
-												origin: {
-													session: input.session,
-													turn: input.turn,
-													step: turn.steps,
-												},
-											}),
-											context: ContextWindow.append(
-												view.state.value.conversation.context,
-												content,
-											),
-										},
-									}
-									const ready = TimelineState.waits(value).length === 0
-									return [
-										ready,
-										Option.some({
-											value,
-											session: {
-												turns: view.session.turns.map((entry) =>
-													entry.id === input.turn
-														? {
-																...entry,
-																items: A.append(entry.items, item),
-																...(ready
-																	? { status: { _tag: "Running" as const } }
-																	: {}),
-															}
-														: entry,
-												),
-											},
-										}),
-									] as const
-								}),
-						}),
-					)
-					if (ready)
-						yield* launch({
-							view,
-							turn: input.turn,
-							item,
-							prompt: Prompt.empty,
-						})
-					return receipt(view, input.turn, item)
-				}),
-			)
-		const resume: Session.Runtime<P, Tools, E, R, HostTools>["resume"] = (
-			session,
-		) =>
-			Effect.gen(function* () {
-				const view = yield* options.store.read(session),
-					current = Session.currentTurn(view.session)
-
-				if (
-					current === undefined ||
-					Turn.isTerminal(current.status) ||
-					current.status._tag === "Waiting" ||
-					HashMap.has(yield* SynchronizedRef.get(active), session)
-				)
-					return view
-				return yield* close(session, current.id, { _tag: "Interrupted" })
+				return yield* close(input.chat, input.turn, { _tag: "Interrupted" })
 			})
 		/** An event with a view takes its position from it. Other events carry `at`. */
 		const positionOf = (event: Event) =>
-			"view" in event ? Session.position(event.view.session) : event.at
-		const belongs = (event: Event, session: Session.Id) =>
-			positionOf(event).session === session
+			"view" in event ? Chat.position(event.view.chat) : event.at
+		const belongs = (event: Event, chat: Chat.Id) =>
+			positionOf(event).chat === chat
 		const revision = (event: Event) => positionOf(event).revision
-		const events: Session.Runtime<P, Tools, E, R, HostTools>["events"] = (
-			input,
-		) =>
+		const events: Chat.Runtime<P, Tools, E, R, HostTools>["events"] = (input) =>
 			Stream.unwrap(
 				Effect.gen(function* () {
-					yield* options.store.read(input.session)
+					yield* store.read(input.chat)
 					const subscription = yield* PubSub.subscribe(bus)
 					const snapshot = (yield* Ref.get(retained)).filter(
 						(event) =>
-							belongs(event, input.session) &&
+							belongs(event, input.chat) &&
 							input.after !== undefined &&
 							revision(event) > input.after,
 					)
 					return Stream.concat(
 						Stream.fromArray(snapshot),
 						Stream.fromEffectRepeat(PubSub.take(subscription)).pipe(
-							Stream.filter((event) => belongs(event, input.session)),
+							Stream.filter((event) => belongs(event, input.chat)),
 						),
 					)
 				}),
 			)
-		const wait: Session.Runtime<P, Tools, E, R, HostTools>["wait"] = (input) =>
+		const wait: Chat.Runtime<P, Tools, E, R, HostTools>["wait"] = (input) =>
 			Effect.scoped(
 				Effect.gen(function* () {
 					const observed = yield* Effect.forkChild(
 						Effect.raceFirst(
-							options.store
-								.changes({ session: input.session })
+							store
+								.changes({ chat: input.chat })
 								.pipe(Stream.take(1), Stream.runDrain),
 							Stream.fromPubSub(activity).pipe(
-								Stream.filter((session) => session === input.session),
+								Stream.filter((chat) => chat === input.chat),
 								Stream.take(1),
 								Stream.runDrain,
 							),
 						),
 						{ startImmediately: true },
 					)
-					const view = yield* options.store.read(input.session)
-					if (view.session.revision !== input.after) return view
+					const view = yield* store.read(input.chat)
+					if (view.chat.revision !== input.after) return view
 					if (
 						input.afterActive !== undefined &&
-						HashMap.has(yield* SynchronizedRef.get(active), input.session) !==
-							input.afterActive
+						(yield* isActive(input.chat)) !== input.afterActive
 					)
 						return view
 					yield* Fiber.join(observed).pipe(Effect.timeoutOption(input.timeout))
-					return yield* options.store.read(input.session)
+					return yield* store.read(input.chat)
 				}),
 			)
 		const withActionDriver = <A, EX, RX>(
@@ -1670,7 +1605,7 @@ export const make = <
 					Effect.provideService(LanguageModel.LanguageModel, driver),
 				)
 			})
-		const startAction: Session.Runtime<
+		const startAction: Chat.Runtime<
 			P,
 			Tools,
 			E,
@@ -1678,48 +1613,66 @@ export const make = <
 			HostTools
 		>["startAction"] = (input) =>
 			Effect.gen(function* () {
-				if (input.turn === undefined) {
-					const accepted = yield* withActionDriver(
-						input.action,
-						start({
-							...input,
-							input:
-								input.input ??
-								Prompt.make("Host-selected action: " + input.action.name),
-						}),
-					)
-					return { ...accepted, callId: "host-action-" + accepted.turn }
-				}
-				const turn = input.turn
-				const item = Item.Id.make(yield* id())
 				const content = Prompt.make(
 					input.input ?? "Host-selected action: " + input.action.name,
 				)
-				const changed = yield* options.store.modifyEffect({
-					session: input.base.session,
-					expectedRevision: input.base.revision,
+				if (input.turn === undefined) {
+					const accepted = yield* withActionDriver(
+						input.action,
+						Effect.uninterruptibleMask((restore) =>
+							Effect.gen(function* () {
+								const accepted = yield* restore(
+									acceptNow(
+										{
+											chat: input.chat,
+											input: content,
+											...(input.author === undefined
+												? {}
+												: { author: input.author }),
+										},
+										input.action,
+									),
+								)
+								yield* launch(accepted)
+								return accepted
+							}),
+						),
+					)
+					const receipt: Chat.ActionReceipt = {
+						chat: input.chat,
+						turn: accepted.turn,
+						item: accepted.item,
+						revision: accepted.view.chat.revision,
+						callId: "host-action-" + accepted.turn,
+					}
+					return receipt
+				}
+				const turn = input.turn
+				const item = Item.Id.make(yield* id())
+				const changed = yield* store.modifyEffect({
+					chat: input.chat,
 					update: (view) =>
 						Effect.gen(function* () {
 							const record = yield* requireTurn(view, turn)
 							const running = HashMap.get(
 								yield* SynchronizedRef.get(active),
-								view.session.id,
+								view.chat.id,
 							)
-							const resident =
-								Option.exists(running, (entry) => entry.turn === turn) ||
-								record.status._tag === "Waiting"
-							if (!resident || Turn.isTerminal(record.status))
+							if (
+								!Option.exists(running, (entry) => entry.turn === turn) ||
+								Turn.isTerminal(record.status)
+							)
 								return yield* new Turn.Conflict({
-									session: view.session.id,
+									chat: view.chat.id,
 									turn,
 									message:
-										"Related host actions need the current Turn to be active in this runtime",
+										"Related host actions need the current Turn to run in this runtime",
 								})
 							return [
 								undefined,
 								Option.some({
-									session: {
-										pending: A.append(view.session.pending, {
+									chat: {
+										inbox: A.append(view.chat.inbox, {
 											id: item,
 											kind: "action" as const,
 											turn,
@@ -1731,52 +1684,28 @@ export const make = <
 							] as const
 						}),
 				})
-				return {
-					...receipt(changed.view, turn, item),
+				const receipt: Chat.ActionReceipt = {
+					chat: input.chat,
+					turn,
+					item,
+					revision: changed.view.chat.revision,
 					callId: "host-action-" + item,
 				}
-			})
-
-		const resolveAction: Session.Runtime<
-			P,
-			Tools,
-			E,
-			R,
-			HostTools
-		>["resolveAction"] = (input) =>
-			Effect.gen(function* () {
-				const view = yield* options.store.read(input.session)
-				const turn = yield* requireTurn(view, input.turn)
-				const action = turn.activeAction?.action ?? turn.action
-				if (action === undefined)
-					return yield* new Turn.Conflict({
-						session: input.session,
-						turn: input.turn,
-						message: "This Turn is not a host-selected action",
-					})
-				return yield* withActionDriver(action, resolve(input))
+				return receipt
 			})
 		return {
-			startAction,
-			resolveAction,
-			isActive: (session) =>
-				SynchronizedRef.get(active).pipe(
-					Effect.map((entries) => HashMap.has(entries, session)),
-				),
+			isActive,
+			deliver,
+			stream,
 			execute: (input) =>
 				stream(input).pipe(
 					Stream.runDrain,
-					Effect.andThen(options.store.read(input.base.session)),
+					Effect.andThen(store.read(input.chat)),
 				),
-			stream,
-			start,
-			runQueued,
-			steer,
-			enqueue,
+			startAction,
 			interrupt,
-			resolve,
-			resume,
-			status: options.store.read,
+			drain,
+			status: store.read,
 			events,
 			wait,
 			compact,
@@ -1792,9 +1721,9 @@ export const layer: {
 		BuildR = never,
 		HostTools extends Record<string, Tool.Any> = {},
 	>(
-		options: Session.RuntimeOptions<P, Tools, E, R, BuildE, BuildR, HostTools>,
+		options: Chat.RuntimeOptions<P, Tools, E, R, BuildE, BuildR, HostTools>,
 	): <I>(
-		tag: Context.Service<I, Session.Runtime<P, Tools, E, R, HostTools>>,
+		tag: Context.Service<I, Chat.Runtime<P, Tools, E, R, HostTools>>,
 	) => Layer.Layer<I, BuildE, Exclude<BuildR, Scope.Scope>>
 	<
 		I,
@@ -1806,8 +1735,8 @@ export const layer: {
 		BuildR = never,
 		HostTools extends Record<string, Tool.Any> = {},
 	>(
-		tag: Context.Service<I, Session.Runtime<P, Tools, E, R, HostTools>>,
-		options: Session.RuntimeOptions<P, Tools, E, R, BuildE, BuildR, HostTools>,
+		tag: Context.Service<I, Chat.Runtime<P, Tools, E, R, HostTools>>,
+		options: Chat.RuntimeOptions<P, Tools, E, R, BuildE, BuildR, HostTools>,
 	): Layer.Layer<I, BuildE, Exclude<BuildR, Scope.Scope>>
 } = dual(
 	2,
@@ -1821,7 +1750,7 @@ export const layer: {
 		BuildR = never,
 		HostTools extends Record<string, Tool.Any> = {},
 	>(
-		tag: Context.Service<I, Session.Runtime<P, Tools, E, R, HostTools>>,
-		options: Session.RuntimeOptions<P, Tools, E, R, BuildE, BuildR, HostTools>,
+		tag: Context.Service<I, Chat.Runtime<P, Tools, E, R, HostTools>>,
+		options: Chat.RuntimeOptions<P, Tools, E, R, BuildE, BuildR, HostTools>,
 	) => Layer.effect(tag, make(options)),
 )

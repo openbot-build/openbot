@@ -210,7 +210,11 @@ export type ChatParent = typeof ChatParent.Type
  * Whether a Chat runs work now. `historical` means that the Chat says that it
  * runs, but no process runs it.
  */
-export const ChatActivity = Schema.Literals(["active", "inactive", "historical"])
+export const ChatActivity = Schema.Literals([
+	"active",
+	"inactive",
+	"historical",
+])
 export type ChatActivity = typeof ChatActivity.Type
 
 /** Work of a Chat that has not ended yet. It comes back as new input. */

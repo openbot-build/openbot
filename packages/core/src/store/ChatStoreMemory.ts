@@ -1,46 +1,44 @@
 import { Context, Effect, Layer, type Scope } from "effect"
 import { dual } from "effect/Function"
-import type * as SessionStore from "./SessionStore.ts"
+import type * as ChatStore from "./ChatStore.ts"
 import type * as Plugin from "../plugins/Plugin.ts"
 import * as MemoryPersistence from "./MemoryPersistence.ts"
-import * as SessionStoreRepository from "./SessionStoreRepository.ts"
+import * as ChatStoreRepository from "./ChatStoreRepository.ts"
 
 type Construction<S extends Plugin.Stores> = Effect.Effect<
-	SessionStore.Store<SessionStore.Plugins<S>>,
+	ChatStore.Store<ChatStore.Plugins<S>>,
 	never,
-	| Scope.Scope
-	| SessionStore.DecodingServices<S>
-	| SessionStore.EncodingServices<S>
+	Scope.Scope | ChatStore.DecodingServices<S> | ChatStore.EncodingServices<S>
 >
 export const make = <S extends Plugin.Stores>(
-	definition: SessionStore.Definition<S>,
+	definition: ChatStore.Definition<S>,
 ): Construction<S> =>
 	Effect.flatMap(MemoryPersistence.make, (persistence) =>
-		SessionStoreRepository.make({ definition, persistence }),
+		ChatStoreRepository.make({ definition, persistence }),
 	)
 
 export const layer: {
 	<S extends Plugin.Stores>(
-		definition: SessionStore.Definition<S>,
+		definition: ChatStore.Definition<S>,
 	): <I>(
-		tag: Context.Service<I, SessionStore.Store<SessionStore.Plugins<S>>>,
+		tag: Context.Service<I, ChatStore.Store<ChatStore.Plugins<S>>>,
 	) => Layer.Layer<
 		I,
 		never,
-		SessionStore.DecodingServices<S> | SessionStore.EncodingServices<S>
+		ChatStore.DecodingServices<S> | ChatStore.EncodingServices<S>
 	>
 	<I, S extends Plugin.Stores>(
-		tag: Context.Service<I, SessionStore.Store<SessionStore.Plugins<S>>>,
-		definition: SessionStore.Definition<S>,
+		tag: Context.Service<I, ChatStore.Store<ChatStore.Plugins<S>>>,
+		definition: ChatStore.Definition<S>,
 	): Layer.Layer<
 		I,
 		never,
-		SessionStore.DecodingServices<S> | SessionStore.EncodingServices<S>
+		ChatStore.DecodingServices<S> | ChatStore.EncodingServices<S>
 	>
 } = dual(
 	2,
 	<I, S extends Plugin.Stores>(
-		tag: Context.Service<I, SessionStore.Store<SessionStore.Plugins<S>>>,
-		definition: SessionStore.Definition<S>,
+		tag: Context.Service<I, ChatStore.Store<ChatStore.Plugins<S>>>,
+		definition: ChatStore.Definition<S>,
 	) => Layer.effect(tag, make(definition)),
 )

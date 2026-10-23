@@ -1,4 +1,4 @@
-import type * as Session from "../session/Session.ts"
+import type * as Chat from "../chat/Chat.ts"
 import { Context, Data, type Effect, type Option } from "effect"
 import type * as ContextWindow from "./ContextWindow.ts"
 import {
@@ -7,11 +7,11 @@ import {
 	type Tool,
 	type LanguageModel,
 } from "effect/ai"
-import type * as SessionStore from "../store/SessionStore.ts"
+import type * as ChatStore from "../store/ChatStore.ts"
 import type * as ContextCompaction from "./ContextCompaction.ts"
 
 export class State extends Data.TaggedClass("ConversationContext.State")<{
-	readonly session: Session.Id
+	readonly chat: Chat.Id
 	readonly prompt: Prompt.Prompt
 	readonly window: ContextWindow.Window
 	readonly estimatedTokens: number
@@ -35,7 +35,7 @@ export class ConversationContextError extends Data.TaggedError(
 	"ConversationContextError",
 )<{
 	readonly reason:
-		| "session-not-found"
+		| "chat-not-found"
 		| "read-failed"
 		| "summary-failed"
 		| "invalid-target"
@@ -65,25 +65,25 @@ export interface Operations<
 }
 
 export interface Options<P, Tools extends Record<string, Tool.Any>, E, R> {
-	readonly runtime: Pick<Session.Runtime<P, Tools, E, R>, "compact">
-	readonly store: Pick<SessionStore.Store<P>, "read">
-	readonly session: Session.Id
+	readonly runtime: Pick<Chat.Runtime<P, Tools, E, R>, "compact">
+	readonly store: Pick<ChatStore.Store<P>, "read">
+	readonly chat: Chat.Id
 	readonly request: Omit<ContextCompaction.Request, "window" | "selection">
 }
 
 export type RuntimeOperations<E, R> = Operations<
-	| Session.SessionNotFound
-	| SessionStore.SessionStoreError
+	| Chat.ChatNotFound
+	| ChatStore.ChatStoreError
 	| ContextCompaction.ContextCompactionError
 	| ConversationContextError,
 	ContextCompaction.ContextCompaction,
-	Session.SessionNotFound | SessionStore.SessionStoreError | AiError.AiError,
+	Chat.ChatNotFound | ChatStore.ChatStoreError | AiError.AiError,
 	LanguageModel.LanguageModel,
-	E | Session.RuntimeError,
+	E | Chat.RuntimeError,
 	R
 >
 
-/** Context for the current session, bound by the host. */
+/** Context for the current Chat, bound by the host. */
 export class ConversationContext extends Context.Service<
 	ConversationContext,
 	Operations

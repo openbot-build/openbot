@@ -13,16 +13,16 @@ import {
 	type Toolkit,
 	type Tool,
 } from "effect/ai"
-import type * as Session from "../session/Session.ts"
-import type * as SessionStore from "../store/SessionStore.ts"
-import type * as Turn from "../session/Turn.ts"
-import type * as Item from "../timeline/Item.ts"
+import type * as Chat from "../chat/Chat.ts"
+import type * as ChatStore from "../store/ChatStore.ts"
+import type * as Turn from "../chat/Turn.ts"
+import type * as Item from "../chat/Item.ts"
 import type * as Plugin from "../plugins/Plugin.ts"
 import type * as Config from "../models/Config.ts"
 import type * as Provider from "../models/Provider.ts"
 import type * as ContextCompaction from "../context/ContextCompaction.ts"
 
-/** Reusable capabilities. Conversation identity and resources belong to Sessions. */
+/** Reusable capabilities. Conversation identity and resources belong to Chats. */
 export interface Definition<
 	Tools extends Record<string, Tool.Any> = {},
 	E = never,
@@ -41,6 +41,8 @@ export interface Definition<
 	readonly modelCatalog?: Effect.Effect<ReadonlyArray<Config.Model>>
 	readonly providers?: ReadonlyArray<Provider.Provider<E, R, R>>
 	readonly compaction?: typeof ContextCompaction.ContextCompaction.Service
+	/** Decides tool calls that ask for approval. The host may provide one instead. */
+	readonly approvals?: typeof Chat.Approvals.Service
 }
 export interface Options<
 	Tools extends Record<string, Tool.Any>,
@@ -59,8 +61,8 @@ export class Context extends EffectContext.Service<
 	{
 		readonly options: Omit<Options<Record<string, Tool.Any>>, "toolkit">
 		readonly at: Effect.Effect<
-			Session.Position,
-			Session.SessionNotFound | SessionStore.SessionStoreError
+			Chat.Position,
+			Chat.ChatNotFound | ChatStore.ChatStoreError
 		>
 		readonly turn: Effect.Effect<Turn.Id>
 		readonly step: Effect.Effect<number>
@@ -94,25 +96,22 @@ export type Event<
 	Tools extends Record<string, Tool.Any> = Record<string, Tool.Any>,
 	P = {},
 > = Data.TaggedEnum<{
-	TurnStarted: { readonly at: Session.Position; readonly turn: Turn.Id }
+	TurnStarted: { readonly at: Chat.Position; readonly turn: Turn.Id }
 	ModelStepStarted: {
-		readonly at: Session.Position
+		readonly at: Chat.Position
 		readonly turn: Turn.Id
 		readonly step: number
 	}
 	ResponsePart: {
-		readonly at: Session.Position
+		readonly at: Chat.Position
 		readonly turn: Turn.Id
 		readonly step: number
 		readonly item: Item.Id
 		readonly part: Response.StreamPart<Tools, "opaque">
 	}
-	VersionCreated: { readonly view: Session.View<P> }
-	TurnWaiting: {
-		readonly view: Session.View<P>
-		readonly turn: Turn.Record
-	}
-	TurnCompleted: { readonly view: Session.View<P>; readonly turn: Turn.Record }
+	/** The Chat changed. */
+	ChatUpdated: { readonly view: Chat.View<P> }
+	TurnCompleted: { readonly view: Chat.View<P>; readonly turn: Turn.Record }
 }>
 interface EventDefinition extends Data.TaggedEnum.WithGenerics<1> {
 	readonly taggedEnum: Event<

@@ -1,9 +1,8 @@
 import { Context, Data, Schema, type Effect } from "effect"
 import * as ModelRuntime from "./Model.ts"
 import * as ProviderRuntime from "./Provider.ts"
-import type * as Timeline from "../timeline/Timeline.ts"
-import type * as Session from "../session/Session.ts"
-import type * as SessionStore from "../store/SessionStore.ts"
+import type * as Chat from "../chat/Chat.ts"
+import type * as ChatStore from "../store/ChatStore.ts"
 
 /** Provider catalog data that can be serialized. Executable providers live in Provider. */
 export const Provider = Schema.Struct({
@@ -145,23 +144,17 @@ export interface ModelConfigurationOperations<
 }
 
 export interface ModelConfigurationOptions<P = {}> {
-	readonly store: Pick<
-		SessionStore.Store<P>,
-		"read" | "updateSettings" | "modifyEffect"
-	>
+	readonly store: Pick<ChatStore.Store<P>, "read" | "modifyEffect">
 	readonly models: ReadonlyArray<Model>
-	readonly session: Session.Id
+	readonly chat: Chat.Id
 	readonly providers: ReadonlyArray<Provider>
 }
 
 export type RuntimeModelConfiguration = ModelConfigurationOperations<
-	| Session.SessionNotFound
-	| SessionStore.SessionStoreError
-	| ModelConfigurationError,
-	| Session.SessionNotFound
-	| Session.Conflict
-	| Timeline.VersionError
-	| SessionStore.SessionStoreError
+	Chat.ChatNotFound | ChatStore.ChatStoreError | ModelConfigurationError,
+	| Chat.ChatNotFound
+	| Chat.Conflict
+	| ChatStore.ChatStoreError
 	| ModelConfigurationError,
 	never
 >
@@ -173,7 +166,7 @@ export class ModelConfiguration extends Context.Service<
 >()("@openbot-build/core/models/Config/ModelConfiguration") {}
 
 export class ExecutionModeError extends Data.TaggedError("ExecutionModeError")<{
-	readonly reason: "session-not-found" | "unavailable"
+	readonly reason: "chat-not-found" | "unavailable"
 	readonly message: string
 }> {}
 
@@ -187,20 +180,17 @@ export interface ExecutionModeOperations<
 }
 
 export interface ExecutionModeOptions<P = {}> {
-	readonly store: Pick<SessionStore.Store<P>, "read" | "modifyEffect">
-	readonly session: Session.Id
+	readonly store: Pick<ChatStore.Store<P>, "read" | "modifyEffect">
+	readonly chat: Chat.Id
 }
 
 export type RuntimeExecutionMode = ExecutionModeOperations<
-	Session.SessionNotFound | SessionStore.SessionStoreError,
-	| Session.SessionNotFound
-	| Session.Conflict
-	| Timeline.VersionError
-	| SessionStore.SessionStoreError,
+	Chat.ChatNotFound | ChatStore.ChatStoreError,
+	Chat.ChatNotFound | Chat.Conflict | ChatStore.ChatStoreError,
 	never
 >
 
-/** Configuration for the current session, bound by the host. */
+/** Configuration for the current Chat, bound by the host. */
 export class ExecutionMode extends Context.Service<
 	ExecutionMode,
 	ExecutionModeOperations

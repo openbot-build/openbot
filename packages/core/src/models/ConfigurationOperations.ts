@@ -91,16 +91,16 @@ export const selectionProblem: {
 export const modelConfiguration = <P>(
 	input: Config.ModelConfigurationOptions<P>,
 ): Config.RuntimeModelConfiguration => ({
-	get: input.store.read(input.session).pipe(
+	get: input.store.read(input.chat).pipe(
 		Effect.flatMap((view) =>
-			view.session.settings.model === undefined
+			view.chat.settings.model === undefined
 				? Effect.fail(
 						new Config.ModelConfigurationError({
 							reason: "unavailable",
-							message: "No model is selected for the current session",
+							message: "No model is selected for the current Chat",
 						}),
 					)
-				: Effect.succeed(view.session.settings.model),
+				: Effect.succeed(view.chat.settings.model),
 		),
 	),
 	select: (selection) =>
@@ -108,10 +108,17 @@ export const modelConfiguration = <P>(
 			const problem = selectionProblem(input, selection)
 			if (Option.isSome(problem))
 				return yield* new Config.ModelConfigurationError(problem.value)
-			const before = yield* input.store.read(input.session)
-			yield* input.store.updateSettings({
-				expected: before.session,
-				settings: { ...before.session.settings, model: selection },
+			yield* input.store.modifyEffect({
+				chat: input.chat,
+				update: (current) =>
+					Effect.succeed([
+						undefined,
+						Option.some({
+							chat: {
+								settings: { ...current.chat.settings, model: selection },
+							},
+						}),
+					] as const),
 			})
 			return selection
 		}),
@@ -128,17 +135,17 @@ export const executionMode = <P>(
 	input: Config.ExecutionModeOptions<P>,
 ): Config.RuntimeExecutionMode => ({
 	get: input.store
-		.read(input.session)
-		.pipe(Effect.map((view) => view.session.settings.mode)),
+		.read(input.chat)
+		.pipe(Effect.map((view) => view.chat.settings.mode)),
 	set: (mode) =>
 		input.store
 			.modifyEffect({
-				session: input.session,
+				chat: input.chat,
 				update: (current) =>
 					Effect.succeed([
 						mode,
 						Option.some({
-							session: { settings: { ...current.session.settings, mode } },
+							chat: { settings: { ...current.chat.settings, mode } },
 						}),
 					] as const),
 			})
@@ -172,7 +179,7 @@ export const layerExecutionMode = <P>(
 			Effect.mapError(
 				(error) =>
 					new Config.ExecutionModeError({
-						reason: "session-not-found",
+						reason: "chat-not-found",
 						message: error.toString(),
 					}),
 			),

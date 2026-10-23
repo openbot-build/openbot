@@ -1,35 +1,33 @@
 import type { Schema } from "effect"
 import { dual } from "effect/Function"
-import * as Timeline from "../timeline/Timeline.ts"
-import * as SessionStore from "./SessionStore.ts"
+import type * as Chat from "../chat/Chat.ts"
+import * as ChatStore from "./ChatStore.ts"
 
 export const error: {
 	(details: {
 		readonly message: string
-		readonly version?: Timeline.VersionId
-	}): (
-		reason: SessionStore.SessionStoreError["reason"],
-	) => SessionStore.SessionStoreError
+		readonly chat?: Chat.Id
+	}): (reason: ChatStore.ChatStoreError["reason"]) => ChatStore.ChatStoreError
 	(
-		reason: SessionStore.SessionStoreError["reason"],
+		reason: ChatStore.ChatStoreError["reason"],
 		details: {
 			readonly message: string
-			readonly version?: Timeline.VersionId
+			readonly chat?: Chat.Id
 		},
-	): SessionStore.SessionStoreError
+	): ChatStore.ChatStoreError
 } = dual(
 	2,
 	(
-		reason: SessionStore.SessionStoreError["reason"],
+		reason: ChatStore.ChatStoreError["reason"],
 		details: {
 			readonly message: string
-			readonly version?: Timeline.VersionId
+			readonly chat?: Chat.Id
 		},
-	) => new SessionStore.SessionStoreError({ reason, ...details }),
+	) => new ChatStore.ChatStoreError({ reason, ...details }),
 )
 export const invalid = (issue?: Schema.SchemaError) =>
-	new SessionStore.SessionStoreError({
+	new ChatStore.ChatStoreError({
 		reason: "decode-failed",
-		message: "Stored Session data is invalid",
+		message: "Stored Chat data is invalid",
 		...(issue === undefined ? {} : { issue: issue.issue }),
 	})

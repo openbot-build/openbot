@@ -124,17 +124,20 @@ export class Approvals extends Context.Service<
 	{
 		readonly decide: (request: ApprovalRequest) => Effect.Effect<Decision>
 	}
->()("@openbot-build/core/chat/Approvals") {}
+>()("@openbot-build/core/chat/Chat/Approvals") {}
 
 export interface DeliverInput {
 	readonly chat: Id
 	readonly input: Prompt.RawInput
 	/** Who the input is for. See `Turn.Author`. */
 	readonly author?: Turn.Author
-	/** Settings for the Turn that this input starts. */
-	readonly overrides?: Partial<Turn.Settings>
 	readonly notice?: Item.Notice
 	readonly approved?: ApprovedCall
+}
+/** Input that starts a Turn at once. */
+export interface StartInput extends DeliverInput {
+	/** Settings for this Turn only. */
+	readonly overrides?: Partial<Turn.Settings>
 }
 /**
  * What happened to delivered input. `started` began a new Turn. `steered` went into
@@ -193,7 +196,7 @@ export interface Runtime<
 	) => Effect.Effect<Delivery, RuntimeError, Bot.RuntimeServices<Tools, R>>
 	/** Starts a Turn and returns its events. It fails when the Chat is not idle. */
 	readonly stream: (
-		input: DeliverInput,
+		input: StartInput,
 	) => Stream.Stream<
 		Bot.Event<
 			Toolkit.MergedTools<[Toolkit.Toolkit<Tools>, Toolkit.Toolkit<HostTools>]>,
@@ -204,7 +207,7 @@ export interface Runtime<
 	>
 	/** Like `stream`, then waits for the end of the Turn. */
 	readonly execute: (
-		input: DeliverInput,
+		input: StartInput,
 	) => Effect.Effect<
 		View<P>,
 		RuntimeError | Bot.ExecutionError<Tools, E>,

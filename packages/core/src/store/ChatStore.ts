@@ -42,6 +42,8 @@ export interface StoredItem {
 export interface Delta {
 	readonly chat: string
 	readonly ref: Schema.Json
+	/** The revision after the change. */
+	readonly revision: number
 	/** The revision before the change, or `null` for a new Chat. */
 	readonly expected: number | null
 	/** The new state, when it changed. */
@@ -58,7 +60,7 @@ export interface Persistence {
 		}>,
 		ChatStoreError
 	>
-	readonly list: () => Effect.Effect<ReadonlyArray<Schema.Json>, ChatStoreError>
+	readonly list: Effect.Effect<ReadonlyArray<Schema.Json>, ChatStoreError>
 	readonly items: (
 		chat: Chat.Id,
 		query: ItemQuery,
@@ -145,7 +147,7 @@ export interface Store<P = {}> {
 	readonly get: (
 		chat: Chat.Id,
 	) => Effect.Effect<Option.Option<Chat.Ref>, ChatStoreError>
-	readonly list: () => Effect.Effect<ReadonlyArray<Chat.Ref>, ChatStoreError>
+	readonly list: Effect.Effect<ReadonlyArray<Chat.Ref>, ChatStoreError>
 	readonly read: (
 		chat: Chat.Id,
 	) => Effect.Effect<Chat.View<P>, Chat.ChatNotFound | ChatStoreError>
@@ -194,7 +196,9 @@ export interface Options<S extends Plugin.Stores> {
 		readonly delta: Delta
 		readonly view: Chat.View<Plugins<S>>
 	}) => Effect.Effect<void, ChatStoreError>
-	readonly onRemove?: (expected: Chat.Ref) => Effect.Effect<void, ChatStoreError>
+	readonly onRemove?: (
+		expected: Chat.Ref,
+	) => Effect.Effect<void, ChatStoreError>
 }
 export class ChatStore extends Context.Service<ChatStore, Store>()(
 	"@openbot-build/core/store/ChatStore",

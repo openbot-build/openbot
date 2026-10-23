@@ -4,56 +4,56 @@ import { LanguageModel, Prompt, type Tool } from "effect/ai"
 import * as ContextCompaction from "./ContextCompaction.ts"
 import * as ContextWindow from "./ContextWindow.ts"
 import * as ConversationContext from "./ConversationContext.ts"
-import { fullHistory } from "../timeline/TimelineState.ts"
 
 export const make = <P, Tools extends Record<string, Tool.Any>, E, R>(
 	input: ConversationContext.Options<P, Tools, E, R>,
 ): ConversationContext.RuntimeOperations<E, R> => ({
 	load: (additional?: { readonly additional?: Prompt.RawInput }) =>
 		Effect.gen(function* () {
-			const view = yield* input.store.read(input.session),
+			const view = yield* input.store.read(input.chat),
 				compaction = yield* ContextCompaction.ContextCompaction
 			const window =
 				additional?.additional === undefined
-					? view.state.value.conversation.context
+					? view.state.conversation.context
 					: ContextWindow.append(
-							view.state.value.conversation.context,
+							view.state.conversation.context,
 							additional.additional,
 						)
-			if (view.session.settings.model === undefined)
+			if (view.chat.settings.model === undefined)
 				return yield* new ConversationContext.ConversationContextError({
 					reason: "read-failed",
-					message: "No model is selected for the current session",
+					message: "No model is selected for the current Chat",
 				})
 			const estimatedTokens = yield* compaction.count({
 				...input.request,
-				selection: view.session.settings.model,
+				selection: view.chat.settings.model,
 				window,
 			})
 			return new ConversationContext.State({
-				session: input.session,
+				chat: input.chat,
 				prompt: window.prompt,
 				window,
 				estimatedTokens,
 			})
 		}),
 	summarize: Effect.gen(function* () {
-		const view = yield* input.store.read(input.session)
+		const view = yield* input.store.read(input.chat)
+		const prompt = view.state.conversation.context.prompt
 		const response = yield* LanguageModel.generateText({
 			prompt: Prompt.concat(
-				fullHistory(view.state.value),
+				prompt,
 				"Summarize the conversation accurately. Keep its decisions, constraints, and unfinished work.",
 			),
 		})
 		return new ConversationContext.Summary({
 			text: response.text,
-			sourceMessages: view.state.value.conversation.history.length,
+			sourceMessages: prompt.content.length,
 		})
 	}),
 	compact: (request: { readonly targetTokens: number }) =>
 		input.runtime
 			.compact({
-				session: input.session,
+				chat: input.chat,
 				request: input.request,
 				targetTokens: request.targetTokens,
 			})
@@ -65,9 +65,9 @@ export const make = <P, Tools extends Record<string, Tool.Any>, E, R>(
 							beforeTokens: result.beforeTokens,
 							afterTokens: result.afterTokens,
 							context: new ConversationContext.State({
-								session: input.session,
-								prompt: result.view.state.value.conversation.context.prompt,
-								window: result.view.state.value.conversation.context,
+								chat: input.chat,
+								prompt: result.view.state.conversation.context.prompt,
+								window: result.view.state.conversation.context,
 								estimatedTokens: result.afterTokens,
 							}),
 						}),

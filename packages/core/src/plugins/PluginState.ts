@@ -1,48 +1,43 @@
 import { Effect, Option, Record as EffectRecord } from "effect"
-import * as Session from "../session/Session.ts"
+import * as Chat from "../chat/Chat.ts"
 import * as Bot from "../bot/Bot.ts"
-import type * as Timeline from "../timeline/Timeline.ts"
 import type * as Plugin from "./Plugin.ts"
-import type * as SessionStore from "../store/SessionStore.ts"
+import type * as ChatStore from "../store/ChatStore.ts"
 
 export const make = <P, D extends Plugin.StateDeclaration>(input: {
-	readonly store: Pick<SessionStore.Store<P>, "read" | "modifyEffect">
+	readonly store: Pick<ChatStore.Store<P>, "read" | "modifyEffect">
 	readonly plugin: Plugin.Definition & {
 		readonly store: { readonly definition: D }
 	}
-}): Effect.Effect<Plugin.Store<D, Session.SessionError, Bot.Context>> =>
+}): Effect.Effect<Plugin.Store<D, Chat.ChatError, Bot.Context>> =>
 	Effect.gen(function* () {
 		type A = D["schema"]["Type"]
-		type Operations = Plugin.StoreOperations<
-			A,
-			Session.SessionError,
-			Bot.Context
-		>
+		type Operations = Plugin.StoreOperations<A, Chat.ChatError, Bot.Context>
 		const key = input.plugin.id
-		const scoped = (view: Session.View<P>) =>
-			input.plugin.store.definition.scope === "timeline"
-				? view.state.value
-				: view.session.business
-		const read = (view: Session.View<P>): Option.Option<A> =>
+		const scoped = (view: Chat.View<P>) =>
+			input.plugin.store.definition.scope === "state"
+				? view.state
+				: view.chat.business
+		const read = (view: Chat.View<P>): Option.Option<A> =>
 			Option.fromUndefinedOr(scoped(view)[key] as A | undefined)
 		const replace = (
-			view: Session.View<P>,
+			view: Chat.View<P>,
 			data: Option.Option<A>,
-		): SessionStore.Mutation<P> => {
+		): ChatStore.Mutation<P> => {
 			const value = Option.match(data, {
 				onNone: () => EffectRecord.remove(scoped(view), key),
 				onSome: (data) => ({ ...scoped(view), [key]: data }),
 			})
-			return input.plugin.store.definition.scope === "timeline"
-				? { value: value as Timeline.Value<P> }
-				: { session: { business: value } }
+			return input.plugin.store.definition.scope === "state"
+				? { value: value as Chat.View<P>["state"] }
+				: { chat: { business: value } }
 		}
 		const snapshot: Operations["snapshot"] = Effect.gen(function* () {
 			const context = yield* Bot.Context,
 				at = yield* context.at,
-				view = yield* input.store.read(at.session)
+				view = yield* input.store.read(at.chat)
 			return {
-				at: Session.position(view.session),
+				at: Chat.position(view.chat),
 				value: read(view),
 			}
 		})
@@ -51,7 +46,7 @@ export const make = <P, D extends Plugin.StateDeclaration>(input: {
 				const context = yield* Bot.Context,
 					at = yield* context.at
 				const changed = yield* input.store.modifyEffect({
-					session: at.session,
+					chat: at.chat,
 					update: (current) =>
 						f(read(current)).pipe(
 							Effect.map(
@@ -83,22 +78,21 @@ export const make = <P, D extends Plugin.StateDeclaration>(input: {
 				Effect.gen(function* () {
 					const context = yield* Bot.Context,
 						at = yield* context.at
-					if (at.session !== request.base.session)
-						return yield* new Session.SessionError({
+					if (at.chat !== request.base.chat)
+						return yield* new Chat.ChatError({
 							reason: "state-conflict",
-							message: "The plugin store is bound to a different branch",
+							message: "The plugin store is bound to a different Chat",
 						})
 					const { view } = yield* input.store.modifyEffect({
-						session: at.session,
+						chat: at.chat,
 						expectedRevision: request.base.revision,
-						expectedHead: request.base.version,
 						update: (current) =>
 							Effect.succeed([
 								undefined,
 								Option.some(replace(current, request.value)),
 							] as const),
 					})
-					return view.session
+					return view.chat
 				}),
 			modify,
 			modifyEffect,

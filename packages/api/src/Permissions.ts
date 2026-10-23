@@ -41,7 +41,8 @@ const permissionTree = {
 		actions: {
 			read: {
 				name: "Chats Read",
-				description: "Read Chats, their history and the work that they gave away.",
+				description:
+					"Read Chats, their history and the work that they gave away.",
 			},
 			write: {
 				name: "Chats Write",

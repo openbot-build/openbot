@@ -1,12 +1,10 @@
 import { Effect, Schema, SchemaTransformation } from "effect"
-import { dual } from "effect/Function"
-import * as Session from "../session/Session.ts"
-import * as Timeline from "../timeline/Timeline.ts"
-import * as SessionStore from "./SessionStore.ts"
+import * as Chat from "../chat/Chat.ts"
+import * as ChatState from "../chat/ChatState.ts"
+import type * as ChatStore from "./ChatStore.ts"
 import type * as Plugin from "../plugins/Plugin.ts"
 import { omitOptional } from "./PromptCodec.ts"
-import { error, invalid } from "./StoreErrors.ts"
-export const schemaVersion = "timeline/1" as const
+export const schemaVersion = "chat/1" as const
 const codec = <S extends Schema.Constraint>(schema: S) =>
 	Schema.Json.pipe(
 		Schema.decodeTo(
@@ -26,7 +24,11 @@ const codec = <S extends Schema.Constraint>(schema: S) =>
 			}),
 		),
 	)
-export const define: SessionStore.DefinitionFactory["define"] = (input) =>
+/**
+ * Builds the codecs of a store. Plugin data with `record` scope is kept on the
+ * record of the Chat. Plugin data with `state` scope is kept with the conversation.
+ */
+export const define: ChatStore.DefinitionFactory["define"] = (input) =>
 	Effect.sync(() => {
 		const fields = (scope: Plugin.StateDeclaration["scope"]) =>
 			Object.fromEntries(
@@ -34,74 +36,27 @@ export const define: SessionStore.DefinitionFactory["define"] = (input) =>
 					.filter(([, state]) => state.scope === scope)
 					.map(([key, state]) => [key, Schema.optionalKey(state.schema)]),
 			)
-		const timelineSchema = Timeline.Value(fields("timeline")).check(
+		const stateSchema = ChatState.Value(fields("state")).check(
 			Schema.makeFilter(
 				(value) =>
 					Object.keys(value).every(
 						(key) =>
-							key !== "session" &&
-							(!(key in input.stores) ||
-								input.stores[key]!.scope === "timeline"),
-					) || "Session state cannot be stored in the Timeline",
+							key !== "chat" &&
+							(!(key in input.stores) || input.stores[key]!.scope === "state"),
+					) || "Record data cannot be stored in the state",
 			),
 		)
-		const business = Schema.StructWithRest(Schema.Struct(fields("session")), [
+		const business = Schema.StructWithRest(Schema.Struct(fields("record")), [
 			Schema.Record(Schema.String, Schema.Unknown),
 		])
 		// The fields come from Object.fromEntries at run time, so TypeScript only sees a
 		// string record. The schemas match Plugins<S>, but the compiler cannot prove it.
 		return {
 			...input,
-			schema: codec(timelineSchema),
-			sessionSchema: codec(Schema.Struct({ ...Session.Ref.fields, business })),
-		} as unknown as SessionStore.Definition<
+			schema: codec(stateSchema),
+			recordSchema: codec(Schema.Struct({ ...Chat.Ref.fields, business })),
+		} as unknown as ChatStore.Definition<
 			typeof input.stores,
 			typeof input.schemaVersion
 		>
 	})
-export const project: {
-	(
-		version: Timeline.Version,
-		raw: Schema.Json,
-	): <S extends Plugin.Stores>(
-		definition: SessionStore.Definition<S>,
-	) => Effect.Effect<
-		Timeline.State<SessionStore.Plugins<S>>,
-		SessionStore.SessionStoreError,
-		SessionStore.DecodingServices<S>
-	>
-	<S extends Plugin.Stores>(
-		definition: SessionStore.Definition<S>,
-		version: Timeline.Version,
-		raw: Schema.Json,
-	): Effect.Effect<
-		Timeline.State<SessionStore.Plugins<S>>,
-		SessionStore.SessionStoreError,
-		SessionStore.DecodingServices<S>
-	>
-} = dual(
-	3,
-	<S extends Plugin.Stores>(
-		definition: SessionStore.Definition<S>,
-		version: Timeline.Version,
-		raw: Schema.Json,
-	) =>
-		Effect.gen(function* () {
-			if (version.schemaVersion !== definition.schemaVersion)
-				return yield* error("unsupported-format", {
-					message: "Unsupported Timeline format",
-					version: version.id,
-				})
-			const value = yield* Schema.decodeEffect(definition.schema)(raw).pipe(
-				Effect.mapError(invalid),
-			)
-			return {
-				version: {
-					id: version.id,
-					schemaVersion: version.schemaVersion,
-					parents: version.parents,
-				},
-				value,
-			}
-		}),
-)
