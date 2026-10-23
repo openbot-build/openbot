@@ -124,12 +124,11 @@ curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
 
 ## Mitgliedschaft
 
-Eine Platform hat viele Organisationen. Ein Konto kann Member (Mitglied) in vielen davon sein. Wenn sich ein Konto anmeldet, prüft OpenBot, wohin es gehört:
+Eine Platform hat viele Organisationen. Ein User und eine Organisation sind getrennt. Ein Konto kann Organisationen erstellen und Member (Mitglied) in vielen davon sein. Wenn sich ein Konto anmeldet, prüft OpenBot, wohin es gehört:
 
 1. Es tritt der Organisation bei, die die Domain seiner geprüften E-Mail bestätigt hat, wenn diese Organisation `joinByDomain` erlaubt.
 2. Es tritt der Organisation seiner SSO-Verbindung bei, wenn es sich über eine angemeldet hat.
-3. Wenn es dann noch keine Organisation hat und die Platform allen erlaubt, eine zu erstellen, bekommt es eine neue Organisation mit dem Namen "Personal". Dort ist es der Super Administrator.
-4. Sonst hat es keine Organisation. Routen einer Organisation antworten dann mit `403` und `MembershipRequired`.
+3. OpenBot erstellt nie eine Organisation für es. Ohne Organisation antworten Routen einer Organisation mit `403` und `MembershipRequired`. Das Konto kann trotzdem [eine Organisation erstellen](/de/docs/organization#eine-organisation-erstellen) oder [eine Einladung annehmen](/de/docs/organization#auf-eine-einladung-antworten).
 
 OpenBot macht diese Prüfungen auch bei jeder Anfrage mit dem Session-Cookie. Siehe [Organisation](/de/docs/organization#wer-beitreten-kann).
 

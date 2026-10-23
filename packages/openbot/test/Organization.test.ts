@@ -11,7 +11,7 @@ const member = (userId: string) =>
 	"/v1/organization/members/" + encodeURIComponent(userId)
 
 test(
-	"Each account gets its own organization, and others join after a domain is verified",
+	"An account makes its own organization, and others join after a domain is verified",
 	{ timeout: 60000 },
 	async () => {
 		let records: ReadonlyArray<string> = []
@@ -461,6 +461,169 @@ test(
 					"auditor",
 				],
 			)
+		} finally {
+			await host.close()
+		}
+	},
+)
+
+test(
+	"A new account has no organization, joins by invitation, and can leave",
+	{ timeout: 60000 },
+	async () => {
+		const host = await BrowserHost.start({ publicOrigin, sharedDomain: false })
+		try {
+			const account = withCookie({ address: host.address, publicOrigin })
+			const alice = await host.login("inv-alice")
+			const bob = await host.login("inv-bob", undefined, {
+				organization: false,
+			})
+			const carol = await host.login("inv-carol", undefined, {
+				organization: false,
+			})
+
+			// OpenBot makes no organization at sign-in.
+			assert.deepEqual(bob.memberships, [])
+			assert.deepEqual(
+				await (await account(bob.session, "/v1/organizations")).json(),
+				{ items: [] },
+			)
+			assert.equal((await account(bob.session, "/v1/organization")).status, 403)
+
+			const invite = (email: string, roles?: ReadonlyArray<string>) =>
+				account(alice.session, "/v1/organization/invitations", "POST", {
+					email,
+					...(roles === undefined ? {} : { roles }),
+				})
+			const made = await invite("Inv-Bob@example.com", ["member"])
+			assert.equal(made.status, 201, await made.clone().text())
+			const invitation = await made.json()
+			assert.equal(invitation.email, "inv-bob@example.com")
+			assert.equal(invitation.status, "pending")
+			assert.deepEqual(invitation.roles, ["member"])
+			assert.equal((await invite("inv-bob@example.com")).status, 400)
+			assert.equal(
+				(await invite("inv-dave@example.com", ["role_" + "0".repeat(32)]))
+					.status,
+				404,
+			)
+
+			// Only the person with the email sees and answers the invitation.
+			const mine = await (await account(bob.session, "/v1/invitations")).json()
+			assert.deepEqual(
+				mine.items.map((item: { readonly id: string }) => item.id),
+				[invitation.id],
+			)
+			assert.equal(
+				(
+					await account(
+						carol.session,
+						"/v1/invitations/" + invitation.id + "/accept",
+						"POST",
+					)
+				).status,
+				404,
+			)
+			const accepted = await account(
+				bob.session,
+				"/v1/invitations/" + invitation.id + "/accept",
+				"POST",
+			)
+			assert.equal(accepted.status, 200, await accepted.clone().text())
+			assert.equal((await accepted.json()).id, alice.identity.organizationId)
+			const joined = await (
+				await account(bob.session, "/v1/organizations")
+			).json()
+			assert.deepEqual(
+				joined.items.map((item: { readonly id: string }) => item.id),
+				[alice.identity.organizationId],
+			)
+			const bobMember = await (
+				await account(alice.session, member(bob.identity.userId))
+			).json()
+			assert.deepEqual(bobMember.roles, ["member"])
+			assert.equal(
+				(
+					await account(
+						bob.session,
+						"/v1/invitations/" + invitation.id + "/accept",
+						"POST",
+					)
+				).status,
+				400,
+			)
+			// A member already has this email.
+			assert.equal((await invite("inv-bob@example.com")).status, 400)
+
+			// Carol declines. Then she cannot accept.
+			const forCarol = await (await invite("inv-carol@example.com")).json()
+			const declined = await account(
+				carol.session,
+				"/v1/invitations/" + forCarol.id + "/decline",
+				"POST",
+			)
+			assert.equal(declined.status, 200, await declined.clone().text())
+			assert.equal((await declined.json()).status, "declined")
+			assert.equal(
+				(
+					await account(
+						carol.session,
+						"/v1/invitations/" + forCarol.id + "/accept",
+						"POST",
+					)
+				).status,
+				400,
+			)
+
+			// A revoked invitation cannot be answered.
+			const forDave = await (await invite("inv-dave@example.com")).json()
+			assert.equal(
+				(
+					await account(
+						alice.session,
+						"/v1/organization/invitations/" + forDave.id,
+						"DELETE",
+					)
+				).status,
+				204,
+			)
+			const listed = await (
+				await account(alice.session, "/v1/organization/invitations")
+			).json()
+			assert.deepEqual(
+				listed.items.map(
+					(item: { readonly email: string; readonly status: string }) => [
+						item.email,
+						item.status,
+					],
+				),
+				[
+					["inv-dave@example.com", "revoked"],
+					["inv-carol@example.com", "declined"],
+					["inv-bob@example.com", "accepted"],
+				],
+			)
+
+			// Bob leaves. The last Super Administrator cannot leave.
+			const leave = (session: typeof alice.session) =>
+				account(
+					session,
+					"/v1/organizations/" + alice.identity.organizationId + "/membership",
+					"DELETE",
+				)
+			assert.equal((await leave(bob.session)).status, 204)
+			assert.deepEqual(
+				await (await account(bob.session, "/v1/organizations")).json(),
+				{ items: [] },
+			)
+			assert.equal((await leave(alice.session)).status, 409)
+			const left = await (
+				await account(
+					alice.session,
+					"/v1/organization/audit_logs?action=member.left",
+				)
+			).json()
+			assert.equal(left.items.length, 1)
 		} finally {
 			await host.close()
 		}

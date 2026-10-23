@@ -12,6 +12,7 @@ import {
 import { Schema } from "effect"
 import * as PostgresTest from "./PostgresTest.ts"
 import * as DefaultAgent from "./DefaultAgent.ts"
+import * as Organizations from "./Organizations.ts"
 
 test(
 	"built development entry migrates and runs, and production keeps missing-model behavior",
@@ -133,6 +134,13 @@ test(
 					origin: publicOrigin,
 					"content-type": "application/json",
 				}
+				await Organizations.ensure((path, method, payload) =>
+					fetch(development.address + path, {
+						method,
+						headers,
+						...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+					}),
+				)
 				const create = async (address: string) => {
 					await DefaultAgent.ensure((path, method, payload) =>
 						fetch(address + path, {

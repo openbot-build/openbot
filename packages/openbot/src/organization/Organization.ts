@@ -28,8 +28,8 @@ export class Organization extends Context.Service<
 		/**
 		 * Runs when an account signs in or uses the session cookie.
 		 * The account joins the organization that verified its email domain, when
-		 * that organization lets people join by domain. An account with no
-		 * organization gets a personal one, when the platform lets anyone create one.
+		 * that organization lets people join by domain. It never makes an organization:
+		 * an account can have no organization at all.
 		 * `only` limits joining to one organization, such as the owner of an SSO connection.
 		 */
 		readonly admit: (
@@ -114,6 +114,59 @@ export class Organization extends Context.Service<
 			void,
 			| OrganizationApi.MemberNotFound
 			| OrganizationApi.LastSuperAdministrator
+			| OrganizationUnavailable
+		>
+		/** The invitations of an organization, newest first. */
+		readonly listInvitations: (
+			organizationId: string,
+			status?: OrganizationApi.InvitationStatus,
+		) => Effect.Effect<
+			ReadonlyArray<OrganizationApi.Invitation>,
+			OrganizationUnavailable
+		>
+		/**
+		 * Invites an email to an organization. Fails when the email already has a
+		 * pending invitation or belongs to a member.
+		 */
+		readonly createInvitation: (input: {
+			readonly organizationId: string
+			readonly email: string
+			readonly roles: ReadonlyArray<string>
+			readonly invitedBy: string
+		}) => Effect.Effect<
+			OrganizationApi.Invitation,
+			OrganizationApi.InvitationInvalid | OrganizationUnavailable
+		>
+		/** Takes back a pending invitation. */
+		readonly revokeInvitation: (
+			organizationId: string,
+			invitationId: string,
+		) => Effect.Effect<
+			OrganizationApi.Invitation,
+			| OrganizationApi.InvitationNotFound
+			| OrganizationApi.InvitationInvalid
+			| OrganizationUnavailable
+		>
+		/** The pending invitations for the verified email of a user. */
+		readonly invitationsFor: (
+			userId: string,
+		) => Effect.Effect<
+			ReadonlyArray<OrganizationApi.Invitation>,
+			OrganizationUnavailable
+		>
+		/**
+		 * Answers an invitation for the verified email of a user.
+		 * Accepting makes the user a member with the roles of the invitation.
+		 * An invitation for another email is not found.
+		 */
+		readonly answerInvitation: (
+			userId: string,
+			invitationId: string,
+			answer: "accepted" | "declined",
+		) => Effect.Effect<
+			OrganizationApi.Invitation,
+			| OrganizationApi.InvitationNotFound
+			| OrganizationApi.InvitationInvalid
 			| OrganizationUnavailable
 		>
 		/** Whether a member or the default roles use a role. */

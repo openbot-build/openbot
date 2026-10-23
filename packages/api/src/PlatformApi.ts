@@ -98,7 +98,7 @@ const ProviderParams = { providerId: Schema.String }
 const ModelParams = { modelId: Schema.String }
 
 /** The settings of the whole deployment. Only platform admins can use it. */
-export const PlatformApi = HttpApiGroup.make("platform")
+export class PlatformApi extends HttpApiGroup.make("platform")
 	.add(
 		HttpApiEndpoint.get("getPlatformSettings", "/v1/platform/settings", {
 			success: PlatformSettings,
@@ -321,4 +321,4 @@ export const PlatformApi = HttpApiGroup.make("platform")
 	)
 	.middleware(PlatformAuthorize)
 	.middleware(AccountAuth)
-	.middleware(NoStore)
+	.middleware(NoStore) {}

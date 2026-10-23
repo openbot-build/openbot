@@ -152,7 +152,7 @@ export const Errors = [
 	ConnectionConflict.pipe(HttpApiSchema.status(409)),
 	ConnectionConfigurationInvalid.pipe(HttpApiSchema.status(422)),
 ] as const
-export const ConnectionsApi = HttpApiGroup.make("connections").add(
+export class ConnectionsApi extends HttpApiGroup.make("connections").add(
 	HttpApiEndpoint.post("createManualConnection", "/v1/connections/manual", {
 		payload: ManualConnectionRequest,
 		success: Connection.pipe(HttpApiSchema.status(201)),
@@ -231,4 +231,4 @@ export const ConnectionsApi = HttpApiGroup.make("connections").add(
 		success: HttpApiSchema.NoContent,
 		error: Errors,
 	}),
-)
+) {}

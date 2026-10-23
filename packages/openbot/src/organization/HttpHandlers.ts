@@ -372,6 +372,77 @@ const organizationGroup = HttpApiBuilder.group(
 						)
 					}),
 				)
+				.handle("listInvitations", ({ query }) =>
+					Effect.flatMap(Identity, (caller) =>
+						organization.listInvitations(caller.organizationId, query.status),
+					).pipe(
+						Effect.map((items) => ({ items })),
+						Effect.mapError(unavailable),
+					),
+				)
+				.handle("createInvitation", ({ payload }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						const invited =
+							payload.roles ??
+							(yield* settings
+								.organization(caller.organizationId)
+								.pipe(Effect.mapError(unavailable))).document.defaultRoles
+						for (const roleId of invited) yield* findRole(caller, roleId)
+						// Only a Super Administrator can give the Super Administrator role.
+						if (invited.includes(superAdministrator))
+							yield* requireSuperAdministrator(
+								caller,
+								"members.write",
+								organizationKey(caller.organizationId),
+							)
+						const invitation = yield* organization
+							.createInvitation({
+								organizationId: caller.organizationId,
+								email: payload.email,
+								roles: invited,
+								invitedBy: caller.userId,
+							})
+							.pipe(
+								Effect.mapError((error) =>
+									error._tag === "OrganizationUnavailable"
+										? unavailable()
+										: error,
+								),
+							)
+						yield* record(
+							caller,
+							"invitation.created",
+							organizationKey(caller.organizationId),
+							{
+								invitationId: invitation.id,
+								email: invitation.email,
+								roles: [...invitation.roles],
+							},
+						)
+						return invitation
+					}),
+				)
+				.handle("revokeInvitation", ({ params }) =>
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						const invitation = yield* organization
+							.revokeInvitation(caller.organizationId, params.invitationId)
+							.pipe(
+								Effect.mapError((error) =>
+									error._tag === "OrganizationUnavailable"
+										? unavailable()
+										: error,
+								),
+							)
+						yield* record(
+							caller,
+							"invitation.revoked",
+							organizationKey(caller.organizationId),
+							{ invitationId: invitation.id, email: invitation.email },
+						)
+					}),
+				)
 				.handle("listPermissionGroups", () =>
 					Effect.succeed(Permissions.permissionGroups),
 				)
@@ -467,6 +538,50 @@ const organizationsGroup = HttpApiBuilder.group(
 			const organization = yield* Organization
 			const settings = yield* Settings
 			const admins = yield* PlatformAdmins
+			const audit = yield* AuditLog
+			/** Records a change that the account made in one organization. */
+			const record = (
+				userId: string,
+				organizationId: string,
+				action: OrganizationApi.AuditAction,
+				details: Parameters<typeof audit.record>[0]["details"],
+			) =>
+				audit
+					.record({
+						organizationId,
+						action,
+						actor: { kind: "member", userId, organizationId },
+						resource: userKey({ organizationId, userId }),
+						details,
+					})
+					.pipe(Effect.mapError(unavailable))
+			/** An answer to an invitation needs the session cookie, not a token of one organization. */
+			const answer = (invitationId: string, answer: "accepted" | "declined") =>
+				Effect.gen(function* () {
+					const account = yield* Account
+					if (account.tokenId !== undefined)
+						return yield* OrganizationApi.InvitationInvalid.make({
+							message: "Use the session cookie to answer an invitation.",
+						})
+					const invitation = yield* organization
+						.answerInvitation(account.userId, invitationId, answer)
+						.pipe(
+							Effect.mapError((error) =>
+								error._tag === "OrganizationUnavailable"
+									? unavailable()
+									: error,
+							),
+						)
+					yield* record(
+						account.userId,
+						invitation.organizationId,
+						answer === "accepted"
+							? "invitation.accepted"
+							: "invitation.declined",
+						{ invitationId: invitation.id },
+					)
+					return invitation
+				})
 			return handlers
 				.handle("listOrganizations", () =>
 					Effect.gen(function* () {
@@ -511,6 +626,56 @@ const organizationsGroup = HttpApiBuilder.group(
 							.create({ name: payload.name, owner: { id: account.userId } })
 							.pipe(Effect.mapError(unavailable))
 					}),
+				)
+				.handle("leaveOrganization", ({ params }) =>
+					Effect.gen(function* () {
+						const account = yield* Account
+						// A token belongs to one organization, so it can only leave that one.
+						if (
+							account.organizationId !== undefined &&
+							account.organizationId !== params.organizationId
+						)
+							return yield* OrganizationApi.MemberNotFound.make({
+								userId: account.userId,
+							})
+						yield* organization
+							.removeMember(params.organizationId, account.userId)
+							.pipe(
+								Effect.mapError((error) =>
+									error._tag === "OrganizationUnavailable"
+										? unavailable()
+										: error,
+								),
+							)
+						yield* record(
+							account.userId,
+							params.organizationId,
+							"member.left",
+							{},
+						)
+					}),
+				)
+				.handle("listMyInvitations", () =>
+					Effect.flatMap(Account, (account) =>
+						organization.invitationsFor(account.userId),
+					).pipe(
+						Effect.map((items) => ({ items })),
+						Effect.mapError(unavailable),
+					),
+				)
+				.handle("acceptInvitation", ({ params }) =>
+					Effect.gen(function* () {
+						const invitation = yield* answer(params.invitationId, "accepted")
+						return yield* organization
+							.get(invitation.organizationId)
+							.pipe(
+								Effect.flatMap(Effect.fromOption),
+								Effect.mapError(unavailable),
+							)
+					}),
+				)
+				.handle("declineInvitation", ({ params }) =>
+					answer(params.invitationId, "declined"),
 				)
 		}),
 )

@@ -6,16 +6,29 @@ import {
 } from "@openbot-build/api"
 import type { PgClient } from "@effect/sql-pg"
 import { Clock, DateTime, Effect, Layer, Option, Schema } from "effect"
-import { and, asc, eq, gt, isNotNull, like, sql } from "drizzle-orm"
-import { randomUUID } from "node:crypto"
 import {
+	and,
+	asc,
+	desc,
+	eq,
+	getTableColumns,
+	gt,
+	isNotNull,
+	like,
+	sql,
+	type SQL,
+} from "drizzle-orm"
+import { randomUUID } from "node:crypto"
+import { openbot_auth_user } from "../database/AuthSchema.ts"
+import {
+	invitations,
 	members,
 	organizationDomains,
 	organizations,
 	tokens,
 } from "../database/Schema.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
-import { userKey } from "../authorization/Policy.ts"
+import { organizationKey, userKey } from "../authorization/Policy.ts"
 import { Settings } from "../settings/Settings.ts"
 import {
 	type Account,
@@ -54,9 +67,32 @@ const memberView = (
 	policies: decodePolicies(row.policies),
 	joinedAt: iso(row.joinedAt),
 })
+const decodeInvitationStatus = Schema.decodeUnknownSync(
+	OrganizationApi.InvitationStatus,
+)
+/** An invitation lasts 7 days. */
+const invitationLifetime = 7 * 24 * 60 * 60 * 1000
+const invitationView = (
+	row: typeof invitations.$inferSelect & { readonly organizationName: string },
+	now: number,
+): OrganizationApi.Invitation => ({
+	id: row.id,
+	organizationId: row.organizationId,
+	organizationName: row.organizationName,
+	email: row.email,
+	roles: decodeRoles(row.roles),
+	status:
+		row.status === "pending" && row.expiresAt <= now
+			? "expired"
+			: decodeInvitationStatus(row.status),
+	invitedBy: row.invitedBy,
+	createdAt: iso(row.createdAt),
+	expiresAt: iso(row.expiresAt),
+})
 const isActiveSuperAdministrator = (member: OrganizationApi.Member) =>
 	member.status === "active" && member.roles.includes("super_administrator")
 const newId = () => "org_" + randomUUID().replaceAll("-", "")
+const newInvitationId = () => "inv_" + randomUUID().replaceAll("-", "")
 
 export const make: Effect.Effect<
 	typeof Organization.Service,
@@ -145,16 +181,8 @@ export const make: Effect.Effect<
 			.returning({ userId: members.userId })
 			.pipe(Effect.map((rows) => rows.length > 0))
 
-	/**
-	 * Creates an organization and makes its owner the Super Administrator.
-	 * With `firstOnly`, it does nothing when the owner already has an
-	 * organization, so two first requests at the same time make only one.
-	 */
-	const createFor = (input: {
-		readonly name: string
-		readonly owner: Account
-		readonly firstOnly: boolean
-	}) =>
+	/** Creates an organization and makes its owner the Super Administrator. */
+	const create = (input: { readonly name: string; readonly owner: Account }) =>
 		Effect.gen(function* () {
 			const now = yield* Clock.currentTimeMillis
 			const row = {
@@ -163,25 +191,12 @@ export const make: Effect.Effect<
 				status: "active",
 				createdAt: now,
 			}
-			const created = yield* db.transaction((tx) =>
+			yield* db.transaction((tx) =>
 				Effect.gen(function* () {
-					if (input.firstOnly) {
-						yield* tx.execute(
-							sql`SELECT pg_advisory_xact_lock(hashtextextended(${"openbot-first-organization:" + input.owner.id}, 0))`,
-						)
-						const existing = yield* tx
-							.select({ organizationId: members.organizationId })
-							.from(members)
-							.where(eq(members.userId, input.owner.id))
-							.limit(1)
-						if (existing.length > 0) return false
-					}
 					yield* tx.insert(organizations).values(row)
 					yield* join(tx, row.id, input.owner, ["super_administrator"], now)
-					return true
 				}),
 			)
-			if (!created) return Option.none<OrganizationApi.Organization>()
 			yield* audit
 				.record({
 					organizationId: row.id,
@@ -191,22 +206,13 @@ export const make: Effect.Effect<
 						userId: input.owner.id,
 						organizationId: row.id,
 					},
-					resource: "openbot.org." + row.id,
+					resource: organizationKey(row.id),
 					details: { name: row.name },
 				})
 				.pipe(Effect.mapError(unavailable))
 			yield* recordJoin(row.id, input.owner, ["super_administrator"])
-			return Option.some(organizationView(row))
+			return organizationView(row)
 		}).pipe(Effect.mapError(unavailable))
-	const create = (input: { readonly name: string; readonly owner: Account }) =>
-		createFor({ ...input, firstOnly: false }).pipe(
-			Effect.flatMap(
-				Option.match({
-					onNone: () => Effect.fail(unavailable()),
-					onSome: Effect.succeed,
-				}),
-			),
-		)
 
 	/** The organization that verified the email domain of the account, if any. */
 	const domainOrganization = (account: Account) =>
@@ -265,18 +271,6 @@ export const make: Effect.Effect<
 						),
 					)
 					.pipe(Effect.mapError(unavailable))
-				return before
-			}
-			if (options?.only !== undefined) return before
-			const platform = yield* settings.platform
-			if (
-				Option.exists(
-					platform,
-					(platform) => platform.document.organizationCreation === "anyone",
-				)
-			) {
-				yield* createFor({ name: "Personal", owner: account, firstOnly: true })
-				return yield* memberships(account.id)
 			}
 			return before
 		}).pipe(
@@ -284,6 +278,42 @@ export const make: Effect.Effect<
 				error._tag === "OrganizationUnavailable" ? error : unavailable(),
 			),
 		)
+
+	/** The invitations with the name of their organization, newest first. */
+	const invitationRows = (where: SQL | undefined) =>
+		db
+			.select({
+				...getTableColumns(invitations),
+				organizationName: organizations.name,
+			})
+			.from(invitations)
+			.innerJoin(
+				organizations,
+				eq(organizations.id, invitations.organizationId),
+			)
+			.where(where)
+			.orderBy(desc(invitations.createdAt), desc(invitations.id))
+			.pipe(Effect.mapError(unavailable))
+	/** The account of a user, with its email in lower case. */
+	const accountOf = (userId: string) =>
+		db
+			.select({
+				id: openbot_auth_user.id,
+				name: openbot_auth_user.name,
+				email: openbot_auth_user.email,
+				emailVerified: openbot_auth_user.emailVerified,
+			})
+			.from(openbot_auth_user)
+			.where(eq(openbot_auth_user.id, userId))
+			.pipe(
+				Effect.map((rows) =>
+					Option.map(Option.fromNullishOr(rows[0]), (row) => ({
+						...row,
+						email: row.email.toLowerCase(),
+					})),
+				),
+				Effect.mapError(unavailable),
+			)
 
 	const findMember = (organizationId: string, userId: string) =>
 		db
@@ -499,6 +529,190 @@ export const make: Effect.Effect<
 						: unavailable(),
 				),
 			),
+		listInvitations: (organizationId, status) =>
+			Effect.gen(function* () {
+				const now = yield* Clock.currentTimeMillis
+				const rows = yield* invitationRows(
+					eq(invitations.organizationId, organizationId),
+				)
+				return rows
+					.map((row) => invitationView(row, now))
+					.filter(
+						(invitation) =>
+							status === undefined || invitation.status === status,
+					)
+			}),
+		createInvitation: (input) =>
+			Effect.gen(function* () {
+				const now = yield* Clock.currentTimeMillis
+				const email = input.email.trim().toLowerCase()
+				const row = {
+					id: newInvitationId(),
+					organizationId: input.organizationId,
+					email,
+					roles: JSON.stringify(input.roles),
+					status: "pending",
+					invitedBy: input.invitedBy,
+					createdAt: now,
+					expiresAt: now + invitationLifetime,
+				}
+				yield* db
+					.transaction((tx) =>
+						Effect.gen(function* () {
+							yield* lockMembers(tx, input.organizationId)
+							const member = yield* tx
+								.select({ userId: members.userId })
+								.from(members)
+								.where(
+									and(
+										eq(members.organizationId, input.organizationId),
+										sql`lower(${members.email}) = ${email}`,
+									),
+								)
+								.limit(1)
+							if (member.length > 0)
+								return yield* OrganizationApi.InvitationInvalid.make({
+									message: "A member already has this email.",
+								})
+							const pending = yield* tx
+								.select({ id: invitations.id })
+								.from(invitations)
+								.where(
+									and(
+										eq(invitations.organizationId, input.organizationId),
+										eq(invitations.email, email),
+										eq(invitations.status, "pending"),
+										gt(invitations.expiresAt, now),
+									),
+								)
+								.limit(1)
+							if (pending.length > 0)
+								return yield* OrganizationApi.InvitationInvalid.make({
+									message: "This email already has a pending invitation.",
+								})
+							yield* tx.insert(invitations).values(row)
+						}),
+					)
+					.pipe(
+						Effect.mapError((error) =>
+							error._tag === "InvitationInvalid" ? error : unavailable(),
+						),
+					)
+				const [created] = yield* invitationRows(eq(invitations.id, row.id))
+				if (created === undefined) return yield* unavailable()
+				return invitationView(created, now)
+			}),
+		revokeInvitation: (organizationId, invitationId) =>
+			Effect.gen(function* () {
+				const now = yield* Clock.currentTimeMillis
+				const [row] = yield* invitationRows(
+					and(
+						eq(invitations.organizationId, organizationId),
+						eq(invitations.id, invitationId),
+					),
+				)
+				if (row === undefined)
+					return yield* OrganizationApi.InvitationNotFound.make({
+						invitationId,
+					})
+				const current = invitationView(row, now)
+				if (current.status !== "pending")
+					return yield* OrganizationApi.InvitationInvalid.make({
+						message: `The invitation is ${current.status}.`,
+					})
+				yield* db
+					.update(invitations)
+					.set({ status: "revoked" })
+					.where(
+						and(
+							eq(invitations.id, invitationId),
+							eq(invitations.status, "pending"),
+						),
+					)
+					.pipe(Effect.mapError(unavailable))
+				return { ...current, status: "revoked" as const }
+			}),
+		invitationsFor: (userId) =>
+			Effect.gen(function* () {
+				const account = yield* accountOf(userId)
+				if (Option.isNone(account) || !account.value.emailVerified) return []
+				const now = yield* Clock.currentTimeMillis
+				const rows = yield* invitationRows(
+					and(
+						eq(invitations.email, account.value.email),
+						eq(invitations.status, "pending"),
+						gt(invitations.expiresAt, now),
+					),
+				)
+				return rows.map((row) => invitationView(row, now))
+			}),
+		answerInvitation: (userId, invitationId, answer) =>
+			Effect.gen(function* () {
+				const notFound = OrganizationApi.InvitationNotFound.make({
+					invitationId,
+				})
+				const account = yield* accountOf(userId)
+				const [row] = yield* invitationRows(eq(invitations.id, invitationId))
+				// An invitation for another email stays hidden.
+				if (
+					row === undefined ||
+					Option.isNone(account) ||
+					account.value.email !== row.email
+				)
+					return yield* notFound
+				if (!account.value.emailVerified)
+					return yield* OrganizationApi.InvitationInvalid.make({
+						message: "Verify your email address first.",
+					})
+				const now = yield* Clock.currentTimeMillis
+				const roles = decodeRoles(row.roles)
+				const joined = yield* db
+					.transaction((tx) =>
+						Effect.gen(function* () {
+							yield* lockMembers(tx, row.organizationId)
+							const [locked] = yield* tx
+								.select()
+								.from(invitations)
+								.where(eq(invitations.id, invitationId))
+							const status =
+								locked === undefined
+									? "revoked"
+									: invitationView(
+											{ ...locked, organizationName: row.organizationName },
+											now,
+										).status
+							if (status !== "pending")
+								return yield* OrganizationApi.InvitationInvalid.make({
+									message: `The invitation is ${status}.`,
+								})
+							yield* tx
+								.update(invitations)
+								.set({ status: answer })
+								.where(eq(invitations.id, invitationId))
+							return answer === "accepted"
+								? yield* join(
+										tx,
+										row.organizationId,
+										{
+											id: account.value.id,
+											email: account.value.email,
+											name: account.value.name,
+										},
+										roles,
+										now,
+									)
+								: false
+						}),
+					)
+					.pipe(
+						Effect.mapError((error) =>
+							error._tag === "InvitationInvalid" ? error : unavailable(),
+						),
+					)
+				if (joined)
+					yield* recordJoin(row.organizationId, { id: account.value.id }, roles)
+				return { ...invitationView(row, now), status: answer }
+			}),
 		roleInUse: (organizationId, roleId) =>
 			Effect.gen(function* () {
 				const current = yield* settings.organization(organizationId)

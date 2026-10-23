@@ -4,7 +4,7 @@ description: 组织、成员、设置、角色和审计日志。
 ---
 
 本页说明多人如何共用 OpenBot。组织（Organization）是一群人，他们共享 Agents、模型和设置。
-一个平台有很多组织。一个账户可以是其中多个组织的成员。一个人单独使用 OpenBot 时，他有一个只有一名成员的组织。
+一个平台有很多组织。用户和组织是两种不同的东西。用户可以创建组织，也可以只为自己创建一个，并且可以是多个组织的成员。
 
 当前组织的路由都在 `/v1/organization` 下。它们接受用户令牌或 session cookie。使用 cookie 时，如果你属于多个组织，请发送 `OpenBot-Organization` 请求头。见 [身份验证](/zh-cn/docs/authentication#选择组织)。
 
@@ -14,14 +14,16 @@ description: 组织、成员、设置、角色和审计日志。
 
 每次账户登录时，OpenBot 都会检查它属于哪里。在每个带 session cookie 的请求上，它也会检查。
 
-| 方式         | 得到的角色                                                 | 需要的条件                                                              |
-| ------------ | ---------------------------------------------------------- | ----------------------------------------------------------------------- |
-| 已验证的域名 | 组织的 `defaultRoles`                                      | 组织验证了邮箱的域名，`joinByDomain` 为 `true`，并且提供方验证了邮箱。  |
-| SSO 连接     | 组织的 `defaultRoles`                                      | 账户通过该组织的 SSO 连接登录。                                         |
-| 个人组织     | 在一个名为 "Personal" 的新组织中得到 `super_administrator` | 账户没有任何组织，并且平台设置中的 `organizationCreation` 为 `anyone`。 |
-| 新组织       | `super_administrator`                                      | 账户调用 `POST /v1/organizations`。见 [创建组织](#创建组织)。           |
+| 方式         | 得到的角色            | 需要的条件                                                             |
+| ------------ | --------------------- | ---------------------------------------------------------------------- |
+| 邀请         | 邀请中的角色          | 管理员邀请了账户已验证的邮箱，并且账户接受了。见 [邀请](#邀请)。       |
+| 已验证的域名 | 组织的 `defaultRoles` | 组织验证了邮箱的域名，`joinByDomain` 为 `true`，并且提供方验证了邮箱。 |
+| SSO 连接     | 组织的 `defaultRoles` | 账户通过该组织的 SSO 连接登录。                                        |
+| 新组织       | `super_administrator` | 账户调用 `POST /v1/organizations`。见 [创建组织](#创建组织)。          |
 
-没有任何组织的账户，访问组织路由时会得到 `403` 和 `MembershipRequired`。
+OpenBot 不会为新账户创建组织。没有任何组织的账户，访问组织路由时会得到 `403` 和 `MembershipRequired`。它仍然可以创建组织和回答邀请。
+
+旧版本的 OpenBot 会为每个新账户创建一个名为 "Personal" 的组织。这些组织会保留。它们是普通组织，所以你可以改名、邀请别人或离开它们。
 验证域名见 [SSO 和域名](/zh-cn/docs/sso)，`organizationCreation` 见 [Platform](/zh-cn/docs/platform#组织创建)。
 
 ---
@@ -62,6 +64,20 @@ curl -b cookies.txt \
 ```
 
 当平台设置中的 `organizationCreation` 为 `platform_admins` 时，只有平台管理员能这样做。其他调用者会得到 `403` 和 `OrganizationCreationDisabled`。
+
+### 离开组织
+
+`DELETE /v1/organizations/:organizationId/membership` 让你离开一个组织。你在这个组织中的令牌会立即失效。
+
+```sh
+curl -X DELETE -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  https://api.example.com/v1/organizations/org_8f3a/membership
+```
+
+- 最后一个活跃的 Super Administrator 不能离开。OpenBot 返回 `409` 和 `LastSuperAdministrator`。请先把这个角色给别人。
+- 用户令牌只能离开它自己的组织。
+- 如果你的邮箱域名仍然已验证，并且 `joinByDomain` 开着，你下次登录时会再次加入。
 
 ---
 
@@ -198,6 +214,59 @@ curl -X PATCH -b cookies.txt \
 
 ---
 
+## 邀请
+
+管理员按邮箱邀请一个人。这个人用这个邮箱登录，然后接受或拒绝。OpenBot 不会发送邮件，请你自己告诉这个人。
+
+`POST /v1/organization/invitations` 创建邀请。它需要 `members.write`。
+
+```sh
+curl -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"grace@example.com","roles":["member"]}' \
+  https://api.example.com/v1/organization/invitations
+```
+
+```json
+{
+	"id": "inv_51c2",
+	"organizationId": "org_8f3a",
+	"organizationName": "Example",
+	"email": "grace@example.com",
+	"roles": ["member"],
+	"status": "pending",
+	"invitedBy": "u_123",
+	"createdAt": "2026-10-23T09:00:00.000Z",
+	"expiresAt": "2026-10-30T09:00:00.000Z"
+}
+```
+
+- 不填 `roles` 时，这个人得到组织的 `defaultRoles`。每个角色都必须存在，否则 OpenBot 返回 `404` 和 `RoleNotFound`。
+- 只有 Super Administrator 能用 `super_administrator` 角色邀请别人。
+- 邀请的有效期是 7 天。之后它的 `status` 是 `expired`。
+- 在一个组织中，一个邮箱只能有一个待处理的邀请。如果已经有一个，或者已有成员使用这个邮箱，OpenBot 返回 `400` 和 `InvitationInvalid`。
+
+`GET /v1/organization/invitations` 按从新到旧列出邀请。它需要 `members.read`。加上 `?status=pending` 只看未处理的邀请。`DELETE /v1/organization/invitations/:invitationId` 收回一个待处理的邀请。它需要 `members.write`。
+
+### 回答邀请
+
+这些路由给被邀请的人使用。它们不需要成员资格。
+
+- `GET /v1/invitations` 列出发给你已验证邮箱的待处理邀请。
+- `POST /v1/invitations/:invitationId/accept` 让你成为成员，并得到邀请中的角色。它返回这个组织。
+- `POST /v1/invitations/:invitationId/decline` 拒绝邀请。
+
+回答邀请时，请使用 session cookie，不要用用户令牌。你的邮箱必须已验证，并且和邀请的邮箱相同。发给其他邮箱的邀请会返回 `404` 和 `InvitationNotFound`。
+
+```sh
+curl -X POST -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  https://api.example.com/v1/invitations/inv_51c2/accept
+```
+
+---
+
 ## 审计日志
 
 审计日志记录重要的修改。任何操作都不能修改或删除日志条目。
@@ -242,6 +311,11 @@ curl -X PATCH -b cookies.txt \
 | `member.joined`          | 一个账户加入组织。                                     |
 | `member.updated`         | 一个成员得到新的状态、角色或策略。                     |
 | `member.removed`         | 一个成员被移除。                                       |
+| `member.left`            | 一个成员离开了组织。                                   |
+| `invitation.created`     | 一个成员邀请了一个邮箱。                               |
+| `invitation.revoked`     | 一个成员收回了一个邀请。                               |
+| `invitation.accepted`    | 被邀请的人接受了邀请。                                 |
+| `invitation.declined`    | 被邀请的人拒绝了邀请。                                 |
 | `organization.created`   | 有人创建了一个组织。                                   |
 | `organization.updated`   | 组织得到了新名称。                                     |
 | `settings.updated`       | 组织设置发生变化。                                     |
@@ -282,6 +356,9 @@ curl -X PATCH -b cookies.txt \
 | 状态码 | 错误                             | 何时出现                                                          |
 | ------ | -------------------------------- | ----------------------------------------------------------------- |
 | `400`  | `PolicyInvalid`                  | 某个策略指定了组织之外的资源。                                    |
+| `400`  | `InvitationInvalid`              | 现在不能创建或回答这个邀请，例如它已经过期。                      |
+| `404`  | `InvitationNotFound`             | 没有发给你的、使用这个 ID 的邀请。                                |
+| `404`  | `RoleNotFound`                   | 邀请中有一个不存在的角色。                                        |
 | `403`  | `PermissionDenied`               | 调用者没有该权限。见 [权限](/zh-cn/docs/permissions)。            |
 | `400`  | `OrganizationRequired`           | 使用 cookie 的请求没有 `OpenBot-Organization`，而你属于多个组织。 |
 | `400`  | `SettingsInvalid`                | 设置中的某个值无效，例如角色不存在。                              |

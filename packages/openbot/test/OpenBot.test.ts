@@ -31,6 +31,7 @@ import { SqlClient } from "effect/sql"
 import { exportJWK, generateKeyPair, SignJWT } from "jose"
 import * as PostgresTest from "./PostgresTest.ts"
 import * as DefaultAgent from "./DefaultAgent.ts"
+import * as Organizations from "./Organizations.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
 
 test(
@@ -297,6 +298,19 @@ test(
 			})
 			assert.equal(bobResponse.status, 302)
 			const bobSession = sessionCookie(bobResponse)
+			// New accounts have no organization, so each one makes its own.
+			for (const cookie of [alice.session, bobSession])
+				await Organizations.ensure((path, method, payload) =>
+					request(path, {
+						method,
+						headers: {
+							cookie,
+							origin: publicOrigin,
+							"content-type": "application/json",
+						},
+						...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+					}),
+				)
 			forged = true
 			const bad = await login("alice")
 			rejected(await request(bad.callback, { headers: { cookie: bad.cookie } }))

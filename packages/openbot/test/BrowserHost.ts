@@ -435,7 +435,12 @@ export async function start(options: {
 					})
 				}),
 			)
-		const login = async (subject: string, returnTo?: string) => {
+		/** With `organization: false`, a new account keeps no organization. */
+		const login = async (
+			subject: string,
+			returnTo?: string,
+			loginOptions: { readonly organization?: boolean } = {},
+		) => {
 			const start = await fetch(address + "/auth/sign-in/social", {
 				method: "POST",
 				headers: {
@@ -477,13 +482,41 @@ export async function start(options: {
 			const session = Redacted.make(
 				decodeURIComponent(cookie.slice(cookie.indexOf("=") + 1)),
 			)
-			const info = await runtime.runPromise(
-				Effect.flatMap(Auth.Auth, (auth) => auth.resolveSession(session)),
-			)
-			const organizationId = info.memberships[0]?.organizationId
-			if (organizationId === undefined)
+			const resolve = () =>
+				runtime.runPromise(
+					Effect.flatMap(Auth.Auth, (auth) => auth.resolveSession(session)),
+				)
+			let info = await resolve()
+			// A new account has no organization. Like a person, it makes one for itself.
+			if (
+				info.memberships.length === 0 &&
+				loginOptions.organization !== false
+			) {
+				const created = await fetch(address + "/v1/organizations", {
+					method: "POST",
+					headers: {
+						cookie:
+							AuthApi.SessionCookie +
+							"=" +
+							encodeURIComponent(Redacted.value(session)),
+						origin: options.publicOrigin,
+						"content-type": "application/json",
+					},
+					body: JSON.stringify({ name: subject }),
+				})
+				if (!created.ok)
+					throw new Error(
+						"The test account cannot make an organization: " +
+							created.status +
+							" " +
+							(await created.text()),
+					)
+				info = await resolve()
+			}
+			const organizationId = info.memberships[0]?.organizationId ?? ""
+			if (organizationId === "" && loginOptions.organization !== false)
 				throw new Error("The test account has no organization")
-			await prepare(organizationId)
+			if (organizationId !== "") await prepare(organizationId)
 			return {
 				session,
 				identity: {

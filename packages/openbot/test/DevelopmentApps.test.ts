@@ -12,6 +12,7 @@ import { Business } from "../src/app/DevelopmentBusiness.ts"
 import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Postgres from "./PostgresTest.ts"
 import * as DefaultAgent from "./DefaultAgent.ts"
+import * as Organizations from "./Organizations.ts"
 
 test("development Apps show protocol, requirement, expiry and cleanup failures through the standard APIs", async () => {
 	const database = await Postgres.start()
@@ -57,6 +58,13 @@ test("development Apps show protocol, requirement, expiry and cleanup failures t
 			origin: options.auth.publicOrigin,
 			"content-type": "application/json",
 		}
+		await Organizations.ensure((path, method, payload) =>
+			fetch(address + path, {
+				method,
+				headers,
+				...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+			}),
+		)
 		const post = (path: string, body?: unknown) =>
 			fetch(address + path, {
 				method: "POST",

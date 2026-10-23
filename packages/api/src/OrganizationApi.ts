@@ -68,12 +68,51 @@ export const UpdateMemberRequest = Schema.Struct({
 })
 export type UpdateMemberRequest = typeof UpdateMemberRequest.Type
 
+export const InvitationId = Schema.String.check(
+	Schema.isMinLength(1),
+	Schema.isMaxLength(128),
+)
+/** `revoked` means that an administrator took it back. An invitation that is too old is `expired`. */
+export const InvitationStatus = Schema.Literals([
+	"pending",
+	"accepted",
+	"declined",
+	"revoked",
+	"expired",
+])
+export type InvitationStatus = typeof InvitationStatus.Type
+/** An invitation to join an organization. The person with this verified email can accept it. */
+export const Invitation = Schema.Struct({
+	id: InvitationId,
+	organizationId: Schema.String,
+	organizationName: Schema.String,
+	email: Schema.String,
+	/** The roles that the person gets when they accept. */
+	roles: Roles,
+	status: InvitationStatus,
+	/** The user ID of the person who made the invitation. */
+	invitedBy: Schema.String,
+	createdAt: Schema.String,
+	expiresAt: Schema.String,
+})
+export type Invitation = typeof Invitation.Type
+export const CreateInvitationRequest = Schema.Struct({
+	email: Schema.String.check(
+		Schema.isMaxLength(320),
+		Schema.isPattern(/^[^@\s]+@[^@\s]+$/),
+	),
+	/** Without it, the person gets the default roles of the organization. */
+	roles: Schema.optionalKey(Roles),
+})
+export type CreateInvitationRequest = typeof CreateInvitationRequest.Type
+
 /**
  * The audit actions of each resource. Each action id joins the resource and
  * the action with a dot, such as `token.created`.
  */
 const auditActionTree = {
-	member: ["joined", "updated", "removed"],
+	member: ["joined", "updated", "removed", "left"],
+	invitation: ["created", "revoked", "accepted", "declined"],
 	organization: ["created", "updated"],
 	settings: ["updated"],
 	role: ["created", "updated", "deleted"],
@@ -150,6 +189,15 @@ export class RoleReadOnly extends Schema.TaggedError<RoleReadOnly>()(
 	"RoleReadOnly",
 	{ roleId: Schema.String },
 ) {}
+export class InvitationNotFound extends Schema.TaggedError<InvitationNotFound>()(
+	"InvitationNotFound",
+	{ invitationId: Schema.String },
+) {}
+/** The invitation cannot be used now, for example because it is too old or is for another email. */
+export class InvitationInvalid extends Schema.TaggedError<InvitationInvalid>()(
+	"InvitationInvalid",
+	{ message: Schema.String },
+) {}
 /** Only platform admins can create organizations on this platform. */
 export class OrganizationCreationDisabled extends Schema.TaggedError<OrganizationCreationDisabled>()(
 	"OrganizationCreationDisabled",
@@ -171,6 +219,15 @@ const memberErrors = [
 	PolicyInvalid.pipe(HttpApiSchema.status(400)),
 ] as const
 
+/** Inviting with a role can also need Super Administrator rights, so these endpoints can deny on their own. */
+const invitationErrors = [
+	...errors,
+	...PermissionErrors,
+	InvitationNotFound.pipe(HttpApiSchema.status(404)),
+	InvitationInvalid.pipe(HttpApiSchema.status(400)),
+	RoleNotFound.pipe(HttpApiSchema.status(404)),
+] as const
+
 const readMembers = [requires("members.read").on("organization")]
 const writeMembers = [requires("members.write").on("organization")]
 const writeRoles = [requires("roles.write").on("organization")]
@@ -184,7 +241,7 @@ const roleErrors = [
 	PolicyInvalid.pipe(HttpApiSchema.status(400)),
 ] as const
 
-export const OrganizationApi = HttpApiGroup.make("organization").add(
+export class OrganizationApi extends HttpApiGroup.make("organization").add(
 	HttpApiEndpoint.get("getOrganization", "/v1/organization", {
 		success: Organization,
 		error: errors,
@@ -231,6 +288,37 @@ export const OrganizationApi = HttpApiGroup.make("organization").add(
 			OpenApi.Description,
 			"Removes a member and revokes their tokens. If their email domain is still allowed, they join again the next time they sign in. Suspend them to keep them out.",
 		),
+	HttpApiEndpoint.get("listInvitations", "/v1/organization/invitations", {
+		query: { status: Schema.optionalKey(InvitationStatus) },
+		success: Schema.Struct({ items: Schema.Array(Invitation) }),
+		error: invitationErrors,
+	})
+		.annotate(Required, readMembers)
+		.annotate(
+			OpenApi.Description,
+			"Lists the invitations of the organization, newest first.",
+		),
+	HttpApiEndpoint.post("createInvitation", "/v1/organization/invitations", {
+		payload: CreateInvitationRequest,
+		success: Invitation.pipe(HttpApiSchema.status(201)),
+		error: invitationErrors,
+	})
+		.annotate(Required, writeMembers)
+		.annotate(
+			OpenApi.Description,
+			"Invites a person by email. They accept with `POST /v1/invitations/:invitationId/accept` after they sign in with that verified email. An invitation lasts 7 days.",
+		),
+	HttpApiEndpoint.delete(
+		"revokeInvitation",
+		"/v1/organization/invitations/:invitationId",
+		{
+			params: { invitationId: InvitationId },
+			success: HttpApiSchema.NoContent,
+			error: invitationErrors,
+		},
+	)
+		.annotate(Required, writeMembers)
+		.annotate(OpenApi.Description, "Takes back a pending invitation."),
 	HttpApiEndpoint.get(
 		"listPermissionGroups",
 		"/v1/organization/permission_groups",
@@ -309,10 +397,10 @@ export const OrganizationApi = HttpApiGroup.make("organization").add(
 			OpenApi.Description,
 			"Lists audit log entries, newest first. `actor` filters by user ID.",
 		),
-)
+) {}
 
 /** The organizations of the caller. Any signed-in account can use these endpoints. */
-export const OrganizationsApi = HttpApiGroup.make("organizations")
+export class OrganizationsApi extends HttpApiGroup.make("organizations")
 	.add(
 		HttpApiEndpoint.get("listOrganizations", "/v1/organizations", {
 			success: Schema.Struct({ items: Schema.Array(Organization) }),
@@ -332,6 +420,53 @@ export const OrganizationsApi = HttpApiGroup.make("organizations")
 			OpenApi.Description,
 			"Creates an organization. You become its Super Administrator. The platform settings say who can do this.",
 		),
+		HttpApiEndpoint.delete(
+			"leaveOrganization",
+			"/v1/organizations/:organizationId/membership",
+			{
+				params: { organizationId: Schema.String },
+				success: HttpApiSchema.NoContent,
+				error: [
+					...errors,
+					MemberNotFound.pipe(HttpApiSchema.status(404)),
+					LastSuperAdministrator.pipe(HttpApiSchema.status(409)),
+				],
+			},
+		).annotate(
+			OpenApi.Description,
+			"Leaves an organization. Your tokens in it stop working. The last active Super Administrator cannot leave. A user token can only leave its own organization.",
+		),
+		HttpApiEndpoint.get("listMyInvitations", "/v1/invitations", {
+			success: Schema.Struct({ items: Schema.Array(Invitation) }),
+			error: invitationErrors,
+		}).annotate(
+			OpenApi.Description,
+			"Lists the pending invitations for your verified email.",
+		),
+		HttpApiEndpoint.post(
+			"acceptInvitation",
+			"/v1/invitations/:invitationId/accept",
+			{
+				params: { invitationId: InvitationId },
+				success: Organization,
+				error: invitationErrors,
+			},
+		).annotate(
+			OpenApi.Description,
+			"Joins the organization of the invitation. You need the session cookie, and your verified email must be the email of the invitation.",
+		),
+		HttpApiEndpoint.post(
+			"declineInvitation",
+			"/v1/invitations/:invitationId/decline",
+			{
+				params: { invitationId: InvitationId },
+				success: Invitation,
+				error: invitationErrors,
+			},
+		).annotate(
+			OpenApi.Description,
+			"Says no to an invitation. You need the session cookie and the email of the invitation.",
+		),
 	)
 	.middleware(AccountAuth)
-	.middleware(NoStore)
+	.middleware(NoStore) {}

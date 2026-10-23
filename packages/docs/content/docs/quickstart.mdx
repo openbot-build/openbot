@@ -69,7 +69,25 @@ curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
 ```
 
 In development, this signs you in to the local test account `developer@localhost.test` at once. The sign-in cookie goes to `cookies.txt`.
-This account is a platform admin. It also gets its own organization named "Personal".
+This account is a platform admin. It has no organization yet.
+
+</Step>
+
+<Step>
+
+### Make an organization
+
+Agents, Sessions and tokens belong to an [organization](/docs/organization). Make one for yourself:
+
+```sh
+curl -b cookies.txt \
+  -H 'Origin: https://localhost:8443' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"My lab"}' \
+  https://localhost:8443/v1/organizations
+```
+
+You are the Super Administrator of this organization.
 
 </Step>
 
@@ -85,7 +103,7 @@ curl -b cookies.txt \
   https://localhost:8443/v1/user/tokens
 ```
 
-You are the Super Administrator of your "Personal" organization, and the token belongs to it. The answer has a `secret` that starts with `obut_`. You see it only once, so keep it:
+The token belongs to your new organization. The answer has a `secret` that starts with `obut_`. You see it only once, so keep it:
 
 ```sh
 export OPENBOT_TOKEN=obut_...

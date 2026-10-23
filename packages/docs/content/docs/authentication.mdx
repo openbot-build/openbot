@@ -124,12 +124,11 @@ curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
 
 ## Membership
 
-One platform has many organizations. One account can be a member of many of them. When an account signs in, OpenBot checks where it belongs:
+One platform has many organizations. A user and an organization are separate. One account can create organizations and be a member of many of them. When an account signs in, OpenBot checks where it belongs:
 
 1. It joins the organization that verified the domain of its verified email, when that organization allows `joinByDomain`.
 2. It joins the organization of its SSO connection, if it signed in through one.
-3. If it still has no organization, and the platform lets anyone create one, it gets a new organization named "Personal". It is the Super Administrator there.
-4. Otherwise it has no organization. Organization routes then answer `403` with `MembershipRequired`.
+3. OpenBot never makes an organization for it. Without one, organization routes answer `403` with `MembershipRequired`. The account can still [create an organization](/docs/organization#create-an-organization) or [accept an invitation](/docs/organization#answer-an-invitation).
 
 OpenBot also does these checks on each request with the session cookie. See [Organization](/docs/organization#who-can-join).
 

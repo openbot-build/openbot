@@ -69,7 +69,25 @@ curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
 ```
 
 在开发环境中，这会立即让你登录本地测试账户 `developer@localhost.test`。登录 cookie 会保存到 `cookies.txt`。
-这个账户是平台管理员。它还会得到一个自己的组织，名字是 "Personal"。
+这个账户是平台管理员。它现在还没有组织。
+
+</Step>
+
+<Step>
+
+### 创建组织
+
+Agents、Sessions 和令牌都属于一个[组织](/zh-cn/docs/organization)。为你自己创建一个：
+
+```sh
+curl -b cookies.txt \
+  -H 'Origin: https://localhost:8443' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"My lab"}' \
+  https://localhost:8443/v1/organizations
+```
+
+你是这个组织的 Super Administrator（超级管理员）。
 
 </Step>
 
@@ -85,7 +103,7 @@ curl -b cookies.txt \
   https://localhost:8443/v1/user/tokens
 ```
 
-你是 "Personal" 组织的 Super Administrator（超级管理员），这个令牌属于该组织。回答中有一个以 `obut_` 开头的 `secret`。它只显示一次，所以请保存好：
+这个令牌属于你的新组织。回答中有一个以 `obut_` 开头的 `secret`。它只显示一次，所以请保存好：
 
 ```sh
 export OPENBOT_TOKEN=obut_...

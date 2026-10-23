@@ -4,7 +4,7 @@ description: Organisationen, Members, Einstellungen, Roles und das Audit-Log.
 ---
 
 Diese Seite zeigt, wie viele Menschen OpenBot gemeinsam nutzen. Eine Organization (Organisation) ist eine Gruppe von Menschen, die Agents, Models und Einstellungen teilen.
-Eine Platform hat viele Organisationen. Ein Konto kann Member (Mitglied) in vielen davon sein. Eine Person, die OpenBot allein nutzt, hat eine Organisation mit einem Member.
+Eine Platform hat viele Organisationen. Ein User und eine Organisation sind zwei verschiedene Dinge. Ein User kann Organisationen erstellen, auch eine nur für sich selbst, und kann Member (Mitglied) in vielen Organisationen sein.
 
 Die Routen der aktuellen Organisation liegen unter `/v1/organization`. Sie nehmen ein User-Token oder das Session-Cookie an. Mit dem Cookie sendest du den Header `OpenBot-Organization`, wenn du zu mehr als einer Organisation gehörst. Siehe [Authentifizierung](/de/docs/authentication#eine-organisation-wählen).
 
@@ -14,14 +14,16 @@ Die Routen der aktuellen Organisation liegen unter `/v1/organization`. Sie nehme
 
 Jedes Mal, wenn sich ein Konto anmeldet, prüft OpenBot, wohin es gehört. Es prüft das auch bei jeder Anfrage mit dem Session-Cookie.
 
-| Weg                      | Role, die es bekommt                                                       | Voraussetzung                                                                                                             |
-| ------------------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Bestätigte Domain        | Die `defaultRoles` der Organisation                                        | Die Organisation hat die Domain der E-Mail bestätigt, `joinByDomain` ist `true`, und der Anbieter hat die E-Mail geprüft. |
-| SSO-Verbindung           | Die `defaultRoles` der Organisation                                        | Das Konto hat sich über die SSO-Verbindung der Organisation angemeldet.                                                   |
-| Persönliche Organisation | `super_administrator` in einer neuen Organisation mit dem Namen "Personal" | Das Konto hat keine Organisation, und `organizationCreation` in den Platform-Einstellungen ist `anyone`.                  |
-| Neue Organisation        | `super_administrator`                                                      | Das Konto ruft `POST /v1/organizations` auf. Siehe [Eine Organisation erstellen](#eine-organisation-erstellen).           |
+| Weg               | Role, die es bekommt                | Voraussetzung                                                                                                               |
+| ----------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Einladung         | Die Roles der Einladung             | Ein Administrator hat die geprüfte E-Mail des Kontos eingeladen, und das Konto nimmt an. Siehe [Einladungen](#einladungen). |
+| Bestätigte Domain | Die `defaultRoles` der Organisation | Die Organisation hat die Domain der E-Mail bestätigt, `joinByDomain` ist `true`, und der Anbieter hat die E-Mail geprüft.   |
+| SSO-Verbindung    | Die `defaultRoles` der Organisation | Das Konto hat sich über die SSO-Verbindung der Organisation angemeldet.                                                     |
+| Neue Organisation | `super_administrator`               | Das Konto ruft `POST /v1/organizations` auf. Siehe [Eine Organisation erstellen](#eine-organisation-erstellen).             |
 
-Ein Konto ohne Organisation bekommt von Routen einer Organisation `403` mit `MembershipRequired`.
+OpenBot erstellt nie eine Organisation für ein neues Konto. Ein Konto ohne Organisation bekommt von Routen einer Organisation `403` mit `MembershipRequired`. Es kann trotzdem eine Organisation erstellen und auf Einladungen antworten.
+
+Ältere Versionen von OpenBot haben für jedes neue Konto eine Organisation mit dem Namen "Personal" erstellt. Diese Organisationen bleiben. Sie sind normale Organisationen. Du kannst sie also umbenennen, Leute einladen oder sie verlassen.
 Wie du eine Domain bestätigst, steht unter [SSO und Domains](/de/docs/sso). Zu `organizationCreation` siehe [Platform](/de/docs/platform#organizations-erstellen).
 
 ---
@@ -62,6 +64,20 @@ curl -b cookies.txt \
 ```
 
 Wenn `organizationCreation` in den Platform-Einstellungen `platform_admins` ist, können das nur Platform-Admins. Andere Aufrufer bekommen `403` mit `OrganizationCreationDisabled`.
+
+### Eine Organisation verlassen
+
+`DELETE /v1/organizations/:organizationId/membership` nimmt dich aus einer Organisation heraus. Deine Tokens für sie funktionieren sofort nicht mehr.
+
+```sh
+curl -X DELETE -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  https://api.example.com/v1/organizations/org_8f3a/membership
+```
+
+- Der letzte aktive Super Administrator kann nicht gehen. OpenBot gibt `409` mit `LastSuperAdministrator` zurück. Gib die Role zuerst jemand anderem.
+- Ein User-Token kann nur seine eigene Organisation verlassen.
+- Wenn deine E-Mail-Domain noch bestätigt ist und `joinByDomain` an ist, trittst du bei der nächsten Anmeldung wieder bei.
 
 ---
 
@@ -198,6 +214,59 @@ Wenn seine E-Mail-Domain noch bestätigt ist und `joinByDomain` an ist, oder wen
 
 ---
 
+## Einladungen
+
+Ein Administrator lädt eine Person per E-Mail ein. Die Person meldet sich mit dieser E-Mail an und nimmt dann an oder lehnt ab. OpenBot sendet keine E-Mail. Sag es der Person selbst.
+
+`POST /v1/organization/invitations` erstellt eine Einladung. Es braucht `members.write`.
+
+```sh
+curl -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"grace@example.com","roles":["member"]}' \
+  https://api.example.com/v1/organization/invitations
+```
+
+```json
+{
+	"id": "inv_51c2",
+	"organizationId": "org_8f3a",
+	"organizationName": "Example",
+	"email": "grace@example.com",
+	"roles": ["member"],
+	"status": "pending",
+	"invitedBy": "u_123",
+	"createdAt": "2026-10-23T09:00:00.000Z",
+	"expiresAt": "2026-10-30T09:00:00.000Z"
+}
+```
+
+- Ohne `roles` bekommt die Person die `defaultRoles` der Organisation. Jede Role muss existieren, sonst gibt OpenBot `404` mit `RoleNotFound` zurück.
+- Nur ein Super Administrator kann mit der Role `super_administrator` einladen.
+- Eine Einladung gilt 7 Tage. Danach ist ihr `status` `expired`.
+- Eine E-Mail kann in einer Organisation nur eine offene Einladung haben. OpenBot gibt `400` mit `InvitationInvalid` zurück, wenn es schon eine gibt oder wenn ein Member diese E-Mail schon hat.
+
+`GET /v1/organization/invitations` listet die Einladungen auf, die neuesten zuerst. Es braucht `members.read`. Füge `?status=pending` hinzu, um nur die offenen zu sehen. `DELETE /v1/organization/invitations/:invitationId` nimmt eine offene Einladung zurück. Es braucht `members.write`.
+
+### Auf eine Einladung antworten
+
+Diese Routen sind für die eingeladene Person. Sie brauchen keine Mitgliedschaft.
+
+- `GET /v1/invitations` listet die offenen Einladungen für deine geprüfte E-Mail auf.
+- `POST /v1/invitations/:invitationId/accept` macht dich zum Member mit den Roles der Einladung. Es gibt die Organisation zurück.
+- `POST /v1/invitations/:invitationId/decline` lehnt ab.
+
+Nutze zum Antworten das Session-Cookie, kein User-Token. Deine E-Mail muss geprüft sein und gleich der E-Mail der Einladung sein. Eine Einladung für eine andere E-Mail antwortet mit `404` und `InvitationNotFound`.
+
+```sh
+curl -X POST -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  https://api.example.com/v1/invitations/inv_51c2/accept
+```
+
+---
+
 ## Audit-Log
 
 Das Audit-Log zeichnet wichtige Änderungen auf. Nichts kann einen Eintrag ändern oder entfernen.
@@ -242,6 +311,11 @@ Das Audit-Log zeichnet wichtige Änderungen auf. Nichts kann einen Eintrag ände
 | `member.joined`          | Ein Konto tritt der Organisation bei.                                |
 | `member.updated`         | Ein Member bekommt einen neuen Status, Roles oder Policies.          |
 | `member.removed`         | Ein Member wird entfernt.                                            |
+| `member.left`            | Ein Member verlässt die Organisation.                                |
+| `invitation.created`     | Ein Member lädt eine E-Mail ein.                                     |
+| `invitation.revoked`     | Ein Member nimmt eine Einladung zurück.                              |
+| `invitation.accepted`    | Die eingeladene Person nimmt an.                                     |
+| `invitation.declined`    | Die eingeladene Person lehnt ab.                                     |
 | `organization.created`   | Jemand erstellt eine Organisation.                                   |
 | `organization.updated`   | Die Organisation bekommt einen neuen Namen.                          |
 | `settings.updated`       | Die Einstellungen der Organisation ändern sich.                      |
@@ -279,15 +353,18 @@ Das Audit-Log zeichnet wichtige Änderungen auf. Nichts kann einen Eintrag ände
 
 ## Fehler
 
-| Status | Fehler                           | Wann                                                                                         |
-| ------ | -------------------------------- | -------------------------------------------------------------------------------------------- |
-| `400`  | `PolicyInvalid`                  | Eine Policy nennt eine Ressource außerhalb der Organisation.                                 |
-| `403`  | `PermissionDenied`               | Der Aufrufer hat die Berechtigung nicht. Siehe [Berechtigungen](/de/docs/permissions).       |
-| `400`  | `OrganizationRequired`           | Eine Anfrage mit Cookie ohne `OpenBot-Organization`, und du hast mehr als eine Organisation. |
-| `400`  | `SettingsInvalid`                | Ein Wert in den Einstellungen ist ungültig, zum Beispiel eine Role, die es nicht gibt.       |
-| `403`  | `MembershipRequired`             | Du bist kein aktives Member der Organisation.                                                |
-| `403`  | `OrganizationCreationDisabled`   | Auf dieser Platform können nur Platform-Admins Organisationen erstellen.                     |
-| `404`  | `MemberNotFound`                 | Kein Member hat diese User-ID.                                                               |
-| `409`  | `SettingsConflict`               | Jemand hat die Einstellungen geändert, nachdem du sie gelesen hast.                          |
-| `409`  | `LastSuperAdministrator`         | Nach der Änderung gäbe es keinen aktiven Super Administrator mehr.                           |
-| `503`  | `OrganizationStorageUnavailable` | OpenBot erreicht seine Datenbank nicht.                                                      |
+| Status | Fehler                           | Wann                                                                                                   |
+| ------ | -------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `400`  | `PolicyInvalid`                  | Eine Policy nennt eine Ressource außerhalb der Organisation.                                           |
+| `400`  | `InvitationInvalid`              | Die Einladung kann jetzt nicht erstellt oder beantwortet werden, zum Beispiel weil sie abgelaufen ist. |
+| `404`  | `InvitationNotFound`             | Es gibt keine Einladung mit dieser ID für dich.                                                        |
+| `404`  | `RoleNotFound`                   | Eine Einladung nennt eine Role, die es nicht gibt.                                                     |
+| `403`  | `PermissionDenied`               | Der Aufrufer hat die Berechtigung nicht. Siehe [Berechtigungen](/de/docs/permissions).                 |
+| `400`  | `OrganizationRequired`           | Eine Anfrage mit Cookie ohne `OpenBot-Organization`, und du hast mehr als eine Organisation.           |
+| `400`  | `SettingsInvalid`                | Ein Wert in den Einstellungen ist ungültig, zum Beispiel eine Role, die es nicht gibt.                 |
+| `403`  | `MembershipRequired`             | Du bist kein aktives Member der Organisation.                                                          |
+| `403`  | `OrganizationCreationDisabled`   | Auf dieser Platform können nur Platform-Admins Organisationen erstellen.                               |
+| `404`  | `MemberNotFound`                 | Kein Member hat diese User-ID.                                                                         |
+| `409`  | `SettingsConflict`               | Jemand hat die Einstellungen geändert, nachdem du sie gelesen hast.                                    |
+| `409`  | `LastSuperAdministrator`         | Nach der Änderung gäbe es keinen aktiven Super Administrator mehr.                                     |
+| `503`  | `OrganizationStorageUnavailable` | OpenBot erreicht seine Datenbank nicht.                                                                |

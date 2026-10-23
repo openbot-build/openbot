@@ -69,7 +69,25 @@ curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
 ```
 
 In der Entwicklung meldet dich das sofort beim lokalen Testkonto `developer@localhost.test` an. Das Anmelde-Cookie landet in `cookies.txt`.
-Dieses Konto ist ein Platform-Admin. Es bekommt auch eine eigene Organisation mit dem Namen "Personal".
+Dieses Konto ist ein Platform-Admin. Es hat noch keine Organisation.
+
+</Step>
+
+<Step>
+
+### Eine Organisation erstellen
+
+Agents, Sessions und Tokens gehören zu einer [Organisation](/de/docs/organization). Erstelle eine für dich:
+
+```sh
+curl -b cookies.txt \
+  -H 'Origin: https://localhost:8443' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"My lab"}' \
+  https://localhost:8443/v1/organizations
+```
+
+Du bist der Super Administrator dieser Organisation.
 
 </Step>
 
@@ -85,7 +103,7 @@ curl -b cookies.txt \
   https://localhost:8443/v1/user/tokens
 ```
 
-Du bist der Super Administrator deiner Organisation "Personal", und das Token gehört zu ihr. Die Antwort enthält ein `secret`, das mit `obut_` beginnt. Du siehst es nur einmal. Bewahre es also auf:
+Das Token gehört zu deiner neuen Organisation. Die Antwort enthält ein `secret`, das mit `obut_` beginnt. Du siehst es nur einmal. Bewahre es also auf:
 
 ```sh
 export OPENBOT_TOKEN=obut_...

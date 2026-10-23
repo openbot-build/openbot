@@ -124,12 +124,11 @@ curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
 
 ## 成员资格
 
-一个平台有很多组织。一个账户可以是其中多个组织的成员。账户登录时，OpenBot 会检查它属于哪里：
+一个平台有很多组织。用户和组织是分开的。一个账户可以创建组织，也可以是多个组织的成员。账户登录时，OpenBot 会检查它属于哪里：
 
 1. 如果某个组织验证了该账户已验证邮箱的域名，并且允许 `joinByDomain`，账户就加入这个组织。
 2. 如果账户是通过 SSO 连接登录的，它就加入该 SSO 连接所属的组织。
-3. 如果账户仍然没有组织，并且平台允许任何人创建组织，它会得到一个名为 "Personal" 的新组织。它是那里的 Super Administrator（超级管理员）。
-4. 否则它没有组织。这时组织路由会返回 `403` 和 `MembershipRequired`。
+3. OpenBot 不会为它创建组织。没有组织时，组织路由会返回 `403` 和 `MembershipRequired`。账户仍然可以[创建组织](/zh-cn/docs/organization#创建组织)或[接受邀请](/zh-cn/docs/organization#回答邀请)。
 
 OpenBot 在每个带 session cookie 的请求上也会做这些检查。见 [组织](/zh-cn/docs/organization#谁可以加入)。
 

@@ -4,7 +4,7 @@ description: Organizations, members, settings, roles and the audit log.
 ---
 
 This page shows how many people share OpenBot. An organization is a group of people who share Agents, models and settings.
-One platform has many organizations. One account can be a member of many of them. One person who uses OpenBot alone has an organization with one member.
+One platform has many organizations. A user and an organization are separate things. A user can create organizations, also one just for themselves, and can be a member of many organizations.
 
 The routes of the current organization are under `/v1/organization`. They accept a user token or the session cookie. With the cookie, send the `OpenBot-Organization` header when you belong to more than one organization. See [Authentication](/docs/authentication#choose-an-organization).
 
@@ -14,14 +14,16 @@ The routes of the current organization are under `/v1/organization`. They accept
 
 Each time an account signs in, OpenBot checks where it belongs. It also checks on each request with the session cookie.
 
-| Way                   | Role it gets                                                 | Needs                                                                                                             |
-| --------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| Verified domain       | The `defaultRoles` of the organization                       | The organization verified the domain of the email, `joinByDomain` is `true`, and the provider verified the email. |
-| SSO connection        | The `defaultRoles` of the organization                       | The account signed in through the SSO connection of the organization.                                             |
-| Personal organization | `super_administrator` in a new organization named "Personal" | The account has no organization, and `organizationCreation` in the platform settings is `anyone`.                 |
-| New organization      | `super_administrator`                                        | The account calls `POST /v1/organizations`. See [Create an organization](#create-an-organization).                |
+| Way              | Role it gets                           | Needs                                                                                                                 |
+| ---------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Invitation       | The roles of the invitation            | An administrator invited the verified email of the account, and the account accepts. See [Invitations](#invitations). |
+| Verified domain  | The `defaultRoles` of the organization | The organization verified the domain of the email, `joinByDomain` is `true`, and the provider verified the email.     |
+| SSO connection   | The `defaultRoles` of the organization | The account signed in through the SSO connection of the organization.                                                 |
+| New organization | `super_administrator`                  | The account calls `POST /v1/organizations`. See [Create an organization](#create-an-organization).                    |
 
-An account without any organization gets `403` with `MembershipRequired` from organization routes.
+OpenBot never makes an organization for a new account. An account without any organization gets `403` with `MembershipRequired` from organization routes. It can still create an organization and answer invitations.
+
+Older versions of OpenBot made an organization named "Personal" for each new account. Those organizations stay. They are normal organizations, so you can rename them, invite people, or leave them.
 See [SSO and domains](/docs/sso) to verify a domain, and [Platform](/docs/platform#organization-creation) for `organizationCreation`.
 
 ---
@@ -62,6 +64,20 @@ curl -b cookies.txt \
 ```
 
 When `organizationCreation` in the platform settings is `platform_admins`, only platform admins can do this. Other callers get `403` with `OrganizationCreationDisabled`.
+
+### Leave an organization
+
+`DELETE /v1/organizations/:organizationId/membership` takes you out of an organization. Your tokens for it stop working at once.
+
+```sh
+curl -X DELETE -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  https://api.example.com/v1/organizations/org_8f3a/membership
+```
+
+- The last active Super Administrator cannot leave. OpenBot returns `409` with `LastSuperAdministrator`. Give someone else the role first.
+- A user token can only leave its own organization.
+- If your email domain is still verified and `joinByDomain` is on, you join again the next time you sign in.
 
 ---
 
@@ -198,6 +214,59 @@ If their email domain is still verified and `joinByDomain` is on, or they sign i
 
 ---
 
+## Invitations
+
+An administrator invites a person by email. The person signs in with that email, and then accepts or declines. OpenBot does not send the email. Tell the person yourself.
+
+`POST /v1/organization/invitations` makes an invitation. It needs `members.write`.
+
+```sh
+curl -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"grace@example.com","roles":["member"]}' \
+  https://api.example.com/v1/organization/invitations
+```
+
+```json
+{
+	"id": "inv_51c2",
+	"organizationId": "org_8f3a",
+	"organizationName": "Example",
+	"email": "grace@example.com",
+	"roles": ["member"],
+	"status": "pending",
+	"invitedBy": "u_123",
+	"createdAt": "2026-10-23T09:00:00.000Z",
+	"expiresAt": "2026-10-30T09:00:00.000Z"
+}
+```
+
+- Without `roles`, the person gets the `defaultRoles` of the organization. Each role must exist, or OpenBot returns `404` with `RoleNotFound`.
+- Only a Super Administrator can invite with the `super_administrator` role.
+- An invitation lasts 7 days. Then its `status` is `expired`.
+- An email can have only one pending invitation in an organization. OpenBot returns `400` with `InvitationInvalid` when there is one, or when a member already has the email.
+
+`GET /v1/organization/invitations` lists the invitations, newest first. It needs `members.read`. Add `?status=pending` to see only the open ones. `DELETE /v1/organization/invitations/:invitationId` takes back a pending invitation. It needs `members.write`.
+
+### Answer an invitation
+
+These routes are for the invited person. They do not need a membership.
+
+- `GET /v1/invitations` lists the pending invitations for your verified email.
+- `POST /v1/invitations/:invitationId/accept` makes you a member with the roles of the invitation. It returns the organization.
+- `POST /v1/invitations/:invitationId/decline` says no.
+
+To answer, use the session cookie, not a user token. Your email must be verified and equal to the email of the invitation. An invitation for another email answers `404` with `InvitationNotFound`.
+
+```sh
+curl -X POST -b cookies.txt \
+  -H "Origin: https://api.example.com" \
+  https://api.example.com/v1/invitations/inv_51c2/accept
+```
+
+---
+
 ## Audit log
 
 The audit log records important changes. Nothing can change or remove an entry.
@@ -242,6 +311,11 @@ The audit log records important changes. Nothing can change or remove an entry.
 | `member.joined`          | An account joins the organization.                  |
 | `member.updated`         | A member gets a new status, roles or policies.      |
 | `member.removed`         | A member is removed.                                |
+| `member.left`            | A member leaves the organization.                   |
+| `invitation.created`     | A member invites an email.                          |
+| `invitation.revoked`     | A member takes back an invitation.                  |
+| `invitation.accepted`    | The invited person accepts.                         |
+| `invitation.declined`    | The invited person declines.                        |
 | `organization.created`   | Someone creates an organization.                    |
 | `organization.updated`   | The organization gets a new name.                   |
 | `settings.updated`       | The organization settings change.                   |
@@ -282,6 +356,9 @@ The audit log records important changes. Nothing can change or remove an entry.
 | Status | Error                            | When                                                                                      |
 | ------ | -------------------------------- | ----------------------------------------------------------------------------------------- |
 | `400`  | `PolicyInvalid`                  | A policy names a resource outside the organization.                                       |
+| `400`  | `InvitationInvalid`              | The invitation cannot be made or answered now, for example because it expired.            |
+| `404`  | `InvitationNotFound`             | There is no invitation with this ID for you.                                              |
+| `404`  | `RoleNotFound`                   | An invitation names a role that does not exist.                                           |
 | `403`  | `PermissionDenied`               | The caller does not have the permission. See [Permissions](/docs/permissions).            |
 | `400`  | `OrganizationRequired`           | A cookie request without `OpenBot-Organization`, and you have more than one organization. |
 | `400`  | `SettingsInvalid`                | A value in the settings is not valid, such as a role that does not exist.                 |

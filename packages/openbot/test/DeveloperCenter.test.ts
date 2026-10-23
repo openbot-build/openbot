@@ -44,6 +44,7 @@ import { DeveloperIndexing } from "../src/apps/DeveloperIndexing.ts"
 import { IndexWork } from "../src/apps/IndexWork.ts"
 import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Postgres from "./PostgresTest.ts"
+import * as Organizations from "./Organizations.ts"
 import { OpenBot } from "@openbot-build/openbot"
 import { Settings } from "../src/settings/Settings.ts"
 import * as Db from "../src/database/Database.ts"
@@ -97,6 +98,13 @@ test(
 				origin: options.auth.publicOrigin,
 				"content-type": "application/json",
 			}
+			await Organizations.ensure((path, method, payload) =>
+				fetch(address + path, {
+					method,
+					headers,
+					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+				}),
+			)
 			assert.equal((await fetch(address + "/v1/developer")).status, 401)
 			assert.equal(
 				(

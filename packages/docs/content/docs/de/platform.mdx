@@ -196,12 +196,12 @@ Die Liste enthält bis zu 50 Policies.
 
 ## Organizations erstellen
 
-Wenn sich ein Konto anmeldet und keine Organization hat, kann OpenBot eine für es erstellen. `organizationCreation` entscheidet das:
+`organizationCreation` entscheidet, wer `POST /v1/organizations` aufrufen kann. OpenBot erstellt nie eine Organization, wenn sich ein Konto anmeldet.
 
-| Wert              | Was passiert                                                                                                                                                          |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `anyone`          | Der Standard. Ein neues Konto ohne Organization bekommt eine mit dem Namen "Personal". Dort ist es Super Administrator. Jeder kann `POST /v1/organizations` aufrufen. |
-| `platform_admins` | Neue Konten bekommen keine eigene Organization. Nur Admins der Platform können `POST /v1/organizations` aufrufen.                                                     |
+| Wert              | Was passiert                                                                                              |
+| ----------------- | --------------------------------------------------------------------------------------------------------- |
+| `anyone`          | Der Standard. Jeder, der sich anmeldet, kann Organizations erstellen.                                     |
+| `platform_admins` | Nur Admins der Platform können Organizations erstellen. Andere treten per Einladung, Domain oder SSO bei. |
 
 Alle Wege, wie ein Konto beitritt, findest du unter [Organization](/de/docs/organization#wer-beitreten-kann).
 

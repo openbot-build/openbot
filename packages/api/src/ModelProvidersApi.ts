@@ -285,7 +285,7 @@ const ProviderParams = { providerId: Schema.String }
 const ModelParams = { modelId: Schema.String }
 
 /** The models and model providers of the organization. API keys go in, but they never come out. */
-export const ModelProvidersApi = HttpApiGroup.make("modelProviders").add(
+export class ModelProvidersApi extends HttpApiGroup.make("modelProviders").add(
 	HttpApiEndpoint.get("getModelCatalog", "/v1/organization/model_catalog", {
 		success: ModelCatalog,
 		error: errors,
@@ -394,4 +394,4 @@ export const ModelProvidersApi = HttpApiGroup.make("modelProviders").add(
 		OpenApi.Description,
 		"Sets a new price for one model of the provider. The price applies to calls from now on. Old calls keep their cost.",
 	),
-)
+) {}

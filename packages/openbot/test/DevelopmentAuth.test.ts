@@ -17,6 +17,7 @@ import * as PostgresTest from "./PostgresTest.ts"
 import * as Development from "../dist/Development.js"
 import * as OrganizationFixture from "./OrganizationFixture.ts"
 import * as DefaultAgent from "./DefaultAgent.ts"
+import * as Organizations from "./Organizations.ts"
 
 const publicOrigin = "https://localhost:8443"
 const authSecret = "DevelopmentIntegrationSecretMustStayStable123456"
@@ -150,6 +151,13 @@ test(
 			}
 			const session = await login()
 			const accountHeaders = { cookie: session, origin: publicOrigin }
+			await Organizations.ensure((path, method, payload) =>
+				request(path, {
+					method,
+					headers: { ...accountHeaders, "content-type": "application/json" },
+					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+				}),
+			)
 			assert.equal((await request("/auth/session")).status, 401)
 			const infoResponse = await request("/auth/session", {
 				headers: accountHeaders,

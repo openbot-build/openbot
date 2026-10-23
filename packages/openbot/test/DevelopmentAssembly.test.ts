@@ -35,6 +35,7 @@ import * as DevelopmentModel from "../src/app/DevelopmentModel.ts"
 import * as DatabasePostgres from "../dist/database/DatabasePostgres.js"
 import * as PostgresTest from "./PostgresTest.ts"
 import * as DefaultAgent from "./DefaultAgent.ts"
+import * as Organizations from "./Organizations.ts"
 
 const settings = (databaseUrl: string) => ({
 	host: "127.0.0.1",
@@ -118,6 +119,13 @@ test(
 				origin: options.auth.publicOrigin,
 				"content-type": "application/json",
 			}
+			await Organizations.ensure((path, method, payload) =>
+				fetch(address + path, {
+					method,
+					headers,
+					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+				}),
+			)
 			await DefaultAgent.ensure((path, method, payload) =>
 				fetch(address + path, {
 					method,
@@ -509,6 +517,17 @@ test(
 				.getSetCookie()
 				.find((value) => value.startsWith(AuthApi.SessionCookie + "="))!
 				.split(";")[0]!
+			await Organizations.ensure((path, method, payload) =>
+				fetch(address + path, {
+					method,
+					headers: {
+						cookie,
+						origin: options.auth.publicOrigin,
+						"content-type": "application/json",
+					},
+					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+				}),
+			)
 			await using client = ManagedRuntime.make(
 				Client.layer({ baseUrl: address }).pipe(
 					Layer.provide(

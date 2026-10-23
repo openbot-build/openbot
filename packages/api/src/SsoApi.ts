@@ -133,7 +133,7 @@ const errors = [
 const DomainParams = { domain: Schema.String }
 const ConnectionParams = { connectionId: Schema.String }
 
-export const SsoApi = HttpApiGroup.make("sso").add(
+export class SsoApi extends HttpApiGroup.make("sso").add(
 	HttpApiEndpoint.get("listDomains", "/v1/organization/domains", {
 		success: Schema.Struct({ items: Schema.Array(Domain) }),
 		error: errors,
@@ -203,4 +203,4 @@ export const SsoApi = HttpApiGroup.make("sso").add(
 			error: errors,
 		},
 	),
-)
+) {}

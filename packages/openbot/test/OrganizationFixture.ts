@@ -60,6 +60,11 @@ export const layerEveryoneAdministrator = Layer.succeed(Organization, {
 	listMembers: () => Effect.die("unused"),
 	updateMember: () => Effect.die("unused"),
 	removeMember: () => Effect.die("unused"),
+	listInvitations: () => Effect.die("unused"),
+	createInvitation: () => Effect.die("unused"),
+	revokeInvitation: () => Effect.die("unused"),
+	invitationsFor: () => Effect.die("unused"),
+	answerInvitation: () => Effect.die("unused"),
 	roleInUse: () => Effect.die("unused"),
 })
 

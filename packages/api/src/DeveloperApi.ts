@@ -264,7 +264,7 @@ export type Notice = typeof Notice.Type
 const Id = { id: Schema.String }
 const Card = { cardUrl: Schema.String }
 const Page = { before: Schema.optionalKey(Schema.String) }
-export const DeveloperApi = HttpApiGroup.make("developer")
+export class DeveloperApi extends HttpApiGroup.make("developer")
 	.add(
 		HttpApiEndpoint.get("personalReports", "/v1/developer/personal-reports", {
 			query: { before: Schema.optionalKey(Schema.String) },
@@ -547,7 +547,7 @@ export const DeveloperApi = HttpApiGroup.make("developer")
 			success: Schema.Void,
 			error: Errors,
 		}),
-	)
+	) {}
 export const DeveloperPublicApi = HttpApiGroup.make("developerPublic").add(
 	HttpApiEndpoint.get(
 		"authorizationCallback",

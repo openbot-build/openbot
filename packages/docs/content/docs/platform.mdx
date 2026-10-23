@@ -196,12 +196,12 @@ The list holds up to 50 policies.
 
 ## Organization creation
 
-When an account signs in and has no organization, OpenBot can make one for it. `organizationCreation` decides this:
+`organizationCreation` decides who can call `POST /v1/organizations`. OpenBot never makes an organization when an account signs in.
 
-| Value             | What happens                                                                                                                                             |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `anyone`          | The default. A new account without an organization gets one named "Personal", where it is Super Administrator. Anyone can call `POST /v1/organizations`. |
-| `platform_admins` | New accounts get no organization of their own. Only platform admins can call `POST /v1/organizations`.                                                   |
+| Value             | What happens                                                                                                     |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `anyone`          | The default. Anyone who signs in can create organizations.                                                       |
+| `platform_admins` | Only platform admins can create organizations. Other people join by invitation, by a verified domain, or by SSO. |
 
 See [Organization](/docs/organization#who-can-join) for all the ways an account joins.
 
