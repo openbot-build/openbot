@@ -11,9 +11,10 @@ computer, run the server and the checks, and find your way in the code.
 ## Set up
 
 You need [devenv](https://devenv.sh). devenv gives you the exact tools for the
-project: Node.js, pnpm, PostgreSQL, mkcert, and more. You need
-[Docker](https://docs.docker.com/get-docker/) only to build and check the
-images. See [Deploy](/docs/deploy#build-the-images). Run every command through
+project: Node.js, pnpm, PostgreSQL, mkcert, and more. You also need
+[Docker](https://docs.docker.com/get-docker/). The development database runs in
+Docker, and you use Docker to build and check the images. See
+[Deploy](/docs/deploy#build-the-images). Run every command through
 `devenv shell -- <command>`, so you always use these tools.
 
 <Steps>
@@ -54,9 +55,10 @@ devenv shell -- pnpm dev
 
 `pnpm dev` runs `devenv up`. It does these steps:
 
-1. It starts PostgreSQL 18 on `127.0.0.1:5433`, with the user `openbot_dev`.
-   devenv runs it as a normal process. Its data lives in
-   `.devenv/state/postgres`.
+1. It starts PostgreSQL 18 on `127.0.0.1:5433`, with the user `openbot_dev`. It
+   runs in Docker, from the same image as the production Compose file. Its data
+   lives in the Docker volume `openbot-dev-postgres`. To reset the database,
+   stop `pnpm dev` and run `docker volume rm openbot-dev-postgres`.
 2. It installs the packages with `pnpm install --frozen-lockfile`.
 3. It builds OpenBot and the packages it needs.
 4. It runs the database migrations.

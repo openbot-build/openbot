@@ -201,12 +201,12 @@ ausführen.
 
 Die Datei `deploy/docker/compose.production.yaml` startet diese Dienste:
 
-| Dienst          | Image                                            | Port auf dem Host                              |
-| --------------- | ------------------------------------------------ | ---------------------------------------------- |
-| `postgres`      | `postgres:18-alpine`, Daten im Volume `postgres` | keiner                                         |
-| `migrate`       | `openbot:$OPENBOT_RELEASE`                       | keiner                                         |
-| `openbot`       | `openbot:$OPENBOT_RELEASE`                       | `127.0.0.1:8080` oder `OPENBOT_PUBLISHED_PORT` |
-| `protocol-test` | `openbot-protocol-test:$OPENBOT_RELEASE`         | `127.0.0.1:3001`                               |
+| Dienst          | Image                                                                   | Port auf dem Host                              |
+| --------------- | ----------------------------------------------------------------------- | ---------------------------------------------- |
+| `postgres`      | `postgres:18.6-alpine3.24`, fest per Digest, Daten im Volume `postgres` | keiner                                         |
+| `migrate`       | `openbot:$OPENBOT_RELEASE`                                              | keiner                                         |
+| `openbot`       | `openbot:$OPENBOT_RELEASE`                                              | `127.0.0.1:8080` oder `OPENBOT_PUBLISHED_PORT` |
+| `protocol-test` | `openbot-protocol-test:$OPENBOT_RELEASE`                                | `127.0.0.1:3001`                               |
 
 `migrate` führt das Migrationsprogramm einmal aus, sobald PostgreSQL gesund ist.
 `openbot` startet erst, wenn `migrate` erfolgreich war. So migriert `up` die

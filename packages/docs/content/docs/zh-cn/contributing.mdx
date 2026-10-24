@@ -10,8 +10,8 @@ description: 准备代码，运行检查，并遵守项目规则。
 ## 准备环境
 
 你需要
-[devenv](https://devenv.sh)。devenv 为项目提供确切版本的工具：Node.js、pnpm、PostgreSQL、mkcert 等。只有在构建和检查镜像时，你才需要
-[Docker](https://docs.docker.com/get-docker/)。请看[部署](/zh-cn/docs/deploy#构建镜像)。每条命令都通过
+[devenv](https://devenv.sh)。devenv 为项目提供确切版本的工具：Node.js、pnpm、PostgreSQL、mkcert 等。你还需要
+[Docker](https://docs.docker.com/get-docker/)。开发数据库在 Docker 中运行，构建和检查镜像也要用 Docker。请看[部署](/zh-cn/docs/deploy#构建镜像)。每条命令都通过
 `devenv shell -- <command>` 运行，这样你用的总是这些工具。
 
 <Steps>
@@ -53,8 +53,9 @@ devenv shell -- pnpm dev
 `pnpm dev` 运行 `devenv up`。它执行以下步骤：
 
 1. 在 `127.0.0.1:5433` 上启动 PostgreSQL 18，用户为
-   `openbot_dev`。devenv 把它当作普通进程运行。它的数据存放在
-   `.devenv/state/postgres` 中。
+   `openbot_dev`。它在 Docker 中运行，使用和生产 Compose 文件相同的镜像。它的数据存放在 Docker 卷
+   `openbot-dev-postgres` 中。要重置数据库，先停止 `pnpm dev`，再运行
+   `docker volume rm openbot-dev-postgres`。
 2. 用 `pnpm install --frozen-lockfile` 安装包。
 3. 构建 OpenBot 及其需要的包。
 4. 运行数据库迁移。

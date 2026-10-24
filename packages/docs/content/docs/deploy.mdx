@@ -194,12 +194,12 @@ you can also run them as `openbot server`, `openbot migrate` and
 
 The file `deploy/docker/compose.production.yaml` runs these services:
 
-| Service         | Image                                               | Port on the host                              |
-| --------------- | --------------------------------------------------- | --------------------------------------------- |
-| `postgres`      | `postgres:18-alpine`, data in the volume `postgres` | none                                          |
-| `migrate`       | `openbot:$OPENBOT_RELEASE`                          | none                                          |
-| `openbot`       | `openbot:$OPENBOT_RELEASE`                          | `127.0.0.1:8080`, or `OPENBOT_PUBLISHED_PORT` |
-| `protocol-test` | `openbot-protocol-test:$OPENBOT_RELEASE`            | `127.0.0.1:3001`                              |
+| Service         | Image                                                                       | Port on the host                              |
+| --------------- | --------------------------------------------------------------------------- | --------------------------------------------- |
+| `postgres`      | `postgres:18.6-alpine3.24`, pinned by digest, data in the volume `postgres` | none                                          |
+| `migrate`       | `openbot:$OPENBOT_RELEASE`                                                  | none                                          |
+| `openbot`       | `openbot:$OPENBOT_RELEASE`                                                  | `127.0.0.1:8080`, or `OPENBOT_PUBLISHED_PORT` |
+| `protocol-test` | `openbot-protocol-test:$OPENBOT_RELEASE`                                    | `127.0.0.1:3001`                              |
 
 `migrate` runs the migration program once, after PostgreSQL is healthy.
 `openbot` starts only when `migrate` succeeds. So `up` always migrates the
