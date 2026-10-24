@@ -29,22 +29,22 @@
 
   tasks."dev:install".exec = "pnpm install --frozen-lockfile";
 
-  # The development database. Its data lives in .devenv/state/postgres.
-  services.postgres = {
-    enable = true;
-    package = pkgs.postgresql_18;
-    listen_addresses = "127.0.0.1";
-    port = pkgs.lib.toInt (config.dotenv.resolved.OPENBOT_DEV_DATABASE_PORT or "5433");
-    initialDatabases = [
-      {
-        name = config.dotenv.resolved.OPENBOT_DEV_DATABASE_NAME or "openbot";
-        user = "openbot_dev";
-        pass = "openbot_dev";
-      }
-    ];
-  };
-
   processes = {
+    # The development database runs in Docker, from the same image as
+    # deploy/docker/compose.production.yaml. Its data lives in the Docker
+    # volume openbot-dev-postgres.
+    postgres.ready.exec = "pg_isready --quiet --host 127.0.0.1 --port \"$OPENBOT_DEV_DATABASE_PORT\"";
+    postgres.exec = ''
+      set -eu
+      docker rm --force openbot-dev-postgres >/dev/null 2>&1 || true
+      exec docker run --rm --name openbot-dev-postgres \
+        --publish "127.0.0.1:''${OPENBOT_DEV_DATABASE_PORT}:5432" \
+        --volume openbot-dev-postgres:/var/lib/postgresql \
+        --env POSTGRES_USER=openbot_dev \
+        --env POSTGRES_PASSWORD=openbot_dev \
+        --env POSTGRES_DB="$OPENBOT_DEV_DATABASE_NAME" \
+        postgres:18.6-alpine3.24@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
+    '';
     # The development object storage for files. It speaks the S3 API. Its data
     # lives in .devenv/state/rustfs. The development entry makes the bucket.
     rustfs.ready.exec = "bash -c '</dev/tcp/127.0.0.1/$OPENBOT_DEV_S3_PORT'";
@@ -86,6 +86,8 @@
     gh
     corepack
     docker-client
+    # The test helpers start their own throwaway PostgreSQL with initdb and pg_ctl.
+    postgresql_18
     # Checks for the Docker images. See the Deploy page in the docs.
     hadolint
     dive
@@ -101,6 +103,8 @@
       config.dotenv.resolved.OPENBOT_DATABASE_URL or "postgres://openbot_dev:openbot_dev@127.0.0.1:${
         config.dotenv.resolved.OPENBOT_DEV_DATABASE_PORT or "5433"
       }/${config.dotenv.resolved.OPENBOT_DEV_DATABASE_NAME or "openbot"}";
+    OPENBOT_DEV_DATABASE_PORT = config.dotenv.resolved.OPENBOT_DEV_DATABASE_PORT or "5433";
+    OPENBOT_DEV_DATABASE_NAME = config.dotenv.resolved.OPENBOT_DEV_DATABASE_NAME or "openbot";
     OPENBOT_HOST = "127.0.0.1";
     OPENBOT_PORT = config.dotenv.resolved.OPENBOT_DEV_HTTPS_PORT or "8443";
     OPENBOT_DEV_PUBLIC_ORIGIN = "https://localhost:${
