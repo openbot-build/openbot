@@ -82,7 +82,7 @@ interface Next {
  * Check a value with a Standard Schema from the SDK.
  * The schema is built inside the Promise, because the SDK can throw while it builds a JSON Schema validator.
  */
-const decodeStandard = <A>(
+export const decodeStandard = <A>(
 	schema: () => Mcp.StandardSchemaV1<unknown, A>,
 	value: unknown,
 	error: () => ClientError,

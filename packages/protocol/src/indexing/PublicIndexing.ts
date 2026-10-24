@@ -177,8 +177,15 @@ export const makeInspection: Effect.Effect<
 							"RobotsUnavailable",
 							"Could not reach robots.txt within five redirects",
 						)
+					const location = response.headers["location"]
+					if (!URL.canParse(location, url))
+						return yield* documentError(
+							original,
+							"RobotsUnavailable",
+							"robots.txt has an invalid redirect",
+						)
 					const next = yield* Schema.decodeEffect(Document.Link)(
-						new URL(response.headers["location"], url).href,
+						new URL(location, url).href,
 					)
 					return yield* follow(next, hop + 1)
 				}
@@ -234,14 +241,16 @@ export const makeInspection: Effect.Effect<
 				const response = yield* readHop(url, false)
 				if (![301, 302, 303, 307, 308].includes(response.status))
 					return response
-				if (hop >= 5 || response.headers["location"] === undefined)
+				const location = response.headers["location"]
+				// A bad Location header is a typed failure, not a defect from `new URL`.
+				if (hop >= 5 || location === undefined || !URL.canParse(location, url))
 					return yield* documentError(
 						url,
 						"Redirect",
 						"Invalid document redirect",
 					)
 				const next = yield* Schema.decodeEffect(Document.Link)(
-					new URL(response.headers["location"], url).href,
+					new URL(location, url).href,
 				)
 				return yield* follow(next, hop + 1)
 			})
@@ -267,7 +276,9 @@ export const makeInspection: Effect.Effect<
 		for (const entry of catalog.entries.filter(
 			(entry) => entry.type === Document.cardMediaType,
 		)) {
-			if (entry.url === undefined) continue
+			// An entry with a URL that cannot be read is not the card.
+			if (entry.url === undefined || !URL.canParse(entry.url, response.url))
+				continue
 			const link = yield* Schema.decodeEffect(Document.Link)(
 				new URL(entry.url, response.url).href,
 			)

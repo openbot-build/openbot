@@ -1,7 +1,11 @@
-import { specTypeSchemas } from "@modelcontextprotocol/client"
+import {
+	type StandardSchemaV1,
+	specTypeSchemas,
+} from "@modelcontextprotocol/client"
 import { AppViewsApi as Api } from "@openbot-build/api"
 import { Client as ProtocolClient } from "@openbot-build/protocol"
 import type { UiClient } from "@openbot-build/protocol/McpApps"
+import { decodeStandard } from "@openbot-build/protocol/McpClient"
 import { Effect, Schema } from "effect"
 import { Client } from "./Client.ts"
 
@@ -11,32 +15,10 @@ const failure = () =>
 		issue:
 			"The App view request failed. Check its saved operation before you continue.",
 	})
-const decode = <A>(
-	schema: {
-		readonly "~standard": {
-			readonly validate: (
-				input: unknown,
-			) =>
-				| { readonly value: A; readonly issues?: undefined }
-				| { readonly issues: ReadonlyArray<unknown> }
-				| PromiseLike<
-						| { readonly value: A; readonly issues?: undefined }
-						| { readonly issues: ReadonlyArray<unknown> }
-				  >
-		}
-	},
-	input: unknown,
-) =>
-	Effect.tryPromise({
-		try: async () => schema["~standard"].validate(input),
-		catch: failure,
-	}).pipe(
-		Effect.flatMap((result) =>
-			result.issues === undefined
-				? Effect.succeed(result.value)
-				: Effect.fail(failure()),
-		),
-	)
+const decode = <A>(schema: StandardSchemaV1<unknown, A>, input: unknown) =>
+	decodeStandard(() => schema, input, failure)
+/** A new ID for each action, made when the action runs. */
+const newRequestId = Effect.sync(() => crypto.randomUUID())
 export const toolResult = (value: unknown) =>
 	decode(specTypeSchemas.CallToolResult, value)
 /** A bridge without credentials, tied to one view that the server owns. Polling never sends an action again. */
@@ -116,12 +98,14 @@ export const make = Effect.fn("AppViews.make")(function* (
 			Schema.decodeUnknownEffect(Schema.JsonObject)(input.arguments ?? {}).pipe(
 				Effect.mapError(failure),
 				Effect.flatMap((args) =>
-					invoke({
-						kind: "tool",
-						requestId: crypto.randomUUID(),
-						name: input.name,
-						arguments: args,
-					}),
+					Effect.flatMap(newRequestId, (requestId) =>
+						invoke({
+							kind: "tool",
+							requestId,
+							name: input.name,
+							arguments: args,
+						}),
+					),
 				),
 				Effect.flatMap(toolResult),
 				Effect.map((result) => ({ _tag: "Completed" as const, result })),
@@ -140,11 +124,9 @@ export const make = Effect.fn("AppViews.make")(function* (
 							],
 						},
 					})
-				: invoke({
-						kind: "resource",
-						requestId: crypto.randomUUID(),
-						uri: input.uri,
-					}).pipe(
+				: Effect.flatMap(newRequestId, (requestId) =>
+						invoke({ kind: "resource", requestId, uri: input.uri }),
+					).pipe(
 						Effect.flatMap((value) =>
 							decode(specTypeSchemas.ReadResourceResult, value),
 						),
