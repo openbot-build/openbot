@@ -45,9 +45,22 @@
   };
 
   processes = {
+    # The development object storage for files. It speaks the S3 API. Its data
+    # lives in .devenv/state/rustfs. The development entry makes the bucket.
+    rustfs.ready.exec = "bash -c '</dev/tcp/127.0.0.1/$OPENBOT_DEV_S3_PORT'";
+    rustfs.exec = ''
+      set -eu
+      mkdir -p "$DEVENV_STATE/rustfs"
+      exec rustfs server \
+        --address "127.0.0.1:''${OPENBOT_DEV_S3_PORT}" \
+        --access-key "$OPENBOT_DEV_S3_ACCESS_KEY_ID" \
+        --secret-key "$OPENBOT_DEV_S3_SECRET_ACCESS_KEY" \
+        "$DEVENV_STATE/rustfs"
+    '';
     openbot = {
       after = [
         "devenv:processes:postgres"
+        "devenv:processes:rustfs"
         "dev:install"
       ];
       exec = ''
@@ -80,6 +93,7 @@
     mkcert
     openssl
     ripgrep
+    rustfs
   ];
 
   env = {
@@ -94,6 +108,13 @@
     }";
     OPENBOT_TLS_CERT = "${config.devenv.root}/.devenv/dev/cert.pem";
     OPENBOT_TLS_KEY = "${config.devenv.root}/.devenv/dev/key.pem";
+    OPENBOT_DEV_S3_PORT = config.dotenv.resolved.OPENBOT_DEV_S3_PORT or "9000";
+    OPENBOT_DEV_S3_ENDPOINT = "http://127.0.0.1:${
+      config.dotenv.resolved.OPENBOT_DEV_S3_PORT or "9000"
+    }";
+    OPENBOT_DEV_S3_BUCKET = "openbot";
+    OPENBOT_DEV_S3_ACCESS_KEY_ID = "openbot_dev";
+    OPENBOT_DEV_S3_SECRET_ACCESS_KEY = "openbot_dev_secret";
   };
 
   languages = {

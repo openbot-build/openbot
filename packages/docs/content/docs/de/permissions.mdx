@@ -28,6 +28,8 @@ Liste sie mit `GET /v1/organization/permission_groups` auf.
 | `responses.run`            | Chat              | Bots Nachrichten schicken, damit sie in einem Chat arbeiten.                                              |
 | `chats.read`               | Chat              | Chats lesen, mit ihrem Verlauf und der Arbeit, die sie abgegeben haben.                                   |
 | `chats.write`              | Chat              | Chats ändern, unterbrechen und löschen und die Arbeit abbrechen, die sie abgegeben haben.                 |
+| `files.read`               | File              | Deine [Dateien](/de/docs/files) und ihre Bytes lesen.                                                     |
+| `files.write`              | File              | Deine Dateien hochladen und löschen.                                                                      |
 | `requests.resolve`         | Request           | Die Requests deiner Bots für neue Fähigkeiten beantworten.                                                |
 | `bots.read`                | Bot               | Bots lesen, mit ihrem Memory, ihren Rules und Grants.                                                     |
 | `bots.write`               | Bot               | Bots erstellen und ändern, mit ihrem Memory, ihren Rules und Grants.                                      |
@@ -85,6 +87,7 @@ Ein Ressourcen-Schlüssel ist ein Name aus Teilen, die durch Punkte getrennt sin
 | Die Organisation           | `openbot.org.<org>`                                     |
 | Ein Member                 | `openbot.org.<org>.user.<user>`                         |
 | Ein Chat                   | `openbot.org.<org>.user.<user>.chat.<chat>`             |
+| Eine Datei                 | `openbot.org.<org>.user.<user>.file.<file>`             |
 | Ein Bot eines Members      | `openbot.org.<org>.user.<user>.bot.<bot>`               |
 | Ein gemeinsamer Bot        | `openbot.org.<org>.bot.<bot>`                           |
 | Ein Trigger eines Members  | `openbot.org.<org>.user.<user>.trigger.<trigger>`       |

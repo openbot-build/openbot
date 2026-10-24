@@ -1,5 +1,6 @@
 import type { PgClient } from "@effect/sql-pg"
 import type { Discovery } from "@openbot-build/protocol"
+import type { Settings as Api } from "@openbot-build/api"
 import * as AppDiscovery from "../apps/Discovery.ts"
 import { readFileSync } from "node:fs"
 import { createServer } from "node:http"
@@ -127,6 +128,8 @@ export const layerFixed = <
 		readonly platformAdmins?: ReadonlyArray<string>
 		/** Write the public origin even when the platform has other settings. */
 		readonly force?: boolean
+		/** The object storage for files of a new platform, or of a forced one. */
+		readonly fileStorage?: Api.FileStorageInput | undefined
 		readonly tls?:
 			{ readonly certFile: string; readonly keyFile: string } | undefined
 	},
@@ -143,6 +146,7 @@ export const layerFixed = <
 					force: options.force === true,
 					// The settings then describe the app that this layer serves.
 					authSecret: Redacted.value(options.auth.secret),
+					fileStorage: options.fileStorage,
 				}).pipe(Effect.orDie),
 			).pipe(Layer.provide(PlatformAdminsPostgres.layer)),
 		),

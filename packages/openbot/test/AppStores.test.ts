@@ -1,29 +1,32 @@
 // @effect-diagnostics strictEffectProvide:off
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { Authorization, Store } from "@openbot-build/protocol"
-import { Effect, Layer, ManagedRuntime, Redacted, Result } from "effect"
+import { Effect, Layer, Redacted, Result } from "effect"
 import { SqlClient } from "effect/sql"
 import * as ProtocolStores from "../src/apps/ProtocolStores.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
 import * as Database from "../src/database/DatabasePostgres.ts"
 import * as Postgres from "./PostgresTest.ts"
 
-test("encrypted credentials and one-time PKCE flows survive a restart and check their full owner binding", async () => {
-	const database = await Postgres.start()
-	const layers = (key = "test:" + "11".repeat(32)) =>
-		ProtocolStores.layer.pipe(
-			Layer.provide(Secrets.layer(Redacted.make(key))),
-			Layer.provideMerge(
-				Database.layer({ databaseUrl: Redacted.make(database.url) }),
-			),
-			Layer.provide(NodeServices.layer),
-		)
-	let runtime = ManagedRuntime.make(layers())
-	try {
-		const reference = await runtime.runPromise(
-			Effect.gen(function* () {
+it.live(
+	"encrypted credentials and one-time PKCE flows survive a restart and check their full owner binding",
+	() =>
+		Effect.gen(function* () {
+			const database = yield* Effect.acquireRelease(
+				Effect.promise(() => Postgres.start()),
+				(database) => Effect.promise(() => database.close()),
+			)
+			const layers = (key = "test:" + "11".repeat(32)) =>
+				ProtocolStores.layer.pipe(
+					Layer.provide(Secrets.layer(Redacted.make(key))),
+					Layer.provideMerge(
+						Database.layer({ databaseUrl: Redacted.make(database.url) }),
+					),
+					Layer.provide(NodeServices.layer),
+				)
+			// Each server start builds the layers again, so nothing stays in memory.
+			const reference = yield* Effect.gen(function* () {
 				yield* Database.migrate
 				const stores = (yield* ProtocolStores.ProtocolStores).bind("alice")
 				const binding = yield* Store.CredentialBinding.decode({
@@ -62,18 +65,14 @@ test("encrypted credentials and one-time PKCE flows survive a restart and check 
 				const rows = yield* sql<{
 					readonly body: string
 				}>`SELECT body FROM openbot_app_secrets`
-				assert.equal(rows.length, 2)
-				assert.equal(
+				assert.strictEqual(rows.length, 2)
+				assert.strictEqual(
 					rows.some((row) => row.body.includes("private-")),
 					false,
 				)
 				return reference
-			}),
-		)
-		await runtime.dispose()
-		runtime = ManagedRuntime.make(layers())
-		await runtime.runPromise(
-			Effect.gen(function* () {
+			}).pipe(Effect.provide(layers(), { local: true }))
+			yield* Effect.gen(function* () {
 				const service = yield* ProtocolStores.ProtocolStores
 				const alice = service.bind("alice")
 				const bob = service.bind("bob")
@@ -83,18 +82,18 @@ test("encrypted credentials and one-time PKCE flows survive a restart and check 
 					resource: "https://example.test/mcp",
 					issuer: "https://auth.example.test",
 				})
-				assert.equal(
+				assert.strictEqual(
 					Redacted.value(
 						(yield* alice.credentials.get({ binding, reference })).accessToken,
 					),
 					"private-access-token",
 				)
-				assert.equal(
+				assert.strictEqual(
 					(yield* Effect.flip(bob.credentials.get({ binding, reference })))
 						.reason,
 					"Missing",
 				)
-				assert.equal(
+				assert.strictEqual(
 					(yield* Effect.flip(
 						alice.credentials.get({
 							binding: { ...binding, resource: "https://other.test/mcp" },
@@ -107,7 +106,7 @@ test("encrypted credentials and one-time PKCE flows survive a restart and check 
 					key: { owner: "alice", connectionId: "documents" },
 					flowId: "flow",
 				}
-				assert.equal(
+				assert.strictEqual(
 					Redacted.value((yield* alice.flows.get(request)).verifier),
 					"private-pkce-verifier",
 				)
@@ -118,31 +117,26 @@ test("encrypted credentials and one-time PKCE flows survive a restart and check 
 					],
 					{ concurrency: 2 },
 				)
-				assert.equal(claims.filter(Result.isSuccess).length, 1)
-				assert.equal(claims.filter(Result.isFailure).length, 1)
-				assert.equal(
+				assert.strictEqual(claims.filter(Result.isSuccess).length, 1)
+				assert.strictEqual(claims.filter(Result.isFailure).length, 1)
+				assert.strictEqual(
 					(yield* Effect.flip(alice.flows.get(request)))._tag,
 					"AuthorizationError",
 				)
 				yield* alice.credentials.deleteConnection(request.key)
-				assert.equal(
+				assert.strictEqual(
 					(yield* Effect.flip(alice.credentials.get({ binding, reference })))
 						.reason,
 					"Missing",
 				)
-			}),
-		)
-		const invalid = ManagedRuntime.make(layers("invalid"))
-		try {
-			assert.equal(
-				(await invalid.runPromiseExit(ProtocolStores.ProtocolStores))._tag,
+			}).pipe(Effect.provide(layers(), { local: true }))
+			assert.strictEqual(
+				(yield* Effect.exit(
+					ProtocolStores.ProtocolStores.pipe(
+						Effect.provide(layers("invalid"), { local: true }),
+					),
+				))._tag,
 				"Failure",
 			)
-		} finally {
-			await invalid.dispose()
-		}
-	} finally {
-		await runtime.dispose()
-		await database.close()
-	}
-})
+		}),
+)

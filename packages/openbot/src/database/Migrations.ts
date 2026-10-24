@@ -62,6 +62,8 @@ import {
 	organizationCredits,
 	creditGrants,
 	rateWindows,
+	files,
+	fileRefs,
 } from "./Schema.ts"
 import {
 	openbot_auth_user,
@@ -98,6 +100,8 @@ export const check = Effect.gen(function* () {
 	yield* db.select().from(chats).limit(0)
 	yield* db.select().from(chatItems).limit(0)
 	yield* db.select().from(chatTurns).limit(0)
+	yield* db.select().from(files).limit(0)
+	yield* db.select().from(fileRefs).limit(0)
 	yield* db.select().from(organizations).limit(0)
 	yield* db.select().from(settings).limit(0)
 	yield* db.select().from(platformAdmins).limit(0)

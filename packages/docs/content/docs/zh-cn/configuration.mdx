@@ -243,6 +243,7 @@ Compose 文件把 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS` 以 `/run/sec
 | `OPENBOT_DEV_HTTPS_PORT`    | `8443`    | 本地 OpenBot 的 HTTPS 端口。              |
 | `OPENBOT_DEV_DATABASE_PORT` | `5433`    | 开发用 PostgreSQL 的本地端口。            |
 | `OPENBOT_DEV_DATABASE_NAME` | `openbot` | 开发数据库的名称。                        |
+| `OPENBOT_DEV_S3_PORT`       | `9000`    | 开发用 RustFS 的本地端口。                |
 
 <Callout type="info">
 	如果你的 `.env.development` 来自旧版本，请删除它，然后再次运行 `devenv shell
@@ -259,12 +260,16 @@ Compose 文件把 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS` 以 `/run/sec
 | `OPENBOT_DATABASE_URL`      | `postgres://openbot_dev:openbot_dev@127.0.0.1:5433/openbot` |
 | `OPENBOT_TLS_CERT`          | `.devenv/dev/cert.pem`，由 mkcert 生成                      |
 | `OPENBOT_TLS_KEY`           | `.devenv/dev/key.pem`，由 mkcert 生成                       |
+| `OPENBOT_DEV_S3_ENDPOINT`   | `http://127.0.0.1:9000`                                     |
+| `OPENBOT_DEV_S3_BUCKET`     | `openbot`                                                   |
 
 只有开发入口会读取 `OPENBOT_DEV_PUBLIC_ORIGIN`。它不需要设置步骤。每次启动时，它会自己为这个源写入平台设置。它会把本地账号 `developer@localhost.test` 设为平台管理员，并打开本地测试登录。参见[身份验证](/zh-cn/docs/authentication#开发账户)。
 
 生产程序永远不会使用本地测试账号。没有任何开关可以打开它。
 
 开发服务器同样会阻止私有目标。要使用你机器上的模型服务器（例如 Ollama），请在 `.env.development` 中设置 `OPENBOT_OUTBOUND_ALLOW=localhost`。参见[出站连接](#出站连接)。
+
+devenv 还会为[文件](/zh-cn/docs/files)启动 [RustFS](https://rustfs.com)，一个小的对象存储。它的数据在 `.devenv/state/rustfs` 中。每次启动时，开发入口会创建 bucket `openbot`，并把存储写入平台设置。RustFS 在 `127.0.0.1` 上，这是一个私有地址。所以开发入口会为自己打开这一个主机。你不需要把它加入 `OPENBOT_OUTBOUND_ALLOW`。
 
 要使用另一个数据库，请在 `.env.development` 中设置 `OPENBOT_DATABASE_URL`。参见[参与贡献](/zh-cn/docs/contributing)。
 

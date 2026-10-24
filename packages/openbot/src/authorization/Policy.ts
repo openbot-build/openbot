@@ -46,6 +46,7 @@ export const resourceKey = (target: {
 		case "apps":
 			return userKey(subject) + "." + kind
 		case "chat":
+		case "file":
 		case "connection":
 		case "request":
 			return child(userKey(subject))

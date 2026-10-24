@@ -1,6 +1,5 @@
 // @effect-diagnostics strictEffectProvide:off
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { AppViewsApi as Api, AuthApi, AppExecution } from "@openbot-build/api"
 import { Effect, Layer, Redacted, Schema, Stream } from "effect"
 import { LanguageModel, Response } from "effect/ai"
@@ -13,7 +12,7 @@ const usage = {
 	inputTokens: { total: 1, uncached: 1, cacheRead: 0, cacheWrite: 0 },
 	outputTokens: { total: 1, text: 1, reasoning: 0 },
 }
-test("App views bind to the real history and account, accept each exact host action once, keep confirmed state and survive view closure", async () => {
+it("App views bind to the real history and account, accept each exact host action once, keep confirmed state and survive view closure", async () => {
 	const publisher = await Fixture.start({ capabilities: true })
 	const model = await Effect.runPromise(
 		LanguageModel.make({
@@ -107,7 +106,7 @@ test("App views bind to the real history and account, accept each exact host act
 			name: "Work documents",
 			confirmed: true,
 		})
-		assert.equal(added.status, 201, await added.clone().text())
+		assert.strictEqual(added.status, 201, await added.clone().text())
 		const asAlice: Send = (path, method, payload) =>
 			request(path, method, payload)
 		let id = ""
@@ -173,13 +172,13 @@ test("App views bind to the real history and account, accept each exact host act
 				if (pending.length === 0)
 					await new Promise((resolve) => setTimeout(resolve, 25))
 			}
-			assert.equal(pending.length, 1)
+			assert.strictEqual(pending.length, 1)
 			const before = (await wait()).turn?.id
 			const response = await post("/v1/requests/" + pending[0]!.id, {
 				expected: pending[0]!.revision,
 				decision: accepted ? "allow" : "deny",
 			})
-			assert.equal(response.status, 200, await response.clone().text())
+			assert.strictEqual(response.status, 200, await response.clone().text())
 			return after(before)
 		}
 		const receipt = await message(asAlice, bot, "Read the document")
@@ -206,16 +205,20 @@ test("App views bind to the real history and account, accept each exact host act
 			"/v1/app-operations/" + original.id + "/view",
 			opening,
 		)
-		assert.equal(openResponse.status, 200, await openResponse.clone().text())
+		assert.strictEqual(
+			openResponse.status,
+			200,
+			await openResponse.clone().text(),
+		)
 		const view = Schema.decodeUnknownSync(Api.Opened)(await openResponse.json())
-		assert.equal(view.resource.mimeType, "text/html;profile=mcp-app")
-		assert.equal(JSON.stringify(view).includes("secret-work"), false)
-		assert.equal(
+		assert.strictEqual(view.resource.mimeType, "text/html;profile=mcp-app")
+		assert.strictEqual(JSON.stringify(view).includes("secret-work"), false)
+		assert.strictEqual(
 			(await request("/v1/app-views/" + view.id, "GET", undefined, bob.session))
 				.status,
 			404,
 		)
-		assert.equal(
+		assert.strictEqual(
 			(
 				await post("/v1/app-operations/" + original.id + "/view", {
 					...opening,
@@ -232,8 +235,8 @@ test("App views bind to the real history and account, accept each exact host act
 			"PUT",
 			{ revision: 0, context },
 		)
-		assert.equal(saved.status, 200, await saved.clone().text())
-		assert.equal(
+		assert.strictEqual(saved.status, 200, await saved.clone().text())
+		assert.strictEqual(
 			(
 				await request("/v1/app-views/" + view.id + "/context", "PUT", {
 					revision: 0,
@@ -250,15 +253,15 @@ test("App views bind to the real history and account, accept each exact host act
 			arguments: { id: "alpha", text: "Reviewed document" },
 		}
 		const accepted = await post("/v1/app-views/" + view.id + "/actions", action)
-		assert.equal(accepted.status, 202, await accepted.clone().text())
+		assert.strictEqual(accepted.status, 202, await accepted.clone().text())
 		const ticket = await accepted.json()
 		const duplicate = await post(
 			"/v1/app-views/" + view.id + "/actions",
 			action,
 		)
-		assert.equal(duplicate.status, 202, await duplicate.clone().text())
-		assert.deepEqual(await duplicate.json(), ticket)
-		assert.equal(
+		assert.strictEqual(duplicate.status, 202, await duplicate.clone().text())
+		assert.deepStrictEqual(await duplicate.json(), ticket)
+		assert.strictEqual(
 			(
 				await post("/v1/app-views/" + view.id + "/actions", {
 					...action,
@@ -268,16 +271,16 @@ test("App views bind to the real history and account, accept each exact host act
 			409,
 		)
 		await wait()
-		assert.equal(publisher.writes().length, 0)
-		assert.equal(
+		assert.strictEqual(publisher.writes().length, 0)
+		assert.strictEqual(
 			(await request("/v1/app-views/" + view.id, "DELETE")).status,
 			200,
 		)
 		await approve()
-		assert.deepEqual(publisher.writes(), [
+		assert.deepStrictEqual(publisher.writes(), [
 			{ account: "Work", text: "Reviewed document" },
 		])
-		assert.equal(
+		assert.strictEqual(
 			(
 				await post("/v1/app-views/" + view.id + "/actions", {
 					...action,
@@ -293,22 +296,22 @@ test("App views bind to the real history and account, accept each exact host act
 		const restored = Schema.decodeUnknownSync(Api.Opened)(
 			await restoredResponse.json(),
 		)
-		assert.deepEqual(restored.interaction, { revision: 1, context })
-		assert.equal(publisher.writes().length, 1)
+		assert.deepStrictEqual(restored.interaction, { revision: 1, context })
+		assert.strictEqual(publisher.writes().length, 1)
 		const appOnly = await post("/v1/app-views/" + restored.id + "/actions", {
 			kind: "tool",
 			requestId: "app-only",
 			name: "hidden_action",
 			arguments: { id: "alpha" },
 		})
-		assert.equal(appOnly.status, 202, await appOnly.clone().text())
+		assert.strictEqual(appOnly.status, 202, await appOnly.clone().text())
 		await wait()
 		await approve(false)
-		assert.equal(publisher.businessCalls(), 2)
+		assert.strictEqual(publisher.businessCalls(), 2)
 		const record = await (
 			await request("/v1/chats/" + id + "/app-operations")
 		).json()
-		assert.equal(
+		assert.strictEqual(
 			record.some(
 				(r: { source: { name: string }; status: string }) =>
 					r.source.name === "hidden_action" && r.status === "Rejected",
@@ -316,20 +319,23 @@ test("App views bind to the real history and account, accept each exact host act
 			true,
 		)
 		await host.restart()
-		assert.equal((await request("/v1/app-views/" + restored.id)).status, 404)
+		assert.strictEqual(
+			(await request("/v1/app-views/" + restored.id)).status,
+			404,
+		)
 		const durable = await (
 			await post("/v1/app-operations/" + original.id + "/view", opening)
 		).json()
-		assert.deepEqual(durable.interaction, { revision: 1, context })
-		assert.equal(publisher.writes().length, 1)
+		assert.deepStrictEqual(durable.interaction, { revision: 1, context })
+		assert.strictEqual(publisher.writes().length, 1)
 		const exportedResponse = await request("/v1/app-experience/export")
-		assert.equal(
+		assert.strictEqual(
 			exportedResponse.status,
 			200,
 			await exportedResponse.clone().text(),
 		)
 		const exported = await exportedResponse.json()
-		assert.deepEqual(exported, {
+		assert.deepStrictEqual(exported, {
 			format: "openbot-apps-v1",
 			apps: [
 				{
@@ -345,14 +351,14 @@ test("App views bind to the real history and account, accept each exact host act
 			exported,
 			bob.session,
 		)
-		assert.equal(
+		assert.strictEqual(
 			importedResponse.status,
 			200,
 			await importedResponse.clone().text(),
 		)
 		const imported = await importedResponse.json()
-		assert.equal(imported.entries[0].draft.discovery._tag, "Single")
-		assert.deepEqual(
+		assert.strictEqual(imported.entries[0].draft.discovery._tag, "Single")
+		assert.deepStrictEqual(
 			await (
 				await request("/v1/connections", "GET", undefined, bob.session)
 			).json(),
@@ -373,14 +379,22 @@ test("App views bind to the real history and account, accept each exact host act
 			},
 			bob.session,
 		)
-		assert.equal(bobConnection.status, 201, await bobConnection.clone().text())
+		assert.strictEqual(
+			bobConnection.status,
+			201,
+			await bobConnection.clone().text(),
+		)
 		const resetResponse = await post("/v1/app-experience/reset", {})
-		assert.equal(resetResponse.status, 200, await resetResponse.clone().text())
+		assert.strictEqual(
+			resetResponse.status,
+			200,
+			await resetResponse.clone().text(),
+		)
 		const reset = await resetResponse.json()
-		assert.equal(reset.removed.length, 1)
-		assert.deepEqual(reset.pending, [])
-		assert.deepEqual(await (await request("/v1/connections")).json(), [])
-		assert.equal(
+		assert.strictEqual(reset.removed.length, 1)
+		assert.deepStrictEqual(reset.pending, [])
+		assert.deepStrictEqual(await (await request("/v1/connections")).json(), [])
+		assert.strictEqual(
 			(
 				await (
 					await request("/v1/connections", "GET", undefined, bob.session)
@@ -388,13 +402,13 @@ test("App views bind to the real history and account, accept each exact host act
 			).length,
 			1,
 		)
-		assert.equal((await items()).length > 0, true)
-		assert.equal(
+		assert.strictEqual((await items()).length > 0, true)
+		assert.strictEqual(
 			(await (await request("/v1/chats/" + id + "/app-operations")).json())
 				.length > 0,
 			true,
 		)
-		assert.equal(publisher.writes().length, 1)
+		assert.strictEqual(publisher.writes().length, 1)
 	} finally {
 		await host.close()
 		await publisher.close()

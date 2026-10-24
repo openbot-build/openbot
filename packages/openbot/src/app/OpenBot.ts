@@ -47,6 +47,8 @@ import * as Connectors from "../computers/connector/Connectors.ts"
 import * as Drivers from "../computers/Drivers.ts"
 import * as Pairings from "../computers/Pairings.ts"
 import * as ComputerWorker from "../computers/Worker.ts"
+import * as Files from "../files/Files.ts"
+import * as FileWorker from "../files/Worker.ts"
 import * as ComputerPlugin from "../plugins/computers/ComputerPlugin.ts"
 import * as Judge from "../capabilities/Judge.ts"
 import * as Chats from "../chats/Chats.ts"
@@ -101,6 +103,7 @@ export interface Options<
 	readonly triggers?: TriggerWorker.Options
 	readonly channels?: ChannelWorker.Options
 	readonly computers?: ComputerWorker.Options
+	readonly files?: FileWorker.Options
 	/** The drivers of the Computer providers. Tests give fake ones. */
 	readonly computerDrivers?: Layer.Layer<Drivers.Drivers>
 }
@@ -352,7 +355,12 @@ export const layer = <
 		Layer.provideMerge(ModelsPostgres.layer),
 		Layer.provideMerge(BillingPostgres.layer),
 		Layer.provideMerge(RateLimit.layer),
-		Layer.provideMerge(TokenThrottle.layer),
+		Layer.provideMerge(
+			Layer.merge(
+				TokenThrottle.layer,
+				Files.layer.pipe(Layer.provide(NodeCrypto.layer)),
+			),
+		),
 		Layer.provideMerge(
 			SsoPostgres.layer.pipe(
 				Layer.provide(options.domainControl ?? DomainControl.layer),
@@ -369,6 +377,7 @@ export const layer = <
 		Coordinator.layer,
 		TriggerWorker.layer(options.triggers),
 		ComputerWorker.layer(options.computers),
+		FileWorker.layer(options.files),
 		ChannelWorker.layer({
 			publicOrigin: options.auth.publicOrigin,
 			...options.channels,

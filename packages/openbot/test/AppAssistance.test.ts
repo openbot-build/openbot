@@ -1,5 +1,4 @@
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { AppExecution, AppIndexApi } from "@openbot-build/api"
 import { Effect, Schema } from "effect"
 import * as Assistance from "../src/plugins/apps/Assistance.ts"
@@ -7,7 +6,7 @@ import { PublicIndex } from "../src/apps/Index.ts"
 import { Connections } from "../src/apps/Connections.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 
-test("App assistance shows public candidates and the account's access needs without sending private context or granting access", async () => {
+it("App assistance shows public candidates and the account's access needs without sending private context or granting access", async () => {
 	const host = await BrowserHost.start({
 		publicOrigin: "https://openbot.fixture.test",
 	})
@@ -32,8 +31,11 @@ test("App assistance shows public candidates and the account's access needs with
 					connections,
 					occupied: [Assistance.names.search, Assistance.names.search + "_1"],
 				})
-				assert.equal(queries.length, 0)
-				assert.equal(entries[0]?.tool.name, Assistance.names.search + "_2")
+				assert.strictEqual(queries.length, 0)
+				assert.strictEqual(
+					entries[0]?.tool.name,
+					Assistance.names.search + "_2",
+				)
 				const context = { preliminary: () => Effect.void }
 				const search = entries[0]!
 				const result = yield* search.handle(
@@ -47,16 +49,16 @@ test("App assistance shows public candidates and the account's access needs with
 				const candidates = yield* Schema.decodeUnknownEffect(
 					AppExecution.Assistance.cases.AppCandidates,
 				)(result)
-				assert.equal(candidates.page.apps.length, 0)
-				assert.deepEqual(queries, [{ query: "document" }])
+				assert.strictEqual(candidates.page.apps.length, 0)
+				assert.deepStrictEqual(queries, [{ query: "document" }])
 				const invalid = yield* search.handle(
 					{ query: "x".repeat(201) },
 					context,
 				)
-				assert.equal(invalid._tag, "AppAssistanceFailed")
-				assert.equal(queries.length, 1)
+				assert.strictEqual(invalid._tag, "AppAssistanceFailed")
+				assert.strictEqual(queries.length, 1)
 				const access = yield* entries[2]!.handle({}, context)
-				assert.deepEqual(access, {
+				assert.deepStrictEqual(access, {
 					_tag: "AppAccess",
 					connections: [],
 				})
@@ -80,8 +82,8 @@ test("App assistance shows public candidates and the account's access needs with
 					{ query: "document" },
 					context,
 				)
-				assert.equal(failed._tag, "AppAssistanceFailed")
-				assert.deepEqual(yield* entries[2]!.handle({}, context), access)
+				assert.strictEqual(failed._tag, "AppAssistanceFailed")
+				assert.deepStrictEqual(yield* entries[2]!.handle({}, context), access)
 			}),
 		)
 	} finally {

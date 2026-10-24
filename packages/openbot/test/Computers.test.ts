@@ -1,5 +1,4 @@
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { ChatView, ComputersApi, RequestsApi } from "@openbot-build/api"
 import { Effect, Layer, Redacted, Schema, Stream } from "effect"
 import { LanguageModel, Prompt, Response } from "effect/ai"
@@ -215,7 +214,7 @@ const client = (host: Awaited<ReturnType<typeof BrowserHost.start>>) => {
 	return { send, json, until }
 }
 
-test(
+it(
 	"people add Computer providers, make Computers, and give Bots the right to use them",
 	{ timeout: 120000 },
 	async () => {
@@ -237,13 +236,13 @@ test(
 					credentials: { kind: "e2b", apiKey: "e2b_test_key_123456" },
 				}),
 			)
-			assert.deepEqual(provider.credentials, {
+			assert.deepStrictEqual(provider.credentials, {
 				kind: "e2b",
 				apiKey: { set: true, hint: "…3456" },
 				apiUrl: null,
 				sandboxDomain: null,
 			})
-			assert.equal(
+			assert.strictEqual(
 				(await send(bob.session, "/v1/computer-providers/" + provider.id))
 					.status,
 				404,
@@ -253,7 +252,7 @@ test(
 				credentials: { kind: "e2b", apiKey: "e2b_test_key_654321" },
 				shared: true,
 			})
-			assert.equal(shared.status, 403, await shared.clone().text())
+			assert.strictEqual(shared.status, 403, await shared.clone().text())
 
 			const computer = await json(
 				ComputersApi.Computer,
@@ -263,59 +262,59 @@ test(
 					desktop: true,
 				}),
 			)
-			assert.equal(computer.state, "running")
-			assert.deepEqual(computer.features, {
+			assert.strictEqual(computer.state, "running")
+			assert.deepStrictEqual(computer.features, {
 				pause: true,
 				desktop: true,
 				ports: true,
 			})
 			const path = "/v1/computers/" + computer.id
-			assert.equal((await send(bob.session, path)).status, 404)
+			assert.strictEqual((await send(bob.session, path)).status, 404)
 
 			const ran = await json(
 				ComputersApi.CommandResult,
 				send(alice.session, path + "/commands", "POST", { command: "ls" }),
 			)
-			assert.equal(ran.stdout, "ran: ls")
+			assert.strictEqual(ran.stdout, "ran: ls")
 			const written = await send(alice.session, path + "/files", "PUT", {
 				path: "/tmp/a.txt",
 				encoding: "utf8",
 				content: "hello",
 			})
-			assert.equal(written.status, 204, await written.clone().text())
+			assert.strictEqual(written.status, 204, await written.clone().text())
 			const read = await json(
 				ComputersApi.FileContent,
 				send(alice.session, path + "/files?path=%2Ftmp%2Fa.txt"),
 			)
-			assert.equal(read.content, "hello")
+			assert.strictEqual(read.content, "hello")
 			const port = await json(
 				ComputersApi.OpenPort,
 				send(alice.session, path + "/ports/3000", "PUT"),
 			)
-			assert.equal(port.url, "https://3000-sbx-0.example.com")
+			assert.strictEqual(port.url, "https://3000-sbx-0.example.com")
 			const shot = await json(
 				ComputersApi.Screenshot,
 				send(alice.session, path + "/desktop/actions", "POST", {
 					actions: [{ _tag: "Click", x: 1, y: 2 }],
 				}),
 			)
-			assert.equal(shot.width, 800)
+			assert.strictEqual(shot.width, 800)
 
 			// A paused Computer resumes by itself for the next command.
 			const paused = await json(
 				ComputersApi.Computer,
 				send(alice.session, path + "/pause", "POST"),
 			)
-			assert.equal(paused.state, "paused")
+			assert.strictEqual(paused.state, "paused")
 			await json(
 				ComputersApi.CommandResult,
 				send(alice.session, path + "/commands", "POST", { command: "pwd" }),
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await json(ComputersApi.Computer, send(alice.session, path))).state,
 				"running",
 			)
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				fake.log.filter((line) => /^(create|pause|resume)/.test(line)),
 				["create sbx-0", "pause sbx-0", "resume sbx-0"],
 			)
@@ -323,8 +322,8 @@ test(
 				Schema.Array(ComputersApi.ComputerUsage),
 				send(alice.session, path + "/usage"),
 			)
-			assert.equal(usageList.length, 2)
-			assert.equal(usageList[0]!.endedAt, null)
+			assert.strictEqual(usageList.length, 2)
+			assert.strictEqual(usageList[0]!.endedAt, null)
 
 			// Alice gives her Bot the right to use the Computer, and takes it back.
 			const bot = await host.defaultBot(alice.session)
@@ -332,8 +331,8 @@ test(
 				ComputersApi.ComputerAccess,
 				send(alice.session, path + "/bots/" + bot, "PUT"),
 			)
-			assert.equal(granted.bot, bot)
-			assert.deepEqual(
+			assert.strictEqual(granted.bot, bot)
+			assert.deepStrictEqual(
 				(
 					await json(
 						Schema.Array(ComputersApi.Computer),
@@ -342,15 +341,15 @@ test(
 				).map((entry) => entry.id),
 				[computer.id],
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await send(bob.session, path + "/bots/" + bot, "PUT")).status,
 				404,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await send(alice.session, path + "/bots/" + bot, "DELETE")).status,
 				204,
 			)
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				await json(
 					Schema.Array(ComputersApi.ComputerAccess),
 					send(alice.session, path + "/bots"),
@@ -359,7 +358,7 @@ test(
 			)
 
 			// The provider stays while a Computer uses it.
-			assert.equal(
+			assert.strictEqual(
 				(
 					await send(
 						alice.session,
@@ -369,16 +368,19 @@ test(
 				).status,
 				400,
 			)
-			assert.equal((await send(alice.session, path, "DELETE")).status, 204)
+			assert.strictEqual(
+				(await send(alice.session, path, "DELETE")).status,
+				204,
+			)
 			assert.ok(fake.log.includes("destroy sbx-0"))
-			assert.equal((await send(alice.session, path)).status, 404)
+			assert.strictEqual((await send(alice.session, path)).status, 404)
 		} finally {
 			await host.close()
 		}
 	},
 )
 
-test(
+it(
 	"a machine pairs with a code, connects, and runs a command",
 	{ timeout: 120000 },
 	async () => {
@@ -410,17 +412,20 @@ test(
 
 			const pairing = await start()
 			assert.match(pairing.code, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/)
-			assert.deepEqual(await json(ComputersApi.PairingStatus, poll(pairing)), {
-				_tag: "Pending",
-			})
-			assert.equal((await poll(pairing, "ocp_wrong")).status, 404)
+			assert.deepStrictEqual(
+				await json(ComputersApi.PairingStatus, poll(pairing)),
+				{
+					_tag: "Pending",
+				},
+			)
+			assert.strictEqual((await poll(pairing, "ocp_wrong")).status, 404)
 			// People may type the code in small letters and without the dash.
 			const typed = pairing.code.replace("-", "").toLowerCase()
 			const shown = await json(
 				ComputersApi.ComputerPairing,
 				send(alice.session, "/v1/computer-pairings/" + typed),
 			)
-			assert.equal(shown.hostname, "alice-laptop")
+			assert.strictEqual(shown.hostname, "alice-laptop")
 			const computer = await json(
 				ComputersApi.Computer,
 				send(
@@ -430,14 +435,14 @@ test(
 					{},
 				),
 			)
-			assert.equal(computer.name, "alice-laptop")
-			assert.equal(computer.state, "offline")
+			assert.strictEqual(computer.name, "alice-laptop")
+			assert.strictEqual(computer.state, "offline")
 			const approved = await json(ComputersApi.PairingStatus, poll(pairing))
-			assert.equal(approved._tag, "Approved")
+			assert.strictEqual(approved._tag, "Approved")
 			if (approved._tag !== "Approved") return
-			assert.equal(approved.computer, computer.id)
+			assert.strictEqual(approved.computer, computer.id)
 			// The token goes out only once.
-			assert.equal((await poll(pairing)).status, 404)
+			assert.strictEqual((await poll(pairing)).status, 404)
 
 			// The machine connects and answers a command.
 			const url =
@@ -501,7 +506,7 @@ test(
 				ComputersApi.CommandResult,
 				send(alice.session, path + "/commands", "POST", { command: "uname" }),
 			)
-			assert.equal(ran.stdout, "from the laptop")
+			assert.strictEqual(ran.stdout, "from the laptop")
 			socket.close()
 			await until("the machine is offline", async () => {
 				const current = await json(
@@ -522,11 +527,11 @@ test(
 					{},
 				),
 			)
-			assert.equal(same.id, computer.id)
+			assert.strictEqual(same.id, computer.id)
 
 			// A denied pairing ends at once.
 			const third = await start()
-			assert.equal(
+			assert.strictEqual(
 				(
 					await send(
 						alice.session,
@@ -536,14 +541,14 @@ test(
 				).status,
 				204,
 			)
-			assert.equal((await poll(third)).status, 404)
+			assert.strictEqual((await poll(third)).status, 404)
 		} finally {
 			await host.close()
 		}
 	},
 )
 
-test(
+it(
 	"a Bot asks for a Computer, and uses it after its person allows it",
 	{ timeout: 120000 },
 	async () => {
@@ -577,14 +582,14 @@ test(
 
 			// Without the right, the command does not run.
 			const denied = await talk(asAlice, bot, "run " + computer.id)
-			assert.equal(denied.view.status, "Completed")
+			assert.strictEqual(denied.view.status, "Completed")
 			assert.match(lastText(denied.view), /may not use the Computer/)
 			assert.ok(!fake.log.some((line) => line.startsWith("run ")))
 
 			// The Bot asks. The request goes to Alice. The Turn does not wait for her.
 			const asked = await talk(asAlice, bot, "get " + computer.id)
-			assert.equal(asked.view.status, "Completed")
-			assert.equal(asked.view.open.requests, 1)
+			assert.strictEqual(asked.view.status, "Completed")
+			assert.strictEqual(asked.view.open.requests, 1)
 			const request = await until("a request", async () => {
 				const list = await json(
 					Schema.Array(RequestsApi.CapabilityRequest),
@@ -594,15 +599,15 @@ test(
 					(entry) => entry.capability.action === "computers.acquire",
 				)
 			})
-			assert.equal(request.capability.target, computer.id)
-			assert.equal(request.chat, asked.receipt.chat)
+			assert.strictEqual(request.capability.target, computer.id)
+			assert.strictEqual(request.chat, asked.receipt.chat)
 			const resolved = await send(
 				alice.session,
 				"/v1/requests/" + request.id,
 				"POST",
 				{ expected: request.revision, decision: "allow" },
 			)
-			assert.equal(resolved.status, 200, await resolved.clone().text())
+			assert.strictEqual(resolved.status, 200, await resolved.clone().text())
 			// She allows it, and the call runs in a new Turn of the same Chat.
 			const allowed = await until("the allowed call runs", async () => {
 				const current = await settled(asAlice, asked.receipt.chat)
@@ -610,11 +615,11 @@ test(
 					? current
 					: undefined
 			})
-			assert.equal(allowed.status, "Completed")
-			assert.equal(allowed.open.requests, 0)
+			assert.strictEqual(allowed.status, "Completed")
+			assert.strictEqual(allowed.open.requests, 0)
 
 			const ran = await talk(asAlice, bot, "run " + computer.id)
-			assert.equal(ran.view.status, "Completed")
+			assert.strictEqual(ran.view.status, "Completed")
 			assert.match(lastText(ran.view), /ran: echo hi/)
 			assert.ok(fake.log.includes("run sbx-0 echo hi"))
 		} finally {
@@ -623,7 +628,7 @@ test(
 	},
 )
 
-test("the model sees only the newest screenshot", () => {
+it("the model sees only the newest screenshot", () => {
 	const shot = (id: string) =>
 		Prompt.makeMessage("tool", {
 			content: [
@@ -648,11 +653,11 @@ test("the model sees only the newest screenshot", () => {
 		shot("second"),
 	])
 	const shown = keepNewestImage(prompt)
-	assert.equal(shown.content.length, prompt.content.length)
+	assert.strictEqual(shown.content.length, prompt.content.length)
 	const results = shown.content.flatMap((message) =>
 		message.role === "tool" ? message.content : [],
 	)
-	assert.deepEqual(
+	assert.deepStrictEqual(
 		results.map((part) =>
 			part.type === "tool-result"
 				? "openbot_image" in (part.result as object)

@@ -1342,3 +1342,47 @@ export const rateWindows = table(
 		index("openbot_rate_windows_start").on(t.windowStart),
 	],
 )
+
+/**
+ * A file that a member gave to OpenBot. Its bytes are in the object storage at
+ * `object_key`. `pending` means the bytes are not there yet. `deleting` means
+ * the garbage collector removes the bytes, then the row.
+ */
+export const files = table(
+	"openbot_files",
+	{
+		id: text().primaryKey(),
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
+		userId: text("user_id").notNull(),
+		filename: text().notNull(),
+		mediaType: text("media_type").notNull(),
+		bytes: bigint({ mode: "number" }).notNull(),
+		status: text().notNull(),
+		objectKey: text("object_key").notNull(),
+		createdAt: time("created_at").notNull(),
+		updatedAt: time("updated_at").notNull(),
+	},
+	(t) => [
+		index("openbot_files_owner").on(t.organizationId, t.userId, t.createdAt),
+		index("openbot_files_status").on(t.status, t.updatedAt),
+	],
+)
+/**
+ * Which Chats use which files. A Chat Item that names a file adds a row, and
+ * deleting the Chat removes its rows. A file without rows is garbage after a time.
+ * There is no foreign key, so a Chat can name a file that is already gone.
+ */
+export const fileRefs = table(
+	"openbot_file_refs",
+	{
+		file: text().notNull(),
+		namespace: text().notNull(),
+		chat: text().notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.file, t.namespace, t.chat] }),
+		index("openbot_file_refs_chat").on(t.namespace, t.chat),
+	],
+)

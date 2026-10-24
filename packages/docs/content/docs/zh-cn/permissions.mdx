@@ -28,6 +28,8 @@ description: 权限组、策略、角色和资源键。
 | `responses.run`            | Chat              | 给 Bots 发消息，让它们在一个 Chat 中工作。                                     |
 | `chats.read`               | Chat              | 读取 Chats、它们的历史，以及它们交出去的工作。                                 |
 | `chats.write`              | Chat              | 修改、中断和删除 Chats，并取消它们交出去的工作。                               |
+| `files.read`               | File              | 读取你的[文件](/zh-cn/docs/files)和它们的字节。                                |
+| `files.write`              | File              | 上传和删除你的文件。                                                           |
 | `requests.resolve`         | Request           | 回答你的 Bots 对新能力提出的 request。                                         |
 | `bots.read`                | Bot               | 读取 Bots，以及它们的记忆、Rules 和 Grants。                                   |
 | `bots.write`               | Bot               | 创建和修改 Bots，以及它们的记忆、Rules 和 Grants。                             |
@@ -85,6 +87,7 @@ description: 权限组、策略、角色和资源键。
 | 组织             | `openbot.org.<org>`                                     |
 | 一个成员         | `openbot.org.<org>.user.<user>`                         |
 | 一个 Chat        | `openbot.org.<org>.user.<user>.chat.<chat>`             |
+| 一个文件         | `openbot.org.<org>.user.<user>.file.<file>`             |
 | 成员的一个 Bot   | `openbot.org.<org>.user.<user>.bot.<bot>`               |
 | 一个共享的 Bot   | `openbot.org.<org>.bot.<bot>`                           |
 | 成员的一个触发器 | `openbot.org.<org>.user.<user>.trigger.<trigger>`       |

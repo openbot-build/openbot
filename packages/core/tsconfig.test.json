@@ -5,5 +5,5 @@
 		"tsBuildInfoFile": ".cache/tests.tsbuildinfo",
 		"allowImportingTsExtensions": true
 	},
-	"include": ["test"]
+	"include": ["test", "vitest.config.ts"]
 }

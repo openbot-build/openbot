@@ -11,8 +11,7 @@ import {
 	Result,
 	Stream,
 } from "effect"
-import assert from "node:assert/strict"
-import { mock, test } from "node:test"
+import { assert, it, onTestFinished, vi } from "@effect/vitest"
 import { createHash } from "node:crypto"
 import { NodeServices } from "@effect/platform-node"
 import {
@@ -34,10 +33,10 @@ import * as DefaultBot from "./DefaultBot.ts"
 import * as Organizations from "./Organizations.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
 
-test(
+it(
 	"signed OIDC login, session lifecycle, member isolation and PostgreSQL restart",
 	{ timeout: 60000 },
-	async (t) => {
+	async () => {
 		const database = await PostgresTest.start()
 		const issuer = "https://id.example.com"
 		const publicOrigin = "https://e.example.com"
@@ -52,7 +51,7 @@ test(
 		let publicClient = false
 		const providerFetch: typeof globalThis.fetch = async (input, init) => {
 			const url = new URL(input instanceof Request ? input.url : String(input))
-			assert.equal(url.origin, issuer)
+			assert.strictEqual(url.origin, issuer)
 			const json = (body: unknown, status = 200) =>
 				new globalThis.Response(JSON.stringify(body), {
 					status,
@@ -87,20 +86,20 @@ test(
 						"@example.com",
 					email_verified: true,
 				})
-			assert.equal(url.pathname, "/token")
+			assert.strictEqual(url.pathname, "/token")
 			tokenCalls++
 			const form = new URLSearchParams(
 				await new globalThis.Response(init?.body).text(),
 			)
-			assert.equal(
+			assert.strictEqual(
 				new Headers(init?.headers).get("authorization"),
 				publicClient
 					? null
 					: "Basic " + Buffer.from("client:secret").toString("base64"),
 			)
-			assert.equal(form.get("client_secret"), null)
-			if (publicClient) assert.equal(form.get("client_id"), "client")
-			assert.equal(
+			assert.strictEqual(form.get("client_secret"), null)
+			if (publicClient) assert.strictEqual(form.get("client_id"), "client")
+			assert.strictEqual(
 				form.get("redirect_uri"),
 				publicOrigin + "/auth/callback/oidc",
 			)
@@ -109,7 +108,7 @@ test(
 				HashMap.get(pending, state ?? ""),
 			)
 			assert.ok(transaction)
-			assert.equal(
+			assert.strictEqual(
 				createHash("sha256")
 					.update(form.get("code_verifier") ?? "")
 					.digest("base64url"),
@@ -133,19 +132,19 @@ test(
 			})
 		}
 		const actualFetch = globalThis.fetch
-		const providerNetwork = mock.method(
-			globalThis,
-			"fetch",
-			(input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-				const url = new URL(
-					input instanceof Request ? input.url : String(input),
-				)
-				return url.origin === issuer
-					? providerFetch(input, init)
-					: actualFetch(input, init)
-			},
-		)
-		t.after(() => providerNetwork.mock.restore())
+		const providerNetwork = vi
+			.spyOn(globalThis, "fetch")
+			.mockImplementation(
+				(input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+					const url = new URL(
+						input instanceof Request ? input.url : String(input),
+					)
+					return url.origin === issuer
+						? providerFetch(input, init)
+						: actualFetch(input, init)
+				},
+			)
+		onTestFinished(() => providerNetwork.mockRestore())
 		const languageModel = LanguageModel.make({
 			generateText: () =>
 				Effect.succeed([Response.makePart("text", { text: "answer" })]),
@@ -220,7 +219,7 @@ test(
 					redirect: "manual",
 				})
 				if (path.startsWith("/auth/"))
-					assert.equal(response.headers.get("cache-control"), "no-store")
+					assert.strictEqual(response.headers.get("cache-control"), "no-store")
 				return response
 			}
 			const login = async (subject: string) => {
@@ -232,7 +231,7 @@ test(
 						callbackURL: publicOrigin + "/",
 					}),
 				})
-				assert.equal(response.status, 200)
+				assert.strictEqual(response.status, 200)
 				const cookie = response.headers.get("set-cookie") ?? ""
 				assert.match(cookie, /Secure/)
 				assert.match(cookie, /HttpOnly/)
@@ -240,7 +239,7 @@ test(
 				const authorization = new URL(
 					((await response.json()) as { readonly url: string }).url,
 				)
-				assert.equal(authorization.origin, issuer)
+				assert.strictEqual(authorization.origin, issuer)
 				assert.ok(
 					authorization.searchParams
 						.get("scope")
@@ -262,8 +261,8 @@ test(
 					?.split(";")[0] ?? ""
 			/** Better Auth sends a failed callback to its error page and sets no session. */
 			const rejected = (response: globalThis.Response) => {
-				assert.equal(response.status, 302)
-				assert.equal(sessionCookie(response), "")
+				assert.strictEqual(response.status, 302)
+				assert.strictEqual(sessionCookie(response), "")
 				assert.ok(
 					new URL(
 						response.headers.get("location") ?? "",
@@ -276,8 +275,8 @@ test(
 				const response = await request(transaction.callback, {
 					headers: { cookie: transaction.cookie },
 				})
-				assert.equal(response.status, 302)
-				assert.equal(response.headers.get("location"), publicOrigin + "/")
+				assert.strictEqual(response.status, 302)
+				assert.strictEqual(response.headers.get("location"), publicOrigin + "/")
 				return { ...transaction, session: sessionCookie(response) }
 			}
 			const alice = await complete("alice")
@@ -286,7 +285,7 @@ test(
 			rejected(
 				await request(alice.callback, { headers: { cookie: alice.cookie } }),
 			)
-			assert.equal(tokenCalls, count)
+			assert.strictEqual(tokenCalls, count)
 			const wrongBrowser = await login("bob")
 			rejected(
 				await request(wrongBrowser.callback, {
@@ -296,7 +295,7 @@ test(
 			const bobResponse = await request(wrongBrowser.callback, {
 				headers: { cookie: wrongBrowser.cookie },
 			})
-			assert.equal(bobResponse.status, 302)
+			assert.strictEqual(bobResponse.status, 302)
 			const bobSession = sessionCookie(bobResponse)
 			// New accounts have no organization, so each one makes its own.
 			for (const cookie of [alice.session, bobSession])
@@ -335,13 +334,13 @@ test(
 					headers: { cookie: expiredLogin.cookie },
 				}),
 			)
-			assert.equal(tokenCalls, beforeExpiredLogin)
+			assert.strictEqual(tokenCalls, beforeExpiredLogin)
 			const repeated = await request(
 				"/auth/callback/oidc?state=one&state=two&iss=bad&code=bad",
 				{ headers: { cookie: alice.cookie } },
 			)
-			assert.equal(repeated.status, 400)
-			assert.equal(sessionCookie(repeated), "")
+			assert.strictEqual(repeated.status, 400)
+			assert.strictEqual(sessionCookie(repeated), "")
 			providerUnavailable = true
 			await using unavailableRuntime = server()
 			const unavailableAddress = await unavailableRuntime.runPromise(
@@ -349,7 +348,7 @@ test(
 					HttpServer.formatAddress(server.address),
 				),
 			)
-			assert.notEqual(
+			assert.notStrictEqual(
 				(
 					await fetch(unavailableAddress + "/auth/sign-in/social", {
 						method: "POST",
@@ -366,7 +365,7 @@ test(
 			forged = false
 			rejected(await request(bad.callback, { headers: { cookie: bad.cookie } }))
 			for (const origin of [undefined, "https://foreign.example"]) {
-				assert.equal(
+				assert.strictEqual(
 					(
 						await request("/auth/sign-out", {
 							method: "POST",
@@ -386,7 +385,7 @@ test(
 				["POST", 400],
 				["DELETE", 404],
 			] as const) {
-				assert.equal(
+				assert.strictEqual(
 					(
 						await request(
 							"/v1/user/tokens" + (method === "DELETE" ? "/unknown" : ""),
@@ -399,7 +398,7 @@ test(
 					status,
 				)
 			}
-			assert.equal(
+			assert.strictEqual(
 				(
 					await request("/v1/chats", {
 						headers: { authorization: "Bearer retired" },
@@ -424,12 +423,12 @@ test(
 					},
 					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
 				})
-			assert.equal((await request("/v1/chats")).status, 401)
+			assert.strictEqual((await request("/v1/chats")).status, 401)
 			const cookieChats = await request("/v1/chats", {
 				headers: { cookie: alice.session },
 			})
-			assert.equal(cookieChats.status, 200)
-			assert.deepEqual(await cookieChats.json(), [])
+			assert.strictEqual(cookieChats.status, 200)
+			assert.deepStrictEqual(await cookieChats.json(), [])
 			const defaultBot = (cookie: string) =>
 				DefaultBot.ensure((path, method, payload) =>
 					session(cookie, path, method, payload),
@@ -443,8 +442,8 @@ test(
 				"POST",
 				{ input: "hello" },
 			)
-			assert.equal(withoutModel.status, 400)
-			assert.equal((await withoutModel.json()).reason, "missing")
+			assert.strictEqual(withoutModel.status, 400)
+			assert.strictEqual((await withoutModel.json()).reason, "missing")
 			const model = {
 				_tag: "Config.Selection",
 				provider: "test",
@@ -456,7 +455,7 @@ test(
 				instructions: "Answer the person.",
 				model,
 			})
-			assert.equal(createdBot.status, 201)
+			assert.strictEqual(createdBot.status, 201)
 			const aliceBot: { readonly id: string } = await createdBot.json()
 			const message = await session(
 				alice.session,
@@ -464,19 +463,19 @@ test(
 				"POST",
 				{ input: "hello" },
 			)
-			assert.equal(message.status, 202)
+			assert.strictEqual(message.status, 202)
 			const receipt: {
 				readonly chat: string
 				readonly turn: string
 				readonly delivery: string
 			} = await message.json()
-			assert.equal(receipt.delivery, "started")
+			assert.strictEqual(receipt.delivery, "started")
 			const path = "/v1/chats/" + receipt.chat
 			const cookieChat = await request(path, {
 				headers: { cookie: alice.session },
 			})
-			assert.equal(cookieChat.status, 200)
-			assert.equal((await cookieChat.json()).chat.id, receipt.chat)
+			assert.strictEqual(cookieChat.status, 200)
+			assert.strictEqual((await cookieChat.json()).chat.id, receipt.chat)
 			for (const suffix of [
 				"",
 				"/items",
@@ -487,8 +486,11 @@ test(
 				"/delegations",
 				"/wait?after=0&timeoutMs=0",
 			]) {
-				assert.equal((await session(bobSession, path + suffix)).status, 404)
-				assert.equal(
+				assert.strictEqual(
+					(await session(bobSession, path + suffix)).status,
+					404,
+				)
+				assert.strictEqual(
 					(await request(path + suffix, { headers: { cookie: bobSession } }))
 						.status,
 					404,
@@ -501,16 +503,16 @@ test(
 				["/messages", "POST", { input: "foreign" }],
 				["/todos", "PUT", { revision: 0, items: [] }],
 			] as const)
-				assert.equal(
+				assert.strictEqual(
 					(await session(bobSession, path + suffix, method, payload)).status,
 					404,
 				)
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				await (await session(bobSession, "/v1/chats")).json(),
 				[],
 			)
 			// Bob cannot talk to the Bot of Alice, so he cannot reach her Chat through it.
-			assert.equal(
+			assert.strictEqual(
 				(
 					await session(
 						bobSession,
@@ -542,8 +544,8 @@ test(
 					return yield* wait(yield* service.get(Chat.Id.make(receipt.chat)))
 				}),
 			)
-			assert.equal(completeView.response?.id, receipt.turn)
-			assert.equal(completeView.response?.status, "completed")
+			assert.strictEqual(completeView.response?.id, receipt.turn)
+			assert.strictEqual(completeView.response?.status, "completed")
 			const before = {
 				view: await (await session(alice.session, path)).json(),
 				items: await (await session(alice.session, path + "/items")).json(),
@@ -556,7 +558,7 @@ test(
 					HttpServer.formatAddress(value.address),
 				),
 			)
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				{
 					view: await (await session(alice.session, path)).json(),
 					items: await (await session(alice.session, path + "/items")).json(),
@@ -572,8 +574,8 @@ test(
 					headers: { cookie: nextAlice.session },
 				})
 			).json()
-			assert.equal(sessionA.userId, sessionB.userId)
-			assert.deepEqual(sessionA.memberships, sessionB.memberships)
+			assert.strictEqual(sessionA.userId, sessionB.userId)
+			assert.deepStrictEqual(sessionA.memberships, sessionB.memberships)
 			await migration.runPromise(
 				Effect.flatMap(
 					SqlClient.SqlClient,
@@ -581,7 +583,7 @@ test(
 						sql`UPDATE openbot_auth_session SET expires_at = to_timestamp(0) WHERE token = ${decodeURIComponent(nextAlice.session.split("=")[1]!).split(".")[0]}`,
 				),
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await request("/auth/session", {
 						headers: { cookie: nextAlice.session },
@@ -589,7 +591,7 @@ test(
 				).status,
 				401,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await request("/auth/sign-out", {
 						method: "POST",
@@ -603,14 +605,14 @@ test(
 				).status,
 				200,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await request("/auth/session", { headers: { cookie: alice.session } }))
 					.status,
 				401,
 			)
-			assert.equal((await session(bobSession, "/v1/chats")).status, 200)
-			assert.equal((await request("/health")).status, 200)
-			assert.equal((await request("/docs")).status, 200)
+			assert.strictEqual((await session(bobSession, "/v1/chats")).status, 200)
+			assert.strictEqual((await request("/health")).status, 200)
+			assert.strictEqual((await request("/docs")).status, 200)
 			await runtime.dispose()
 			publicClient = true
 			runtime = server()
@@ -621,7 +623,7 @@ test(
 			)
 			const publicLogin = await complete("public-client-user")
 			assert.ok(publicLogin.session)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await request("/auth/session", {
 						headers: { cookie: publicLogin.session },
@@ -650,78 +652,71 @@ const importStream = () =>
 		}),
 	)
 
-test("an instance reads only its own settings and the secret keys", async () => {
-	const load = (values: Record<string, string>) =>
-		Effect.runPromise(
+it.effect("an instance reads only its own settings and the secret keys", () =>
+	Effect.gen(function* () {
+		const load = (values: Record<string, string>) =>
 			EnvironmentConfiguration.load.pipe(
 				Effect.provideService(
 					ConfigProvider.ConfigProvider,
 					ConfigProvider.fromUnknown(values),
 				),
 				Effect.result,
-			),
-		)
-	const required = {
-		OPENBOT_DATABASE_URL: "postgres://localhost/db",
-		OPENBOT_SECRET_KEYS:
-			"k1:1111111111111111111111111111111111111111111111111111111111111111",
-	}
-	assert.equal((await load({}))._tag, "Failure")
-	assert.equal(
-		(await load({ ...required, OPENBOT_PORT: "invalid" }))._tag,
-		"Failure",
-	)
-	const plain = await load(required)
-	assert.ok(Result.isSuccess(plain))
-	assert.equal(plain.success.tls, undefined)
-	assert.equal(plain.success.port, 3000)
-	const secure = await load({
-		...required,
-		OPENBOT_TLS_CERT: "/certs/cert.pem",
-		OPENBOT_TLS_KEY: "/certs/key.pem",
-	})
-	assert.ok(Result.isSuccess(secure))
-	assert.deepEqual(secure.success.tls, {
-		certFile: "/certs/cert.pem",
-		keyFile: "/certs/key.pem",
-	})
-	assert.equal(
-		(await load({ ...required, OPENBOT_TLS_CERT: "/certs/cert.pem" }))._tag,
-		"Failure",
-	)
-})
-
-test("secret keys change one at a time and old secrets still open", async () => {
-	const oldKey = "k1:" + "11".repeat(32)
-	const newKey = "k2:" + "22".repeat(32)
-	const sealed = await Effect.runPromise(
-		Effect.flatMap(Secrets.make(Redacted.make(oldKey)), (secrets) =>
-			secrets.seal("provider key", "place"),
-		),
-	)
-	const rotated = await Effect.runPromise(
-		Secrets.make(Redacted.make(newKey + "," + oldKey)),
-	)
-	assert.equal(
-		await Effect.runPromise(rotated.open(sealed, "place")),
-		"provider key",
-	)
-	assert.ok(
-		(await Effect.runPromise(rotated.seal("next", "place"))).startsWith("k2."),
-	)
-	// A secret only opens in its own place.
-	assert.equal(
-		(await Effect.runPromise(Effect.result(rotated.open(sealed, "other"))))
-			._tag,
-		"Failure",
-	)
-	for (const invalid of [
-		"",
-		"k1:short",
-		"k1:" + "11".repeat(32) + ",k1:" + "22".repeat(32),
-	])
-		assert.equal(
-			(await Effect.runPromise(Effect.result(Secrets.parseKeys(invalid))))._tag,
+			)
+		const required = {
+			OPENBOT_DATABASE_URL: "postgres://localhost/db",
+			OPENBOT_SECRET_KEYS:
+				"k1:1111111111111111111111111111111111111111111111111111111111111111",
+		}
+		assert.strictEqual((yield* load({}))._tag, "Failure")
+		assert.strictEqual(
+			(yield* load({ ...required, OPENBOT_PORT: "invalid" }))._tag,
 			"Failure",
 		)
-})
+		const plain = yield* load(required)
+		assert.ok(Result.isSuccess(plain))
+		assert.strictEqual(plain.success.tls, undefined)
+		assert.strictEqual(plain.success.port, 3000)
+		const secure = yield* load({
+			...required,
+			OPENBOT_TLS_CERT: "/certs/cert.pem",
+			OPENBOT_TLS_KEY: "/certs/key.pem",
+		})
+		assert.ok(Result.isSuccess(secure))
+		assert.deepStrictEqual(secure.success.tls, {
+			certFile: "/certs/cert.pem",
+			keyFile: "/certs/key.pem",
+		})
+		assert.strictEqual(
+			(yield* load({ ...required, OPENBOT_TLS_CERT: "/certs/cert.pem" }))._tag,
+			"Failure",
+		)
+	}),
+)
+
+it.effect("secret keys change one at a time and old secrets still open", () =>
+	Effect.gen(function* () {
+		const oldKey = "k1:" + "11".repeat(32)
+		const newKey = "k2:" + "22".repeat(32)
+		const sealed = yield* Effect.flatMap(
+			Secrets.make(Redacted.make(oldKey)),
+			(secrets) => secrets.seal("provider key", "place"),
+		)
+		const rotated = yield* Secrets.make(Redacted.make(newKey + "," + oldKey))
+		assert.strictEqual(yield* rotated.open(sealed, "place"), "provider key")
+		assert.ok((yield* rotated.seal("next", "place")).startsWith("k2."))
+		// A secret only opens in its own place.
+		assert.strictEqual(
+			(yield* Effect.result(rotated.open(sealed, "other")))._tag,
+			"Failure",
+		)
+		for (const invalid of [
+			"",
+			"k1:short",
+			"k1:" + "11".repeat(32) + ",k1:" + "22".repeat(32),
+		])
+			assert.strictEqual(
+				(yield* Effect.result(Secrets.parseKeys(invalid)))._tag,
+				"Failure",
+			)
+	}),
+)

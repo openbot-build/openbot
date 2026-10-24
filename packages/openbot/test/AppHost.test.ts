@@ -1,9 +1,8 @@
 // @effect-diagnostics strictEffectProvide:off
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { Client } from "@openbot-build/protocol"
-import { Effect, Layer, ManagedRuntime, Match, Redacted } from "effect"
+import { Effect, Layer, Match, Redacted } from "effect"
 import { AppHost } from "../src/apps/AppHost.ts"
 import * as Development from "../dist/Development.js"
 import * as Database from "../src/database/DatabasePostgres.ts"
@@ -11,28 +10,35 @@ import * as Postgres from "./PostgresTest.ts"
 import * as Server from "../dist/app/Server.js"
 import { PublicIndex } from "../src/apps/Index.ts"
 
-test("the development host serves a saved, owner-bound App service through the real MCP client", async () => {
-	const database = await Postgres.start()
-	const configuration = {
-		host: "127.0.0.1",
-		port: 0,
-		databaseUrl: Redacted.make(database.url),
-		secretKeys: Redacted.make("test:" + "11".repeat(32)),
-		auth: {
-			mode: "development" as const,
-			publicOrigin: "https://localhost:8443",
-			secret: Redacted.make("AppHostDevelopmentSecretMustRemainStable123456"),
-		},
-	}
-	const migration = ManagedRuntime.make(
-		Database.layer(configuration).pipe(Layer.provide(NodeServices.layer)),
-	)
-	await migration.runPromise(Database.migrate)
-	let runtime = ManagedRuntime.make(Development.layer(configuration))
-	const policy = Client.InvocationPolicy.of({ check: () => Effect.void })
-	try {
-		await runtime.runPromise(
-			Effect.gen(function* () {
+it.live(
+	"the development host serves a saved, owner-bound App service through the real MCP client",
+	() =>
+		Effect.gen(function* () {
+			const database = yield* Effect.acquireRelease(
+				Effect.promise(() => Postgres.start()),
+				(database) => Effect.promise(() => database.close()),
+			)
+			const configuration = {
+				host: "127.0.0.1",
+				port: 0,
+				databaseUrl: Redacted.make(database.url),
+				secretKeys: Redacted.make("test:" + "11".repeat(32)),
+				auth: {
+					mode: "development" as const,
+					publicOrigin: "https://localhost:8443",
+					secret: Redacted.make(
+						"AppHostDevelopmentSecretMustRemainStable123456",
+					),
+				},
+			}
+			yield* Database.migrate.pipe(
+				Effect.provide(
+					Database.layer(configuration).pipe(Layer.provide(NodeServices.layer)),
+				),
+			)
+			const policy = Client.InvocationPolicy.of({ check: () => Effect.void })
+			// Each server start builds its layer again, so nothing stays in memory.
+			yield* Effect.gen(function* () {
 				const factory = yield* AppHost
 				const alice = factory.bind("alice", policy)
 				const bob = factory.bind("bob", policy)
@@ -53,9 +59,9 @@ test("the development host serves a saved, owner-bound App service through the r
 					confirmed: true,
 					requiresAuthorization: true,
 				})
-				assert.equal(added.connection.authorization._tag, "Unprotected")
-				assert.equal((yield* bob.listConnections).length, 0)
-				assert.equal(
+				assert.strictEqual(added.connection.authorization._tag, "Unprotected")
+				assert.strictEqual((yield* bob.listConnections).length, 0)
+				assert.strictEqual(
 					(yield* Effect.flip(
 						bob.getConnection({ owner: "alice", connectionId: "app" }),
 					)).reason,
@@ -67,8 +73,8 @@ test("the development host serves a saved, owner-bound App service through the r
 							key: { owner: "alice", connectionId: "app" },
 							clientInfo: { name: "OpenBot test", version: "1.0.0" },
 						})
-						assert.equal((yield* client.listTools()).tools.length, 2)
-						assert.deepEqual(
+						assert.strictEqual((yield* client.listTools()).tools.length, 2)
+						assert.deepStrictEqual(
 							(yield* client.listTools({ source: "model" })).tools.map(
 								(tool) => tool.name,
 							),
@@ -76,30 +82,16 @@ test("the development host serves a saved, owner-bound App service through the r
 						)
 					}),
 				)
-			}),
-		)
-		await runtime.dispose()
-		const production = ManagedRuntime.make(Server.layerFixed(configuration))
-		try {
-			assert.deepEqual(
-				await production.runPromise(
-					Effect.flatMap(PublicIndex, (index) => index.search({})),
+			}).pipe(Effect.provide(Development.layer(configuration), { local: true }))
+			assert.deepStrictEqual(
+				yield* Effect.flatMap(PublicIndex, (index) => index.search({})).pipe(
+					Effect.provide(Server.layerFixed(configuration), { local: true }),
 				),
 				{ apps: [], issues: [], nextCursor: null },
 			)
-		} finally {
-			await production.dispose()
-		}
-		runtime = ManagedRuntime.make(Development.layer(configuration))
-		await runtime.runPromise(
-			Effect.gen(function* () {
+			yield* Effect.gen(function* () {
 				const app = (yield* AppHost).bind("alice", policy)
-				assert.equal((yield* app.listConnections).length, 1)
-			}),
-		)
-	} finally {
-		await runtime.dispose()
-		await migration.dispose()
-		await database.close()
-	}
-})
+				assert.strictEqual((yield* app.listConnections).length, 1)
+			}).pipe(Effect.provide(Development.layer(configuration), { local: true }))
+		}),
+)

@@ -1,7 +1,6 @@
 // @effect-diagnostics strictEffectProvide:off
 import { PgClient } from "@effect/sql-pg"
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import {
 	AppExecution,
 	AuthApi,
@@ -26,7 +25,7 @@ import * as Fixture from "./AppFixture.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 import { message, settled, type Send } from "./Messages.ts"
 
-test("the OpenBot App plugin combines live paged capabilities with caller tools and records real handler results for the current account", async () => {
+it("the OpenBot App plugin combines live paged capabilities with caller tools and records real handler results for the current account", async () => {
 	const publisher = await Fixture.start({ capabilities: true })
 	let observed: ReadonlyArray<{
 		readonly input: string
@@ -149,7 +148,7 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 									: []
 							})
 							.at(0) ?? ""
-					assert.equal(Tool.isDynamic(selected), true)
+					assert.strictEqual(Tool.isDynamic(selected), true)
 					return Stream.make(
 						Response.makePart("tool-call", {
 							id: "app-call-" + last,
@@ -226,7 +225,7 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 				}),
 			),
 		)
-		assert.equal(publisher.requests().length, 0)
+		assert.strictEqual(publisher.requests().length, 0)
 		for (const [path, name, account] of [
 			["/card", "Work documents", "Work"],
 			["/second", "Personal documents", "Personal"],
@@ -246,7 +245,7 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 				name,
 				confirmed: true,
 			})
-			assert.equal(response.status, 201, await response.clone().text())
+			assert.strictEqual(response.status, 201, await response.clone().text())
 		}
 		/** The pending requests of a Chat. */
 		const requestsFor = async (
@@ -296,22 +295,22 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 				session === alice.session ? aliceBot : bobBot,
 				input,
 			)
-			assert.equal(receipt.delivery, "started")
+			assert.strictEqual(receipt.delivery, "started")
 			chats.set(session, receipt.chat)
 			let view = await settled(send, receipt.chat)
 			const pending = await requestsFor(receipt.chat, session, view)
-			if (input.includes("covered")) assert.equal(pending.length, 0)
+			if (input.includes("covered")) assert.strictEqual(pending.length, 0)
 			for (const entry of input.includes("hold") ? [] : pending) {
 				// The Turn does not wait for the decision. The call has not run yet.
-				assert.equal(view.status, "Completed")
+				assert.strictEqual(view.status, "Completed")
 				assert.match(JSON.stringify(view.response), /pending/)
-				assert.equal(publisher.businessCalls(), callsBefore)
-				assert.equal(
+				assert.strictEqual(publisher.businessCalls(), callsBefore)
+				assert.strictEqual(
 					entry.app?.source.connectionName,
 					input.includes("write") ? "Personal documents" : "Work documents",
 				)
 				if (input.includes("write"))
-					assert.equal(publisher.writes().length, writesBefore)
+					assert.strictEqual(publisher.writes().length, writesBefore)
 				const decided = await post(
 					"/v1/requests/" + entry.id,
 					{
@@ -320,12 +319,12 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 					},
 					session,
 				)
-				assert.equal(decided.status, 200, await decided.clone().text())
+				assert.strictEqual(decided.status, 200, await decided.clone().text())
 				// The decision comes back to the Chat as a message, and starts a new Turn.
 				view = await after(receipt.chat, session, view.turn?.id)
 			}
 			if (input.includes("hold")) return view
-			assert.equal(
+			assert.strictEqual(
 				view.response?.status,
 				"completed",
 				JSON.stringify(view.response),
@@ -357,7 +356,7 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 						}),
 					{ headers: headers() },
 				)
-				assert.equal(response.status, 200, await response.clone().text())
+				assert.strictEqual(response.status, 200, await response.clone().text())
 				const page = (await response.json()) as Page
 				items = [...items, ...page.items]
 				before = page.next
@@ -365,7 +364,7 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 			return items.toReversed()
 		}
 		await run("Read the document")
-		assert.equal(publisher.businessCalls(), 1)
+		assert.strictEqual(publisher.businessCalls(), 1)
 		const aliceChat = chats.get(alice.session)!
 		const firstItems = await chatItems(aliceChat)
 		const history = JSON.stringify(firstItems)
@@ -373,19 +372,19 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 		assert.match(history, /Document content release-plan/)
 		assert.match(history, /read_later/)
 		assert.match(history, /outputSchema/)
-		assert.equal(history.includes("private-Work"), false)
+		assert.strictEqual(history.includes("private-Work"), false)
 		assert.ok(
 			observed[0]?.descriptions.includes(
 				"Apply the proposed change after approval",
 			),
 		)
-		assert.equal(
+		assert.strictEqual(
 			observed[0]?.descriptions.some((value) =>
 				value.includes("hidden_action"),
 			),
 			false,
 		)
-		assert.equal(
+		assert.strictEqual(
 			observed[0]?.descriptions.filter((value) => value.includes("read_later"))
 				.length,
 			2,
@@ -400,11 +399,11 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 		}
 		const invalid = await run("Read with invalid parameters")
 		assert.match(JSON.stringify(invalid.response), /Schema/)
-		assert.equal(publisher.businessCalls(), 1)
+		assert.strictEqual(publisher.businessCalls(), 1)
 		publisher.setInvalidOutput(true)
 		const malformed = await run("Read malformed output")
 		assert.match(JSON.stringify(malformed.response), /Schema/)
-		assert.equal(publisher.businessCalls(), 2)
+		assert.strictEqual(publisher.businessCalls(), 2)
 		publisher.setInvalidOutput(false)
 
 		const bobResult = await run("Bob read the document", bob.session)
@@ -412,19 +411,19 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 			JSON.stringify(bobResult.response),
 			/No matching App capability/,
 		)
-		assert.equal(
+		assert.strictEqual(
 			observed
 				.at(-1)
 				?.descriptions.some((value) => value.includes("Work documents")),
 			false,
 		)
-		assert.equal(publisher.businessCalls(), 2)
+		assert.strictEqual(publisher.businessCalls(), 2)
 		await run("reject write to board")
-		assert.equal(publisher.writes().length, 0)
-		assert.equal(publisher.businessCalls(), 2)
+		assert.strictEqual(publisher.writes().length, 0)
+		assert.strictEqual(publisher.businessCalls(), 2)
 		const written = await run("write reviewed document to board")
-		assert.equal(publisher.writes().length, 1)
-		assert.deepEqual(publisher.writes()[0], {
+		assert.strictEqual(publisher.writes().length, 1)
+		assert.deepStrictEqual(publisher.writes()[0], {
 			account: "Personal",
 			text: "Document content release-plan",
 		})
@@ -432,8 +431,8 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 		publisher.setInputRequired(true)
 		const requiringInput = await run("Read requiring input")
 		assert.match(JSON.stringify(requiringInput.response), /InputRequired/)
-		assert.equal(publisher.inputStarts(), 1)
-		assert.equal(publisher.businessCalls(), 3)
+		assert.strictEqual(publisher.inputStarts(), 1)
+		assert.strictEqual(publisher.businessCalls(), 3)
 		const operationsResponse = await fetch(
 			host.address + `/v1/chats/${aliceChat}/app-operations`,
 			{ headers: headers() },
@@ -446,7 +445,7 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 		)
 		assert.ok(pendingInput)
 		const operationPath = "/v1/app-operations/" + pendingInput.id
-		assert.equal(
+		assert.strictEqual(
 			(
 				await fetch(host.address + operationPath, {
 					headers: headers(bob.session),
@@ -454,7 +453,7 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 			).status,
 			404,
 		)
-		assert.equal(
+		assert.strictEqual(
 			(
 				await post(operationPath + "/inputs", {
 					round: pendingInput.round,
@@ -464,18 +463,18 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 			409,
 		)
 		await host.restart()
-		assert.equal(publisher.inputStarts(), 1)
+		assert.strictEqual(publisher.inputStarts(), 1)
 		const resumed = await post(operationPath + "/inputs", {
 			round: pendingInput.round,
 			responses: {
 				consent: { action: "accept", content: { confirmed: true } },
 			},
 		})
-		assert.equal(resumed.status, 200, await resumed.clone().text())
-		assert.equal((await resumed.json()).status, "Completed")
-		assert.equal(publisher.inputStarts(), 1)
-		assert.equal(publisher.businessCalls(), 4)
-		assert.equal(
+		assert.strictEqual(resumed.status, 200, await resumed.clone().text())
+		assert.strictEqual((await resumed.json()).status, "Completed")
+		assert.strictEqual(publisher.inputStarts(), 1)
+		assert.strictEqual(publisher.businessCalls(), 4)
+		assert.strictEqual(
 			(
 				await post(operationPath + "/inputs", {
 					round: pendingInput.round,
@@ -491,7 +490,7 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 		const unknown = await run("Read a result dropped after processing")
 		publisher.setDropResult(false)
 		assert.match(JSON.stringify(unknown.response), /OutcomeUnknown/)
-		assert.equal(publisher.businessCalls(), 5)
+		assert.strictEqual(publisher.businessCalls(), 5)
 		const savedUnknown = Schema.decodeUnknownSync(
 			Schema.Array(AppExecution.Invocation),
 		)(
@@ -501,14 +500,14 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 				})
 			).json(),
 		)
-		assert.equal(
+		assert.strictEqual(
 			savedUnknown.filter((value) => value.status === "OutcomeUnknown").length,
 			2,
 		)
-		assert.equal(publisher.businessCalls(), 5)
+		assert.strictEqual(publisher.businessCalls(), 5)
 		await run("ordinary read")
 		await run("ordinary covered read")
-		assert.equal(publisher.businessCalls(), 7)
+		assert.strictEqual(publisher.businessCalls(), 7)
 		await host.runtime.runPromise(
 			Effect.gen(function* () {
 				const sql = yield* PgClient.PgClient
@@ -518,8 +517,8 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 		)
 		const saveFailed = await run("write with receipt storage unavailable")
 		assert.match(JSON.stringify(saveFailed.response), /OutcomeUnknown/)
-		assert.equal(publisher.writes().length, 2)
-		assert.equal(publisher.businessCalls(), 8)
+		assert.strictEqual(publisher.writes().length, 2)
+		assert.strictEqual(publisher.businessCalls(), 8)
 		await host.runtime.runPromise(
 			Effect.gen(function* () {
 				const sql = yield* PgClient.PgClient
@@ -529,8 +528,8 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 					readonly body: string
 				}>`select body from openbot_app_invocations`
 				for (const row of rows) {
-					assert.equal(row.body.includes("Document content"), false)
-					assert.equal(row.body.includes("private-Work"), false)
+					assert.strictEqual(row.body.includes("Document content"), false)
+					assert.strictEqual(row.body.includes("private-Work"), false)
 				}
 			}),
 		)
@@ -558,9 +557,9 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 				}),
 			},
 		)
-		assert.equal(disabled.status, 200)
+		assert.strictEqual(disabled.status, 200)
 		// The decision came after the connection changed, so the call never runs.
-		assert.equal(
+		assert.strictEqual(
 			(
 				await post("/v1/requests/" + heldRequest.id, {
 					expected: heldRequest.revision,
@@ -571,8 +570,8 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 		)
 		const notRun = await after(aliceChat, alice.session, held.turn?.id)
 		assert.match(JSON.stringify(notRun.response), /connection changed/)
-		assert.equal(publisher.businessCalls(), 8)
-		assert.equal(
+		assert.strictEqual(publisher.businessCalls(), 8)
+		assert.strictEqual(
 			(
 				await post("/v1/requests/" + heldRequest.id, {
 					expected: heldRequest.revision + 1,
@@ -602,9 +601,9 @@ test("the OpenBot App plugin combines live paged capabilities with caller tools 
 		const execution = Schema.decodeUnknownSync(AppExecution.Result)(
 			resultParts[0]?.result,
 		)
-		assert.equal(execution.source.connectionName, "Work documents")
-		assert.equal(execution.source.name, "read_later")
-		assert.equal(execution.source.kind, "tool")
+		assert.strictEqual(execution.source.connectionName, "Work documents")
+		assert.strictEqual(execution.source.name, "read_later")
+		assert.strictEqual(execution.source.kind, "tool")
 	} finally {
 		await host.close()
 		await publisher.close()

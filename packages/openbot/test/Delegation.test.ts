@@ -1,5 +1,4 @@
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { Item } from "@openbot-build/core"
 import {
 	BotsApi,
@@ -177,7 +176,7 @@ const direct = (
 			"POST",
 			{ input },
 		)
-		assert.equal(sent.status, 202, await sent.clone().text())
+		assert.strictEqual(sent.status, 202, await sent.clone().text())
 		const receipt = Schema.decodeUnknownSync(MessageReceipt)(await sent.json())
 		if (to === undefined) chat = receipt.chat
 		return receipt
@@ -234,7 +233,7 @@ const direct = (
 	}
 }
 
-test(
+it(
 	"a Bot gives slow work to itself without a request, answers the person at once while it runs, and takes more work into the same task",
 	{ timeout: 120000 },
 	async () => {
@@ -247,14 +246,14 @@ test(
 
 			// Work for itself needs no request. The Bot answers at once.
 			const started = await chat.turn("research slowly")
-			assert.equal(started.status, "Completed")
-			assert.equal(started.open.delegations, 1)
+			assert.strictEqual(started.status, "Completed")
+			assert.strictEqual(started.open.delegations, 1)
 			const [research] = await chat.delegations()
 			assert.ok(research !== undefined)
-			assert.equal(research.bot, main)
+			assert.strictEqual(research.bot, main)
 			assert.ok(["queued", "running"].includes(research.status))
 			known.research = research.id
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				await json(
 					Schema.Array(RequestsApi.CapabilityRequest),
 					send(alice.session, "/v1/requests"),
@@ -265,16 +264,16 @@ test(
 			// While the work runs, the person gets an answer at once.
 			const asked = Date.now()
 			const reply = await chat.message("are you there?")
-			assert.equal(reply.delivery, "started")
+			assert.strictEqual(reply.delivery, "started")
 			await chat.says("Yes, I am here.")
 			assert.ok(Date.now() - asked < 2500, String(Date.now() - asked))
-			assert.equal((await chat.delegation(research.id)).status, "running")
+			assert.strictEqual((await chat.delegation(research.id)).status, "running")
 
 			// More work for running work goes into the same task. The work ends only
 			// after the task Chat has read it, so the result is the last answer.
 			await chat.turn("add to the research")
 			const first = await chat.ended(research.id, "completed")
-			assert.equal(first.result, "Tests look fine.")
+			assert.strictEqual(first.result, "Tests look fine.")
 			assert.ok(first.chat !== null)
 			const task = first.chat
 			assert.match(await chat.history(task), /Research done\./)
@@ -288,8 +287,8 @@ test(
 			const next = rounds.find((entry) => entry.id !== research.id)
 			assert.ok(next !== undefined)
 			const second = await chat.ended(next.id, "completed")
-			assert.equal(second.chat, task)
-			assert.equal(second.result, "One more thing done.")
+			assert.strictEqual(second.chat, task)
+			assert.strictEqual(second.result, "One more thing done.")
 			await chat.says("Noted: [OpenBot] The work " + next.id)
 			await chat.rested()
 
@@ -304,8 +303,8 @@ test(
 						entry.status === "completed",
 				),
 			)
-			assert.equal(round.chat, task)
-			assert.equal(round.result, "Written down.")
+			assert.strictEqual(round.chat, task)
+			assert.strictEqual(round.result, "Written down.")
 			await chat.says("Noted: [OpenBot] The work " + round.id)
 			await chat.rested()
 		} finally {
@@ -314,7 +313,7 @@ test(
 	},
 )
 
-test(
+it(
 	"cancelling work also stops the work that it gave away, and a denied request comes back as a message",
 	{ timeout: 120000 },
 	async () => {
@@ -344,7 +343,7 @@ test(
 				"I wait for the deeper task.",
 				(await chat.delegation(deep.id)).chat!,
 			)
-			assert.equal((await chat.delegation(deep.id)).status, "running")
+			assert.strictEqual((await chat.delegation(deep.id)).status, "running")
 
 			// The person cancels the first work. The work below it stops too.
 			const cancelled = await send(
@@ -353,11 +352,11 @@ test(
 				"POST",
 				{},
 			)
-			assert.equal(cancelled.status, 200, await cancelled.clone().text())
+			assert.strictEqual(cancelled.status, 200, await cancelled.clone().text())
 			await chat.ended(deep.id, "cancelled")
 			await chat.ended(deeper.id, "cancelled")
 			const stopped = await chat.rested(deeper.chat!)
-			assert.notEqual(stopped.status, "Completed")
+			assert.notStrictEqual(stopped.status, "Completed")
 			assert.ok(!(await chat.history(deeper.chat!)).includes("Too late."))
 
 			// Work for another Bot needs a decision. A denial comes back as a message.
@@ -389,7 +388,7 @@ test(
 					reason: "Not this week.",
 				},
 			)
-			assert.equal(denied.status, 200, await denied.clone().text())
+			assert.strictEqual(denied.status, 200, await denied.clone().text())
 			const asked = (await chat.delegations()).find(
 				(entry) => entry.bot === other.id,
 			)

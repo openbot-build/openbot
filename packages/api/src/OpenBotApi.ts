@@ -21,6 +21,7 @@ import { BotInvitationsApi, BotsApi } from "./BotsApi.ts"
 import { RequestsApi } from "./RequestsApi.ts"
 import { MemberSettingsApi } from "./MemberSettingsApi.ts"
 import { TriggerHooksApi, TriggersApi } from "./TriggersApi.ts"
+import { FilesApi } from "./FilesApi.ts"
 import { ChannelHooksApi, ChannelLinksApi, ChannelsApi } from "./ChannelsApi.ts"
 import {
 	ComputerHooksApi,
@@ -63,6 +64,7 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 			.middleware(Authorize)
 			.middleware(BotAuth),
 		ChatsApi,
+		FilesApi,
 		DelegationsApi,
 		BotsApi,
 		BotInvitationsApi,

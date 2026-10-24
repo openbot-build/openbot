@@ -1,4 +1,3 @@
-import { mock } from "node:test"
 import { AuthApi } from "@openbot-build/api"
 import { NodeServices } from "@effect/platform-node"
 import { Config, Model, Provider } from "@openbot-build/core"
@@ -66,6 +65,8 @@ export async function start(options: {
 	readonly triggerIntervalMs?: number
 	/** How often the Channel worker looks for new events and messages. */
 	readonly channelIntervalMs?: number
+	/** How often the file garbage collector runs. */
+	readonly fileIntervalMs?: number
 	/** Answers the HTTP calls of the server to other places, such as Slack. */
 	readonly platformFetch?: typeof fetch
 	/** The drivers of the Computer providers. */
@@ -139,17 +140,18 @@ export async function start(options: {
 			scope: "openid profile email",
 		})
 	}
+	// This file also runs alone as a script, outside of Vitest, so it changes
+	// fetch by hand and puts the real one back when it closes.
 	const actualFetch = globalThis.fetch
-	const providerNetwork = mock.method(
-		globalThis,
-		"fetch",
-		(input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-			const url = new URL(input instanceof Request ? input.url : String(input))
-			return url.origin === issuer
-				? providerFetch(input, init)
-				: actualFetch(input, init)
-		},
-	)
+	globalThis.fetch = (input, init) => {
+		const url = new URL(input instanceof Request ? input.url : String(input))
+		return url.origin === issuer
+			? providerFetch(input, init)
+			: actualFetch(input, init)
+	}
+	const restoreFetch = () => {
+		globalThis.fetch = actualFetch
+	}
 	const confirm = Tool.make("ConfirmChange", {
 		description: "Apply the proposed change after approval",
 		parameters: Schema.Struct({ description: Schema.String }),
@@ -307,6 +309,9 @@ export async function start(options: {
 		...(options.channelIntervalMs === undefined
 			? {}
 			: { channels: { interval: options.channelIntervalMs } }),
+		...(options.fileIntervalMs === undefined
+			? {}
+			: { files: { interval: options.fileIntervalMs } }),
 		...(options.computerDrivers === undefined
 			? {}
 			: { computerDrivers: options.computerDrivers }),
@@ -577,13 +582,13 @@ export async function start(options: {
 			consolidations: () => consolidations,
 			close: async () => {
 				await runtime.dispose()
-				providerNetwork.mock.restore()
+				restoreFetch()
 				await migration.dispose()
 				await database.close()
 			},
 		}
 	} catch (error) {
-		providerNetwork.mock.restore()
+		restoreFetch()
 		await migration.dispose()
 		await database.close()
 		throw error

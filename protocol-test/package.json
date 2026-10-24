@@ -7,16 +7,18 @@
 	"scripts": {
 		"build": "tsdown",
 		"start": "node dist/Main.js",
-		"test": "pnpm build && tsc -p tsconfig.test.json && node --test test/*.test.ts"
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
 	},
 	"dependencies": {
 		"@effect/platform-node": "4.0.6",
-		"@openbot-build/protocol": "workspace:*",
 		"@modelcontextprotocol/ext-apps": "2.0.3",
+		"@openbot-build/protocol": "workspace:*",
 		"effect": "4.0.6"
 	},
 	"devDependencies": {
-		"@modelcontextprotocol/client": "2.3.1"
+		"@effect/vitest": "4.0.6",
+		"@modelcontextprotocol/client": "2.3.1",
+		"vitest": "5.0.5"
 	},
 	"files": [
 		"dist",

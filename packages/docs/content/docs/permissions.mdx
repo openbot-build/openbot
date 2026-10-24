@@ -28,6 +28,8 @@ List them with `GET /v1/organization/permission_groups`.
 | `responses.run`            | Chat              | Send messages to Bots, so that they work in a Chat.                                        |
 | `chats.read`               | Chat              | Read Chats, their history and the work that they gave away.                                |
 | `chats.write`              | Chat              | Change, interrupt and delete Chats, and cancel the work that they gave away.               |
+| `files.read`               | File              | Read your [files](/docs/files) and their bytes.                                            |
+| `files.write`              | File              | Upload and delete your files.                                                              |
 | `requests.resolve`         | Request           | Answer the requests of your Bots for new capabilities.                                     |
 | `bots.read`                | Bot               | Read Bots, their memory, Rules and Grants.                                                 |
 | `bots.write`               | Bot               | Create and change Bots, their memory, Rules and Grants.                                    |
@@ -85,6 +87,7 @@ A resource key is a name with parts that dots separate:
 | The organization         | `openbot.org.<org>`                                     |
 | One member               | `openbot.org.<org>.user.<user>`                         |
 | One Chat                 | `openbot.org.<org>.user.<user>.chat.<chat>`             |
+| One file                 | `openbot.org.<org>.user.<user>.file.<file>`             |
 | One Bot of a member      | `openbot.org.<org>.user.<user>.bot.<bot>`               |
 | One shared Bot           | `openbot.org.<org>.bot.<bot>`                           |
 | One trigger of a member  | `openbot.org.<org>.user.<user>.trigger.<trigger>`       |

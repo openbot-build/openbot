@@ -1,5 +1,4 @@
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { Chat, Item } from "@openbot-build/core"
 import * as BotMemory from "../src/plugins/memory/BotMemory.ts"
 import * as Audience from "../src/plugins/memory/Audience.ts"
@@ -42,7 +41,7 @@ const ids = () => {
 	return () => "e" + String((next += 1))
 }
 
-test("a fact gets the tags of OpenBot from its source Items", () => {
+it("a fact gets the tags of OpenBot from its source Items", () => {
 	const applied = BotMemory.apply({
 		pool: [],
 		evidence,
@@ -58,9 +57,9 @@ test("a fact gets the tags of OpenBot from its source Items", () => {
 		now: 1,
 		id: ids(),
 	})
-	assert.equal(applied.rejected, 0)
+	assert.strictEqual(applied.rejected, 0)
 	const [fact] = applied.entries
-	assert.deepEqual(
+	assert.deepStrictEqual(
 		[...(fact?.tags ?? [])].sort(),
 		[
 			"app:github_read",
@@ -91,7 +90,7 @@ test("a fact gets the tags of OpenBot from its source Items", () => {
 	)
 })
 
-test("an App result alone never becomes memory, and unknown sources are refused", () => {
+it("an App result alone never becomes memory, and unknown sources are refused", () => {
 	const applied = BotMemory.apply({
 		pool: [],
 		evidence,
@@ -114,11 +113,11 @@ test("an App result alone never becomes memory, and unknown sources are refused"
 		now: 1,
 		id: ids(),
 	})
-	assert.equal(applied.entries.length, 0)
-	assert.equal(applied.rejected, 1)
+	assert.strictEqual(applied.entries.length, 0)
+	assert.strictEqual(applied.rejected, 1)
 })
 
-test("an observation comes from all its people, but only people who see every source see it", () => {
+it("an observation comes from all its people, but only people who see every source see it", () => {
 	const next = ids()
 	const applied = BotMemory.apply({
 		pool: [],
@@ -154,12 +153,12 @@ test("an observation comes from all its people, but only people who see every so
 		(entry) => entry.layer === "observation",
 	)
 	assert.ok(observation !== undefined)
-	assert.equal(observation.confidence, 1)
-	assert.deepEqual(Audience.peopleOf(observation.tags).sort(), [
+	assert.strictEqual(observation.confidence, 1)
+	assert.deepStrictEqual(Audience.peopleOf(observation.tags).sort(), [
 		"u-ana",
 		"u-bob",
 	])
-	assert.deepEqual(Audience.audiencesOf(observation.tags), [])
+	assert.deepStrictEqual(Audience.audiencesOf(observation.tags), [])
 	assert.ok(
 		!Audience.visible(observation.tags, {
 			organizationId: "org-a",
@@ -181,7 +180,7 @@ test("an observation comes from all its people, but only people who see every so
 		now: 2,
 		id: next,
 	})
-	assert.equal(widened.reasons.length, 1)
+	assert.strictEqual(widened.reasons.length, 1)
 	assert.ok(
 		Audience.visible(widened.entries[0]!.tags, {
 			organizationId: "org-a",
@@ -190,7 +189,7 @@ test("an observation comes from all its people, but only people who see every so
 	)
 })
 
-test("the memory Bot cannot change pinned or retracted entries", () => {
+it("the memory Bot cannot change pinned or retracted entries", () => {
 	const pinned = Option.getOrThrow(
 		BotMemory.edit({
 			pool: [],
@@ -204,7 +203,7 @@ test("the memory Bot cannot change pinned or retracted entries", () => {
 			id: () => "p1",
 		}),
 	)
-	assert.equal(pinned.layer, "pinned")
+	assert.strictEqual(pinned.layer, "pinned")
 	const applied = BotMemory.apply({
 		pool: [pinned],
 		evidence: [],
@@ -215,11 +214,11 @@ test("the memory Bot cannot change pinned or retracted entries", () => {
 		now: 2,
 		id: ids(),
 	})
-	assert.equal(applied.entries.length, 0)
-	assert.equal(applied.rejected, 2)
+	assert.strictEqual(applied.entries.length, 0)
+	assert.strictEqual(applied.rejected, 2)
 })
 
-test("Forget takes back only the part of the person who forgets", () => {
+it("Forget takes back only the part of the person who forgets", () => {
 	const shared: BotMemory.Entry = {
 		id: "s1",
 		layer: "fact",
@@ -246,7 +245,7 @@ test("Forget takes back only the part of the person who forgets", () => {
 			id: ids(),
 		}),
 	)
-	assert.equal(after.status, "active")
+	assert.strictEqual(after.status, "active")
 	assert.ok(!after.tags.includes("from:u-ana"))
 	assert.ok(!Audience.visible(after.tags, { ...ana, person: "u-ana" }))
 	const bob = { userId: "u-bob", organizationId: "org-a" }
@@ -259,7 +258,7 @@ test("Forget takes back only the part of the person who forgets", () => {
 			id: ids(),
 		}),
 	)
-	assert.equal(gone.status, "retracted")
+	assert.strictEqual(gone.status, "retracted")
 	// A person cannot forget an entry that is not for them.
 	assert.ok(
 		Option.isNone(
@@ -274,7 +273,7 @@ test("Forget takes back only the part of the person who forgets", () => {
 	)
 })
 
-test("a Channel group sees only group entries and entries for everyone", () => {
+it("a Channel group sees only group entries and entries for everyone", () => {
 	const group = ["from:u-ana", "org:org-a", "for:channel:c-1"]
 	const own = ["from:u-ana", "org:org-a", "for:person:u-ana"]
 	const everyone = ["from:u-ana", "org:org-a", "for:bot"]
@@ -298,15 +297,15 @@ test("a Channel group sees only group entries and entries for everyone", () => {
 	)
 })
 
-test("the rewrite check accepts only added words", () => {
-	assert.deepEqual(
+it("the rewrite check accepts only added words", () => {
+	assert.deepStrictEqual(
 		insertions(
 			"fix the tests",
 			"fix the tests (run them with devenv shell; Ana likes small commits)",
 		),
 		Option.some(["(run them with devenv shell; Ana likes small commits)"]),
 	)
-	assert.deepEqual(
+	assert.deepStrictEqual(
 		insertions("fix the tests", "please fix the\ntests now"),
 		Option.some(["please", "now"]),
 	)

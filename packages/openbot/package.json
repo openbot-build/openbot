@@ -25,7 +25,7 @@
 		"build": "tsdown",
 		"start": "node dist/Main.js",
 		"start:development": "node dist/DevelopmentMain.js",
-		"test": "pnpm build && tsc -p tsconfig.test.json && node --test test/*.test.ts",
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run",
 		"migrate": "node dist/Migrate.js",
 		"setup": "node dist/Setup.js"
 	},
@@ -50,7 +50,9 @@
 		"undici": "8.12.3"
 	},
 	"devDependencies": {
+		"@effect/vitest": "4.0.6",
 		"@openbot-build/client": "workspace:*",
-		"@types/pg": "8.23.1"
+		"@types/pg": "8.23.1",
+		"vitest": "5.0.5"
 	}
 }

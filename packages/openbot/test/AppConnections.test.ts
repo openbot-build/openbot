@@ -1,6 +1,5 @@
 // @effect-diagnostics strictEffectProvide:off
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { ConnectionsApi as Api, Identity, AuthApi } from "@openbot-build/api"
 import { CatalogDiscovery, Store, Document } from "@openbot-build/protocol"
@@ -26,7 +25,7 @@ const bob = { organizationId: "organization", userId: "bob" }
 const asOwner = <A, E, R>(operation: Effect.Effect<A, E, R>, owner = alice) =>
 	Effect.provideService(operation, Identity, owner)
 
-test("confirmed App connections save encrypted configuration, reject changes, and keep accounts apart", async () => {
+it("confirmed App connections save encrypted configuration, reject changes, and keep accounts apart", async () => {
 	const database = await Postgres.start()
 	const publisher = await Fixture.start()
 	const storage = Layer.merge(
@@ -59,9 +58,9 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 						publisher.origin + "/catalog?account=private-catalog-input",
 					),
 				)
-				assert.equal(draft.discovery._tag, "Multiple")
-				assert.deepEqual(yield* asOwner(connections.listConnections), [])
-				assert.equal(
+				assert.strictEqual(draft.discovery._tag, "Multiple")
+				assert.deepStrictEqual(yield* asOwner(connections.listConnections), [])
+				assert.strictEqual(
 					(yield* Effect.flip(
 						asOwner(connections.getConnectionDraft(draft.id), bob),
 					))._tag,
@@ -79,17 +78,22 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 					},
 					confirmed: true,
 				}
-				assert.equal(
+				assert.strictEqual(
 					(yield* Effect.flip(
 						asOwner(connections.createConnection({ ...input, values: {} })),
 					))._tag,
 					"ConnectionConfigurationInvalid",
 				)
 				const saved = yield* asOwner(connections.createConnection(input))
-				assert.equal(saved.name, "Project documents")
-				assert.equal(saved.availability._tag, "Unverified")
-				assert.deepEqual(saved.configuration, { "header:X-Account": "Work" })
-				assert.equal(JSON.stringify(saved).includes("private-app-token"), false)
+				assert.strictEqual(saved.name, "Project documents")
+				assert.strictEqual(saved.availability._tag, "Unverified")
+				assert.deepStrictEqual(saved.configuration, {
+					"header:X-Account": "Work",
+				})
+				assert.strictEqual(
+					JSON.stringify(saved).includes("private-app-token"),
+					false,
+				)
 				const duplicates = yield* Effect.all(
 					[
 						asOwner(connections.createConnection(input)),
@@ -97,22 +101,22 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 					],
 					{ concurrency: 2 },
 				)
-				assert.equal(duplicates[0].id, saved.id)
-				assert.equal(duplicates[1].id, saved.id)
+				assert.strictEqual(duplicates[0].id, saved.id)
+				assert.strictEqual(duplicates[1].id, saved.id)
 				const rows = yield* sql<{
 					readonly body: string
 				}>`SELECT body FROM openbot_app_connections`
-				assert.equal(rows.length, 1)
-				assert.equal(rows[0]?.body.includes("private-app-token"), false)
+				assert.strictEqual(rows.length, 1)
+				assert.strictEqual(rows[0]?.body.includes("private-app-token"), false)
 				const jobs = yield* sql`SELECT * FROM openbot_app_index_jobs`
-				assert.equal(jobs.length, 1)
+				assert.strictEqual(jobs.length, 1)
 				const publicData = jobs
 					.flatMap((row) => Object.values(row).map(String))
 					.join(" ")
-				assert.equal(publicData.includes("private-app-token"), false)
-				assert.equal(publicData.includes("private-catalog-input"), false)
-				assert.equal(Object.keys(jobs[0] ?? {}).includes("owner"), false)
-				assert.equal(
+				assert.strictEqual(publicData.includes("private-app-token"), false)
+				assert.strictEqual(publicData.includes("private-catalog-input"), false)
+				assert.strictEqual(Object.keys(jobs[0] ?? {}).includes("owner"), false)
+				assert.strictEqual(
 					(yield* Effect.flip(
 						asOwner(connections.getConnection(saved.id), bob),
 					))._tag,
@@ -129,7 +133,7 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 						connections.createConnection({ ...input, draftId: changed.id }),
 					),
 				)
-				assert.equal(failure._tag, "ConnectionConflict")
+				assert.strictEqual(failure._tag, "ConnectionConflict")
 				const expired = { ...draft, id: "expired", expiresAt: 0 }
 				const db = yield* Db.make
 				yield* StoredConnections.saveDraft(db, ownerKey(alice), expired)
@@ -138,7 +142,7 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 						connections.createConnection({ ...input, draftId: expired.id }),
 					),
 				)
-				assert.equal(expiredResult._tag, "ConnectionConflict")
+				assert.strictEqual(expiredResult._tag, "ConnectionConflict")
 				const bobDraft = yield* asOwner(
 					connections.prepareConnection(
 						publisher.origin + "/card?edition=team",
@@ -151,7 +155,7 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 				yield* sql.unsafe(
 					"CREATE TRIGGER reject_app_connection BEFORE INSERT ON openbot_app_connections FOR EACH ROW EXECUTE FUNCTION reject_app_connection()",
 				)
-				assert.equal(
+				assert.strictEqual(
 					(yield* Effect.flip(
 						asOwner(
 							connections.createConnection({ ...input, draftId: bobDraft.id }),
@@ -164,21 +168,24 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 					"DROP TRIGGER reject_app_connection ON openbot_app_connections",
 				)
 				yield* sql.unsafe("DROP FUNCTION reject_app_connection()")
-				assert.deepEqual(
+				assert.deepStrictEqual(
 					yield* db
 						.select()
 						.from(appRecords)
 						.where(eq(appRecords.owner, ownerKey(bob))),
 					[],
 				)
-				assert.deepEqual(yield* asOwner(connections.listConnections, bob), [])
+				assert.deepStrictEqual(
+					yield* asOwner(connections.listConnections, bob),
+					[],
+				)
 				yield* sql.unsafe(
 					"CREATE FUNCTION reject_index_job() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Index work storage unavailable'; END $$",
 				)
 				yield* sql.unsafe(
 					"CREATE TRIGGER reject_index_job BEFORE INSERT ON openbot_app_index_jobs FOR EACH ROW EXECUTE FUNCTION reject_index_job()",
 				)
-				assert.equal(
+				assert.strictEqual(
 					(yield* Effect.flip(
 						asOwner(
 							connections.createConnection({ ...input, draftId: bobDraft.id }),
@@ -191,14 +198,17 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 					"DROP TRIGGER reject_index_job ON openbot_app_index_jobs",
 				)
 				yield* sql.unsafe("DROP FUNCTION reject_index_job()")
-				assert.deepEqual(
+				assert.deepStrictEqual(
 					yield* db
 						.select()
 						.from(appRecords)
 						.where(eq(appRecords.owner, ownerKey(bob))),
 					[],
 				)
-				assert.deepEqual(yield* asOwner(connections.listConnections, bob), [])
+				assert.deepStrictEqual(
+					yield* asOwner(connections.listConnections, bob),
+					[],
+				)
 				return saved.id
 			}),
 		)
@@ -207,13 +217,13 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 		await runtime.runPromise(
 			Effect.gen(function* () {
 				const connections = yield* Connections.Connections
-				assert.equal(
+				assert.strictEqual(
 					(yield* asOwner(connections.getConnection(id))).enabled,
 					true,
 				)
 				const db = yield* Db.make
 				const secrets = yield* Secrets.Secrets
-				assert.equal(
+				assert.strictEqual(
 					Redacted.value(
 						(yield* StoredConnections.get(db, secrets, ownerKey(alice), id))
 							.connection.configuration,
@@ -229,7 +239,7 @@ test("confirmed App connections save encrypted configuration, reject changes, an
 	}
 })
 
-test("connection limits stay atomic across concurrent database pools and storage failures stay failures", async () => {
+it("connection limits stay atomic across concurrent database pools and storage failures stay failures", async () => {
 	const database = await Postgres.start()
 	const layer = () =>
 		Layer.merge(
@@ -287,11 +297,11 @@ test("connection limits stay atomic across concurrent database pools and storage
 				save(index % 2 === 0 ? first : second, String(index)),
 			),
 		)
-		assert.equal(
+		assert.strictEqual(
 			results.filter((result) => result._tag === "Success").length,
 			30,
 		)
-		assert.equal(
+		assert.strictEqual(
 			results.filter((result) => result._tag === "Failure").length,
 			5,
 		)
@@ -302,7 +312,7 @@ test("connection limits stay atomic across concurrent database pools and storage
 	}
 })
 
-test("ordinary HTTP clients prepare and confirm protected Apps without trusting caller authorization claims", async () => {
+it("ordinary HTTP clients prepare and confirm protected Apps without trusting caller authorization claims", async () => {
 	const publisher = await Fixture.start()
 	const host = await BrowserHost.start({
 		publicOrigin: "https://openbot.fixture.test",
@@ -324,7 +334,7 @@ test("ordinary HTTP clients prepare and confirm protected Apps without trusting 
 			headers,
 			body: JSON.stringify({ input: publisher.origin + "/card?edition=team" }),
 		})
-		assert.equal(prepared.status, 201)
+		assert.strictEqual(prepared.status, 201)
 		const draft = await prepared.json()
 		const response = await fetch(host.address + "/v1/connections", {
 			method: "POST",
@@ -340,16 +350,19 @@ test("ordinary HTTP clients prepare and confirm protected Apps without trusting 
 				requiresAuthorization: false,
 			}),
 		})
-		assert.equal(response.status, 201)
+		assert.strictEqual(response.status, 201)
 		const connection = await response.json()
-		assert.equal(connection.availability._tag, "PendingAuthorization")
-		assert.equal((await fetch(host.address + "/v1/connections")).status, 401)
+		assert.strictEqual(connection.availability._tag, "PendingAuthorization")
+		assert.strictEqual(
+			(await fetch(host.address + "/v1/connections")).status,
+			401,
+		)
 		const badOrigin = await fetch(host.address + "/v1/connection-drafts", {
 			method: "POST",
 			headers: { ...headers, origin: "https://foreign.test" },
 			body: JSON.stringify({ input: publisher.origin + "/card" }),
 		})
-		assert.equal(badOrigin.status, 403)
+		assert.strictEqual(badOrigin.status, 403)
 	} finally {
 		await host.close()
 		await publisher.close()

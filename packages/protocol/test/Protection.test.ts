@@ -1,5 +1,4 @@
 import { Array as EffectArray, Effect, Layer, Redacted, Schema } from "effect"
-import assert from "node:assert/strict"
 import {
 	PublisherProtection,
 	McpPublisher,
@@ -7,7 +6,7 @@ import {
 	Document,
 	Protection,
 } from "@openbot-build/protocol"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import {
 	Client,
 	StreamableHTTPClientTransport,
@@ -16,7 +15,7 @@ import {
 import { McpSchema, McpServer, Tool, Toolkit } from "effect/ai"
 import { HttpRouter } from "effect/http"
 
-test("Protected publisher checks real identity, scopes and audience before it filters lists or runs tools", async () => {
+it("Protected publisher checks real identity, scopes and audience before it filters lists or runs tools", async () => {
 	const origin = "https://notes.example"
 	const resource = origin + "/mcp"
 	const issuer = "https://accounts.example"
@@ -129,11 +128,14 @@ test("Protected publisher checks real identity, scopes and audience before it fi
 		: false = true
 	assert.ok(verifierRequired)
 	try {
-		assert.equal((await app.handler(new Request(origin + "/card"))).status, 200)
+		assert.strictEqual(
+			(await app.handler(new Request(origin + "/card"))).status,
+			200,
+		)
 		const prm = await app.handler(
 			new Request(origin + "/.well-known/oauth-protected-resource/mcp"),
 		)
-		assert.equal(
+		assert.strictEqual(
 			(
 				await Effect.runPromise(
 					Authorization.ResourceMetadata.decode(await prm.json()),
@@ -165,13 +167,13 @@ test("Protected publisher checks real identity, scopes and audience before it fi
 					}),
 				}),
 			)
-			assert.equal(response.status, token === "scope" ? 403 : 401)
+			assert.strictEqual(response.status, token === "scope" ? 403 : 401)
 			assert.match(
 				response.headers.get("www-authenticate") ?? "",
 				/resource_metadata=/,
 			)
 		}
-		assert.equal(calls, 0)
+		assert.strictEqual(calls, 0)
 		for (const account of ["alice", "bob"]) {
 			const client = new Client(
 				{ name: "independent", version: "1.0.0" },
@@ -196,16 +198,16 @@ test("Protected publisher checks real identity, scopes and audience before it fi
 				}),
 			)
 			const list = await client.listTools()
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				list.tools.map((tool) => tool.name),
 				[account === "alice" ? "AliceNote" : "BobNote"],
 			)
-			assert.equal(list["cacheScope"], "private")
+			assert.strictEqual(list["cacheScope"], "private")
 			const result = await client.callTool({
 				name: list.tools[0]?.name ?? "",
 				arguments: {},
 			})
-			assert.deepEqual(result.structuredContent, {
+			assert.deepStrictEqual(result.structuredContent, {
 				subject: account,
 			})
 			const before: number = calls
@@ -228,10 +230,10 @@ test("Protected publisher checks real identity, scopes and audience before it fi
 					}),
 				}),
 			)
-			assert.equal(denied.status, 403)
-			assert.equal(calls, before)
+			assert.strictEqual(denied.status, 403)
+			assert.strictEqual(calls, before)
 		}
-		assert.equal(calls, 2)
+		assert.strictEqual(calls, 2)
 	} finally {
 		await Promise.all(clients.map((client) => client.close()))
 		await app.dispose()

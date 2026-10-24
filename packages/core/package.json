@@ -40,12 +40,14 @@
 	},
 	"scripts": {
 		"build": "tsdown",
-		"test": "pnpm build && tsc -p tsconfig.test.json && node --test test/*.test.ts"
+		"test": "pnpm build && tsc -p tsconfig.test.json && vitest run"
 	},
 	"peerDependencies": {
 		"effect": "4.0.6"
 	},
 	"devDependencies": {
-		"effect": "4.0.6"
+		"@effect/vitest": "4.0.6",
+		"effect": "4.0.6",
+		"vitest": "5.0.5"
 	}
 }

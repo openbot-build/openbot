@@ -183,6 +183,9 @@ export const layer = (
 					},
 					verification: { modelName: "openbot_auth_verification" },
 					advanced: {
+						// better-auth turns its Origin check off when NODE_ENV is "test" or
+						// TEST is set. Keep the check on, whatever the environment says.
+						disableOriginCheck: false,
 						// Explicit __Host names replace the __Secure prefix that the SDK adds itself.
 						useSecureCookies: false,
 						defaultCookieAttributes: {

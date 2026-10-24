@@ -57,18 +57,27 @@ docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
   --admin-email=alice@example.com
 ```
 
-| Flag                   | Required     | What it does                                                                                                   |
-| ---------------------- | ------------ | -------------------------------------------------------------------------------------------------------------- |
-| `--public-origin`      | Yes          | The public HTTPS origin of OpenBot, such as `https://api.example.com`. No path and no trailing slash.          |
-| `--oidc-issuer`        | With the ID  | The HTTPS address of the platform OpenID Connect provider, with no trailing slash.                             |
-| `--oidc-client-id`     | With issuer  | The client ID at that provider.                                                                                |
-| `--oidc-client-secret` | No           | The client secret. Leave it out for a public client that uses PKCE.                                            |
-| `--admin-email`        | At least one | A person with this verified email becomes a platform admin when they sign in. Repeat the flag for more people. |
-| `--force`              | No           | Write the settings even when they exist. Use it only for recovery, when no platform admin can sign in.         |
+| Flag                     | Required          | What it does                                                                                                   |
+| ------------------------ | ----------------- | -------------------------------------------------------------------------------------------------------------- |
+| `--public-origin`        | Yes               | The public HTTPS origin of OpenBot, such as `https://api.example.com`. No path and no trailing slash.          |
+| `--oidc-issuer`          | With the ID       | The HTTPS address of the platform OpenID Connect provider, with no trailing slash.                             |
+| `--oidc-client-id`       | With issuer       | The client ID at that provider.                                                                                |
+| `--oidc-client-secret`   | No                | The client secret. Leave it out for a public client that uses PKCE.                                            |
+| `--admin-email`          | At least one      | A person with this verified email becomes a platform admin when they sign in. Repeat the flag for more people. |
+| `--s3-endpoint`          | With the bucket   | The address of the object storage for [files](/docs/files), such as `https://s3.us-east-1.amazonaws.com`.      |
+| `--s3-public-endpoint`   | No                | The address where clients put files with a direct upload, when it is not `--s3-endpoint`.                      |
+| `--s3-region`            | No                | The region of the storage. The default is `us-east-1`.                                                         |
+| `--s3-bucket`            | With the endpoint | The bucket for files.                                                                                          |
+| `--s3-access-key-id`     | With the endpoint | The access key ID for the storage.                                                                             |
+| `--s3-secret-access-key` | With the endpoint | The secret key for the storage.                                                                                |
+| `--s3-path-style`        | No                | Put the bucket in the path. MinIO and RustFS need it.                                                          |
+| `--force`                | No                | Write the settings even when they exist. Use it only for recovery, when no platform admin can sign in.         |
 
 Set `--oidc-issuer` and `--oidc-client-id` together, or leave both out. Leave both out when people sign in only through the [SSO connections](/docs/sso) of organizations.
 
 A command line can show up in process lists. So you can give the client secret in the environment variable `OPENBOT_SETUP_OIDC_CLIENT_SECRET` instead of `--oidc-client-secret`. This is the better way.
+
+Set the four storage flags `--s3-endpoint`, `--s3-bucket`, `--s3-access-key-id` and `--s3-secret-access-key` together, or leave all of them out. You can give the secret key in `OPENBOT_SETUP_S3_SECRET_ACCESS_KEY` instead. Without them, the platform has no storage until an admin sets `files` in the platform settings.
 
 Setup also makes a random sign-in secret. Better Auth uses it to sign the sign-in cookies. OpenBot stores it encrypted, and you never see it.
 
@@ -114,6 +123,21 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		"bot": null,
 		"token": null
 	},
+	"files": {
+		"storage": null,
+		"uploads": { "server": true, "direct": true },
+		"maxBytes": 20971520,
+		"quotaBytes": null,
+		"mediaTypes": [
+			"image/png",
+			"image/jpeg",
+			"image/gif",
+			"image/webp",
+			"application/pdf",
+			"text/plain"
+		],
+		"unusedMs": 86400000
+	},
 	"updatedAt": "2026-10-21T09:00:00.000Z"
 }
 ```
@@ -129,6 +153,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `codeMode`             | Whether Bots can use Code Mode, and its limits. See [Code Mode](/docs/code-mode#turn-on-code-mode).                     |
 | `rateLimit`            | How many API requests each caller may send in one minute. See [Rate limit](/docs/usage#rate-limit).                     |
 | `tokenRate`            | The highest token rates of each scope. Organizations can only set lower ones. See [Token rate](/docs/usage#token-rate). |
+| `files`                | The object storage and the limits for [files](/docs/files#set-up-storage).                                              |
 | `updatedAt`            | When the settings last changed.                                                                                         |
 
 ### Secrets never come back

@@ -1,8 +1,7 @@
 // Each test owns the Layers that it provides at the point where it runs.
 // @effect-diagnostics strictEffectProvide:off
 
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { Effect, Layer, Option, Redacted, Schema, Stream } from "effect"
 import { Decision, DecisionModel } from "effect/ai"
 import { HttpClient, HttpClientResponse } from "effect/http"
@@ -72,30 +71,37 @@ const Triage = Decision.make({
 	},
 })
 
-test("a typesafe decision model sends its key, address and upstream model, and gives checked answers", async () => {
-	const http = fakeTypeSafe()
-	const answer = await Effect.runPromise(
-		DecisionModel.decide(Triage, { input: "I paid two times." }).pipe(
-			Effect.provide(
-				TypeSafeProvider.layer({
-					apiKey: Redacted.make("ts-key-0123"),
-					apiUrl: "https://decisions.example.com/v1",
-					upstreamModel: "jev-latest",
-				}).pipe(Layer.provide(http.layer)),
-			),
-		),
-	)
-	assert.equal(answer.answers.route.label, "billing")
-	assert.equal(answer.answers.route.probabilities.technical, 0.2)
-	assert.equal(answer.usage.inputTokens, 12)
-	assert.equal(http.sent.length, 1)
-	const [request] = http.sent
-	assert.equal(request?.url, "https://decisions.example.com/v1/systemone")
-	assert.equal(request?.authorization, "Bearer ts-key-0123")
-	assert.equal(request?.body.model, "jev-latest")
-	assert.equal(request?.body.state, "I paid two times.")
-	assert.equal(request?.body.questions["route"]?.type, "choice")
-})
+it.effect(
+	"a typesafe decision model sends its key, address and upstream model, and gives checked answers",
+	() =>
+		Effect.gen(function* () {
+			const http = fakeTypeSafe()
+			const answer = yield* DecisionModel.decide(Triage, {
+				input: "I paid two times.",
+			}).pipe(
+				Effect.provide(
+					TypeSafeProvider.layer({
+						apiKey: Redacted.make("ts-key-0123"),
+						apiUrl: "https://decisions.example.com/v1",
+						upstreamModel: "jev-latest",
+					}).pipe(Layer.provide(http.layer)),
+				),
+			)
+			assert.strictEqual(answer.answers.route.label, "billing")
+			assert.strictEqual(answer.answers.route.probabilities.technical, 0.2)
+			assert.strictEqual(answer.usage.inputTokens, 12)
+			assert.strictEqual(http.sent.length, 1)
+			const [request] = http.sent
+			assert.strictEqual(
+				request?.url,
+				"https://decisions.example.com/v1/systemone",
+			)
+			assert.strictEqual(request?.authorization, "Bearer ts-key-0123")
+			assert.strictEqual(request?.body.model, "jev-latest")
+			assert.strictEqual(request?.body.state, "I paid two times.")
+			assert.strictEqual(request?.body.questions["route"]?.type, "choice")
+		}),
+)
 
 const organizationId = "org_a"
 
@@ -190,72 +196,79 @@ const selection = (providerId: string) =>
 		model: "jev" as Config.Selection["model"],
 	})
 
-test("the registry builds the decision model that the organization settings name", async () => {
-	const http = fakeTypeSafe()
-	const label = await Effect.runPromise(
+it.effect(
+	"the registry builds the decision model that the organization settings name",
+	() =>
 		Effect.gen(function* () {
-			const registry = yield* ModelRegistry.ModelRegistry
-			const model = yield* registry.decision(organizationId)
-			assert.ok(Option.isSome(model))
-			const again = yield* registry.decision(organizationId)
-			// The registry builds each decision model once.
-			assert.equal(Option.getOrThrow(again), model.value)
-			const answer = yield* DecisionModel.decide(Triage, {
-				input: "I paid two times.",
-			}).pipe(Effect.provideService(DecisionModel.DecisionModel, model.value))
-			return answer.answers.route.label
-		}).pipe(
-			Effect.provide(
-				registryWith({
-					providers: [provider({ id: "prov_ts", kind: "typesafe" })],
-					decisionModel: selection("prov_ts"),
-					http: http.layer,
-				}),
-			),
-		),
-	)
-	assert.equal(label, "billing")
-	assert.equal(http.sent[0]?.url, "https://decisions.example.com/v1/systemone")
-	assert.equal(http.sent[0]?.body.model, "jev-latest")
-})
-
-test("the registry gives no decision model when the settings name none, and an error when the model is gone", async () => {
-	const none = await Effect.runPromise(
-		Effect.flatMap(ModelRegistry.ModelRegistry, (registry) =>
-			registry.decision(organizationId),
-		).pipe(
-			Effect.provide(
-				registryWith({
-					providers: [provider({ id: "prov_ts", kind: "typesafe" })],
-					decisionModel: null,
-					http: fakeTypeSafe().layer,
-				}),
-			),
-		),
-	)
-	assert.ok(Option.isNone(none))
-	for (const [providers, message] of [
-		[[], /No provider of the organization offers/],
-		[
-			[provider({ id: "prov_ts", kind: "openai-compat" })],
-			/openai-compat provider yet/,
-		],
-	] as const) {
-		const failed = await Effect.runPromise(
-			Effect.flatMap(ModelRegistry.ModelRegistry, (registry) =>
-				registry.decision(organizationId),
-			).pipe(
-				Effect.flip,
+			const http = fakeTypeSafe()
+			const label = yield* Effect.gen(function* () {
+				const registry = yield* ModelRegistry.ModelRegistry
+				const model = yield* registry.decision(organizationId)
+				assert.ok(Option.isSome(model))
+				const again = yield* registry.decision(organizationId)
+				// The registry builds each decision model once.
+				assert.strictEqual(Option.getOrThrow(again), model.value)
+				const answer = yield* DecisionModel.decide(Triage, {
+					input: "I paid two times.",
+				}).pipe(Effect.provideService(DecisionModel.DecisionModel, model.value))
+				return answer.answers.route.label
+			}).pipe(
 				Effect.provide(
 					registryWith({
-						providers,
+						providers: [provider({ id: "prov_ts", kind: "typesafe" })],
 						decisionModel: selection("prov_ts"),
+						http: http.layer,
+					}),
+				),
+			)
+			assert.strictEqual(label, "billing")
+			assert.strictEqual(
+				http.sent[0]?.url,
+				"https://decisions.example.com/v1/systemone",
+			)
+			assert.strictEqual(http.sent[0]?.body.model, "jev-latest")
+		}),
+)
+
+it.effect(
+	"the registry gives no decision model when the settings name none, and an error when the model is gone",
+	() =>
+		Effect.gen(function* () {
+			const none = yield* Effect.flatMap(
+				ModelRegistry.ModelRegistry,
+				(registry) => registry.decision(organizationId),
+			).pipe(
+				Effect.provide(
+					registryWith({
+						providers: [provider({ id: "prov_ts", kind: "typesafe" })],
+						decisionModel: null,
 						http: fakeTypeSafe().layer,
 					}),
 				),
-			),
-		)
-		assert.ok(failed instanceof Config.ModelConfigurationError)
-		assert.match(failed.message, message)
-	}
-})
+			)
+			assert.ok(Option.isNone(none))
+			for (const [providers, message] of [
+				[[], /No provider of the organization offers/],
+				[
+					[provider({ id: "prov_ts", kind: "openai-compat" })],
+					/openai-compat provider yet/,
+				],
+			] as const) {
+				const failed = yield* Effect.flatMap(
+					ModelRegistry.ModelRegistry,
+					(registry) => registry.decision(organizationId),
+				).pipe(
+					Effect.flip,
+					Effect.provide(
+						registryWith({
+							providers,
+							decisionModel: selection("prov_ts"),
+							http: fakeTypeSafe().layer,
+						}),
+					),
+				)
+				assert.ok(failed instanceof Config.ModelConfigurationError)
+				assert.match(failed.message, message)
+			}
+		}),
+)

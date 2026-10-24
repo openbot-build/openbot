@@ -1,6 +1,5 @@
 import { memberOf } from "./Caller.ts"
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { AuthApi } from "@openbot-build/api"
 import { Effect, Layer, ManagedRuntime, Redacted, Schema } from "effect"
@@ -14,7 +13,7 @@ import * as Postgres from "./PostgresTest.ts"
 import * as Organizations from "./Organizations.ts"
 import { bot, message, model, settled, type Send } from "./Messages.ts"
 
-test("development Apps show protocol, requirement, expiry and cleanup failures through the standard APIs", async () => {
+it("development Apps show protocol, requirement, expiry and cleanup failures through the standard APIs", async () => {
 	const database = await Postgres.start()
 	const options = {
 		host: "127.0.0.1",
@@ -94,18 +93,27 @@ test("development Apps show protocol, requirement, expiry and cleanup failures t
 						: "Simulated private documents",
 				confirmed: true,
 			})
-			assert.equal(response.status, 201, await response.clone().text())
+			assert.strictEqual(response.status, 201, await response.clone().text())
 			return response.json()
 		}
 		const plain = await add(0)
 		const path = "/v1/connections/" + plain.id
-		assert.equal((await (await post(path + "/verify")).json())._tag, "Verified")
+		assert.strictEqual(
+			(await (await post(path + "/verify")).json())._tag,
+			"Verified",
+		)
 		await mode("protocol-failure")
 		const incompatible = await (await post(path + "/verify")).json()
-		assert.equal(incompatible.connection.availability._tag, "ConnectionFailed")
+		assert.strictEqual(
+			incompatible.connection.availability._tag,
+			"ConnectionFailed",
+		)
 		await mode("requirements-changed")
 		const changed = await (await post(path + "/verify")).json()
-		assert.equal(changed.connection.availability._tag, "NeedsRevalidation")
+		assert.strictEqual(
+			changed.connection.availability._tag,
+			"NeedsRevalidation",
+		)
 		const draft = await prepare()
 		const reviewed = await post(path + "/revalidate", {
 			revision: changed.connection.revision,
@@ -114,8 +122,11 @@ test("development Apps show protocol, requirement, expiry and cleanup failures t
 			values: {},
 			confirmed: true,
 		})
-		assert.equal(reviewed.status, 200, await reviewed.clone().text())
-		assert.equal((await (await post(path + "/verify")).json())._tag, "Verified")
+		assert.strictEqual(reviewed.status, 200, await reviewed.clone().text())
+		assert.strictEqual(
+			(await (await post(path + "/verify")).json())._tag,
+			"Verified",
+		)
 		const account = Schema.decodeUnknownSync(AuthApi.SessionInfo)(
 			await (await fetch(address + "/auth/session", { headers })).json(),
 		)
@@ -153,9 +164,9 @@ test("development Apps show protocol, requirement, expiry and cleanup failures t
 			if (requests.length === 0)
 				await new Promise((resolve) => setTimeout(resolve, 25))
 		}
-		assert.equal(requests.length, 1)
-		assert.equal(await executions(), 0)
-		assert.equal(
+		assert.strictEqual(requests.length, 1)
+		assert.strictEqual(await executions(), 0)
+		assert.strictEqual(
 			(
 				await post("/v1/requests/" + requests[0]!.id, {
 					expected: requests[0]!.revision,
@@ -178,14 +189,14 @@ test("development Apps show protocol, requirement, expiry and cleanup failures t
 			await new Promise((resolve) => setTimeout(resolve, 25))
 			completed = await settled(request, first.chat)
 		}
-		assert.equal(completed.response?.status, "completed")
+		assert.strictEqual(completed.response?.status, "completed")
 		assert.match(JSON.stringify(completed.response), /handlerExecutions/)
 		// The first Turn got a pending result for the call, and ended well.
 		const firstTurn = await (
 			await fetch(address + chatPath + "/turns/" + first.turn, { headers })
 		).json()
-		assert.equal(firstTurn.turn.status._tag, "Completed")
-		assert.equal(await executions(), 1)
+		assert.strictEqual(firstTurn.turn.status._tag, "Completed")
+		assert.strictEqual(await executions(), 1)
 		await mode("available")
 		const protectedApp = await add(1)
 		const protectedPath = "/v1/connections/" + protectedApp.id
@@ -197,7 +208,7 @@ test("development Apps show protocol, requirement, expiry and cleanup failures t
 				revision: current.revision,
 				scopes: ["documents"],
 			})
-			assert.equal(started.status, 200, await started.clone().text())
+			assert.strictEqual(started.status, 200, await started.clone().text())
 			const authorization = await started.json()
 			const query = new URL(authorization.authorizationUrl).search.slice(1)
 			const consent = await fetch(address + "/development/apps/authorize", {
@@ -206,22 +217,25 @@ test("development Apps show protocol, requirement, expiry and cleanup failures t
 				body: new URLSearchParams({ query, decision: "allow" }),
 				redirect: "manual",
 			})
-			assert.equal(consent.status, 303)
+			assert.strictEqual(consent.status, 303)
 			const callback = new URL(consent.headers.get("location") ?? "")
 			const completed = await fetch(
 				address + callback.pathname + callback.search,
 				{ headers, redirect: "manual" },
 			)
-			assert.equal(completed.status, 303, await completed.clone().text())
+			assert.strictEqual(completed.status, 303, await completed.clone().text())
 		}
 		await authorize()
-		assert.equal(
+		assert.strictEqual(
 			(await (await post(protectedPath + "/verify")).json())._tag,
 			"Verified",
 		)
 		await mode("authorization-expired")
 		const expired = await (await post(protectedPath + "/verify")).json()
-		assert.equal(expired.connection.availability._tag, "AuthorizationExpired")
+		assert.strictEqual(
+			expired.connection.availability._tag,
+			"AuthorizationExpired",
+		)
 		await authorize()
 		await mode("cleanup-failure")
 		const revoke = () =>
@@ -229,13 +243,13 @@ test("development Apps show protocol, requirement, expiry and cleanup failures t
 				method: "DELETE",
 				headers,
 			})
-		assert.equal((await revoke()).status, 409)
+		assert.strictEqual((await revoke()).status, 409)
 		await mode("available")
-		assert.equal((await (await revoke()).json())._tag, "Revoked")
+		assert.strictEqual((await (await revoke()).json())._tag, "Revoked")
 		const disabled = await (
 			await fetch(address + protectedPath, { headers })
 		).json()
-		assert.equal(
+		assert.strictEqual(
 			(
 				await fetch(address + protectedPath, {
 					method: "PUT",
@@ -252,26 +266,29 @@ test("development Apps show protocol, requirement, expiry and cleanup failures t
 		await authorize()
 		await mode("cleanup-failure")
 		const partialResponse = await post("/v1/app-experience/reset", {})
-		assert.equal(
+		assert.strictEqual(
 			partialResponse.status,
 			200,
 			await partialResponse.clone().text(),
 		)
 		const partial = await partialResponse.json()
-		assert.equal(partial.removed.length, 1)
-		assert.equal(partial.pending.length, 1)
-		assert.equal(partial.pending[0].id, protectedApp.id)
-		assert.equal(
+		assert.strictEqual(partial.removed.length, 1)
+		assert.strictEqual(partial.pending.length, 1)
+		assert.strictEqual(partial.pending[0].id, protectedApp.id)
+		assert.strictEqual(
 			(await (await fetch(address + protectedPath, { headers })).json())
 				.availability._tag,
 			"CleanupPending",
 		)
 		await mode("available")
 		const finished = await (await post("/v1/app-experience/reset", {})).json()
-		assert.equal(finished.removed.length, 1)
-		assert.deepEqual(finished.pending, [])
-		assert.equal(await executions(), 1)
-		assert.equal((await fetch(address + chatPath, { headers })).status, 200)
+		assert.strictEqual(finished.removed.length, 1)
+		assert.deepStrictEqual(finished.pending, [])
+		assert.strictEqual(await executions(), 1)
+		assert.strictEqual(
+			(await fetch(address + chatPath, { headers })).status,
+			200,
+		)
 	} finally {
 		await runtime.dispose()
 		await migration.dispose()

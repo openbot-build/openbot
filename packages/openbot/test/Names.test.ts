@@ -1,10 +1,9 @@
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import * as BrowserHost from "./BrowserHost.ts"
 import { withCookie, withToken } from "./Caller.ts"
 import { message, view } from "./Messages.ts"
 
-test(
+it(
 	"Bot names lose outer spaces, and a direct Chat has no title",
 	{ timeout: 60000 },
 	async () => {
@@ -21,11 +20,11 @@ test(
 				role: "Writes text",
 				instructions: "Write short text.",
 			})
-			assert.equal(bot.status, 201, await bot.clone().text())
+			assert.strictEqual(bot.status, 201, await bot.clone().text())
 			const created = await bot.json()
-			assert.equal(created.name, "Writer")
+			assert.strictEqual(created.name, "Writer")
 			const botPath = "/v1/bots/" + created.id
-			assert.equal(
+			assert.strictEqual(
 				(
 					await account(alice.session, botPath, "PATCH", {
 						expected: created.revision,
@@ -34,7 +33,7 @@ test(
 				).status,
 				400,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await account(alice.session, botPath, "PATCH", {
 						expected: created.revision,
@@ -47,9 +46,9 @@ test(
 				expected: created.revision,
 				name: " Editor ",
 			})
-			assert.equal(renamed.status, 200, await renamed.clone().text())
+			assert.strictEqual(renamed.status, 200, await renamed.clone().text())
 			const second = await renamed.json()
-			assert.equal(second.name, "Editor")
+			assert.strictEqual(second.name, "Editor")
 
 			// API keys rename Bots in the same way as the session cookie.
 			const token = await account(alice.session, "/v1/user/tokens", "POST", {
@@ -60,8 +59,12 @@ test(
 				expected: second.revision,
 				name: "  Planner  ",
 			})
-			assert.equal(keyedRename.status, 200, await keyedRename.clone().text())
-			assert.equal((await keyedRename.json()).name, "Planner")
+			assert.strictEqual(
+				keyedRename.status,
+				200,
+				await keyedRename.clone().text(),
+			)
+			assert.strictEqual((await keyedRename.json()).name, "Planner")
 
 			// Only a channel Chat has a title: the name of its chat on the platform.
 			const send = (
@@ -71,8 +74,8 @@ test(
 			) => keyed(secret, path, method, payload)
 			const receipt = await message(send, created.id, "Hello")
 			const current = await view(send, receipt.chat)
-			assert.equal(current.chat.kind, "direct")
-			assert.equal("title" in current.chat, false)
+			assert.strictEqual(current.chat.kind, "direct")
+			assert.strictEqual("title" in current.chat, false)
 		} finally {
 			await host.close()
 		}

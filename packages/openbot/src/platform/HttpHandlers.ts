@@ -22,8 +22,8 @@ import {
 import { Models, view as modelView } from "../models/Models.ts"
 import { Organization } from "../organization/Organization.ts"
 import { hint, Secrets } from "../secrets/Secrets.ts"
-import type { PlatformDocument } from "../settings/Documents.ts"
-import { bindings } from "../settings/Platform.ts"
+import { filesOf, type PlatformDocument } from "../settings/Documents.ts"
+import { bindings, changeFiles } from "../settings/Platform.ts"
 import { Settings } from "../settings/Settings.ts"
 import * as Views from "../settings/Views.ts"
 import { PlatformAdmins } from "./PlatformAdmins.ts"
@@ -196,7 +196,12 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 			.handle("updatePlatformSettings", ({ payload }) =>
 				Effect.gen(function* () {
 					const account = yield* Account
-					const { expectedVersion, identityProvider, ...changes } = payload
+					const {
+						expectedVersion,
+						identityProvider,
+						files: filesInput,
+						...changes
+					} = payload
 					const updated = yield* settings.updatePlatform(
 						expectedVersion,
 						(document) =>
@@ -230,9 +235,21 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 																	),
 																}),
 												}
-								return { ...document, ...changes, identityProvider: provider }
+								const files =
+									filesInput === undefined
+										? document.files
+										: yield* changeFiles(filesOf(document), filesInput)
+								return {
+									...document,
+									...changes,
+									identityProvider: provider,
+									...(files === undefined ? {} : { files }),
+								}
 							}).pipe(
-								Effect.mapError(() => SettingsApi.SettingsUnavailable.make({})),
+								Effect.provideService(Secrets, secrets),
+								Effect.catchTag("SecretStorageError", () =>
+									Effect.fail(SettingsApi.SettingsUnavailable.make({})),
+								),
 							),
 					)
 					yield* record(account, {
@@ -242,6 +259,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 							changes: [
 								...Object.keys(changes),
 								...(identityProvider === undefined ? [] : ["identityProvider"]),
+								...(filesInput === undefined ? [] : ["files"]),
 							],
 							version: updated.version,
 						},

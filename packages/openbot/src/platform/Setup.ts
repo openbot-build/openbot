@@ -1,8 +1,13 @@
 import { randomBytes } from "node:crypto"
+import type { Settings as Api } from "@openbot-build/api"
 import { Effect, Option, Schema } from "effect"
 import { hint, Secrets } from "../secrets/Secrets.ts"
-import type { PlatformDocument } from "../settings/Documents.ts"
-import { bindings } from "../settings/Platform.ts"
+import {
+	filesDefaults,
+	filesOf,
+	type PlatformDocument,
+} from "../settings/Documents.ts"
+import { bindings, changeFiles } from "../settings/Platform.ts"
 import { Settings } from "../settings/Settings.ts"
 import { PlatformAdmins } from "./PlatformAdmins.ts"
 
@@ -23,6 +28,11 @@ export interface Input {
 	 * and an existing platform keeps its own.
 	 */
 	readonly authSecret?: string | undefined
+	/**
+	 * The object storage for files. Without it, a new platform has none, and
+	 * an existing platform keeps its own.
+	 */
+	readonly fileStorage?: Api.FileStorageInput | undefined
 }
 
 /** The platform already has settings, and they are not the same. */
@@ -52,8 +62,23 @@ export const run = (input: Input) =>
 				message: "Name at least one platform admin email.",
 			})
 		const current = yield* settings.platform
+		const sameStorage = (document: PlatformDocument) => {
+			const wanted = input.fileStorage
+			if (wanted === undefined) return true
+			const storage = filesOf(document).storage
+			return (
+				storage !== null &&
+				storage.endpoint === wanted.endpoint &&
+				storage.publicEndpoint === wanted.publicEndpoint &&
+				storage.region === wanted.region &&
+				storage.bucket === wanted.bucket &&
+				storage.accessKeyId === wanted.accessKeyId &&
+				storage.forcePathStyle === wanted.forcePathStyle
+			)
+		}
 		const sameAsCurrent = (document: PlatformDocument) =>
 			document.publicOrigin === input.publicOrigin &&
+			sameStorage(document) &&
 			Option.match(input.identityProvider, {
 				onNone: () => document.identityProvider === null,
 				onSome: (provider) =>
@@ -99,7 +124,18 @@ export const run = (input: Input) =>
 							randomBytes(32).toString("hex"),
 							bindings.authSecret,
 						)
+		const files =
+			input.fileStorage === undefined
+				? Option.getOrUndefined(current)?.document.files
+				: yield* changeFiles(
+						Option.match(current, {
+							onNone: () => filesDefaults,
+							onSome: (current) => filesOf(current.document),
+						}),
+						{ storage: input.fileStorage },
+					)
 		const document: PlatformDocument = {
+			...(files === undefined ? {} : { files }),
 			publicOrigin: input.publicOrigin,
 			authSecret,
 			identityProvider,

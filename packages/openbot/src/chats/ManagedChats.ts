@@ -51,6 +51,8 @@ import {
 import type { PgClient } from "@effect/sql-pg"
 import * as StoredChats from "./StoredChats.ts"
 import { withAttribution } from "../billing/MeteredModel.ts"
+import { Files } from "../files/Files.ts"
+import { withFiles } from "../files/ModelFiles.ts"
 import {
 	Chats,
 	type Options,
@@ -155,6 +157,7 @@ export const make = <
 		const workPlugin = yield* Effect.serviceOption(WorkPlugin)
 		const channelPlugin = yield* Effect.serviceOption(ChannelPlugin)
 		const computerPlugin = yield* Effect.serviceOption(ComputerPlugin)
+		const files = yield* Effect.serviceOption(Files)
 		const openWork = Option.getOrUndefined(
 			yield* Effect.serviceOption(OpenWork),
 		)
@@ -244,7 +247,14 @@ export const make = <
 				return yield* modelFor(view.chat, Chat.currentTurn(view.chat))
 			}),
 		)
-		const routed = Context.add(environment, LanguageModel.LanguageModel, router)
+		const routed = Context.add(
+			environment,
+			LanguageModel.LanguageModel,
+			Option.match(files, {
+				onNone: () => router,
+				onSome: (files) => withFiles(router, files.load),
+			}),
+		)
 		const host = Plugin.make({
 			id: chatHostId,
 			store: ChatHost.chatHostStore,

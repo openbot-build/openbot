@@ -326,10 +326,11 @@ A return path can be any path on the same origin, except paths under `/auth/`, `
 
 ## Backups
 
-Back up two things, and keep them together:
+Back up these things, and keep them together:
 
 1. **The database.** It holds the platform and organization settings, accounts, organizations and their members, user tokens, models and model providers, SSO connections, the audit log, Bots, Chats and their history, and App connections.
 2. **`OPENBOT_SECRET_KEYS`.** The keys decrypt the secrets in the database: App secrets, model provider keys, SSO client secrets, and the sign-in secret. A database backup without the keys cannot restore them.
+3. **The bucket of [files](/docs/files).** It holds the bytes of the files that people uploaded. The database only names them.
 
 With Compose, make a database backup like this:
 

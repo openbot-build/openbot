@@ -1,13 +1,15 @@
+import { Settings as Api } from "@openbot-build/api"
 import { Effect, Redacted } from "effect"
 import type { Configuration } from "../auth/Model.ts"
-import { Secrets } from "../secrets/Secrets.ts"
-import type { PlatformDocument } from "./Documents.ts"
+import { hint, Secrets } from "../secrets/Secrets.ts"
+import type { FilesDocument, PlatformDocument } from "./Documents.ts"
 
 /** The places of the sealed secrets in the platform settings. */
 export const bindings = {
 	authSecret: "openbot_settings:platform:authSecret",
 	identityProviderSecret:
 		"openbot_settings:platform:identityProvider.clientSecret",
+	fileStorageSecret: "openbot_settings:platform:files.storage.secretAccessKey",
 } as const
 
 /**
@@ -60,3 +62,39 @@ export const appKey = (document: PlatformDocument) =>
 		document.authSecret,
 		document.identityProvider,
 	])
+
+/** Applies a change of the file settings. A new secret key is sealed. */
+export const changeFiles = (current: FilesDocument, input: Api.FilesInput) =>
+	Effect.gen(function* () {
+		const { storage, ...limits } = input
+		const next = { ...current, ...limits }
+		if (storage === undefined) return next
+		if (storage === null) return { ...next, storage: null }
+		const { secretAccessKey, ...fields } = storage
+		if (secretAccessKey === undefined) {
+			if (current.storage === null)
+				return yield* Api.SettingsInvalid.make({
+					message: "New file storage needs a secretAccessKey.",
+				})
+			return {
+				...next,
+				storage: {
+					...fields,
+					secretAccessKey: current.storage.secretAccessKey,
+					secretAccessKeyHint: current.storage.secretAccessKeyHint,
+				},
+			}
+		}
+		const secrets = yield* Secrets
+		return {
+			...next,
+			storage: {
+				...fields,
+				secretAccessKey: yield* secrets.seal(
+					secretAccessKey,
+					bindings.fileStorageSecret,
+				),
+				secretAccessKeyHint: hint(secretAccessKey),
+			},
+		}
+	})

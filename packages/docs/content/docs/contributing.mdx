@@ -65,18 +65,19 @@ To sign in and make a user token, see [Quick start](/docs/quickstart).
 
 ## Checks
 
-| Command                                                  | What it does                               |
-| -------------------------------------------------------- | ------------------------------------------ |
-| `devenv shell -- pnpm install`                           | Installs all packages.                     |
-| `devenv shell -- pnpm build`                             | Builds every package with tsdown.          |
-| `devenv shell -- pnpm typecheck`                         | Checks the types of every package.         |
-| `devenv shell -- pnpm -r test`                           | Runs the tests of every package.           |
-| `devenv shell -- pnpm --filter @openbot-build/core test` | Runs the tests of one package.             |
-| `devenv shell -- treefmt`                                | Formats the code with Prettier and nixfmt. |
+| Command                                                  | What it does                                                                     |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `devenv shell -- pnpm install`                           | Installs all packages.                                                           |
+| `devenv shell -- pnpm build`                             | Builds every package with tsdown.                                                |
+| `devenv shell -- pnpm typecheck`                         | Checks the types of every package.                                               |
+| `devenv shell -- pnpm -r test`                           | Runs the tests of every package.                                                 |
+| `devenv shell -- pnpm test`                              | Runs the tests of every package in one Vitest run, without build or type checks. |
+| `devenv shell -- pnpm --filter @openbot-build/core test` | Runs the tests of one package.                                                   |
+| `devenv shell -- treefmt`                                | Formats the code with Prettier and nixfmt.                                       |
 
 Run `pnpm build` before `pnpm typecheck`. Packages import each other from their built files.
 
-Tests use Node.js's own test runner. OpenBot tests start their own short-lived PostgreSQL server with the tools from devenv. They need no secrets and no outside services.
+Tests use [Vitest](https://vitest.dev) with [`@effect/vitest`](https://www.npmjs.com/package/@effect/vitest). A test that runs an Effect uses `it.effect`. It gives the test a test clock: time moves only when the test moves it. A test that needs real time, for example one with a real server, uses `it.live`. OpenBot tests start their own short-lived PostgreSQL server with the tools from devenv. They need no secrets and no outside services.
 GitHub Actions runs the same `build`, `typecheck`, and `test` commands. See [Deploy](/docs/deploy#github-actions).
 
 ---

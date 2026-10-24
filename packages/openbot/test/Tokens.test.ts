@@ -1,15 +1,14 @@
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it, vi } from "@effect/vitest"
 import { AuthApi } from "@openbot-build/api"
 import { Redacted } from "effect"
 import * as BrowserHost from "./BrowserHost.ts"
 import { withCookie, withToken } from "./Caller.ts"
 import { message } from "./Messages.ts"
 
-test(
+it(
 	"User tokens authenticate headless clients, stay with their member and stop working when revoked",
 	{ timeout: 60000 },
-	async (t) => {
+	async () => {
 		const publicOrigin = "https://api.example.com"
 		const host = await BrowserHost.start({ publicOrigin })
 		try {
@@ -20,20 +19,20 @@ test(
 			const keyed = withToken(host.address)
 
 			const root = await fetch(host.address + "/")
-			assert.equal(root.status, 200)
-			assert.equal((await root.json()).tokens, "/v1/user/tokens")
+			assert.strictEqual(root.status, 200)
+			assert.strictEqual((await root.json()).tokens, "/v1/user/tokens")
 
 			const created = await account(alice.session, "/v1/user/tokens", "POST", {
 				name: "  CI pipeline  ",
 			})
-			assert.equal(created.status, 201, await created.clone().text())
-			assert.equal(created.headers.get("cache-control"), "no-store")
+			assert.strictEqual(created.status, 201, await created.clone().text())
+			assert.strictEqual(created.headers.get("cache-control"), "no-store")
 			const { token, secret } = await created.json()
 			assert.match(secret, /^obut_[A-Za-z0-9_-]{43}$/)
-			assert.equal(token.name, "CI pipeline")
+			assert.strictEqual(token.name, "CI pipeline")
 			assert.ok(secret.startsWith(token.prefix))
-			assert.equal(token.expiresAt, null)
-			assert.equal(token.lastUsedAt, null)
+			assert.strictEqual(token.expiresAt, null)
+			assert.strictEqual(token.lastUsedAt, null)
 
 			const receipt = await message(
 				(path, method, payload) => keyed(secret, path, method, payload),
@@ -41,10 +40,10 @@ test(
 				"Headless work",
 			)
 			const listed = await keyed(secret, "/v1/chats")
-			assert.equal(listed.status, 200)
+			assert.strictEqual(listed.status, 200)
 			assert.ok(JSON.stringify(await listed.json()).includes(receipt.chat))
 			// Members of one organization still do not see each other's Chats.
-			assert.equal(
+			assert.strictEqual(
 				(
 					await account(
 						bob.session,
@@ -55,14 +54,14 @@ test(
 			)
 
 			const verified = await (await keyed(secret, "/v1/tokens/verify")).json()
-			assert.equal(verified.caller.kind, "user_token")
-			assert.equal(verified.caller.userId, alice.identity.userId)
-			assert.equal(
+			assert.strictEqual(verified.caller.kind, "user_token")
+			assert.strictEqual(verified.caller.userId, alice.identity.userId)
+			assert.strictEqual(
 				verified.caller.organizationId,
 				alice.identity.organizationId,
 			)
-			assert.equal(verified.token.id, token.id)
-			assert.equal(
+			assert.strictEqual(verified.token.id, token.id)
+			assert.strictEqual(
 				(await (await account(alice.session, "/v1/tokens/verify")).json())
 					.token,
 				null,
@@ -71,10 +70,10 @@ test(
 			const tokens = await (
 				await account(alice.session, "/v1/user/tokens")
 			).json()
-			assert.equal(tokens.items.length, 1)
-			assert.notEqual(tokens.items[0].lastUsedAt, null)
-			assert.equal(JSON.stringify(tokens).includes(secret), false)
-			assert.deepEqual(
+			assert.strictEqual(tokens.items.length, 1)
+			assert.notStrictEqual(tokens.items[0].lastUsedAt, null)
+			assert.strictEqual(JSON.stringify(tokens).includes(secret), false)
+			assert.deepStrictEqual(
 				(await (await account(bob.session, "/v1/user/tokens")).json()).items,
 				[],
 			)
@@ -83,9 +82,9 @@ test(
 			const denied = await keyed(secret, "/v1/user/tokens", "POST", {
 				name: "Minted",
 			})
-			assert.equal(denied.status, 403)
-			assert.equal((await denied.json())._tag, "PermissionDenied")
-			assert.equal((await keyed(secret, "/v1/user/tokens")).status, 403)
+			assert.strictEqual(denied.status, 403)
+			assert.strictEqual((await denied.json())._tag, "PermissionDenied")
+			assert.strictEqual((await keyed(secret, "/v1/user/tokens")).status, 403)
 
 			const foreignOrigin = await fetch(host.address + "/v1/user/tokens", {
 				method: "POST",
@@ -99,8 +98,8 @@ test(
 				},
 				body: JSON.stringify({ name: "Cross-site" }),
 			})
-			assert.equal(foreignOrigin.status, 403)
-			assert.equal(
+			assert.strictEqual(foreignOrigin.status, 403)
+			assert.strictEqual(
 				(await account(alice.session, "/v1/user/tokens", "POST", { name: " " }))
 					.status,
 				400,
@@ -120,10 +119,13 @@ test(
 					],
 				},
 			)
-			assert.equal(foreignPolicy.status, 400)
-			assert.equal((await foreignPolicy.json())._tag, "TokenPolicyInvalid")
+			assert.strictEqual(foreignPolicy.status, 400)
+			assert.strictEqual(
+				(await foreignPolicy.json())._tag,
+				"TokenPolicyInvalid",
+			)
 
-			assert.equal(
+			assert.strictEqual(
 				(
 					await account(
 						bob.session,
@@ -133,7 +135,7 @@ test(
 				).status,
 				404,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await account(
 						alice.session,
@@ -143,8 +145,8 @@ test(
 				).status,
 				204,
 			)
-			assert.equal((await keyed(secret, "/v1/chats")).status, 401)
-			assert.equal((await keyed("obut_unknown", "/v1/chats")).status, 401)
+			assert.strictEqual((await keyed(secret, "/v1/chats")).status, 401)
+			assert.strictEqual((await keyed("obut_unknown", "/v1/chats")).status, 401)
 
 			const expiring = await (
 				await account(alice.session, "/v1/user/tokens", "POST", {
@@ -152,17 +154,24 @@ test(
 					expiresInDays: 1,
 				})
 			).json()
-			assert.notEqual(expiring.token.expiresAt, null)
-			assert.equal((await keyed(expiring.secret, "/v1/chats")).status, 200)
-			t.mock.timers.enable({ apis: ["Date"], now: Date.now() + 2 * 86400000 })
+			assert.notStrictEqual(expiring.token.expiresAt, null)
+			assert.strictEqual(
+				(await keyed(expiring.secret, "/v1/chats")).status,
+				200,
+			)
+			// Only Date is fake, so the server and fetch still use real timers.
+			vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 2 * 86400000 })
 			try {
-				assert.equal((await keyed(expiring.secret, "/v1/chats")).status, 401)
+				assert.strictEqual(
+					(await keyed(expiring.secret, "/v1/chats")).status,
+					401,
+				)
 			} finally {
-				t.mock.timers.reset()
+				vi.useRealTimers()
 			}
 
 			for (let index = 1; index < 25; index++)
-				assert.equal(
+				assert.strictEqual(
 					(
 						await account(alice.session, "/v1/user/tokens", "POST", {
 							name: "Token " + index,
@@ -173,8 +182,8 @@ test(
 			const limited = await account(alice.session, "/v1/user/tokens", "POST", {
 				name: "One too many",
 			})
-			assert.equal(limited.status, 409)
-			assert.deepEqual(await limited.json(), {
+			assert.strictEqual(limited.status, 409)
+			assert.deepStrictEqual(await limited.json(), {
 				_tag: "TokenLimitReached",
 				limit: 25,
 			})
@@ -184,7 +193,7 @@ test(
 	},
 )
 
-test(
+it(
 	"Token policies can only narrow what the member can do",
 	{ timeout: 60000 },
 	async () => {
@@ -204,7 +213,7 @@ test(
 						policies,
 					},
 				)
-				assert.equal(response.status, 201, await response.clone().text())
+				assert.strictEqual(response.status, 201, await response.clone().text())
 				return (await response.json()).secret as string
 			}
 
@@ -225,17 +234,17 @@ test(
 					resources: ["openbot.org.{org}.user.{self}"],
 				},
 			])
-			assert.equal((await keyed(readOnly, "/v1/chats")).status, 200)
+			assert.strictEqual((await keyed(readOnly, "/v1/chats")).status, 200)
 			const read = await keyed(readOnly, chatPath)
-			assert.equal(read.status, 200, await read.clone().text())
+			assert.strictEqual(read.status, 200, await read.clone().text())
 			const { chat } = await read.json()
 			const write = await keyed(readOnly, chatPath, "PATCH", {
 				expected: chat.revision,
 				mode: "plan",
 			})
-			assert.equal(write.status, 403)
-			assert.equal((await write.json()).permission, "chats.write")
-			assert.equal(
+			assert.strictEqual(write.status, 403)
+			assert.strictEqual((await write.json()).permission, "chats.write")
+			assert.strictEqual(
 				(await keyed(readOnly, messages, "POST", { input: "Not allowed" }))
 					.status,
 				403,
@@ -257,7 +266,7 @@ test(
 			]
 			const full = await make(allowed)
 			const sent = await keyed(full, messages, "POST", { input: "Allowed" })
-			assert.equal(sent.status, 202, await sent.clone().text())
+			assert.strictEqual(sent.status, 202, await sent.clone().text())
 			const denied = await make([
 				...allowed,
 				{
@@ -266,10 +275,10 @@ test(
 					resources: ["openbot.org.{org}.user.{self}.chat"],
 				},
 			])
-			assert.equal((await keyed(denied, "/v1/chats")).status, 200)
+			assert.strictEqual((await keyed(denied, "/v1/chats")).status, 200)
 			const refused = await keyed(denied, messages, "POST", { input: "No" })
-			assert.equal(refused.status, 403)
-			assert.equal((await refused.json()).permission, "chats.write")
+			assert.strictEqual(refused.status, 403)
+			assert.strictEqual((await refused.json()).permission, "chats.write")
 
 			// A token never gets more than its member. Alice is a Super Administrator,
 			// but she loses organization.write here, and so does her broad token.
@@ -280,7 +289,7 @@ test(
 					resources: ["openbot.org.{org}"],
 				},
 			])
-			assert.equal(
+			assert.strictEqual(
 				(await keyed(broad, "/v1/organization", "PATCH", { name: "Acme" }))
 					.status,
 				200,
@@ -292,15 +301,15 @@ test(
 				"PATCH",
 				{ roles: ["super_administrator"] },
 			)
-			assert.equal(promoted.status, 200, await promoted.clone().text())
+			assert.strictEqual(promoted.status, 200, await promoted.clone().text())
 			const narrowed = await account(
 				bob.session,
 				"/v1/organization/members/" + encodeURIComponent(alice.identity.userId),
 				"PATCH",
 				{ roles: ["member"] },
 			)
-			assert.equal(narrowed.status, 200, await narrowed.clone().text())
-			assert.equal(
+			assert.strictEqual(narrowed.status, 200, await narrowed.clone().text())
+			assert.strictEqual(
 				(await keyed(broad, "/v1/organization", "PATCH", { name: "Acme 2" }))
 					.status,
 				403,

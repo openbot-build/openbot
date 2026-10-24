@@ -1,6 +1,5 @@
 // @effect-diagnostics strictEffectProvide:off
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { AppIndexApi as Api, OpenBotApi } from "@openbot-build/api"
 import { Document, Index } from "@openbot-build/protocol"
 import { Effect, Layer, ManagedRuntime, Redacted, Schema } from "effect"
@@ -47,7 +46,7 @@ const entry = (path: string, name = "example.test/documents") =>
 		validators: {},
 	})
 
-test("public Index contract declares anonymous reads and typed page failures", () => {
+it("public Index contract declares anonymous reads and typed page failures", () => {
 	const document = OpenApi.fromApi(OpenBotApi)
 	const operation = document.paths["/v1/app-index/apps"]?.get
 	assert.ok(operation)
@@ -57,7 +56,7 @@ test("public Index contract declares anonymous reads and typed page failures", (
 	assert.ok(document.paths["/v1/apps/discover"]?.post?.security?.length)
 })
 
-test("the stored public Index searches, merges sources and pages results without leaking connection data", async () => {
+it("the stored public Index searches, merges sources and pages results without leaking connection data", async () => {
 	const database = await PostgresTest.start()
 	const db = Database.layer({ databaseUrl: Redacted.make(database.url) }).pipe(
 		Layer.provide(NodeServices.layer),
@@ -107,51 +106,57 @@ test("the stored public Index searches, merges sources and pages results without
 				yield* Migration.initialize
 				const index = yield* PublicIndex.PublicIndex
 				const store = yield* Index.IndexStore
-				assert.deepEqual((yield* index.search({ source: "openbot" })).apps, [])
+				assert.deepStrictEqual(
+					(yield* index.search({ source: "openbot" })).apps,
+					[],
+				)
 				yield* store.upsert(yield* entry("first"))
 				yield* store.upsert(second)
 				const page = yield* index.search({ limit: "1" })
-				assert.equal(page.apps.length, 1)
-				assert.equal(page.issues[0]?.source, "offline")
+				assert.strictEqual(page.apps.length, 1)
+				assert.strictEqual(page.issues[0]?.source, "offline")
 				assert.ok(page.nextCursor)
 				const next = yield* index.search({
 					limit: "1",
 					cursor: page.nextCursor,
 				})
-				assert.equal(next.apps[0]?.entry.cardUrl, second.cardUrl)
-				assert.deepEqual(
+				assert.strictEqual(next.apps[0]?.entry.cardUrl, second.cardUrl)
+				assert.deepStrictEqual(
 					next.apps[0]?.sources.map((source) => source.id),
 					["openbot", "second"],
 				)
-				assert.equal(next.nextCursor, null)
-				assert.equal((yield* index.search({ query: "project" })).apps.length, 2)
-				assert.equal(
+				assert.strictEqual(next.nextCursor, null)
+				assert.strictEqual(
+					(yield* index.search({ query: "project" })).apps.length,
+					2,
+				)
+				assert.strictEqual(
 					(yield* index.search({
 						query: "example.test",
 					})).apps[0]?.matches.includes("publisher"),
 					true,
 				)
-				assert.equal(
+				assert.strictEqual(
 					(yield* Effect.flip(
 						index.search({ cursor: page.nextCursor, query: "other" }),
 					))._tag,
 					"IndexInputInvalid",
 				)
-				assert.equal(
+				assert.strictEqual(
 					(yield* Effect.flip(index.search({ source: "offline" })))._tag,
 					"IndexUnavailable",
 				)
-				assert.equal(
+				assert.strictEqual(
 					(yield* Effect.flip(index.get("https://example.test/missing")))._tag,
 					"IndexNotFound",
 				)
-				assert.equal((yield* index.get(second.cardUrl)).sources.length, 2)
+				assert.strictEqual((yield* index.get(second.cardUrl)).sources.length, 2)
 			}),
 		)
 		await runtime.dispose()
 		const restarted = ManagedRuntime.make(repository)
 		try {
-			assert.equal(
+			assert.strictEqual(
 				(
 					await restarted.runPromise(
 						Effect.flatMap(Db.make, (db) => db.select().from(appIndexEntries)),
@@ -186,27 +191,27 @@ test("the stored public Index searches, merges sources and pages results without
 				),
 			)
 			const anonymous = await fetch(`${address}/v1/app-index/apps`)
-			assert.equal(anonymous.status, 200)
+			assert.strictEqual(anonymous.status, 200)
 			const publicPage = Schema.decodeUnknownSync(Api.Page)(
 				await anonymous.json(),
 			)
-			assert.equal(publicPage.apps.length, 2)
-			assert.equal(
+			assert.strictEqual(publicPage.apps.length, 2)
+			assert.strictEqual(
 				(await fetch(`${address}/v1/app-index/apps?cursor=invalid`)).status,
 				400,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await fetch(`${address}/v1/app-index/apps?source=missing`)).status,
 				404,
 			)
 			const cookieRead = await fetch(`${address}/v1/app-index/apps`, {
 				headers: { cookie: "__Host-openbot-session=not-a-real-user" },
 			})
-			assert.deepEqual(await cookieRead.json(), publicPage)
-			assert.equal((await fetch(`${address}/v1/connections`)).status, 401)
+			assert.deepStrictEqual(await cookieRead.json(), publicPage)
+			assert.strictEqual((await fetch(`${address}/v1/connections`)).status, 401)
 			const client = ManagedRuntime.make(Client.layer({ baseUrl: address }))
 			try {
-				assert.equal(
+				assert.strictEqual(
 					(
 						await client.runPromise(
 							Effect.flatMap(Client.Client, (api) =>

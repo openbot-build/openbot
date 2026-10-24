@@ -3,6 +3,7 @@ import {
 	ChatConflict,
 	ChatStorageUnavailable,
 	ChatsApi,
+	FilesApi,
 	Identity,
 	OpenBotApi,
 	Permissions,
@@ -18,6 +19,7 @@ import { Bots } from "../bots/Bots.ts"
 import { Coordinator } from "../bots/Coordinator.ts"
 import { Delegations } from "../bots/Delegations.ts"
 import { MemoryBot } from "../bots/MemoryBot.ts"
+import { Files } from "../files/Files.ts"
 import { can } from "../authorization/Check.ts"
 import { resourceKey } from "../authorization/Policy.ts"
 import type * as Chats from "./Chats.ts"
@@ -43,6 +45,7 @@ export const chainFor = (caller: Caller, bot: BotsApi.Bot): ChatHost.Chain => ({
 	chats: [],
 })
 const send = (
+	files: Files["Service"],
 	chats: typeof Chats.Chats.Service,
 	chat: Chat.Id,
 	payload: SendMessageRequest,
@@ -50,7 +53,19 @@ const send = (
 ) =>
 	Effect.gen(function* () {
 		const input = {
-			input: payload.input,
+			input: yield* files.prompt(caller, payload.input).pipe(
+				Effect.catchTags({
+					FilesUnavailable: () => Effect.fail(ChatStorageUnavailable.make({})),
+					FileNotFound: (error) =>
+						Effect.fail(
+							FilesApi.FileInvalid.make({
+								message: `The file ${error.id} is not one of your ready files.`,
+							}),
+						),
+					FilesDisabled: (error) =>
+						Effect.fail(FilesApi.FileInvalid.make({ message: error.message })),
+				}),
+			),
 			author: ChatHost.authorOf(caller.userId, caller.tokenId),
 		}
 		if (payload.stream !== true) return yield* chats.deliver(chat, input)
@@ -66,6 +81,7 @@ const implementations = Effect.gen(function* () {
 	const coordinator = yield* Coordinator
 	const delegations = yield* Delegations
 	const memoryBot = yield* MemoryBot
+	const files = yield* Files
 	const services = yield* Effect.context<AuthorizationServices>()
 	const unavailable = () => ChatStorageUnavailable.make({})
 	return {
@@ -83,7 +99,7 @@ const implementations = Effect.gen(function* () {
 				const chats = yield* current
 				const chat = yield* chats.direct(bot, chainFor(caller, bot))
 				// The request owns the scope, so a live stream stays open while the client reads it.
-				return yield* send(chats, chat, payload, caller)
+				return yield* send(files, chats, chat, payload, caller)
 			}),
 		sendMessage: ({ params, payload }: Request<"sendMessage">) =>
 			Effect.gen(function* () {
@@ -96,7 +112,7 @@ const implementations = Effect.gen(function* () {
 					return yield* ChatConflict.make({
 						message: "Only direct Chats and task Chats take messages.",
 					})
-				return yield* send(chats, params.chatId, payload, caller)
+				return yield* send(files, chats, params.chatId, payload, caller)
 			}),
 		listChats: ({ query }: Request<"listChats">) =>
 			Effect.flatMap(current, (chats) =>

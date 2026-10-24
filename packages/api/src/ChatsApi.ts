@@ -4,6 +4,7 @@ import * as BotMemory from "./BotMemory.ts"
 import { Authorize, GroupRequired, Required, requires } from "./Permissions.ts"
 import { BotErrors, BotId } from "./BotsApi.ts"
 import { Delegation, DelegationId } from "./DelegationsApi.ts"
+import { FileId, FileInvalid } from "./FilesApi.ts"
 import { PlanApproval } from "./PlanApproval.ts"
 import { Schema } from "effect"
 import { Sse } from "effect/encoding"
@@ -19,15 +20,30 @@ const TextInput = Schema.Struct({
 	type: Schema.Literal("input_text"),
 	text: Schema.NonEmptyString,
 })
+/** An image file that you uploaded. Its media type must start with `image/`. */
+const ImageInput = Schema.Struct({
+	type: Schema.Literal("input_image"),
+	file_id: FileId,
+})
+/** A file that you uploaded, such as a PDF. */
+const FileInput = Schema.Struct({
+	type: Schema.Literal("input_file"),
+	file_id: FileId,
+})
+export const InputPart = Schema.Union([TextInput, ImageInput, FileInput])
+export type InputPart = typeof InputPart.Type
 const InputMessage = Schema.Struct({
 	type: Schema.optionalKey(Schema.Literal("message")),
 	role: Schema.Literal("user"),
 	content: Schema.Union([
 		Schema.NonEmptyString,
-		Schema.Array(TextInput).check(Schema.isMinLength(1)),
+		Schema.Array(InputPart).check(Schema.isMinLength(1)),
 	]),
 })
-/** Text only. These forms are the same: a string, or a list of user messages. */
+/**
+ * These forms are the same: a string, or a list of user messages. A message
+ * can have text, and files from `POST /v1/files`.
+ */
 export const MessageInput = Schema.Union([
 	Schema.NonEmptyString,
 	Schema.Array(InputMessage).check(Schema.isMinLength(1)),
@@ -374,6 +390,7 @@ const sendSuccess = [
 ] as const
 const sendErrors = [
 	...ChatOperationErrors,
+	FileInvalid.pipe(HttpApiSchema.status(400)),
 	ChatExecutionUnavailable.pipe(HttpApiSchema.status(503)),
 ] as const
 

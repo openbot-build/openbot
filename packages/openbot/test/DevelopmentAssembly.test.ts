@@ -1,7 +1,6 @@
 import { memberOf } from "./Caller.ts"
 // @effect-diagnostics strictEffectProvide:off
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { Chat, Config, Item, Model } from "@openbot-build/core"
 import * as Client from "@openbot-build/client"
@@ -85,7 +84,7 @@ const signIn = async (address: string, publicOrigin: string) => {
 		headers: { origin: publicOrigin, "content-type": "application/json" },
 		body: "{}",
 	})
-	assert.equal(login.status, 200)
+	assert.strictEqual(login.status, 200)
 	const cookie = login.headers
 		.getSetCookie()
 		.find((value) => value.startsWith(AuthApi.SessionCookie + "="))!
@@ -105,7 +104,7 @@ const signIn = async (address: string, publicOrigin: string) => {
 	return { cookie, headers, send }
 }
 
-test(
+it(
 	"development assembly streams through the API and keeps the Chat after a restart",
 	{ timeout: 30000 },
 	async () => {
@@ -139,7 +138,7 @@ test(
 				input: "Persist this development conversation",
 				stream: true,
 			})
-			assert.equal(response.status, 200)
+			assert.strictEqual(response.status, 200)
 			const events = await response.text()
 			assert.match(events, /response.output_text.delta/)
 			assert.match(
@@ -154,7 +153,10 @@ test(
 			const id = summary.chat.id
 			const path = `/v1/chats/${id}`
 			// The development platform gives each new Chat a simulated model.
-			assert.deepEqual(summary.chat.settings.model, DevelopmentModel.selection)
+			assert.deepStrictEqual(
+				summary.chat.settings.model,
+				DevelopmentModel.selection,
+			)
 			const backend = await runtime.runPromise(Backend.Backend)
 			const session = Schema.decodeUnknownSync(AuthApi.SessionInfo)(
 				await (
@@ -166,7 +168,7 @@ test(
 				backend.forCaller({ kind: "member", ...memberOf(session) }),
 			)
 			const saved = await runtime.runPromise(wait(chats, id))
-			assert.equal(saved.status, "Completed")
+			assert.strictEqual(saved.status, "Completed")
 			const savedItems = await (await send(path + "/items", "GET")).json()
 			assert.ok(savedItems.items.length >= 2)
 			await runtime.dispose()
@@ -179,8 +181,8 @@ test(
 			const restored = Schema.decodeUnknownSync(ChatView)(
 				await (await send(path, "GET")).json(),
 			)
-			assert.deepEqual(restored, saved)
-			assert.deepEqual(
+			assert.deepStrictEqual(restored, saved)
+			assert.deepStrictEqual(
 				await (await send(path + "/items", "GET")).json(),
 				savedItems,
 			)
@@ -198,7 +200,7 @@ test(
 				),
 			)
 			const continued = await runtime.runPromise(wait(restartedChats, id))
-			assert.equal(
+			assert.strictEqual(
 				(await runtime.runPromise(restartedChats.items(id, {}))).items.length,
 				savedItems.items.length + 2,
 			)
@@ -226,7 +228,7 @@ test(
 								input,
 								author,
 							})
-							assert.equal(result.receipt.delivery, "started")
+							assert.strictEqual(result.receipt.delivery, "started")
 							assert.ok(Option.isSome(result.events))
 							return yield* read(result.events.value)
 						}),
@@ -242,11 +244,11 @@ test(
 					Stream.runCollect,
 				),
 			)
-			assert.equal(partial.length, 1)
+			assert.strictEqual(partial.length, 1)
 			await runtime.runPromise(restartedChats.interrupt(id))
 			const interrupted = await runtime.runPromise(wait(restartedChats, id))
-			assert.equal(interrupted.status, "Interrupted")
-			assert.equal(interrupted.response?.status, "cancelled")
+			assert.strictEqual(interrupted.status, "Interrupted")
+			assert.strictEqual(interrupted.response?.status, "cancelled")
 			await select(interrupted, "mock-failure")
 			const failedEvents = await live(
 				"Save this failed input",
@@ -259,8 +261,8 @@ test(
 			)
 			assert.ok(failedEvents.some((event) => event.event === "response.failed"))
 			const failed = await runtime.runPromise(wait(restartedChats, id))
-			assert.equal(failed.status, "Failed")
-			assert.equal(failed.response?.status, "failed")
+			assert.strictEqual(failed.status, "Failed")
+			assert.strictEqual(failed.response?.status, "failed")
 			assert.match(
 				JSON.stringify(
 					(await runtime.runPromise(restartedChats.items(id, {}))).items,
@@ -274,7 +276,7 @@ test(
 				}),
 			)
 			await live("Recover after failure", Stream.runDrain)
-			assert.equal(
+			assert.strictEqual(
 				(await runtime.runPromise(wait(restartedChats, id))).response?.status,
 				"completed",
 			)
@@ -285,7 +287,7 @@ test(
 	},
 )
 
-test(
+it(
 	"server assembly keeps extra per-Chat handlers and approvals",
 	{ timeout: 60000 },
 	async () => {
@@ -337,7 +339,7 @@ test(
 			}
 			const [first, second] = await Promise.all([talk("First"), talk("Second")])
 			assert.ok(first !== undefined && second !== undefined)
-			assert.notEqual(first.chat, second.chat)
+			assert.notStrictEqual(first.chat, second.chat)
 			const pendingOf = async (chat: string) => {
 				for (let tries = 0; tries < 200; tries++) {
 					const list = Schema.decodeUnknownSync(
@@ -354,10 +356,10 @@ test(
 				pendingOf(first.chat),
 				pendingOf(second.chat),
 			])
-			assert.equal(firstRequests?.length, 1)
-			assert.equal(secondRequests?.length, 1)
+			assert.strictEqual(firstRequests?.length, 1)
+			assert.strictEqual(secondRequests?.length, 1)
 			for (const entry of [...firstRequests!, ...secondRequests!])
-				assert.deepEqual(
+				assert.deepStrictEqual(
 					[entry.capability.action, entry.capability.target],
 					["tools.call", "DevelopmentConfirmation"],
 				)
@@ -370,12 +372,12 @@ test(
 				).turn.status._tag as string
 			await Promise.all([settled(send, first.chat), settled(send, second.chat)])
 			const firstTurns = [await turnStatus(first), await turnStatus(second)]
-			assert.equal(HashMap.size(calls), 0)
+			assert.strictEqual(HashMap.size(calls), 0)
 			const decide = async (
 				entry: RequestsApi.CapabilityRequest,
 				decision: "allow" | "deny",
 			) =>
-				assert.equal(
+				assert.strictEqual(
 					(
 						await send("/v1/requests/" + entry.id, "POST", {
 							expected: entry.revision,
@@ -415,7 +417,7 @@ test(
 			)
 				await new Promise((resolve) => setTimeout(resolve, 25))
 			const approved = await settled(send, first.chat)
-			assert.equal(
+			assert.strictEqual(
 				HashMap.get(calls, Chat.Id.make(first.chat)).pipe(
 					Option.getOrElse(() => 0),
 				),
@@ -430,11 +432,11 @@ test(
 			assert.ok(denial !== undefined)
 			assert.match(JSON.stringify(denial.content), /rejected/)
 			await settled(send, second.chat)
-			assert.equal(HashMap.has(calls, Chat.Id.make(second.chat)), false)
-			assert.equal(HashMap.size(calls), 1)
+			assert.strictEqual(HashMap.has(calls, Chat.Id.make(second.chat)), false)
+			assert.strictEqual(HashMap.size(calls), 1)
 			// A pending result lets the first Turns end well. After the allowed call,
 			// the model answers with its result and asks for nothing more.
-			assert.deepEqual(firstTurns, ["Completed", "Completed"])
+			assert.deepStrictEqual(firstTurns, ["Completed", "Completed"])
 			assert.match(
 				JSON.stringify(approved.response),
 				new RegExp(
@@ -443,7 +445,7 @@ test(
 						": Confirm independently",
 				),
 			)
-			assert.equal(approved.open.requests, 0)
+			assert.strictEqual(approved.open.requests, 0)
 		} finally {
 			await runtime.dispose()
 			await database.close()
@@ -451,7 +453,7 @@ test(
 	},
 )
 
-test("discovery injection keeps construction failures and required services", () => {
+it("discovery injection keeps construction failures and required services", () => {
 	class DiscoveryConfiguration extends Context.Service<
 		DiscoveryConfiguration,
 		{ readonly enabled: boolean }
@@ -480,10 +482,10 @@ test("discovery injection keeps construction failures and required services", ()
 	const serverFailure: DiscoveryStartupFailed extends Layer.Error<typeof server>
 		? true
 		: false = true
-	assert.deepEqual([serverDependency, serverFailure], [true, true])
+	assert.deepStrictEqual([serverDependency, serverFailure], [true, true])
 })
 
-test(
+it(
 	"development HTTP discovery uses fixed local data with standard authentication",
 	{ timeout: 30000 },
 	async () => {
@@ -508,7 +510,7 @@ test(
 				},
 				body: "{}",
 			})
-			assert.equal(login.status, 200)
+			assert.strictEqual(login.status, 200)
 			const cookie = login.headers
 				.getSetCookie()
 				.find((value) => value.startsWith(AuthApi.SessionCookie + "="))!
@@ -550,16 +552,16 @@ test(
 			]) {
 				const result = await client.runPromise(discover(input))
 				assert.ok(result._tag === "Single")
-				assert.equal(
+				assert.strictEqual(
 					result.candidate.cardUrl,
 					"https://app.development.test/card.json",
 				)
-				assert.equal(
+				assert.strictEqual(
 					result.candidate.card.name,
 					"app.development.test/simulated-app",
 				)
-				assert.equal(result.candidate.sources[0]?.originalInput, input)
-				assert.equal(
+				assert.strictEqual(result.candidate.sources[0]?.originalInput, input)
+				assert.strictEqual(
 					result.candidate.endpoints[0]?.remote.url,
 					"https://app.development.test/mcp",
 				)
@@ -577,7 +579,7 @@ test(
 				)
 				assert.ok(Result.isFailure(result))
 				assert.ok(Schema.is(AppDiscoveryFailed)(result.failure))
-				assert.equal(result.failure.reason, reason)
+				assert.strictEqual(result.failure.reason, reason)
 			}
 			const request = (
 				headers: Record<string, string>,
@@ -601,15 +603,15 @@ test(
 				],
 			] satisfies ReadonlyArray<readonly [Record<string, string>, number]>) {
 				const response = await request(headers)
-				assert.equal(response.status, status)
+				assert.strictEqual(response.status, status)
 				await response.text()
 			}
 			const session = await request({
 				cookie,
 				origin: options.auth.publicOrigin,
 			})
-			assert.equal(session.status, 200)
-			assert.equal(
+			assert.strictEqual(session.status, 200)
+			assert.strictEqual(
 				Schema.decodeUnknownSync(Schema.toCodecJson(AppDiscoveryResult))(
 					await session.json(),
 				)._tag,
@@ -619,7 +621,7 @@ test(
 				{ cookie, origin: options.auth.publicOrigin },
 				"{",
 			)
-			assert.equal(malformed.status, 400)
+			assert.strictEqual(malformed.status, 400)
 			await malformed.text()
 		} finally {
 			await runtime.dispose()

@@ -1,6 +1,5 @@
-import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
-import { test } from "node:test"
+import { assert, expect, it } from "@effect/vitest"
 import { createHash } from "node:crypto"
 import { Clock, Effect, Layer, ManagedRuntime, Schema } from "effect"
 import { NodeServices } from "@effect/platform-node"
@@ -171,7 +170,7 @@ const fixture = async (clock?: Clock.Clock) => {
 			code_challenge: createHash("sha256").update(verifier).digest("base64url"),
 		})
 		const response = await request("/oauth/" + mode + "/authorize?" + params)
-		assert.equal(response.status, 200, await response.clone().text())
+		assert.strictEqual(response.status, 200, await response.clone().text())
 		const consent = /name="request" value="([^"]+)"/.exec(
 			await response.text(),
 		)?.[1]
@@ -181,10 +180,13 @@ const fixture = async (clock?: Clock.Clock) => {
 			decision: options.decision ?? "allow",
 			account: options.account ?? "alice",
 		})
-		assert.equal(decision.status, 303)
+		assert.strictEqual(decision.status, 303)
 		const callback = new URL(decision.headers.get("location") ?? "")
-		assert.equal(callback.searchParams.get("state"), "test-state")
-		assert.equal(callback.searchParams.get("iss"), origin + "/oauth/" + mode)
+		assert.strictEqual(callback.searchParams.get("state"), "test-state")
+		assert.strictEqual(
+			callback.searchParams.get("iss"),
+			origin + "/oauth/" + mode,
+		)
 		const code = callback.searchParams.get("code")
 		const body = {
 			grant_type: "authorization_code",
@@ -220,19 +222,19 @@ const fixture = async (clock?: Clock.Clock) => {
 	return { ...app, request, form, rpc, connect, authorize }
 }
 
-test("serves discovery documents, public indexing fixtures, cache validators and CORS", async () => {
+it("serves discovery documents, public indexing fixtures, cache validators and CORS", async () => {
 	const app = await fixture()
 	try {
 		const response = await app.request("/.well-known/ai-catalog.json")
-		assert.equal(
+		assert.strictEqual(
 			response.headers.get("content-type"),
 			Document.catalogMediaType,
 		)
 		const catalog = Schema.decodeUnknownSync(Document.Catalog)(
 			await response.json(),
 		)
-		assert.equal(catalog.entries.length, scenarios.length + 2)
-		assert.equal(
+		assert.strictEqual(catalog.entries.length, scenarios.length + 2)
+		assert.strictEqual(
 			(
 				await app.request("/.well-known/ai-catalog.json", {
 					headers: { "if-none-match": response.headers.get("etag") ?? "" },
@@ -244,13 +246,19 @@ test("serves discovery documents, public indexing fixtures, cache validators and
 			const card = await app.request(
 				"/apps/" + scenario.id + "/server-card.json",
 			)
-			assert.equal(card.status, 200)
-			assert.equal(card.headers.get("content-type"), Document.cardMediaType)
+			assert.strictEqual(card.status, 200)
+			assert.strictEqual(
+				card.headers.get("content-type"),
+				Document.cardMediaType,
+			)
 			const value = await Effect.runPromise(
 				Document.ServerCard.decode(await card.json()),
 			)
-			assert.equal(value.remotes?.[0]?.url, origin + "/mcp/" + scenario.id)
-			assert.equal(
+			assert.strictEqual(
+				value.remotes?.[0]?.url,
+				origin + "/mcp/" + scenario.id,
+			)
+			assert.strictEqual(
 				(
 					await app.request("/apps/" + scenario.id + "/server-card.json", {
 						headers: {
@@ -265,7 +273,7 @@ test("serves discovery documents, public indexing fixtures, cache validators and
 				/rel="ai-catalog"/,
 			)
 		}
-		assert.equal(
+		assert.strictEqual(
 			(await app.request("/fixtures/noindex/server-card.json")).headers.get(
 				"x-robots-tag",
 			),
@@ -275,15 +283,15 @@ test("serves discovery documents, public indexing fixtures, cache validators and
 			await (await app.request("/robots.txt")).text(),
 			/Disallow: \/fixtures\/robots-denied\//,
 		)
-		assert.equal(
+		assert.strictEqual(
 			(await app.request("/fixtures/withdrawn/server-card.json")).status,
 			410,
 		)
-		assert.equal(
+		assert.strictEqual(
 			(await app.request("/fixtures/unavailable/server-card.json")).status,
 			503,
 		)
-		assert.equal(
+		assert.strictEqual(
 			(await app.request("/fixtures/redirect/server-card.json")).status,
 			302,
 		)
@@ -294,12 +302,12 @@ test("serves discovery documents, public indexing fixtures, cache validators and
 				"access-control-request-method": "POST",
 			},
 		})
-		assert.equal(preflight.status, 204)
-		assert.equal(
+		assert.strictEqual(preflight.status, 204)
+		assert.strictEqual(
 			preflight.headers.get("access-control-allow-origin"),
 			"https://host.example",
 		)
-		assert.equal(
+		assert.strictEqual(
 			(
 				await app.request("/mcp/anonymous", {
 					method: "OPTIONS",
@@ -313,7 +321,7 @@ test("serves discovery documents, public indexing fixtures, cache validators and
 	}
 })
 
-test("an independent MCP client uses structured tools, pagination, resources, templates, completion, prompts and Apps", async () => {
+it("an independent MCP client uses structured tools, pagination, resources, templates, completion, prompts and Apps", async () => {
 	const app = await fixture()
 	const client = await app.connect()
 	try {
@@ -323,12 +331,12 @@ test("an independent MCP client uses structured tools, pagination, resources, te
 				(tool) => tool.name === "write_note" && tool.outputSchema !== undefined,
 			),
 		)
-		assert.deepEqual(
+		assert.deepStrictEqual(
 			(await client.callTool({ name: "echo", arguments: { text: "hello" } }))
 				.structuredContent,
 			{ text: "hello", scenario: "anonymous" },
 		)
-		assert.deepEqual(
+		assert.deepStrictEqual(
 			(await client.callTool({ name: "add", arguments: { a: 2, b: 3 } }))
 				.structuredContent,
 			{ sum: 5 },
@@ -342,12 +350,12 @@ test("an independent MCP client uses structured tools, pagination, resources, te
 			name: "write_note",
 			arguments: input,
 		})
-		assert.deepEqual(
+		assert.deepStrictEqual(
 			(await client.callTool({ name: "write_note", arguments: input }))
 				.structuredContent,
 			first.structuredContent,
 		)
-		assert.equal(
+		assert.strictEqual(
 			(
 				await client.callTool({
 					name: "write_note",
@@ -356,7 +364,7 @@ test("an independent MCP client uses structured tools, pagination, resources, te
 			).isError,
 			true,
 		)
-		assert.equal(
+		assert.strictEqual(
 			(
 				await client.callTool({
 					name: "delete_note",
@@ -382,7 +390,7 @@ test("an independent MCP client uses structured tools, pagination, resources, te
 			name: "content_samples",
 			arguments: {},
 		})
-		assert.deepEqual(
+		assert.deepStrictEqual(
 			samples.content.map((entry) => entry.type),
 			["text", "image", "audio", "resource", "resource_link"],
 		)
@@ -405,7 +413,7 @@ test("an independent MCP client uses structured tools, pagination, resources, te
 			}),
 		)(wirePage)
 		assert.ok(initial.result.nextCursor)
-		assert.equal(initial.result.resources.length, 20)
+		assert.strictEqual(initial.result.resources.length, 20)
 		let listed = await client.listResources({
 			cursor: initial.result.nextCursor,
 		})
@@ -415,7 +423,7 @@ test("an independent MCP client uses structured tools, pagination, resources, te
 			listed = await client.listResources({ cursor: listed.nextCursor })
 			count += listed.resources.length
 		}
-		assert.equal(count, 113)
+		assert.strictEqual(count, 113)
 		assert.ok(
 			(await client.listResourceTemplates()).resourceTemplates.some(
 				(template) =>
@@ -426,7 +434,7 @@ test("an independent MCP client uses structured tools, pagination, resources, te
 			ref: { type: "ref/prompt", name: "summarize_workspace" },
 			argument: { name: "style", value: "b" },
 		})
-		assert.deepEqual(completed.completion.values, ["brief"])
+		assert.deepStrictEqual(completed.completion.values, ["brief"])
 		assert.ok(
 			(
 				await client.getPrompt({
@@ -435,7 +443,7 @@ test("an independent MCP client uses structured tools, pagination, resources, te
 				})
 			).messages.length > 0,
 		)
-		assert.equal(
+		assert.strictEqual(
 			(
 				await client.callTool({
 					name: "test_error",
@@ -447,7 +455,7 @@ test("an independent MCP client uses structured tools, pagination, resources, te
 		const ui = await client.readResource({
 			uri: "ui://protocol-test/workspace.html",
 		})
-		assert.equal(ui.contents[0]?.mimeType, Document.uiMediaType)
+		assert.strictEqual(ui.contents[0]?.mimeType, Document.uiMediaType)
 		assert.ok(
 			ui.contents.some(
 				(content) =>
@@ -456,7 +464,7 @@ test("an independent MCP client uses structured tools, pagination, resources, te
 					content.text.includes("ui/initialize"),
 			),
 		)
-		assert.equal(
+		assert.strictEqual(
 			(await client.callTool({ name: "echo", arguments: { text: 1 } })).isError,
 			true,
 		)
@@ -466,7 +474,7 @@ test("an independent MCP client uses structured tools, pagination, resources, te
 	}
 })
 
-test("configured headers reject invalid access and let independent MCP clients connect", async () => {
+it("configured headers reject invalid access and let independent MCP clients connect", async () => {
 	const app = await fixture()
 	try {
 		for (const scenario of scenarios.filter(
@@ -474,13 +482,13 @@ test("configured headers reject invalid access and let independent MCP clients c
 		)) {
 			const auth = scenario.authentication
 			if (auth.kind !== "header") continue
-			assert.equal(
+			assert.strictEqual(
 				(await app.rpc("/mcp/" + scenario.id, "server/discover")).status,
 				401,
 			)
 			const client = await app.connect(scenario.id, { [auth.name]: auth.value })
 			try {
-				assert.equal(
+				assert.strictEqual(
 					(
 						await client.callTool({
 							name: "echo",
@@ -498,13 +506,16 @@ test("configured headers reject invalid access and let independent MCP clients c
 	}
 })
 
-test("OAuth checks code binding, consent denial, refresh rotation, scope, audience, account isolation and revocation", async () => {
+it("OAuth checks code binding, consent denial, refresh rotation, scope, audience, account isolation and revocation", async () => {
 	const app = await fixture()
 	try {
 		const denied = await app.authorize({ decision: "deny" })
-		assert.equal(denied.callback.searchParams.get("error"), "access_denied")
+		assert.strictEqual(
+			denied.callback.searchParams.get("error"),
+			"access_denied",
+		)
 		const alice = await app.authorize()
-		assert.equal(
+		assert.strictEqual(
 			(
 				await app.form("/oauth/preregistered/token", {
 					...alice.body,
@@ -514,10 +525,10 @@ test("OAuth checks code binding, consent denial, refresh rotation, scope, audien
 			400,
 		)
 		const response = await alice.exchange()
-		assert.equal(response.status, 200, await response.clone().text())
+		assert.strictEqual(response.status, 200, await response.clone().text())
 		const token = Schema.decodeUnknownSync(Token)(await response.json())
-		assert.equal((await alice.exchange()).status, 400)
-		assert.equal(
+		assert.strictEqual((await alice.exchange()).status, 400)
+		assert.strictEqual(
 			(
 				await app.rpc(
 					"/mcp/oauth-cimd",
@@ -557,7 +568,7 @@ test("OAuth checks code binding, consent denial, refresh rotation, scope, audien
 					arguments: { workspace: "private" },
 				})
 			).structuredContent
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				Schema.decodeUnknownSync(
 					Schema.Struct({ notes: Schema.Array(Schema.Unknown) }),
 				)(data).notes,
@@ -595,7 +606,7 @@ test("OAuth checks code binding, consent denial, refresh rotation, scope, audien
 			},
 			readToken.access_token,
 		)
-		assert.equal(insufficient.status, 403)
+		assert.strictEqual(insufficient.status, 403)
 		assert.match(
 			insufficient.headers.get("www-authenticate") ?? "",
 			/test:write/,
@@ -607,13 +618,13 @@ test("OAuth checks code binding, consent denial, refresh rotation, scope, audien
 			refresh_token: token.refresh_token ?? "",
 		}
 		const refreshed = await app.form("/oauth/preregistered/token", refreshForm)
-		assert.equal(refreshed.status, 200)
+		assert.strictEqual(refreshed.status, 200)
 		const next = Schema.decodeUnknownSync(Token)(await refreshed.json())
-		assert.equal(
+		assert.strictEqual(
 			(await app.form("/oauth/preregistered/token", refreshForm)).status,
 			400,
 		)
-		assert.equal(
+		assert.strictEqual(
 			(
 				await app.form("/oauth/preregistered/revoke", {
 					client_id: alice.client,
@@ -622,7 +633,7 @@ test("OAuth checks code binding, consent denial, refresh rotation, scope, audien
 			).status,
 			200,
 		)
-		assert.equal(
+		assert.strictEqual(
 			(
 				await app.rpc(
 					"/mcp/oauth-preregistered",
@@ -633,7 +644,7 @@ test("OAuth checks code binding, consent denial, refresh rotation, scope, audien
 			).status,
 			401,
 		)
-		assert.equal(
+		assert.strictEqual(
 			(
 				await app.rpc(
 					"/mcp/oauth-preregistered",
@@ -649,14 +660,14 @@ test("OAuth checks code binding, consent denial, refresh rotation, scope, audien
 	}
 })
 
-test("CIMD, dynamic registration, confidential Basic/POST and client credentials are real token flows", async () => {
+it("CIMD, dynamic registration, confidential Basic/POST and client credentials are real token flows", async () => {
 	const app = await fixture()
 	try {
 		const cimd = await app.authorize({
 			mode: "cimd",
 			client: "https://client.example/client.json",
 		})
-		assert.equal((await cimd.exchange()).status, 200)
+		assert.strictEqual((await cimd.exchange()).status, 200)
 		const registration = await app.request("/oauth/dcr/register", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
@@ -666,20 +677,20 @@ test("CIMD, dynamic registration, confidential Basic/POST and client credentials
 				token_endpoint_auth_method: "none",
 			}),
 		})
-		assert.equal(registration.status, 201)
+		assert.strictEqual(registration.status, 201)
 		const data = await object(registration)
-		assert.equal(typeof data["client_id"], "string")
+		assert.strictEqual(typeof data["client_id"], "string")
 		const dynamic = await app.authorize({
 			mode: "dcr",
 			client: String(data["client_id"]),
 		})
-		assert.equal((await dynamic.exchange()).status, 200)
+		assert.strictEqual((await dynamic.exchange()).status, 200)
 		for (const method of ["basic", "post"]) {
 			const grant = await app.authorize({
 				client: "protocol-test-confidential-" + method,
 				secretMethod: method,
 			})
-			assert.equal((await grant.exchange()).status, 200)
+			assert.strictEqual((await grant.exchange()).status, 200)
 		}
 		const machine = await app.form("/oauth/client-credentials/token", {
 			grant_type: "client_credentials",
@@ -688,9 +699,9 @@ test("CIMD, dynamic registration, confidential Basic/POST and client credentials
 			resource: origin + "/mcp/oauth-client-credentials",
 			scope: "test:read",
 		})
-		assert.equal(machine.status, 200)
-		assert.equal((await object(machine))["refresh_token"], undefined)
-		assert.equal(
+		assert.strictEqual(machine.status, 200)
+		assert.strictEqual((await object(machine))["refresh_token"], undefined)
+		assert.strictEqual(
 			(
 				await app.form("/oauth/client-credentials/token", {
 					grant_type: "client_credentials",
@@ -700,7 +711,7 @@ test("CIMD, dynamic registration, confidential Basic/POST and client credentials
 			).status,
 			400,
 		)
-		assert.equal(
+		assert.strictEqual(
 			(
 				await app.form("/oauth/client-credentials/token", {
 					grant_type: "client_credentials",
@@ -716,7 +727,7 @@ test("CIMD, dynamic registration, confidential Basic/POST and client credentials
 	}
 })
 
-test("standard keyed inputs resume form, URL, sampling and roots operations and reject replay", async () => {
+it("standard keyed inputs resume form, URL, sampling and roots operations and reject replay", async () => {
 	const app = await fixture()
 	const meta = {
 		"io.modelcontextprotocol/protocolVersion": Document.protocolVersion,
@@ -786,7 +797,7 @@ test("standard keyed inputs resume form, URL, sampling and roots operations and 
 	}
 })
 
-test(
+it(
 	"subscriptions, progress, logs and cancellation use the selected MCP transport",
 	{ timeout: 10000 },
 	async () => {
@@ -824,7 +835,7 @@ test(
 					},
 				},
 			)
-			assert.equal(progress, 5)
+			assert.strictEqual(progress, 5)
 			assert.ok(logs > 0)
 			await client.callTool({ name: "notify", arguments: {} })
 			await client.callTool({
@@ -839,13 +850,13 @@ test(
 			await resourceUpdate.promise
 			assert.ok(updated > 0)
 			const controller = new AbortController()
-			await assert.rejects(() =>
+			await expect(
 				client.callTool(
 					{ name: "wait", arguments: { milliseconds: 10000 } },
 					{ signal: controller.signal, onprogress: () => controller.abort() },
 				),
-			)
-			assert.deepEqual(
+			).rejects.toThrow()
+			assert.deepStrictEqual(
 				(
 					await client.callTool({
 						name: "echo",
@@ -862,7 +873,7 @@ test(
 	},
 )
 
-test("a controlled clock makes codes, access tokens, refresh grants and workspaces expire", async () => {
+it("a controlled clock makes codes, access tokens, refresh grants and workspaces expire", async () => {
 	let now = Date.now()
 	const live = Clock.Clock.defaultValue()
 	const clock: Clock.Clock = {
@@ -878,7 +889,7 @@ test("a controlled clock makes codes, access tokens, refresh grants and workspac
 	try {
 		const expiredCode = await app.authorize()
 		now += 60_001
-		assert.equal((await expiredCode.exchange()).status, 400)
+		assert.strictEqual((await expiredCode.exchange()).status, 400)
 		const grant = await app.authorize()
 		const tokens = Schema.decodeUnknownSync(Token)(
 			await (await grant.exchange()).json(),
@@ -894,7 +905,7 @@ test("a controlled clock makes codes, access tokens, refresh grants and workspac
 				},
 			})
 			now += 300_001
-			assert.equal(
+			assert.strictEqual(
 				(
 					await app.rpc(
 						"/mcp/oauth-preregistered",
@@ -905,7 +916,7 @@ test("a controlled clock makes codes, access tokens, refresh grants and workspac
 				).status,
 				401,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await app.form("/oauth/preregistered/token", {
 						client_id: grant.client,
@@ -923,14 +934,14 @@ test("a controlled clock makes codes, access tokens, refresh grants and workspac
 					arguments: { workspace: "expires" },
 				})
 			).structuredContent
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				Schema.decodeUnknownSync(
 					Schema.Struct({ notes: Schema.Array(Schema.Unknown) }),
 				)(view).notes,
 				[],
 			)
 			now += 3_600_001
-			assert.equal(
+			assert.strictEqual(
 				(
 					await app.form("/oauth/preregistered/token", {
 						client_id: grant.client,
@@ -949,7 +960,7 @@ test("a controlled clock makes codes, access tokens, refresh grants and workspac
 	}
 })
 
-test("protocol discovery and anonymous public indexing read the published fixtures", async () => {
+it("protocol discovery and anonymous public indexing read the published fixtures", async () => {
 	const app = await fixture()
 	const readDocument: Network.PublicNetwork["Service"]["readDocument"] = (
 		input,
@@ -1001,33 +1012,33 @@ test("protocol discovery and anonymous public indexing read the published fixtur
 		const selected = await runtime.runPromise(
 			Discovery.resolve(origin + "/apps/anonymous"),
 		)
-		assert.equal(selected._tag, "Single")
+		assert.strictEqual(selected._tag, "Single")
 		const domain = await runtime.runPromise(
 			Discovery.resolve("protocol-test.example.com"),
 		)
-		assert.equal(domain._tag, "Multiple")
+		assert.strictEqual(domain._tag, "Multiple")
 
 		await runtime.runPromise(
 			Effect.gen(function* () {
-				assert.equal(
+				assert.strictEqual(
 					(yield* Indexing.sync({
 						cardUrl: origin + "/apps/anonymous/server-card.json",
 					}))._tag,
 					"Indexed",
 				)
-				assert.equal(
+				assert.strictEqual(
 					(yield* Indexing.sync({
 						cardUrl: origin + "/fixtures/noindex/server-card.json",
 					}))._tag,
 					"Excluded",
 				)
-				assert.equal(
+				assert.strictEqual(
 					(yield* Indexing.sync({
 						cardUrl: origin + "/fixtures/robots-denied/server-card.json",
 					}))._tag,
 					"Excluded",
 				)
-				assert.equal(
+				assert.strictEqual(
 					(yield* Indexing.sync({
 						cardUrl: origin + "/fixtures/unlisted/server-card.json",
 					}))._tag,

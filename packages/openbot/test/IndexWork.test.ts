@@ -1,6 +1,5 @@
 // @effect-diagnostics strictEffectProvide:off
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { AppIndexApi as Api, AuthApi } from "@openbot-build/api"
 import {
@@ -42,40 +41,53 @@ import { ownerKey } from "../src/apps/StoredConnections.ts"
 import * as Secrets from "../src/secrets/Secrets.ts"
 import * as Db from "../src/database/Database.ts"
 
-test("stored public verification updates and withdraws with a test clock and recovers interrupted claims", async () => {
-	const database = await Postgres.start()
-	const publisher = await Fixture.start()
-	const website = await Fixture.start()
-	const indexStorage = IndexStorage.layer
-	const indexing = PublicIndexing.layer.pipe(
-		Layer.provide(CatalogDiscovery.layerRules),
-		Layer.provide(RobotsPolicy.layer),
-		Layer.provide(
-			publisher.publicNetwork({ origins: [website.origin], cas: [website.ca] }),
-		),
-		Layer.provide(indexStorage),
-	)
-	const layers = Layer.merge(
-		PublicIndex.layer({ publicOrigin: "https://openbot.test" }),
-		Work.layer().pipe(Layer.provide(indexing)),
-	).pipe(
-		Layer.provideMerge(indexStorage),
-		Layer.provide(
-			Governance.layer.pipe(
-				Layer.provide(OrganizationFixture.layerDefaultSettings),
-			),
-		),
-		Layer.provideMerge(
-			Database.layer({ databaseUrl: Redacted.make(database.url) }),
-		),
-		Layer.provideMerge(TestClock.layer()),
-		Layer.provide(NodeServices.layer),
-	)
-	let runtime = ManagedRuntime.make(layers)
-	const cardUrl = publisher.origin + "/card?edition=team"
-	try {
-		await runtime.runPromise(
-			Effect.gen(function* () {
+it.live(
+	"stored public verification updates and withdraws with a test clock and recovers interrupted claims",
+	() =>
+		Effect.gen(function* () {
+			// Each resource closes when the test ends, in the reverse order.
+			const database = yield* Effect.acquireRelease(
+				Effect.promise(() => Postgres.start()),
+				(database) => Effect.promise(() => database.close()),
+			)
+			const website = yield* Effect.acquireRelease(
+				Effect.promise(() => Fixture.start()),
+				(website) => Effect.promise(() => website.close()),
+			)
+			const publisher = yield* Effect.acquireRelease(
+				Effect.promise(() => Fixture.start()),
+				(publisher) => Effect.promise(() => publisher.close()),
+			)
+			const indexStorage = IndexStorage.layer
+			const indexing = PublicIndexing.layer.pipe(
+				Layer.provide(CatalogDiscovery.layerRules),
+				Layer.provide(RobotsPolicy.layer),
+				Layer.provide(
+					publisher.publicNetwork({
+						origins: [website.origin],
+						cas: [website.ca],
+					}),
+				),
+				Layer.provide(indexStorage),
+			)
+			const layers = Layer.merge(
+				PublicIndex.layer({ publicOrigin: "https://openbot.test" }),
+				Work.layer().pipe(Layer.provide(indexing)),
+			).pipe(
+				Layer.provideMerge(indexStorage),
+				Layer.provide(
+					Governance.layer.pipe(
+						Layer.provide(OrganizationFixture.layerDefaultSettings),
+					),
+				),
+				Layer.provideMerge(
+					Database.layer({ databaseUrl: Redacted.make(database.url) }),
+				),
+				Layer.provideMerge(TestClock.layer()),
+				Layer.provide(NodeServices.layer),
+			)
+			const cardUrl = publisher.origin + "/card?edition=team"
+			yield* Effect.gen(function* () {
 				yield* Database.migrate
 				const db = yield* Db.make
 				const enqueue = Work.enqueue(db, "public", cardUrl, [])
@@ -86,14 +98,14 @@ test("stored public verification updates and withdraws with a test clock and rec
 				assert.ok(yield* work.runOne())
 				const first = (yield* index.search({})).apps[0]
 				assert.ok(first)
-				assert.equal(first.entry.cardUrl, cardUrl)
-				assert.equal(first.check?._tag, "Indexed")
-				assert.equal(yield* work.runOne(), false)
+				assert.strictEqual(first.entry.cardUrl, cardUrl)
+				assert.strictEqual(first.check?._tag, "Indexed")
+				assert.strictEqual(yield* work.runOne(), false)
 				publisher.setDescription("Updated project documents")
 				yield* TestClock.adjust("1 hour")
 				yield* work.runOne()
 				const updated = yield* index.get(cardUrl)
-				assert.equal(
+				assert.strictEqual(
 					updated.entry.card.description,
 					"Updated project documents",
 				)
@@ -102,15 +114,15 @@ test("stored public verification updates and withdraws with a test clock and rec
 				yield* TestClock.adjust("1 hour")
 				yield* work.runOne()
 				const unconfirmed = yield* index.get(cardUrl)
-				assert.equal(unconfirmed.check?._tag, "Unconfirmed")
-				assert.equal(unconfirmed.entry.checkedAt, updated.entry.checkedAt)
+				assert.strictEqual(unconfirmed.check?._tag, "Unconfirmed")
+				assert.strictEqual(unconfirmed.entry.checkedAt, updated.entry.checkedAt)
 				publisher.setPublication("withdrawn")
-				assert.equal(yield* work.runOne(), false)
+				assert.strictEqual(yield* work.runOne(), false)
 				yield* TestClock.adjust("1 minute")
 				yield* work.runOne()
-				assert.deepEqual((yield* index.search({})).apps, [])
-				assert.equal(Option.isNone(yield* repository.get(cardUrl)), true)
-				assert.equal(
+				assert.deepStrictEqual((yield* index.search({})).apps, [])
+				assert.strictEqual(Option.isNone(yield* repository.get(cardUrl)), true)
+				assert.strictEqual(
 					Option.getOrThrow(
 						HashMap.get(yield* IndexStorage.checks(db, "public"), cardUrl),
 					)._tag,
@@ -122,21 +134,21 @@ test("stored public verification updates and withdraws with a test clock and rec
 				publisher.setPublication("noindex")
 				yield* enqueue
 				yield* work.runOne()
-				assert.deepEqual((yield* index.search({})).apps, [])
+				assert.deepStrictEqual((yield* index.search({})).apps, [])
 				publisher.setPublication("published")
 				yield* enqueue
 				yield* work.runOne()
 				publisher.setPublication("robots-denied")
 				yield* enqueue
 				yield* work.runOne()
-				assert.deepEqual((yield* index.search({})).apps, [])
+				assert.deepStrictEqual((yield* index.search({})).apps, [])
 				publisher.setPublication("published")
 				publisher.setWebsite(website.origin + "/website")
 				publisher.setDeclarations([])
 				website.setDeclarations([cardUrl])
 				yield* enqueue
 				yield* work.runOne()
-				assert.equal(
+				assert.strictEqual(
 					(yield* index.get(cardUrl)).entry.evidence[0]?.association,
 					"Website",
 				)
@@ -146,20 +158,17 @@ test("stored public verification updates and withdraws with a test clock and rec
 					.update(appIndexJobs)
 					.set({ claim: "interrupted", leaseUntil: Number.MAX_SAFE_INTEGER })
 					.where(eq(appIndexJobs.cardUrl, cardUrl))
-				assert.equal(yield* work.runOne(), false)
-			}),
-		)
-		await runtime.dispose()
-		runtime = ManagedRuntime.make(layers)
-		await runtime.runPromise(
-			Effect.gen(function* () {
+				assert.strictEqual(yield* work.runOne(), false)
+			}).pipe(Effect.provide(layers))
+			// Providing the layers again builds new services, like a new process.
+			yield* Effect.gen(function* () {
 				// The worker of the new process releases the claims of the old process.
 				yield* (yield* Db.make)
 					.update(appIndexJobs)
 					.set({ claim: null, leaseUntil: 0 })
 					.where(eq(appIndexJobs.namespace, "public"))
-				assert.equal(yield* (yield* IndexWork).runOne(), true)
-				assert.equal(
+				assert.strictEqual(yield* (yield* IndexWork).runOne(), true)
+				assert.strictEqual(
 					(yield* (yield* PublicIndex.PublicIndex).search({})).apps.length,
 					1,
 				)
@@ -168,18 +177,12 @@ test("stored public verification updates and withdraws with a test clock and rec
 				yield* Scope.close(workerScope, Exit.void)
 				const count = publisher.requests().length
 				yield* TestClock.adjust("2 hours")
-				assert.equal(publisher.requests().length, count)
-			}),
-		)
-	} finally {
-		await runtime.dispose()
-		await publisher.close()
-		await website.close()
-		await database.close()
-	}
-})
+				assert.strictEqual(publisher.requests().length, count)
+			}).pipe(Effect.provide(layers))
+		}),
+)
 
-test("standard clients see independently indexed Apps, and withdrawal keeps private connections", async () => {
+it("standard clients see independently indexed Apps, and withdrawal keeps private connections", async () => {
 	const publisher = await Fixture.start()
 	const host = await BrowserHost.start({
 		publicOrigin: "https://openbot.fixture.test",
@@ -220,7 +223,7 @@ test("standard clients see independently indexed Apps, and withdrawal keeps priv
 				confirmed: true,
 			}),
 		})
-		assert.equal(saved.status, 201)
+		assert.strictEqual(saved.status, 201)
 		const connection = await saved.json()
 		const waitFor = async (count: number) => {
 			for (let attempt = 0; attempt < 60; attempt++) {
@@ -232,9 +235,9 @@ test("standard clients see independently indexed Apps, and withdrawal keeps priv
 			throw new Error("Public Index did not reach the expected state")
 		}
 		const page = await waitFor(1)
-		assert.equal(JSON.stringify(page).includes("private-secret"), false)
+		assert.strictEqual(JSON.stringify(page).includes("private-secret"), false)
 		const bob = await host.login("index-bob")
-		assert.deepEqual(
+		assert.deepStrictEqual(
 			await (
 				await fetch(host.address + "/v1/connections", {
 					headers: {
@@ -259,7 +262,7 @@ test("standard clients see independently indexed Apps, and withdrawal keeps priv
 			}),
 		)
 		await waitFor(0)
-		assert.equal(
+		assert.strictEqual(
 			(
 				await fetch(host.address + "/v1/connections/" + connection.id, {
 					headers,
@@ -273,7 +276,7 @@ test("standard clients see independently indexed Apps, and withdrawal keeps priv
 	}
 })
 
-test("public restrictions show appeals and block existing App clients and new confirmations", async () => {
+it("public restrictions show appeals and block existing App clients and new confirmations", async () => {
 	const publisher = await Fixture.start()
 	const cardUrl = publisher.origin + "/card?edition=team"
 	const restriction = {
@@ -303,7 +306,7 @@ test("public restrictions show appeals and block existing App clients and new co
 				Effect.provide(publisher.discovery),
 			),
 		)
-		assert.equal(discovery._tag, "Single")
+		assert.strictEqual(discovery._tag, "Single")
 		if (discovery._tag !== "Single") throw new Error("Expected one fixture App")
 		await storage.runPromise(
 			Effect.gen(function* () {
@@ -340,8 +343,8 @@ test("public restrictions show appeals and block existing App clients and new co
 		const response = await fetch(
 			host.address + "/v1/app-index/app?" + new URLSearchParams({ cardUrl }),
 		)
-		assert.equal(response.status, 403)
-		assert.deepEqual((await response.json()).restriction, restriction)
+		assert.strictEqual(response.status, 403)
+		assert.deepStrictEqual((await response.json()).restriction, restriction)
 		const denied = await host.runtime.runPromise(
 			Effect.scoped(
 				Effect.gen(function* () {
@@ -358,7 +361,7 @@ test("public restrictions show appeals and block existing App clients and new co
 				}),
 			),
 		)
-		assert.equal(denied._tag, "PermissionDenied")
+		assert.strictEqual(denied._tag, "PermissionDenied")
 		const headers = {
 			cookie:
 				AuthApi.SessionCookie +
@@ -380,9 +383,9 @@ test("public restrictions show appeals and block existing App clients and new co
 				confirmed: true,
 			}),
 		})
-		assert.equal(confirmation.status, 403)
-		assert.equal((await confirmation.json())._tag, "AppRestricted")
-		assert.equal(
+		assert.strictEqual(confirmation.status, 403)
+		assert.strictEqual((await confirmation.json())._tag, "AppRestricted")
+		assert.strictEqual(
 			(
 				await (
 					await fetch(host.address + "/v1/connections", { headers })
@@ -390,7 +393,7 @@ test("public restrictions show appeals and block existing App clients and new co
 			)[0].availability._tag,
 			"Restricted",
 		)
-		assert.equal(
+		assert.strictEqual(
 			publisher.requests().some((request) => request.path === "/mcp"),
 			false,
 		)

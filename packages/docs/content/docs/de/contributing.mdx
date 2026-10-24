@@ -65,18 +65,19 @@ Wie du dich anmeldest und ein User Token erstellst, steht unter [Schnellstart](/
 
 ## Prüfungen
 
-| Befehl                                                   | Was er tut                                   |
-| -------------------------------------------------------- | -------------------------------------------- |
-| `devenv shell -- pnpm install`                           | Installiert alle Pakete.                     |
-| `devenv shell -- pnpm build`                             | Baut jedes Paket mit tsdown.                 |
-| `devenv shell -- pnpm typecheck`                         | Prüft die Typen jedes Pakets.                |
-| `devenv shell -- pnpm -r test`                           | Führt die Tests jedes Pakets aus.            |
-| `devenv shell -- pnpm --filter @openbot-build/core test` | Führt die Tests eines Pakets aus.            |
-| `devenv shell -- treefmt`                                | Formatiert den Code mit Prettier und nixfmt. |
+| Befehl                                                   | Was er tut                                                                        |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `devenv shell -- pnpm install`                           | Installiert alle Pakete.                                                          |
+| `devenv shell -- pnpm build`                             | Baut jedes Paket mit tsdown.                                                      |
+| `devenv shell -- pnpm typecheck`                         | Prüft die Typen jedes Pakets.                                                     |
+| `devenv shell -- pnpm -r test`                           | Führt die Tests jedes Pakets aus.                                                 |
+| `devenv shell -- pnpm test`                              | Führt die Tests aller Pakete in einem Vitest-Lauf aus, ohne Build und Typprüfung. |
+| `devenv shell -- pnpm --filter @openbot-build/core test` | Führt die Tests eines Pakets aus.                                                 |
+| `devenv shell -- treefmt`                                | Formatiert den Code mit Prettier und nixfmt.                                      |
 
 Führe `pnpm build` vor `pnpm typecheck` aus. Pakete importieren einander aus ihren gebauten Dateien.
 
-Tests nutzen den eingebauten Test-Runner von Node.js. Tests von OpenBot starten ihren eigenen kurzlebigen PostgreSQL-Server mit den Werkzeugen aus devenv. Sie brauchen keine Geheimnisse und keine externen Dienste.
+Tests nutzen [Vitest](https://vitest.dev) mit [`@effect/vitest`](https://www.npmjs.com/package/@effect/vitest). Ein Test, der einen Effect ausführt, nutzt `it.effect`. Er gibt dem Test eine Test-Uhr: Die Zeit läuft nur weiter, wenn der Test sie weiterstellt. Ein Test, der echte Zeit braucht, zum Beispiel einer mit einem echten Server, nutzt `it.live`. Tests von OpenBot starten ihren eigenen kurzlebigen PostgreSQL-Server mit den Werkzeugen aus devenv. Sie brauchen keine Geheimnisse und keine externen Dienste.
 GitHub Actions führt dieselben Befehle `build`, `typecheck` und `test` aus. Siehe [Betrieb](/de/docs/deploy#github-actions).
 
 ---

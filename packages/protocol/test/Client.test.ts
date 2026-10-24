@@ -1,6 +1,7 @@
+// Tests are entry points, so they provide their own Layers.
+// @effect-diagnostics strictEffectProvide:off
 import {
 	Array as EffectArray,
-	ManagedRuntime,
 	Effect,
 	Fiber,
 	Layer,
@@ -9,7 +10,6 @@ import {
 	Stream,
 	Match,
 } from "effect"
-import assert from "node:assert/strict"
 import {
 	CatalogDiscovery,
 	MemoryStore,
@@ -20,7 +20,7 @@ import {
 	Store,
 } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { type IncomingHttpHeaders, type ServerResponse } from "node:http"
 import * as Mcp from "@modelcontextprotocol/client"
 
@@ -291,8 +291,11 @@ const service = async () => {
 							return
 						}
 						if (params.name === "NeedInput") {
-							assert.equal(params.requestState, "server-owned-operation-1")
-							assert.deepEqual(params.inputResponses, {
+							assert.strictEqual(
+								params.requestState,
+								"server-owned-operation-1",
+							)
+							assert.deepStrictEqual(params.inputResponses, {
 								consent: {
 									action: "accept",
 									content: {
@@ -489,26 +492,36 @@ const service = async () => {
 	}
 }
 
-test("the protocol client uses live discovery, standard pages, schemas, headers and one shared policy", async () => {
-	const fixture = await service()
-	try {
-		await using runtime1 = ManagedRuntime.make(
-			fixture.layers.pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
-		)
-		await runtime1.runPromise(
-			Effect.scoped(
+// Each test starts its own service and closes it when the test ends.
+const openService = Effect.acquireRelease(
+	Effect.promise(() => service()),
+	(fixture) => Effect.promise(() => fixture.close()),
+)
+// A fresh Layer for each provide, like a fresh runtime.
+const layersOf = (fixture: Effect.Success<typeof openService>) =>
+	fixture.layers.pipe(Layer.provideMerge([CatalogDiscovery.layerRules]))
+
+it.live(
+	"the protocol client uses live discovery, standard pages, schemas, headers and one shared policy",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* openService
+			yield* Effect.scoped(
 				Effect.gen(function* () {
 					yield* fixture.prepare
 					const client = yield* fixture.connect()
-					assert.equal(
+					assert.strictEqual(
 						client.discovery.supportedVersions.includes(
 							Document.protocolVersion,
 						),
 						true,
 					)
-					assert.equal(fixture.requests[0]?.request.method, "server/discover")
-					assert.equal((yield* client.listTools()).tools.length, 9)
-					assert.equal(
+					assert.strictEqual(
+						fixture.requests[0]?.request.method,
+						"server/discover",
+					)
+					assert.strictEqual((yield* client.listTools()).tools.length, 9)
+					assert.strictEqual(
 						(yield* client.modelTools).some((tool) => tool.name === "AppOnly"),
 						false,
 					)
@@ -521,10 +534,12 @@ test("the protocol client uses live discovery, standard pages, schemas, headers 
 						},
 						{ source: "model" },
 					)
-					assert.equal(created._tag, "Completed")
+					assert.strictEqual(created._tag, "Completed")
 					Match.value(created).pipe(
 						Match.tag("Completed", (created) => {
-							assert.deepEqual(created.result.structuredContent, { id: 1 })
+							assert.deepStrictEqual(created.result.structuredContent, {
+								id: 1,
+							})
 						}),
 						Match.orElse(() => undefined),
 					)
@@ -540,7 +555,7 @@ test("the protocol client uses live discovery, standard pages, schemas, headers 
 							{ source: "model" },
 						),
 					)
-					assert.equal(invalid._tag, "Failure")
+					assert.strictEqual(invalid._tag, "Failure")
 					assert.ok(
 						fixture.requests
 							.slice(before)
@@ -552,17 +567,17 @@ test("the protocol client uses live discovery, standard pages, schemas, headers 
 							{ source: "host", readOnly: true },
 						),
 					)
-					assert.equal(malformed._tag, "Failure")
+					assert.strictEqual(malformed._tag, "Failure")
 					Match.value(malformed).pipe(
 						Match.tag("Failure", (malformed) => {
-							assert.equal(malformed.failure._tag, "ClientError")
+							assert.strictEqual(malformed.failure._tag, "ClientError")
 						}),
 						Match.orElse(() => undefined),
 					)
 					const failed = yield* Effect.result(
 						client.callTool({ name: "Fail" }, { source: "host" }),
 					)
-					assert.equal(failed._tag, "Failure")
+					assert.strictEqual(failed._tag, "Failure")
 					Match.value(failed).pipe(
 						Match.when(
 							{
@@ -570,7 +585,7 @@ test("the protocol client uses live discovery, standard pages, schemas, headers 
 								failure: Match.instanceOf(Client.ToolFailure),
 							},
 							({ failure }) => {
-								assert.equal(failure.result.content[0]?.type, "text")
+								assert.strictEqual(failure.result.content[0]?.type, "text")
 							},
 						),
 						Match.orElse(() => undefined),
@@ -584,7 +599,7 @@ test("the protocol client uses live discovery, standard pages, schemas, headers 
 						},
 						{ source: "host" },
 					)
-					assert.equal(
+					assert.strictEqual(
 						fixture.requests.findLast((r) => r.request.method === "tools/call")
 							?.headers["mcp-param-locale"],
 						"=?base64?77yv77yr?=",
@@ -596,7 +611,7 @@ test("the protocol client uses live discovery, standard pages, schemas, headers 
 					})
 					Match.value(resource).pipe(
 						Match.tag("Completed", (resource) => {
-							assert.equal(resource.result.contents[0]?.uri, "notes://42")
+							assert.strictEqual(resource.result.contents[0]?.uri, "notes://42")
 						}),
 						Match.orElse(() => undefined),
 					)
@@ -606,14 +621,17 @@ test("the protocol client uses live discovery, standard pages, schemas, headers 
 					)
 					Match.value(prompt).pipe(
 						Match.tag("Completed", (prompt) => {
-							assert.equal(prompt.result.messages[0]?.content.type, "text")
+							assert.strictEqual(
+								prompt.result.messages[0]?.content.type,
+								"text",
+							)
 						}),
 						Match.orElse(() => undefined),
 					)
 					fixture.deny()
 					const deniedCount = fixture.requests.length
 					for (const source of ["model", "app"] as const)
-						assert.equal(
+						assert.strictEqual(
 							(yield* Effect.result(
 								client.callTool(
 									{
@@ -629,8 +647,8 @@ test("the protocol client uses live discovery, standard pages, schemas, headers 
 							))._tag,
 							"Failure",
 						)
-					assert.equal(fixture.requests.length, deniedCount)
-					assert.equal(fixture.state.writes, 1)
+					assert.strictEqual(fixture.requests.length, deniedCount)
+					assert.strictEqual(fixture.state.writes, 1)
 					assert.ok(
 						fixture.requests.every(
 							(r) =>
@@ -642,27 +660,22 @@ test("the protocol client uses live discovery, standard pages, schemas, headers 
 					assert.ok(
 						fixture.requests.every((r) => r.request.method !== "initialize"),
 					)
-					assert.equal(
+					assert.strictEqual(
 						fixture.requests.find((r) => r.request.method === "tools/call")
 							?.headers["mcp-protocol-version"],
 						Document.protocolVersion,
 					)
 				}),
-			),
-		)
-	} finally {
-		await fixture.close()
-	}
-})
+			).pipe(Effect.provide(layersOf(fixture)))
+		}),
+)
 
-test("MRTR stays pending until a capable host explicitly resumes the same operation", async () => {
-	const fixture = await service()
-	try {
-		await using runtime2 = ManagedRuntime.make(
-			fixture.layers.pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
-		)
-		await runtime2.runPromise(
-			Effect.scoped(
+it.live(
+	"MRTR stays pending until a capable host explicitly resumes the same operation",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* openService
+			yield* Effect.scoped(
 				Effect.gen(function* () {
 					yield* fixture.prepare
 					const noInputs = yield* fixture.connect()
@@ -670,16 +683,16 @@ test("MRTR stays pending until a capable host explicitly resumes the same operat
 						{ name: "NeedInput" },
 						{ source: "host" },
 					)
-					assert.equal(pending._tag, "InputRequired")
+					assert.strictEqual(pending._tag, "InputRequired")
 					return yield* Match.value(pending).pipe(
 						Match.tag("InputRequired", (pending) =>
 							Effect.gen(function* () {
-								assert.equal(fixture.state.writes, 0)
-								assert.equal(
+								assert.strictEqual(fixture.state.writes, 0)
+								assert.strictEqual(
 									(yield* Effect.result(pending.handle))._tag,
 									"Failure",
 								)
-								assert.equal(fixture.state.writes, 0)
+								assert.strictEqual(fixture.state.writes, 0)
 								const client = yield* fixture.connect({
 									capabilities: {
 										elicitation: {
@@ -698,18 +711,18 @@ test("MRTR stays pending until a capable host explicitly resumes the same operat
 									{ name: "NeedInput" },
 									{ source: "host" },
 								)
-								assert.equal(operation._tag, "InputRequired")
+								assert.strictEqual(operation._tag, "InputRequired")
 								return yield* Match.value(operation).pipe(
 									Match.tag("InputRequired", (operation) =>
 										Effect.gen(function* () {
 											const completed = yield* operation.handle
-											assert.equal(completed._tag, "Completed")
-											assert.equal(fixture.state.writes, 1)
+											assert.strictEqual(completed._tag, "Completed")
+											assert.strictEqual(fixture.state.writes, 1)
 											const requests = fixture.requests.filter(
 												(r) => r.request.method === "tools/call",
 											)
-											assert.equal(requests.length, 3)
-											assert.equal(
+											assert.strictEqual(requests.length, 3)
+											assert.strictEqual(
 												requests[2]?.request.params?.["requestState"],
 												"server-owned-operation-1",
 											)
@@ -722,21 +735,16 @@ test("MRTR stays pending until a capable host explicitly resumes the same operat
 						Match.orElse(() => Effect.void),
 					)
 				}),
-			),
-		)
-	} finally {
-		await fixture.close()
-	}
-})
+			).pipe(Effect.provide(layersOf(fixture)))
+		}),
+)
 
-test("SSE progress, explicit subscriptions, cancellation and unknown write outcomes stay distinct", async () => {
-	const fixture = await service()
-	try {
-		await using runtime3 = ManagedRuntime.make(
-			fixture.layers.pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
-		)
-		await runtime3.runPromise(
-			Effect.scoped(
+it.live(
+	"SSE progress, explicit subscriptions, cancellation and unknown write outcomes stay distinct",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* openService
+			yield* Effect.scoped(
 				Effect.gen(function* () {
 					yield* fixture.prepare
 					const client = yield* fixture.connect()
@@ -749,8 +757,8 @@ test("SSE progress, explicit subscriptions, cancellation and unknown write outco
 								(progress = EffectArray.append(progress, event.progress)),
 						},
 					)
-					assert.equal(result._tag, "Completed")
-					assert.deepEqual(progress, [1])
+					assert.strictEqual(result._tag, "Completed")
+					assert.deepStrictEqual(progress, [1])
 					const received = yield* Effect.forkChild(
 						client.notifications.pipe(
 							Stream.filter(
@@ -763,15 +771,15 @@ test("SSE progress, explicit subscriptions, cancellation and unknown write outco
 					const subscription = yield* client.listen({
 						toolsListChanged: true,
 					})
-					assert.equal(subscription.honoredFilter.toolsListChanged, true)
+					assert.strictEqual(subscription.honoredFilter.toolsListChanged, true)
 					fixture.change()
 					yield* Fiber.join(received)
-					assert.equal(
+					assert.strictEqual(
 						(yield* client.listTools()).tools[0]?.description,
 						"revision 2",
 					)
 					yield* subscription.close
-					assert.equal(yield* subscription.closed, "local")
+					assert.strictEqual(yield* subscription.closed, "local")
 					const hanging = yield* Effect.forkChild(
 						client.callTool({ name: "Hang" }, { source: "host" }),
 					)
@@ -793,15 +801,15 @@ test("SSE progress, explicit subscriptions, cancellation and unknown write outco
 							},
 						),
 					)
-					assert.equal(unknown._tag, "Failure")
+					assert.strictEqual(unknown._tag, "Failure")
 					Match.value(unknown).pipe(
 						Match.tag("Failure", (unknown) => {
-							assert.equal(unknown.failure._tag, "OutcomeUnknown")
+							assert.strictEqual(unknown.failure._tag, "OutcomeUnknown")
 						}),
 						Match.orElse(() => undefined),
 					)
-					assert.equal(fixture.state.writes, 1)
-					assert.equal(
+					assert.strictEqual(fixture.state.writes, 1)
+					assert.strictEqual(
 						fixture.requests.filter(
 							(r) => paramsOf(r.request.params ?? {}).name === "Drop",
 						).length,
@@ -813,68 +821,53 @@ test("SSE progress, explicit subscriptions, cancellation and unknown write outco
 						),
 					)
 				}),
-			),
-		)
-		assert.ok(fixture.state.aborted >= 2)
-	} finally {
-		await fixture.close()
-	}
-})
+			).pipe(Effect.provide(layersOf(fixture)))
+			assert.ok(fixture.state.aborted >= 2)
+		}),
+)
 
-test("Version mismatch fails before tools, and a service that advertises only tools gets no other lists", async () => {
-	const fixture = await service()
-	try {
-		fixture.state.versions = ["2025-11-25"]
-		await using runtime4 = ManagedRuntime.make(
-			fixture.layers.pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
-		)
-		await assert.rejects(
-			runtime4.runPromise(
+it.live(
+	"Version mismatch fails before tools, and a service that advertises only tools gets no other lists",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* openService
+			fixture.state.versions = ["2025-11-25"]
+			const error = yield* Effect.flip(
 				Effect.scoped(
 					Effect.gen(function* () {
 						yield* fixture.prepare
 						return yield* fixture.connect()
 					}),
-				),
-			),
-			/ClientError/,
-		)
-		assert.ok(
-			fixture.requests.every((r) => r.request.method === "server/discover"),
-		)
-		fixture.requests = []
-		fixture.state.versions = [Document.protocolVersion]
-		fixture.state.toolsOnly = true
-		await using runtime5 = ManagedRuntime.make(
-			fixture.layers.pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
-		)
-		await runtime5.runPromise(
-			Effect.scoped(
+				).pipe(Effect.provide(layersOf(fixture))),
+			)
+			assert.match(String(error), /ClientError/)
+			assert.ok(
+				fixture.requests.every((r) => r.request.method === "server/discover"),
+			)
+			fixture.requests = []
+			fixture.state.versions = [Document.protocolVersion]
+			fixture.state.toolsOnly = true
+			yield* Effect.scoped(
 				Effect.gen(function* () {
 					yield* fixture.prepare
 					yield* fixture.connect()
 				}),
-			),
-		)
-		assert.ok(
-			fixture.requests.every((r) =>
-				["server/discover", "tools/list"].includes(r.request.method),
-			),
-		)
-	} finally {
-		await fixture.close()
-	}
-})
+			).pipe(Effect.provide(layersOf(fixture)))
+			assert.ok(
+				fixture.requests.every((r) =>
+					["server/discover", "tools/list"].includes(r.request.method),
+				),
+			)
+		}),
+)
 
-test("input response identifiers cannot collide with a joined identifier", async () => {
-	const fixture = await service()
-	fixture.state.inputId = "a\0b"
-	try {
-		await using runtime = ManagedRuntime.make(
-			fixture.layers.pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
-		)
-		await runtime.runPromise(
-			Effect.scoped(
+it.live(
+	"input response identifiers cannot collide with a joined identifier",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* openService
+			fixture.state.inputId = "a\0b"
+			yield* Effect.scoped(
 				Effect.gen(function* () {
 					yield* fixture.prepare
 					const client = yield* fixture.connect({
@@ -897,13 +890,10 @@ test("input response identifiers cannot collide with a joined identifier", async
 					)
 					assert.ok(result._tag === "Failure")
 					assert.ok(result.failure._tag === "ClientError")
-					assert.equal(result.failure.reason, "Schema")
-					assert.equal(fixture.requests.length, before)
-					assert.equal(fixture.state.writes, 0)
+					assert.strictEqual(result.failure.reason, "Schema")
+					assert.strictEqual(fixture.requests.length, before)
+					assert.strictEqual(fixture.state.writes, 0)
 				}),
-			),
-		)
-	} finally {
-		await fixture.close()
-	}
-})
+			).pipe(Effect.provide(layersOf(fixture)))
+		}),
+)

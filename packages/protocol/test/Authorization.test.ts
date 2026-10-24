@@ -1,14 +1,14 @@
+// Tests are entry points, so they provide their own Layers.
+// @effect-diagnostics strictEffectProvide:off
 import {
 	Array as EffectArray,
 	Option,
 	HashMap,
-	ManagedRuntime,
 	Effect,
 	Layer,
 	Redacted,
 	Match,
 } from "effect"
-import assert from "node:assert/strict"
 import {
 	CatalogDiscovery,
 	MemoryStore,
@@ -22,155 +22,188 @@ import {
 } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import { createHash, randomUUID } from "node:crypto"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { NodeCrypto } from "@effect/platform-node"
 
 import { TestClock } from "effect/testing"
 import { startHttps } from "./Fixture.ts"
 
-test("Real CIMD/PKCE exchange checks callbacks, isolated grants, explicit refresh and revocation", async () => {
-	let origin = ""
-	let oidc = false
-	let cimd = true
-	let wrongClient = false
-	let expanded = false
-	let exchanges = 0
-	let refreshes = 0
-	let revocations = 0
-	let businessRequests = 0
-	let requested: ReadonlyArray<string> = []
-	let codes = HashMap.empty<string, URLSearchParams>()
-	const fixture = await startHttps((req, res) => {
-		void (async () => {
-			const url = new URL(req.url ?? "/", origin)
-			requested = EffectArray.append(requested, url.pathname)
-			const json = (value: unknown) => {
-				res.setHeader("content-type", "application/json")
-				res.end(JSON.stringify(value))
-			}
-			const issuer = origin + "/tenant"
-			if (url.pathname === "/client.json")
-				return json({
-					client_id: wrongClient
-						? origin + "/different.json"
-						: origin + "/client.json",
-					redirect_uris: [origin + "/callback?host=trusted"],
-					token_endpoint_auth_method: "none",
-					grant_types: ["authorization_code", "refresh_token"],
-					response_types: ["code"],
-				})
-			if (url.pathname === "/.well-known/oauth-protected-resource/mcp")
-				return json({
-					resource: origin + "/mcp",
-					authorization_servers: [issuer],
-				})
-			if (
-				(url.pathname === "/.well-known/oauth-authorization-server/tenant" &&
-					!oidc) ||
-				(url.pathname === "/tenant/.well-known/openid-configuration" && oidc)
+// The HTTPS server is real, so the test runs with live services. The test
+// program gets its own TestClock from the layer below.
+it.live(
+	"Real CIMD/PKCE exchange checks callbacks, isolated grants, explicit refresh and revocation",
+	() =>
+		Effect.gen(function* () {
+			let origin = ""
+			let oidc = false
+			let cimd = true
+			let wrongClient = false
+			let expanded = false
+			let exchanges = 0
+			let refreshes = 0
+			let revocations = 0
+			let businessRequests = 0
+			let requested: ReadonlyArray<string> = []
+			let codes = HashMap.empty<string, URLSearchParams>()
+			const fixture = yield* Effect.acquireRelease(
+				Effect.promise(() =>
+					startHttps((req, res) => {
+						void (async () => {
+							const url = new URL(req.url ?? "/", origin)
+							requested = EffectArray.append(requested, url.pathname)
+							const json = (value: unknown) => {
+								res.setHeader("content-type", "application/json")
+								res.end(JSON.stringify(value))
+							}
+							const issuer = origin + "/tenant"
+							if (url.pathname === "/client.json")
+								return json({
+									client_id: wrongClient
+										? origin + "/different.json"
+										: origin + "/client.json",
+									redirect_uris: [origin + "/callback?host=trusted"],
+									token_endpoint_auth_method: "none",
+									grant_types: ["authorization_code", "refresh_token"],
+									response_types: ["code"],
+								})
+							if (url.pathname === "/.well-known/oauth-protected-resource/mcp")
+								return json({
+									resource: origin + "/mcp",
+									authorization_servers: [issuer],
+								})
+							if (
+								(url.pathname ===
+									"/.well-known/oauth-authorization-server/tenant" &&
+									!oidc) ||
+								(url.pathname === "/tenant/.well-known/openid-configuration" &&
+									oidc)
+							)
+								return json({
+									issuer,
+									authorization_endpoint: origin + "/authorize",
+									token_endpoint: origin + "/token",
+									revocation_endpoint: origin + "/revoke",
+									client_id_metadata_document_supported: cimd,
+									authorization_response_iss_parameter_supported: true,
+									code_challenge_methods_supported: ["S256"],
+									response_types_supported: ["code"],
+									token_endpoint_auth_methods_supported: ["none"],
+									jwks_uri: origin + "/jwks",
+									subject_types_supported: ["public"],
+									id_token_signing_alg_values_supported: ["RS256"],
+								})
+							if (url.pathname === "/authorize") {
+								assert.strictEqual(
+									url.searchParams.get("code_challenge_method"),
+									"S256",
+								)
+								assert.strictEqual(
+									url.searchParams.get("resource"),
+									origin + "/mcp",
+								)
+								assert.strictEqual(
+									url.searchParams.get("client_id"),
+									origin + "/client.json",
+								)
+								const code = randomUUID()
+								codes = HashMap.set(codes, code, url.searchParams)
+								const callback = new URL(
+									url.searchParams.get("redirect_uri") ?? "",
+								)
+								callback.searchParams.set(
+									"state",
+									url.searchParams.get("state") ?? "",
+								)
+								callback.searchParams.set("code", code)
+								callback.searchParams.set("iss", issuer)
+								res.writeHead(303, { location: callback.href })
+								return res.end()
+							}
+							if (url.pathname === "/callback") return json({ received: true })
+							if (url.pathname === "/token" || url.pathname === "/revoke") {
+								let chunks: ReadonlyArray<Buffer> = []
+								for await (const chunk of req)
+									chunks = EffectArray.append(chunks, Buffer.from(chunk))
+								const form = new URLSearchParams(
+									Buffer.concat(chunks).toString(),
+								)
+								assert.strictEqual(
+									form.get("client_id"),
+									origin + "/client.json",
+								)
+								if (url.pathname === "/revoke") {
+									revocations++
+									assert.strictEqual(form.get("token"), "refresh-secret")
+									return res.end()
+								}
+								assert.strictEqual(form.get("resource"), origin + "/mcp")
+								if (form.get("grant_type") === "authorization_code") {
+									exchanges++
+									const code = form.get("code") ?? ""
+									const params = Option.getOrUndefined(HashMap.get(codes, code))
+									assert.ok(params)
+									codes = HashMap.remove(codes, code)
+									assert.strictEqual(
+										form.get("redirect_uri"),
+										params.get("redirect_uri"),
+									)
+									assert.strictEqual(
+										createHash("sha256")
+											.update(form.get("code_verifier") ?? "")
+											.digest("base64url"),
+										params.get("code_challenge"),
+									)
+								} else {
+									refreshes++
+									assert.strictEqual(form.get("grant_type"), "refresh_token")
+									assert.strictEqual(
+										form.get("refresh_token"),
+										"refresh-secret",
+									)
+								}
+								return json({
+									access_token: "access-secret",
+									refresh_token: "refresh-secret",
+									token_type: "Bearer",
+									expires_in: 60,
+									scope: expanded ? "notes admin" : "notes",
+								})
+							}
+							if (url.pathname === "/mcp") businessRequests++
+							res.writeHead(404)
+							res.end()
+						})().catch((error) => {
+							res.writeHead(500)
+							res.end()
+							throw error
+						})
+					}),
+				),
+				(fixture) => Effect.promise(() => fixture.close()),
 			)
-				return json({
-					issuer,
-					authorization_endpoint: origin + "/authorize",
-					token_endpoint: origin + "/token",
-					revocation_endpoint: origin + "/revoke",
-					client_id_metadata_document_supported: cimd,
-					authorization_response_iss_parameter_supported: true,
-					code_challenge_methods_supported: ["S256"],
-					response_types_supported: ["code"],
-					token_endpoint_auth_methods_supported: ["none"],
-					jwks_uri: origin + "/jwks",
-					subject_types_supported: ["public"],
-					id_token_signing_alg_values_supported: ["RS256"],
-				})
-			if (url.pathname === "/authorize") {
-				assert.equal(url.searchParams.get("code_challenge_method"), "S256")
-				assert.equal(url.searchParams.get("resource"), origin + "/mcp")
-				assert.equal(url.searchParams.get("client_id"), origin + "/client.json")
-				const code = randomUUID()
-				codes = HashMap.set(codes, code, url.searchParams)
-				const callback = new URL(url.searchParams.get("redirect_uri") ?? "")
-				callback.searchParams.set("state", url.searchParams.get("state") ?? "")
-				callback.searchParams.set("code", code)
-				callback.searchParams.set("iss", issuer)
-				res.writeHead(303, { location: callback.href })
-				return res.end()
-			}
-			if (url.pathname === "/callback") return json({ received: true })
-			if (url.pathname === "/token" || url.pathname === "/revoke") {
-				let chunks: ReadonlyArray<Buffer> = []
-				for await (const chunk of req)
-					chunks = EffectArray.append(chunks, Buffer.from(chunk))
-				const form = new URLSearchParams(Buffer.concat(chunks).toString())
-				assert.equal(form.get("client_id"), origin + "/client.json")
-				if (url.pathname === "/revoke") {
-					revocations++
-					assert.equal(form.get("token"), "refresh-secret")
-					return res.end()
-				}
-				assert.equal(form.get("resource"), origin + "/mcp")
-				if (form.get("grant_type") === "authorization_code") {
-					exchanges++
-					const code = form.get("code") ?? ""
-					const params = Option.getOrUndefined(HashMap.get(codes, code))
-					assert.ok(params)
-					codes = HashMap.remove(codes, code)
-					assert.equal(form.get("redirect_uri"), params.get("redirect_uri"))
-					assert.equal(
-						createHash("sha256")
-							.update(form.get("code_verifier") ?? "")
-							.digest("base64url"),
-						params.get("code_challenge"),
-					)
-				} else {
-					refreshes++
-					assert.equal(form.get("grant_type"), "refresh_token")
-					assert.equal(form.get("refresh_token"), "refresh-secret")
-				}
-				return json({
-					access_token: "access-secret",
-					refresh_token: "refresh-secret",
-					token_type: "Bearer",
-					expires_in: 60,
-					scope: expanded ? "notes admin" : "notes",
-				})
-			}
-			if (url.pathname === "/mcp") businessRequests++
-			res.writeHead(404)
-			res.end()
-		})().catch((error) => {
-			res.writeHead(500)
-			res.end()
-			throw error
-		})
-	})
-	origin = fixture.origin
-	const key = { owner: "alice", connectionId: "notes" }
-	const clientId = origin + "/client.json"
-	const redirectUri = origin + "/callback?host=trusted"
-	const resource = origin + "/mcp"
-	const issuer = origin + "/tenant"
-	const layer = Layer.mergeAll(
-		MemoryStore.layer,
-		MemoryStore.layerCredentials,
-		OAuthAuthorization.layerMemoryFlows,
-		AppConnections.layerConnectionScopes,
-		NodeCrypto.layer,
-		TestClock.layer(),
-		McpClient.layerPolicy(() => Effect.void),
-		NodeHttpServer.layerUserNetwork({
-			owner: "alice",
-			allowedOrigins: [origin],
-			ca: fixture.ca,
-			allowAddress: (address) => address === "127.0.0.1" || address === "::1",
-		}),
-	)
-	try {
-		await using runtime1 = ManagedRuntime.make(
-			layer.pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
-		)
-		await runtime1.runPromise(
-			Effect.scoped(
+			origin = fixture.origin
+			const key = { owner: "alice", connectionId: "notes" }
+			const clientId = origin + "/client.json"
+			const redirectUri = origin + "/callback?host=trusted"
+			const resource = origin + "/mcp"
+			const issuer = origin + "/tenant"
+			const layer = Layer.mergeAll(
+				MemoryStore.layer,
+				MemoryStore.layerCredentials,
+				OAuthAuthorization.layerMemoryFlows,
+				AppConnections.layerConnectionScopes,
+				NodeCrypto.layer,
+				TestClock.layer(),
+				McpClient.layerPolicy(() => Effect.void),
+				NodeHttpServer.layerUserNetwork({
+					owner: "alice",
+					allowedOrigins: [origin],
+					ca: fixture.ca,
+					allowAddress: (address) =>
+						address === "127.0.0.1" || address === "::1",
+				}),
+			)
+			yield* Effect.scoped(
 				Effect.gen(function* () {
 					const apps = yield* Store.AppStore
 					const credentials = yield* Store.CredentialStore
@@ -218,7 +251,7 @@ test("Real CIMD/PKCE exchange checks callbacks, isolated grants, explicit refres
 						resource,
 						issuer,
 					})
-					assert.equal(initial.metadata.issuer, issuer)
+					assert.strictEqual(initial.metadata.issuer, issuer)
 					oidc = true
 					yield* OAuthAuthorization.discover({
 						resource,
@@ -236,16 +269,19 @@ test("Real CIMD/PKCE exchange checks callbacks, isolated grants, explicit refres
 					const incompatible = yield* Effect.result(
 						OAuthAuthorization.begin(options),
 					)
-					assert.equal(incompatible._tag, "Failure")
+					assert.strictEqual(incompatible._tag, "Failure")
 					Match.value(incompatible).pipe(
 						Match.tag("Failure", (incompatible) => {
-							assert.equal(incompatible.failure._tag, "AuthorizationError")
+							assert.strictEqual(
+								incompatible.failure._tag,
+								"AuthorizationError",
+							)
 						}),
 						Match.orElse(() => undefined),
 					)
 					cimd = true
 					wrongClient = true
-					assert.equal(
+					assert.strictEqual(
 						(yield* Effect.result(
 							OAuthAuthorization.readClientMetadata({
 								clientId,
@@ -255,7 +291,7 @@ test("Real CIMD/PKCE exchange checks callbacks, isolated grants, explicit refres
 						"Failure",
 					)
 					wrongClient = false
-					assert.equal(
+					assert.strictEqual(
 						(yield* Effect.result(
 							OAuthAuthorization.readClientMetadata({
 								clientId: origin + "/",
@@ -264,7 +300,7 @@ test("Real CIMD/PKCE exchange checks callbacks, isolated grants, explicit refres
 						))._tag,
 						"Failure",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* Effect.result(
 							OAuthAuthorization.readClientMetadata({
 								clientId,
@@ -279,12 +315,15 @@ test("Real CIMD/PKCE exchange checks callbacks, isolated grants, explicit refres
 						key,
 						flowId: pending.flowId,
 					})
-					assert.deepEqual(flow.binding, {
+					assert.deepStrictEqual(flow.binding, {
 						...key,
 						resource,
 						issuer,
 					})
-					assert.equal((yield* Effect.result(flows.save(flow)))._tag, "Failure")
+					assert.strictEqual(
+						(yield* Effect.result(flows.save(flow)))._tag,
+						"Failure",
+					)
 					assert.ok(!JSON.stringify(pending).includes("verifier"))
 					const network = yield* Network.Network
 					const callback = (yield* network.readDocument({
@@ -326,23 +365,23 @@ test("Real CIMD/PKCE exchange checks callbacks, isolated grants, explicit refres
 							callbackUrl: callback.replace(/state=[^&]+/, "state=other"),
 						},
 					])
-						assert.equal(
+						assert.strictEqual(
 							(yield* Effect.result(OAuthAuthorization.complete(input)))._tag,
 							"Failure",
 						)
-					assert.equal(exchanges, 0)
+					assert.strictEqual(exchanges, 0)
 					const authorized = yield* OAuthAuthorization.complete(complete)
-					assert.equal(authorized.authorization._tag, "Authorized")
+					assert.strictEqual(authorized.authorization._tag, "Authorized")
 					assert.ok(!JSON.stringify(authorized).includes("access-secret"))
 					assert.ok(!JSON.stringify(authorized).includes("refresh-secret"))
-					assert.equal(exchanges, 1)
-					assert.equal(businessRequests, 0)
-					assert.equal(
+					assert.strictEqual(exchanges, 1)
+					assert.strictEqual(businessRequests, 0)
+					assert.strictEqual(
 						(yield* Effect.result(OAuthAuthorization.complete(complete)))._tag,
 						"Failure",
 					)
-					assert.equal(exchanges, 1)
-					assert.equal(authorized.authorization._tag, "Authorized")
+					assert.strictEqual(exchanges, 1)
+					assert.strictEqual(authorized.authorization._tag, "Authorized")
 					const auth = Match.value(authorized.authorization).pipe(
 						Match.tag("Authorized", (auth) => auth),
 						Match.orElse(() => {
@@ -355,7 +394,7 @@ test("Real CIMD/PKCE exchange checks callbacks, isolated grants, explicit refres
 						{ resource: origin + "/other" },
 						{ issuer: origin + "/other" },
 					])
-						assert.equal(
+						assert.strictEqual(
 							(yield* Effect.result(
 								credentials.get({
 									binding: {
@@ -369,17 +408,17 @@ test("Real CIMD/PKCE exchange checks callbacks, isolated grants, explicit refres
 						)
 					expanded = true
 					const rejected = yield* Effect.result(OAuthAuthorization.refresh(key))
-					assert.equal(rejected._tag, "Failure")
+					assert.strictEqual(rejected._tag, "Failure")
 					Match.value(rejected).pipe(
 						Match.when(
 							{ _tag: "Failure", failure: { _tag: "AuthorizationError" } },
 							({ failure }) => {
-								assert.equal(failure.reason, "ScopeRequired")
+								assert.strictEqual(failure.reason, "ScopeRequired")
 							},
 						),
 						Match.orElse(() => undefined),
 					)
-					assert.deepEqual(
+					assert.deepStrictEqual(
 						(yield* credentials.get({
 							binding: auth.binding,
 							reference: auth.credentialRef,
@@ -388,7 +427,7 @@ test("Real CIMD/PKCE exchange checks callbacks, isolated grants, explicit refres
 					)
 					expanded = false
 					yield* OAuthAuthorization.refresh(key)
-					assert.equal(refreshes, 2)
+					assert.strictEqual(refreshes, 2)
 					yield* TestClock.adjust("61 seconds")
 					const expired = yield* Effect.result(
 						McpClient.open({
@@ -399,18 +438,18 @@ test("Real CIMD/PKCE exchange checks callbacks, isolated grants, explicit refres
 							},
 						}),
 					)
-					assert.equal(expired._tag, "Failure")
+					assert.strictEqual(expired._tag, "Failure")
 					Match.value(expired).pipe(
 						Match.when(
 							{ _tag: "Failure", failure: { _tag: "AuthorizationRequired" } },
 							({ failure }) => {
-								assert.equal(failure.reason, "Expired")
+								assert.strictEqual(failure.reason, "Expired")
 							},
 						),
 						Match.orElse(() => undefined),
 					)
-					assert.equal(businessRequests, 0)
-					assert.equal(refreshes, 2)
+					assert.strictEqual(businessRequests, 0)
+					assert.strictEqual(refreshes, 2)
 					const expiring = yield* OAuthAuthorization.begin({
 						...options,
 						expiresInMs: 1000,
@@ -426,20 +465,23 @@ test("Real CIMD/PKCE exchange checks callbacks, isolated grants, explicit refres
 							callbackUrl: expiredCallback,
 						}),
 					)
-					assert.equal(expiredFlow._tag, "Failure")
+					assert.strictEqual(expiredFlow._tag, "Failure")
 					Match.value(expiredFlow).pipe(
 						Match.when(
 							{ _tag: "Failure", failure: { _tag: "AuthorizationError" } },
 							({ failure }) => {
-								assert.equal(failure.reason, "FlowExpired")
+								assert.strictEqual(failure.reason, "FlowExpired")
 							},
 						),
 						Match.orElse(() => undefined),
 					)
-					assert.equal(exchanges, 1)
-					assert.equal((yield* OAuthAuthorization.revoke(key))._tag, "Revoked")
-					assert.equal(revocations, 1)
-					assert.equal(
+					assert.strictEqual(exchanges, 1)
+					assert.strictEqual(
+						(yield* OAuthAuthorization.revoke(key))._tag,
+						"Revoked",
+					)
+					assert.strictEqual(revocations, 1)
+					assert.strictEqual(
 						(yield* credentials
 							.get({
 								binding: auth.binding,
@@ -448,14 +490,15 @@ test("Real CIMD/PKCE exchange checks callbacks, isolated grants, explicit refres
 							.pipe(Effect.result))._tag,
 						"Failure",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* apps.get(key)).authorization._tag,
 						"PendingAuthorization",
 					)
 				}),
-			),
-		)
-	} finally {
-		await fixture.close()
-	}
-})
+			).pipe(
+				Effect.provide(
+					layer.pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
+				),
+			)
+		}),
+)

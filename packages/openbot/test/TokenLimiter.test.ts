@@ -1,6 +1,5 @@
 import { Effect, Layer, Schema, Stream } from "effect"
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { Chat, Plugin, PluginComposition } from "@openbot-build/core"
 import { LanguageModel, Prompt, Response, Tool, Toolkit } from "effect/ai"
 import * as TokenLimiter from "../src/plugins/token-limiter/TokenLimiter.ts"
@@ -62,12 +61,12 @@ const toolPlugin = Plugin.make({ id: Plugin.Id.make("tools") })(() =>
 	),
 )
 
-test("invalid token limits fail before any model request", async () => {
-	let calls = 0
-	for (const maxTokens of [0, -1, 0.5, NaN, Infinity]) {
-		const chat = ChatTest(TokenLimiter.make({ maxTokens }))
-		const error = await Effect.runPromise(
-			chat.execute({ input: "hello" }).pipe(
+it.effect("invalid token limits fail before any model request", () =>
+	Effect.gen(function* () {
+		let calls = 0
+		for (const maxTokens of [0, -1, 0.5, NaN, Infinity]) {
+			const chat = ChatTest(TokenLimiter.make({ maxTokens }))
+			const error = yield* chat.execute({ input: "hello" }).pipe(
 				Effect.flip,
 				Effect.provide(
 					LanguageModelTest(() => {
@@ -75,63 +74,69 @@ test("invalid token limits fail before any model request", async () => {
 						return Stream.empty
 					}),
 				),
-			),
-		)
-		assert.ok(error instanceof TokenLimiter.InvalidMaxTokens)
-		assert.equal(error.maxTokens, maxTokens)
-	}
-	assert.equal(calls, 0)
-})
+			)
+			assert.ok(error instanceof TokenLimiter.InvalidMaxTokens)
+			// NaN is not equal to itself, so use Object.is.
+			assert.ok(Object.is(error.maxTokens, maxTokens))
+		}
+		assert.strictEqual(calls, 0)
+	}),
+)
 
-test("blocks the next model step when the used tokens reach the limit", async () => {
-	for (const [maxTokens, steps] of [
-		[1, 1],
-		[5, 1],
-		[6, 2],
-		[10, 2],
-		[11, 3],
-	] as const) {
-		let calls = 0
-		const chat = ChatTest(
-			PluginComposition.merge(TokenLimiter.make({ maxTokens }), toolPlugin),
-		)
-		const error = await Effect.runPromise(
-			chat.execute({ input: "echo" }).pipe(
-				Effect.flip,
-				Effect.provide(
-					Layer.merge(
-						LanguageModelTest(() =>
-							Stream.suspend(() => {
-								calls++
-								return Stream.make(call(calls), finish("tool-calls"))
-							}),
+it.effect(
+	"blocks the next model step when the used tokens reach the limit",
+	() =>
+		Effect.gen(function* () {
+			for (const [maxTokens, steps] of [
+				[1, 1],
+				[5, 1],
+				[6, 2],
+				[10, 2],
+				[11, 3],
+			] as const) {
+				let calls = 0
+				const chat = ChatTest(
+					PluginComposition.merge(TokenLimiter.make({ maxTokens }), toolPlugin),
+				)
+				const error = yield* chat.execute({ input: "echo" }).pipe(
+					Effect.flip,
+					Effect.provide(
+						Layer.merge(
+							LanguageModelTest(() =>
+								Stream.suspend(() => {
+									calls++
+									return Stream.make(call(calls), finish("tool-calls"))
+								}),
+							),
+							handlers,
 						),
-						handlers,
 					),
-				),
-			),
-		)
-		assert.ok(error instanceof TokenLimiter.TokenLimitExceeded)
-		assert.equal(calls, steps)
-		assert.equal(error.maxTokens, maxTokens)
-		assert.equal(error.usedTokens, steps * 5)
-		assert.deepEqual(
-			error.history.content.map((m) => m.role),
-			[
-				"system",
-				"user",
-				...Array.from({ length: steps }, () => ["assistant", "tool"]).flat(),
-			],
-		)
-	}
-})
+				)
+				assert.ok(error instanceof TokenLimiter.TokenLimitExceeded)
+				assert.strictEqual(calls, steps)
+				assert.strictEqual(error.maxTokens, maxTokens)
+				assert.strictEqual(error.usedTokens, steps * 5)
+				assert.deepStrictEqual(
+					error.history.content.map((m) => m.role),
+					[
+						"system",
+						"user",
+						...Array.from({ length: steps }, () => [
+							"assistant",
+							"tool",
+						]).flat(),
+					],
+				)
+			}
+		}),
+)
 
-test("a Turn that ends under the limit completes", async () => {
-	const chat = ChatTest(
-		PluginComposition.merge(TokenLimiter.make({ maxTokens: 6 }), toolPlugin),
-	)
-	const view = await Effect.runPromise(
-		chat.execute({ input: "echo" }).pipe(
+it.effect("a Turn that ends under the limit completes", () =>
+	Effect.gen(function* () {
+		const chat = ChatTest(
+			PluginComposition.merge(TokenLimiter.make({ maxTokens: 6 }), toolPlugin),
+		)
+		const view = yield* chat.execute({ input: "echo" }).pipe(
 			Effect.provide(
 				Layer.merge(
 					LanguageModelTest(({ prompt }) =>
@@ -142,19 +147,19 @@ test("a Turn that ends under the limit completes", async () => {
 					handlers,
 				),
 			),
-		),
-	)
-	assert.equal(Chat.currentTurn(view.chat)!.steps, 2)
-	assert.equal(Chat.status(view.chat)._tag, "Completed")
-})
-
-test("each execution counts its own tokens", async () => {
-	const chat = ChatTest(TokenLimiter.make({ maxTokens: 5 }))
-	const model = LanguageModelTest(() => answer())
-	for (const input of ["first", "second"]) {
-		const view = await Effect.runPromise(
-			chat.execute({ input }).pipe(Effect.provide(model)),
 		)
-		assert.equal(Chat.status(view.chat)._tag, "Completed")
-	}
-})
+		assert.strictEqual(Chat.currentTurn(view.chat)!.steps, 2)
+		assert.strictEqual(Chat.status(view.chat)._tag, "Completed")
+	}),
+)
+
+it.effect("each execution counts its own tokens", () =>
+	Effect.gen(function* () {
+		const chat = ChatTest(TokenLimiter.make({ maxTokens: 5 }))
+		const model = LanguageModelTest(() => answer())
+		for (const input of ["first", "second"]) {
+			const view = yield* chat.execute({ input }).pipe(Effect.provide(model))
+			assert.strictEqual(Chat.status(view.chat)._tag, "Completed")
+		}
+	}),
+)

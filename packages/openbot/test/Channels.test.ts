@@ -1,11 +1,10 @@
-import assert from "node:assert/strict"
 import {
 	createCipheriv,
 	createHash,
 	createHmac,
 	randomBytes,
 } from "node:crypto"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { ChannelsApi } from "@openbot-build/api"
 import { Network } from "@openbot-build/protocol/Network"
 import { Effect, Layer, Redacted, Stream } from "effect"
@@ -44,7 +43,7 @@ const client = (host: Host) => {
 	const json = async (response: Promise<Response>, status = 200) => {
 		const value = await response
 		const body = await value.text()
-		assert.equal(value.status, status, body)
+		assert.strictEqual(value.status, status, body)
 		return body.length === 0 ? undefined : JSON.parse(body)
 	}
 	const until = async <A>(
@@ -75,21 +74,25 @@ const sharedBot = async (host: Host, owner: Redacted.Redacted<string>) => {
 	return bot.id as string
 }
 
-test("Markdown turns into the format of each platform, and long text splits at words", () => {
-	assert.equal(
+it("Markdown turns into the format of each platform, and long text splits at words", () => {
+	assert.strictEqual(
 		slackMrkdwn("**bold** and [site](https://a.example)"),
 		"*bold* and <https://a.example|site>",
 	)
-	assert.equal(slackMrkdwn("a < b"), "a &lt; b")
-	assert.equal(
+	assert.strictEqual(slackMrkdwn("a < b"), "a &lt; b")
+	assert.strictEqual(
 		telegramHtml("# Title\n**bold** `x<y`\n```\nif (a < b) {}\n```"),
 		"<b>Title</b>\n<b>bold</b> <code>x&lt;y</code>\n<pre>if (a &lt; b) {}\n</pre>",
 	)
-	assert.deepEqual(chunk("one two three four", 9), ["one two", "three", "four"])
-	assert.deepEqual(chunk("short", 10), ["short"])
+	assert.deepStrictEqual(chunk("one two three four", 9), [
+		"one two",
+		"three",
+		"four",
+	])
+	assert.deepStrictEqual(chunk("short", 10), ["short"])
 })
 
-test(
+it(
 	"a Slack Channel links people, keeps one Chat for each chat, works for the speaker, and decides requests with buttons",
 	{ timeout: 180000 },
 	async () => {
@@ -103,9 +106,9 @@ test(
 		// The test plays Slack.
 		const platformFetch: typeof fetch = async (input, init) => {
 			const url = new URL(input instanceof Request ? input.url : String(input))
-			assert.equal(url.origin, "https://slack.com")
+			assert.strictEqual(url.origin, "https://slack.com")
 			const request = input instanceof Request ? input : new Request(url, init)
-			assert.equal(
+			assert.strictEqual(
 				request.headers.get("authorization"),
 				"Bearer xoxb-test-token-123456",
 			)
@@ -149,26 +152,23 @@ test(
 				"POST",
 				payload,
 			)
-			assert.equal(refused.status, 403)
+			assert.strictEqual(refused.status, 403)
 			const created = await json(
 				send(alice.session, "/v1/organization/channels", "POST", payload),
 				201,
 			)
 			const channel = created as ChannelsApi.Channel
-			assert.equal(channel.actor, alice.identity.userId)
-			assert.equal(
+			assert.strictEqual(channel.actor, alice.identity.userId)
+			assert.strictEqual(
 				channel.webhookUrl,
 				`${publicOrigin}/v1/hooks/channels/${channel.id}`,
 			)
-			assert.deepEqual(channel.credentials, {
+			assert.deepStrictEqual(channel.credentials, {
 				kind: "slack",
 				botToken: { set: true, hint: "…3456" },
 				signingSecret: { set: true, hint: "…ests" },
 			})
-			assert.doesNotMatch(
-				JSON.stringify(created),
-				/xoxb-test-token|signing-secret/,
-			)
+			assert.notMatch(JSON.stringify(created), /xoxb-test-token|signing-secret/)
 			const mine = await json(
 				send(alice.session, "/v1/bots", "POST", {
 					name: "Private Bot",
@@ -186,7 +186,7 @@ test(
 					bot: mine.id,
 				},
 			)
-			assert.equal(wrongBot.status, 400)
+			assert.strictEqual(wrongBot.status, 400)
 
 			const hook = (
 				body: string,
@@ -221,9 +221,14 @@ test(
 				type: "url_verification",
 				challenge: "c-123",
 			})
-			assert.deepEqual(await json(hook(verification)), { challenge: "c-123" })
-			assert.equal((await hook(verification, { secret: "wrong" })).status, 401)
-			assert.equal((await hook(verification, { age: 600 })).status, 401)
+			assert.deepStrictEqual(await json(hook(verification)), {
+				challenge: "c-123",
+			})
+			assert.strictEqual(
+				(await hook(verification, { secret: "wrong" })).status,
+				401,
+			)
+			assert.strictEqual((await hook(verification, { age: 600 })).status, 401)
 
 			let events = 0
 			const message = (input: {
@@ -278,7 +283,7 @@ test(
 				).items
 
 			// A person who is not linked gets a link in the direct chat, and nothing runs.
-			assert.equal(
+			assert.strictEqual(
 				(
 					await message({
 						user: "UBOB",
@@ -296,18 +301,18 @@ test(
 						String(call.body["text"]).includes("/link?code="),
 				),
 			)
-			assert.equal(prompt.body["channel"], "DUBOB")
+			assert.strictEqual(prompt.body["channel"], "DUBOB")
 			const code = decodeURIComponent(
 				/code=([^\s)]+)/.exec(String(prompt.body["text"]))![1]!,
 			)
-			assert.equal((await channelChats()).length, 0)
+			assert.strictEqual((await channelChats()).length, 0)
 
 			// The person opens the link in OpenBot and accepts it. A code works once.
 			const link = await json(
 				send(bob.session, "/v1/channel-links/" + encodeURIComponent(code)),
 			)
-			assert.equal(link.externalUserId, "UBOB")
-			assert.equal(link.channelName, "Team Slack")
+			assert.strictEqual(link.externalUserId, "UBOB")
+			assert.strictEqual(link.channelName, "Team Slack")
 			const linked = await json(
 				send(
 					bob.session,
@@ -315,8 +320,8 @@ test(
 					"POST",
 				),
 			)
-			assert.equal(linked.userId, bob.identity.userId)
-			assert.equal(
+			assert.strictEqual(linked.userId, bob.identity.userId)
+			assert.strictEqual(
 				(
 					await send(
 						bob.session,
@@ -326,7 +331,7 @@ test(
 				).status,
 				404,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await json(send(bob.session, "/v1/user/channel-identities"))).length,
 				1,
 			)
@@ -346,7 +351,7 @@ test(
 						String(call.body["text"]).includes("A useful result"),
 				),
 			)
-			assert.equal(answer.body["channel"], "DUBOB")
+			assert.strictEqual(answer.body["channel"], "DUBOB")
 			assert.ok(
 				slack.some(
 					(call) =>
@@ -357,7 +362,7 @@ test(
 			const [first] = await channelChats()
 			assert.ok(first !== undefined)
 			let direct = first
-			assert.equal(
+			assert.strictEqual(
 				(await turnsOf(direct.chat.id)).at(-1)?.author,
 				bob.identity.userId,
 			)
@@ -370,10 +375,10 @@ test(
 				id: "EvSame",
 			})
 			await new Promise((resolve) => setTimeout(resolve, 400))
-			assert.equal((await turnsOf(direct.chat.id)).length, 1)
+			assert.strictEqual((await turnsOf(direct.chat.id)).length, 1)
 
 			// The actor deletes the Chat. The next message in that chat starts a new Chat.
-			assert.equal(
+			assert.strictEqual(
 				(await send(alice.session, "/v1/chats/" + direct.chat.id, "DELETE"))
 					.status,
 				204,
@@ -394,7 +399,7 @@ test(
 					? fresh
 					: undefined
 			})
-			assert.equal((await channelChats()).length, 1)
+			assert.strictEqual((await channelChats()).length, 1)
 
 			// A group message that names the bot starts the Chat of that group.
 			// The tool needs approval, and the card goes to Bob, who spoke.
@@ -424,8 +429,8 @@ test(
 			const pending = await json(
 				send(bob.session, "/v1/requests?status=pending"),
 			)
-			assert.equal(pending.length, 1)
-			assert.equal(
+			assert.strictEqual(pending.length, 1)
+			assert.strictEqual(
 				(await json(send(alice.session, "/v1/requests?status=pending"))).length,
 				0,
 			)
@@ -441,7 +446,7 @@ test(
 			)
 			// The Turn does not wait for the decision: the call is pending, and the Bot answers.
 			// Bob allows it once. Then the call runs, and the card shows the decision.
-			assert.equal(host.toolCalls(), 0)
+			assert.strictEqual(host.toolCalls(), 0)
 			await action("UBOB", values[1]!)
 			await until("the answer in the group", () =>
 				// The answer changes the message that showed the waiting Turn.
@@ -463,7 +468,7 @@ test(
 				(entry) => entry.chat.id !== direct.chat.id,
 			)
 			assert.ok(group !== undefined)
-			assert.equal(
+			assert.strictEqual(
 				(await turnsOf(group.chat.id))[0]?.author,
 				bob.identity.userId,
 			)
@@ -472,7 +477,7 @@ test(
 			)
 
 			// An administrator can unlink a person. Then the bot asks again.
-			assert.equal(
+			assert.strictEqual(
 				(
 					await send(
 						alice.session,
@@ -482,7 +487,7 @@ test(
 				).status,
 				204,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await json(
 						send(
@@ -499,7 +504,7 @@ test(
 	},
 )
 
-test(
+it(
 	"Telegram, Lark and custom Channels check their own secrets",
 	{ timeout: 120000 },
 	async () => {
@@ -510,7 +515,7 @@ test(
 		// The test plays Telegram.
 		const platformFetch: typeof fetch = async (input, init) => {
 			const url = new URL(input instanceof Request ? input.url : String(input))
-			assert.equal(url.origin, "https://api.telegram.org")
+			assert.strictEqual(url.origin, "https://api.telegram.org")
 			const request = input instanceof Request ? input : new Request(url, init)
 			const body = (await request.json()) as Record<string, unknown>
 			telegram.push({ method: url.pathname.split("/").at(-1)!, body })
@@ -587,7 +592,7 @@ test(
 			})
 			const registered = telegram.find((call) => call.method === "setWebhook")
 			assert.ok(registered !== undefined)
-			assert.equal(registered.body["url"], channel.webhookUrl)
+			assert.strictEqual(registered.body["url"], channel.webhookUrl)
 			const secret = String(registered.body["secret_token"])
 			const update = JSON.stringify({
 				update_id: 1,
@@ -598,7 +603,7 @@ test(
 					text: "hi",
 				},
 			})
-			assert.equal(
+			assert.strictEqual(
 				(
 					await hook(channel.id, update, {
 						"x-telegram-bot-api-secret-token": "wrong",
@@ -606,7 +611,7 @@ test(
 				).status,
 				401,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await hook(channel.id, update, {
 						"x-telegram-bot-api-secret-token": secret,
@@ -617,7 +622,7 @@ test(
 			const prompt = await until("the Telegram link prompt", () =>
 				telegram.find((call) => call.method === "sendMessage"),
 			)
-			assert.equal(prompt.body["chat_id"], "77")
+			assert.strictEqual(prompt.body["chat_id"], "77")
 			assert.match(String(prompt.body["text"]), /<code>ocl_/)
 
 			// Lark encrypts its events. The check of the request URL has the token.
@@ -645,7 +650,7 @@ test(
 					]).toString("base64"),
 				})
 			}
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				await json(
 					hook(
 						lark.id,
@@ -659,7 +664,7 @@ test(
 				),
 				{ challenge: "lark-c" },
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await hook(
 						lark.id,
@@ -692,7 +697,7 @@ test(
 				"sha256=" +
 				createHmac("sha256", key).update(`${timestamp}.${body}`).digest("hex")
 			// Without a secret, nothing gets in.
-			assert.equal(
+			assert.strictEqual(
 				(
 					await hook(custom.id, body, {
 						"x-openbot-timestamp": timestamp,
@@ -708,7 +713,7 @@ test(
 					"PUT",
 				),
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await hook(custom.id, body, {
 						"x-openbot-timestamp": timestamp,
@@ -717,7 +722,7 @@ test(
 				).status,
 				401,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await hook(custom.id, body, {
 						"x-openbot-timestamp": timestamp,
@@ -730,18 +735,18 @@ test(
 				deliveries.find((entry) => entry["type"] === "send"),
 			)
 			// In a group, the prompt goes privately to the sender.
-			assert.equal(delivery["conversation"], "room-1")
-			assert.equal(delivery["person"], "u1")
-			assert.equal(delivery["url"], "https://custom.example.com/hook")
+			assert.strictEqual(delivery["conversation"], "room-1")
+			assert.strictEqual(delivery["person"], "u1")
+			assert.strictEqual(delivery["url"], "https://custom.example.com/hook")
 			assert.match(String(delivery["signature"]), /^sha256=[0-9a-f]{64}$/)
 			const listed = await json(
 				send(alice.session, "/v1/organization/channels"),
 			)
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				listed.map((entry: { readonly kind: string }) => entry.kind),
 				["telegram", "lark", "custom"],
 			)
-			assert.doesNotMatch(
+			assert.notMatch(
 				JSON.stringify(listed),
 				/telegram-token|lark-app-secret|ocs_/,
 			)

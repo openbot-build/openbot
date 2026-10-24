@@ -2,8 +2,11 @@ import type { Settings as Api } from "@openbot-build/api"
 import { DateTime } from "effect"
 import {
 	codeModeOf,
+	filesOf,
+	quotaOf,
 	rateLimitOf,
 	tokenRateOf,
+	type FilesDocument,
 	type MemberDocument,
 	type OrganizationDocument,
 	type PlatformDocument,
@@ -37,7 +40,22 @@ export const platform = (
 		codeMode: codeModeOf(document),
 		rateLimit: rateLimitOf(document),
 		tokenRate: tokenRateOf(document),
+		files: files(filesOf(document)),
 		updatedAt: iso(snapshot.updatedAt),
+	}
+}
+
+const files = (document: FilesDocument): Api.Files => {
+	const { storage, ...stored } = document
+	const limits = { ...stored, quotaBytes: quotaOf(document) }
+	if (storage === null) return { ...limits, storage: null }
+	const { secretAccessKey, secretAccessKeyHint, ...fields } = storage
+	return {
+		...limits,
+		storage: {
+			...fields,
+			secretAccessKey: { set: true, hint: secretAccessKeyHint },
+		},
 	}
 }
 

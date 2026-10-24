@@ -326,10 +326,11 @@ Ein Rücksprungpfad kann jeder Pfad auf demselben Origin sein, außer Pfaden unt
 
 ## Sicherungen
 
-Sichere zwei Dinge und bewahre sie zusammen auf:
+Sichere diese Dinge und bewahre sie zusammen auf:
 
 1. **Die Datenbank.** Sie enthält die Einstellungen von Plattform und Organisationen, Konten, Organisationen und ihre Mitglieder, User Tokens, Models und Model Providers, SSO-Verbindungen, das Audit-Log, Bots, Chats und ihren Verlauf und App-Verbindungen.
 2. **`OPENBOT_SECRET_KEYS`.** Die Schlüssel entschlüsseln die Geheimnisse in der Datenbank: App-Geheimnisse, Schlüssel der Model Provider, SSO-Client-Geheimnisse und das Anmelde-Geheimnis. Eine Datenbank-Sicherung ohne die Schlüssel kann diese Geheimnisse nicht wiederherstellen.
+3. **Der Bucket der [Dateien](/de/docs/files).** Er hält die Bytes der Dateien, die Leute hochgeladen haben. Die Datenbank nennt sie nur.
 
 Mit Compose machst du so eine Datenbank-Sicherung:
 

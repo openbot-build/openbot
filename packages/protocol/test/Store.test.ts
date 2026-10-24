@@ -1,4 +1,5 @@
-import assert from "node:assert/strict"
+// Tests are entry points, so they provide their own Layers.
+// @effect-diagnostics strictEffectProvide:off
 import {
 	CatalogDiscovery,
 	AppConnections,
@@ -7,10 +8,10 @@ import {
 	Document,
 	Store,
 } from "@openbot-build/protocol"
-import { test } from "node:test"
-import { ManagedRuntime, Effect, Layer, Redacted } from "effect"
+import { assert, it } from "@effect/vitest"
+import { Effect, Layer, Redacted } from "effect"
 
-// Tests build in-process dependencies at the edge of their runtime.
+// Tests build in-process dependencies with Effect.provide.
 
 const candidate: Discovery.Candidate = {
 	cardUrl: "https://service.example/card",
@@ -55,38 +56,35 @@ const add = (owner: string, confirmed: boolean = true) =>
 		requiresAuthorization: true,
 	})
 
-test("Confirmation saves one shared App record, and each owner keeps its own configuration and credentials", async () => {
-	await using runtime1 = ManagedRuntime.make(
-		Layer.mergeAll(
-			MemoryStore.layer,
-			MemoryStore.layerCredentials,
-			discovery,
-		).pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
-	)
-	await runtime1.runPromise(
+it.effect(
+	"Confirmation saves one shared App record, and each owner keeps its own configuration and credentials",
+	() =>
 		Effect.gen(function* () {
 			const denied = yield* Effect.result(add("alice", false))
-			assert.equal(denied._tag, "Failure")
+			assert.strictEqual(denied._tag, "Failure")
 			const apps = yield* Store.AppStore
-			assert.equal(
+			assert.strictEqual(
 				(yield* Effect.result(apps.getApp(candidate.cardUrl)))._tag,
 				"Failure",
 			)
 			const alice = yield* add("alice")
 			const bob = yield* add("bob")
-			assert.equal(alice.connection.cardUrl, bob.connection.cardUrl)
-			assert.equal(alice.connection.authorization._tag, "PendingAuthorization")
-			assert.deepEqual(Redacted.value(alice.connection.configuration), {
+			assert.strictEqual(alice.connection.cardUrl, bob.connection.cardUrl)
+			assert.strictEqual(
+				alice.connection.authorization._tag,
+				"PendingAuthorization",
+			)
+			assert.deepStrictEqual(Redacted.value(alice.connection.configuration), {
 				private: "alice",
 			})
-			assert.deepEqual(Redacted.value(bob.connection.configuration), {
+			assert.deepStrictEqual(Redacted.value(bob.connection.configuration), {
 				private: "bob",
 			})
-			assert.equal(
+			assert.strictEqual(
 				(yield* apps.getApp(candidate.cardUrl)).card.name,
 				candidate.card.name,
 			)
-			assert.equal(alice.publicHints.cardUrl, candidate.cardUrl)
+			assert.strictEqual(alice.publicHints.cardUrl, candidate.cardUrl)
 			const credentials = yield* Store.CredentialStore
 			const binding = {
 				owner: "alice",
@@ -113,7 +111,7 @@ test("Confirmation saves one shared App record, and each owner keeps its own con
 				{ resource: "https://other.example/mcp" },
 				{ issuer: "https://other-auth.example" },
 			])
-				assert.equal(
+				assert.strictEqual(
 					(yield* Effect.result(
 						credentials.get({
 							binding: {
@@ -129,7 +127,7 @@ test("Confirmation saves one shared App record, and each owner keeps its own con
 				owner: "bob",
 				connectionId: "service",
 			})
-			assert.equal(
+			assert.strictEqual(
 				Redacted.value(
 					(yield* credentials.get({
 						binding,
@@ -139,48 +137,61 @@ test("Confirmation saves one shared App record, and each owner keeps its own con
 				"secret-a",
 			)
 			const duplicate = yield* Effect.result(add("alice"))
-			assert.equal(duplicate._tag, "Failure")
-		}),
-	)
-})
-
-test("An unavailable store cannot report a successful add", async () => {
-	const failing = Layer.succeed(Store.AppStore, {
-		save: () =>
-			Effect.fail(
-				new Store.StoreError({
-					reason: "Unavailable",
-					operation: "save",
-				}),
+			assert.strictEqual(duplicate._tag, "Failure")
+		}).pipe(
+			Effect.provide(
+				Layer.mergeAll(
+					MemoryStore.layer,
+					MemoryStore.layerCredentials,
+					discovery,
+				).pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
 			),
-		get: () =>
-			Effect.fail(
-				new Store.StoreError({
-					reason: "Missing",
-					operation: "get",
-				}),
-			),
-		getApp: () =>
-			Effect.fail(
-				new Store.StoreError({
-					reason: "Missing",
-					operation: "getApp",
-				}),
-			),
-		update: () =>
-			Effect.fail(
-				new Store.StoreError({
-					reason: "Unavailable",
-					operation: "update",
-				}),
-			),
-		updateApp: () => Effect.void,
-		delete: () => Effect.void,
-	})
-	await using runtime2 = ManagedRuntime.make(
-		Layer.merge(failing, discovery).pipe(
-			Layer.provideMerge([CatalogDiscovery.layerRules]),
 		),
-	)
-	await assert.rejects(runtime2.runPromise(add("alice")), /StoreError/)
-})
+)
+
+it.effect("An unavailable store cannot report a successful add", () =>
+	Effect.gen(function* () {
+		const failing = Layer.succeed(Store.AppStore, {
+			save: () =>
+				Effect.fail(
+					new Store.StoreError({
+						reason: "Unavailable",
+						operation: "save",
+					}),
+				),
+			get: () =>
+				Effect.fail(
+					new Store.StoreError({
+						reason: "Missing",
+						operation: "get",
+					}),
+				),
+			getApp: () =>
+				Effect.fail(
+					new Store.StoreError({
+						reason: "Missing",
+						operation: "getApp",
+					}),
+				),
+			update: () =>
+				Effect.fail(
+					new Store.StoreError({
+						reason: "Unavailable",
+						operation: "update",
+					}),
+				),
+			updateApp: () => Effect.void,
+			delete: () => Effect.void,
+		})
+		const error = yield* Effect.flip(
+			add("alice").pipe(
+				Effect.provide(
+					Layer.merge(failing, discovery).pipe(
+						Layer.provideMerge([CatalogDiscovery.layerRules]),
+					),
+				),
+			),
+		)
+		assert.match(String(error), /StoreError/)
+	}),
+)

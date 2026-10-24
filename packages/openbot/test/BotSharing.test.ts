@@ -1,5 +1,4 @@
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { BotMemory, BotsApi, RequestsApi } from "@openbot-build/api"
 import { Schema } from "effect"
 import * as BrowserHost from "./BrowserHost.ts"
@@ -8,7 +7,7 @@ import { message, settled, talk } from "./Messages.ts"
 
 const publicOrigin = "https://sharing.example.com"
 
-test(
+it(
 	"a person joins a shared Bot by invitation and uses it in their own organization",
 	{ timeout: 180000 },
 	async () => {
@@ -23,7 +22,7 @@ test(
 			): Promise<A> => {
 				const value = await response
 				const body = await value.text()
-				assert.equal(value.status, status, body)
+				assert.strictEqual(value.status, status, body)
 				return Schema.decodeUnknownSync(schema)(JSON.parse(body))
 			}
 			const until = async <A>(
@@ -40,7 +39,7 @@ test(
 			const alice = await host.login("sharing-alice")
 			const carol = await host.login("sharing-carol")
 			const dave = await host.login("sharing-dave")
-			assert.notEqual(
+			assert.notStrictEqual(
 				alice.identity.organizationId,
 				carol.identity.organizationId,
 			)
@@ -65,7 +64,7 @@ test(
 				}),
 				201,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await send(
 						alice.session,
@@ -86,9 +85,9 @@ test(
 				201,
 			)
 			assert.ok(link.secret?.startsWith(BotsApi.InvitationSecretPrefix))
-			assert.equal(link.url, publicOrigin + "/join#" + link.secret)
-			assert.equal(link.invitation.email, null)
-			assert.equal(link.invitation.expiresAt, null)
+			assert.strictEqual(link.url, publicOrigin + "/join#" + link.secret)
+			assert.strictEqual(link.invitation.email, null)
+			assert.strictEqual(link.invitation.expiresAt, null)
 			const again = await json(
 				BotsApi.BotInvitationSecret,
 				send(
@@ -96,9 +95,9 @@ test(
 					`/v1/bots/${guide.id}/invitations/${link.invitation.id}/secret`,
 				),
 			)
-			assert.equal(again.secret, link.secret)
+			assert.strictEqual(again.secret, link.secret)
 			// People of other organizations cannot manage the invitations.
-			assert.equal(
+			assert.strictEqual(
 				(await send(carol.session, `/v1/bots/${guide.id}/invitations`)).status,
 				404,
 			)
@@ -115,17 +114,17 @@ test(
 					status,
 				)
 			const linked = await accept(carol.session, { secret: link.secret })
-			assert.notEqual(linked.id, guide.id)
-			assert.equal(linked.name, "Guide")
-			assert.deepEqual(linked.owner, {
+			assert.notStrictEqual(linked.id, guide.id)
+			assert.strictEqual(linked.name, "Guide")
+			assert.deepStrictEqual(linked.owner, {
 				_tag: "Member",
 				userId: carol.identity.userId,
 			})
-			assert.deepEqual(linked.source, {
+			assert.deepStrictEqual(linked.source, {
 				organizationId: alice.identity.organizationId,
 				bot: guide.id,
 			})
-			assert.equal(
+			assert.strictEqual(
 				(await accept(carol.session, { secret: link.secret })).id,
 				linked.id,
 			)
@@ -134,7 +133,7 @@ test(
 				send(carol.session, "/v1/bots"),
 			)
 			assert.ok(listed.some((bot) => bot.id === linked.id))
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				(
 					await json(
 						Schema.Array(BotsApi.BotMember),
@@ -145,7 +144,7 @@ test(
 			)
 
 			// Only the people of the shared Bot change what it is.
-			assert.equal(
+			assert.strictEqual(
 				(
 					await send(carol.session, `/v1/bots/${linked.id}`, "PATCH", {
 						expected: linked.revision,
@@ -161,7 +160,7 @@ test(
 					name: "Guide Two",
 				}),
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await json(BotsApi.Bot, send(carol.session, `/v1/bots/${linked.id}`)))
 					.name,
 				"Guide Two",
@@ -174,16 +173,16 @@ test(
 				payload?: unknown,
 			) => send(carol.session, path, method, payload)
 			const hello = await talk(asCarol, linked.id, "Hello")
-			assert.equal(hello.view.chat.bot, linked.id)
-			assert.equal(hello.view.chat.kind, "direct")
-			assert.equal(hello.view.status, "Completed")
+			assert.strictEqual(hello.view.chat.bot, linked.id)
+			assert.strictEqual(hello.view.chat.kind, "direct")
+			assert.strictEqual(hello.view.status, "Completed")
 			// The Chat is in the organization of Carol. The people of the shared Bot do not see it.
-			assert.equal(
+			assert.strictEqual(
 				(await send(alice.session, "/v1/chats/" + hello.receipt.chat)).status,
 				404,
 			)
 			const asked = await message(asCarol, linked.id, "This needs approval")
-			assert.equal(asked.chat, hello.receipt.chat)
+			assert.strictEqual(asked.chat, hello.receipt.chat)
 			const pending = await until("a pending request", async () => {
 				const list = await json(
 					Schema.Array(RequestsApi.CapabilityRequest),
@@ -191,8 +190,8 @@ test(
 				)
 				return list[0]
 			})
-			assert.equal(pending.bot, linked.id)
-			assert.equal(host.toolCalls(), 0)
+			assert.strictEqual(pending.bot, linked.id)
+			assert.strictEqual(host.toolCalls(), 0)
 			await json(
 				RequestsApi.CapabilityRequest,
 				send(carol.session, "/v1/requests/" + pending.id, "POST", {
@@ -207,7 +206,7 @@ test(
 			)
 			await settled(asCarol, asked.chat)
 			// Her decision is a Grant of her own linked Bot. The shared Bot does not get it.
-			assert.equal(
+			assert.strictEqual(
 				(
 					await json(
 						Schema.Array(BotsApi.Grant),
@@ -216,7 +215,7 @@ test(
 				).length,
 				1,
 			)
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				await json(
 					Schema.Array(BotsApi.Grant),
 					send(alice.session, `/v1/bots/${guide.id}/grants`),
@@ -232,7 +231,7 @@ test(
 					command: { _tag: "Remember", content: "Carol likes tea." },
 				}),
 			)
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				remembered.entries.map((entry) => entry.content),
 				["Carol likes tea."],
 			)
@@ -240,7 +239,7 @@ test(
 				BotMemory.View,
 				send(alice.session, `/v1/bots/${guide.id}/memory`),
 			)
-			assert.deepEqual(asOwner.entries, [])
+			assert.deepStrictEqual(asOwner.entries, [])
 			// The owner can remove what Carol left without reading it.
 			const purged = await json(
 				BotMemory.PurgeResult,
@@ -248,8 +247,8 @@ test(
 					tag: "from:" + carol.identity.userId,
 				}),
 			)
-			assert.equal(purged.removed, 1)
-			assert.deepEqual(
+			assert.strictEqual(purged.removed, 1)
+			assert.deepStrictEqual(
 				(
 					await json(
 						BotMemory.View,
@@ -259,7 +258,7 @@ test(
 				[],
 			)
 			// Members do not manage the memory Bot of a shared Bot.
-			assert.equal(
+			assert.strictEqual(
 				(await send(carol.session, `/v1/bots/${linked.id}/memory/bot`)).status,
 				400,
 			)
@@ -272,7 +271,7 @@ test(
 				}),
 				201,
 			)
-			assert.equal(emailed.secret, null)
+			assert.strictEqual(emailed.secret, null)
 			const mine = (await (
 				await send(dave.session, "/v1/invitations")
 			).json()) as {
@@ -281,11 +280,11 @@ test(
 					readonly bot?: { readonly id: string }
 				}>
 			}
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				mine.items.map((item) => [item.id, item.bot?.id]),
 				[[emailed.invitation.id, guide.id]],
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await send(
 						dave.session,
@@ -295,7 +294,7 @@ test(
 				).status,
 				400,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await send(carol.session, "/v1/bot-invitations/accept", "POST", {
 						invitation: emailed.invitation.id,
@@ -306,7 +305,7 @@ test(
 			const daveLinked = await accept(dave.session, {
 				invitation: emailed.invitation.id,
 			})
-			assert.equal(
+			assert.strictEqual(
 				(
 					await send(dave.session, "/v1/bot-invitations/accept", "POST", {
 						invitation: emailed.invitation.id,
@@ -323,7 +322,7 @@ test(
 					archived: true,
 				}),
 			)
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				(
 					await json(
 						Schema.Array(BotsApi.BotMember),
@@ -344,10 +343,10 @@ test(
 				"POST",
 				{ secret: link.secret },
 			)
-			assert.equal(joined.status, 200, await joined.clone().text())
+			assert.strictEqual(joined.status, 200, await joined.clone().text())
 
 			// A revoked link opens no more. The people who joined stay.
-			assert.equal(
+			assert.strictEqual(
 				(
 					await send(
 						alice.session,
@@ -358,7 +357,7 @@ test(
 				204,
 			)
 			const frank = await host.login("sharing-frank")
-			assert.equal(
+			assert.strictEqual(
 				(
 					await send(frank.session, "/v1/bot-invitations/accept", "POST", {
 						secret: link.secret,
@@ -366,13 +365,13 @@ test(
 				).status,
 				400,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await send(carol.session, `/v1/bots/${linked.id}`)).status,
 				200,
 			)
 
 			// When the people of the shared Bot take Carol off, her linked Bot stops.
-			assert.equal(
+			assert.strictEqual(
 				(
 					await send(
 						alice.session,
@@ -382,7 +381,7 @@ test(
 				).status,
 				204,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await send(carol.session, `/v1/bots/${linked.id}`)).status,
 				404,
 			)

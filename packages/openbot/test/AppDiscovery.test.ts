@@ -7,16 +7,16 @@ import { Coordinator } from "../src/bots/Coordinator.ts"
 import { Connectors } from "../src/computers/connector/Connectors.ts"
 import { Drivers } from "../src/computers/Drivers.ts"
 import { Pairings } from "../src/computers/Pairings.ts"
+import { Files } from "../src/files/Files.ts"
 import * as ChannelQueue from "../src/channels/ChannelQueue.ts"
 import * as ChannelRegistry from "../src/channels/ChannelRegistry.ts"
 import * as DeveloperLayers from "../src/apps/DeveloperLayers.ts"
 import * as AppExperience from "../src/apps/Experience.ts"
 import * as Views from "../src/apps/Views.ts"
-import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises"
 import { createServer as createHttpsServer } from "node:https"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
 import {
 	Array as EffectArray,
@@ -127,8 +127,8 @@ const fixture = async () => {
 	const server = createHttpsServer(
 		{ key: await readFile(`${directory}/key.pem`), cert: ca },
 		(req, res) => {
-			assert.equal(req.headers.authorization, undefined)
-			assert.equal(req.headers.cookie, undefined)
+			assert.strictEqual(req.headers.authorization, undefined)
+			assert.strictEqual(req.headers.cookie, undefined)
 			requests = EffectArray.append(requests, req.url ?? "")
 			res.setHeader("content-type", "application/json")
 			const catalog = (urls: ReadonlyArray<string>) => ({
@@ -264,26 +264,26 @@ const fixture = async () => {
 	}
 }
 
-test("known-address discovery keeps protocol candidates, configuration and sources from local HTTPS", async () => {
+it("known-address discovery keeps protocol candidates, configuration and sources from local HTTPS", async () => {
 	await using publisher = await fixture()
 	await using runtime = ManagedRuntime.make(publisher.layer)
 	const single = await runtime.runPromise(
 		AppDiscovery.discover(publisher.origin.slice(8)),
 	)
-	assert.equal(single._tag, "Single")
+	assert.strictEqual(single._tag, "Single")
 	assert.ok(single._tag === "Single")
-	assert.equal(
+	assert.strictEqual(
 		single.candidate.cardUrl,
 		publisher.origin + "/card?edition=team",
 	)
-	assert.equal(
+	assert.strictEqual(
 		single.candidate.endpoints[0]?.requirements[0]?.key,
 		"header:X-Account",
 	)
-	assert.deepEqual(single.candidate.card._meta, {
+	assert.deepStrictEqual(single.candidate.card._meta, {
 		"fixture.test/metadata": { preserved: true },
 	})
-	assert.deepEqual(
+	assert.deepStrictEqual(
 		single.candidate.sources.map((source) => source.role),
 		["input", "catalog", "card", "endpoint"],
 	)
@@ -291,23 +291,23 @@ test("known-address discovery keeps protocol candidates, configuration and sourc
 		AppDiscovery.discover(publisher.origin + "/catalog"),
 	)
 	assert.ok(multiple._tag === "Multiple")
-	assert.equal(multiple.candidates.length, 2)
-	assert.equal(multiple.issues.length, 1)
-	assert.equal(multiple.issues[0]?.url, publisher.origin + "/invalid")
+	assert.strictEqual(multiple.candidates.length, 2)
+	assert.strictEqual(multiple.issues.length, 1)
+	assert.strictEqual(multiple.issues[0]?.url, publisher.origin + "/invalid")
 	await runtime.runPromise(Schema.decodeEffect(AppDiscoveryResult)(multiple))
 	const page = await runtime.runPromise(
 		AppDiscovery.discover(publisher.origin + "/page?edition=team"),
 	)
 	assert.ok(page._tag === "Single")
-	assert.equal(
+	assert.strictEqual(
 		page.candidate.sources[0]?.originalInput,
 		publisher.origin + "/page?edition=team",
 	)
 	assert.ok(publisher.requests.includes("/page?edition=team"))
-	assert.equal(publisher.requests.includes("/mcp"), false)
+	assert.strictEqual(publisher.requests.includes("/mcp"), false)
 })
 
-test("extra public Index sources follow HTTPS pages without sending credentials", async () => {
+it("extra public Index sources follow HTTPS pages without sending credentials", async () => {
 	await using publisher = await fixture()
 	const runtime = ManagedRuntime.make(publisher.publicNetwork)
 	try {
@@ -320,9 +320,9 @@ test("extra public Index sources follow HTTPS pages without sending credentials"
 			}),
 		)
 		const entries = await Effect.runPromise(provider.entries)
-		assert.equal(entries.length, 2)
-		assert.notEqual(entries[0]?.cardUrl, entries[1]?.cardUrl)
-		assert.deepEqual(publisher.requests, [
+		assert.strictEqual(entries.length, 2)
+		assert.notStrictEqual(entries[0]?.cardUrl, entries[1]?.cardUrl)
+		assert.deepStrictEqual(publisher.requests, [
 			"/index?limit=50",
 			"/index?limit=50&cursor=second",
 		])
@@ -331,7 +331,7 @@ test("extra public Index sources follow HTTPS pages without sending credentials"
 	}
 })
 
-test("discovery returns the main typed failures with local HTTP evidence", async () => {
+it("discovery returns the main typed failures with local HTTP evidence", async () => {
 	await using publisher = await fixture()
 	await using runtime = ManagedRuntime.make(publisher.layer)
 	const failures: ReadonlyArray<readonly [string, string]> = [
@@ -349,8 +349,8 @@ test("discovery returns the main typed failures with local HTTP evidence", async
 			AppDiscovery.discover(publisher.origin + path).pipe(Effect.result),
 		)
 		assert.ok(Result.isFailure(result), path)
-		assert.equal(result.failure._tag, "AppDiscoveryFailed")
-		assert.equal(result.failure.reason, reason, path)
+		assert.strictEqual(result.failure._tag, "AppDiscoveryFailed")
+		assert.strictEqual(result.failure.reason, reason, path)
 	}
 	const before = publisher.requests.length
 	for (const input of [
@@ -362,12 +362,12 @@ test("discovery returns the main typed failures with local HTTP evidence", async
 			AppDiscovery.discover(input).pipe(Effect.result),
 		)
 		assert.ok(Result.isFailure(result))
-		assert.equal(result.failure.reason, "InvalidInput")
+		assert.strictEqual(result.failure.reason, "InvalidInput")
 	}
-	assert.equal(publisher.requests.length, before)
+	assert.strictEqual(publisher.requests.length, before)
 })
 
-test("production discovery blocks loopback addresses before any protocol HTTP request", async () => {
+it("production discovery blocks loopback addresses before any protocol HTTP request", async () => {
 	await using publisher = await fixture()
 	await using runtime = ManagedRuntime.make(AppDiscovery.layerPublic)
 	const result = await runtime.runPromise(
@@ -376,8 +376,8 @@ test("production discovery blocks loopback addresses before any protocol HTTP re
 		),
 	)
 	assert.ok(Result.isFailure(result))
-	assert.equal(result.failure.reason, "BlockedTarget")
-	assert.equal(publisher.requests.length, 0)
+	assert.strictEqual(result.failure.reason, "BlockedTarget")
+	assert.strictEqual(publisher.requests.length, 0)
 })
 
 const publicOrigin = "https://openbot.fixture.test"
@@ -531,6 +531,8 @@ const startApi = async (
 				Layer.succeed(Connectors, {} as Connectors["Service"]),
 				Layer.succeed(Drivers, {} as Drivers["Service"]),
 				Layer.succeed(Pairings, {} as Pairings["Service"]),
+				// Discovery never uses files. Their handlers only need the service to exist.
+				Layer.succeed(Files, {} as Files["Service"]),
 				// Discovery never uses Chats. Their handlers only need the Coordinator to exist.
 				Layer.succeed(Coordinator, {} as Coordinator["Service"]),
 			]),
@@ -576,7 +578,7 @@ const startApi = async (
 	}
 }
 
-test("the registered public App API checks ordinary BotAuth before it discovers local services", async () => {
+it("the registered public App API checks ordinary BotAuth before it discovers local services", async () => {
 	await using publisher = await fixture()
 	await using api = await startApi(publisher.layer)
 	const payload = { input: publisher.origin + "/card?edition=team" }
@@ -601,13 +603,13 @@ test("the registered public App API checks ordinary BotAuth before it discovers 
 	]
 	for (const [headers, status] of denied) {
 		const response = await api.request(payload, headers)
-		assert.equal(response.status, status)
+		assert.strictEqual(response.status, status)
 		await response.text()
 	}
-	assert.equal(publisher.requests.length, 0)
+	assert.strictEqual(publisher.requests.length, 0)
 	for (const invalid of [{}, { input: 123 }, { input: "" }]) {
 		const response = await api.request(invalid, authenticated)
-		assert.equal(response.status, 400)
+		assert.strictEqual(response.status, 400)
 		await response.text()
 	}
 	const malformed = await fetch(api.address + "/v1/apps/discover", {
@@ -615,39 +617,39 @@ test("the registered public App API checks ordinary BotAuth before it discovers 
 		headers: { ...authenticated, "content-type": "application/json" },
 		body: "{",
 	})
-	assert.equal(malformed.status, 400)
+	assert.strictEqual(malformed.status, 400)
 	await malformed.text()
-	assert.equal(publisher.requests.length, 0)
+	assert.strictEqual(publisher.requests.length, 0)
 	const response = await api.request(
 		{ input: publisher.origin.slice(8) },
 		{ ...session, origin: publicOrigin },
 	)
-	assert.equal(response.status, 200)
+	assert.strictEqual(response.status, 200)
 	const single = Schema.decodeUnknownSync(
 		Schema.toCodecJson(AppDiscoveryResult),
 	)(await response.json())
 	assert.ok(single._tag === "Single")
-	assert.equal(single.candidate.cardUrl, payload.input)
-	assert.equal(
+	assert.strictEqual(single.candidate.cardUrl, payload.input)
+	assert.strictEqual(
 		single.candidate.endpoints[0]?.requirements[0]?.key,
 		"header:X-Account",
 	)
-	assert.equal(
+	assert.strictEqual(
 		single.candidate.sources[0]?.originalInput,
 		publisher.origin.slice(8),
 	)
 	const spec = await (await fetch(api.address + "/openapi.json")).json()
-	assert.deepEqual(spec.paths["/v1/apps/discover"].post.security, [
+	assert.deepStrictEqual(spec.paths["/v1/apps/discover"].post.security, [
 		{ token: [] },
 		{ session: [] },
 	])
 	for (const status of ["200", "400", "401", "403", "422", "503"])
 		assert.ok(spec.paths["/v1/apps/discover"].post.responses[status])
-	assert.equal((await fetch(api.address + "/health")).status, 200)
-	assert.equal(publisher.requests.includes("/mcp"), false)
+	assert.strictEqual((await fetch(api.address + "/health")).status, 200)
+	assert.strictEqual(publisher.requests.includes("/mcp"), false)
 })
 
-test("shared public client decodes real HTTP discovery results and typed protocol failures", async () => {
+it("shared public client decodes real HTTP discovery results and typed protocol failures", async () => {
 	await using publisher = await fixture()
 	await using api = await startApi(publisher.layer)
 	await using client = ManagedRuntime.make(
@@ -674,8 +676,8 @@ test("shared public client decodes real HTTP discovery results and typed protoco
 		discover(publisher.origin + "/catalog"),
 	)
 	assert.ok(multiple._tag === "Multiple")
-	assert.equal(multiple.candidates.length, 2)
-	assert.equal(multiple.issues[0]?.url, publisher.origin + "/invalid")
+	assert.strictEqual(multiple.candidates.length, 2)
+	assert.strictEqual(multiple.issues[0]?.url, publisher.origin + "/invalid")
 	const failures: ReadonlyArray<readonly [string, string]> = [
 		["not a link", "InvalidInput"],
 		[publisher.origin + "/none", "NoDeclaration"],
@@ -695,29 +697,29 @@ test("shared public client decodes real HTTP discovery results and typed protoco
 				origin: publicOrigin,
 			},
 		)
-		assert.equal(response.status, 422)
+		assert.strictEqual(response.status, 422)
 		const failure = Schema.decodeUnknownSync(AppDiscoveryFailed)(
 			await response.json(),
 		)
-		assert.equal(failure.reason, reason)
+		assert.strictEqual(failure.reason, reason)
 		const result = await client.runPromise(discover(input).pipe(Effect.result))
 		assert.ok(Result.isFailure(result))
 		assert.ok(Schema.is(AppDiscoveryFailed)(result.failure))
-		assert.equal(result.failure.reason, reason)
+		assert.strictEqual(result.failure.reason, reason)
 	}
 	await using publicApi = await startApi(AppDiscovery.layerPublic)
 	const rejected = await publicApi.request(
 		{ input: publisher.origin + "/card?edition=team" },
 		{ cookie: `${AuthApi.SessionCookie}=local-session`, origin: publicOrigin },
 	)
-	assert.equal(rejected.status, 422)
-	assert.equal(
+	assert.strictEqual(rejected.status, 422)
+	assert.strictEqual(
 		Schema.decodeUnknownSync(AppDiscoveryFailed)(await rejected.json()).reason,
 		"BlockedTarget",
 	)
 })
 
-test("anonymous developer inspection uses its own HTTPS evidence and does not change connections or the Index", async () => {
+it("anonymous developer inspection uses its own HTTPS evidence and does not change connections or the Index", async () => {
 	await using publisher = await fixture()
 	await using api = await startApi(publisher.layer, publisher.publicNetwork)
 	const headers = {
@@ -734,14 +736,14 @@ test("anonymous developer inspection uses its own HTTPS evidence and does not ch
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({ input }),
 		})
-		assert.equal(response.status, 200, await response.clone().text())
+		assert.strictEqual(response.status, 200, await response.clone().text())
 		return Schema.decodeUnknownSync(
 			Schema.toCodecJson(DeveloperApi.InspectionReport),
 		)(await response.json())
 	}
 	const authCalls = api.authCalls.length
 	const single = await inspect(publisher.origin + "/card?edition=team")
-	assert.equal(single.apps[0]?.eligibility._tag, "Eligible")
+	assert.strictEqual(single.apps[0]?.eligibility._tag, "Eligible")
 	assert.ok(
 		single.stages.some(
 			(stage) => stage.name === "Eligibility" && stage.status === "Passed",
@@ -752,8 +754,8 @@ test("anonymous developer inspection uses its own HTTPS evidence and does not ch
 	)
 	try {
 		const unknown = await inspect(publisher.origin + "/card?edition=team")
-		assert.equal(unknown.apps[0]?.eligibility._tag, "Eligible")
-		assert.equal(unknown.apps[0]?.stored._tag, "Unknown")
+		assert.strictEqual(unknown.apps[0]?.eligibility._tag, "Eligible")
+		assert.strictEqual(unknown.apps[0]?.stored._tag, "Unknown")
 	} finally {
 		await api.sql(
 			"ALTER TABLE unavailable_index_entries RENAME TO openbot_app_index_entries",
@@ -761,29 +763,29 @@ test("anonymous developer inspection uses its own HTTPS evidence and does not ch
 	}
 
 	const multiple = await inspect(publisher.origin + "/catalog")
-	assert.equal(multiple.apps.length, 2)
+	assert.strictEqual(multiple.apps.length, 2)
 	assert.ok(multiple.issues.some((issue) => issue.code === "InvalidCandidate"))
 	for (const path of ["/empty", "/none", "/malformed", "/redirect"]) {
 		const report = await inspect(publisher.origin + path)
-		assert.equal(report.apps.length, 0)
+		assert.strictEqual(report.apps.length, 0)
 		assert.ok(report.issues.length > 0)
 		assert.ok(report.stages.some((stage) => stage.status === "NotChecked"))
 	}
-	assert.equal(api.authCalls.length, authCalls)
+	assert.strictEqual(api.authCalls.length, authCalls)
 	const count = publisher.requests.length
 	const invalid = await fetch(api.address + "/v1/developer/inspect", {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify({ input: "http://insecure.example/card" }),
 	})
-	assert.equal(invalid.status, 400)
-	assert.equal(publisher.requests.length, count)
-	assert.equal(publisher.requests.includes("/mcp"), false)
-	assert.equal(
+	assert.strictEqual(invalid.status, 400)
+	assert.strictEqual(publisher.requests.length, count)
+	assert.strictEqual(publisher.requests.includes("/mcp"), false)
+	assert.strictEqual(
 		await (await fetch(api.address + "/v1/connections", { headers })).text(),
 		inventory,
 	)
-	assert.equal(
+	assert.strictEqual(
 		await (await fetch(api.address + "/v1/app-index/apps")).text(),
 		index,
 	)

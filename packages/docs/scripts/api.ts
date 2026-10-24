@@ -52,6 +52,11 @@ const groups = [
 		"Talk to a Bot. Each Bot has one Chat with each person, and the Bot always answers at once.",
 	],
 	[
+		"files",
+		"Files",
+		"Upload files, such as pictures and PDFs, and give them to a Bot in a message.",
+	],
+	[
 		"delegations",
 		"Delegations",
 		"Read or stop the work that a Bot gave to another Bot or to itself.",

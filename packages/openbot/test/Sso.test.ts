@@ -1,5 +1,4 @@
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { DomainControl } from "../src/apps/DomainControl.ts"
 import * as BrowserHost from "./BrowserHost.ts"
@@ -7,7 +6,7 @@ import { withCookie } from "./Caller.ts"
 
 const publicOrigin = "https://api.example.com"
 
-test(
+it(
 	"SSO connections use only verified domains, hide their secrets and keep their domains",
 	{ timeout: 60000 },
 	async () => {
@@ -36,8 +35,8 @@ test(
 				"POST",
 				connection,
 			)
-			assert.equal(unverified.status, 400)
-			assert.equal((await unverified.json())._tag, "SsoConnectionInvalid")
+			assert.strictEqual(unverified.status, 400)
+			assert.strictEqual((await unverified.json())._tag, "SsoConnectionInvalid")
 
 			const domain = await (
 				await account(alice.session, "/v1/organization/domains", "POST", {
@@ -56,11 +55,11 @@ test(
 				"POST",
 				connection,
 			)
-			assert.equal(created.status, 200, await created.clone().text())
+			assert.strictEqual(created.status, 200, await created.clone().text())
 			const value = await created.json()
-			assert.deepEqual(value.clientSecret, { set: true, hint: "…6789" })
-			assert.equal(JSON.stringify(value).includes("sso-secret"), false)
-			assert.equal(
+			assert.deepStrictEqual(value.clientSecret, { set: true, hint: "…6789" })
+			assert.strictEqual(JSON.stringify(value).includes("sso-secret"), false)
+			assert.strictEqual(
 				value.redirectUri,
 				publicOrigin + "/auth/callback/" + value.id,
 			)
@@ -70,14 +69,14 @@ test(
 				"/v1/organization/domains/example.com",
 				"DELETE",
 			)
-			assert.equal((await inUse.json())._tag, "DomainInUse")
+			assert.strictEqual((await inUse.json())._tag, "DomainInUse")
 			const stale = await account(
 				alice.session,
 				"/v1/organization/sso_connections/" + value.id,
 				"PATCH",
 				{ expectedVersion: value.version + 1, enforce: false },
 			)
-			assert.equal((await stale.json())._tag, "SsoConnectionConflict")
+			assert.strictEqual((await stale.json())._tag, "SsoConnectionConflict")
 
 			// Without an email, sign-in goes to the provider of the platform.
 			const start = await fetch(host.address + "/auth/sign-in", {
@@ -85,8 +84,8 @@ test(
 				headers: { origin: publicOrigin, "content-type": "application/json" },
 				body: JSON.stringify({ returnTo: "/" }),
 			})
-			assert.equal(start.status, 200, await start.clone().text())
-			assert.equal(
+			assert.strictEqual(start.status, 200, await start.clone().text())
+			assert.strictEqual(
 				new URL((await start.json()).url).origin,
 				"https://id.example.com",
 			)
@@ -99,14 +98,14 @@ test(
 				"PATCH",
 				{ expectedVersion: value.version, enforce: true },
 			)
-			assert.equal(enforced.status, 200, await enforced.clone().text())
+			assert.strictEqual(enforced.status, 200, await enforced.clone().text())
 			let status = 200
 			for (let attempt = 0; status === 200 && attempt < 100; attempt++) {
 				status = (await account(alice.session, "/v1/organization")).status
 				if (status === 200)
 					await new Promise((resolve) => setTimeout(resolve, 50))
 			}
-			assert.equal(status, 401)
+			assert.strictEqual(status, 401)
 		} finally {
 			await host.close()
 		}

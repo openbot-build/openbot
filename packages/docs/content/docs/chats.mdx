@@ -52,7 +52,7 @@ The message goes to your direct Chat with this Bot. The first message makes the 
 
 There is no `expected` revision. A message is always taken.
 
-`input` takes text only. These three forms are the same:
+`input` takes text. These three forms are the same:
 
 ```json
 "Plan three days in Rome."
@@ -73,6 +73,8 @@ There is no `expected` revision. A message is always taken.
 ```
 
 Unknown fields return `400`.
+
+A message can also have files that you uploaded, with `input_image` and `input_file` parts. See [Give a file to a Bot](/docs/files#give-a-file-to-a-bot).
 
 `POST /v1/chats/:chatId/messages` takes the same body. Use it for a direct Chat, or for a task Chat when you want to add to the work of a Bot. In a task Chat, the Bot reads your message as a message from you. Other kinds of Chats return `409` with `ChatConflict`.
 
@@ -135,6 +137,7 @@ The stream only watches the Turn. If you close it, the Turn goes on.
 | Status | Error                      | When                                                                                       |
 | ------ | -------------------------- | ------------------------------------------------------------------------------------------ |
 | `400`  | `ChatModelInvalid`         | The Chat has no model. The Bot needs a `model`. See [Models](/docs/models#choose-a-model). |
+| `400`  | `FileInvalid`              | A file part names a file that is not one of your ready files, or is not an image.          |
 | `403`  | `PermissionDenied`         | You may not give work to this Bot.                                                         |
 | `404`  | `BotNotFound`              | There is no Bot with this ID that you may use.                                             |
 | `404`  | `ChatNotFound`             | You have no Chat with this ID.                                                             |
@@ -434,6 +437,8 @@ OpenBot does not use the native compaction of a provider by default, such as `/r
 ## Delete the history
 
 `DELETE /v1/chats/:chatId` deletes the history of a direct Chat or a channel Chat, and returns `204`. First it stops the running Turn and cancels the [open work](#open-work) of the Chat. Task Chats and review Chats return `409` with `ChatConflict`.
+
+The Chat then no longer keeps the [files](/docs/files#how-files-go-away) that it named.
 
 After you delete a direct Chat, your next message to the Bot starts a new, empty Chat with a new ID. In the same way, the next message in the chat of a deleted channel Chat starts a new Chat. What the Bot learned from the Chat stays in its [Bot memory](/docs/memory). To remove that too, purge the tag `chat:<id>`. See [Read and change it](/docs/memory#read-and-change-it).
 

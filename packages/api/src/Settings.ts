@@ -168,6 +168,125 @@ export const tokenRateDefaults: TokenRateLimits = {
 	token: null,
 }
 
+/** An HTTP or HTTPS address with no path, such as `https://s3.example.com`. */
+export const StorageEndpoint = Schema.NonEmptyString.check(
+	Schema.makeFilter(
+		(value) => {
+			if (!URL.canParse(value)) return false
+			const endpoint = new URL(value)
+			return (
+				(endpoint.protocol === "https:" || endpoint.protocol === "http:") &&
+				endpoint.origin === value &&
+				endpoint.username === "" &&
+				endpoint.password === ""
+			)
+		},
+		{ message: "Expected an HTTP or HTTPS origin with no path" },
+	),
+)
+/** A bucket name of S3. */
+export const BucketName = Schema.String.check(
+	Schema.isPattern(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/),
+)
+const storageFields = {
+	/** The address where OpenBot reaches the storage. */
+	endpoint: StorageEndpoint,
+	/**
+	 * The address where clients put files with a signed upload. Null means
+	 * `endpoint`. Use it when OpenBot reaches the storage on a private network.
+	 */
+	publicEndpoint: Schema.NullOr(StorageEndpoint),
+	region: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(64)),
+	bucket: BucketName,
+	accessKeyId: Schema.String.check(
+		Schema.isMinLength(1),
+		Schema.isMaxLength(256),
+	),
+	/**
+	 * Put the bucket in the path, as in `https://host/bucket/key`. Most storage
+	 * that is not AWS, such as MinIO, needs it.
+	 */
+	forcePathStyle: Schema.Boolean,
+}
+/** An object storage that speaks the S3 API, such as AWS S3, Cloudflare R2 or MinIO. */
+export const FileStorage = Schema.Struct({
+	...storageFields,
+	secretAccessKey: SecretState,
+})
+export type FileStorage = typeof FileStorage.Type
+export const FileStorageInput = Schema.Struct({
+	...storageFields,
+	/** Leave it out to keep the current secret. */
+	secretAccessKey: Schema.optionalKey(SecretInput),
+})
+export type FileStorageInput = typeof FileStorageInput.Type
+
+/** The ways that clients can upload files. */
+export const FileUploads = Schema.Struct({
+	/** `POST /v1/files`: the bytes go through OpenBot. */
+	server: Schema.Boolean,
+	/** `POST /v1/files/uploads`: the client puts the bytes in storage itself, at a signed address. */
+	direct: Schema.Boolean,
+})
+export type FileUploads = typeof FileUploads.Type
+
+const fileLimits = {
+	uploads: FileUploads,
+	/** The largest file, in bytes. */
+	maxBytes: Schema.Int.check(
+		Schema.isBetween({ minimum: 1, maximum: 5 * 1024 * 1024 * 1024 }),
+	),
+	/**
+	 * The most bytes that one member may keep in files. Pending and ready files
+	 * both count. Null means no limit.
+	 */
+	quotaBytes: Schema.NullOr(
+		Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 2 ** 50 })),
+	),
+	/** The media types that people can upload, such as `image/png`. `image/*` takes every image. */
+	mediaTypes: Schema.Array(
+		Schema.String.check(Schema.isMinLength(3), Schema.isMaxLength(255)),
+	).check(Schema.isMaxLength(100)),
+	/**
+	 * How long a file that no Chat uses stays, in milliseconds. After that,
+	 * OpenBot deletes it. A file that a Chat uses stays until the Chat is deleted.
+	 */
+	unusedMs: Schema.Int.check(
+		Schema.isBetween({ minimum: 60_000, maximum: 365 * 24 * 60 * 60 * 1000 }),
+	),
+}
+/** Files that people give to Bots. */
+export const Files = Schema.Struct({
+	/** Null means no storage, so nobody can upload files. */
+	storage: Schema.NullOr(FileStorage),
+	...fileLimits,
+})
+export type Files = typeof Files.Type
+export const FilesInput = Schema.Struct({
+	/** Leave it out to keep the current storage. Null removes it. */
+	storage: Schema.optionalKey(Schema.NullOr(FileStorageInput)),
+	uploads: Schema.optionalKey(fileLimits.uploads),
+	maxBytes: Schema.optionalKey(fileLimits.maxBytes),
+	quotaBytes: Schema.optionalKey(fileLimits.quotaBytes),
+	mediaTypes: Schema.optionalKey(fileLimits.mediaTypes),
+	unusedMs: Schema.optionalKey(fileLimits.unusedMs),
+})
+export type FilesInput = typeof FilesInput.Type
+export const fileDefaults: Omit<Files, "storage"> = {
+	uploads: { server: true, direct: true },
+	maxBytes: 20 * 1024 * 1024,
+	quotaBytes: null,
+	mediaTypes: [
+		"image/png",
+		"image/jpeg",
+		"image/gif",
+		"image/webp",
+		"application/pdf",
+		"text/plain",
+	],
+	unusedMs: 24 * 60 * 60 * 1000,
+}
+
 export const PlatformSettings = Schema.Struct({
 	version: Version,
 	/**
@@ -190,6 +309,7 @@ export const PlatformSettings = Schema.Struct({
 	rateLimit: RateLimit,
 	/** The highest token rates. An organization can only set lower ones. */
 	tokenRate: TokenRateLimits,
+	files: Files,
 	updatedAt: Schema.String,
 })
 export type PlatformSettings = typeof PlatformSettings.Type
@@ -205,6 +325,7 @@ export const UpdatePlatformSettingsRequest = Schema.Struct({
 	codeMode: Schema.optionalKey(CodeMode),
 	rateLimit: Schema.optionalKey(RateLimit),
 	tokenRate: Schema.optionalKey(TokenRateLimits),
+	files: Schema.optionalKey(FilesInput),
 })
 export type UpdatePlatformSettingsRequest =
 	typeof UpdatePlatformSettingsRequest.Type

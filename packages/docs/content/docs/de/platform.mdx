@@ -57,18 +57,27 @@ docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
   --admin-email=alice@example.com
 ```
 
-| Flag                   | Pflicht          | Was es tut                                                                                                                          |
-| ---------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `--public-origin`      | Ja               | Der öffentliche HTTPS-Ursprung von OpenBot, zum Beispiel `https://api.example.com`. Kein Pfad und kein Schrägstrich am Ende.        |
-| `--oidc-issuer`        | Mit der ID       | Die HTTPS-Adresse des OpenID-Connect-Anbieters der Platform, ohne Schrägstrich am Ende.                                             |
-| `--oidc-client-id`     | Mit dem Issuer   | Die Client-ID bei diesem Anbieter.                                                                                                  |
-| `--oidc-client-secret` | Nein             | Das Client-Secret. Lass es weg für einen öffentlichen Client, der PKCE nutzt.                                                       |
-| `--admin-email`        | Mindestens einer | Eine Person mit dieser bestätigten E-Mail wird Admin der Platform, wenn sie sich anmeldet. Wiederhole das Flag für mehr Personen.   |
-| `--force`              | Nein             | Schreibt die Einstellungen, auch wenn es sie schon gibt. Nutze es nur zur Rettung, wenn sich kein Admin der Platform anmelden kann. |
+| Flag                     | Pflicht          | Was es tut                                                                                                                          |
+| ------------------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `--public-origin`        | Ja               | Der öffentliche HTTPS-Ursprung von OpenBot, zum Beispiel `https://api.example.com`. Kein Pfad und kein Schrägstrich am Ende.        |
+| `--oidc-issuer`          | Mit der ID       | Die HTTPS-Adresse des OpenID-Connect-Anbieters der Platform, ohne Schrägstrich am Ende.                                             |
+| `--oidc-client-id`       | Mit dem Issuer   | Die Client-ID bei diesem Anbieter.                                                                                                  |
+| `--oidc-client-secret`   | Nein             | Das Client-Secret. Lass es weg für einen öffentlichen Client, der PKCE nutzt.                                                       |
+| `--admin-email`          | Mindestens einer | Eine Person mit dieser bestätigten E-Mail wird Admin der Platform, wenn sie sich anmeldet. Wiederhole das Flag für mehr Personen.   |
+| `--s3-endpoint`          | Mit dem Bucket   | Die Adresse des Objektspeichers für [Dateien](/de/docs/files), etwa `https://s3.us-east-1.amazonaws.com`.                           |
+| `--s3-public-endpoint`   | Nein             | Die Adresse, an die Clients Dateien beim direkten Hochladen senden, wenn sie nicht `--s3-endpoint` ist.                             |
+| `--s3-region`            | Nein             | Die Region des Speichers. Der Standard ist `us-east-1`.                                                                             |
+| `--s3-bucket`            | Mit der Adresse  | Der Bucket für Dateien.                                                                                                             |
+| `--s3-access-key-id`     | Mit der Adresse  | Die Access Key ID für den Speicher.                                                                                                 |
+| `--s3-secret-access-key` | Mit der Adresse  | Der geheime Schlüssel für den Speicher.                                                                                             |
+| `--s3-path-style`        | Nein             | Den Bucket in den Pfad setzen. MinIO und RustFS brauchen das.                                                                       |
+| `--force`                | Nein             | Schreibt die Einstellungen, auch wenn es sie schon gibt. Nutze es nur zur Rettung, wenn sich kein Admin der Platform anmelden kann. |
 
 Setze `--oidc-issuer` und `--oidc-client-id` zusammen, oder lass beide weg. Lass beide weg, wenn sich Menschen nur über die [SSO-Verbindungen](/de/docs/sso) von Organizations anmelden.
 
 Eine Befehlszeile kann in Prozess-Listen erscheinen. Darum kannst du das Client-Secret statt mit `--oidc-client-secret` in der Umgebungsvariable `OPENBOT_SETUP_OIDC_CLIENT_SECRET` angeben. Das ist der bessere Weg.
+
+Setze die vier Speicher-Flags `--s3-endpoint`, `--s3-bucket`, `--s3-access-key-id` und `--s3-secret-access-key` zusammen, oder lass alle weg. Den geheimen Schlüssel kannst du auch in `OPENBOT_SETUP_S3_SECRET_ACCESS_KEY` angeben. Ohne sie hat die Platform keinen Speicher, bis ein Admin `files` in den Einstellungen der Platform setzt.
 
 Das Setup erstellt auch ein zufälliges Anmelde-Geheimnis. Better Auth nutzt es, um die Anmelde-Cookies zu signieren. OpenBot speichert es verschlüsselt, und du siehst es nie.
 
@@ -114,6 +123,21 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		"bot": null,
 		"token": null
 	},
+	"files": {
+		"storage": null,
+		"uploads": { "server": true, "direct": true },
+		"maxBytes": 20971520,
+		"quotaBytes": null,
+		"mediaTypes": [
+			"image/png",
+			"image/jpeg",
+			"image/gif",
+			"image/webp",
+			"application/pdf",
+			"text/plain"
+		],
+		"unusedMs": 86400000
+	},
 	"updatedAt": "2026-10-21T09:00:00.000Z"
 }
 ```
@@ -129,6 +153,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `codeMode`             | Ob Bots Code Mode nutzen können, und seine Grenzen. Siehe [Code Mode](/de/docs/code-mode#code-mode-einschalten).                   |
 | `rateLimit`            | Wie viele API-Anfragen jeder Aufrufer in einer Minute senden darf. Siehe [Rate Limit](/de/docs/usage#rate-limit).                  |
 | `tokenRate`            | Die höchsten Token Rates jedes Bereichs. Organisationen können nur kleinere setzen. Siehe [Token Rate](/de/docs/usage#token-rate). |
+| `files`                | Der Objektspeicher und die Grenzen für [Dateien](/de/docs/files#den-speicher-einrichten).                                          |
 | `updatedAt`            | Wann sich die Einstellungen zuletzt geändert haben.                                                                                |
 
 ### Geheimnisse kommen nie zurück

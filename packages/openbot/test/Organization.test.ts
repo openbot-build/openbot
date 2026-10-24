@@ -1,5 +1,4 @@
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { AuthApi } from "@openbot-build/api"
 import { Effect, Layer, Redacted } from "effect"
 import { DomainControl } from "../src/apps/DomainControl.ts"
@@ -10,7 +9,7 @@ const publicOrigin = "https://api.example.com"
 const member = (userId: string) =>
 	"/v1/organization/members/" + encodeURIComponent(userId)
 
-test(
+it(
 	"An account makes its own organization, and others join after a domain is verified",
 	{ timeout: 60000 },
 	async () => {
@@ -28,16 +27,16 @@ test(
 			const organization = await (
 				await account(alice.session, "/v1/organization")
 			).json()
-			assert.equal(organization.id, alice.identity.organizationId)
-			assert.equal(organization.status, "active")
+			assert.strictEqual(organization.id, alice.identity.organizationId)
+			assert.strictEqual(organization.status, "active")
 			const self = await (
 				await account(alice.session, member(alice.identity.userId))
 			).json()
-			assert.deepEqual(self.roles, ["super_administrator"])
+			assert.deepStrictEqual(self.roles, ["super_administrator"])
 
 			// Bob has a verified email in the same domain, but nobody verified the domain.
 			const bob = await host.login("bob")
-			assert.notEqual(
+			assert.notStrictEqual(
 				bob.identity.organizationId,
 				alice.identity.organizationId,
 			)
@@ -48,22 +47,22 @@ test(
 					domain: "example.com",
 				})
 			).json()
-			assert.equal(added.recordName, "_openbot-verification.example.com")
-			assert.equal(added.verifiedAt, null)
+			assert.strictEqual(added.recordName, "_openbot-verification.example.com")
+			assert.strictEqual(added.verifiedAt, null)
 			const early = await account(
 				alice.session,
 				"/v1/organization/domains/example.com/verify",
 				"POST",
 			)
-			assert.equal(early.status, 409)
-			assert.equal((await early.json())._tag, "DomainNotVerified")
+			assert.strictEqual(early.status, 409)
+			assert.strictEqual((await early.json())._tag, "DomainNotVerified")
 			records = [added.recordValue]
 			const verified = await account(
 				alice.session,
 				"/v1/organization/domains/example.com/verify",
 				"POST",
 			)
-			assert.equal(verified.status, 200, await verified.clone().text())
+			assert.strictEqual(verified.status, 200, await verified.clone().text())
 
 			// Bob cannot take the domain for his own organization now. He names it,
 			// because he now also belongs to Alice's organization.
@@ -88,20 +87,23 @@ test(
 				"/v1/organization/domains/example.com/verify",
 				"POST",
 			)
-			assert.equal((await taken.json())._tag, "DomainTaken")
+			assert.strictEqual((await taken.json())._tag, "DomainTaken")
 
 			// Carol signs in for the first time and joins Alice's organization.
 			const carol = await host.login("carol")
-			assert.equal(carol.identity.organizationId, alice.identity.organizationId)
+			assert.strictEqual(
+				carol.identity.organizationId,
+				alice.identity.organizationId,
+			)
 			const joined = await (
 				await account(alice.session, member(carol.identity.userId))
 			).json()
-			assert.deepEqual(joined.roles, ["member"])
+			assert.deepStrictEqual(joined.roles, ["member"])
 
 			// Bob joins too. With two organizations, a cookie request must name one.
 			const ambiguous = await account(bob.session, "/v1/organization")
-			assert.equal(ambiguous.status, 400)
-			assert.equal((await ambiguous.json())._tag, "OrganizationRequired")
+			assert.strictEqual(ambiguous.status, 400)
+			assert.strictEqual((await ambiguous.json())._tag, "OrganizationRequired")
 			const chosen = await fetch(host.address + "/v1/organization", {
 				headers: {
 					cookie:
@@ -111,21 +113,24 @@ test(
 					"openbot-organization": alice.identity.organizationId,
 				},
 			})
-			assert.equal((await chosen.json()).id, alice.identity.organizationId)
+			assert.strictEqual(
+				(await chosen.json()).id,
+				alice.identity.organizationId,
+			)
 			const listed = await (
 				await withCookie({ address: host.address, publicOrigin })(
 					bob.session,
 					"/v1/organizations",
 				)
 			).json()
-			assert.equal(listed.items.length, 2)
+			assert.strictEqual(listed.items.length, 2)
 		} finally {
 			await host.close()
 		}
 	},
 )
 
-test(
+it(
 	"Settings and custom roles change through the API, and roles never give more than their writer has",
 	{ timeout: 60000 },
 	async () => {
@@ -137,8 +142,8 @@ test(
 			const settings = await (
 				await account(alice.session, "/v1/organization/settings")
 			).json()
-			assert.equal(settings.joinByDomain, true)
-			assert.deepEqual(settings.defaultRoles, ["member"])
+			assert.strictEqual(settings.joinByDomain, true)
+			assert.deepStrictEqual(settings.defaultRoles, ["member"])
 
 			// A change must name the version that it read.
 			const stale = await account(
@@ -147,15 +152,15 @@ test(
 				"PATCH",
 				{ expectedVersion: settings.version + 5, botMemory: false },
 			)
-			assert.equal(stale.status, 409)
+			assert.strictEqual(stale.status, 409)
 			const changed = await (
 				await account(alice.session, "/v1/organization/settings", "PATCH", {
 					expectedVersion: settings.version,
 					botMemory: false,
 				})
 			).json()
-			assert.equal(changed.botMemory, false)
-			assert.equal(changed.version, settings.version + 1)
+			assert.strictEqual(changed.botMemory, false)
+			assert.strictEqual(changed.version, settings.version + 1)
 			const unknownRole = await account(
 				alice.session,
 				"/v1/organization/settings",
@@ -165,7 +170,7 @@ test(
 					defaultRoles: ["role_" + "0".repeat(32)],
 				},
 			)
-			assert.equal((await unknownRole.json())._tag, "SettingsInvalid")
+			assert.strictEqual((await unknownRole.json())._tag, "SettingsInvalid")
 
 			// A custom role that only reads the audit log.
 			const created = await account(
@@ -184,14 +189,14 @@ test(
 					],
 				},
 			)
-			assert.equal(created.status, 200, await created.clone().text())
+			assert.strictEqual(created.status, 200, await created.clone().text())
 			const role = await created.json()
-			assert.equal(role.builtin, false)
-			assert.equal(
+			assert.strictEqual(role.builtin, false)
+			assert.strictEqual(
 				(await account(bob.session, "/v1/organization/audit_logs")).status,
 				403,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await account(alice.session, member(bob.identity.userId), "PATCH", {
 						roles: ["member", role.id],
@@ -199,7 +204,7 @@ test(
 				).status,
 				200,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await account(bob.session, "/v1/organization/audit_logs")).status,
 				200,
 			)
@@ -209,14 +214,14 @@ test(
 				"/v1/organization/roles/" + role.id,
 				"DELETE",
 			)
-			assert.equal((await inUse.json())._tag, "RoleInUse")
+			assert.strictEqual((await inUse.json())._tag, "RoleInUse")
 			const builtin = await account(
 				alice.session,
 				"/v1/organization/roles/member",
 				"PATCH",
 				{ name: "Changed" },
 			)
-			assert.equal((await builtin.json())._tag, "RoleReadOnly")
+			assert.strictEqual((await builtin.json())._tag, "RoleReadOnly")
 
 			// Bob becomes an Administrator. He can write roles, but not one with more than he has.
 			await account(alice.session, member(bob.identity.userId), "PATCH", {
@@ -238,15 +243,15 @@ test(
 					],
 				},
 			)
-			assert.equal(escalation.status, 403)
-			assert.equal((await escalation.json())._tag, "PermissionDenied")
+			assert.strictEqual(escalation.status, 403)
+			assert.strictEqual((await escalation.json())._tag, "PermissionDenied")
 		} finally {
 			await host.close()
 		}
 	},
 )
 
-test(
+it(
 	"Roles decide who can manage the organization, and Super Administrators stay protected",
 	{ timeout: 60000 },
 	async () => {
@@ -259,27 +264,30 @@ test(
 			const carol = await host.login("carol")
 
 			// A member can read the organization, but not change it or read its members.
-			assert.equal((await account(bob.session, "/v1/organization")).status, 200)
+			assert.strictEqual(
+				(await account(bob.session, "/v1/organization")).status,
+				200,
+			)
 			const change = await account(bob.session, "/v1/organization", "PATCH", {
 				name: "Mine",
 			})
-			assert.equal(change.status, 403)
-			assert.deepEqual(await change.json(), {
+			assert.strictEqual(change.status, 403)
+			assert.deepStrictEqual(await change.json(), {
 				_tag: "PermissionDenied",
 				permission: "organization.write",
 				resource: "openbot.org." + alice.identity.organizationId,
 			})
-			assert.equal(
+			assert.strictEqual(
 				(await account(bob.session, "/v1/organization/members")).status,
 				403,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await account(bob.session, "/v1/organization/audit_logs")).status,
 				403,
 			)
 
 			// Alice makes Bob an Administrator. He can manage members now.
-			assert.equal(
+			assert.strictEqual(
 				(
 					await account(alice.session, member(bob.identity.userId), "PATCH", {
 						roles: ["administrator"],
@@ -290,8 +298,8 @@ test(
 			const listed = await (
 				await account(bob.session, "/v1/organization/members?limit=2")
 			).json()
-			assert.equal(listed.items.length, 2)
-			assert.notEqual(listed.next, null)
+			assert.strictEqual(listed.items.length, 2)
+			assert.notStrictEqual(listed.next, null)
 			const rest = await (
 				await account(
 					bob.session,
@@ -299,8 +307,8 @@ test(
 						encodeURIComponent(listed.next),
 				)
 			).json()
-			assert.equal(rest.items.length, 1)
-			assert.equal(rest.next, null)
+			assert.strictEqual(rest.items.length, 1)
+			assert.strictEqual(rest.next, null)
 
 			// An Administrator cannot touch a Super Administrator or make one.
 			for (const [target, roles] of [
@@ -310,9 +318,9 @@ test(
 				const attempt = await account(bob.session, member(target), "PATCH", {
 					roles,
 				})
-				assert.equal(attempt.status, 403)
+				assert.strictEqual(attempt.status, 403)
 			}
-			assert.equal(
+			assert.strictEqual(
 				(await account(bob.session, member(alice.identity.userId), "DELETE"))
 					.status,
 				403,
@@ -333,7 +341,7 @@ test(
 					],
 				},
 			)
-			assert.equal(allow.status, 403)
+			assert.strictEqual(allow.status, 403)
 			const { version } = await (
 				await account(bob.session, "/v1/organization/settings")
 			).json()
@@ -343,7 +351,7 @@ test(
 				"PATCH",
 				{ expectedVersion: version, defaultRoles: ["super_administrator"] },
 			)
-			assert.equal(defaults.status, 403)
+			assert.strictEqual(defaults.status, 403)
 
 			// The organization keeps at least one active Super Administrator.
 			const last = await account(
@@ -352,8 +360,8 @@ test(
 				"PATCH",
 				{ status: "suspended" },
 			)
-			assert.equal(last.status, 409)
-			assert.equal((await last.json())._tag, "LastSuperAdministrator")
+			assert.strictEqual(last.status, 409)
+			assert.strictEqual((await last.json())._tag, "LastSuperAdministrator")
 
 			// An Administrator can take a permission away with a deny policy.
 			const deny = await account(
@@ -370,7 +378,7 @@ test(
 					],
 				},
 			)
-			assert.equal(deny.status, 200, await deny.clone().text())
+			assert.strictEqual(deny.status, 200, await deny.clone().text())
 			const carolBot = await host.defaultBot(carol.session)
 			const run = await account(
 				carol.session,
@@ -378,8 +386,8 @@ test(
 				"POST",
 				{ input: "Hello" },
 			)
-			assert.equal(run.status, 403)
-			assert.equal((await run.json()).permission, "responses.run")
+			assert.strictEqual(run.status, 403)
+			assert.strictEqual((await run.json()).permission, "responses.run")
 
 			// A suspended member is out, with the cookie and with every token.
 			const token = await (
@@ -387,8 +395,8 @@ test(
 					name: "Carol bot",
 				})
 			).json()
-			assert.equal((await keyed(token.secret, "/v1/chats")).status, 200)
-			assert.equal(
+			assert.strictEqual((await keyed(token.secret, "/v1/chats")).status, 200)
+			assert.strictEqual(
 				(
 					await account(bob.session, member(carol.identity.userId), "PATCH", {
 						status: "suspended",
@@ -397,22 +405,22 @@ test(
 				200,
 			)
 			const suspended = await account(carol.session, "/v1/chats")
-			assert.equal(suspended.status, 403)
-			assert.equal((await suspended.json())._tag, "MembershipRequired")
+			assert.strictEqual(suspended.status, 403)
+			assert.strictEqual((await suspended.json())._tag, "MembershipRequired")
 			// A token has no cookie to fall back on, so it gets the plain sign-in error.
-			assert.equal((await keyed(token.secret, "/v1/chats")).status, 401)
+			assert.strictEqual((await keyed(token.secret, "/v1/chats")).status, 401)
 
 			// Removing a member also revokes their tokens.
-			assert.equal(
+			assert.strictEqual(
 				(await account(bob.session, member(carol.identity.userId), "DELETE"))
 					.status,
 				204,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await account(bob.session, member(carol.identity.userId))).status,
 				404,
 			)
-			assert.equal((await keyed(token.secret, "/v1/chats")).status, 401)
+			assert.strictEqual((await keyed(token.secret, "/v1/chats")).status, 401)
 
 			const audit = await (
 				await account(alice.session, "/v1/organization/audit_logs?limit=100")
@@ -434,8 +442,8 @@ test(
 						encodeURIComponent(bob.identity.userId),
 				)
 			).json()
-			assert.equal(byBob.items.length, 1)
-			assert.equal(byBob.items[0].actor.userId, bob.identity.userId)
+			assert.strictEqual(byBob.items.length, 1)
+			assert.strictEqual(byBob.items[0].actor.userId, bob.identity.userId)
 
 			const groups = await (
 				await account(alice.session, "/v1/organization/permission_groups")
@@ -448,7 +456,7 @@ test(
 			const roles = await (
 				await account(alice.session, "/v1/organization/roles")
 			).json()
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				roles.map((role: { readonly id: string }) => role.id),
 				[
 					"super_administrator",
@@ -464,7 +472,7 @@ test(
 	},
 )
 
-test(
+it(
 	"A new account has no organization, joins by invitation, and can leave",
 	{ timeout: 60000 },
 	async () => {
@@ -480,12 +488,15 @@ test(
 			})
 
 			// OpenBot makes no organization at sign-in.
-			assert.deepEqual(bob.memberships, [])
-			assert.deepEqual(
+			assert.deepStrictEqual(bob.memberships, [])
+			assert.deepStrictEqual(
 				await (await account(bob.session, "/v1/organizations")).json(),
 				{ items: [] },
 			)
-			assert.equal((await account(bob.session, "/v1/organization")).status, 403)
+			assert.strictEqual(
+				(await account(bob.session, "/v1/organization")).status,
+				403,
+			)
 
 			const invite = (email: string, roles?: ReadonlyArray<string>) =>
 				account(alice.session, "/v1/organization/invitations", "POST", {
@@ -493,13 +504,13 @@ test(
 					...(roles === undefined ? {} : { roles }),
 				})
 			const made = await invite("Inv-Bob@example.com", ["member"])
-			assert.equal(made.status, 201, await made.clone().text())
+			assert.strictEqual(made.status, 201, await made.clone().text())
 			const invitation = await made.json()
-			assert.equal(invitation.email, "inv-bob@example.com")
-			assert.equal(invitation.status, "pending")
-			assert.deepEqual(invitation.roles, ["member"])
-			assert.equal((await invite("inv-bob@example.com")).status, 400)
-			assert.equal(
+			assert.strictEqual(invitation.email, "inv-bob@example.com")
+			assert.strictEqual(invitation.status, "pending")
+			assert.deepStrictEqual(invitation.roles, ["member"])
+			assert.strictEqual((await invite("inv-bob@example.com")).status, 400)
+			assert.strictEqual(
 				(await invite("inv-dave@example.com", ["role_" + "0".repeat(32)]))
 					.status,
 				404,
@@ -507,11 +518,11 @@ test(
 
 			// Only the person with the email sees and answers the invitation.
 			const mine = await (await account(bob.session, "/v1/invitations")).json()
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				mine.items.map((item: { readonly id: string }) => item.id),
 				[invitation.id],
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await account(
 						carol.session,
@@ -526,20 +537,23 @@ test(
 				"/v1/invitations/" + invitation.id + "/accept",
 				"POST",
 			)
-			assert.equal(accepted.status, 200, await accepted.clone().text())
-			assert.equal((await accepted.json()).id, alice.identity.organizationId)
+			assert.strictEqual(accepted.status, 200, await accepted.clone().text())
+			assert.strictEqual(
+				(await accepted.json()).id,
+				alice.identity.organizationId,
+			)
 			const joined = await (
 				await account(bob.session, "/v1/organizations")
 			).json()
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				joined.items.map((item: { readonly id: string }) => item.id),
 				[alice.identity.organizationId],
 			)
 			const bobMember = await (
 				await account(alice.session, member(bob.identity.userId))
 			).json()
-			assert.deepEqual(bobMember.roles, ["member"])
-			assert.equal(
+			assert.deepStrictEqual(bobMember.roles, ["member"])
+			assert.strictEqual(
 				(
 					await account(
 						bob.session,
@@ -550,7 +564,7 @@ test(
 				400,
 			)
 			// A member already has this email.
-			assert.equal((await invite("inv-bob@example.com")).status, 400)
+			assert.strictEqual((await invite("inv-bob@example.com")).status, 400)
 
 			// Carol declines. Then she cannot accept.
 			const forCarol = await (await invite("inv-carol@example.com")).json()
@@ -559,9 +573,9 @@ test(
 				"/v1/invitations/" + forCarol.id + "/decline",
 				"POST",
 			)
-			assert.equal(declined.status, 200, await declined.clone().text())
-			assert.equal((await declined.json()).status, "declined")
-			assert.equal(
+			assert.strictEqual(declined.status, 200, await declined.clone().text())
+			assert.strictEqual((await declined.json()).status, "declined")
+			assert.strictEqual(
 				(
 					await account(
 						carol.session,
@@ -574,7 +588,7 @@ test(
 
 			// A revoked invitation cannot be answered.
 			const forDave = await (await invite("inv-dave@example.com")).json()
-			assert.equal(
+			assert.strictEqual(
 				(
 					await account(
 						alice.session,
@@ -587,7 +601,7 @@ test(
 			const listed = await (
 				await account(alice.session, "/v1/organization/invitations")
 			).json()
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				listed.items.map(
 					(item: { readonly email: string; readonly status: string }) => [
 						item.email,
@@ -608,19 +622,19 @@ test(
 					"/v1/organizations/" + alice.identity.organizationId + "/membership",
 					"DELETE",
 				)
-			assert.equal((await leave(bob.session)).status, 204)
-			assert.deepEqual(
+			assert.strictEqual((await leave(bob.session)).status, 204)
+			assert.deepStrictEqual(
 				await (await account(bob.session, "/v1/organizations")).json(),
 				{ items: [] },
 			)
-			assert.equal((await leave(alice.session)).status, 409)
+			assert.strictEqual((await leave(alice.session)).status, 409)
 			const left = await (
 				await account(
 					alice.session,
 					"/v1/organization/audit_logs?action=member.left",
 				)
 			).json()
-			assert.equal(left.items.length, 1)
+			assert.strictEqual(left.items.length, 1)
 		} finally {
 			await host.close()
 		}

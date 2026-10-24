@@ -1,7 +1,6 @@
 // @effect-diagnostics strictEffectProvide:off
 import { PgClient } from "@effect/sql-pg"
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { AuthApi, CodeRunsApi, RequestsApi } from "@openbot-build/api"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import {
@@ -33,40 +32,41 @@ const limits = {
 }
 /** Runs a program. Each App call answers with its name and arguments. */
 const runProgram = (code: string, options: Partial<Program> = {}) =>
-	Effect.runPromise(
-		Effect.gen(function* () {
-			const sandbox = yield* makeSandbox
-			let seen: ReadonlyArray<Call> = []
-			const outcome = yield* sandbox.run(
-				{
-					code,
-					bindings: ["calendar.list", "calendar.add"],
-					seed: 7,
-					clock: 1_000,
-					limits,
-					...options,
-				},
-				(calls) =>
-					Effect.sync(() => {
-						seen = [...seen, ...calls]
-						return Option.some(
-							calls.map((call) => ({
-								index: call.index,
-								ok: true as const,
-								value: JSON.stringify({
-									binding: call.binding,
-									arguments: JSON.parse(call.arguments),
-								}),
-							})),
-						)
-					}),
-			)
-			return { outcome, seen }
-		}),
-	)
+	Effect.gen(function* () {
+		const sandbox = yield* makeSandbox
+		let seen: ReadonlyArray<Call> = []
+		const outcome = yield* sandbox.run(
+			{
+				code,
+				bindings: ["calendar.list", "calendar.add"],
+				seed: 7,
+				clock: 1_000,
+				limits,
+				...options,
+			},
+			(calls) =>
+				Effect.sync(() => {
+					seen = [...seen, ...calls]
+					return Option.some(
+						calls.map((call) => ({
+							index: call.index,
+							ok: true as const,
+							value: JSON.stringify({
+								binding: call.binding,
+								arguments: JSON.parse(call.arguments),
+							}),
+						})),
+					)
+				}),
+		)
+		return { outcome, seen }
+	})
 
-test("a program runs in a closed sandbox and gets its App results in order", async () => {
-	const { outcome, seen } = await runProgram(`
+it.effect(
+	"a program runs in a closed sandbox and gets its App results in order",
+	() =>
+		Effect.gen(function* () {
+			const { outcome, seen } = yield* runProgram(`
 		const [a, b] = await Promise.all([
 			apps.calendar.list({ day: 1 }),
 			apps.call("calendar.add", { title: "Lunch" }),
@@ -74,69 +74,76 @@ test("a program runs in a closed sandbox and gets its App results in order", asy
 		console.log("first", a.arguments.day)
 		return { a, b, now: Date.now(), date: new Date().getTime(), random: Math.random() }
 	`)
-	assert.equal(outcome._tag, "Done")
-	assert.deepEqual(
-		seen.map((call) => [call.index, call.binding]),
-		[
-			[0, "calendar.list"],
-			[1, "calendar.add"],
-		],
-	)
-	if (outcome._tag !== "Done") return
-	assert.deepEqual(outcome.logs, ["first 1"])
-	const value = outcome.value as Record<string, unknown>
-	assert.equal(value["now"], 1_000)
-	assert.equal(value["date"], 1_000)
-	// The same seed gives the same random numbers in each run.
-	const again = await runProgram("return Math.random()")
-	const other = await runProgram("return Math.random()", { seed: 8 })
-	assert.equal(
-		again.outcome._tag === "Done" && again.outcome.value,
-		value["random"],
-	)
-	assert.notEqual(
-		other.outcome._tag === "Done" && other.outcome.value,
-		value["random"],
-	)
-})
+			assert.strictEqual(outcome._tag, "Done")
+			assert.deepStrictEqual(
+				seen.map((call) => [call.index, call.binding]),
+				[
+					[0, "calendar.list"],
+					[1, "calendar.add"],
+				],
+			)
+			if (outcome._tag !== "Done") return
+			assert.deepStrictEqual(outcome.logs, ["first 1"])
+			const value = outcome.value as Record<string, unknown>
+			assert.strictEqual(value["now"], 1_000)
+			assert.strictEqual(value["date"], 1_000)
+			// The same seed gives the same random numbers in each run.
+			const again = yield* runProgram("return Math.random()")
+			const other = yield* runProgram("return Math.random()", { seed: 8 })
+			assert.strictEqual(
+				again.outcome._tag === "Done" && again.outcome.value,
+				value["random"],
+			)
+			assert.notStrictEqual(
+				other.outcome._tag === "Done" && other.outcome.value,
+				value["random"],
+			)
+		}),
+)
 
-test("a program has no Node.js, and the sandbox stops programs at their limits", async () => {
-	const closed = await runProgram(
-		"return [typeof fetch, typeof require, typeof process, typeof setTimeout, typeof globalThis.__openbot_host]",
-	)
-	assert.deepEqual(closed.outcome._tag === "Done" && closed.outcome.value, [
-		"undefined",
-		"undefined",
-		"undefined",
-		"undefined",
-		"undefined",
-	])
-	const cases = [
-		["while (true) {}", "Timeout"],
-		["const list = []; for (;;) list.push({ a: [1, 2, 3] })", "Memory"],
-		["return 'x'.repeat(10000)", "OutputTooLarge"],
-		["throw new Error('boom')", "Error"],
-		["await new Promise(() => {})", "Error"],
-		["return apps.calendar.remove({})", "Error"],
-		["return apps.calendar.list('not an object')", "Error"],
-	] as const
-	for (const [code, reason] of cases) {
-		const { outcome, seen } = await runProgram(code)
-		assert.equal(outcome._tag, "Failed", code)
-		assert.equal(outcome._tag === "Failed" && outcome.reason, reason, code)
-		assert.equal(seen.length, 0, code)
-	}
-	const logged = await runProgram(
-		"for (let i = 0; i < 1000; i++) console.log('line ' + i); return 1",
-	)
-	assert.equal(logged.outcome._tag, "Done")
-	if (logged.outcome._tag === "Done")
-		assert.equal(logged.outcome.logs.at(-1), "[More output was cut off.]")
-	// An App error reaches the program as an Error that it can catch.
-	const failing = await Effect.runPromise(
+// The limits test needs real time: the sandbox stops a program after a real timeout.
+it.live(
+	"a program has no Node.js, and the sandbox stops programs at their limits",
+	() =>
 		Effect.gen(function* () {
-			const sandbox = yield* makeSandbox
-			return yield* sandbox.run(
+			const closed = yield* runProgram(
+				"return [typeof fetch, typeof require, typeof process, typeof setTimeout, typeof globalThis.__openbot_host]",
+			)
+			assert.deepStrictEqual(
+				closed.outcome._tag === "Done" && closed.outcome.value,
+				["undefined", "undefined", "undefined", "undefined", "undefined"],
+			)
+			const cases = [
+				["while (true) {}", "Timeout"],
+				["const list = []; for (;;) list.push({ a: [1, 2, 3] })", "Memory"],
+				["return 'x'.repeat(10000)", "OutputTooLarge"],
+				["throw new Error('boom')", "Error"],
+				["await new Promise(() => {})", "Error"],
+				["return apps.calendar.remove({})", "Error"],
+				["return apps.calendar.list('not an object')", "Error"],
+			] as const
+			for (const [code, reason] of cases) {
+				const { outcome, seen } = yield* runProgram(code)
+				assert.strictEqual(outcome._tag, "Failed", code)
+				assert.strictEqual(
+					outcome._tag === "Failed" && outcome.reason,
+					reason,
+					code,
+				)
+				assert.strictEqual(seen.length, 0, code)
+			}
+			const logged = yield* runProgram(
+				"for (let i = 0; i < 1000; i++) console.log('line ' + i); return 1",
+			)
+			assert.strictEqual(logged.outcome._tag, "Done")
+			if (logged.outcome._tag === "Done")
+				assert.strictEqual(
+					logged.outcome.logs.at(-1),
+					"[More output was cut off.]",
+				)
+			// An App error reaches the program as an Error that it can catch.
+			const denying = yield* makeSandbox
+			const failing = yield* denying.run(
 				{
 					code: "try { await apps.calendar.list({}) } catch (error) { return [error.name, error.details.operationId] }",
 					bindings: ["calendar.list"],
@@ -157,17 +164,13 @@ test("a program has no Node.js, and the sandbox stops programs at their limits",
 						})),
 					),
 			)
-		}),
-	)
-	assert.deepEqual(failing._tag === "Done" && failing.value, [
-		"AppCallDenied",
-		"op_1",
-	])
-	// When the host gives no answer, the program stops and waits.
-	const stopped = await Effect.runPromise(
-		Effect.gen(function* () {
-			const sandbox = yield* makeSandbox
-			return yield* sandbox.run(
+			assert.deepStrictEqual(failing._tag === "Done" && failing.value, [
+				"AppCallDenied",
+				"op_1",
+			])
+			// When the host gives no answer, the program stops and waits.
+			const silent = yield* makeSandbox
+			const stopped = yield* silent.run(
 				{
 					code: "await apps.calendar.list({}); return 1",
 					bindings: ["calendar.list"],
@@ -177,12 +180,11 @@ test("a program has no Node.js, and the sandbox stops programs at their limits",
 				},
 				() => Effect.succeedNone,
 			)
+			assert.strictEqual(stopped._tag, "Stopped")
 		}),
-	)
-	assert.equal(stopped._tag, "Stopped")
-})
+)
 
-test("each binding gets a stable short name and a TypeScript declaration", () => {
+it("each binding gets a stable short name and a TypeScript declaration", () => {
 	const binding = (
 		connectionId: string,
 		connectionName: string,
@@ -220,7 +222,7 @@ test("each binding gets a stable short name and a TypeScript declaration", () =>
 		binding("a", "Work calendar", "notes://index", "resource"),
 		binding("c", "Call", "add"),
 	])
-	assert.deepEqual(
+	assert.deepStrictEqual(
 		named.map((entry) => entry.alias),
 		[
 			"work_calendar.notes_index_resource",
@@ -238,10 +240,10 @@ test("each binding gets a stable short name and a TypeScript declaration", () =>
 		/list_events\(args: \{ \/\*\* The day of the month\. \*\/ "day": number; "tags"\?: Array<string>; "mode"\?: "fast" \| "slow" \}\): Promise<ToolResult>/,
 	)
 	assert.match(text, /notes_index_resource\(args: .*\): Promise<ReadResult>/)
-	assert.equal(text.includes("work_calendar_2"), false)
+	assert.strictEqual(text.includes("work_calendar_2"), false)
 })
 
-test("Code Mode sends App calls through the same checks, goes on after decisions, and never sends a call twice", async () => {
+it("Code Mode sends App calls through the same checks, goes on after decisions, and never sends a call twice", async () => {
 	const publisher = await Fixture.start({ capabilities: true })
 	let observed: ReadonlyArray<ReadonlyArray<string>> = []
 	const usage = {
@@ -377,7 +379,7 @@ test("Code Mode sends App calls through the same checks, goes on after decisions
 				name: connectionName,
 				confirmed: true,
 			})
-			assert.equal(response.status, 201, await response.clone().text())
+			assert.strictEqual(response.status, 201, await response.clone().text())
 		}
 		let chat = ""
 		const pending = async () => {
@@ -404,8 +406,8 @@ test("Code Mode sends App calls through the same checks, goes on after decisions
 		const start = async (code: string) => {
 			const receipt = await message(asAlice, bot, code)
 			if (chat === "") chat = receipt.chat
-			assert.equal(receipt.chat, chat)
-			assert.equal(receipt.delivery, "started")
+			assert.strictEqual(receipt.chat, chat)
+			assert.strictEqual(receipt.delivery, "started")
 			return settled(asAlice, chat)
 		}
 		const decide = async (decision: "allow" | "deny") => {
@@ -415,13 +417,13 @@ test("Code Mode sends App calls through the same checks, goes on after decisions
 				expected: request.revision,
 				decision,
 			})
-			assert.equal(decided.status, 200, await decided.clone().text())
+			assert.strictEqual(decided.status, 200, await decided.clone().text())
 			return request
 		}
 		/** While a call waits, the Turn ends, and the Bot reads that the call is pending. */
 		const paused = (view: Awaited<ReturnType<typeof settled>>) => {
-			assert.equal(view.status, "Completed")
-			assert.equal(view.open.requests, 1)
+			assert.strictEqual(view.status, "Completed")
+			assert.strictEqual(view.open.requests, 1)
 			assert.match(JSON.stringify(view.response), /pending/)
 		}
 
@@ -434,14 +436,14 @@ test("Code Mode sends App calls through the same checks, goes on after decisions
 			console.log("read", a.structuredContent.id)
 			return [a.structuredContent.text, b.structuredContent.text]
 		`)
-		assert.equal(
+		assert.strictEqual(
 			reads.response?.status,
 			"completed",
 			JSON.stringify(reads.response),
 		)
 		assert.match(JSON.stringify(reads.response), /Document content one/)
 		assert.match(JSON.stringify(reads.response), /Document content two/)
-		assert.equal(publisher.businessCalls(), 2)
+		assert.strictEqual(publisher.businessCalls(), 2)
 		assert.ok(observed[0]?.includes("openbot_code_api"))
 
 		// A denied call reaches the program as an error that it can catch.
@@ -455,13 +457,13 @@ test("Code Mode sends App calls through the same checks, goes on after decisions
 		`)
 		paused(deniedTurn)
 		const denial = await decide("deny")
-		assert.equal(denial.code?.index, 0)
+		assert.strictEqual(denial.code?.index, 0)
 		assert.match(denial.code?.code ?? "", /write_board/)
-		assert.equal(denial.app?.source.connectionName, "Personal documents")
+		assert.strictEqual(denial.app?.source.connectionName, "Personal documents")
 		// The program goes on in the background. Its result comes back as a message.
 		await answered(/AppCallDenied/)
-		assert.equal(publisher.writes().length, 0)
-		assert.equal(publisher.businessCalls(), 2)
+		assert.strictEqual(publisher.writes().length, 0)
+		assert.strictEqual(publisher.businessCalls(), 2)
 
 		// The program waits for the write. After the decision it runs again in the
 		// background, and the read before the write is not sent again.
@@ -474,18 +476,18 @@ test("Code Mode sends App calls through the same checks, goes on after decisions
 			return "written"
 		`)
 		paused(waiting)
-		assert.equal(publisher.businessCalls(), 3)
-		assert.equal(publisher.writes().length, 0)
+		assert.strictEqual(publisher.businessCalls(), 3)
+		assert.strictEqual(publisher.writes().length, 0)
 		const allowed = await decide("allow")
-		assert.equal(allowed.code?.index, 1)
+		assert.strictEqual(allowed.code?.index, 1)
 		const written = await answered(/written/)
-		assert.equal(
+		assert.strictEqual(
 			written.response?.status,
 			"completed",
 			JSON.stringify(written.response),
 		)
-		assert.equal(publisher.businessCalls(), 4)
-		assert.deepEqual(publisher.writes(), [
+		assert.strictEqual(publisher.businessCalls(), 4)
+		assert.deepStrictEqual(publisher.writes(), [
 			{ account: "Personal", text: "Document content plan" },
 		])
 
@@ -497,7 +499,7 @@ test("Code Mode sends App calls through the same checks, goes on after decisions
 			return count
 		`)
 		paused(changing)
-		assert.equal(publisher.businessCalls(), 5)
+		assert.strictEqual(publisher.businessCalls(), 5)
 		const connections = (await (
 			await read("/v1/connections")
 		).json()) as ReadonlyArray<{
@@ -521,17 +523,17 @@ test("Code Mode sends App calls through the same checks, goes on after decisions
 				}),
 			},
 		)
-		assert.equal(disabled.status, 200, await disabled.clone().text())
+		assert.strictEqual(disabled.status, 200, await disabled.clone().text())
 		await decide("allow")
 		await answered(/ReplayMismatch/)
-		assert.equal(publisher.businessCalls(), 5)
-		assert.equal(publisher.writes().length, 1)
+		assert.strictEqual(publisher.businessCalls(), 5)
+		assert.strictEqual(publisher.writes().length, 1)
 
 		// People read the programs of their Chats with the cookie or with a token.
 		const runs = Schema.decodeUnknownSync(Schema.Array(CodeRunsApi.CodeRun))(
 			await (await read("/v1/chats/" + chat + "/code-runs")).json(),
 		)
-		assert.deepEqual(
+		assert.deepStrictEqual(
 			runs.map((run) => [run.status, run.calls.length]),
 			[
 				["Completed", 2],
@@ -540,11 +542,11 @@ test("Code Mode sends App calls through the same checks, goes on after decisions
 				["Failed", 2],
 			],
 		)
-		assert.deepEqual(
+		assert.deepStrictEqual(
 			runs[2]?.calls.map((call) => call.outcome._tag),
 			["Done", "Done"],
 		)
-		assert.equal(runs[1]?.calls[0]?.outcome._tag, "Denied")
+		assert.strictEqual(runs[1]?.calls[0]?.outcome._tag, "Denied")
 		const token = await (
 			await post("/v1/user/tokens", { name: "code runs" })
 		).json()
@@ -552,12 +554,12 @@ test("Code Mode sends App calls through the same checks, goes on after decisions
 			host.address + "/v1/code-runs/" + runs[2]!.id,
 			{ headers: { authorization: "Bearer " + token.secret } },
 		)
-		assert.equal(withToken.status, 200, await withToken.clone().text())
-		assert.equal(
+		assert.strictEqual(withToken.status, 200, await withToken.clone().text())
+		assert.strictEqual(
 			Schema.decodeUnknownSync(CodeRunsApi.CodeRun)(await withToken.json()).id,
 			runs[2]!.id,
 		)
-		assert.equal(
+		assert.strictEqual(
 			(await read("/v1/code-runs/" + runs[2]!.id, bob.session)).status,
 			404,
 		)
@@ -565,7 +567,7 @@ test("Code Mode sends App calls through the same checks, goes on after decisions
 		const operations = (await (
 			await read("/v1/chats/" + chat + "/app-operations")
 		).json()) as ReadonlyArray<{ readonly callId: string }>
-		assert.equal(
+		assert.strictEqual(
 			operations.filter((operation) => operation.callId.includes(":")).length,
 			7,
 		)
@@ -576,10 +578,10 @@ test("Code Mode sends App calls through the same checks, goes on after decisions
 				const rows = yield* sql<{
 					readonly body: string
 				}>`select body from openbot_code_runs`
-				assert.equal(rows.length, 4)
+				assert.strictEqual(rows.length, 4)
 				for (const row of rows) {
-					assert.equal(row.body.includes("Document content"), false)
-					assert.equal(row.body.includes("write_board"), false)
+					assert.strictEqual(row.body.includes("Document content"), false)
+					assert.strictEqual(row.body.includes("write_board"), false)
 				}
 			}),
 		)
@@ -600,7 +602,7 @@ test("Code Mode sends App calls through the same checks, goes on after decisions
 		)
 		const off = await start("return 1")
 		assert.match(JSON.stringify(off.response), /Code Mode is not available/)
-		assert.equal(observed.at(-1)?.includes("openbot_run_code"), false)
+		assert.strictEqual(observed.at(-1)?.includes("openbot_run_code"), false)
 	} finally {
 		await host.close()
 		await publisher.close()

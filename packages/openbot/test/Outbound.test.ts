@@ -1,8 +1,7 @@
 // Each test owns the Layers that it provides at the point where it runs.
 // @effect-diagnostics strictEffectProvide:off
-import assert from "node:assert/strict"
+import { assert, expect, it } from "@effect/vitest"
 import { createServer, type RequestListener } from "node:http"
-import { test } from "node:test"
 import {
 	ConfigProvider,
 	Effect,
@@ -49,12 +48,15 @@ const isBlocked = (error: unknown) =>
 	error instanceof TypeError &&
 	error.cause instanceof OutboundGuard.OutboundBlocked
 
-test("the allow list takes IP addresses, IP ranges and exact host names", () => {
+it("the allow list takes IP addresses, IP ranges and exact host names", () => {
 	const allow = parse(
 		" 127.0.0.1, 10.0.0.0/8 ,::1,fd00::/8, Ollama.Internal., ,db_1",
 	)
-	assert.deepEqual([...allow.hostnames].sort(), ["db_1", "ollama.internal"])
-	assert.equal(allow.networks.length, 4)
+	assert.deepStrictEqual([...allow.hostnames].sort(), [
+		"db_1",
+		"ollama.internal",
+	])
+	assert.strictEqual(allow.networks.length, 4)
 	for (const entry of [
 		"*",
 		"*.internal",
@@ -67,25 +69,25 @@ test("the allow list takes IP addresses, IP ranges and exact host names", () => 
 	assert.ok(Result.isSuccess(OutboundPolicy.parse("")))
 })
 
-test("the address rule opens only the listed private targets", () => {
+it("the address rule opens only the listed private targets", () => {
 	const allowAddress = OutboundPolicy.allowAddress(
 		parse("10.1.0.0/16,127.0.0.1,ollama.internal"),
 	)
-	assert.equal(allowAddress("8.8.8.8", "dns.google"), true)
-	assert.equal(allowAddress("10.1.2.3", "a.example"), true)
-	assert.equal(allowAddress("10.2.0.1", "a.example"), false)
-	assert.equal(allowAddress("127.0.0.1", "127.0.0.1"), true)
-	assert.equal(allowAddress("::ffff:127.0.0.1", "a.example"), true)
-	assert.equal(allowAddress("127.0.0.2", "a.example"), false)
-	assert.equal(allowAddress("169.254.169.254", "a.example"), false)
-	assert.equal(allowAddress("192.168.1.9", "OLLAMA.internal."), true)
-	assert.equal(
+	assert.strictEqual(allowAddress("8.8.8.8", "dns.google"), true)
+	assert.strictEqual(allowAddress("10.1.2.3", "a.example"), true)
+	assert.strictEqual(allowAddress("10.2.0.1", "a.example"), false)
+	assert.strictEqual(allowAddress("127.0.0.1", "127.0.0.1"), true)
+	assert.strictEqual(allowAddress("::ffff:127.0.0.1", "a.example"), true)
+	assert.strictEqual(allowAddress("127.0.0.2", "a.example"), false)
+	assert.strictEqual(allowAddress("169.254.169.254", "a.example"), false)
+	assert.strictEqual(allowAddress("192.168.1.9", "OLLAMA.internal."), true)
+	assert.strictEqual(
 		OutboundPolicy.allowAddress(OutboundPolicy.empty)("127.0.0.1", "localhost"),
 		false,
 	)
 })
 
-test("the environment sets the allow list, and a bad entry stops start-up", async () => {
+it("the environment sets the allow list, and a bad entry stops start-up", async () => {
 	const load = (env: Record<string, string>) =>
 		Effect.runPromise(
 			EnvironmentConfiguration.load.pipe(
@@ -101,17 +103,18 @@ test("the environment sets the allow list, and a bad entry stops start-up", asyn
 			),
 		)
 	const empty = await load({})
-	assert.equal(HashSet.size(empty.outboundAllow.hostnames), 0)
-	assert.equal(empty.outboundAllow.networks.length, 0)
+	assert.strictEqual(HashSet.size(empty.outboundAllow.hostnames), 0)
+	assert.strictEqual(empty.outboundAllow.networks.length, 0)
 	const listed = await load({ OPENBOT_OUTBOUND_ALLOW: "localhost" })
 	assert.ok(HashSet.has(listed.outboundAllow.hostnames, "localhost"))
-	await assert.rejects(
+	await expect(
 		load({ OPENBOT_OUTBOUND_ALLOW: "localhost:11434" }),
+	).rejects.toThrow(
 		/OPENBOT_OUTBOUND_ALLOW has an invalid entry "localhost:11434"/,
 	)
 })
 
-test("the global guard blocks private targets for fetch and the Effect HTTP client", async () => {
+it("the global guard blocks private targets for fetch and the Effect HTTP client", async () => {
 	await using server = await startHttp((_req, res) => res.end("ok"))
 	const before = getGlobalDispatcher()
 	{
@@ -122,38 +125,43 @@ test("the global guard blocks private targets for fetch and the Effect HTTP clie
 			),
 		)
 		await runtime.runPromise(Effect.void)
-		assert.notEqual(getGlobalDispatcher(), before)
-		await assert.rejects(fetch(`http://127.0.0.1:${server.port}/`), isBlocked)
-		await assert.rejects(fetch(`http://[::1]:${server.port}/`), isBlocked)
-		await assert.rejects(
+		assert.notStrictEqual(getGlobalDispatcher(), before)
+		await expect(fetch(`http://127.0.0.1:${server.port}/`)).rejects.toSatisfy(
+			isBlocked,
+		)
+		await expect(fetch(`http://[::1]:${server.port}/`)).rejects.toSatisfy(
+			isBlocked,
+		)
+		await expect(
 			runtime.runPromise(HttpClient.get(`http://127.0.0.1:${server.port}/`)),
+		).rejects.toSatisfy(
 			(error: unknown) =>
 				error instanceof Error &&
 				error.cause instanceof TypeError &&
 				isBlocked(error.cause) &&
 				/OPENBOT_OUTBOUND_ALLOW/.test(String(error.cause.cause)),
 		)
-		assert.equal(server.requests(), 0)
+		assert.strictEqual(server.requests(), 0)
 		const policy = await runtime.runPromise(readPolicy)
-		assert.equal(policy.allowAddress("127.0.0.1", "127.0.0.1"), false)
+		assert.strictEqual(policy.allowAddress("127.0.0.1", "127.0.0.1"), false)
 	}
-	assert.equal(getGlobalDispatcher(), before)
+	assert.strictEqual(getGlobalDispatcher(), before)
 })
 
-test("the global guard lets a listed address through and shares the rule", async () => {
+it("the global guard lets a listed address through and shares the rule", async () => {
 	await using server = await startHttp((_req, res) => res.end("ok"))
 	await using runtime = ManagedRuntime.make(
 		OutboundGuard.layer(parse("127.0.0.1")),
 	)
 	await runtime.runPromise(Effect.void)
 	const response = await fetch(`http://127.0.0.1:${server.port}/`)
-	assert.equal(await response.text(), "ok")
+	assert.strictEqual(await response.text(), "ok")
 	const policy = await runtime.runPromise(readPolicy)
-	assert.equal(policy.allowAddress("127.0.0.1", "127.0.0.1"), true)
-	assert.equal(policy.allowAddress("127.0.0.2", "127.0.0.2"), false)
+	assert.strictEqual(policy.allowAddress("127.0.0.1", "127.0.0.1"), true)
+	assert.strictEqual(policy.allowAddress("127.0.0.2", "127.0.0.2"), false)
 })
 
-test("the guard checks the DNS answer and every redirect", async () => {
+it("the guard checks the DNS answer and every redirect", async () => {
 	await using server = await startHttp((req, res) => {
 		if (req.url === "/redirect") {
 			res.writeHead(302, { location: `http://127.0.0.1:${server.port}/` })
@@ -171,17 +179,15 @@ test("the guard checks the DNS answer and every redirect", async () => {
 		const listed = await undiciFetch(`http://listed.test:${server.port}/`, {
 			dispatcher,
 		})
-		assert.equal(await listed.text(), "ok")
-		await assert.rejects(
+		assert.strictEqual(await listed.text(), "ok")
+		await expect(
 			undiciFetch(`http://other.test:${server.port}/`, { dispatcher }),
-			isBlocked,
-		)
-		await assert.rejects(
+		).rejects.toSatisfy(isBlocked)
+		await expect(
 			undiciFetch(`http://listed.test:${server.port}/redirect`, { dispatcher }),
-			isBlocked,
-		)
-		assert.deepEqual(blocked, ["other.test", "127.0.0.1"])
-		assert.equal(server.requests(), 2)
+		).rejects.toSatisfy(isBlocked)
+		assert.deepStrictEqual(blocked, ["other.test", "127.0.0.1"])
+		assert.strictEqual(server.requests(), 2)
 	} finally {
 		await dispatcher.close()
 	}

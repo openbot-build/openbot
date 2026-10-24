@@ -1,6 +1,29 @@
 import { PlanApproval, Settings as Api } from "@openbot-build/api"
 import { Schema } from "effect"
 
+/** The stored form of the file settings. The secret key is sealed. */
+export const FilesDocument = Schema.Struct({
+	storage: Schema.NullOr(
+		Schema.Struct({
+			endpoint: Api.FileStorage.fields.endpoint,
+			publicEndpoint: Api.FileStorage.fields.publicEndpoint,
+			region: Api.FileStorage.fields.region,
+			bucket: Api.FileStorage.fields.bucket,
+			accessKeyId: Api.FileStorage.fields.accessKeyId,
+			forcePathStyle: Api.FileStorage.fields.forcePathStyle,
+			secretAccessKey: Schema.String,
+			secretAccessKeyHint: Schema.NullOr(Schema.String),
+		}),
+	),
+	uploads: Api.Files.fields.uploads,
+	maxBytes: Api.Files.fields.maxBytes,
+	/** Missing in documents from before quotas. Then there is no quota. */
+	quotaBytes: Schema.optionalKey(Api.Files.fields.quotaBytes),
+	mediaTypes: Api.Files.fields.mediaTypes,
+	unusedMs: Api.Files.fields.unusedMs,
+})
+export type FilesDocument = typeof FilesDocument.Type
+
 /**
  * The stored form of the platform settings. Secrets are sealed with the
  * secret keys of the instance, and only this code opens them.
@@ -27,6 +50,8 @@ export const PlatformDocument = Schema.Struct({
 	rateLimit: Schema.optionalKey(Api.RateLimit),
 	/** Missing in documents from before token rates. Then there is no limit. */
 	tokenRate: Schema.optionalKey(Api.TokenRateLimits),
+	/** Missing in documents from before files. Then there is no storage. */
+	files: Schema.optionalKey(FilesDocument),
 })
 export type PlatformDocument = typeof PlatformDocument.Type
 
@@ -38,6 +63,18 @@ export const codeModeOf = (document: PlatformDocument): Api.CodeMode =>
 export const tokenRateOf = (document: {
 	readonly tokenRate?: Api.TokenRateLimits
 }): Api.TokenRateLimits => document.tokenRate ?? Api.tokenRateDefaults
+
+/** The file settings of the platform. */
+export const filesOf = (document: PlatformDocument): FilesDocument =>
+	document.files ?? filesDefaults
+/** The quota of each member, or null for no quota. */
+export const quotaOf = (document: FilesDocument): number | null =>
+	document.quotaBytes ?? null
+/** No storage, so nobody can upload files yet. */
+export const filesDefaults: FilesDocument = {
+	...Api.fileDefaults,
+	storage: null,
+}
 
 /** The API rate limit of the platform. */
 export const rateLimitOf = (document: PlatformDocument): Api.RateLimit =>

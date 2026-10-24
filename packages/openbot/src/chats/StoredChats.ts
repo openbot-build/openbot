@@ -12,7 +12,8 @@ import {
 	or,
 	sql,
 } from "drizzle-orm"
-import { chats, chatItems, chatTurns } from "../database/Schema.ts"
+import { chats, chatItems, chatTurns, fileRefs } from "../database/Schema.ts"
+import { fileIdsIn } from "../files/Refs.ts"
 import * as Db from "../database/Database.ts"
 import { chatHostId } from "./ChatHost.ts"
 import { conflict, databaseError, decode } from "./ChatEncoding.ts"
@@ -219,17 +220,24 @@ export const save = (
 								)
 								.returning({ id: chats.id })
 				if (written.length !== 1) return yield* conflict()
-				if (delta.items.length > 0)
-					yield* tx.insert(chatItems).values(
-						delta.items.map((item) => ({
-							namespace,
-							chat: delta.chat,
-							seq: item.seq,
-							id: item.id,
-							turn: item.turn,
-							value: JSON.stringify(item.value),
-						})),
-					)
+				const items = delta.items.map((item) => ({
+					namespace,
+					chat: delta.chat,
+					seq: item.seq,
+					id: item.id,
+					turn: item.turn,
+					value: JSON.stringify(item.value),
+				}))
+				if (items.length > 0) yield* tx.insert(chatItems).values(items)
+				// The files that the new Items name stay while this Chat lives.
+				const used = [
+					...new Set(items.flatMap((item) => fileIdsIn(item.value))),
+				]
+				if (used.length > 0)
+					yield* tx
+						.insert(fileRefs)
+						.values(used.map((file) => ({ file, namespace, chat: delta.chat })))
+						.onConflictDoNothing()
 				if (delta.turn !== undefined)
 					yield* tx
 						.insert(chatTurns)
@@ -247,7 +255,7 @@ export const save = (
 		)
 		.pipe(Effect.mapError(databaseError))
 
-/** Deletes a Chat with its Items and Turns. */
+/** Deletes a Chat with its Items, Turns and file refs. */
 export const remove = (
 	db: Database,
 	namespace: string,
@@ -265,6 +273,11 @@ export const remove = (
 					.delete(chatTurns)
 					.where(
 						and(eq(chatTurns.namespace, namespace), eq(chatTurns.chat, chat)),
+					)
+				yield* tx
+					.delete(fileRefs)
+					.where(
+						and(eq(fileRefs.namespace, namespace), eq(fileRefs.chat, chat)),
 					)
 				yield* tx
 					.delete(chats)

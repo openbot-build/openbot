@@ -1,5 +1,4 @@
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { Item } from "@openbot-build/core"
 import {
 	BotMemory,
@@ -316,7 +315,7 @@ const client = (host: Awaited<ReturnType<typeof BrowserHost.start>>) => {
 				defaultBot: bot.id,
 			}),
 		)
-		assert.equal(updated.defaultBot, bot.id)
+		assert.strictEqual(updated.defaultBot, bot.id)
 		return bot
 	}
 	/**
@@ -335,7 +334,7 @@ const client = (host: Awaited<ReturnType<typeof BrowserHost.start>>) => {
 					input,
 				},
 			)
-			assert.equal(sent.status, 202, await sent.clone().text())
+			assert.strictEqual(sent.status, 202, await sent.clone().text())
 			const receipt = Schema.decodeUnknownSync(MessageReceipt)(
 				await sent.json(),
 			)
@@ -401,7 +400,7 @@ const client = (host: Awaited<ReturnType<typeof BrowserHost.start>>) => {
 	return { send, json, until, defaultBot, talk, pendingFor }
 }
 
-test(
+it(
 	"the default Bot gives work to another Bot after the person allows it, does not wait, and gets only the result back as a message, also after a restart",
 	{ timeout: 120000 },
 	async () => {
@@ -420,7 +419,7 @@ test(
 				}),
 			)
 			known.programmer = programmer.id
-			assert.equal(
+			assert.strictEqual(
 				(await send(bob.session, "/v1/bots/" + programmer.id)).status,
 				404,
 			)
@@ -428,24 +427,24 @@ test(
 
 			// The Bot gives the work away and answers at once. The work waits for a decision.
 			const asked = await chat.turn("delegate to programmer")
-			assert.equal(asked.chat.kind, "direct")
-			assert.equal(asked.chat.bot, main.id)
-			assert.equal(asked.status, "Completed")
-			assert.equal(asked.open.delegations, 1)
+			assert.strictEqual(asked.chat.kind, "direct")
+			assert.strictEqual(asked.chat.bot, main.id)
+			assert.strictEqual(asked.status, "Completed")
+			assert.strictEqual(asked.open.delegations, 1)
 			assert.match(await chat.history(), /authorizing/)
 			const request = await pendingFor(alice.session, () => true)
-			assert.deepEqual(request.capability, {
+			assert.deepStrictEqual(request.capability, {
 				action: "bots.delegate",
 				target: programmer.id,
 			})
-			assert.deepEqual(request.approver, {
+			assert.deepStrictEqual(request.approver, {
 				_tag: "Person",
 				userId: alice.identity.userId,
 			})
-			assert.equal(request.chat, chat.chat())
+			assert.strictEqual(request.chat, chat.chat())
 			const waiting = await chat.delegations()
-			assert.equal(waiting[0]?.status, "authorizing")
-			assert.equal(waiting[0]?.chat, null)
+			assert.strictEqual(waiting[0]?.status, "authorizing")
+			assert.strictEqual(waiting[0]?.chat, null)
 
 			// The work is saved, so a restart does not lose it.
 			await host.restart()
@@ -457,17 +456,17 @@ test(
 					scope: "lifetime",
 				}),
 			)
-			assert.equal(allowed.status, "allowed")
+			assert.strictEqual(allowed.status, "allowed")
 			const finished = await until("the work ends", async () => {
 				const list = await chat.delegations()
 				return list[0]?.status === "completed" ? list[0] : undefined
 			})
-			assert.equal(finished.result, "Programmer did it")
-			assert.equal(finished.parent.chat, chat.chat())
+			assert.strictEqual(finished.result, "Programmer did it")
+			assert.strictEqual(finished.parent.chat, chat.chat())
 			// The result comes back as a message, and the Bot answers it in a new Turn.
 			await chat.says("Assistant read: [OpenBot] The work " + finished.id)
 			const done = await chat.rested()
-			assert.equal(done.open.delegations, 0)
+			assert.strictEqual(done.open.delegations, 0)
 			assert.match(JSON.stringify(done.response?.output), /Programmer did it/)
 
 			// The work ran in its own task Chat.
@@ -476,9 +475,9 @@ test(
 				ChatView,
 				send(alice.session, "/v1/chats/" + finished.chat),
 			)
-			assert.equal(task.chat.kind, "task")
-			assert.equal(task.chat.bot, programmer.id)
-			assert.deepEqual(task.chat.parent, {
+			assert.strictEqual(task.chat.kind, "task")
+			assert.strictEqual(task.chat.bot, programmer.id)
+			assert.deepStrictEqual(task.chat.parent, {
 				chat: chat.chat(),
 				delegation: finished.id,
 			})
@@ -493,7 +492,7 @@ test(
 				Schema.Array(Schema.Struct({ chat: ChatInfo })),
 				send(alice.session, "/v1/chats"),
 			)
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				listed.map((entry) => entry.chat.id),
 				[chat.chat()],
 			)
@@ -503,8 +502,8 @@ test(
 				Schema.Array(BotsApi.Grant),
 				send(alice.session, "/v1/bots/" + main.id + "/grants"),
 			)
-			assert.equal(grants.length, 1)
-			assert.equal(grants[0]?.scope, "lifetime")
+			assert.strictEqual(grants.length, 1)
+			assert.strictEqual(grants[0]?.scope, "lifetime")
 			await chat.turn("delegate to programmer")
 			await until("the second work ends", async () => {
 				const list = await chat.delegations()
@@ -512,7 +511,7 @@ test(
 					? list
 					: undefined
 			})
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				await json(
 					Schema.Array(RequestsApi.CapabilityRequest),
 					send(alice.session, "/v1/requests?status=pending"),
@@ -528,9 +527,9 @@ test(
 					command: { _tag: "Remember", content: "Run the tests first." },
 				}),
 			)
-			assert.equal(memory.version, 1)
-			assert.equal(memory.entries[0]?.layer, "pinned")
-			assert.equal(
+			assert.strictEqual(memory.version, 1)
+			assert.strictEqual(memory.entries[0]?.layer, "pinned")
+			assert.strictEqual(
 				(
 					await send(
 						alice.session,
@@ -545,7 +544,7 @@ test(
 				Schema.Array(BotMemory.LogEntry),
 				send(alice.session, "/v1/bots/" + programmer.id + "/memory/log"),
 			)
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				log.map((entry) => [entry.by, entry.ids]),
 				[["person", [memory.entries[0]!.id]]],
 			)
@@ -555,7 +554,7 @@ test(
 	},
 )
 
-test(
+it(
 	"after the Bot confides, the memory Bot answers it, learns for the person, and adds what helps only to the input of that person",
 	{ timeout: 120000 },
 	async () => {
@@ -581,7 +580,7 @@ test(
 					},
 				},
 			)
-			assert.equal(configured.status, 200, await configured.text())
+			assert.strictEqual(configured.status, 200, await configured.text())
 			const shared = await json(
 				BotsApi.Bot,
 				send(alice.session, "/v1/bots", "POST", {
@@ -608,11 +607,14 @@ test(
 				Schema.Array(BotMemory.Confession),
 				send(alice.session, path + "/confessions"),
 			)
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				confessions.map((confession) => confession.text),
 				["I feel unsure about tea"],
 			)
-			assert.equal((await send(bob.session, path + "/confessions")).status, 404)
+			assert.strictEqual(
+				(await send(bob.session, path + "/confessions")).status,
+				404,
+			)
 
 			// After the Turn, the memory Bot learns a fact for Alice only.
 			const learned = await until("the memory Bot learns", async () => {
@@ -620,15 +622,15 @@ test(
 				return view.entries.length > 0 ? view : undefined
 			})
 			const [fact] = learned.entries
-			assert.equal(fact?.content, "Alice likes green tea.")
-			assert.equal(fact?.layer, "fact")
+			assert.strictEqual(fact?.content, "Alice likes green tea.")
+			assert.strictEqual(fact?.layer, "fact")
 			assert.ok(fact?.tags.includes("from:" + alice.identity.userId))
 			assert.ok(fact?.tags.includes("for:person:" + alice.identity.userId))
 			assert.ok(fact?.tags.includes("drinks"))
 			const [source] = fact?.sources ?? []
 			assert.ok(source !== undefined && "chat" in source)
-			assert.equal(source.chat, aliceChat.chat())
-			assert.deepEqual(
+			assert.strictEqual(source.chat, aliceChat.chat())
+			assert.deepStrictEqual(
 				(await json(BotMemory.View, send(bob.session, memoryPath))).entries,
 				[],
 			)
@@ -652,7 +654,7 @@ test(
 				Schema.Array(BotMemory.Enrichment),
 				send(alice.session, path + "/enrichments"),
 			)
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				enrichments.map((enrichment) => [
 					enrichment.inserted,
 					enrichment.entries,
@@ -662,12 +664,12 @@ test(
 
 			// Bob asks the same in his own Chat, and nothing about Alice reaches his input.
 			const third = await bobChat.turn("What should I drink?")
-			assert.notEqual(bobChat.chat(), aliceChat.chat())
+			assert.notStrictEqual(bobChat.chat(), aliceChat.chat())
 			assert.ok(
 				JSON.stringify(third.response).includes("Hello."),
 				JSON.stringify(third.response),
 			)
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				await json(
 					Schema.Array(BotMemory.Enrichment),
 					send(bob.session, "/v1/chats/" + bobChat.chat() + "/enrichments"),
@@ -680,7 +682,7 @@ test(
 	},
 )
 
-test(
+it(
 	"a Bot that another Bot owns asks, its owner reviews and passes it up, and the person decides at the top",
 	{ timeout: 120000 },
 	async () => {
@@ -698,7 +700,7 @@ test(
 					bot: main.id,
 				}),
 			)
-			assert.deepEqual(helper.owner, {
+			assert.deepStrictEqual(helper.owner, {
 				_tag: "Bot",
 				bot: main.id,
 				userId: alice.identity.userId,
@@ -716,18 +718,18 @@ test(
 					request.capability.action === "tools.call" &&
 					request.endorsements.length === 1,
 			)
-			assert.equal(passedUp.bot, helper.id)
-			assert.deepEqual(passedUp.chain, [main.id, helper.id])
-			assert.deepEqual(passedUp.endorsements[0], {
+			assert.strictEqual(passedUp.bot, helper.id)
+			assert.deepStrictEqual(passedUp.chain, [main.id, helper.id])
+			assert.deepStrictEqual(passedUp.endorsements[0], {
 				bot: main.id,
 				scope: "lifetime",
 				reason: "It fits the task I gave.",
 			})
-			assert.equal(host.toolCalls(), toolsBefore)
+			assert.strictEqual(host.toolCalls(), toolsBefore)
 			// The Helper does not wait. Its work stays open while the request is open.
 			const [work] = await chat.delegations()
-			assert.equal(work?.status, "running")
-			assert.equal(passedUp.chat, work?.chat)
+			assert.strictEqual(work?.status, "running")
+			assert.strictEqual(passedUp.chat, work?.chat)
 			await chat.says("Helper waits for a decision.", work!.chat!)
 
 			await json(
@@ -740,10 +742,10 @@ test(
 			)
 			// The allowed call runs in the task Chat, the work ends, and its result comes back.
 			await chat.says("Helper confirmed it")
-			assert.equal(host.toolCalls(), toolsBefore + 1)
+			assert.strictEqual(host.toolCalls(), toolsBefore + 1)
 			const [ended] = await chat.delegations()
-			assert.equal(ended?.status, "completed")
-			assert.equal(ended?.result, "Helper confirmed it")
+			assert.strictEqual(ended?.status, "completed")
+			assert.strictEqual(ended?.result, "Helper confirmed it")
 			await chat.rested()
 
 			// Each Bot on the way got a Grant with the scope that its decider chose.
@@ -759,10 +761,10 @@ test(
 				(grant) => grant.capability.action === "tools.call",
 			)
 			// A Grant for one Chat holds where that Bot works: the default Bot in its direct Chat.
-			assert.equal(mainTool?.scope, "chat")
-			assert.equal(mainTool?.chat, chat.chat())
-			assert.equal(helperGrants[0]?.scope, "lifetime")
-			assert.equal(helperGrants[0]?.parent, mainTool?.id)
+			assert.strictEqual(mainTool?.scope, "chat")
+			assert.strictEqual(mainTool?.chat, chat.chat())
+			assert.strictEqual(helperGrants[0]?.scope, "lifetime")
+			assert.strictEqual(helperGrants[0]?.parent, mainTool?.id)
 
 			// Revoking the Grant of the owner also revokes the Grant that it gave to the helper.
 			const revoked = await send(
@@ -770,8 +772,8 @@ test(
 				"/v1/bots/" + main.id + "/grants/" + mainTool!.id,
 				"DELETE",
 			)
-			assert.equal(revoked.status, 204)
-			assert.deepEqual(
+			assert.strictEqual(revoked.status, 204)
+			assert.deepStrictEqual(
 				await json(
 					Schema.Array(BotsApi.Grant),
 					send(
@@ -783,18 +785,18 @@ test(
 			)
 
 			// Deleting the direct Chat removes its history. The next message starts again.
-			assert.equal(
+			assert.strictEqual(
 				(await send(alice.session, "/v1/chats/" + chat.chat(), "DELETE"))
 					.status,
 				204,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await send(alice.session, "/v1/chats/" + chat.chat())).status,
 				404,
 			)
 			const old = chat.chat()
 			await chat.turn("hello")
-			assert.notEqual(chat.chat(), old)
+			assert.notStrictEqual(chat.chat(), old)
 			assert.ok(!(await chat.history()).includes("confirm via helper"))
 			await until("the helper is still there", async () =>
 				(await json(BotsApi.Bot, send(alice.session, "/v1/bots/" + helper.id)))
@@ -808,7 +810,7 @@ test(
 	},
 )
 
-test(
+it(
 	"Rules let the judge allow a call, and a deny Grant wins over them",
 	{ timeout: 120000 },
 	async () => {
@@ -833,7 +835,11 @@ test(
 					},
 				},
 			)
-			assert.equal(configured.status, 200, await configured.clone().text())
+			assert.strictEqual(
+				configured.status,
+				200,
+				await configured.clone().text(),
+			)
 			const main = await defaultBot(alice.session)
 			const chat = talk(alice.session, main.id)
 			const rule = await json(
@@ -842,11 +848,11 @@ test(
 					text: "Assistant may confirm changes with ConfirmChange.",
 				}),
 			)
-			assert.equal(rule.status, "active")
+			assert.strictEqual(rule.status, "active")
 			const before = host.toolCalls()
 			await chat.turn("confirm directly")
-			assert.equal(host.toolCalls(), before + 1)
-			assert.deepEqual(
+			assert.strictEqual(host.toolCalls(), before + 1)
+			assert.deepStrictEqual(
 				await json(
 					Schema.Array(RequestsApi.CapabilityRequest),
 					send(alice.session, "/v1/requests"),
@@ -864,18 +870,18 @@ test(
 			)
 			// The deny is decided at once, in the same Turn. The Bot reads the reason.
 			const denied = await chat.turn("confirm directly")
-			assert.equal(host.toolCalls(), before + 1)
-			assert.equal(denied.status, "Completed")
-			assert.equal(denied.open.requests, 0)
+			assert.strictEqual(host.toolCalls(), before + 1)
+			assert.strictEqual(denied.status, "Completed")
+			assert.strictEqual(denied.open.requests, 0)
 			assert.match(await chat.history(), /No more changes today/)
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				await json(
 					Schema.Array(RequestsApi.CapabilityRequest),
 					send(alice.session, "/v1/requests?status=pending"),
 				),
 				[],
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await send(
 						alice.session,
@@ -886,14 +892,14 @@ test(
 				204,
 			)
 			await chat.turn("confirm directly")
-			assert.equal(host.toolCalls(), before + 2)
+			assert.strictEqual(host.toolCalls(), before + 2)
 		} finally {
 			await host.close()
 		}
 	},
 )
 
-test(
+it(
 	"a Bot makes Bots that it owns, and their requests go up the owner chain",
 	{ timeout: 120000 },
 	async () => {
@@ -922,23 +928,23 @@ test(
 			// The Bot does not wait for the decision. When it comes, the call runs.
 			const mainChat = talk(dave.session, main.id)
 			const asked = await mainChat.turn("create a worker")
-			assert.equal(asked.open.requests, 1)
+			assert.strictEqual(asked.open.requests, 1)
 			const create = await pendingFor(
 				dave.session,
 				(request) => request.capability.action === "bots.create",
 			)
-			assert.deepEqual(create.approver, {
+			assert.deepStrictEqual(create.approver, {
 				_tag: "Person",
 				userId: dave.identity.userId,
 			})
-			assert.deepEqual(create.chain, [main.id])
+			assert.deepStrictEqual(create.chain, [main.id])
 			await allow(create)
 			const owned = await until("the worker exists", async () => {
 				const list = await ownedBy(main.id)
 				return list.length === 1 ? list : undefined
 			})
 			const worker = owned[0]!
-			assert.deepEqual(worker.owner, {
+			assert.deepStrictEqual(worker.owner, {
 				_tag: "Bot",
 				bot: main.id,
 				userId: dave.identity.userId,
@@ -960,10 +966,10 @@ test(
 					request.capability.action === "bots.create" &&
 					request.endorsements.length === 1,
 			)
-			assert.equal(passedUp.bot, worker.id)
-			assert.deepEqual(passedUp.chain, [main.id, worker.id])
-			assert.equal(passedUp.endorsements[0]?.bot, main.id)
-			assert.deepEqual(passedUp.approver, {
+			assert.strictEqual(passedUp.bot, worker.id)
+			assert.deepStrictEqual(passedUp.chain, [main.id, worker.id])
+			assert.strictEqual(passedUp.endorsements[0]?.bot, main.id)
+			assert.deepStrictEqual(passedUp.approver, {
 				_tag: "Person",
 				userId: dave.identity.userId,
 			})
@@ -973,7 +979,7 @@ test(
 				return list.length === 1 ? list : undefined
 			})
 			const scout = scouts[0]!
-			assert.deepEqual(scout.owner, {
+			assert.deepStrictEqual(scout.owner, {
 				_tag: "Bot",
 				bot: worker.id,
 				userId: dave.identity.userId,
@@ -988,7 +994,7 @@ test(
 				shared: true,
 				bot: main.id,
 			})
-			assert.equal(mixed.status, 400)
+			assert.strictEqual(mixed.status, 400)
 			const second = await json(
 				BotsApi.Bot,
 				send(dave.session, "/v1/bots", "POST", {
@@ -998,7 +1004,7 @@ test(
 					bot: worker.id,
 				}),
 			)
-			assert.deepEqual(second.owner, {
+			assert.deepStrictEqual(second.owner, {
 				_tag: "Bot",
 				bot: worker.id,
 				userId: dave.identity.userId,
@@ -1013,9 +1019,9 @@ test(
 					archived: true,
 				}),
 			)
-			assert.equal((await bot(scout.id)).archived, true)
-			assert.equal((await bot(second.id)).archived, true)
-			assert.equal((await bot(main.id)).archived, false)
+			assert.strictEqual((await bot(scout.id)).archived, true)
+			assert.strictEqual((await bot(second.id)).archived, true)
+			assert.strictEqual((await bot(main.id)).archived, false)
 
 			// Only a top Bot can be the default Bot.
 			const settings = await json(
@@ -1026,7 +1032,7 @@ test(
 				expectedVersion: settings.version,
 				defaultBot: worker.id,
 			})
-			assert.equal(notTop.status, 400, await notTop.clone().text())
+			assert.strictEqual(notTop.status, 400, await notTop.clone().text())
 
 			// An archived Bot does no new work.
 			const top = await bot(main.id)
@@ -1043,14 +1049,14 @@ test(
 				"POST",
 				{ input: "hello" },
 			)
-			assert.equal(archived.status, 400, await archived.clone().text())
+			assert.strictEqual(archived.status, 400, await archived.clone().text())
 		} finally {
 			await host.close()
 		}
 	},
 )
 
-test(
+it(
 	"a person talks only to Bots that they may use, and a trigger needs a Bot",
 	{ timeout: 120000 },
 	async () => {
@@ -1060,7 +1066,7 @@ test(
 			// Frank comes first and runs the organization. Erin is a member.
 			const frank = await host.login("bots-frank")
 			const erin = await host.login("bots-erin")
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				await json(Schema.Array(BotsApi.Bot), send(erin.session, "/v1/bots")),
 				[],
 			)
@@ -1068,11 +1074,11 @@ test(
 				Settings.MemberSettings,
 				send(erin.session, "/v1/me/settings"),
 			)
-			assert.equal(settings.defaultBot, null)
+			assert.strictEqual(settings.defaultBot, null)
 			const trigger = await send(erin.session, "/v1/triggers", "POST", {
 				prompt: "Say hello.",
 			})
-			assert.equal(trigger.status, 400, await trigger.clone().text())
+			assert.strictEqual(trigger.status, 400, await trigger.clone().text())
 
 			const theirs = await json(
 				BotsApi.Bot,
@@ -1086,14 +1092,14 @@ test(
 				expectedVersion: settings.version,
 				defaultBot: theirs.id,
 			})
-			assert.equal(other.status, 400, await other.clone().text())
+			assert.strictEqual(other.status, 400, await other.clone().text())
 			const hidden = await send(
 				erin.session,
 				"/v1/bots/" + theirs.id + "/messages",
 				"POST",
 				{ input: "hello" },
 			)
-			assert.equal(hidden.status, 404, await hidden.clone().text())
+			assert.strictEqual(hidden.status, 404, await hidden.clone().text())
 
 			const named = await json(
 				BotsApi.Bot,
@@ -1105,15 +1111,15 @@ test(
 			)
 			const chat = talk(erin.session, named.id)
 			const first = await chat.message("hello")
-			assert.equal(first.delivery, "started")
+			assert.strictEqual(first.delivery, "started")
 			const view = await chat.rested()
-			assert.equal(view.chat.bot, named.id)
+			assert.strictEqual(view.chat.bot, named.id)
 			// The same Bot and person always use the same Chat.
 			const again = await chat.message("hello again")
-			assert.equal(again.chat, first.chat)
+			assert.strictEqual(again.chat, first.chat)
 			await chat.rested()
 			// Frank cannot read the Chat of Erin.
-			assert.equal(
+			assert.strictEqual(
 				(await send(frank.session, "/v1/chats/" + first.chat)).status,
 				404,
 			)

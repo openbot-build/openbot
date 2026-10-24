@@ -1,5 +1,4 @@
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
 import {
 	ChatSummary,
@@ -95,7 +94,7 @@ const client = (host: Awaited<ReturnType<typeof BrowserHost.start>>) => {
 	return { send, json, until }
 }
 
-test(
+it(
 	"a trigger gives its prompt to its Bot on a schedule and from a webhook, the result comes to the Chat of the actor, and only those who may use it",
 	{ timeout: 120000 },
 	async () => {
@@ -147,7 +146,7 @@ test(
 				prompt: "Check the build.",
 				schedule: { cron: "every day" },
 			})
-			assert.equal(wrong.status, 400)
+			assert.strictEqual(wrong.status, 400)
 
 			// The schedule fires. The test moves its next time to now.
 			const daily = await json(
@@ -157,7 +156,7 @@ test(
 					schedule: { cron: "0 9 * * *", timeZone: "Europe/Berlin" },
 				}),
 			)
-			assert.equal(daily.actor, alice.identity.userId)
+			assert.strictEqual(daily.actor, alice.identity.userId)
 			assert.ok(daily.nextRunAt !== null && daily.nextRunAt > Date.now())
 			await host.runtime.runPromise(
 				Effect.gen(function* () {
@@ -171,8 +170,8 @@ test(
 			})
 			assert.ok(scheduled.chat.parent !== null)
 			const work = await completed(scheduled.chat.parent.delegation)
-			assert.equal(work.trigger, daily.id)
-			assert.equal(work.chat, scheduled.chat.id)
+			assert.strictEqual(work.trigger, daily.id)
+			assert.strictEqual(work.chat, scheduled.chat.id)
 			console.log(
 				"DEBUG",
 				JSON.stringify(work),
@@ -187,8 +186,8 @@ test(
 				(await history(direct)).includes(work.id) ? true : undefined,
 			)
 			const rest = await rested(direct)
-			assert.equal(rest.chat.kind, "direct")
-			assert.equal(rest.status, "Completed")
+			assert.strictEqual(rest.chat.kind, "direct")
+			assert.strictEqual(rest.status, "Completed")
 			const after = await json(
 				TriggersApi.Trigger,
 				send(alice.session, "/v1/triggers/" + daily.id),
@@ -201,7 +200,10 @@ test(
 				TriggersApi.WebhookSecret,
 				send(alice.session, "/v1/triggers/" + daily.id + "/webhook", "PUT"),
 			)
-			assert.equal(hook.url, publicOrigin + "/v1/hooks/triggers/" + daily.id)
+			assert.strictEqual(
+				hook.url,
+				publicOrigin + "/v1/hooks/triggers/" + daily.id,
+			)
 			const denied = await send(
 				undefined,
 				"/v1/hooks/triggers/" + daily.id,
@@ -209,7 +211,7 @@ test(
 				{ order: 42 },
 				{ authorization: "Bearer wrong" },
 			)
-			assert.equal(denied.status, 401)
+			assert.strictEqual(denied.status, 401)
 			const fired = await json(
 				Schema.Struct({ delegation: DelegationsApi.DelegationId }),
 				send(
@@ -234,7 +236,7 @@ test(
 					enabled: false,
 				}),
 			)
-			assert.equal(disabled.nextRunAt, null)
+			assert.strictEqual(disabled.nextRunAt, null)
 			const off = await send(
 				undefined,
 				"/v1/hooks/triggers/" + daily.id,
@@ -242,10 +244,10 @@ test(
 				{},
 				{ authorization: "Bearer " + hook.secret },
 			)
-			assert.equal(off.status, 401)
+			assert.strictEqual(off.status, 401)
 
 			// Bob cannot see the trigger of Alice, and a member cannot make shared triggers.
-			assert.equal(
+			assert.strictEqual(
 				(await send(bob.session, "/v1/triggers/" + daily.id)).status,
 				404,
 			)
@@ -253,7 +255,7 @@ test(
 				prompt: "Say hello.",
 				shared: true,
 			})
-			assert.equal(shared.status, 403, await shared.clone().text())
+			assert.strictEqual(shared.status, 403, await shared.clone().text())
 			const team = await json(
 				TriggersApi.Trigger,
 				send(alice.session, "/v1/triggers", "POST", {
@@ -261,12 +263,12 @@ test(
 					shared: true,
 				}),
 			)
-			assert.deepEqual(team.owner, { _tag: "Organization" })
+			assert.deepStrictEqual(team.owner, { _tag: "Organization" })
 			const seen = await json(
 				Schema.Array(TriggersApi.Trigger),
 				send(bob.session, "/v1/triggers"),
 			)
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				seen.map((trigger) => trigger.id),
 				[team.id],
 			)
@@ -279,8 +281,8 @@ test(
 					prompt: "Say goodbye.",
 				},
 			)
-			assert.equal(change.status, 403)
-			assert.equal(
+			assert.strictEqual(change.status, 403)
+			assert.strictEqual(
 				(await send(alice.session, "/v1/triggers/" + team.id, "DELETE")).status,
 				204,
 			)

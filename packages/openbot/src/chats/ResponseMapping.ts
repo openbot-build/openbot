@@ -42,8 +42,11 @@ export const inputPrompt = (
 						Prompt.makeMessage("user", {
 							content: Predicate.isString(message.content)
 								? [Prompt.makePart("text", { text: message.content })]
-								: message.content.map((part) =>
-										Prompt.makePart("text", { text: part.text }),
+								: // The Files service turns file parts into prompts. Here only text is left.
+									message.content.flatMap((part) =>
+										part.type === "input_text"
+											? [Prompt.makePart("text", { text: part.text })]
+											: [],
 									),
 						}),
 					),

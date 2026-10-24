@@ -1,8 +1,7 @@
-import assert from "node:assert/strict"
 import { cp, mkdtemp, readdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { test } from "node:test"
+import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest"
 import { fileURLToPath } from "node:url"
 import { NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
@@ -944,595 +943,593 @@ const decodeJson =
 	(text: string): A =>
 		Schema.decodeUnknownSync(Schema.toCodecJson(schema))(JSON.parse(text))
 
-test("Sessions become Chats, and stored values that named Sessions name Chats", async (t) => {
-	const database = await PostgresTest.start()
-	const before = await mkdtemp(join(tmpdir(), "openbot-migrations-"))
-	const through = await mkdtemp(join(tmpdir(), "openbot-migrations-"))
-	const runtime = ManagedRuntime.make(
-		DatabasePostgres.layer({ databaseUrl: Redacted.make(database.url) }).pipe(
+const makeRuntime = (url: string) =>
+	ManagedRuntime.make(
+		DatabasePostgres.layer({ databaseUrl: Redacted.make(url) }).pipe(
 			Layer.provide(NodeServices.layer),
 		),
 	)
-	try {
+
+describe("Sessions become Chats, and stored values that named Sessions name Chats", () => {
+	let database: Awaited<ReturnType<typeof PostgresTest.start>> | undefined
+	let before: string | undefined
+	let through: string | undefined
+	let runtime!: ReturnType<typeof makeRuntime>
+
+	beforeAll(async () => {
+		database = await PostgresTest.start()
+		const beforeFolder = await mkdtemp(join(tmpdir(), "openbot-migrations-"))
+		before = beforeFolder
+		const throughFolder = await mkdtemp(join(tmpdir(), "openbot-migrations-"))
+		through = throughFolder
+		runtime = makeRuntime(database.url)
 		for (const name of await readdir(migrations)) {
 			if (name < chatsMigration)
-				await cp(join(migrations, name), join(before, name), {
+				await cp(join(migrations, name), join(beforeFolder, name), {
 					recursive: true,
 				})
 			if (name <= chatsMigration)
-				await cp(join(migrations, name), join(through, name), {
+				await cp(join(migrations, name), join(throughFolder, name), {
 					recursive: true,
 				})
 		}
 		await runtime.runPromise(
 			Effect.gen(function* () {
 				const db = yield* Db.make
-				yield* migrate(db, { migrationsFolder: before })
+				yield* migrate(db, { migrationsFolder: beforeFolder })
 				yield* insertOldData
-				yield* migrate(db, { migrationsFolder: through })
-				// The server checks every table of the new schema when it starts.
+				yield* migrate(db, { migrationsFolder: throughFolder })
+				// Later migrations add tables, and the server checks every table
+				// of the new schema when it starts.
+				yield* migrate(db, { migrationsFolder: migrations })
 				yield* DatabasePostgres.check
 			}),
 		)
-		const query = <A extends object>(
-			run: (
-				sql: PgClient.PgClient,
-			) => Effect.Effect<ReadonlyArray<A>, SqlError.SqlError>,
-		) =>
-			runtime.runPromise(
+	}, 120_000)
+
+	afterAll(async () => {
+		await runtime?.dispose()
+		if (before !== undefined) await rm(before, { recursive: true, force: true })
+		if (through !== undefined)
+			await rm(through, { recursive: true, force: true })
+		await database?.close()
+	})
+
+	const query = <A extends object>(
+		run: (
+			sql: PgClient.PgClient,
+		) => Effect.Effect<ReadonlyArray<A>, SqlError.SqlError>,
+	) =>
+		runtime.runPromise(
+			Effect.gen(function* () {
+				return yield* run(yield* PgClient.PgClient)
+			}),
+		)
+
+	it("only channel Sessions and the newest direct Session of each Bot stay", async () => {
+		const rows = await query(
+			(sql) =>
+				sql<{
+					readonly namespace: string
+					readonly id: string
+					readonly kind: string
+					readonly bot: string
+					readonly status: string
+					readonly turn: string | null
+					readonly inbox_size: number
+					readonly revision: number
+				}>`select namespace, id, kind, bot, status, turn, inbox_size, revision from openbot_chats order by id`,
+		)
+		assert.deepStrictEqual(
+			rows.map((row) => [
+				row.namespace,
+				row.id,
+				row.kind,
+				row.bot,
+				row.status,
+				row.turn,
+				row.inbox_size,
+				row.revision,
+			]),
+			[
+				[namespaceB, "ses_b", "direct", "bot_2", "Idle", null, 1, 7],
+				[
+					namespaceA,
+					"ses_chan",
+					"channel",
+					"bot_1",
+					"Interrupted",
+					"turn_chan2",
+					0,
+					7,
+				],
+				[
+					namespaceA,
+					"ses_new",
+					"direct",
+					"bot_1",
+					"Interrupted",
+					"turn_new2",
+					2,
+					7,
+				],
+			],
+		)
+		const tables = await query(
+			(sql) =>
+				sql<{
+					readonly tablename: string
+				}>`select tablename from pg_catalog.pg_tables where tablename in ('openbot_session_references', 'openbot_timeline_versions', 'openbot_timeline_contents')`,
+		)
+		assert.deepStrictEqual(tables, [])
+	})
+
+	it("the server reads a forked Chat whose last Turn did not end", async () => {
+		const read = await runtime.runPromise(
+			Effect.scoped(
 				Effect.gen(function* () {
-					return yield* run(yield* PgClient.PgClient)
+					const store = yield* chatStore(namespaceA)
+					const view = yield* store.read(Chat.Id.make("ses_new"))
+					const items = yield* store.items(view.chat.id)
+					const turns = yield* store.turns(view.chat.id)
+					const inherited = yield* store.turn(
+						view.chat.id,
+						Turn.Id.make("turn_old1"),
+					)
+					const gone = yield* store.get(Chat.Id.make("ses_old"))
+					return { view, items, turns, inherited, gone }
 				}),
-			)
-
-		await t.test(
-			"only channel Sessions and the newest direct Session of each Bot stay",
-			async () => {
-				const rows = await query(
-					(sql) =>
-						sql<{
-							readonly namespace: string
-							readonly id: string
-							readonly kind: string
-							readonly bot: string
-							readonly status: string
-							readonly turn: string | null
-							readonly inbox_size: number
-							readonly revision: number
-						}>`select namespace, id, kind, bot, status, turn, inbox_size, revision from openbot_chats order by id`,
-				)
-				assert.deepEqual(
-					rows.map((row) => [
-						row.namespace,
-						row.id,
-						row.kind,
-						row.bot,
-						row.status,
-						row.turn,
-						row.inbox_size,
-						row.revision,
-					]),
-					[
-						[namespaceB, "ses_b", "direct", "bot_2", "Idle", null, 1, 7],
-						[
-							namespaceA,
-							"ses_chan",
-							"channel",
-							"bot_1",
-							"Interrupted",
-							"turn_chan2",
-							0,
-							7,
-						],
-						[
-							namespaceA,
-							"ses_new",
-							"direct",
-							"bot_1",
-							"Interrupted",
-							"turn_new2",
-							2,
-							7,
-						],
-					],
-				)
-				const tables = await query(
-					(sql) =>
-						sql<{
-							readonly tablename: string
-						}>`select tablename from pg_catalog.pg_tables where tablename in ('openbot_session_references', 'openbot_timeline_versions', 'openbot_timeline_contents')`,
-				)
-				assert.deepEqual(tables, [])
-			},
+			),
 		)
-
-		await t.test(
-			"the server reads a forked Chat whose last Turn did not end",
-			async () => {
-				const read = await runtime.runPromise(
-					Effect.scoped(
-						Effect.gen(function* () {
-							const store = yield* chatStore(namespaceA)
-							const view = yield* store.read(Chat.Id.make("ses_new"))
-							const items = yield* store.items(view.chat.id)
-							const turns = yield* store.turns(view.chat.id)
-							const inherited = yield* store.turn(
-								view.chat.id,
-								Turn.Id.make("turn_old1"),
-							)
-							const gone = yield* store.get(Chat.Id.make("ses_old"))
-							return { view, items, turns, inherited, gone }
-						}),
-					),
-				)
-				const { view, items, turns } = read
-				assert.equal(Option.isNone(read.gone), true)
-				assert.equal(Option.isSome(read.inherited), true)
-				// The Items of the Turn that did not end are gone, so no tool call waits for a result.
-				assert.deepEqual(
-					items.map((item) => [
-						item.seq,
-						item.id,
-						item.origin?.chat,
-						item.origin?.turn,
-					]),
-					[
-						[1, "itm_old1", "ses_new", "turn_old1"],
-						[2, "itm_old2", "ses_new", "turn_old1"],
-						[3, "itm_new1", "ses_new", "turn_new1"],
-						[4, "itm_new2", "ses_new", "turn_new1"],
-					],
-				)
-				assert.equal(HashMap.size(ChatState.unansweredCalls(items)), 0)
-				assert.equal(view.chat.seq, 4)
-				// The window of the model loses the same messages.
-				assert.equal(view.state.conversation.context._tag, "Prompt")
-				assert.deepEqual(
-					view.state.conversation.context.prompt,
-					ChatState.promptOf(items),
-				)
-				assert.equal(view.state.conversation.closed, true)
-				assert.deepEqual(view.state[Todos.storeKey], todos)
-				assert.deepEqual(
-					turns.map((turn) => [turn.id, turn.chat, turn.status._tag]),
-					[
-						["turn_old1", "ses_new", "Completed"],
-						["turn_new1", "ses_new", "Completed"],
-						["turn_new2", "ses_new", "Interrupted"],
-					],
-				)
-				assert.deepEqual(view.chat.turn, turns[2])
-				assert.deepEqual(view.chat.turn?.items, [])
-				// Steer input for the Turn waits for the next Turn. A host action for it goes.
-				assert.deepEqual(
-					view.chat.inbox.map((entry) => [
-						entry.id,
-						entry.kind,
-						entry.turn,
-						entry.author,
-					]),
-					[
-						["itm_steer", "message", undefined, undefined],
-						["itm_next", "message", undefined, "user_b"],
-					],
-				)
-				const state = ChatHost.hostState(view.chat)
-				assert.deepEqual(state, {
-					bot: "bot_1",
-					kind: "direct",
-					chain: {
-						organizationId: "org_a",
-						userId: "user_a",
-						bots: ["bot_1"],
-						chats: [],
-					},
-					planApproval: {
-						approver: "person",
-						timeoutMs: 1000,
-						onTimeout: "stay",
-					},
-				})
-				assert.equal(view.chat.createdAt, 300)
-			},
+		const { view, items, turns } = read
+		assert.strictEqual(Option.isNone(read.gone), true)
+		assert.strictEqual(Option.isSome(read.inherited), true)
+		// The Items of the Turn that did not end are gone, so no tool call waits for a result.
+		assert.deepStrictEqual<unknown>(
+			items.map((item) => [
+				item.seq,
+				item.id,
+				item.origin?.chat,
+				item.origin?.turn,
+			]),
+			[
+				[1, "itm_old1", "ses_new", "turn_old1"],
+				[2, "itm_old2", "ses_new", "turn_old1"],
+				[3, "itm_new1", "ses_new", "turn_new1"],
+				[4, "itm_new2", "ses_new", "turn_new1"],
+			],
 		)
-
-		await t.test(
-			"the stored values of a Chat have no Session fields any more",
-			async () => {
-				const rows = await query(
-					(sql) =>
-						sql<{
-							readonly body: string
-							readonly state: string
-						}>`select body, state from openbot_chats where id = 'ses_new'`,
-				)
-				const body = JSON.parse(rows[0]!.body)
-				const state = JSON.parse(rows[0]!.state)
-				for (const key of [
-					"head",
-					"metadata",
-					"pending",
-					"turns",
-					"inheritedTurns",
-					"forkedFrom",
-				])
-					assert.equal(key in body, false, key)
-				assert.deepEqual(Object.keys(body.business), [
-					"@openbot-build/openbot/chat-host",
-				])
-				assert.equal(memoryKey in state, false)
-				const turns = await query(
-					(sql) =>
-						sql<{
-							readonly value: string
-						}>`select value from openbot_chat_turns where chat = 'ses_new' order by position`,
-				)
-				for (const turn of turns.map((row) => JSON.parse(row.value))) {
-					for (const key of ["session", "start", "end"])
-						assert.equal(key in turn, false, key)
-				}
-			},
+		assert.strictEqual(HashMap.size(ChatState.unansweredCalls(items)), 0)
+		assert.strictEqual(view.chat.seq, 4)
+		// The window of the model loses the same messages.
+		assert.strictEqual(view.state.conversation.context._tag, "Prompt")
+		assert.deepStrictEqual(
+			view.state.conversation.context.prompt,
+			ChatState.promptOf(items),
 		)
-
-		await t.test(
-			"a channel Chat keeps its title, and its window starts again when it does not fit",
-			async () => {
-				const read = await runtime.runPromise(
-					Effect.scoped(
-						Effect.gen(function* () {
-							const store = yield* chatStore(namespaceA)
-							const view = yield* store.read(Chat.Id.make("ses_chan"))
-							const items = yield* store.items(view.chat.id)
-							return { view, items }
-						}),
-					),
-				)
-				const { view, items } = read
-				assert.deepEqual(
-					items.map((item) => item.id),
-					["itm_c1", "itm_c2"],
-				)
-				assert.equal(HashMap.size(ChatState.unansweredCalls(items)), 0)
-				assert.equal(view.chat.turn?.status._tag, "Interrupted")
-				// The window was made smaller in the Turn that did not end, so it starts again
-				// from the Items that stay.
-				assert.equal(view.state.conversation.context._tag, "Prompt")
-				assert.deepEqual(
-					view.state.conversation.context.prompt,
-					ChatState.promptOf(items),
-				)
-				const state = ChatHost.hostState(view.chat)
-				assert.equal(state.kind, "channel")
-				assert.equal(state.title, "Team room")
-				assert.deepEqual(state.channel, {
-					channel: "chn_1",
-					conversation: "C1",
-					group: true,
-				})
-			},
+		assert.strictEqual(view.state.conversation.closed, true)
+		assert.deepStrictEqual<unknown>(view.state[Todos.storeKey], todos)
+		assert.deepStrictEqual(
+			turns.map((turn) => [turn.id, turn.chat, turn.status._tag]),
+			[
+				["turn_old1", "ses_new", "Completed"],
+				["turn_new1", "ses_new", "Completed"],
+				["turn_new2", "ses_new", "Interrupted"],
+			],
 		)
+		assert.deepStrictEqual(view.chat.turn, turns[2])
+		assert.deepStrictEqual(view.chat.turn?.items, [])
+		// Steer input for the Turn waits for the next Turn. A host action for it goes.
+		assert.deepStrictEqual(
+			view.chat.inbox.map((entry) => [
+				entry.id,
+				entry.kind,
+				entry.turn,
+				entry.author,
+			]),
+			[
+				["itm_steer", "message", undefined, undefined],
+				["itm_next", "message", undefined, "user_b"],
+			],
+		)
+		const state = ChatHost.hostState(view.chat)
+		assert.deepStrictEqual<unknown>(state, {
+			bot: "bot_1",
+			kind: "direct",
+			chain: {
+				organizationId: "org_a",
+				userId: "user_a",
+				bots: ["bot_1"],
+				chats: [],
+			},
+			planApproval: {
+				approver: "person",
+				timeoutMs: 1000,
+				onTimeout: "stay",
+			},
+		})
+		assert.strictEqual(view.chat.createdAt, 300)
+	})
 
-		await t.test("the lists of the server find the Chats", async () => {
-			const found = await runtime.runPromise(
+	it("the stored values of a Chat have no Session fields any more", async () => {
+		const rows = await query(
+			(sql) =>
+				sql<{
+					readonly body: string
+					readonly state: string
+				}>`select body, state from openbot_chats where id = 'ses_new'`,
+		)
+		const body = JSON.parse(rows[0]!.body)
+		const state = JSON.parse(rows[0]!.state)
+		for (const key of [
+			"head",
+			"metadata",
+			"pending",
+			"turns",
+			"inheritedTurns",
+			"forkedFrom",
+		])
+			assert.strictEqual(key in body, false, key)
+		assert.deepStrictEqual(Object.keys(body.business), [
+			"@openbot-build/openbot/chat-host",
+		])
+		assert.strictEqual(memoryKey in state, false)
+		const turns = await query(
+			(sql) =>
+				sql<{
+					readonly value: string
+				}>`select value from openbot_chat_turns where chat = 'ses_new' order by position`,
+		)
+		for (const turn of turns.map((row) => JSON.parse(row.value))) {
+			for (const key of ["session", "start", "end"])
+				assert.strictEqual(key in turn, false, key)
+		}
+	})
+
+	it("a channel Chat keeps its title, and its window starts again when it does not fit", async () => {
+		const read = await runtime.runPromise(
+			Effect.scoped(
 				Effect.gen(function* () {
-					const db = yield* Db.make
-					const listA = yield* StoredChats.list(db, namespaceA)
-					const listB = yield* StoredChats.list(db, namespaceB)
-					const direct = yield* StoredChats.direct(db, namespaceA, "bot_1")
-					return { listA, listB, direct }
+					const store = yield* chatStore(namespaceA)
+					const view = yield* store.read(Chat.Id.make("ses_chan"))
+					const items = yield* store.items(view.chat.id)
+					return { view, items }
 				}),
-			)
-			assert.deepEqual(
-				found.listA.map((chat) => chat.id),
-				["ses_chan", "ses_new"],
-			)
-			assert.deepEqual(
-				found.listB.map((chat) => [
-					chat.id,
-					chat.seq,
-					chat.turn,
-					chat.inbox.length,
-				]),
-				[["ses_b", 0, undefined, 1]],
-			)
-			assert.deepEqual(found.direct, Option.some("ses_new"))
+			),
+		)
+		const { view, items } = read
+		assert.deepStrictEqual(
+			items.map((item) => item.id),
+			["itm_c1", "itm_c2"],
+		)
+		assert.strictEqual(HashMap.size(ChatState.unansweredCalls(items)), 0)
+		assert.strictEqual(view.chat.turn?.status._tag, "Interrupted")
+		// The window was made smaller in the Turn that did not end, so it starts again
+		// from the Items that stay.
+		assert.strictEqual(view.state.conversation.context._tag, "Prompt")
+		assert.deepStrictEqual(
+			view.state.conversation.context.prompt,
+			ChatState.promptOf(items),
+		)
+		const state = ChatHost.hostState(view.chat)
+		assert.strictEqual(state.kind, "channel")
+		assert.strictEqual(state.title, "Team room")
+		assert.deepStrictEqual(state.channel, {
+			channel: "chn_1",
+			conversation: "C1",
+			group: true,
 		})
+	})
 
-		await t.test(
-			"the server adds Items after the Items that stay",
-			async () => {
-				const changed = await runtime.runPromise(
-					Effect.scoped(
-						Effect.gen(function* () {
-							const store = yield* chatStore(namespaceA)
-							return yield* store.modifyEffect({
-								chat: Chat.Id.make("ses_new"),
-								update: () =>
-									Effect.succeed([
-										undefined,
-										Option.some({
-											append: [
-												{
-													id: Item.Id.make("itm_after"),
-													content: Prompt.make("What next?"),
-												},
-											],
-										}),
-									] as const),
-							})
-						}),
-					),
-				)
-				assert.deepEqual(
-					changed.items.map((item) => [item.id, item.seq]),
-					[["itm_after", 5]],
-				)
-				assert.equal(changed.view.chat.revision, 8)
-				const rows = await query(
-					(sql) =>
-						sql<{
-							readonly revision: number
-						}>`select revision from openbot_chats where id = 'ses_new'`,
-				)
-				assert.deepEqual(rows, [{ revision: 8 }])
-			},
+	it("the lists of the server find the Chats", async () => {
+		const found = await runtime.runPromise(
+			Effect.gen(function* () {
+				const db = yield* Db.make
+				const listA = yield* StoredChats.list(db, namespaceA)
+				const listB = yield* StoredChats.list(db, namespaceB)
+				const direct = yield* StoredChats.direct(db, namespaceA, "bot_1")
+				return { listA, listB, direct }
+			}),
 		)
-
-		await t.test(
-			"Bot records change to the new forms and still decode",
-			async () => {
-				const rows = await query(
-					(sql) =>
-						sql<{
-							readonly kind: string
-							readonly id: string
-							readonly owner: string
-							readonly scope: string
-							readonly status: string
-							readonly body: string
-						}>`select kind, id, owner, scope, status, body from openbot_bot_records order by kind, id`,
-				)
-				const byId = new Map(rows.map((row) => [row.kind + ":" + row.id, row]))
-				assert.deepEqual(
-					rows.map((row) => row.kind + ":" + row.id),
-					[
-						"bot:bot_1",
-						"bot:bot_s",
-						"confession:cnf_keep",
-						"grant:grt_keep",
-						"grant:grt_life",
-						"memory_cursor:bot_1/ses_new",
-						"memory_enrichment:ses_new/turn_new1",
-						"request:req_done",
-						"request:req_wait",
-						"rule:rul_1",
-					],
-				)
-				const bots = decodeJson(BotsApi.Bot)
-				const lasting = byId.get("bot:bot_1")!
-				assert.equal(lasting.status, "active")
-				assert.equal("kind" in JSON.parse(lasting.body), false)
-				bots(lasting.body)
-				// A Session Bot becomes an archived Bot of the Bot of its Session.
-				const sessionBot = byId.get("bot:bot_s")!
-				assert.deepEqual(
-					[sessionBot.owner, sessionBot.scope, sessionBot.status],
-					["user_a", "bot_1", "archived"],
-				)
-				const archived = bots(sessionBot.body)
-				assert.deepEqual(archived.owner, {
-					_tag: "Bot",
-					bot: "bot_1",
-					userId: "user_a",
-				})
-				assert.equal(archived.archived, true)
-
-				const grants = decodeJson(BotsApi.Grant)
-				const kept = grants(byId.get("grant:grt_keep")!.body)
-				assert.deepEqual([kept.scope, kept.chat], ["chat", "ses_new"])
-				assert.equal(
-					"session" in JSON.parse(byId.get("grant:grt_keep")!.body),
-					false,
-				)
-				assert.equal(grants(byId.get("grant:grt_life")!.body).scope, "lifetime")
-
-				const requests = decodeJson(StoredRequest)
-				const wait = byId.get("request:req_wait")!
-				assert.equal(wait.status, "cancelled")
-				const cancelled = requests(wait.body)
-				assert.equal(cancelled.request.status, "cancelled")
-				assert.equal(cancelled.request.chat, "ses_new")
-				assert.equal(cancelled.request.revision, 3)
-				assert.deepEqual(cancelled.request.decision?.by, {
-					_tag: "Person",
-					userId: "user_a",
-				})
-				assert.deepEqual(cancelled.request.endorsements, [
-					{ bot: "bot_1", scope: "chat" },
-				])
-				assert.deepEqual(cancelled.chain.chats, ["ses_new"])
-				const done = requests(byId.get("request:req_done")!.body)
-				assert.equal(done.request.status, "allowed")
-				assert.equal(done.request.decision?.scope, "chat")
-
-				const confession = decodeJson(BotMemory.Confession)(
-					byId.get("confession:cnf_keep")!.body,
-				)
-				assert.equal(confession.chat, "ses_new")
-				const enrichment = decodeJson(BotMemory.Enrichment)(
-					byId.get("memory_enrichment:ses_new/turn_new1")!.body,
-				)
-				assert.equal(enrichment.chat, "ses_new")
-				// The memory Bot read up to the last Item that stays and that it had read.
-				assert.deepEqual(
-					JSON.parse(byId.get("memory_cursor:bot_1/ses_new")!.body),
-					{ after: 3 },
-				)
-			},
+		assert.deepStrictEqual(
+			found.listA.map((chat) => chat.id),
+			["ses_chan", "ses_new"],
 		)
+		assert.deepStrictEqual<unknown>(
+			found.listB.map((chat) => [
+				chat.id,
+				chat.seq,
+				chat.turn,
+				chat.inbox.length,
+			]),
+			[["ses_b", 0, undefined, 1]],
+		)
+		assert.deepStrictEqual(found.direct, Option.some("ses_new"))
+	})
 
-		await t.test("Bot memory names Chats", async () => {
-			const memories = await query(
-				(sql) =>
-					sql<{
-						readonly sources: string
-					}>`select sources from openbot_bot_memories`,
-			)
-			assert.deepEqual(
-				Schema.decodeSync(
-					Schema.fromJsonString(Schema.Array(BotMemory.Source)),
-				)(memories[0]!.sources),
-				[{ chat: "ses_new", item: "itm_new1" }, { entry: "mem_0" }],
-			)
-			const tags = await query(
-				(sql) =>
-					sql<{
-						readonly tag: string
-					}>`select tag from openbot_bot_memory_tags order by tag`,
-			)
-			assert.deepEqual(
-				tags.map((row) => row.tag),
-				["chat:ses_new", "from:user_a"],
-			)
+	it("the server adds Items after the Items that stay", async () => {
+		const changed = await runtime.runPromise(
+			Effect.scoped(
+				Effect.gen(function* () {
+					const store = yield* chatStore(namespaceA)
+					return yield* store.modifyEffect({
+						chat: Chat.Id.make("ses_new"),
+						update: () =>
+							Effect.succeed([
+								undefined,
+								Option.some({
+									append: [
+										{
+											id: Item.Id.make("itm_after"),
+											content: Prompt.make("What next?"),
+										},
+									],
+								}),
+							] as const),
+					})
+				}),
+			),
+		)
+		assert.deepStrictEqual(
+			changed.items.map((item) => [item.id, item.seq]),
+			[["itm_after", 5]],
+		)
+		assert.strictEqual(changed.view.chat.revision, 8)
+		const rows = await query(
+			(sql) =>
+				sql<{
+					readonly revision: number
+				}>`select revision from openbot_chats where id = 'ses_new'`,
+		)
+		assert.deepStrictEqual(rows, [{ revision: 8 }])
+	})
+
+	it("Bot records change to the new forms and still decode", async () => {
+		const rows = await query(
+			(sql) =>
+				sql<{
+					readonly kind: string
+					readonly id: string
+					readonly owner: string
+					readonly scope: string
+					readonly status: string
+					readonly body: string
+				}>`select kind, id, owner, scope, status, body from openbot_bot_records order by kind, id`,
+		)
+		const byId = new Map(rows.map((row) => [row.kind + ":" + row.id, row]))
+		assert.deepStrictEqual(
+			rows.map((row) => row.kind + ":" + row.id),
+			[
+				"bot:bot_1",
+				"bot:bot_s",
+				"confession:cnf_keep",
+				"grant:grt_keep",
+				"grant:grt_life",
+				"memory_cursor:bot_1/ses_new",
+				"memory_enrichment:ses_new/turn_new1",
+				"request:req_done",
+				"request:req_wait",
+				"rule:rul_1",
+			],
+		)
+		const bots = decodeJson(BotsApi.Bot)
+		const lasting = byId.get("bot:bot_1")!
+		assert.strictEqual(lasting.status, "active")
+		assert.strictEqual("kind" in JSON.parse(lasting.body), false)
+		bots(lasting.body)
+		// A Session Bot becomes an archived Bot of the Bot of its Session.
+		const sessionBot = byId.get("bot:bot_s")!
+		assert.deepStrictEqual(
+			[sessionBot.owner, sessionBot.scope, sessionBot.status],
+			["user_a", "bot_1", "archived"],
+		)
+		const archived = bots(sessionBot.body)
+		assert.deepStrictEqual<unknown>(archived.owner, {
+			_tag: "Bot",
+			bot: "bot_1",
+			userId: "user_a",
 		})
+		assert.strictEqual(archived.archived, true)
 
-		await t.test("policies use the words of Chats", async () => {
-			const expected = [
-				{
-					effect: "allow",
-					permissionGroups: ["chats.read", "chats.write", "bots.read"],
-					resources: [
-						"openbot.org.{org}.user.{self}.chat",
-						"openbot.org.{org}.user.{self}.chat.ses_new",
-						"openbot.org.{org}.user.{self}",
-					],
-				},
-			]
-			const decodePolicies = decodeJson(Permissions.Policies)
-			for (const table of [
-				"openbot_roles",
-				"openbot_members",
-				"openbot_tokens",
-			]) {
-				const rows = await query(
-					(sql) =>
-						sql<{
-							readonly policies: string
-						}>`select policies from ${sql(table)}`,
-				)
-				assert.deepEqual(decodePolicies(rows[0]!.policies), expected, table)
-			}
-			const roles = await query(
-				(sql) =>
-					sql<{
-						readonly description: string
-					}>`select description from openbot_roles`,
-			)
-			assert.equal(roles[0]!.description, "Sessions and Bots.")
-			const platform = await query(
-				(sql) =>
-					sql<{
-						readonly document: string
-					}>`select document from openbot_settings where scope_kind = 'platform'`,
-			)
-			assert.deepEqual(
-				Schema.decodeUnknownSync(Settings.CeilingPolicies)(
-					JSON.parse(platform[0]!.document).policyCeiling,
-				),
-				[{ ...expected[0], effect: "deny" }],
-			)
+		const grants = decodeJson(BotsApi.Grant)
+		const kept = grants(byId.get("grant:grt_keep")!.body)
+		assert.deepStrictEqual([kept.scope, kept.chat], ["chat", "ses_new"])
+		assert.strictEqual(
+			"session" in JSON.parse(byId.get("grant:grt_keep")!.body),
+			false,
+		)
+		assert.strictEqual(
+			grants(byId.get("grant:grt_life")!.body).scope,
+			"lifetime",
+		)
+
+		const requests = decodeJson(StoredRequest)
+		const wait = byId.get("request:req_wait")!
+		assert.strictEqual(wait.status, "cancelled")
+		const cancelled = requests(wait.body)
+		assert.strictEqual(cancelled.request.status, "cancelled")
+		assert.strictEqual(cancelled.request.chat, "ses_new")
+		assert.strictEqual(cancelled.request.revision, 3)
+		assert.deepStrictEqual(cancelled.request.decision?.by, {
+			_tag: "Person",
+			userId: "user_a",
 		})
+		assert.deepStrictEqual<unknown>(cancelled.request.endorsements, [
+			{ bot: "bot_1", scope: "chat" },
+		])
+		assert.deepStrictEqual<unknown>(cancelled.chain.chats, ["ses_new"])
+		const done = requests(byId.get("request:req_done")!.body)
+		assert.strictEqual(done.request.status, "allowed")
+		assert.strictEqual(done.request.decision?.scope, "chat")
 
-		await t.test(
-			"settings lose the memory switches, and usage keeps its cost",
-			async () => {
-				const settings = await query(
-					(sql) =>
-						sql<{
-							readonly scope_kind: string
-							readonly document: string
-						}>`select scope_kind, document from openbot_settings where scope_kind <> 'platform' order by scope_kind`,
-				)
-				assert.deepEqual(
-					settings.map((row) => [row.scope_kind, JSON.parse(row.document)]),
-					[
-						["member", { defaultBot: "bot_1" }],
-						["organization", { botMemory: true }],
-					],
-				)
-				const usage = await query(
-					(sql) =>
-						sql<{
-							readonly id: string
-							readonly source: string
-							readonly chat_id: string
-							readonly cost_micros: string
-						}>`select id, source, chat_id, cost_micros from openbot_usage_events order by id`,
-				)
-				assert.deepEqual(
-					usage.map((row) => [
-						row.id,
-						row.source,
-						row.chat_id,
-						Number(row.cost_micros),
-					]),
-					[
-						["use_memory", "other", "ses_new", 7],
-						["use_turn", "turn", "ses_new", 7],
-					],
-				)
-			},
+		const confession = decodeJson(BotMemory.Confession)(
+			byId.get("confession:cnf_keep")!.body,
 		)
+		assert.strictEqual(confession.chat, "ses_new")
+		const enrichment = decodeJson(BotMemory.Enrichment)(
+			byId.get("memory_enrichment:ses_new/turn_new1")!.body,
+		)
+		assert.strictEqual(enrichment.chat, "ses_new")
+		// The memory Bot read up to the last Item that stays and that it had read.
+		assert.deepStrictEqual(
+			JSON.parse(byId.get("memory_cursor:bot_1/ses_new")!.body),
+			{ after: 3 },
+		)
+	})
 
-		await t.test(
-			"sealed records of Sessions go, and deliveries stay only for Chats that stay",
-			async () => {
-				const deliveries = await query(
-					(sql) =>
-						sql<{
-							readonly id: string
-							readonly chat: string | null
-						}>`select id, chat from openbot_channel_deliveries order by id`,
-				)
-				assert.deepEqual(
-					deliveries.map((row) => [row.id, row.chat]),
-					[
-						["dlv_keep", "ses_chan"],
-						["dlv_notice", null],
-					],
-				)
-				const conversations = await query(
-					(sql) =>
-						sql<{
-							readonly chat: string
-						}>`select chat from openbot_channel_conversations`,
-				)
-				assert.deepEqual(conversations, [{ chat: "ses_chan" }])
-				const invocations = await query(
-					(sql) =>
-						sql<{
-							readonly id: string
-						}>`select id from openbot_app_invocations`,
-				)
-				assert.deepEqual(invocations, [])
-				const runs = await query(
-					(sql) =>
-						sql<{ readonly id: string }>`select id from openbot_code_runs`,
-				)
-				assert.deepEqual(runs, [])
-				const secrets = await query(
-					(sql) =>
-						sql<{
-							readonly kind: string
-						}>`select kind from openbot_app_secrets`,
-				)
-				assert.deepEqual(secrets, [{ kind: "app-token" }])
-			},
+	it("Bot memory names Chats", async () => {
+		const memories = await query(
+			(sql) =>
+				sql<{
+					readonly sources: string
+				}>`select sources from openbot_bot_memories`,
 		)
-	} finally {
-		await runtime.dispose()
-		await rm(before, { recursive: true, force: true })
-		await rm(through, { recursive: true, force: true })
-		await database.close()
-	}
+		assert.deepStrictEqual<unknown>(
+			Schema.decodeSync(Schema.fromJsonString(Schema.Array(BotMemory.Source)))(
+				memories[0]!.sources,
+			),
+			[{ chat: "ses_new", item: "itm_new1" }, { entry: "mem_0" }],
+		)
+		const tags = await query(
+			(sql) =>
+				sql<{
+					readonly tag: string
+				}>`select tag from openbot_bot_memory_tags order by tag`,
+		)
+		assert.deepStrictEqual(
+			tags.map((row) => row.tag),
+			["chat:ses_new", "from:user_a"],
+		)
+	})
+
+	it("policies use the words of Chats", async () => {
+		const expected = [
+			{
+				effect: "allow",
+				permissionGroups: ["chats.read", "chats.write", "bots.read"],
+				resources: [
+					"openbot.org.{org}.user.{self}.chat",
+					"openbot.org.{org}.user.{self}.chat.ses_new",
+					"openbot.org.{org}.user.{self}",
+				],
+			},
+		]
+		const decodePolicies = decodeJson(Permissions.Policies)
+		for (const table of [
+			"openbot_roles",
+			"openbot_members",
+			"openbot_tokens",
+		]) {
+			const rows = await query(
+				(sql) =>
+					sql<{
+						readonly policies: string
+					}>`select policies from ${sql(table)}`,
+			)
+			assert.deepStrictEqual<unknown>(
+				decodePolicies(rows[0]!.policies),
+				expected,
+				table,
+			)
+		}
+		const roles = await query(
+			(sql) =>
+				sql<{
+					readonly description: string
+				}>`select description from openbot_roles`,
+		)
+		assert.strictEqual(roles[0]!.description, "Sessions and Bots.")
+		const platform = await query(
+			(sql) =>
+				sql<{
+					readonly document: string
+				}>`select document from openbot_settings where scope_kind = 'platform'`,
+		)
+		assert.deepStrictEqual<unknown>(
+			Schema.decodeUnknownSync(Settings.CeilingPolicies)(
+				JSON.parse(platform[0]!.document).policyCeiling,
+			),
+			[{ ...expected[0], effect: "deny" }],
+		)
+	})
+
+	it("settings lose the memory switches, and usage keeps its cost", async () => {
+		const settings = await query(
+			(sql) =>
+				sql<{
+					readonly scope_kind: string
+					readonly document: string
+				}>`select scope_kind, document from openbot_settings where scope_kind <> 'platform' order by scope_kind`,
+		)
+		assert.deepStrictEqual(
+			settings.map((row) => [row.scope_kind, JSON.parse(row.document)]),
+			[
+				["member", { defaultBot: "bot_1" }],
+				["organization", { botMemory: true }],
+			],
+		)
+		const usage = await query(
+			(sql) =>
+				sql<{
+					readonly id: string
+					readonly source: string
+					readonly chat_id: string
+					readonly cost_micros: string
+				}>`select id, source, chat_id, cost_micros from openbot_usage_events order by id`,
+		)
+		assert.deepStrictEqual(
+			usage.map((row) => [
+				row.id,
+				row.source,
+				row.chat_id,
+				Number(row.cost_micros),
+			]),
+			[
+				["use_memory", "other", "ses_new", 7],
+				["use_turn", "turn", "ses_new", 7],
+			],
+		)
+	})
+
+	it("sealed records of Sessions go, and deliveries stay only for Chats that stay", async () => {
+		const deliveries = await query(
+			(sql) =>
+				sql<{
+					readonly id: string
+					readonly chat: string | null
+				}>`select id, chat from openbot_channel_deliveries order by id`,
+		)
+		assert.deepStrictEqual(
+			deliveries.map((row) => [row.id, row.chat]),
+			[
+				["dlv_keep", "ses_chan"],
+				["dlv_notice", null],
+			],
+		)
+		const conversations = await query(
+			(sql) =>
+				sql<{
+					readonly chat: string
+				}>`select chat from openbot_channel_conversations`,
+		)
+		assert.deepStrictEqual(conversations, [{ chat: "ses_chan" }])
+		const invocations = await query(
+			(sql) =>
+				sql<{
+					readonly id: string
+				}>`select id from openbot_app_invocations`,
+		)
+		assert.deepStrictEqual(invocations, [])
+		const runs = await query(
+			(sql) => sql<{ readonly id: string }>`select id from openbot_code_runs`,
+		)
+		assert.deepStrictEqual(runs, [])
+		const secrets = await query(
+			(sql) =>
+				sql<{
+					readonly kind: string
+				}>`select kind from openbot_app_secrets`,
+		)
+		assert.deepStrictEqual(secrets, [{ kind: "app-token" }])
+	})
 })

@@ -1,4 +1,5 @@
-import assert from "node:assert/strict"
+// Tests are entry points, so they provide their own Layers.
+// @effect-diagnostics strictEffectProvide:off
 import {
 	CatalogDiscovery,
 	MemoryStore,
@@ -12,9 +13,8 @@ import {
 	Store,
 } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import {
-	ManagedRuntime,
 	Effect,
 	Fiber,
 	Layer,
@@ -27,7 +27,8 @@ import {
 import * as Mcp from "@modelcontextprotocol/client"
 import { startHttps } from "./Fixture.ts"
 
-// Build the runtime to test real HTTP cancellation and lifecycle storage failures.
+// Build the services to test real HTTP cancellation and lifecycle storage
+// failures. The tests use it.live, because they talk to a real HTTPS server.
 
 const Request = Schema.Struct({
 	id: Schema.optional(Schema.Union([Schema.String, Schema.Finite])),
@@ -171,14 +172,17 @@ const service = async () => {
 		reads: () => reads,
 	}
 }
-test("remove stops new calls and real running I/O, keeps other owners and public entries, and resumes failed cleanup", async () => {
-	const fixture = await service()
-	try {
-		await using runtime1 = ManagedRuntime.make(
-			fixture.layers.pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
-		)
-		await runtime1.runPromise(
-			Effect.scoped(
+// The service stops when the test ends.
+const openService = Effect.acquireRelease(
+	Effect.promise(() => service()),
+	(fixture) => Effect.promise(() => fixture.close()),
+)
+it.live(
+	"remove stops new calls and real running I/O, keeps other owners and public entries, and resumes failed cleanup",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* openService
+			yield* Effect.scoped(
 				Effect.gen(function* () {
 					const store = yield* Store.AppStore
 					yield* store.save({
@@ -249,22 +253,25 @@ test("remove stops new calls and real running I/O, keeps other owners and public
 							Effect.provideService(Store.CredentialStore, failCleanup),
 						),
 					)
-					assert.equal(failed._tag, "Failure")
+					assert.strictEqual(failed._tag, "Failure")
 					Match.value(failed).pipe(
 						Match.tag("Failure", (failed) => {
-							assert.equal(failed.failure._tag, "CleanupPending")
+							assert.strictEqual(failed.failure._tag, "CleanupPending")
 						}),
 						Match.orElse(() => undefined),
 					)
-					assert.equal((yield* store.get(fixture.key)).state, "CleanupPending")
+					assert.strictEqual(
+						(yield* store.get(fixture.key)).state,
+						"CleanupPending",
+					)
 					yield* Effect.promise(() => fixture.released)
 					yield* Fiber.await(request)
 					const before = fixture.reads()
-					assert.equal(
+					assert.strictEqual(
 						(yield* Effect.result(AppConnections.usable(fixture.key)))._tag,
 						"Failure",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* Effect.result(
 							client.callTool(
 								{
@@ -277,36 +284,37 @@ test("remove stops new calls and real running I/O, keeps other owners and public
 						))._tag,
 						"Failure",
 					)
-					assert.equal(fixture.reads(), before)
-					assert.equal((yield* store.get(bob)).state, "Enabled")
-					assert.equal(
+					assert.strictEqual(fixture.reads(), before)
+					assert.strictEqual((yield* store.get(bob)).state, "Enabled")
+					assert.strictEqual(
 						(yield* index.get(fixture.connection.cardUrl))._tag,
 						"Some",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* AppConnections.remove(fixture.key))._tag,
 						"Removed",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* Effect.result(store.get(fixture.key)))._tag,
 						"Failure",
 					)
-					assert.equal((yield* store.get(bob)).state, "Enabled")
+					assert.strictEqual((yield* store.get(bob)).state, "Enabled")
 				}),
-			),
-		)
-	} finally {
-		await fixture.close()
-	}
-})
-test("description updates keep authorization, but endpoint, issuer and scope changes pause it until explicit confirmation", async () => {
-	const fixture = await service()
-	try {
-		await using runtime2 = ManagedRuntime.make(
-			fixture.layers.pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
-		)
-		await runtime2.runPromise(
-			Effect.scoped(
+			).pipe(
+				Effect.provide(
+					fixture.layers.pipe(
+						Layer.provideMerge([CatalogDiscovery.layerRules]),
+					),
+				),
+			)
+		}),
+)
+it.live(
+	"description updates keep authorization, but endpoint, issuer and scope changes pause it until explicit confirmation",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* openService
+			yield* Effect.scoped(
 				Effect.gen(function* () {
 					const store = yield* Store.AppStore
 					const credentials = yield* Store.CredentialStore
@@ -344,7 +352,7 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 					let candidate = yield* discovery.refreshCard(
 						fixture.connection.cardUrl,
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* AppConnections.revalidate({
 							key: fixture.key,
 							candidate,
@@ -356,7 +364,7 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 						}))._tag,
 						"DescriptionUpdated",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* store.get(fixture.key)).authorization._tag,
 						"Authorized",
 					)
@@ -385,7 +393,7 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 						],
 					})
 					candidate = yield* discovery.refreshCard(fixture.connection.cardUrl)
-					assert.equal(
+					assert.strictEqual(
 						(yield* AppConnections.revalidate({
 							key: fixture.key,
 							candidate,
@@ -397,13 +405,13 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 						}))._tag,
 						"NeedsRevalidation",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* store.get(fixture.key)).state,
 						"NeedsRevalidation",
 					)
-					assert.equal(finalized, true)
+					assert.strictEqual(finalized, true)
 					const before = fixture.reads()
-					assert.equal(
+					assert.strictEqual(
 						(yield* Effect.result(
 							McpClient.open({
 								key: fixture.key,
@@ -415,7 +423,7 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 						))._tag,
 						"Failure",
 					)
-					assert.equal(fixture.reads(), before)
+					assert.strictEqual(fixture.reads(), before)
 					const confirmed = yield* AppConnections.revalidate({
 						key: fixture.key,
 						candidate,
@@ -425,12 +433,12 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 							scopes: ["notes", "write"],
 						}),
 					})
-					assert.equal(confirmed._tag, "Revalidated")
-					assert.equal(
+					assert.strictEqual(confirmed._tag, "Revalidated")
+					assert.strictEqual(
 						(yield* store.get(fixture.key)).authorization._tag,
 						"PendingAuthorization",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* Effect.result(
 							credentials.get({
 								binding,
@@ -439,7 +447,7 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 						))._tag,
 						"Failure",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* Effect.result(
 							McpClient.open({
 								key: fixture.key,
@@ -451,7 +459,7 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 						))._tag,
 						"Failure",
 					)
-					assert.equal(fixture.reads(), before)
+					assert.strictEqual(fixture.reads(), before)
 					// Changing only the issuer or scopes also pauses a currently authorized connection.
 					for (const change of [
 						{
@@ -496,7 +504,7 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 								},
 							},
 						})
-						assert.equal(
+						assert.strictEqual(
 							(yield* AppConnections.revalidate({
 								key,
 								candidate,
@@ -505,8 +513,11 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 							}))._tag,
 							"NeedsRevalidation",
 						)
-						assert.equal((yield* store.get(key)).state, "NeedsRevalidation")
-						assert.equal(
+						assert.strictEqual(
+							(yield* store.get(key)).state,
+							"NeedsRevalidation",
+						)
+						assert.strictEqual(
 							(yield* Effect.result(
 								McpClient.open({
 									key,
@@ -518,41 +529,42 @@ test("description updates keep authorization, but endpoint, issuer and scope cha
 							))._tag,
 							"Failure",
 						)
-						assert.equal(fixture.reads(), before)
+						assert.strictEqual(fixture.reads(), before)
 					}
 				}),
-			),
-		)
-	} finally {
-		await fixture.close()
-	}
-})
+			).pipe(
+				Effect.provide(
+					fixture.layers.pipe(
+						Layer.provideMerge([CatalogDiscovery.layerRules]),
+					),
+				),
+			)
+		}),
+)
 
-test("revalidation ignores the key order of configuration and variables, and the order and duplicates of scopes", async () => {
-	const fixture = await service()
-	try {
-		const original = {
-			...fixture.card,
-			remotes: [
-				{
-					...fixture.card.remotes![0]!,
-					variables: {
-						account: { default: "one" },
-						mode: { default: "read" },
+it.live(
+	"revalidation ignores the key order of configuration and variables, and the order and duplicates of scopes",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* openService
+			const original = {
+				...fixture.card,
+				remotes: [
+					{
+						...fixture.card.remotes![0]!,
+						variables: {
+							account: { default: "one" },
+							mode: { default: "read" },
+						},
+						headers: [
+							{ name: "X-Account", value: "one" },
+							{ name: "X-Mode", value: "read" },
+						],
 					},
-					headers: [
-						{ name: "X-Account", value: "one" },
-						{ name: "X-Mode", value: "read" },
-					],
-				},
-			],
-		}
-		fixture.setCard(original)
-		await using runtime = ManagedRuntime.make(
-			fixture.layers.pipe(Layer.provideMerge([CatalogDiscovery.layerRules])),
-		)
-		await runtime.runPromise(
-			Effect.scoped(
+				],
+			}
+			fixture.setCard(original)
+			yield* Effect.scoped(
 				Effect.gen(function* () {
 					const store = yield* Store.AppStore
 					const binding = {
@@ -613,15 +625,15 @@ test("revalidation ignores the key order of configuration and variables, and the
 							scopes: ["write", "notes", "write"],
 						}),
 					}
-					assert.equal(
+					assert.strictEqual(
 						(yield* AppConnections.revalidate(options))._tag,
 						"DescriptionUpdated",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* store.get(fixture.key)).authorization._tag,
 						"Authorized",
 					)
-					assert.equal(
+					assert.strictEqual(
 						(yield* AppConnections.revalidate({
 							...options,
 							values: { mode: "write", account: "one" },
@@ -629,9 +641,12 @@ test("revalidation ignores the key order of configuration and variables, and the
 						"NeedsRevalidation",
 					)
 				}),
-			),
-		)
-	} finally {
-		await fixture.close()
-	}
-})
+			).pipe(
+				Effect.provide(
+					fixture.layers.pipe(
+						Layer.provideMerge([CatalogDiscovery.layerRules]),
+					),
+				),
+			)
+		}),
+)

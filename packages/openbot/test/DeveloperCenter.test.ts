@@ -1,8 +1,7 @@
 import { memberOf } from "./Caller.ts"
 // @effect-diagnostics strictEffectProvide:off
-import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import {
 	Client,
@@ -50,7 +49,7 @@ import { Settings } from "../src/settings/Settings.ts"
 import * as Db from "../src/database/Database.ts"
 
 const cardUrl = "https://app.development.test/card.json"
-test(
+it(
 	"standard developer clients finish publication, proof, history, test OAuth, indexing, notifications and cleanup",
 	{ timeout: 60000 },
 	async () => {
@@ -87,7 +86,7 @@ test(
 				},
 				body: "{}",
 			})
-			assert.equal(login.status, 200)
+			assert.strictEqual(login.status, 200)
 			const cookie =
 				login.headers
 					.getSetCookie()
@@ -105,8 +104,8 @@ test(
 					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
 				}),
 			)
-			assert.equal((await fetch(address + "/v1/developer")).status, 401)
-			assert.equal(
+			assert.strictEqual((await fetch(address + "/v1/developer")).status, 401)
+			assert.strictEqual(
 				(
 					await fetch(address + "/v1/developer/claims", {
 						method: "POST",
@@ -172,21 +171,21 @@ test(
 					headers,
 					body: JSON.stringify({ scope, tokens }),
 				})
-				assert.equal(response.status, 204, await response.text())
+				assert.strictEqual(response.status, 204, await response.text())
 			}
 			const report = await call((api) =>
 				api.developerPublic.inspect({
 					payload: { input: "app.development.test" },
 				}),
 			)
-			assert.equal(report.apps[0]?.eligibility._tag, "Eligible")
+			assert.strictEqual(report.apps[0]?.eligibility._tag, "Eligible")
 			assert.ok(
 				report.stages.some(
 					(stage) =>
 						stage.name === "PublisherAssociation" && stage.status === "Passed",
 				),
 			)
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				await call((api) => api.connections.listConnections({})),
 				[],
 			)
@@ -198,12 +197,12 @@ test(
 					value.api.developer.verifyClaim({ params: { id: claim.id } }),
 				).pipe(Effect.flip),
 			)
-			assert.equal(mismatch._tag, "DeveloperConflict")
+			assert.strictEqual(mismatch._tag, "DeveloperConflict")
 			await publishProof(claim.scope, [claim.token])
 			const proof = await call((api) =>
 				api.developer.verifyClaim({ params: { id: claim.id } }),
 			)
-			assert.equal(proof.status, "Confirmed")
+			assert.strictEqual(proof.status, "Confirmed")
 			const domain = await call((api) =>
 				api.developer.startClaim({
 					payload: {
@@ -216,7 +215,7 @@ test(
 			await call((api) =>
 				api.developer.verifyClaim({ params: { id: domain.id } }),
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await call((api) => api.developer.overview({}))).proofs.length,
 				2,
 			)
@@ -229,7 +228,7 @@ test(
 			await call((api) =>
 				api.developer.invitation({ params: { id: invitation.id } }),
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await call((api) =>
 						api.developer.members({ params: { id: proof.id } }),
@@ -240,7 +239,7 @@ test(
 			await call((api) =>
 				api.developer.acceptInvitation({ params: { id: invitation.id } }),
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await call((api) =>
 						api.developer.members({ params: { id: proof.id } }),
@@ -252,7 +251,7 @@ test(
 			await call((api) =>
 				api.developer.saveInspection({ payload: { cardUrl } }),
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await call((api) => api.developer.overview({}))).apps[0]?.candidate
 					.endpoints[0]?.remote.url,
 				"https://app.development.test/mcp-updated",
@@ -282,7 +281,7 @@ test(
 					payload: { id: randomUUID(), cardUrl, remoteIndex: 0 },
 				}),
 			)
-			assert.equal(plain.status, "Queued")
+			assert.strictEqual(plain.status, "Queued")
 			const settle = async (id: string) => {
 				let current = await call((api) =>
 					api.developer.test({ params: { id } }),
@@ -295,17 +294,25 @@ test(
 					await new Promise((resolve) => setTimeout(resolve, 20))
 					current = await call((api) => api.developer.test({ params: { id } }))
 				}
-				assert.notEqual(current.status, "Running", JSON.stringify(current))
+				assert.notStrictEqual(
+					current.status,
+					"Running",
+					JSON.stringify(current),
+				)
 				return current
 			}
 			await call((api) => api.developer.runTest({ params: { id: plain.id } }))
 			const completed = await settle(plain.id)
-			assert.equal(completed.status, "Succeeded", JSON.stringify(completed))
-			assert.equal(
+			assert.strictEqual(
+				completed.status,
+				"Succeeded",
+				JSON.stringify(completed),
+			)
+			assert.strictEqual(
 				completed.stages.find((stage) => stage.name === "tools")?.items.length,
 				2,
 			)
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				await call((api) => api.connections.listConnections({})),
 				[],
 			)
@@ -317,7 +324,7 @@ test(
 			await call((api) =>
 				api.developer.runTest({ params: { id: protectedTest.id } }),
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await settle(protectedTest.id)).status,
 				"AwaitingAuthorization",
 			)
@@ -327,11 +334,11 @@ test(
 					payload: { scopes: ["documents"] },
 				}),
 			)
-			assert.notEqual(started.authorization, null)
+			assert.notStrictEqual(started.authorization, null)
 			const authorizationUrl = new URL(
 				started.authorization?.authorizationUrl ?? "",
 			)
-			assert.equal(
+			assert.strictEqual(
 				authorizationUrl.searchParams.get("redirect_uri"),
 				options.auth.publicOrigin + "/auth/developer/apps/callback",
 			)
@@ -344,9 +351,9 @@ test(
 				}),
 				redirect: "manual",
 			})
-			assert.equal(consent.status, 303)
+			assert.strictEqual(consent.status, 303)
 			const callback = new URL(consent.headers.get("location") ?? "")
-			assert.equal(
+			assert.strictEqual(
 				(
 					await fetch(address + "/auth/apps/callback" + callback.search, {
 						headers,
@@ -367,10 +374,10 @@ test(
 					),
 				).pipe(Effect.flip),
 			)
-			assert.equal(wrongOwner._tag, "DeveloperNotFound")
+			assert.strictEqual(wrongOwner._tag, "DeveloperNotFound")
 			const badIssuer = new URL(callback)
 			badIssuer.searchParams.set("iss", "https://wrong-issuer.example")
-			assert.equal(
+			assert.strictEqual(
 				(
 					await fetch(address + badIssuer.pathname + badIssuer.search, {
 						headers,
@@ -391,7 +398,7 @@ test(
 					),
 				)
 				assert.ok(Redacted.value(flow.verifier).length >= 43)
-				assert.equal(
+				assert.strictEqual(
 					flow.binding.resource,
 					"https://app.development.test/protected",
 				)
@@ -401,12 +408,12 @@ test(
 				address + callback.pathname + callback.search,
 				{ headers, redirect: "manual" },
 			)
-			assert.equal(receipt.status, 303, await receipt.clone().text())
-			assert.equal(
+			assert.strictEqual(receipt.status, 303, await receipt.clone().text())
+			assert.strictEqual(
 				receipt.headers.get("location"),
 				"/?" + new URLSearchParams({ developerTest: protectedTest.id }),
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await fetch(address + callback.pathname + callback.search, {
 						headers,
@@ -416,7 +423,7 @@ test(
 				409,
 			)
 
-			assert.equal(
+			assert.strictEqual(
 				(
 					await call((api) =>
 						api.developer.test({ params: { id: protectedTest.id } }),
@@ -424,7 +431,7 @@ test(
 				).authorization?.status,
 				"Received",
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await call((api) =>
 						api.developer.completeTestAuthorization({
@@ -456,7 +463,7 @@ test(
 							credential.refreshToken !== undefined &&
 								Redacted.value(credential.refreshToken).length > 0,
 						)
-						assert.deepEqual(credential.scopes, ["documents"])
+						assert.deepStrictEqual(credential.scopes, ["documents"])
 					}),
 				)
 			}
@@ -468,14 +475,14 @@ test(
 					}),
 				).pipe(Effect.result),
 			)
-			assert.equal(replay._tag, "Failure")
+			assert.strictEqual(replay._tag, "Failure")
 
 			await call((api) =>
 				api.developer.runTest({ params: { id: protectedTest.id } }),
 			)
-			assert.equal((await settle(protectedTest.id)).status, "Succeeded")
+			assert.strictEqual((await settle(protectedTest.id)).status, "Succeeded")
 			const account = await call((api) => api.account.session({}))
-			assert.equal(
+			assert.strictEqual(
 				await server.runPromise(
 					Effect.flatMap(Business, (business) =>
 						business.executions(ownerKey(memberOf(account))),
@@ -484,7 +491,7 @@ test(
 				0,
 			)
 			await mode("cleanup-failure")
-			assert.equal(
+			assert.strictEqual(
 				(
 					await call((api) =>
 						api.developer.cleanupTest({ params: { id: protectedTest.id } }),
@@ -493,7 +500,7 @@ test(
 				"Pending",
 			)
 			await mode("available")
-			assert.equal(
+			assert.strictEqual(
 				(
 					await call((api) =>
 						api.developer.cleanupTest({ params: { id: protectedTest.id } }),
@@ -507,8 +514,8 @@ test(
 			const request = await call((api) =>
 				api.developer.requestIndexing({ payload: { cardUrl } }),
 			)
-			assert.equal(request.check, null)
-			assert.equal(
+			assert.strictEqual(request.check, null)
+			assert.strictEqual(
 				(
 					await call((api) =>
 						api.developer.requestIndexing({ payload: { cardUrl } }),
@@ -519,7 +526,7 @@ test(
 			await server.runPromise(
 				Effect.flatMap(IndexWork, (work) => work.runOne(cardUrl)),
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await call((api) =>
 						api.developer.indexingRequest({ params: { id: request.id } }),
@@ -549,8 +556,8 @@ test(
 						client.api.developer.requestIndexing({ payload: { cardUrl } }),
 					).pipe(Effect.result),
 				)
-				assert.equal(rejected._tag, "Failure")
-				assert.deepEqual(
+				assert.strictEqual(rejected._tag, "Failure")
+				assert.deepStrictEqual(
 					await sql(
 						"SELECT generation, completed_generation, sources, requested_at FROM openbot_app_index_jobs WHERE namespace = 'development'",
 					),
@@ -566,13 +573,13 @@ test(
 			const next = await call((api) =>
 				api.developer.requestIndexing({ payload: { cardUrl } }),
 			)
-			assert.notEqual(next.generation, request.generation)
-			assert.equal(next.check, null)
+			assert.notStrictEqual(next.generation, request.generation)
+			assert.strictEqual(next.check, null)
 			await publication("noindex")
 			await server.runPromise(
 				Effect.flatMap(IndexWork, (work) => work.runOne(cardUrl)),
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await call((api) =>
 						api.developer.indexingRequest({ params: { id: next.id } }),
@@ -598,12 +605,12 @@ test(
 			const notices = await call((api) =>
 				api.developer.notifications({ query: {} }),
 			)
-			assert.equal(
+			assert.strictEqual(
 				notices.filter((notice) => notice.kind === "IssueAppeared").length,
 				1,
 			)
 			await monitor()
-			assert.equal(
+			assert.strictEqual(
 				(await call((api) => api.developer.notifications({ query: {} })))
 					.length,
 				notices.length,
@@ -613,7 +620,7 @@ test(
 			const recovered = await call((api) =>
 				api.developer.notifications({ query: {} }),
 			)
-			assert.equal(
+			assert.strictEqual(
 				recovered.filter((notice) => notice.kind === "IssueResolved").length,
 				1,
 			)
@@ -627,17 +634,17 @@ test(
 			)
 			await publication("noindex")
 			await monitor()
-			assert.equal(
+			assert.strictEqual(
 				(await call((api) => api.developer.notifications({ query: {} })))
 					.length,
 				recovered.length,
 			)
 			await call((api) => api.appExperience.reset({}))
-			assert.equal(
+			assert.strictEqual(
 				(await call((api) => api.developer.overview({}))).proofs.length,
 				2,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await call((api) => api.developer.test({ params: { id: plain.id } })))
 					.status,
 				"Succeeded",
@@ -691,15 +698,18 @@ test(
 					}),
 				),
 			)
-			assert.equal(restrictedRequest.check?._tag, "Excluded")
-			assert.deepEqual(restrictedRequest.restriction, restriction)
+			assert.strictEqual(restrictedRequest.check?._tag, "Excluded")
+			assert.deepStrictEqual(restrictedRequest.restriction, restriction)
 			const restricted = await server.runPromise(
 				Effect.flatMap(DeveloperIndexing, (indexing) =>
 					indexing.request(owner, cardUrl),
 				).pipe(Effect.flip),
 			)
 			assert.ok(restricted._tag === "DeveloperRestricted")
-			assert.equal(restricted.restriction.appealUrl, restriction.appealUrl)
+			assert.strictEqual(
+				restricted.restriction.appealUrl,
+				restriction.appealUrl,
+			)
 			let restartedApp = await server.runPromise(
 				Effect.flatMap(Db.make, (db) =>
 					Rows.getApp(db, "development", cardUrl),
@@ -719,7 +729,7 @@ test(
 			}
 			assert.ok(restartedApp.nextCheckAt > 0)
 
-			assert.equal(
+			assert.strictEqual(
 				(
 					await server.runPromise(
 						Effect.flatMap(Db.make, (db) =>
@@ -729,7 +739,7 @@ test(
 				).value.status,
 				"Cancelled",
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await server.runPromise(
 						Effect.flatMap(Db.make, (db) =>

@@ -1,3 +1,4 @@
+import type { Settings as Api } from "@openbot-build/api"
 import { CatalogDiscovery, Discovery } from "@openbot-build/protocol"
 import { Effect, Layer, Redacted } from "effect"
 import type * as Configuration from "../configuration/Configuration.ts"
@@ -89,6 +90,8 @@ export const developmentSecret = (secretKeys: Redacted.Redacted<string>) =>
 export const layer = (
 	settings: Omit<Configuration.Settings, "outboundAllow"> & {
 		readonly auth: AuthConfiguration
+		/** The local object storage for files, such as RustFS from devenv. */
+		readonly fileStorage?: Api.FileStorageInput | undefined
 	},
 ) =>
 	Layer.unwrap(

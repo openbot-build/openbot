@@ -52,7 +52,7 @@ Die Nachricht geht in deinen direkten Chat mit diesem Bot. Die erste Nachricht e
 
 Es gibt keine Revision `expected`. Eine Nachricht wird immer angenommen.
 
-`input` nimmt nur Text an. Diese drei Formen bedeuten dasselbe:
+`input` nimmt Text an. Diese drei Formen bedeuten dasselbe:
 
 ```json
 "Plan three days in Rome."
@@ -73,6 +73,8 @@ Es gibt keine Revision `expected`. Eine Nachricht wird immer angenommen.
 ```
 
 Unbekannte Felder ergeben `400`.
+
+Eine Nachricht kann auch Dateien haben, die du hochgeladen hast, mit Teilen vom Typ `input_image` und `input_file`. Siehe [Eine Datei an einen Bot geben](/de/docs/files#eine-datei-an-einen-bot-geben).
 
 `POST /v1/chats/:chatId/messages` nimmt denselben Body. Nutze es für einen direkten Chat, oder für einen Task-Chat, wenn du der Arbeit eines Bots etwas hinzufügen willst. In einem Task-Chat liest der Bot deine Nachricht als Nachricht von dir. Andere Arten von Chats ergeben `409` mit `ChatConflict`.
 
@@ -135,6 +137,7 @@ Der Stream beobachtet den Turn nur. Wenn du ihn schließt, läuft der Turn weite
 | Status | Fehler                     | Wann                                                                                                       |
 | ------ | -------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `400`  | `ChatModelInvalid`         | Der Chat hat kein Model. Der Bot braucht ein `model`. Siehe [Models](/de/docs/models#ein-model-auswählen). |
+| `400`  | `FileInvalid`              | Ein Dateiteil nennt keine deiner fertigen Dateien, oder die Datei ist kein Bild.                           |
 | `403`  | `PermissionDenied`         | Du darfst diesem Bot keine Arbeit geben.                                                                   |
 | `404`  | `BotNotFound`              | Es gibt keinen Bot mit dieser ID, den du nutzen darfst.                                                    |
 | `404`  | `ChatNotFound`             | Du hast keinen Chat mit dieser ID.                                                                         |
@@ -434,6 +437,8 @@ OpenBot nutzt standardmäßig nicht die eingebaute Kompaktierung eines Anbieters
 ## Den Verlauf löschen
 
 `DELETE /v1/chats/:chatId` löscht den Verlauf eines direkten Chats oder eines Channel-Chats und antwortet mit `204`. Zuerst stoppt es den laufenden Turn und bricht die [offene Arbeit](#offene-arbeit) des Chats ab. Task-Chats und Prüf-Chats ergeben `409` mit `ChatConflict`.
+
+Danach hält der Chat die [Dateien](/de/docs/files#wie-dateien-verschwinden) nicht mehr, die er genannt hat.
 
 Nachdem du einen direkten Chat gelöscht hast, startet deine nächste Nachricht an den Bot einen neuen, leeren Chat mit einer neuen ID. Genauso startet nach dem Löschen eines Channel-Chats die nächste Nachricht in diesem Chat einen neuen Chat. Was der Bot aus dem Chat gelernt hat, bleibt in seinem [Bot Memory](/de/docs/memory). Um auch das zu entfernen, lösche alles mit dem Tag `chat:<id>`. Siehe [Lesen und ändern](/de/docs/memory#lesen-und-ändern).
 

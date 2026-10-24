@@ -20,6 +20,7 @@ import * as PlatformHandlers from "../platform/HttpHandlers.ts"
 import * as SsoHandlers from "../sso/HttpHandlers.ts"
 import * as SettingsHandlers from "../settings/HttpHandlers.ts"
 import * as TriggerHandlers from "../triggers/HttpHandlers.ts"
+import * as FileHandlers from "../files/HttpHandlers.ts"
 import * as ChannelHandlers from "../channels/HttpHandlers.ts"
 import * as ComputerHandlers from "../computers/HttpHandlers.ts"
 import * as BillingHandlers from "../billing/HttpHandlers.ts"
@@ -52,6 +53,7 @@ export const layerPlatform = (publicOrigin: string) =>
 					RequestHandlers.layer,
 					SettingsHandlers.layerMember,
 					TriggerHandlers.layer(publicOrigin),
+					FileHandlers.layer,
 					TriggerHandlers.layerHooks,
 					ChannelHandlers.layer(publicOrigin),
 					ChannelHandlers.layerLinks,

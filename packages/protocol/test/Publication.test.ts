@@ -1,7 +1,6 @@
 import { Array as EffectArray, Effect, Layer, Schema } from "effect"
-import assert from "node:assert/strict"
 import { McpPublisher, Document, Publisher } from "@openbot-build/protocol"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import {
 	Client,
 	StreamableHTTPClientTransport,
@@ -36,97 +35,111 @@ const publication: Publisher.Publication = {
 	allowedOrigins: ["https://host.example"],
 }
 
-test("Card and Catalog keep format, compatibility and URL identity separate", async () => {
-	const decoded = await Effect.runPromise(Document.ServerCard.decode(card))
-	assert.deepEqual(decoded._meta, card._meta)
-	assert.equal(
-		(await Effect.runPromise(Document.compatibleRemotes(decoded))).length,
-		1,
-	)
-	await assert.rejects(
-		Effect.runPromise(
-			Document.ServerCard.decode({
-				...card,
-				name: "no-namespace",
-			}),
-		),
-		/InvalidDocument/,
-	)
-	await assert.rejects(
-		Effect.runPromise(
-			Document.Catalog.decode({
-				specVersion: "1.0",
-				entries: [
-					{
-						identifier: "x",
-						type: "x",
-						url: origin,
-						data: {},
-					},
-				],
-			}),
-		),
-		/InvalidDocument/,
-	)
-	await assert.rejects(
-		Effect.runPromise(Document.compatibleRemotes({ ...decoded, remotes: [] })),
-		/IncompatibleCard/,
-	)
-	await assert.rejects(
-		Effect.runPromise(
-			McpPublisher.validate({
-				...publication,
-				mcpUrl: "http://service.example/mcp",
-			}),
-		),
-		/SchemaError/,
-	)
-	await assert.rejects(
-		Effect.runPromise(
-			Schema.decodeEffect(Document.Link)(
+it.effect(
+	"Card and Catalog keep format, compatibility and URL identity separate",
+	() =>
+		Effect.gen(function* () {
+			const decoded = yield* Document.ServerCard.decode(card)
+			assert.deepStrictEqual(decoded._meta, card._meta)
+			assert.strictEqual((yield* Document.compatibleRemotes(decoded)).length, 1)
+			assert.match(
+				String(
+					yield* Effect.flip(
+						Document.ServerCard.decode({
+							...card,
+							name: "no-namespace",
+						}),
+					),
+				),
+				/InvalidDocument/,
+			)
+			assert.match(
+				String(
+					yield* Effect.flip(
+						Document.Catalog.decode({
+							specVersion: "1.0",
+							entries: [
+								{
+									identifier: "x",
+									type: "x",
+									url: origin,
+									data: {},
+								},
+							],
+						}),
+					),
+				),
+				/InvalidDocument/,
+			)
+			assert.match(
+				String(
+					yield* Effect.flip(
+						Document.compatibleRemotes({ ...decoded, remotes: [] }),
+					),
+				),
+				/IncompatibleCard/,
+			)
+			assert.match(
+				String(
+					yield* Effect.flip(
+						McpPublisher.validate({
+							...publication,
+							mcpUrl: "http://service.example/mcp",
+						}),
+					),
+				),
+				/SchemaError/,
+			)
+			assert.match(
+				String(
+					yield* Effect.flip(
+						Schema.decodeEffect(Document.Link)(
+							"https://token:secret@service.example/",
+						),
+					),
+				),
+				/SchemaError/,
+			)
+			assert.strictEqual(
+				yield* Schema.decodeEffect(Document.Link)(
+					"https://SERVICE.example:443/cards/a?b=2&a=1#fragment",
+				),
+				"https://service.example/cards/a?b=2&a=1",
+			)
+			const identity = "https://service.example/cards/a?b=2&a=1"
+			assert.strictEqual(
+				yield* Schema.encodeEffect(Document.Link)(identity),
+				identity,
+			)
+			assert.strictEqual(
+				yield* Schema.encodeEffect(Document.Link)(identity + "#fragment"),
+				identity,
+			)
+			for (const input of [
+				"/relative",
+				"not a URL",
+				"http://service.example",
+				42,
+			]) {
+				assert.throws(
+					() => Schema.decodeUnknownSync(Document.Link)(input),
+					Schema.SchemaError,
+				)
+			}
+			for (const input of [
+				"not a URL",
+				"http://service.example",
 				"https://token:secret@service.example/",
-			),
-		),
-		/SchemaError/,
-	)
-	assert.equal(
-		await Effect.runPromise(
-			Schema.decodeEffect(Document.Link)(
-				"https://SERVICE.example:443/cards/a?b=2&a=1#fragment",
-			),
-		),
-		"https://service.example/cards/a?b=2&a=1",
-	)
-	const identity = "https://service.example/cards/a?b=2&a=1"
-	assert.equal(Schema.encodeSync(Document.Link)(identity), identity)
-	assert.equal(
-		Schema.encodeSync(Document.Link)(identity + "#fragment"),
-		identity,
-	)
-	for (const input of [
-		"/relative",
-		"not a URL",
-		"http://service.example",
-		42,
-	]) {
-		assert.throws(
-			() => Schema.decodeUnknownSync(Document.Link)(input),
-			Schema.SchemaError,
-		)
-	}
-	for (const input of [
-		"not a URL",
-		"http://service.example",
-		"https://token:secret@service.example/",
-	]) {
-		assert.throws(
-			() => Schema.encodeSync(Document.Link)(input),
-			Schema.SchemaError,
-		)
-	}
-})
+			]) {
+				assert.throws(
+					() => Schema.encodeSync(Document.Link)(input),
+					Schema.SchemaError,
+				)
+			}
+		}),
+)
 
-test("Independent SDK client calls the Effect publisher and reads native UI resources", async () => {
+it("Independent SDK client calls the Effect publisher and reads native UI resources", async () => {
 	let calls = 0
 	const tool = Tool.make("CreateNote", {
 		parameters: Schema.Struct({ text: Schema.String }),
@@ -187,30 +200,30 @@ test("Independent SDK client calls the Effect publisher and reads native UI reso
 	)
 	try {
 		const cardResponse = await app.handler(new Request(publication.cardUrl))
-		assert.equal(
+		assert.strictEqual(
 			cardResponse.headers.get("content-type"),
 			Document.cardMediaType,
 		)
-		assert.equal(cardResponse.headers.get("x-robots-tag"), "noindex")
-		assert.deepEqual(await cardResponse.json(), card)
+		assert.strictEqual(cardResponse.headers.get("x-robots-tag"), "noindex")
+		assert.deepStrictEqual(await cardResponse.json(), card)
 		const cached = await app.handler(
 			new Request(publication.cardUrl, {
 				headers: { "if-none-match": 'W/"notes-v1"' },
 			}),
 		)
-		assert.equal(cached.status, 304)
-		assert.equal(await cached.text(), "")
+		assert.strictEqual(cached.status, 304)
+		assert.strictEqual(await cached.text(), "")
 		const catalogResponse = await app.handler(
 			new Request(publication.catalogUrl),
 		)
-		assert.equal(
+		assert.strictEqual(
 			catalogResponse.headers.get("content-type"),
 			Document.catalogMediaType,
 		)
 		const catalog = await Effect.runPromise(
 			Document.Catalog.decode(await catalogResponse.json()),
 		)
-		assert.equal(catalog.entries[0]?.url, publication.cardUrl)
+		assert.strictEqual(catalog.entries[0]?.url, publication.cardUrl)
 		assert.match(
 			await Effect.runPromise(
 				McpPublisher.catalogLinkHtml(publication.catalogUrl),
@@ -231,8 +244,8 @@ test("Independent SDK client calls the Effect publisher and reads native UI reso
 			}),
 		)
 		const listed = (await client.listTools()).tools
-		assert.equal(listed[0]?.name, "CreateNote")
-		assert.deepEqual(listed[0]?._meta?.["ui"], {
+		assert.strictEqual(listed[0]?.name, "CreateNote")
+		assert.deepStrictEqual(listed[0]?._meta?.["ui"], {
 			resourceUri: "ui://notes/main.html",
 			visibility: ["model", "app"],
 		})
@@ -240,7 +253,7 @@ test("Independent SDK client calls the Effect publisher and reads native UI reso
 			name: "CreateNote",
 			arguments: { text: "hello" },
 		})
-		assert.deepEqual(result.structuredContent, {
+		assert.deepStrictEqual(result.structuredContent, {
 			id: "1",
 			text: "hello",
 		})
@@ -250,13 +263,16 @@ test("Independent SDK client calls the Effect publisher and reads native UI reso
 		const resource = await client.readResource({
 			uri: "ui://notes/main.html",
 		})
-		assert.equal(resource.contents[0]?.mimeType, Document.uiMediaType)
-		assert.deepEqual(resource.contents[0]?._meta?.["ui"], {
+		assert.strictEqual(resource.contents[0]?.mimeType, Document.uiMediaType)
+		assert.deepStrictEqual(resource.contents[0]?._meta?.["ui"], {
 			csp: { connectDomains: [] },
 		})
-		assert.equal((await client.listResources()).resources.length, 2)
-		assert.equal((await client.listPrompts()).prompts[0]?.name, "Summarize")
-		assert.equal(
+		assert.strictEqual((await client.listResources()).resources.length, 2)
+		assert.strictEqual(
+			(await client.listPrompts()).prompts[0]?.name,
+			"Summarize",
+		)
+		assert.strictEqual(
 			(await client.getPrompt({ name: "Summarize" })).messages[0]?.content.type,
 			"text",
 		)
@@ -265,7 +281,7 @@ test("Independent SDK client calls the Effect publisher and reads native UI reso
 				r.json,
 			),
 		)
-		assert.equal(bodies[0]?.method, "server/discover")
+		assert.strictEqual(bodies[0]?.method, "server/discover")
 		assert.ok(bodies.every((r) => r.method !== "initialize"))
 		assert.ok(
 			requests.every(
@@ -274,11 +290,11 @@ test("Independent SDK client calls the Effect publisher and reads native UI reso
 		)
 		const call = requests[bodies.findIndex((r) => r.method === "tools/call")]
 		assert.ok(call)
-		assert.equal(
+		assert.strictEqual(
 			call.headers.get("mcp-protocol-version"),
 			Document.protocolVersion,
 		)
-		assert.equal(call.headers.get("mcp-method"), "tools/call")
+		assert.strictEqual(call.headers.get("mcp-method"), "tools/call")
 		const rejected = await app.handler(
 			new Request(publication.mcpUrl, {
 				method: "POST",
@@ -290,16 +306,16 @@ test("Independent SDK client calls the Effect publisher and reads native UI reso
 				body: JSON.stringify(call.json),
 			}),
 		)
-		assert.equal(rejected.status, 403)
-		assert.equal(calls, 1)
+		assert.strictEqual(rejected.status, 403)
+		assert.strictEqual(calls, 1)
 	} finally {
 		await client.close()
 		await app.dispose()
 	}
 })
 
-test("Generic entry imports without a DOM, and building a Layer does no I/O", async () => {
-	assert.equal(typeof globalThis.document, "undefined")
+it("Generic entry imports without a DOM, and building a Layer does no I/O", async () => {
+	assert.strictEqual(typeof globalThis.document, "undefined")
 	assert.ok((await import("@openbot-build/protocol")).McpPublisher.layer)
 	assert.ok(
 		Layer.isLayer(McpPublisher.layer({ publication, register: Effect.void })),

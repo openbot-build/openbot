@@ -52,7 +52,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 没有 `expected` revision。消息总是会被接收。
 
-`input` 只接受文本。下面三种形式是一样的：
+`input` 接受文本。下面三种形式是一样的：
 
 ```json
 "Plan three days in Rome."
@@ -73,6 +73,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ```
 
 未知字段会返回 `400`。
+
+消息里也可以有你上传的文件，用 `input_image` 和 `input_file` 部分。见[把文件交给 Bot](/zh-cn/docs/files#把文件交给-bot)。
 
 `POST /v1/chats/:chatId/messages` 接受同样的请求体。它用于 direct Chat，或者当你想给一个 Bot 的工作补充内容时，用于 task Chat。在 task Chat 中，Bot 把你的消息当作你发来的消息来读。其他种类的 Chat 会返回 `409` 和 `ChatConflict`。
 
@@ -135,6 +137,7 @@ data: {"type":"response.output_text.delta","chat":"chat_7d21…","turn":"t-19aa"
 | 状态码 | 错误                       | 何时出现                                                                             |
 | ------ | -------------------------- | ------------------------------------------------------------------------------------ |
 | `400`  | `ChatModelInvalid`         | 这个 Chat 没有模型。Bot 需要一个 `model`。见 [Models](/zh-cn/docs/models#选择模型)。 |
+| `400`  | `FileInvalid`              | 文件部分指向的不是你自己的、已就绪的文件，或者不是图片。                             |
 | `403`  | `PermissionDenied`         | 你不能把工作交给这个 Bot。                                                           |
 | `404`  | `BotNotFound`              | 没有你可以使用的、这个 ID 的 Bot。                                                   |
 | `404`  | `ChatNotFound`             | 你没有这个 ID 的 Chat。                                                              |
@@ -434,6 +437,8 @@ OpenBot 默认不使用提供方的原生压缩，例如 OpenAI 的 `/responses/
 ## 删除历史
 
 `DELETE /v1/chats/:chatId` 删除一个 direct Chat 或 channel Chat 的历史，并返回 `204`。它会先停止正在运行的 Turn，并取消这个 Chat [未完成的工作](#未完成的工作)。task Chat 和 review Chat 会返回 `409` 和 `ChatConflict`。
+
+之后这个 Chat 不再保留它指向的[文件](/zh-cn/docs/files#文件怎样被删除)。
 
 删除一个 direct Chat 后，你给这个 Bot 的下一条消息会开始一个新的、空的 Chat，它有新的 ID。同样，channel Chat 被删除后，那个聊天里的下一条消息会开始一个新的 Chat。Bot 从这个 Chat 学到的东西仍然留在它的 [Bot 记忆](/zh-cn/docs/memory)中。要把这些也删除，请清除 Tag `chat:<id>`。见 [读取和修改](/zh-cn/docs/memory#读取和修改)。
 

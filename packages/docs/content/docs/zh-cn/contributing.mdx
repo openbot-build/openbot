@@ -65,18 +65,19 @@ devenv shell -- pnpm dev
 
 ## 检查
 
-| 命令                                                     | 作用                               |
-| -------------------------------------------------------- | ---------------------------------- |
-| `devenv shell -- pnpm install`                           | 安装所有包。                       |
-| `devenv shell -- pnpm build`                             | 用 tsdown 构建每个包。             |
-| `devenv shell -- pnpm typecheck`                         | 检查每个包的类型。                 |
-| `devenv shell -- pnpm -r test`                           | 运行每个包的测试。                 |
-| `devenv shell -- pnpm --filter @openbot-build/core test` | 运行一个包的测试。                 |
-| `devenv shell -- treefmt`                                | 用 Prettier 和 nixfmt 格式化代码。 |
+| 命令                                                     | 作用                                                         |
+| -------------------------------------------------------- | ------------------------------------------------------------ |
+| `devenv shell -- pnpm install`                           | 安装所有包。                                                 |
+| `devenv shell -- pnpm build`                             | 用 tsdown 构建每个包。                                       |
+| `devenv shell -- pnpm typecheck`                         | 检查每个包的类型。                                           |
+| `devenv shell -- pnpm -r test`                           | 运行每个包的测试。                                           |
+| `devenv shell -- pnpm test`                              | 在一次 Vitest 运行中运行所有包的测试，不构建，也不检查类型。 |
+| `devenv shell -- pnpm --filter @openbot-build/core test` | 运行一个包的测试。                                           |
+| `devenv shell -- treefmt`                                | 用 Prettier 和 nixfmt 格式化代码。                           |
 
 先运行 `pnpm build`，再运行 `pnpm typecheck`。包之间通过构建出的文件互相导入。
 
-测试使用 Node.js 自带的测试运行器。OpenBot 的测试会用 devenv 中的工具启动自己的临时 PostgreSQL 服务器。它们不需要密钥，也不需要外部服务。
+测试使用 [Vitest](https://vitest.dev) 和 [`@effect/vitest`](https://www.npmjs.com/package/@effect/vitest)。运行 Effect 的测试使用 `it.effect`。它给测试一个测试时钟：只有测试推动时，时间才会前进。需要真实时间的测试，例如带有真实服务器的测试，使用 `it.live`。OpenBot 的测试会用 devenv 中的工具启动自己的临时 PostgreSQL 服务器。它们不需要密钥，也不需要外部服务。
 GitHub Actions 运行同样的 `build`、`typecheck` 和 `test` 命令。请看[部署](/zh-cn/docs/deploy#github-actions)。
 
 ---

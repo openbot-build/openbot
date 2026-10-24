@@ -1,8 +1,7 @@
-import assert from "node:assert/strict"
 import { cp, mkdtemp, readdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { fileURLToPath } from "node:url"
 import { NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
@@ -45,7 +44,7 @@ const oldProvider = (input: {
 	updated_at: input.createdAt,
 })
 
-test("models in old providers move to their own table, and their IDs stay the same", async () => {
+it("models in old providers move to their own table, and their IDs stay the same", async () => {
 	const database = await PostgresTest.start()
 	const before = await mkdtemp(join(tmpdir(), "openbot-migrations-"))
 	await using runtime = ManagedRuntime.make(
@@ -135,7 +134,7 @@ test("models in old providers move to their own table, and their IDs stay the sa
 					readonly availability: string | null
 				}>`select owner_kind, owner_id, id, name, reasoning_efforts, service_tiers, context_window, availability
 					from openbot_models order by owner_kind, owner_id, id`
-				assert.deepEqual(
+				assert.deepStrictEqual(
 					models.map((row) => [
 						row.owner_kind,
 						row.owner_id,
@@ -179,7 +178,7 @@ test("models in old providers move to their own table, and their IDs stay the sa
 					readonly max_output_tokens: number | null
 				}>`select provider_id, model_owner_kind, model_id, position, reasoning_efforts, max_output_tokens
 					from openbot_provider_models order by provider_id, position`
-				assert.deepEqual(
+				assert.deepStrictEqual(
 					links.map((row) => [
 						row.provider_id,
 						row.model_owner_kind,
@@ -198,7 +197,7 @@ test("models in old providers move to their own table, and their IDs stay the sa
 				const columns = yield* sql<{ readonly column_name: string }>`
 					select column_name from information_schema.columns
 					where table_name = 'openbot_model_providers' and column_name = 'models'`
-				assert.equal(columns.length, 0)
+				assert.strictEqual(columns.length, 0)
 			}),
 		)
 	} finally {
@@ -207,7 +206,7 @@ test("models in old providers move to their own table, and their IDs stay the sa
 	}
 })
 
-test("old models become language models, and old organization settings get no decision model", async () => {
+it("old models become language models, and old organization settings get no decision model", async () => {
 	const database = await PostgresTest.start()
 	const before = await mkdtemp(join(tmpdir(), "openbot-migrations-"))
 	await using runtime = ManagedRuntime.make(
@@ -267,7 +266,7 @@ test("old models become language models, and old organization settings get no de
 				const models = yield* sql<{
 					readonly type: string
 				}>`select type from openbot_models`
-				assert.deepEqual(
+				assert.deepStrictEqual(
 					models.map((row) => row.type),
 					["language"],
 				)
@@ -275,7 +274,7 @@ test("old models become language models, and old organization settings get no de
 					readonly scope_id: string
 					readonly document: string
 				}>`select scope_id, document from openbot_settings order by scope_id`
-				assert.deepEqual(
+				assert.deepStrictEqual(
 					settings.map((row) => [row.scope_id, JSON.parse(row.document)]),
 					[
 						[
@@ -307,7 +306,7 @@ test("old models become language models, and old organization settings get no de
 	}
 })
 
-test("the old default model moves to Bots without a model, and the old helper model moves to rulesModel and botMemoryModel", async () => {
+it("the old default model moves to Bots without a model, and the old helper model moves to rulesModel and botMemoryModel", async () => {
 	const database = await PostgresTest.start()
 	const before = await mkdtemp(join(tmpdir(), "openbot-migrations-"))
 	await using runtime = ManagedRuntime.make(
@@ -386,7 +385,7 @@ test("the old default model moves to Bots without a model, and the old helper mo
 					readonly id: string
 					readonly body: string
 				}>`select id, body from openbot_bot_records order by id`
-				assert.deepEqual(
+				assert.deepStrictEqual(
 					bots.map((row) => [row.id, JSON.parse(row.body).model]),
 					[
 						["bot_none", undefined],
@@ -398,7 +397,7 @@ test("the old default model moves to Bots without a model, and the old helper mo
 					readonly scope_id: string
 					readonly document: string
 				}>`select scope_id, document from openbot_settings where scope_kind <> 'member' order by scope_id`
-				assert.deepEqual(
+				assert.deepStrictEqual(
 					settings.map((row) => [row.scope_id, JSON.parse(row.document)]),
 					[
 						[

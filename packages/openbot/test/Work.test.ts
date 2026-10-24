@@ -1,5 +1,4 @@
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { Item } from "@openbot-build/core"
 import {
 	BotsApi,
@@ -48,7 +47,7 @@ const call = (name: string, params: Record<string, unknown>) =>
 		Response.makePart("finish", { reason: "tool-calls", usage }),
 	)
 
-const todo = (id: string, status: string) => ({
+const todo = (id: string, status: "pending" | "in_progress" | "done") => ({
 	id,
 	content: "Step " + id,
 	status,
@@ -222,7 +221,7 @@ const chat = async (
 				input,
 			},
 		)
-		assert.equal(sent.status, 202, await sent.clone().text())
+		assert.strictEqual(sent.status, 202, await sent.clone().text())
 		const receipt = Schema.decodeUnknownSync(MessageReceipt)(await sent.json())
 		path = "/v1/chats/" + receipt.chat
 		return rested()
@@ -251,7 +250,7 @@ const chat = async (
 	}
 }
 
-test(
+it(
 	"a Bot keeps working while its todos are open, and a person reads and replaces the list",
 	{ timeout: 120000 },
 	async () => {
@@ -264,17 +263,17 @@ test(
 			// The Bot stops after the first step, so OpenBot reminds it once.
 			// It then marks both steps done. A list where every item is done becomes empty.
 			await work.turn("do two steps")
-			assert.deepEqual((await work.todos()).items, [])
-			assert.equal(await work.reminders(), 1)
+			assert.deepStrictEqual((await work.todos()).items, [])
+			assert.strictEqual(await work.reminders(), 1)
 
 			// A model that will not go on gets one reminder for each state of the list.
 			await work.turn("stop early")
-			assert.deepEqual((await work.todos()).items, [todo("a", "pending")])
-			assert.equal(await work.reminders(), 2)
+			assert.deepStrictEqual((await work.todos()).items, [todo("a", "pending")])
+			assert.strictEqual(await work.reminders(), 2)
 
 			// The tool refuses a list where two items have the same id.
 			await work.turn("same id")
-			assert.deepEqual((await work.todos()).items, [todo("a", "pending")])
+			assert.deepStrictEqual((await work.todos()).items, [todo("a", "pending")])
 
 			// A person replaces the list. An old revision is a conflict.
 			const current = await work.view()
@@ -285,17 +284,17 @@ test(
 					items: [todo("c", "pending")],
 				}),
 			)
-			assert.deepEqual((await work.todos()).items, [todo("c", "pending")])
+			assert.deepStrictEqual((await work.todos()).items, [todo("c", "pending")])
 			const stale = await send(alice.session, work.path() + "/todos", "PUT", {
 				revision: current.chat.revision,
 				items: [],
 			})
-			assert.equal(stale.status, 409)
+			assert.strictEqual(stale.status, 409)
 			const twice = await send(alice.session, work.path() + "/todos", "PUT", {
 				revision: replaced.chat.revision,
 				items: [todo("d", "pending"), todo("d", "pending")],
 			})
-			assert.equal(twice.status, 409)
+			assert.strictEqual(twice.status, 409)
 
 			// Another member cannot read the list.
 			const bob = await host.login("work-bob")
@@ -307,7 +306,7 @@ test(
 	},
 )
 
-test(
+it(
 	"a reminder comes back as a message, also over a restart, and only a stop of all work cancels it",
 	{ timeout: 120000 },
 	async () => {
@@ -322,36 +321,36 @@ test(
 			// does not lose it. At its time, its note starts a new Turn.
 			const began = Date.now()
 			const set = await work.turn("remind me soon")
-			assert.equal(set.status, "Completed")
-			assert.equal(set.open.reminders, 1)
+			assert.strictEqual(set.status, "Completed")
+			assert.strictEqual(set.open.reminders, 1)
 			assert.match(await text(), /I will look later\./)
 			await host.restart()
 			await until("the reminder", async () =>
 				(await text()).includes("The build is green.") ? true : undefined,
 			)
 			assert.ok(Date.now() - began >= 2000)
-			assert.equal((await work.rested()).open.reminders, 0)
+			assert.strictEqual((await work.rested()).open.reminders, 0)
 
 			// A plain interrupt stops only the Turn. Stopping all work cancels the reminder.
-			assert.equal((await work.turn("remind me late")).open.reminders, 1)
+			assert.strictEqual((await work.turn("remind me late")).open.reminders, 1)
 			const interrupt = (payload: unknown) =>
 				send(alice.session, work.path() + "/interrupt", "POST", payload)
-			assert.equal((await interrupt({})).status, 200)
-			assert.equal((await work.view()).open.reminders, 1)
-			assert.equal((await interrupt({ delegations: true })).status, 200)
-			assert.equal((await work.view()).open.reminders, 0)
+			assert.strictEqual((await interrupt({})).status, 200)
+			assert.strictEqual((await work.view()).open.reminders, 1)
+			assert.strictEqual((await interrupt({ delegations: true })).status, 200)
+			assert.strictEqual((await work.view()).open.reminders, 0)
 
 			// A wrong input sets no reminder. The Bot gets an error.
 			await work.turn("remind me wrongly")
 			assert.match(await text(), /Give either seconds or until, not both/)
-			assert.equal((await work.view()).open.reminders, 0)
+			assert.strictEqual((await work.view()).open.reminders, 0)
 		} finally {
 			await host.close()
 		}
 	},
 )
 
-test(
+it(
 	"a plan asks for approval as the most specific setting says, and then runs in build mode",
 	{ timeout: 120000 },
 	async () => {
@@ -363,7 +362,7 @@ test(
 				Settings.OrganizationSettings,
 				send(alice.session, "/v1/organization/settings"),
 			)
-			assert.deepEqual(organization.planApproval, {
+			assert.deepStrictEqual(organization.planApproval, {
 				approver: "chain",
 				timeoutMs: 86400000,
 				onTimeout: "stay",
@@ -380,12 +379,12 @@ test(
 					},
 				}),
 			)
-			assert.equal(mine.version, 1)
+			assert.strictEqual(mine.version, 1)
 			const stale = await send(alice.session, "/v1/me/settings", "PATCH", {
 				expectedVersion: 0,
 				planApproval: null,
 			})
-			assert.equal(stale.status, 409)
+			assert.strictEqual(stale.status, 409)
 			const defaultBot = await host.defaultBot(alice.session)
 			const work = await chat(host, alice.session)
 			await work.turn("hello")
@@ -397,10 +396,10 @@ test(
 					mode: "plan",
 					planApproval,
 				})
-				assert.equal(changed.status, 200, await changed.clone().text())
+				assert.strictEqual(changed.status, 200, await changed.clone().text())
 				// The plan Turn does not wait for the decision.
 				const asked = await work.turn("plan the fix")
-				assert.equal(asked.status, "Completed")
+				assert.strictEqual(asked.status, "Completed")
 				return asked
 			}
 			const built = () =>
@@ -427,19 +426,19 @@ test(
 			// 1. The Chat asks the person. Alice allows it, so the plan runs in a new Turn.
 			await plan({ approver: "person", timeoutMs: 600000, onTimeout: "stay" })
 			const request = await pending()
-			assert.deepEqual(request.approver, {
+			assert.deepStrictEqual(request.approver, {
 				_tag: "Person",
 				userId: alice.identity.userId,
 			})
-			assert.equal(request.onExpire, "deny")
-			assert.equal(request.chat, work.path().split("/").at(-1))
+			assert.strictEqual(request.onExpire, "deny")
+			assert.strictEqual(request.chat, work.path().split("/").at(-1))
 			const resolved = await send(
 				alice.session,
 				"/v1/requests/" + request.id,
 				"POST",
 				{ expected: request.revision, decision: "allow" },
 			)
-			assert.equal(resolved.status, 200, await resolved.clone().text())
+			assert.strictEqual(resolved.status, 200, await resolved.clone().text())
 			await built()
 			await until("the built answer", async () =>
 				(await work.history()).some((item) => item.includes("Built."))
@@ -447,7 +446,7 @@ test(
 					: undefined,
 			)
 			// Every item is done, so the list is empty after the Turn.
-			assert.deepEqual((await work.todos()).items, [])
+			assert.deepStrictEqual((await work.todos()).items, [])
 
 			// 2. The Chat says that silence means yes. It wins over the member setting.
 			await plan({ approver: "person", timeoutMs: 1000, onTimeout: "run" })
@@ -462,7 +461,7 @@ test(
 					: undefined,
 			)
 			const stayed = await work.rested()
-			assert.equal(stayed.chat.settings.mode, "plan")
+			assert.strictEqual(stayed.chat.settings.mode, "plan")
 
 			// 4. A Bot setting comes before the member setting.
 			const main = await json(
@@ -482,7 +481,7 @@ test(
 					},
 				},
 			)
-			assert.equal(changed.status, 200, await changed.clone().text())
+			assert.strictEqual(changed.status, 200, await changed.clone().text())
 			await plan(null)
 			await built()
 		} finally {

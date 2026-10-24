@@ -8,6 +8,7 @@ export const ResourceKind = Schema.Literals([
 	"organization",
 	"user",
 	"chat",
+	"file",
 	"bot",
 	"trigger",
 	"channel",
@@ -48,6 +49,19 @@ const permissionTree = {
 				name: "Chats Write",
 				description:
 					"Change, interrupt and delete Chats, and cancel the work that they gave away.",
+			},
+		},
+	},
+	files: {
+		scope: "file",
+		actions: {
+			read: {
+				name: "Files Read",
+				description: "Read your files and their bytes.",
+			},
+			write: {
+				name: "Files Write",
+				description: "Upload and delete your files.",
 			},
 		},
 	},
@@ -436,6 +450,8 @@ const own: ReadonlyArray<PermissionGroupId> = [
 	"responses.run",
 	"chats.read",
 	"chats.write",
+	"files.read",
+	"files.write",
 	"requests.resolve",
 	"bots.read",
 	"bots.write",

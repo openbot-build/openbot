@@ -37,6 +37,48 @@ const adminEmails = Flag.String("admin-email").pipe(
 		"A person with this verified email becomes a platform admin. Repeat it for more people.",
 	),
 )
+const s3Endpoint = Flag.String("s3-endpoint").pipe(
+	Flag.withSchema(Api.StorageEndpoint),
+	Flag.optional,
+	Flag.withDescription(
+		"The address of the object storage for files, such as https://s3.us-east-1.amazonaws.com. Leave it out for no file uploads.",
+	),
+)
+const s3PublicEndpoint = Flag.String("s3-public-endpoint").pipe(
+	Flag.withSchema(Api.StorageEndpoint),
+	Flag.optional,
+	Flag.withDescription(
+		"The address where clients put files with a signed upload, when it is not --s3-endpoint.",
+	),
+)
+const s3Region = Flag.String("s3-region").pipe(
+	Flag.withDefault("us-east-1"),
+	Flag.withDescription("The region of the object storage."),
+)
+const s3Bucket = Flag.String("s3-bucket").pipe(
+	Flag.withSchema(Api.BucketName),
+	Flag.optional,
+	Flag.withDescription("The bucket for files."),
+)
+const s3AccessKeyId = Flag.String("s3-access-key-id").pipe(
+	Flag.optional,
+	Flag.withDescription("The access key ID for the object storage."),
+)
+const s3SecretAccessKey = Flag.Redacted("s3-secret-access-key").pipe(
+	Flag.withFallbackConfig(
+		Config.Redacted("OPENBOT_SETUP_S3_SECRET_ACCESS_KEY"),
+	),
+	Flag.optional,
+	Flag.withDescription(
+		"The secret access key. You can also set OPENBOT_SETUP_S3_SECRET_ACCESS_KEY.",
+	),
+)
+const s3PathStyle = Flag.Boolean("s3-path-style").pipe(
+	Flag.withDefault(false),
+	Flag.withDescription(
+		"Put the bucket in the path. Most storage that is not AWS needs it.",
+	),
+)
 const force = Flag.Boolean("force").pipe(
 	Flag.withDefault(false),
 	Flag.withDescription(
@@ -50,6 +92,13 @@ const setup = Command.make("setup", {
 	clientId,
 	clientSecret,
 	adminEmails,
+	s3Endpoint,
+	s3PublicEndpoint,
+	s3Region,
+	s3Bucket,
+	s3AccessKeyId,
+	s3SecretAccessKey,
+	s3PathStyle,
 	force,
 }).pipe(
 	Command.withDescription(
@@ -70,8 +119,34 @@ const setup = Command.make("setup", {
 					clientSecret: Option.map(input.clientSecret, Redacted.value),
 				}),
 			)
+			const storage = [
+				Option.isSome(input.s3Endpoint),
+				Option.isSome(input.s3Bucket),
+				Option.isSome(input.s3AccessKeyId),
+				Option.isSome(input.s3SecretAccessKey),
+			]
+			if (storage.includes(true) && storage.includes(false))
+				return yield* Setup.SetupInvalid.make({
+					message:
+						"Set --s3-endpoint, --s3-bucket, --s3-access-key-id and --s3-secret-access-key together.",
+				})
+			const fileStorage = Option.all({
+				endpoint: input.s3Endpoint,
+				bucket: input.s3Bucket,
+				accessKeyId: input.s3AccessKeyId,
+				secretAccessKey: Option.map(input.s3SecretAccessKey, Redacted.value),
+			}).pipe(
+				Option.map((storage) => ({
+					...storage,
+					publicEndpoint: Option.getOrNull(input.s3PublicEndpoint),
+					region: input.s3Region,
+					forcePathStyle: input.s3PathStyle,
+				})),
+				Option.getOrUndefined,
+			)
 			const outcome = yield* Setup.run({
 				publicOrigin: input.publicOrigin,
+				fileStorage,
 				identityProvider,
 				adminEmails: input.adminEmails,
 				force: input.force,

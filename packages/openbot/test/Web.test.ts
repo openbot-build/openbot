@@ -1,6 +1,5 @@
 import { Effect, Match, Redacted, Schema, Stream } from "effect"
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import {
 	ChatResponse,
 	ChatResponseEvent,
@@ -15,7 +14,7 @@ import { bot, message, settled, view, type Send } from "./Messages.ts"
 
 const pause = () => new Promise((resolve) => setTimeout(resolve, 25))
 
-test(
+it(
 	"public Chats, Turns, approvals and detached SSE share one execution",
 	{ timeout: 60000 },
 	async () => {
@@ -65,20 +64,24 @@ test(
 					},
 				},
 			)
-			assert.equal(configured.status, 200, await configured.clone().text())
+			assert.strictEqual(
+				configured.status,
+				200,
+				await configured.clone().text(),
+			)
 			const decode = Schema.decodeUnknownSync(ChatView)
 			// The first message to a Bot makes the direct Chat of the member with it.
 			const first = await message(asAlice, aliceBot, "Say hello")
-			assert.equal(first.delivery, "started")
+			assert.strictEqual(first.delivery, "started")
 			const chat = first.chat,
 				path = "/v1/chats/" + chat
 			const initial = await settled(asAlice, chat)
-			assert.equal(initial.chat.bot, aliceBot)
-			assert.equal(initial.chat.kind, "direct")
-			assert.equal(initial.chat.parent, null)
-			assert.equal(initial.status, "Completed")
-			assert.equal(initial.response?.id, first.turn)
-			assert.deepEqual(
+			assert.strictEqual(initial.chat.bot, aliceBot)
+			assert.strictEqual(initial.chat.kind, "direct")
+			assert.strictEqual(initial.chat.parent, null)
+			assert.strictEqual(initial.status, "Completed")
+			assert.strictEqual(initial.response?.id, first.turn)
+			assert.deepStrictEqual(
 				Schema.decodeUnknownSync(Schema.Array(ChatSummary))(
 					await (
 						await request(alice.session, "/v1/chats?bot=" + aliceBot)
@@ -86,7 +89,7 @@ test(
 				).map((summary) => summary.chat.id),
 				[chat],
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await request(alice.session, path, "PATCH", {
 						expected: initial.chat.revision,
@@ -96,8 +99,11 @@ test(
 				400,
 			)
 			for (const suffix of ["", "/items", "/delegations", "/turns"])
-				assert.equal((await request(bob.session, path + suffix)).status, 404)
-			assert.equal(
+				assert.strictEqual(
+					(await request(bob.session, path + suffix)).status,
+					404,
+				)
+			assert.strictEqual(
 				(
 					await fetch(host.address + path, {
 						headers: {
@@ -114,7 +120,7 @@ test(
 				["/memory", "GET"],
 				["/fork", "POST"],
 			] as const)
-				assert.equal(
+				assert.strictEqual(
 					(
 						await request(
 							alice.session,
@@ -163,20 +169,20 @@ test(
 			}
 			// A call that needs approval gets a pending result at once, so the Turn does not wait.
 			const asked = await message(asAlice, aliceBot, "request approval")
-			assert.equal(asked.chat, chat)
-			assert.equal(asked.delivery, "started")
+			assert.strictEqual(asked.chat, chat)
+			assert.strictEqual(asked.delivery, "started")
 			const pending = await nextRequest()
 			const waiting = await settled(asAlice, chat)
-			assert.equal(waiting.status, "Completed")
-			assert.equal(waiting.response?.id, asked.turn)
-			assert.equal(waiting.open.requests, 1)
-			assert.equal(pending.length, 1)
-			assert.equal(pending[0]!.capability.action, "tools.call")
-			assert.equal(pending[0]!.chat, chat)
-			assert.equal(host.toolCalls(), 0)
-			assert.deepEqual(await requests(bob.session), [])
+			assert.strictEqual(waiting.status, "Completed")
+			assert.strictEqual(waiting.response?.id, asked.turn)
+			assert.strictEqual(waiting.open.requests, 1)
+			assert.strictEqual(pending.length, 1)
+			assert.strictEqual(pending[0]!.capability.action, "tools.call")
+			assert.strictEqual(pending[0]!.chat, chat)
+			assert.strictEqual(host.toolCalls(), 0)
+			assert.deepStrictEqual(await requests(bob.session), [])
 			const decide = "/v1/requests/" + pending[0]!.id
-			assert.equal(
+			assert.strictEqual(
 				(
 					await request(alice.session, decide, "POST", {
 						expected: pending[0]!.revision + 1,
@@ -185,7 +191,7 @@ test(
 				).status,
 				409,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await request(bob.session, decide, "POST", {
 						expected: pending[0]!.revision,
@@ -194,7 +200,7 @@ test(
 				).status,
 				404,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await request(alice.session, decide, "POST", {
 						expected: pending[0]!.revision,
@@ -209,9 +215,9 @@ test(
 			assert.ok(denial !== undefined)
 			assert.match(JSON.stringify(denial.content), /Not now/)
 			const denied = await settled(asAlice, chat)
-			assert.equal(denied.open.requests, 0)
-			assert.equal(host.toolCalls(), 0)
-			assert.equal(
+			assert.strictEqual(denied.open.requests, 0)
+			assert.strictEqual(host.toolCalls(), 0)
+			assert.strictEqual(
 				(
 					await request(alice.session, decide, "POST", {
 						expected: pending[0]!.revision + 1,
@@ -221,10 +227,10 @@ test(
 				409,
 			)
 			const again = await message(asAlice, aliceBot, "another approval")
-			assert.equal(again.chat, chat)
+			assert.strictEqual(again.chat, chat)
 			const second = await nextRequest()
-			assert.equal(second.length, 1)
-			assert.equal(
+			assert.strictEqual(second.length, 1)
+			assert.strictEqual(
 				(
 					await request(
 						alice.session,
@@ -243,9 +249,9 @@ test(
 			for (let tries = 0; tries < 200 && host.toolCalls() < 1; tries++)
 				await pause()
 			const completed = await settled(asAlice, chat)
-			assert.equal(host.toolCalls(), 1)
-			assert.equal(completed.open.requests, 0)
-			assert.equal(completed.response?.status, "completed")
+			assert.strictEqual(host.toolCalls(), 1)
+			assert.strictEqual(completed.open.requests, 0)
+			assert.strictEqual(completed.response?.status, "completed")
 			// Interrupting a Chat that runs no Turn changes nothing.
 			const interrupted = await request(
 				alice.session,
@@ -253,22 +259,22 @@ test(
 				"POST",
 				{},
 			)
-			assert.equal(interrupted.status, 200)
+			assert.strictEqual(interrupted.status, 200)
 			const unchanged = decode(await interrupted.json())
-			assert.equal(unchanged.chat.revision, completed.chat.revision)
-			assert.equal(unchanged.status, completed.status)
+			assert.strictEqual(unchanged.chat.revision, completed.chat.revision)
+			assert.strictEqual(unchanged.status, completed.status)
 			const turns: {
 				items: ReadonlyArray<{ id: string }>
 				next: string | null
 			} = await (await request(alice.session, path + "/turns?limit=1")).json()
-			assert.equal(turns.items.length, 1)
+			assert.strictEqual(turns.items.length, 1)
 			assert.ok(turns.next !== null)
-			assert.equal(
+			assert.strictEqual(
 				(await request(alice.session, path + "/turns/" + turns.items[0]!.id))
 					.status,
 				200,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await request(
 						alice.session,
@@ -285,9 +291,9 @@ test(
 					})
 				).json(),
 			)
-			assert.equal(planned.chat.settings.mode, "plan")
+			assert.strictEqual(planned.chat.settings.mode, "plan")
 			assert.ok(planned.chat.revision > completed.chat.revision)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await request(alice.session, path, "PATCH", {
 						expected: completed.chat.revision,
@@ -296,7 +302,7 @@ test(
 				).status,
 				409,
 			)
-			assert.equal((await view(asAlice, chat)).chat.settings.mode, "plan")
+			assert.strictEqual((await view(asAlice, chat)).chat.settings.mode, "plan")
 			// The Items of the Chat come newest first, one page at a time.
 			const Page = Schema.Struct({
 				items: Schema.Array(Item.Record),
@@ -305,9 +311,9 @@ test(
 			const newest = Schema.decodeUnknownSync(Page)(
 				await (await request(alice.session, path + "/items?limit=2")).json(),
 			)
-			assert.equal(newest.items.length, 2)
-			assert.equal(newest.items[0]!.seq, newest.items[1]!.seq + 1)
-			assert.equal(newest.next, newest.items[1]!.seq)
+			assert.strictEqual(newest.items.length, 2)
+			assert.strictEqual(newest.items[0]!.seq, newest.items[1]!.seq + 1)
+			assert.strictEqual(newest.next, newest.items[1]!.seq)
 			const older = Schema.decodeUnknownSync(Page)(
 				await (
 					await request(
@@ -316,7 +322,7 @@ test(
 					)
 				).json(),
 			)
-			assert.equal(older.items[0]!.seq, newest.items[1]!.seq - 1)
+			assert.strictEqual(older.items[0]!.seq, newest.items[1]!.seq - 1)
 			const beforeConsolidations = host.consolidations()
 			const controller = new AbortController()
 			const streaming = await fetch(host.address + path + "/messages", {
@@ -331,7 +337,7 @@ test(
 				},
 				body: JSON.stringify({ input: "slow output", stream: true }),
 			})
-			assert.equal(streaming.status, 200)
+			assert.strictEqual(streaming.status, 200)
 			const reader = streaming.body!.getReader()
 			let body = ""
 			while (!body.includes("response.output_text.delta")) {
@@ -343,18 +349,21 @@ test(
 			// The Turn goes on after the client goes away.
 			controller.abort()
 			const final = await settled(asAlice, chat)
-			assert.equal(final.response?.status, "completed")
-			assert.equal(final.turn?.settings.mode, "plan")
-			assert.equal(final.chat.settings.mode, "plan")
-			assert.match(final.response.output[0]!.content[0]!.text, /Progress stays/)
+			assert.strictEqual(final.response?.status, "completed")
+			assert.strictEqual(final.turn?.settings.mode, "plan")
+			assert.strictEqual(final.chat.settings.mode, "plan")
+			assert.match(
+				final.response!.output[0]!.content[0]!.text,
+				/Progress stays/,
+			)
 			// No other model call ran. Bot memory learns only after the Bot confides,
 			// and the empty pool gives the memory Bot nothing to add to the input.
 			await new Promise((resolve) => setTimeout(resolve, 100))
-			assert.equal(host.consolidations(), beforeConsolidations)
+			assert.strictEqual(host.consolidations(), beforeConsolidations)
 			const old = await (
 				await request(alice.session, path + "/turns/" + completed.response!.id)
 			).json()
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				Schema.decodeUnknownSync(ChatResponse)(old.response),
 				completed.response,
 			)
@@ -364,7 +373,7 @@ test(
 	},
 )
 
-test(
+it(
 	"native SSE keeps Unicode, empty outputs, exact identities and one saved terminal result",
 	{ timeout: 30000 },
 	async () => {
@@ -473,7 +482,7 @@ test(
 					"POST",
 					{ input, stream: true },
 				)
-				assert.equal(stream.status, 200)
+				assert.strictEqual(stream.status, 200)
 				const events = (await stream.text())
 					.split(/\r?\n\r?\n/)
 					.flatMap((block) => {
@@ -488,7 +497,7 @@ test(
 									),
 								]
 					})
-				assert.deepEqual(
+				assert.deepStrictEqual(
 					events.map((event) => event.sequence_number),
 					events.map((_, index) => index),
 				)
@@ -500,7 +509,7 @@ test(
 						"response.cancelled",
 					].includes(event.type),
 				)
-				assert.equal(terminal.length, 1)
+				assert.strictEqual(terminal.length, 1)
 				const end = terminal[0]!
 				assert.ok("response" in end)
 				const [summary] = Schema.decodeUnknownSync(Schema.Array(ChatSummary))(
@@ -508,7 +517,7 @@ test(
 				)
 				assert.ok(summary !== undefined)
 				const current = await view(request, summary.chat.id)
-				assert.deepEqual(end.response, current.response)
+				assert.deepStrictEqual(end.response, current.response)
 				assert.ok(
 					events.every(
 						(event) =>
@@ -527,21 +536,24 @@ test(
 					),
 				)
 				if (input === "empty") {
-					assert.equal(end.response.output[0]!.content[0]!.text, "")
+					assert.strictEqual(end.response.output[0]!.content[0]!.text, "")
 					assert.ok(
 						events.some((event) => event.type === "response.output_item.done"),
 					)
 				} else {
-					assert.equal(end.response.output[0]!.content[0]!.text, "héllo 🌍\né")
+					assert.strictEqual(
+						end.response.output[0]!.content[0]!.text,
+						"héllo 🌍\né",
+					)
 				}
 				if (input === "model-error" || input === "defect") {
-					assert.equal(end.response.status, "failed")
-					assert.equal(
+					assert.strictEqual(end.response.status, "failed")
+					assert.strictEqual(
 						end.response.error?.code,
 						input === "defect" ? "internal_error" : "model_error",
 					)
 				} else {
-					assert.equal(
+					assert.strictEqual(
 						end.response.status,
 						["length", "content-filter"].includes(input)
 							? "incomplete"
@@ -549,7 +561,7 @@ test(
 					)
 				}
 			}
-			assert.equal(calls, 6)
+			assert.strictEqual(calls, 6)
 		} finally {
 			await host.close()
 		}

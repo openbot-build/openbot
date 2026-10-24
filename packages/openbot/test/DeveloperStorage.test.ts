@@ -1,9 +1,8 @@
 // @effect-diagnostics strictEffectProvide:off
-import assert from "node:assert/strict"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { PgClient } from "@effect/sql-pg"
-import { Effect, Layer, ManagedRuntime, Redacted } from "effect"
+import { Effect, Layer, Redacted } from "effect"
 import { eq } from "drizzle-orm"
 import {
 	appDrafts,
@@ -18,16 +17,20 @@ import * as Database from "../src/database/DatabasePostgres.ts"
 import * as Postgres from "./PostgresTest.ts"
 import * as Db from "../src/database/Database.ts"
 
-test("Drizzle writes join the surrounding SQL transaction and roll back with it", async () => {
-	const database = await Postgres.start()
-	const runtime = ManagedRuntime.make(
-		Database.layer({ databaseUrl: Redacted.make(database.url) }).pipe(
-			Layer.provide(NodeServices.layer),
-		),
+const layer = (url: string) =>
+	Database.layer({ databaseUrl: Redacted.make(url) }).pipe(
+		Layer.provide(NodeServices.layer),
 	)
-	try {
-		await runtime.runPromise(
-			Effect.gen(function* () {
+
+it.live(
+	"Drizzle writes join the surrounding SQL transaction and roll back with it",
+	() =>
+		Effect.gen(function* () {
+			const database = yield* Effect.acquireRelease(
+				Effect.promise(() => Postgres.start()),
+				(database) => Effect.promise(() => database.close()),
+			)
+			yield* Effect.gen(function* () {
 				yield* Database.migrate
 				const sql = yield* PgClient.PgClient
 				const db = yield* Db.make
@@ -47,26 +50,21 @@ test("Drizzle writes join the surrounding SQL transaction and roll back with it"
 						}),
 					)
 					.pipe(Effect.flip)
-				assert.equal(failed, "stop")
-				assert.deepEqual(yield* db.select().from(appDrafts), [])
-			}),
-		)
-	} finally {
-		await runtime.dispose()
-		await database.close()
-	}
-})
+				assert.strictEqual(failed, "stop")
+				assert.deepStrictEqual(yield* db.select().from(appDrafts), [])
+			}).pipe(Effect.provide(layer(database.url)))
+		}),
+)
 
-test("the Developer tables keep one membership for each account and remove dependent rows with their parent", async () => {
-	const database = await Postgres.start()
-	const runtime = ManagedRuntime.make(
-		Database.layer({ databaseUrl: Redacted.make(database.url) }).pipe(
-			Layer.provide(NodeServices.layer),
-		),
-	)
-	try {
-		await runtime.runPromise(
-			Effect.gen(function* () {
+it.live(
+	"the Developer tables keep one membership for each account and remove dependent rows with their parent",
+	() =>
+		Effect.gen(function* () {
+			const database = yield* Effect.acquireRelease(
+				Effect.promise(() => Postgres.start()),
+				(database) => Effect.promise(() => database.close()),
+			)
+			yield* Effect.gen(function* () {
 				yield* Database.migrate
 				const db = yield* Db.make
 				const scope = JSON.stringify({
@@ -101,8 +99,8 @@ test("the Developer tables keep one membership for each account and remove depen
 						.values({ id, proofId: "claim", owner: "bob", role: "viewer" })
 						.onConflictDoNothing()
 						.returning({ id: developerMembers.id })
-				assert.equal((yield* member("first")).length, 1)
-				assert.equal((yield* member("second")).length, 0)
+				assert.strictEqual((yield* member("first")).length, 1)
+				assert.strictEqual((yield* member("second")).length, 0)
 				yield* db.insert(developerInvitations).values({
 					id: "invitation",
 					proofId: "claim",
@@ -112,9 +110,12 @@ test("the Developer tables keep one membership for each account and remove depen
 					status: "Pending",
 				})
 				yield* db.delete(developerClaims).where(eq(developerClaims.id, "claim"))
-				assert.deepEqual(yield* db.select().from(developerProofs), [])
-				assert.deepEqual(yield* db.select().from(developerMembers), [])
-				assert.deepEqual(yield* db.select().from(developerInvitations), [])
+				assert.deepStrictEqual(yield* db.select().from(developerProofs), [])
+				assert.deepStrictEqual(yield* db.select().from(developerMembers), [])
+				assert.deepStrictEqual(
+					yield* db.select().from(developerInvitations),
+					[],
+				)
 
 				yield* db.insert(developerTests).values({
 					id: "test",
@@ -134,11 +135,7 @@ test("the Developer tables keep one membership for each account and remove depen
 					value: "{}",
 				})
 				yield* db.delete(developerTests).where(eq(developerTests.id, "test"))
-				assert.deepEqual(yield* db.select().from(developerTestFlows), [])
-			}),
-		)
-	} finally {
-		await runtime.dispose()
-		await database.close()
-	}
-})
+				assert.deepStrictEqual(yield* db.select().from(developerTestFlows), [])
+			}).pipe(Effect.provide(layer(database.url)))
+		}),
+)

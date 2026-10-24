@@ -1,5 +1,4 @@
-import assert from "node:assert/strict"
-import { mock, test } from "node:test"
+import { assert, it, onTestFinished, vi } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { Auth, DatabasePostgres, Server } from "@openbot-build/openbot"
 import { AuthApi, Caller, Identity, OpenBotApi } from "@openbot-build/api"
@@ -32,14 +31,14 @@ import { bot, message, type Send } from "./Messages.ts"
 const publicOrigin = "https://localhost:8443"
 const authSecret = "DevelopmentIntegrationSecretMustStayStable123456"
 
-test("the development sign-in secret comes from the first secret key and stays the same", () => {
+it("the development sign-in secret comes from the first secret key and stays the same", () => {
 	const keys = Redacted.make(
 		"dev:" + "11".repeat(32) + ",old:" + "22".repeat(32),
 	)
 	const first = Redacted.value(Development.developmentSecret(keys))
-	assert.equal(first, Redacted.value(Development.developmentSecret(keys)))
+	assert.strictEqual(first, Redacted.value(Development.developmentSecret(keys)))
 	assert.ok(first.length >= 32)
-	assert.notEqual(
+	assert.notStrictEqual(
 		first,
 		Redacted.value(
 			Development.developmentSecret(Redacted.make("dev:" + "33".repeat(32))),
@@ -47,46 +46,63 @@ test("the development sign-in secret comes from the first secret key and stays t
 	)
 })
 
-test("development authentication accepts only loopback HTTPS origins in standard form", async () => {
-	const decode = (publicOrigin: string) =>
-		Effect.runPromise(
-			Schema.decodeEffect(Auth.Model.Configuration)({
-				mode: "development",
-				publicOrigin,
-				secret: Redacted.make(authSecret),
-			}).pipe(Effect.result),
-		)
-	assert.equal((await decode("https://localhost:8443"))._tag, "Success")
-	assert.equal((await decode("https://127.0.0.1:8443"))._tag, "Success")
-	assert.equal((await decode("https://[::1]:8443"))._tag, "Success")
-	assert.equal((await decode("https://e.example.com"))._tag, "Failure")
-	assert.equal((await decode("http://localhost:8443"))._tag, "Failure")
-	assert.equal((await decode("https://localhost:8443/path"))._tag, "Failure")
-	assert.equal((await decode("invalid"))._tag, "Failure")
-})
+it.effect(
+	"development authentication accepts only loopback HTTPS origins in standard form",
+	() =>
+		Effect.gen(function* () {
+			const decode = (publicOrigin: string) =>
+				Schema.decodeEffect(Auth.Model.Configuration)({
+					mode: "development",
+					publicOrigin,
+					secret: Redacted.make(authSecret),
+				}).pipe(Effect.result)
+			assert.strictEqual(
+				(yield* decode("https://localhost:8443"))._tag,
+				"Success",
+			)
+			assert.strictEqual(
+				(yield* decode("https://127.0.0.1:8443"))._tag,
+				"Success",
+			)
+			assert.strictEqual((yield* decode("https://[::1]:8443"))._tag, "Success")
+			assert.strictEqual(
+				(yield* decode("https://e.example.com"))._tag,
+				"Failure",
+			)
+			assert.strictEqual(
+				(yield* decode("http://localhost:8443"))._tag,
+				"Failure",
+			)
+			assert.strictEqual(
+				(yield* decode("https://localhost:8443/path"))._tag,
+				"Failure",
+			)
+			assert.strictEqual((yield* decode("invalid"))._tag, "Failure")
+		}),
+)
 
-test(
+it(
 	"local login keeps normal sign-in sessions and Chats across a restart",
 	{ timeout: 60000 },
-	async (t) => {
+	async () => {
 		const database = await PostgresTest.start()
 		const actualFetch = globalThis.fetch
-		const network = mock.method(
-			globalThis,
-			"fetch",
-			(input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-				const url = new URL(
-					input instanceof Request ? input.url : String(input),
-				)
-				assert.notEqual(
-					url.origin,
-					"https://id.example.com",
-					"Development login must not contact the identity provider",
-				)
-				return actualFetch(input, init)
-			},
-		)
-		t.after(() => network.mock.restore())
+		const network = vi
+			.spyOn(globalThis, "fetch")
+			.mockImplementation(
+				(input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+					const url = new URL(
+						input instanceof Request ? input.url : String(input),
+					)
+					assert.notStrictEqual(
+						url.origin,
+						"https://id.example.com",
+						"Development login must not contact the identity provider",
+					)
+					return actualFetch(input, init)
+				},
+			)
+		onTestFinished(() => network.mockRestore())
 		const model = Config.Selection.make({
 			provider: Provider.Id.make("test"),
 			model: Model.Id.make("answer"),
@@ -160,7 +176,7 @@ test(
 					redirect: "manual",
 				})
 				if (path.startsWith("/auth/"))
-					assert.equal(response.headers.get("cache-control"), "no-store")
+					assert.strictEqual(response.headers.get("cache-control"), "no-store")
 				return response
 			}
 			const login = async () => {
@@ -169,7 +185,7 @@ test(
 					headers: { origin: publicOrigin, "content-type": "application/json" },
 					body: "{}",
 				})
-				assert.equal(response.status, 200)
+				assert.strictEqual(response.status, 200)
 				const cookie =
 					response.headers
 						.getSetCookie()
@@ -178,7 +194,10 @@ test(
 				assert.match(cookie, /Secure/)
 				assert.match(cookie, /HttpOnly/)
 				assert.match(cookie, /SameSite=Lax/i)
-				assert.equal(Number(cookie.match(/Max-Age=(\d+)/i)?.[1]), 30 * 86400)
+				assert.strictEqual(
+					Number(cookie.match(/Max-Age=(\d+)/i)?.[1]),
+					30 * 86400,
+				)
 				return cookie.split(";")[0]!
 			}
 			const session = await login()
@@ -190,19 +209,19 @@ test(
 					...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
 				}),
 			)
-			assert.equal((await request("/auth/session")).status, 401)
+			assert.strictEqual((await request("/auth/session")).status, 401)
 			const infoResponse = await request("/auth/session", {
 				headers: accountHeaders,
 			})
-			assert.equal(infoResponse.status, 200)
+			assert.strictEqual(infoResponse.status, 200)
 			const info: typeof AuthApi.SessionInfo.Type = await infoResponse.json()
-			assert.equal(info.profile.name, "Local Developer")
-			assert.equal(info.profile.email, "developer@localhost.test")
-			assert.equal(
+			assert.strictEqual(info.profile.name, "Local Developer")
+			assert.strictEqual(info.profile.email, "developer@localhost.test")
+			assert.strictEqual(
 				(await request("/v1/chats", { headers: accountHeaders })).status,
 				200,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await request("/auth/callback/oidc?code=anything")).headers.has(
 					"set-cookie",
 				),
@@ -212,9 +231,9 @@ test(
 			const same: typeof AuthApi.SessionInfo.Type = await (
 				await request("/auth/session", { headers: { cookie: secondSession } })
 			).json()
-			assert.equal(same.userId, info.userId)
-			assert.deepEqual(same.memberships, info.memberships)
-			assert.notEqual(secondSession, session)
+			assert.strictEqual(same.userId, info.userId)
+			assert.deepStrictEqual(same.memberships, info.memberships)
+			assert.notStrictEqual(secondSession, session)
 			const newBot = {
 				name: "Blocked",
 				role: "Helps in tests",
@@ -230,13 +249,13 @@ test(
 					},
 					body: JSON.stringify(newBot),
 				})
-				assert.equal(blocked.status, 403)
+				assert.strictEqual(blocked.status, 403)
 			}
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				await (await request("/v1/bots", { headers: accountHeaders })).json(),
 				[],
 			)
-			assert.deepEqual(
+			assert.deepStrictEqual(
 				await (await request("/v1/chats", { headers: accountHeaders })).json(),
 				[],
 			)
@@ -249,8 +268,8 @@ test(
 				const denied = await request("/v1/chats", {
 					headers: { authorization },
 				})
-				assert.equal(denied.status, 401)
-				assert.deepEqual(await denied.json(), {
+				assert.strictEqual(denied.status, 401)
+				assert.deepStrictEqual(await denied.json(), {
 					_tag: "AuthenticationRequired",
 				})
 			}
@@ -270,7 +289,7 @@ test(
 			const saved = await bot(send, { name: "Saved", model })
 			const receipt = await message(send, saved, "Keep this Chat")
 			const path = "/v1/chats/" + receipt.chat
-			assert.equal(
+			assert.strictEqual(
 				(await request(path, { headers: accountHeaders })).status,
 				200,
 			)
@@ -279,23 +298,30 @@ test(
 					.getSetCookie()
 					.find((value) => value.startsWith(AuthApi.SessionCookie + "="))
 				assert.ok(cookie, "Renewal must reach the browser through Set-Cookie")
-				assert.equal(Number(cookie.match(/Max-Age=(\d+)/i)?.[1]), 30 * 86400)
-				assert.equal(/Secure/.test(cookie), true)
-				assert.equal(/HttpOnly/.test(cookie), true)
-				assert.equal(/SameSite=Lax/i.test(cookie), true)
-				assert.equal(/Path=\//i.test(cookie), true)
-				assert.equal(/Domain=/i.test(cookie), false)
+				assert.strictEqual(
+					Number(cookie.match(/Max-Age=(\d+)/i)?.[1]),
+					30 * 86400,
+				)
+				assert.strictEqual(/Secure/.test(cookie), true)
+				assert.strictEqual(/HttpOnly/.test(cookie), true)
+				assert.strictEqual(/SameSite=Lax/i.test(cookie), true)
+				assert.strictEqual(/Path=\//i.test(cookie), true)
+				assert.strictEqual(/Domain=/i.test(cookie), false)
 				return cookie.split(";")[0]!
 			}
 			const originalExpiration = Date.parse(info.expiresAt)
 			const startedAt = Date.now()
-			t.mock.timers.enable({ apis: ["Date"], now: startedAt })
-			t.mock.timers.tick(61 * 60 * 1000)
-			assert.equal(
+			// Only Date is fake. Real timers keep the server going.
+			vi.useFakeTimers({ toFake: ["Date"], now: startedAt })
+			onTestFinished(() => {
+				vi.useRealTimers()
+			})
+			vi.advanceTimersByTime(61 * 60 * 1000)
+			assert.strictEqual(
 				(await request("/auth/session", { headers: accountHeaders })).status,
 				200,
 			)
-			t.mock.timers.setTime(startedAt + 2 * 86400000)
+			vi.setSystemTime(startedAt + 2 * 86400000)
 			for (const origin of [undefined, "https://foreign.example"]) {
 				const denied = await request(`/v1/bots/${saved}/messages`, {
 					method: "POST",
@@ -306,47 +332,53 @@ test(
 					},
 					body: JSON.stringify({ input: "Blocked renewal" }),
 				})
-				assert.equal(denied.status, 403)
-				assert.equal(denied.headers.getSetCookie().length, 0)
+				assert.strictEqual(denied.status, 403)
+				assert.strictEqual(denied.headers.getSetCookie().length, 0)
 			}
 			const renewed = await request("/auth/session", {
 				headers: accountHeaders,
 			})
-			assert.equal(renewed.status, 200)
+			assert.strictEqual(renewed.status, 200)
 			accountHeaders.cookie = renewalCookie(renewed)
 			const renewedInfo: typeof AuthApi.SessionInfo.Type = await renewed.json()
-			assert.equal(renewedInfo.userId, info.userId)
-			assert.deepEqual(renewedInfo.memberships, info.memberships)
+			assert.strictEqual(renewedInfo.userId, info.userId)
+			assert.deepStrictEqual(renewedInfo.memberships, info.memberships)
 			assert.ok(Date.parse(renewedInfo.expiresAt) > originalExpiration)
 			const unchanged = await request("/auth/session", {
 				headers: accountHeaders,
 			})
-			assert.equal(unchanged.status, 200)
-			assert.equal(unchanged.headers.getSetCookie().length, 0)
-			assert.equal((await unchanged.json()).expiresAt, renewedInfo.expiresAt)
-			t.mock.timers.tick(2 * 86400000)
+			assert.strictEqual(unchanged.status, 200)
+			assert.strictEqual(unchanged.headers.getSetCookie().length, 0)
+			assert.strictEqual(
+				(await unchanged.json()).expiresAt,
+				renewedInfo.expiresAt,
+			)
+			vi.advanceTimersByTime(2 * 86400000)
 			const businessRenewal = await request(path, { headers: accountHeaders })
-			assert.equal(businessRenewal.status, 200)
+			assert.strictEqual(businessRenewal.status, 200)
 			accountHeaders.cookie = renewalCookie(businessRenewal)
-			t.mock.timers.tick(2 * 86400000)
+			vi.advanceTimersByTime(2 * 86400000)
 			const missing = await request("/v1/chats/" + crypto.randomUUID(), {
 				headers: accountHeaders,
 			})
-			assert.equal(missing.status, 404)
+			assert.strictEqual(missing.status, 404)
 			accountHeaders.cookie = renewalCookie(missing)
-			t.mock.timers.setTime(originalExpiration + 1)
-			assert.equal(
+			vi.setSystemTime(originalExpiration + 1)
+			assert.strictEqual(
 				(await request(path, { headers: accountHeaders })).status,
 				200,
 			)
 			const openapi = await (await request("/openapi.json")).json()
 			const sendPath = openapi.paths["/v1/bots/{botId}/messages"]
-			assert.deepEqual(sendPath.post.security, [{ token: [] }, { session: [] }])
-			assert.deepEqual(openapi.components.securitySchemes.token, {
+			assert.deepStrictEqual(sendPath.post.security, [
+				{ token: [] },
+				{ session: [] },
+			])
+			assert.deepStrictEqual(openapi.components.securitySchemes.token, {
 				type: "http",
 				scheme: "Bearer",
 			})
-			assert.deepEqual(openapi.components.securitySchemes.session, {
+			assert.deepStrictEqual(openapi.components.securitySchemes.session, {
 				type: "apiKey",
 				in: "cookie",
 				name: AuthApi.SessionCookie,
@@ -360,15 +392,15 @@ test(
 					HttpServer.formatAddress(server.address),
 				),
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await request(path, { headers: accountHeaders })).status,
 				200,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await request(path, { headers: accountHeaders })).status,
 				200,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await request("/auth/session", { headers: accountHeaders })).status,
 				200,
 			)
@@ -378,9 +410,9 @@ test(
 					headers: { cookie: restartedSession },
 				})
 			).json()
-			assert.equal(restarted.userId, info.userId)
-			assert.deepEqual(restarted.memberships, info.memberships)
-			assert.equal(
+			assert.strictEqual(restarted.userId, info.userId)
+			assert.deepStrictEqual(restarted.memberships, info.memberships)
+			assert.strictEqual(
 				(
 					await request("/auth/sign-out", {
 						method: "POST",
@@ -394,7 +426,7 @@ test(
 				).status,
 				403,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await request("/auth/sign-out", {
 						method: "POST",
@@ -404,26 +436,26 @@ test(
 				).status,
 				200,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await request("/auth/session", { headers: accountHeaders })).status,
 				401,
 			)
-			assert.equal(
+			assert.strictEqual(
 				(await request(path, { headers: accountHeaders })).status,
 				401,
 			)
-			assert.equal((await request(path)).status, 401)
+			assert.strictEqual((await request(path)).status, 401)
 			const signedInAgain = await login()
-			assert.equal(
+			assert.strictEqual(
 				(await request(path, { headers: { cookie: signedInAgain } })).status,
 				200,
 			)
-			t.mock.timers.tick(31 * 86400000)
+			vi.advanceTimersByTime(31 * 86400000)
 			const expired = await request("/auth/session", {
 				headers: { cookie: signedInAgain },
 			})
-			assert.equal(expired.status, 401)
-			assert.equal(
+			assert.strictEqual(expired.status, 401)
+			assert.strictEqual(
 				(await request(path, { headers: { cookie: signedInAgain } })).status,
 				401,
 			)
@@ -434,7 +466,7 @@ test(
 	},
 )
 
-test("business authentication keeps session Origin checks and typed failures", async () => {
+it("business authentication keeps session Origin checks and typed failures", async () => {
 	let unavailable = true
 	const failure = Effect.fail(
 		Auth.Model.AuthUnavailable.make({ dependency: "storage" }),
@@ -511,13 +543,15 @@ test("business authentication keeps session Origin checks and typed failures", a
 		const failed = await app.handler(
 			new Request(publicOrigin + "/identity", { headers: cookie }),
 		)
-		assert.equal(failed.status, 503)
-		assert.deepEqual(await failed.json(), { _tag: "AuthenticationUnavailable" })
+		assert.strictEqual(failed.status, 503)
+		assert.deepStrictEqual(await failed.json(), {
+			_tag: "AuthenticationUnavailable",
+		})
 		unavailable = false
 		const session = await app.handler(
 			new Request(publicOrigin + "/identity", { headers: cookie }),
 		)
-		assert.deepEqual(await session.json(), {
+		assert.deepStrictEqual(await session.json(), {
 			kind: "member",
 			userId: "session-user",
 			organizationId: "session-user",
@@ -527,7 +561,7 @@ test("business authentication keeps session Origin checks and typed failures", a
 			{ authorization: "Bearer retired" },
 			{ cookie: AuthApi.SessionCookie + "=invalid" },
 		]) {
-			assert.equal(
+			assert.strictEqual(
 				(
 					await app.handler(
 						new Request(publicOrigin + "/identity", { headers }),
@@ -544,28 +578,34 @@ test("business authentication keeps session Origin checks and typed failures", a
 					body: "{}",
 				}),
 			)
-		assert.equal((await write(cookie)).status, 403)
-		assert.equal(
+		assert.strictEqual((await write(cookie)).status, 403)
+		assert.strictEqual(
 			(await write({ ...cookie, origin: "https://other.example" })).status,
 			403,
 		)
-		assert.equal((await write({ ...cookie, origin: publicOrigin })).status, 200)
-		assert.equal((await write({ authorization: "Bearer retired" })).status, 401)
+		assert.strictEqual(
+			(await write({ ...cookie, origin: publicOrigin })).status,
+			200,
+		)
+		assert.strictEqual(
+			(await write({ authorization: "Bearer retired" })).status,
+			401,
+		)
 		const keyed = await write({ authorization: "Bearer obut_valid" })
-		assert.equal(keyed.status, 200)
-		assert.deepEqual(await keyed.json(), {
+		assert.strictEqual(keyed.status, 200)
+		assert.deepStrictEqual(await keyed.json(), {
 			kind: "user_token",
 			userId: "key-user",
 			organizationId: "key-user",
 			tokenId: "key-1",
 		})
 		const spec = OpenApi.fromApi(OpenBotApi)
-		assert.deepEqual(spec.paths["/v1/bots/{botId}/messages"]?.post?.security, [
-			{ token: [] },
-			{ session: [] },
-		])
-		assert.equal(spec.components.securitySchemes["bearer"], undefined)
-		assert.deepEqual(spec.components.securitySchemes["session"], {
+		assert.deepStrictEqual(
+			spec.paths["/v1/bots/{botId}/messages"]?.post?.security,
+			[{ token: [] }, { session: [] }],
+		)
+		assert.strictEqual(spec.components.securitySchemes["bearer"], undefined)
+		assert.deepStrictEqual(spec.components.securitySchemes["session"], {
 			type: "apiKey",
 			in: "cookie",
 			name: AuthApi.SessionCookie,
@@ -575,7 +615,7 @@ test("business authentication keeps session Origin checks and typed failures", a
 	}
 })
 
-test("return destinations accept same-origin client paths and reject open redirects", () => {
+it("return destinations accept same-origin client paths and reject open redirects", () => {
 	const accepts = Schema.is(AuthApi.ReturnTo)
 	for (const target of [
 		"/",
@@ -584,7 +624,7 @@ test("return destinations accept same-origin client paths and reject open redire
 		"/apps?query=documents",
 		"/chats/chat-1",
 	])
-		assert.equal(accepts(target), true, target)
+		assert.strictEqual(accepts(target), true, target)
 	for (const target of [
 		"https://external.example/developer",
 		"//external.example/developer",
@@ -594,5 +634,5 @@ test("return destinations accept same-origin client paths and reject open redire
 		"/v1/chats",
 		"/development/sign-in",
 	])
-		assert.equal(accepts(target), false, target)
+		assert.strictEqual(accepts(target), false, target)
 })

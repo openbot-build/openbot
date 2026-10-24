@@ -1,7 +1,6 @@
 // @effect-diagnostics strictEffectProvide:off
-import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
-import { test } from "node:test"
+import { assert, it } from "@effect/vitest"
 import { NodeServices } from "@effect/platform-node"
 import { CatalogDiscovery, Document, Network } from "@openbot-build/protocol"
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
@@ -32,7 +31,7 @@ const Wire = Schema.fromJsonString(
 )
 const owner = ownerKey({ organizationId: "developer", userId: "alice" })
 const another = ownerKey({ organizationId: "other", userId: "bob" })
-test(
+it(
 	"independent HTTPS developer tests apply rules for complete pages, optional capabilities, cancellation and owner-only cleanup",
 	{ timeout: 30000 },
 	async () => {
@@ -65,8 +64,8 @@ test(
 				_meta: { "openbot/developer-verification": { version: 1, tokens } },
 			}
 			if (request.method === "GET") {
-				assert.equal(request.headers.authorization, undefined)
-				assert.equal(request.headers.cookie, undefined)
+				assert.strictEqual(request.headers.authorization, undefined)
+				assert.strictEqual(request.headers.cookie, undefined)
 				response.setHeader("content-type", "application/json")
 				response.setHeader("cache-control", "no-store")
 				if (request.url === "/card.json") response.end(JSON.stringify(card))
@@ -90,7 +89,7 @@ test(
 				return
 			}
 			if (request.url === "/configured")
-				assert.equal(request.headers["x-test-key"], "private-fixture-key")
+				assert.strictEqual(request.headers["x-test-key"], "private-fixture-key")
 			let body = ""
 			request.setEncoding("utf8")
 			request.on("data", (part: string) => {
@@ -264,17 +263,17 @@ test(
 						Effect.flatMap(DeveloperTests, (tests) => tests.get(owner, id)),
 					)
 				}
-				assert.notEqual(value.status, "Running")
+				assert.notStrictEqual(value.status, "Running")
 				return value
 			}
 			const configured = await create(1)
-			assert.equal(configured.status, "AwaitingConfiguration")
+			assert.strictEqual(configured.status, "AwaitingConfiguration")
 			const invalid = await runtime.runPromise(
 				Effect.flatMap(DeveloperTests, (tests) =>
 					tests.configure(owner, configured.id, {}),
 				).pipe(Effect.flip),
 			)
-			assert.equal(invalid._tag, "DeveloperInputInvalid")
+			assert.strictEqual(invalid._tag, "DeveloperInputInvalid")
 			await runtime.runPromise(
 				Effect.flatMap(DeveloperTests, (tests) =>
 					tests.configure(owner, configured.id, {
@@ -282,7 +281,7 @@ test(
 					}),
 				),
 			)
-			assert.equal(
+			assert.strictEqual(
 				JSON.stringify(
 					await runtime.runPromise(
 						Effect.flatMap(DeveloperTests, (tests) =>
@@ -292,7 +291,7 @@ test(
 				).includes("private-fixture-key"),
 				false,
 			)
-			assert.equal(
+			assert.strictEqual(
 				JSON.stringify(
 					await runtime.runPromise(
 						Effect.flatMap(Db.make, (db) =>
@@ -306,7 +305,7 @@ test(
 			)
 			await runtime.dispose()
 			runtime = ManagedRuntime.make(layer)
-			assert.equal(
+			assert.strictEqual(
 				(
 					await runtime.runPromise(
 						Effect.flatMap(DeveloperTests, (tests) =>
@@ -321,7 +320,7 @@ test(
 					tests.run(owner, configured.id),
 				),
 			)
-			assert.equal((await settle(configured.id)).status, "Succeeded")
+			assert.strictEqual((await settle(configured.id)).status, "Succeeded")
 			for (const selected of [
 				"normal",
 				"repeat",
@@ -336,7 +335,7 @@ test(
 					Effect.flatMap(DeveloperTests, (tests) => tests.run(owner, test.id)),
 				)
 				const result = await settle(test.id)
-				assert.equal(
+				assert.strictEqual(
 					result.status,
 					selected === "repeat" || selected === "page-failure"
 						? "Failed"
@@ -344,30 +343,30 @@ test(
 					JSON.stringify(result),
 				)
 				if (selected === "normal")
-					assert.equal(
+					assert.strictEqual(
 						result.stages.find((stage) => stage.name === "tools")?.items.length,
 						2,
 					)
 				if (selected === "repeat" || selected === "page-failure")
-					assert.equal(
+					assert.strictEqual(
 						result.stages.find((stage) => stage.name === "resources")?.status,
 						"NotChecked",
 						JSON.stringify(result),
 					)
 				if (selected === "page-failure")
-					assert.equal(
+					assert.strictEqual(
 						result.stages.find((stage) => stage.name === "tools")?.items.length,
 						1,
 					)
 
 				if (selected === "optional") {
-					assert.equal(
+					assert.strictEqual(
 						result.stages.find((stage) => stage.name === "resources")?.status,
 						"NotAdvertised",
 					)
-					assert.equal(methods.includes("resources/list"), false)
+					assert.strictEqual(methods.includes("resources/list"), false)
 				}
-				assert.equal(
+				assert.strictEqual(
 					(
 						await runtime.runPromise(
 							Effect.flatMap(DeveloperTests, (tests) =>
@@ -388,7 +387,11 @@ test(
 				Effect.flatMap(DeveloperTests, (tests) => tests.cancel(owner, slow.id)),
 			)
 			const cancelled = await settle(slow.id)
-			assert.equal(cancelled.cleanup, "Complete", JSON.stringify(cancelled))
+			assert.strictEqual(
+				cancelled.cleanup,
+				"Complete",
+				JSON.stringify(cancelled),
+			)
 			for (let attempt = 0; closed === 0 && attempt < 50; attempt++)
 				await new Promise((resolve) => setTimeout(resolve, 10))
 			assert.ok(
@@ -412,7 +415,7 @@ test(
 				await new Promise((resolve) => setTimeout(resolve, 10))
 				expired = await settle(expiring.id)
 			}
-			assert.equal(expired.cleanup, "Complete", JSON.stringify(expired))
+			assert.strictEqual(expired.cleanup, "Complete", JSON.stringify(expired))
 			remembered = (await create()).id
 			await runtime.runPromise(
 				Effect.gen(function* () {
@@ -433,11 +436,11 @@ test(
 			const restored = await runtime.runPromise(
 				Effect.flatMap(Db.make, (db) => Rows.getTest(db, "public", remembered)),
 			)
-			assert.equal(restored.value.status, "Interrupted")
+			assert.strictEqual(restored.value.status, "Interrupted")
 			await runtime.runPromise(
 				Effect.gen(function* () {
 					yield* (yield* DeveloperAccess).relinquish(owner, proof.id)
-					assert.equal(
+					assert.strictEqual(
 						(yield* (yield* DeveloperTests).get(owner, remembered)).stages
 							.length,
 						0,
@@ -463,9 +466,9 @@ test(
 					),
 				)
 			}
-			assert.equal(cleaned.cleanup, "Complete", JSON.stringify(cleaned))
+			assert.strictEqual(cleaned.cleanup, "Complete", JSON.stringify(cleaned))
 
-			assert.equal(
+			assert.strictEqual(
 				methods.some((method) =>
 					["tools/call", "resources/read", "prompts/get"].includes(method),
 				),

@@ -246,6 +246,7 @@ Eine vollständige Vorlage liegt in `deploy/docker/production.env.example`.
 | `OPENBOT_DEV_HTTPS_PORT`    | `8443`    | Der HTTPS-Port des lokalen OpenBot.                 |
 | `OPENBOT_DEV_DATABASE_PORT` | `5433`    | Der lokale Port des PostgreSQL für die Entwicklung. |
 | `OPENBOT_DEV_DATABASE_NAME` | `openbot` | Der Name der Datenbank für die Entwicklung.         |
+| `OPENBOT_DEV_S3_PORT`       | `9000`    | Der lokale Port des RustFS für die Entwicklung.     |
 
 <Callout type="info">
 	Wenn deine `.env.development` aus einer älteren Version stammt, lösche sie und
@@ -263,12 +264,16 @@ devenv setzt dann diese Werte für dich:
 | `OPENBOT_DATABASE_URL`      | `postgres://openbot_dev:openbot_dev@127.0.0.1:5433/openbot` |
 | `OPENBOT_TLS_CERT`          | `.devenv/dev/cert.pem`, erstellt von mkcert                 |
 | `OPENBOT_TLS_KEY`           | `.devenv/dev/key.pem`, erstellt von mkcert                  |
+| `OPENBOT_DEV_S3_ENDPOINT`   | `http://127.0.0.1:9000`                                     |
+| `OPENBOT_DEV_S3_BUCKET`     | `openbot`                                                   |
 
 Nur der Einstiegspunkt für die Entwicklung liest `OPENBOT_DEV_PUBLIC_ORIGIN`. Er braucht keinen Setup-Schritt. Bei jedem Start schreibt er die Einstellungen der Platform für diesen Ursprung selbst. Er macht das lokale Konto `developer@localhost.test` zum Admin der Platform und schaltet die lokale Test-Anmeldung ein. Siehe [Authentifizierung](/de/docs/authentication#entwicklungskonto).
 
 Das Programm für den Betrieb nutzt nie das lokale Test-Konto. Es gibt keinen Schalter dafür.
 
 Der Entwicklungs-Server sperrt private Ziele auch. Um einen Model-Server auf deiner Maschine zu nutzen, zum Beispiel Ollama, setze `OPENBOT_OUTBOUND_ALLOW=localhost` in `.env.development`. Siehe [Ausgehende Verbindungen](#ausgehende-verbindungen).
+
+devenv startet auch [RustFS](https://rustfs.com), einen kleinen Objektspeicher, für [Dateien](/de/docs/files). Seine Daten liegen in `.devenv/state/rustfs`. Bei jedem Start macht der Einstiegspunkt für die Entwicklung den Bucket `openbot` und schreibt den Speicher in die Einstellungen der Platform. RustFS ist auf `127.0.0.1`, einer privaten Adresse. Darum öffnet der Einstiegspunkt für die Entwicklung diesen einen Host für sich selbst. Du musst ihn nicht zu `OPENBOT_OUTBOUND_ALLOW` hinzufügen.
 
 Um eine andere Datenbank zu nutzen, setze `OPENBOT_DATABASE_URL` in `.env.development`. Siehe [Mitmachen](/de/docs/contributing).
 
