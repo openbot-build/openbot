@@ -130,6 +130,35 @@ describe("Authorizer", () => {
 		}),
 	)
 
+	it.effect("checks a part of a kind with where", () =>
+		Effect.gen(function* () {
+			const own = yield* run(
+				Auth.check({
+					action: "update",
+					kind: "Bot",
+					where: { ownerUserId: "alice" },
+				}),
+			)
+			assert.isTrue(Exit.isSuccess(own.exit))
+			const other = yield* run(
+				Auth.check({
+					action: "update",
+					kind: "Bot",
+					where: { ownerUserId: "bob" },
+				}),
+			)
+			assert.strictEqual(failureTag(other.exit), "Forbidden")
+			const organization = yield* run(
+				Auth.check({
+					action: "read",
+					kind: "Bot",
+					where: { organizationId: "acme" },
+				}),
+			)
+			assert.isTrue(Exit.isSuccess(organization.exit))
+		}),
+	)
+
 	it.effect("hides a resource that the principal may not read", () =>
 		Effect.gen(function* () {
 			const other = Bot.make({ ...aliceBot, organizationId: "other" })

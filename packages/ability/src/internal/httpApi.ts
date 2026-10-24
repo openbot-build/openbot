@@ -21,6 +21,14 @@ export const requires = (
 	Object.freeze(load === undefined ? { action, kind } : { action, kind, load })
 
 /** @internal */
+export const requiresWhere = (
+	_authorizer: unknown,
+	action: string,
+	kind: string,
+	where: NonNullable<HttpApi.Requirement["where"]>,
+): HttpApi.Requirement => Object.freeze({ action, kind, where })
+
+/** @internal */
 export const layer = (
 	middleware: Context.ServiceClass<any, string, any>,
 	authorizer: Authorizer.AnyServiceClass,
@@ -61,20 +69,29 @@ export const layer = (
 					)
 				}
 				for (const requirement of requirements.value) {
-					if (requirement.load === undefined) {
-						yield* service.check({
-							action: requirement.action,
-							kind: requirement.kind,
-						} as never)
-					} else {
+					if (requirement.load !== undefined) {
 						const params = yield* HttpRouter.params
+						const principal = yield* service.principal
 						const value = yield* Effect.provideContext(
-							requirement.load(params),
+							requirement.load(params, principal),
 							services,
 						)
 						yield* service.check({
 							action: requirement.action,
 							resource: value,
+						} as never)
+					} else if (requirement.where !== undefined) {
+						const params = yield* HttpRouter.params
+						const principal = yield* service.principal
+						yield* service.check({
+							action: requirement.action,
+							kind: requirement.kind,
+							where: requirement.where(params, principal),
+						} as never)
+					} else {
+						yield* service.check({
+							action: requirement.action,
+							kind: requirement.kind,
 						} as never)
 					}
 				}

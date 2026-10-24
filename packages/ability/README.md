@@ -275,6 +275,24 @@ the resource fields only. It is `True` when the policy allows every value of the
 kind, and `False` when it allows none. Use it to ask "may this principal do this
 act on some value of this kind?", or to make a database query.
 
+### A part of a kind
+
+A kind target may have `where`: known values of some fields. Then the question
+is about the part of the kind with these values, such as "the Bots of this
+user":
+
+```ts
+Policy.residual(policy, {
+	principal,
+	action: "update",
+	kind: "Post",
+	where: { authorId: "u1" },
+})
+```
+
+The result is `True` when the policy allows the act on every post of `u1`.
+`Condition.assign` does the same work on any condition.
+
 ## Queries
 
 Change a residual condition into a query with `Condition.fold`. You give one
@@ -362,7 +380,8 @@ const where = yield * Auth.filter({ action: "read", kind: "Post" })
 | `invalidate`      | Removes a cached policy, after a change to the rules of a principal.          |
 
 A check on a kind (`{ action, kind }`) passes only when the policy allows the
-act on every value of the kind.
+act on every value of the kind. With `where`, it passes when the policy allows
+the act on every value with those field values.
 
 The errors of a check:
 
@@ -420,6 +439,17 @@ const health = HttpApiEndpoint.get("health", "/health").annotate(
 
 const AuthorizationLive = AbilityHttpApi.layer(Authorization, Auth)
 ```
+
+`requiresWhere` checks a part of a kind, with no value to load. Its function
+gets the path parameters and the principal, and gives the known field values:
+
+```ts
+AbilityHttpApi.requiresWhere(Auth, "read", "Post", (params, user) => ({
+	authorId: user.id,
+}))
+```
+
+A `load` function gets the principal as its second argument too.
 
 `GroupRequired` gives a default for a whole group: one list for GET requests and
 one for every other method. `AbilityHttpApi.errors` gives the errors with HTTP

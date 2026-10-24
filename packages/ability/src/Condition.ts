@@ -577,6 +577,28 @@ export const partial: {
 } = internal.partial as never
 
 /**
+ * Puts known field values into a condition. Each test on one of these fields
+ * becomes `True` or `False`, and the result is simplified. Tests on other
+ * fields stay. A test that still uses a principal field stays too, so call
+ * {@link partial} first.
+ *
+ * Use it to ask about a part of a kind, such as "the Bots of this user".
+ *
+ * @stability stable
+ * @category evaluation
+ * @since 0.4.0
+ */
+export const assign: {
+	(
+		values: Readonly<Record<string, Scalar>>,
+	): <E, R, O>(condition: Condition<E, R, O>) => Condition<E, R, O>
+	<E, R, O>(
+		condition: Condition<E, R, O>,
+		values: Readonly<Record<string, Scalar>>,
+	): Condition<E, R, O>
+} = internal.assign as never
+
+/**
  * Makes a condition smaller without a change to its meaning. It removes `True`
  * and `False` from `And` and `Or`, joins nested `And` and `Or` nodes, and
  * removes double `Not` nodes.

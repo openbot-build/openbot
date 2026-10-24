@@ -214,7 +214,25 @@ export type Target<D> = {
 }[Domain.Kind<D>]
 
 /**
+ * Known values of some fields of a kind. Only fields with a plain value
+ * (a string, a number, a boolean or `null`) may be given.
+ *
+ * @stability stable
+ * @category models
+ * @since 0.4.0
+ */
+export type Where<Data> = {
+	readonly [
+		F in keyof Data as Data[F] extends Condition.Scalar ? F : never
+	]?: Data[F]
+}
+
+/**
  * One act on one kind of resource, with no value.
+ *
+ * With `where`, the target is the part of the kind with these field values,
+ * such as "the Bots of this user". A check on it passes when the policy allows
+ * the act on every value of that part.
  *
  * @stability stable
  * @category models
@@ -225,6 +243,7 @@ export type KindTarget<D> = {
 		readonly action: Domain.ActionOf<D, K>
 		readonly kind: K
 		readonly field?: Condition.FieldPath<Domain.DataOf<D, K>>
+		readonly where?: Where<Domain.DataOf<D, K>>
 	}
 }[Domain.Kind<D>]
 
@@ -474,6 +493,10 @@ export const explain: {
  * request. It has no principal fields and no `Under` nodes, so you can give it
  * to `Condition.fold`. It is `True` when the policy allows every value of the
  * kind, and `False` when it allows none.
+ *
+ * With `where`, the known field values are put into the condition, as with
+ * `Condition.assign`. Then `True` means that the policy allows every value with
+ * these field values.
  *
  * Predicates stay in the condition. They take the principal with them.
  *

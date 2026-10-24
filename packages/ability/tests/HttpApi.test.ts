@@ -78,6 +78,14 @@ const Api = HttpApi.make("api").add(
 					findBot(params["id"]),
 				),
 			]),
+			HttpApiEndpoint.get("mine", "/users/:userId/bots", {
+				params: { userId: Schema.String },
+				success: Schema.String,
+			}).annotate(Authorization.Required, [
+				Authorization.requiresWhere(Auth, "update", "Bot", (params) => ({
+					ownerUserId: params["userId"] ?? "",
+				})),
+			]),
 			HttpApiEndpoint.get("count", "/bots/count", {
 				success: Schema.Finite,
 			}),
@@ -108,6 +116,9 @@ const BotsLive = HttpApiBuilder.group(Api, "bots", (handlers) =>
 	Effect.succeed(
 		handlers
 			.handle("rename", ({ params }) => Effect.succeed(`renamed ${params.id}`))
+			.handle("mine", ({ params }) =>
+				Effect.succeed(`bots of ${params.userId}`),
+			)
 			.handle("count", () => Effect.succeed(bots.size))
 			.handle("health", () => Effect.succeed("ok"))
 			.handle("secret", () => Effect.succeed("secret")),
@@ -184,6 +195,25 @@ describe("HttpApi", () => {
 				client.bots.rename({ params: { id: "nope" } }),
 			)
 			assert.isTrue(Exit.isFailure(missing))
+		}).pipe(Effect.scoped, Effect.provide(ServerLive)),
+	)
+
+	it.effect("checks a part of a kind with where", () =>
+		Effect.gen(function* () {
+			const client = yield* HttpApiTest.groups(Api, ["bots", "admin"])
+			assert.strictEqual(
+				yield* client.bots.mine({ params: { userId: "alice" } }),
+				"bots of alice",
+			)
+			const other = yield* Effect.exit(
+				client.bots.mine({ params: { userId: "bob" } }),
+			)
+			assert.deepStrictEqual(
+				Exit.findErrorOption(other),
+				Option.some(
+					Authorizer.Forbidden.make({ action: "update", kind: "Bot" }),
+				),
+			)
 		}).pipe(Effect.scoped, Effect.provide(ServerLive)),
 	)
 

@@ -460,6 +460,63 @@ export const partialOf = (
 	},
 ): Ast => simplify(bind(ast, input.principal, input.path))
 
+/** Makes a value with one field, so that a node can be tested on it alone. */
+const valueWith = (path: string, value: unknown): object => {
+	const keys = path.split(".")
+	let output: unknown = value
+	for (const key of keys.slice().reverse()) {
+		output = { [key]: output }
+	}
+	return output as object
+}
+
+const assignNode = (
+	ast: Ast,
+	values: Readonly<Record<string, unknown>>,
+): Ast => {
+	switch (ast._tag) {
+		case "Compare":
+		case "In":
+		case "Exists": {
+			if (!Object.hasOwn(values, ast.field)) {
+				return ast
+			}
+			// A node that still uses a principal field can not be tested here.
+			const operands =
+				ast._tag === "Compare"
+					? [ast.value]
+					: ast._tag === "In"
+						? ast.values
+						: []
+			if (operands.some((operand) => operand._tag !== "Literal")) {
+				return ast
+			}
+			return evaluateSyncOf(ast, {
+				value: valueWith(ast.field, values[ast.field]),
+			})
+				? always
+				: never
+		}
+		case "And":
+			return and(...ast.conditions.map((child) => assignNode(child, values)))
+		case "Or":
+			return or(...ast.conditions.map((child) => assignNode(child, values)))
+		case "Not":
+			return not(assignNode(ast.condition, values))
+		default:
+			return ast
+	}
+}
+
+/** @internal */
+export const assignOf = (
+	ast: Ast,
+	values: Readonly<Record<string, unknown>>,
+): Ast => simplify(assignNode(ast, values))
+
+/** @internal */
+export const assign = dual(2, assignOf)
+
 /** @internal */
 export const evaluate = dual(2, evaluateOf)
 

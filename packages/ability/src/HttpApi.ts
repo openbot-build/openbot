@@ -34,13 +34,17 @@ import type * as Layer from "effect/Layer"
 import { HttpApiSchema } from "effect/http-api"
 import * as Authorizer from "./Authorizer.ts"
 import type * as Domain from "./Domain.ts"
+import type * as Policy from "./Policy.ts"
 import * as internal from "./internal/httpApi.ts"
 
 /**
  * One check that an endpoint needs: an action on a kind of resource. With
  * `load`, the middleware loads the resource value from the path parameters
- * and checks the action on that value. Without `load`, it checks the action
- * on the kind.
+ * and checks the action on that value. With `where`, it checks the action on
+ * the part of the kind with those field values. With neither, it checks the
+ * action on the whole kind.
+ *
+ * Both functions get the path parameters and the principal of the request.
  *
  * @stability unstable
  * @category models
@@ -51,7 +55,12 @@ export interface Requirement {
 	readonly kind: string
 	readonly load?: (
 		params: Readonly<Record<string, string | undefined>>,
+		principal: any,
 	) => Effect.Effect<object, unknown, unknown>
+	readonly where?: (
+		params: Readonly<Record<string, string | undefined>>,
+		principal: any,
+	) => Readonly<Record<string, unknown>>
 }
 
 /**
@@ -102,8 +111,35 @@ export const requires: <
 	kind: K,
 	load?: (
 		params: Readonly<Record<string, string | undefined>>,
+		principal: Domain.Principal<A["domain"]>,
 	) => Effect.Effect<Domain.ValueOf<A["domain"], K>, unknown, unknown>,
 ) => Requirement = internal.requires
+
+/**
+ * Makes a {@link Requirement} on a part of a kind. `where` gives known field
+ * values from the path parameters and the principal, such as the owner of
+ * the resource. The check passes when the policy allows the action on every
+ * value with these field values. See `Policy.KindTarget`.
+ *
+ * Use it when the resource value is not needed, or can not be loaded, such as
+ * for a list of the resources of the principal.
+ *
+ * @stability unstable
+ * @category constructors
+ * @since 0.4.0
+ */
+export const requiresWhere: <
+	A extends { readonly domain: Domain.Any },
+	const K extends Domain.Kind<A["domain"]>,
+>(
+	authorizer: A,
+	action: Domain.ActionOf<A["domain"], K>,
+	kind: K,
+	where: (
+		params: Readonly<Record<string, string | undefined>>,
+		principal: Domain.Principal<A["domain"]>,
+	) => Policy.Where<Domain.DataOf<A["domain"], K>>,
+) => Requirement = internal.requiresWhere
 
 /**
  * The errors of the middleware, with HTTP status codes: 403 for

@@ -109,6 +109,39 @@ describe("Condition", () => {
 		)
 	})
 
+	it("puts known field values into a condition", () => {
+		const condition = $.and(
+			$.eq("ownerUserId", "alice"),
+			$.or($.gte("level", 2), $.eq("organizationId", "acme")),
+		)
+		assert.deepStrictEqual(
+			Condition.assign(condition, {
+				ownerUserId: "alice",
+				organizationId: "acme",
+			}),
+			Condition.always,
+		)
+		assert.deepStrictEqual(
+			Condition.assign(condition, { ownerUserId: "bob" }),
+			Condition.never,
+		)
+		assert.deepStrictEqual(
+			Condition.assign(condition, { ownerUserId: "alice" }),
+			Condition.simplify(
+				$.or($.gte("level", 2), $.eq("organizationId", "acme")),
+			),
+		)
+		assert.deepStrictEqual(
+			Condition.assign($.eq("ownerUserId", null), { ownerUserId: null }),
+			Condition.always,
+		)
+		const withPrincipal = $.eq("ownerUserId", $.principal("userId"))
+		assert.deepStrictEqual(
+			Condition.assign(withPrincipal, { ownerUserId: "alice" }),
+			withPrincipal,
+		)
+	})
+
 	it("makes conditions smaller", () => {
 		assert.deepStrictEqual(
 			Condition.simplify(

@@ -572,6 +572,55 @@ describe("Policy", () => {
 		)
 
 		it.prop(
+			"gives a residual condition with where that agrees with decide",
+			{
+				specs: Schema.Array(Spec),
+				bot: BotInput,
+				request: Request,
+				where: Schema.Literals(["owner", "organization", "both"]),
+			},
+			({ specs, bot, request, where }) => {
+				const policy = build(specs, request)
+				const field = request.field === "none" ? undefined : request.field
+				const principal = principals[request.principal]
+				const known = {
+					...(where === "organization" ? {} : { ownerUserId: bot.ownerUserId }),
+					...(where === "owner" ? {} : { organizationId: bot.organizationId }),
+				}
+				const residual = Policy.residual(policy, {
+					principal,
+					action: request.action,
+					kind: "Bot",
+					where: known,
+					...(field === undefined ? {} : { field }),
+				})
+				// Every value with the known fields must get the same answer from
+				// the residual condition and from decide.
+				return (["Helper", "Team"] as const).every((name) =>
+					([0, 2, 5] as const).every((level) => {
+						const value = Bot.make({
+							...bot,
+							name,
+							level,
+							id: "b9",
+							settings: { model: "small", secret: "s" },
+						})
+						const decision = Policy.decideSync(policy, {
+							principal,
+							action: request.action,
+							resource: value,
+							...(field === undefined ? {} : { field }),
+						})
+						return (
+							Condition.evaluateSync(residual, { value }) ===
+							(decision._tag === "Allow")
+						)
+					}),
+				)
+			},
+		)
+
+		it.prop(
 			"keeps every policy the same through JSON",
 			{ specs: Schema.Array(Spec), request: Request },
 			({ specs, request }) => {

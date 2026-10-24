@@ -556,13 +556,20 @@ export const residualPair = (
 	if (descriptor === undefined) {
 		return { allow: never, deny: never }
 	}
-	return residualNode(nodeOf(policy), {
+	const pair = residualNode(nodeOf(policy), {
 		principal: request.principal,
 		action: request.action,
 		kind: request.kind,
 		field: request.field,
 		input: { principal: request.principal, path: descriptor.path },
 	})
+	const where = request.where as Readonly<Record<string, unknown>> | undefined
+	return where === undefined
+		? pair
+		: {
+				allow: condition.assignOf(pair.allow, where),
+				deny: condition.assignOf(pair.deny, where),
+			}
 }
 
 /** @internal */
