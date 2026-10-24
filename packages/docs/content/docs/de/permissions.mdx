@@ -349,10 +349,10 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 - Die Allow-Regeln einer Role können nichts geben, was du selbst nicht tun
   kannst. OpenBot prüft jede Allow-Regel mit dir als Aufrufer. Du musst ihre
-  Aktionen auf jeder Ressource tun können, deren Felder die Regel festlegt, zum
-  Beispiel ihren Besitzer. Eine Regel, die kein Feld festlegt, braucht die
-  Aktionen auf der ganzen Organisation. Sonst antwortet OpenBot mit `403` und
-  `Forbidden`.
+  Aktionen auf jedem Wert tun können, den die Regel in der Organisation erlaubt.
+  Die Antwort ist genau: Sie prüft die Felder und den Pfad der Ressource. Eine
+  Regel, die keinen Wert erlaubt, gibt nichts, also ist sie in Ordnung. Sonst
+  antwortet OpenBot mit `403` und `Forbidden`.
 - Eine Änderung gilt sofort für jedes Member mit dieser Role.
 - Du kannst eine Role nicht löschen, solange ein Member oder die `defaultRoles`
   der Organisation sie nutzen. OpenBot antwortet dann mit `409` und `RoleInUse`.

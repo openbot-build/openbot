@@ -177,7 +177,9 @@ export const make = Effect.gen(function* () {
 						organizationId: caller.organizationId,
 					}),
 				},
-				() => notFound(id),
+				{
+					hide: () => notFound(id),
+				},
 			)
 			return found.value
 		})
@@ -282,10 +284,11 @@ export const make = Effect.gen(function* () {
 				const readable = yield* filter(caller, {
 					action: "read",
 					kind: "Trigger",
-					where: { organizationId: caller.organizationId },
+					within: ($) => $.eq("organizationId", caller.organizationId),
 				}).pipe(
 					Effect.flatMap((condition) =>
 						toWhere(condition, {
+							organizationId: triggers.organizationId,
 							ownerUserId: triggers.ownerUserId,
 							id: triggers.id,
 						}),
@@ -312,10 +315,14 @@ export const make = Effect.gen(function* () {
 				yield* checkAct(caller, {
 					action: "write",
 					kind: "Trigger",
-					where: {
-						organizationId: caller.organizationId,
-						ownerUserId: owner._tag === "Member" ? owner.userId : null,
-					},
+					within: ($) =>
+						$.and(
+							$.eq("organizationId", caller.organizationId),
+							$.eq(
+								"ownerUserId",
+								owner._tag === "Member" ? owner.userId : null,
+							),
+						),
 				})
 				const now = yield* Clock.currentTimeMillis
 				const schedule = input.schedule ?? null

@@ -137,7 +137,7 @@ export const layer = HttpApiBuilder.group(
 						const usable = yield* filter(caller, {
 							action: "use",
 							kind: "Model",
-							where: { organizationId: caller.organizationId },
+							within: ($) => $.eq("organizationId", caller.organizationId),
 						}).pipe(Effect.provideContext(services))
 						const models = catalog.models.filter((model) =>
 							matches(

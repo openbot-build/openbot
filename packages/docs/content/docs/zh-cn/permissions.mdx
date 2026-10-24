@@ -322,7 +322,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `PATCH /v1/organization/roles/:roleId`  | 修改一个自定义角色。 |
 | `DELETE /v1/organization/roles/:roleId` | 删除一个自定义角色。 |
 
-- 角色的允许规则不能给出你自己做不到的事。OpenBot 把你当作调用者来测试每条允许规则。对于规则固定的字段（例如它的所有者）所对应的每个资源，你都必须能做它的操作。没有固定任何字段的规则，需要你能在整个组织上做这些操作。否则 OpenBot 返回
+- 角色的允许规则不能给出你自己做不到的事。OpenBot 把你当作调用者来测试每条允许规则。对于这条规则在组织中允许的每个值，你都必须能做它的操作。这个答案是精确的：它会看资源的字段和路径。一条不允许任何值的规则什么也不给，所以它可以通过。否则 OpenBot 返回
   `403` 和 `Forbidden`。
 - 修改会立即对拥有该角色的每个成员生效。
 - 当某个成员或组织的 `defaultRoles`

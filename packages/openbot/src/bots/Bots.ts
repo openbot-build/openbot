@@ -211,7 +211,9 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 				yield* guard(
 					caller,
 					{ action, resource: resourceOf(caller, bot) },
-					() => notFound(id),
+					{
+						hide: () => notFound(id),
+					},
 				)
 				return bot
 			})

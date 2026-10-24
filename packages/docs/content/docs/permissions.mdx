@@ -341,9 +341,10 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 - The allow rules of a role cannot give anything that you cannot do yourself.
   OpenBot tests each allow rule with you as the caller. You must be able to do
-  its actions on every resource with the fields that the rule fixes, such as its
-  owner. A rule that fixes no field needs the actions on the whole organization.
-  Otherwise OpenBot returns `403` with `Forbidden`.
+  its actions on every value that the rule allows in the organization. The
+  answer is exact: it looks at the fields and the path of the resource. A rule
+  that allows no value gives nothing, so it passes. Otherwise OpenBot returns
+  `403` with `Forbidden`.
 - A change applies to every member with the role at once.
 - You cannot delete a role while a member or the `defaultRoles` of the
   organization use it. OpenBot returns `409` with `RoleInUse`.

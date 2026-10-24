@@ -277,7 +277,9 @@ export const make = Effect.gen(function* () {
 						organizationId: caller.organizationId,
 					}),
 				},
-				() => notFound(id),
+				{
+					hide: () => notFound(id),
+				},
 			)
 			return { computer, row: found.value }
 		})
@@ -395,10 +397,11 @@ export const make = Effect.gen(function* () {
 		check(caller, {
 			action: "write",
 			kind: "Computer",
-			where: {
-				organizationId: caller.organizationId,
-				ownerUserId: shared ? null : caller.userId,
-			},
+			within: ($) =>
+				$.and(
+					$.eq("organizationId", caller.organizationId),
+					$.eq("ownerUserId", shared ? null : caller.userId),
+				),
 		})
 
 	const service: Computers["Service"] = {
@@ -407,10 +410,11 @@ export const make = Effect.gen(function* () {
 				const readable = yield* filter(caller, {
 					action: "read",
 					kind: "Computer",
-					where: { organizationId: caller.organizationId },
+					within: ($) => $.eq("organizationId", caller.organizationId),
 				}).pipe(
 					Effect.flatMap((condition) =>
 						toWhere(condition, {
+							organizationId: computers.organizationId,
 							ownerUserId: computers.ownerUserId,
 							id: computers.id,
 						}),

@@ -560,29 +560,30 @@ const ownWork = (_: Builder) =>
 				$.principal("userId"),
 			),
 	})
-const sharedOf = <
-	const K extends ReadonlyArray<
-		typeof Bot | typeof Trigger | typeof Computer | typeof ComputerProvider
-	>,
->(
-	_: Builder,
-	actions: ReadonlyArray<string>,
-	kinds: K,
-) =>
-	_.allow(actions as never, kinds, {
-		when: ($) =>
-			$.and(
-				$.under("org", $.principal("organizationId")),
-				$.eq("ownerUserId", null),
-			),
-	})
-const useSharedBots = (_: Builder) => sharedOf(_, ["read", "delegate"], [Bot])
-const readSharedTriggers = (_: Builder) => sharedOf(_, ["read"], [Trigger])
+/** The rule covers the shared resources of the organization of the caller. */
+const sharedOnly = {
+	when: <
+		B extends Condition.Builder<
+			{ readonly ownerUserId: string | null },
+			any,
+			AccountCaller
+		>,
+	>(
+		$: B,
+	) =>
+		$.and(
+			$.under("org", $.principal("organizationId")),
+			$.eq("ownerUserId", null),
+		),
+}
+const useSharedBots = (_: Builder) =>
+	_.allow(["read", "delegate"], Bot, sharedOnly)
+const readSharedTriggers = (_: Builder) => _.allow("read", Trigger, sharedOnly)
 const useChannels = (_: Builder) => _.allow("use", Channel, inOrganization)
 const useSharedComputers = (_: Builder) =>
-	sharedOf(_, ["read", "use"], [Computer, ComputerProvider])
+	_.allow(["read", "use"], [Computer, ComputerProvider], sharedOnly)
 const readSharedComputers = (_: Builder) =>
-	sharedOf(_, ["read"], [Computer, ComputerProvider])
+	_.allow("read", [Computer, ComputerProvider], sharedOnly)
 
 /**
  * Built-in roles. Every organization has them, and their policies cannot
@@ -609,9 +610,9 @@ export const builtinRoles = [
 			yield* readSharedTriggers(_)
 			yield* useChannels(_)
 			yield* useSharedComputers(_)
-			yield* sharedOf(_, ["write", "share"], [Bot])
-			yield* sharedOf(_, ["write"], [Computer, ComputerProvider])
-			yield* sharedOf(_, ["write"], [Trigger])
+			yield* _.allow(["write", "share"], Bot, sharedOnly)
+			yield* _.allow("write", [Computer, ComputerProvider], sharedOnly)
+			yield* _.allow("write", Trigger, sharedOnly)
 			yield* _.allow(
 				"*",
 				[
@@ -775,51 +776,58 @@ type OrganizationKind =
 	| "Usage"
 	| "Budget"
 
+/** A path parameter, or an empty string when the path has none. */
+const param = (
+	params: Readonly<Record<string, string | undefined>>,
+	name: string,
+) => params[name] ?? ""
+
 /**
- * An act on the resources of the caller. With `param`, the path parameter
+ * An act on the resources of the caller: the check passes when the caller may
+ * act on every one of them. With `name`, the path parameter with that name
  * names one resource, and the check is on that one.
  */
 export const own = <const K extends OwnKind>(
 	action: Domain.ActionOf<OpenBot, K>,
 	kind: K,
-	param?: string,
+	name?: string,
 ): Requirement =>
-	AbilityHttpApi.requiresWhere(
-		Auth,
-		action as never,
-		kind,
-		(params, caller) =>
-			({
-				organizationId: caller.organizationId ?? "",
-				ownerUserId: caller.userId,
-				...(param === undefined ? {} : { id: params[param] ?? "" }),
-			}) as never,
-	)
+	AbilityHttpApi.requires(Auth, action as never, kind, {
+		within: (params) => ($: any) =>
+			$.and(
+				$.under(
+					"org",
+					$.principal("organizationId"),
+					"user",
+					$.principal("userId"),
+				),
+				...(name === undefined ? [] : [$.eq("id", param(params, name))]),
+			),
+	})
 
 /** An act on the organization of the caller, such as reading its members. */
 export const organization = <const K extends OrganizationKind>(
 	action: Domain.ActionOf<OpenBot, K>,
 	kind: K,
 ): Requirement =>
-	AbilityHttpApi.requiresWhere(
-		Auth,
-		action as never,
-		kind,
-		(_, caller) => ({ organizationId: caller.organizationId ?? "" }) as never,
-	)
+	AbilityHttpApi.requires(Auth, action as never, kind, {
+		within: () => ($: any) => $.under("org", $.principal("organizationId")),
+	})
 
 /** An act on one Channel, named by a path parameter. */
 export const channel = (
 	action: Domain.ActionOf<OpenBot, "Channel">,
-	param: string,
+	name: string,
 ): Requirement =>
-	AbilityHttpApi.requiresWhere(Auth, action, "Channel", (params, caller) => ({
-		organizationId: caller.organizationId ?? "",
-		id: params[param] ?? "",
-	}))
+	AbilityHttpApi.requires(Auth, action, "Channel", {
+		within: (params) => ($) =>
+			$.and(
+				$.under("org", $.principal("organizationId")),
+				$.eq("id", param(params, name)),
+			),
+	})
 
 /** An act on the platform. */
 export const onPlatform = (
 	action: Domain.ActionOf<OpenBot, "Platform">,
-): Requirement =>
-	AbilityHttpApi.requiresWhere(PlatformAuth, action, "Platform", () => ({}))
+): Requirement => AbilityHttpApi.requires(PlatformAuth, action, "Platform")

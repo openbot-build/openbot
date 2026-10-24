@@ -38,12 +38,12 @@ export const allows = (
  * Fails with the error of `hide` when the caller may not read the resource,
  * so the caller can not learn that it exists. Then it checks the act.
  */
-export const guard = <E>(
+export const guard = <const T extends Policy.Target<OpenBot>, E>(
 	caller: Caller,
-	target: Policy.Target<OpenBot>,
-	hide: () => E,
+	target: T,
+	options: Authorizer.GuardOptions<OpenBot, E, T["resource"]["_tag"]>,
 ): Effect.Effect<void, E | Errors, Services> =>
-	Authorization.Auth.guard(target, { hide }).pipe(
+	Authorization.Auth.guard(target, options).pipe(
 		Effect.provideService(Identity, caller),
 	)
 

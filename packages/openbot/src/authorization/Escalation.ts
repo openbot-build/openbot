@@ -1,9 +1,12 @@
-import { Authorization, type Caller } from "@openbot-build/api"
-import { Condition, type Policy, type Rule } from "@nmnmcc/ability"
-import { Effect } from "effect"
-import { check, type Errors, type Services } from "./Check.ts"
+import { Authorization, type Caller, Identity } from "@openbot-build/api"
+import { Condition, Policy, type Rule } from "@nmnmcc/ability"
+import { Effect, HashMap, Option } from "effect"
+import type { Errors, Services } from "./Check.ts"
 
-type Scalar = Condition.Scalar
+/** Allows everything. A scope is empty when this policy allows none of it. */
+const everything = Policy.define(Authorization.OpenBot)(function* (_) {
+	yield* _.allow("*", "*")
+})
 
 /** Every allow rule in a policy tree, in any place of the tree. */
 const allowRules = (node: Policy.Node): ReadonlyArray<Rule.Any> => {
@@ -20,33 +23,15 @@ const allowRules = (node: Policy.Node): ReadonlyArray<Rule.Any> => {
 }
 
 /**
- * The fields that a condition fixes to one value: the `eq` tests with a
- * plain value at the top, or in an `And` at the top. Every value that the
- * condition lets in has these field values.
- */
-const fixedFields = (condition: Condition.Ast): Record<string, Scalar> => {
-	const output: Record<string, Scalar> = {}
-	const parts = condition._tag === "And" ? condition.conditions : [condition]
-	for (const part of parts)
-		if (
-			part._tag === "Compare" &&
-			part.op === "eq" &&
-			part.value._tag === "Literal"
-		)
-			output[part.field] = part.value.value
-	return output
-}
-
-/**
  * Checks that the allow rules of a policy give nothing that the caller can
  * not do. Otherwise anyone who may write roles could give themselves every
  * act.
  *
- * For each allow rule, and each kind and action of it, the rule is tested
- * for the caller as the principal. The check then asks the policy of the
- * caller about every value with the fields that the rule fixes, such as its
- * owner. A rule that fixes no field needs the act on the whole organization.
- * So the check never says yes for a rule that gives more than the caller has.
+ * Each allow rule, for each of its kinds and actions, is a scope: the values
+ * that it allows inside the organization, with the caller as the principal.
+ * The policy of the caller must allow every value in that scope. An empty
+ * scope gives nothing, so it passes. The check fails closed: when the answer
+ * is not known, it says no.
  */
 export const noMoreThanCaller = (
 	caller: Caller,
@@ -56,36 +41,48 @@ export const noMoreThanCaller = (
 		allowRules(policy.node),
 		(rule) => {
 			const kinds = rule.resources.includes("*")
-				? [...Authorization.OpenBot.resources.keys()]
+				? Array.from(HashMap.keys(Authorization.OpenBot.resources))
 				: rule.resources
 			return Effect.forEach(
 				kinds,
 				(kind) => {
-					const descriptor = Authorization.OpenBot.resources.get(kind)
-					if (descriptor === undefined) return Effect.void
-					const condition =
-						rule.when === undefined
-							? Condition.always
-							: Condition.partial(rule.when, {
-									principal: caller,
-									path: descriptor.path,
-								})
-					// This rule never applies inside the organization of the caller.
-					if (condition._tag === "False") return Effect.void
+					const descriptor = HashMap.get(Authorization.OpenBot.resources, kind)
+					// The rules of a member only work in the organization of the
+					// member, so a kind outside every organization gives nothing.
+					if (Option.isNone(descriptor) || descriptor.value.path?.[0] !== "org")
+						return Effect.void
 					const actions = rule.actions.includes("*")
-						? descriptor.actions
+						? descriptor.value.actions
 						: rule.actions.filter((action) =>
-								descriptor.actions.includes(action),
+								descriptor.value.actions.includes(action),
 							)
-					const where = {
-						...(descriptor.fieldPaths.includes("organizationId")
-							? { organizationId: caller.organizationId }
-							: {}),
-						...fixedFields(condition),
-					}
+					// A decoded policy keeps its conditions as plain data, so the
+					// condition of the rule is a scope as it is.
+					const within = ($: Condition.Builder<any, any, any>) =>
+						$.and(
+							$.under("org", $.principal("organizationId")),
+							(rule.when ?? Condition.always) as never,
+						)
 					return Effect.forEach(
 						actions,
-						(action) => check(caller, { action, kind, where } as never),
+						(action) =>
+							Effect.gen(function* () {
+								const target = { action, kind, within } as never
+								const empty =
+									Policy.coverage(everything, {
+										...(target as object),
+										principal: caller,
+									} as never)._tag === "None"
+								if (empty) return
+								const coverage = yield* Authorization.Auth.coverage(target)
+								if (coverage._tag === "All") return
+								return yield* Authorization.Forbidden.make({
+									action,
+									kind,
+									reason:
+										"A role or a policy may not give more than you can do yourself.",
+								})
+							}),
 						{ discard: true },
 					)
 				},
@@ -93,4 +90,4 @@ export const noMoreThanCaller = (
 			)
 		},
 		{ discard: true },
-	)
+	).pipe(Effect.provideService(Identity, caller))

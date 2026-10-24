@@ -61,14 +61,22 @@ export const memberTarget = (input: {
 			return {
 				action: "write",
 				kind: "Bot",
-				where: { organizationId, ownerUserId: rootOf(input.self.owner) },
+				within: ($) =>
+					$.and(
+						$.eq("organizationId", organizationId),
+						$.eq("ownerUserId", rootOf(input.self.owner)),
+					),
 			}
 		case "bots.delegate":
 			return input.bot === undefined
 				? {
 						action: "delegate",
 						kind: "Bot",
-						where: { organizationId, ownerUserId: null },
+						within: ($) =>
+							$.and(
+								$.eq("organizationId", organizationId),
+								$.eq("ownerUserId", null),
+							),
 					}
 				: {
 						action: "delegate",
