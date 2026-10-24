@@ -38,8 +38,8 @@ material. Do not change it unless the user asks.
   `Authorizer`.
 - `src/HttpApi.ts` is a separate entry point, because `effect/http-api` is not
   stable. Do not export it from `src/index.ts`.
-- Internal code is in `src/internal/`, with one file for each module that has
-  code.
+- Each module keeps its types, its docs and its code in one file. There is no
+  `src/internal/` folder.
 - Examples are in `examples/`.
 - Tests are in `tests/`.
 
@@ -57,7 +57,8 @@ material. Do not change it unless the user asks.
 - A condition is plain data. Only a predicate may run code. A predicate keeps
   its error type and service type in the types of the policy and of every check.
   A policy with a predicate must not become JSON: keep the `Opaque` marker in
-  the types.
+  the types. A condition also keeps what its predicates read (`Reads`), and each
+  child of a node has the types of its node.
 - A decision is `Allow`, `Deny` or `NotApplicable`. `Policy.decide` gives a
   decision. `Authorizer.check` puts a "no" into the error channel.
 - Fail closed. An error while loading a policy is never a "yes".
@@ -67,11 +68,43 @@ material. Do not change it unless the user asks.
 
 ## Code
 
-- Keep public types and their docs in the public modules in `src/`. Keep the
-  code in `src/internal/`.
-- Inside `src/internal/`, the error and service types of predicates are erased
-  to `unknown`. Those files turn off the `anyUnknownInErrorContext` check. Keep
-  the real types in the public modules.
+- Build the library on Effect. Do not copy the way Effect builds itself: Effect
+  had no Effect to build on, so its own code uses tricks that this library does
+  not need.
+  - Make values with Effect data types: `Data.taggedEnum` for trees of plain
+    nodes, `Data.Class` for values with methods, and `Schema` classes for errors
+    and for data that comes from outside.
+  - Do not make prototypes by hand. Do not write `Equal.symbol`, `Hash.symbol`
+    or `NodeInspectSymbol` methods, and do not use `Object.create`. Effect data
+    types give equality, hashing and `pipe`. When a value needs an equality that
+    is not structural, such as a cache key that keeps more data than it
+    compares, implement the public `Equal.Equal` interface on a small class, and
+    say why in a comment.
+  - Do not mark values with a `TypeId`. A guard tests the class with
+    `instanceof`.
+  - Use the tools that Effect gives to its users, such as `Function.dual`,
+    `Effect.fn`, `Context.Service`, `Layer`, `Cache` and `Schema`.
+- Do not keep state for the whole program. A module may not have a `Map`, a
+  `Set`, a `WeakMap`, a cache or a `let` at its top level. When a walk needs a
+  memo, the walk makes it, and the memo goes away when the walk ends. State that
+  must live longer belongs to a value, such as a layer.
+- Change as little state as you can. Use `const` and values that do not change.
+  Make a new value in place of a change to an old one. A memo `Map` inside one
+  call is the usual exception.
+- Use the `HashMap` and `HashSet` of Effect, not a native `Map` or `Set`. Use
+  `MutableHashMap` for a memo with keys that are strings, numbers or functions.
+  A native `Map` or `Set` is right only when it must find an object by the
+  object itself: `Equal` compares Effect data, Schema nodes and plain objects by
+  structure. Say why in a comment.
+- Do not write `for` or `while` loops. Use the tools of Effect: `Array` from
+  `effect` (`map`, `flatMap`, `filter`, `reduce`, `reduceRight`, `some`,
+  `every`, `findFirst`, `groupWith`, `unfold`) for values, and `Effect.forEach`,
+  `Effect.filter` and `Effect.findFirst` for Effects. A walk that must stop
+  early may call itself with the next index.
+- A public function gives its full types. When the code under it works on nodes
+  with no types, give it a short private function, and give the public type in
+  the `export const` line. Such a file may turn off the
+  `anyUnknownInErrorContext` check, with a comment that says why.
 - Follow the style of the code near your change before you add new layers.
 - Keep each change to what the user asked for.
 - Do not change generated files or reference material by hand.

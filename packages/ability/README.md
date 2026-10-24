@@ -218,6 +218,10 @@ test for `null`, use a fixed value, as in `$.eq("ownerUserId", null)`.
 of the policy and of every check. A policy with a predicate can not become JSON
 or a query, and the type system stops you when you try.
 
+A predicate also keeps the types of the value and the principal that it reads.
+So a predicate for a Bot can not go into a rule for a Trigger. Make conditions
+with the builder: a node made by hand is not a condition in the types.
+
 ## Policies
 
 A list of rules has a combining algorithm. It decides which rule gives the
@@ -268,6 +272,7 @@ authorizer with a decider asks the decider first.
 | `Policy.decideSync`      | The same, at once. Only for policies with no predicates.       |
 | `Policy.explain`         | The decision and the rules that were tested, for an audit log. |
 | `Policy.residual`        | The condition on resource values that the policy allows.       |
+| `Policy.coverage`        | If the policy allows all, none or some of a part of a kind.    |
 | `Policy.permittedFields` | The fields of a value that the policy lets a request use.      |
 
 `Policy.residual` puts the principal into every rule and gives a condition on
@@ -275,23 +280,66 @@ the resource fields only. It is `True` when the policy allows every value of the
 kind, and `False` when it allows none. Use it to ask "may this principal do this
 act on some value of this kind?", or to make a database query.
 
-### A part of a kind
+When a rule that the request may use has a predicate, the residual is one
+predicate with the name `"policy"`. It runs the whole policy for each value, so
+it gives the same answers and the same failures as `Policy.decide`.
 
-A kind target may have `where`: known values of some fields. Then the question
-is about the part of the kind with these values, such as "the Bots of this
-user":
+A deep policy tree may give a very large residual. When it would have more than
+10000 nodes, `Policy.residual` throws an error, and a check in an `Authorizer`
+fails.
+
+### Scopes
+
+A scope is a part of a kind, such as the posts of one writer. Give it as
+`within`, with the same builder as the condition of a rule. A scope is plain
+data: it may not have a predicate.
+
+There are three questions about a scope. Each one is a question about two sets:
+the values in the scope, and the values that the policy allows.
+
+| Question                               | Sets                | Function                        |
+| -------------------------------------- | ------------------- | ------------------------------- |
+| May the principal act on every value?  | scope ⊆ allowed     | `Policy.coverage` is `All`      |
+| Which values may the principal act on? | scope ∩ allowed     | `Policy.residual`               |
+| May the principal act on some value?   | scope ∩ allowed ≠ ∅ | `Policy.coverage` is not `None` |
 
 ```ts
-Policy.residual(policy, {
-	principal,
+const ownPosts = {
+	principal: writer,
 	action: "update",
 	kind: "Post",
-	where: { authorId: "u1" },
-})
+	within: ($) => $.eq("authorId", $.principal("id")),
+} as const
+
+Policy.coverage(policy, ownPosts)._tag // "All"
+Policy.residual(policy, ownPosts) // authorId = "u1"
 ```
 
-The result is `True` when the policy allows the act on every post of `u1`.
-`Condition.assign` does the same work on any condition.
+Use "every value" for an act on a value that does not exist yet. A new post has
+no id, but its author is known, so a check on the scope of its author tells if
+the writer may make it.
+
+`Policy.coverage` gives one of four answers. Each one has `condition`, the exact
+list query for the scope:
+
+- `All`: the policy allows every value in the scope.
+- `None`: the policy allows no value in the scope. An empty scope is `None` too,
+  so a scope with a mistake never gives a "yes".
+- `Some`: the policy allows some values and not others. It gives an example of
+  each, `allowed` and `refused`.
+- `Unknown`: the policy has a predicate, or the search went past its budget.
+
+The answer is exact. Each test in a condition compares one field with fixed
+values, so these values cut the values of the field into a few parts, and every
+value in one part gives the same answer. `Condition.satisfiable` tries one value
+from each part, one field at a time. It takes the values of each field from the
+Schema of the resource: its literals, `null` for a nullable or optional field,
+and finite or integer numbers. It does not use other Schema checks, such as a
+minimum length. So it may say "not all" where such a check stops the other
+values, but it never says "all" wrongly.
+
+"Some" means that some value of the Schema is allowed. It does not mean that
+such a value is in your database. To know that, run the condition as a query.
 
 ## Queries
 
@@ -310,15 +358,19 @@ const toSql = Condition.fold<string>({
 	not: (part) => `NOT ${part}`,
 })
 
-const where =
-	yield *
-	toSql(Policy.residual(policy, { principal, action: "read", kind: "Post" }))
+const program = Effect.gen(function* () {
+	const where = yield* toSql(
+		Policy.residual(policy, { principal, action: "read", kind: "Post" }),
+	)
+})
 ```
 
 `fold` fails with `Untranslatable` on a predicate, unless you give a `predicate`
 function too. Take care with `null`: in this library `ne` is true when the field
 is `null`, but in SQL `x <> 'a'` is not true when `x` is `NULL`. Use
-`IS DISTINCT FROM` or a similar form.
+`IS DISTINCT FROM` or a similar form. Give the values to the database as bound
+parameters. A value from a principal may have a quote in it, and in the SQL text
+it could change the query. `examples/openbot-rbac.ts` shows how.
 
 ## JSON
 
@@ -355,19 +407,32 @@ const AuthLive = Authorizer.layer(Auth, {
 })
 ```
 
+Two principals with the same data get one policy from the cache. So the loader
+must decide by the data of the principal only. When it tests that an object of
+the principal is a given object, as `role === admin` does, give `cache: false`.
+
 Use it in a handler:
 
 ```ts
-yield * Auth.check({ action: "update", resource: post })
-yield * Auth.check({ action: "read", kind: "Post" })
-yield *
-	Auth.guard(
+const handler = Effect.gen(function* () {
+	yield* Auth.check({ action: "update", resource: post })
+	yield* Auth.check({ action: "read", kind: "Post" })
+	yield* Auth.guard(
 		{ action: "update", resource: post },
 		{
 			hide: () => PostNotFound.make({ id: post.id }),
 		},
 	)
-const where = yield * Auth.filter({ action: "read", kind: "Post" })
+	const where = yield* Auth.filter({ action: "read", kind: "Post" })
+	// A new post of the writer: every post of this author may be made.
+	yield* Auth.check({
+		action: "update",
+		kind: "Post",
+		within: ($) => $.eq("authorId", $.principal("id")),
+	})
+	const covered = yield* Auth.coverage({ action: "delete", kind: "Post" })
+	const showDeleteButton = covered._tag !== "None"
+})
 ```
 
 | Function          | What it does                                                                  |
@@ -375,13 +440,18 @@ const where = yield * Auth.filter({ action: "read", kind: "Post" })
 | `check`           | Succeeds with `void`, or fails with `Forbidden`.                              |
 | `guard`           | Fails with your error when the principal may not read the value, then checks. |
 | `filter`          | Gives the residual condition, for a list query.                               |
+| `coverage`        | Tells if the principal may act on all, none or some values in a scope.        |
 | `decide`          | Gives the decision. It does not fail on a "no".                               |
 | `permittedFields` | Gives the fields that the principal may use.                                  |
 | `invalidate`      | Removes a cached policy, after a change to the rules of a principal.          |
 
 A check on a kind (`{ action, kind }`) passes only when the policy allows the
-act on every value of the kind. With `where`, it passes when the policy allows
-the act on every value with those field values.
+act on every value of the kind. With `within`, it passes only when the policy
+allows the act on every value in the scope, and the scope is not empty. The
+decider is asked only when no value in the scope is denied.
+
+`filter` gives `False` when the principal may act on no value. Then the list is
+empty, and that is not an error.
 
 The errors of a check:
 
@@ -437,19 +507,43 @@ const health = HttpApiEndpoint.get("health", "/health").annotate(
 	[],
 )
 
+// The checks run only in a group that uses the middleware.
+const posts = HttpApiGroup.make("posts")
+	.add(update, health)
+	.middleware(Authorization)
+
 const AuthorizationLive = AbilityHttpApi.layer(Authorization, Auth)
 ```
 
-`requiresWhere` checks a part of a kind, with no value to load. Its function
-gets the path parameters and the principal, and gives the known field values:
+An act on a part of a kind takes a scope from the path parameters. A list takes
+`lists`: the middleware does not check every value, because the handler gets its
+query with `Auth.filter`, with the same scope. An empty list is not an error,
+unless you give `nonEmpty: true`:
 
 ```ts
-AbilityHttpApi.requiresWhere(Auth, "read", "Post", (params, user) => ({
-	authorId: user.id,
-}))
+const create = HttpApiEndpoint.post("create", "/users/:user/posts", {
+	params: { user: Schema.String },
+}).annotate(AbilityHttpApi.Required, [
+	AbilityHttpApi.requires(Auth, "update", "Post", {
+		within: (params) => ($) => $.eq("authorId", params["user"] ?? ""),
+	}),
+])
+
+const list = HttpApiEndpoint.get("list", "/users/:user/posts", {
+	params: { user: Schema.String },
+}).annotate(AbilityHttpApi.Required, [
+	AbilityHttpApi.lists(Auth, "read", "Post", {
+		within: (params) => ($) => $.eq("authorId", params["user"] ?? ""),
+	}),
+])
 ```
 
-A `load` function gets the principal as its second argument too.
+A path parameter may be `undefined`. A scope with `undefined` in it is a defect,
+so give another value for it.
+
+The annotations and the layer do nothing alone. Give the middleware to every
+group with `.middleware(Authorization)`, or to the whole API. An endpoint in a
+group without the middleware is not checked.
 
 `GroupRequired` gives a default for a whole group: one list for GET requests and
 one for every other method. `AbilityHttpApi.errors` gives the errors with HTTP

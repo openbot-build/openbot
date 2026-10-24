@@ -25,6 +25,7 @@ import { Authorizer, Policy } from "../src/index.ts"
 import {
 	alice,
 	aliceBot,
+	aliceTrigger,
 	App,
 	Bot,
 	bob,
@@ -67,6 +68,11 @@ const findBot = (id: string | undefined) =>
 		Effect.mapError(() => BotNotFound.make({ id: id ?? "" })),
 	)
 
+// A wrapper that takes any kind. Its load function gives a Trigger, also when
+// the kind is "Bot".
+const readAny = (kind: "Bot" | "Trigger") =>
+	Authorization.requires(Auth, "read", kind, () => Effect.succeed(aliceTrigger))
+
 const Api = HttpApi.make("api").add(
 	HttpApiGroup.make("bots")
 		.add(
@@ -78,14 +84,6 @@ const Api = HttpApi.make("api").add(
 					findBot(params["id"]),
 				),
 			]),
-			HttpApiEndpoint.get("mine", "/users/:userId/bots", {
-				params: { userId: Schema.String },
-				success: Schema.String,
-			}).annotate(Authorization.Required, [
-				Authorization.requiresWhere(Auth, "update", "Bot", (params) => ({
-					ownerUserId: params["userId"] ?? "",
-				})),
-			]),
 			HttpApiEndpoint.get("count", "/bots/count", {
 				success: Schema.Finite,
 			}),
@@ -95,6 +93,48 @@ const Api = HttpApi.make("api").add(
 			HttpApiEndpoint.get("secret", "/secret", {
 				success: Schema.String,
 			}),
+			HttpApiEndpoint.get("mixed", "/mixed", {
+				success: Schema.String,
+			}).annotate(Authorization.Required, [readAny("Bot")]),
+			HttpApiEndpoint.post("create", "/orgs/:org/users/:user/bots", {
+				params: { org: Schema.String, user: Schema.String },
+				success: Schema.String,
+			}).annotate(Authorization.Required, [
+				Authorization.requires(Auth, "update", "Bot", {
+					within: (params) => ($) =>
+						$.under(
+							"org",
+							params["org"] ?? null,
+							"user",
+							params["user"] ?? null,
+						),
+				}),
+			]),
+			HttpApiEndpoint.get("list", "/orgs/:org/bots", {
+				params: { org: Schema.String },
+				success: Schema.String,
+			}).annotate(Authorization.Required, [
+				Authorization.lists(Auth, "read", "Bot", {
+					within: (params) => ($) => $.under("org", params["org"] ?? null),
+				}),
+			]),
+			HttpApiEndpoint.get("strictList", "/orgs/:org/strict-bots", {
+				params: { org: Schema.String },
+				success: Schema.String,
+			}).annotate(Authorization.Required, [
+				Authorization.lists(Auth, "read", "Bot", {
+					within: (params) => ($) => $.under("org", params["org"] ?? null),
+					nonEmpty: true,
+				}),
+			]),
+			HttpApiEndpoint.post("careless", "/careless", {
+				success: Schema.String,
+			}).annotate(Authorization.Required, [
+				Authorization.requires(Auth, "update", "Bot", {
+					// There is no `org` parameter, so the value is `undefined`.
+					within: (params) => ($) => $.under("org", params["org"] as string),
+				}),
+			]),
 		)
 		.annotate(Authorization.GroupRequired, {
 			read: [Authorization.requires(Auth, "read", "Bot")],
@@ -116,12 +156,16 @@ const BotsLive = HttpApiBuilder.group(Api, "bots", (handlers) =>
 	Effect.succeed(
 		handlers
 			.handle("rename", ({ params }) => Effect.succeed(`renamed ${params.id}`))
-			.handle("mine", ({ params }) =>
-				Effect.succeed(`bots of ${params.userId}`),
-			)
 			.handle("count", () => Effect.succeed(bots.size))
 			.handle("health", () => Effect.succeed("ok"))
-			.handle("secret", () => Effect.succeed("secret")),
+			.handle("secret", () => Effect.succeed("secret"))
+			.handle("mixed", () => Effect.succeed("mixed"))
+			.handle("create", ({ params }) =>
+				Effect.succeed(`created in ${params.org}`),
+			)
+			.handle("list", () => Effect.succeed("listed"))
+			.handle("strictList", () => Effect.succeed("listed"))
+			.handle("careless", () => Effect.succeed("created")),
 	),
 )
 
@@ -174,6 +218,46 @@ const ServerLive = Layer.mergeAll(BotsLive, AdminLive).pipe(
 	Layer.provideMerge(PlatformLive),
 )
 
+const BrokenServerLive = Layer.mergeAll(BotsLive, AdminLive).pipe(
+	Layer.provideMerge(
+		Layer.mergeAll(
+			AuthenticationLive,
+			Authorization.layer(Authorize, Auth),
+		).pipe(
+			Layer.provide(
+				Authorizer.layer(Auth, {
+					principal: Identity,
+					policy: () => Effect.fail({ password: "secret" }),
+				}),
+			),
+		),
+	),
+	Layer.provideMerge(PlatformLive),
+)
+
+const MixedServerLive = Layer.mergeAll(BotsLive, AdminLive).pipe(
+	Layer.provideMerge(
+		Layer.mergeAll(
+			AuthenticationLive,
+			Authorization.layer(Authorize, Auth),
+		).pipe(
+			Layer.provide(
+				Authorizer.layer(Auth, {
+					principal: Identity,
+					policy: () =>
+						Effect.succeed(
+							Policy.define(App)(function* (_) {
+								yield* _.allow("read", "Trigger")
+								yield* _.deny("read", Bot)
+							}),
+						),
+				}),
+			),
+		),
+	),
+	Layer.provideMerge(PlatformLive),
+)
+
 describe("HttpApi", () => {
 	it.effect("checks a loaded resource for an endpoint", () =>
 		Effect.gen(function* () {
@@ -198,25 +282,6 @@ describe("HttpApi", () => {
 		}).pipe(Effect.scoped, Effect.provide(ServerLive)),
 	)
 
-	it.effect("checks a part of a kind with where", () =>
-		Effect.gen(function* () {
-			const client = yield* HttpApiTest.groups(Api, ["bots", "admin"])
-			assert.strictEqual(
-				yield* client.bots.mine({ params: { userId: "alice" } }),
-				"bots of alice",
-			)
-			const other = yield* Effect.exit(
-				client.bots.mine({ params: { userId: "bob" } }),
-			)
-			assert.deepStrictEqual(
-				Exit.findErrorOption(other),
-				Option.some(
-					Authorizer.Forbidden.make({ action: "update", kind: "Bot" }),
-				),
-			)
-		}).pipe(Effect.scoped, Effect.provide(ServerLive)),
-	)
-
 	it.effect("uses the group default, and lets an empty list through", () =>
 		Effect.gen(function* () {
 			const client = yield* HttpApiTest.groups(Api, ["bots", "admin"])
@@ -232,5 +297,66 @@ describe("HttpApi", () => {
 			const exit = yield* Effect.exit(client.admin.stats())
 			assert.isTrue(Exit.isFailure(exit))
 		}).pipe(Effect.scoped, Effect.provide(ServerLive)),
+	)
+
+	it.effect("does not send the cause of PolicyUnavailable", () =>
+		Effect.gen(function* () {
+			const client = yield* HttpApiTest.groups(Api, ["bots", "admin"])
+			const exit = yield* Effect.exit(
+				client.bots.rename({ params: { id: "b1" } }),
+			)
+			const error = Exit.findErrorOption(exit)
+			assert.isTrue(
+				error._tag === "Some" &&
+					error.value instanceof Authorizer.PolicyUnavailable,
+			)
+			assert.notInclude(JSON.stringify(error), "secret")
+		}).pipe(Effect.scoped, Effect.provide(BrokenServerLive)),
+	)
+
+	it.effect("checks a scope from the path parameters", () =>
+		Effect.gen(function* () {
+			const client = yield* HttpApiTest.groups(Api, ["bots", "admin"])
+			assert.strictEqual(
+				yield* client.bots.create({ params: { org: "acme", user: "alice" } }),
+				"created in acme",
+			)
+			const other = yield* Effect.exit(
+				client.bots.create({ params: { org: "acme", user: "bob" } }),
+			)
+			assert.deepStrictEqual(
+				Exit.findErrorOption(other),
+				Option.some(
+					Authorizer.Forbidden.make({ action: "update", kind: "Bot" }),
+				),
+			)
+			const careless = yield* Effect.exit(client.bots.careless())
+			assert.isTrue(Exit.isFailure(careless))
+		}).pipe(Effect.scoped, Effect.provide(ServerLive)),
+	)
+
+	it.effect("lets a list through when it is empty, unless it must not be", () =>
+		Effect.gen(function* () {
+			const client = yield* HttpApiTest.groups(Api, ["bots", "admin"])
+			assert.strictEqual(
+				yield* client.bots.list({ params: { org: "acme" } }),
+				"listed",
+			)
+			const strict = yield* Effect.exit(
+				client.bots.strictList({ params: { org: "acme" } }),
+			)
+			assert.deepStrictEqual(
+				Exit.findErrorOption(strict),
+				Option.some(Authorizer.Forbidden.make({ action: "read", kind: "Bot" })),
+			)
+		}).pipe(Effect.scoped, Effect.provide(ServerLive)),
+	)
+
+	it.effect("does not check a loaded value of another kind", () =>
+		Effect.gen(function* () {
+			const client = yield* HttpApiTest.groups(Api, ["bots", "admin"])
+			const exit = yield* Effect.exit(client.bots.mixed())
+			assert.isTrue(Exit.isFailure(exit))
+		}).pipe(Effect.scoped, Effect.provide(MixedServerLive)),
 	)
 })
