@@ -90,3 +90,9 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 评判模型使用 **Rules 模型**。它是[组织设置](/zh-cn/docs/organization#设置)中的
 `rulesModel`。它没有默认值。它为 `null`
 时，评判不给出答案，由人或 Bot 来决定。对于相同的 Rule 和相同的能力，OpenBot 会保存每次评判的回答，因此同一个问题不会让评判模型再运行一次。
+
+Rules 模型可以是语言模型，也可以是[决策模型](/zh-cn/docs/models#决策模型)：
+
+- 语言模型写出完整的回答。它引用所用每条 Rule 的原话，并给出理由。
+- 决策模型不写文本。它从 `allow`、`deny` 和 `no_match`
+  中选一个，并对每条 Rule 给出这条 Rule 决定这个请求的可能性。可能性达到 0.5 或以上的每条 Rule，OpenBot 都会引用它的全文。没有这样的 Rule 的允许或拒绝不算决定。

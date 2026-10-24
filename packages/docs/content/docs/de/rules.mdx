@@ -113,3 +113,14 @@ keinen Standardwert. Wenn es `null` ist, gibt das Prüf-Modell keine Antwort.
 Dann entscheidet eine Person oder ein Bot. OpenBot speichert jede Antwort des
 Prüf-Modells für dieselben Rules und dieselbe Fähigkeit. So läuft das
 Prüf-Modell für dieselbe Frage nicht noch einmal.
+
+Das Rules-Model kann ein Language-Model oder ein
+[Decision-Model](/de/docs/models#decision-model) sein:
+
+- Ein Language-Model schreibt die ganze Antwort. Es zitiert die Worte jeder
+  Rule, die es nutzt, und nennt seinen Grund.
+- Ein Decision-Model schreibt keinen Text. Es wählt `allow`, `deny` oder
+  `no_match`. Für jede Rule sagt es, wie wahrscheinlich diese Rule über den
+  Request entscheidet. OpenBot zitiert den ganzen Text jeder Rule mit einer
+  Wahrscheinlichkeit von 0,5 oder mehr. Ein Allow oder Deny ohne eine solche
+  Rule ist keine Entscheidung.

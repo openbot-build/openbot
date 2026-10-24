@@ -25,7 +25,7 @@ Bot 需要一个语言模型才能工作。OpenBot 不自带模型。你需要�
 
 - `language` 模型会写文本、调用工具。它运行 Turn、评判 Rule，并学习 Bot 记忆。
 - `decision`
-  模型只从固定的列表中选一个答案。它不写文本。TypeSafe 的 Jev 就是一个例子。见[决策模型](#决策模型)。
+  模型只从固定的列表中选一个答案。它不写文本。它可以评判 Rule。TypeSafe 的 Jev 就是一个例子。见[决策模型](#决策模型)。
 
 当你从代码中运行 OpenBot 时，还可以提供内置模型。参见[内置模型](#内置模型)。
 
@@ -227,8 +227,9 @@ OpenBot 从不替你选模型。没有默认模型。每种用途都要指明自
 - **[Bot 记忆](/zh-cn/docs/memory)**使用同一份设置中的 `botMemoryModel`。它为
   `null` 时，Bot 什么都不学。
 
-`rulesModel` 和 `botMemoryModel` 必须是 `language` 模型。目录会给出每个模型的
-`type`，Chat 只能选择 `language` 模型。
+`rulesModel` 可以是 `language` 模型，也可以是 `decision` 模型。`botMemoryModel`
+必须是 `language` 模型，因为记忆 Bot 要写文本。否则 OpenBot 返回 `400` 和
+`SettingsInvalid`。目录会给出每个模型的 `type`，Chat 只能选择 `language` 模型。
 
 旧版本的 OpenBot 有 `defaultModel` 和 `helperModel`。升级时，OpenBot 把旧的
 `defaultModel` 给每个没有模型的 Bot。`rulesModel` 和 `botMemoryModel`
@@ -290,8 +291,8 @@ token，并把 `upstream`
 `openai-compat` 提供方询问决策模型。你可以在那里关联它，但要询问它，请使用
 `typesafe` 提供方。
 
-OpenBot 目前还没有任何部分会询问决策模型。`rulesModel` 和 `botMemoryModel`
-只接受语言模型。
+Rule 的评判可以使用决策模型。把 `rulesModel`
+设为它即可。见[评判模型](/zh-cn/docs/rules#评判模型)。
 
 ## 没有模型时运行
 

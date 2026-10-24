@@ -30,7 +30,8 @@ Each model has one of two types:
 - A `language` model writes text and calls tools. It runs Turns, judges Rules
   and learns Bot memory.
 - A `decision` model only picks an answer from a fixed list. It does not write
-  text. Jev from TypeSafe is an example. See [Decision model](#decision-model).
+  text. It can judge Rules. Jev from TypeSafe is an example. See
+  [Decision model](#decision-model).
 
 When you run OpenBot from code, you can also give built-in models. See
 [Built-in models](#built-in-models).
@@ -249,8 +250,10 @@ its own model:
 - **[Bot memory](/docs/memory)** uses `botMemoryModel` in the same settings.
   When it is `null`, Bots learn nothing.
 
-`rulesModel` and `botMemoryModel` must be `language` models. The catalog gives
-the `type` of each model, and a Chat can choose only `language` models.
+`rulesModel` can be a `language` model or a `decision` model. `botMemoryModel`
+must be a `language` model, because the memory Bot writes text. Otherwise
+OpenBot returns `400` with `SettingsInvalid`. The catalog gives the `type` of
+each model, and a Chat can choose only `language` models.
 
 Older versions of OpenBot had `defaultModel` and `helperModel`. When you
 upgrade, OpenBot gives the old `defaultModel` to each Bot that has no model.
@@ -316,8 +319,8 @@ builds the client once for each provider and model, and builds it again when the
 provider changes. OpenBot cannot ask a decision model through an `openai-compat`
 provider yet. You can link one there, but use a `typesafe` provider to ask it.
 
-No part of OpenBot asks a decision model yet. `rulesModel` and `botMemoryModel`
-take only language models.
+The judge of Rules can use a decision model. Set `rulesModel` to it. See
+[The judge model](/docs/rules#the-judge-model).
 
 ## Run without a model
 

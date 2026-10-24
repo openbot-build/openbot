@@ -106,3 +106,13 @@ The judge uses the **Rules model**. It is `rulesModel` in the
 is `null`, the judge gives no answer, so a person or a Bot decides. OpenBot
 keeps each judge answer for the same Rules and the same capability, so the judge
 does not run again for the same question.
+
+The Rules model can be a language model or a
+[decision model](/docs/models#decision-model):
+
+- A language model writes the whole answer. It quotes the words of each Rule
+  that it uses, and gives its reason.
+- A decision model writes no text. It picks `allow`, `deny` or `no_match`, and
+  for each Rule it says how likely it is that the Rule decides the request.
+  OpenBot quotes the whole text of each Rule with a likelihood of 0.5 or more.
+  An allow or a deny without such a Rule is no decision.

@@ -31,8 +31,8 @@ Jedes Model hat einen von zwei Typen:
 - Ein `language`-Model schreibt Text und ruft Werkzeuge auf. Es führt Turns aus,
   beurteilt Rules und lernt Bot-Memory.
 - Ein `decision`-Model wählt nur eine Antwort aus einer festen Liste. Es
-  schreibt keinen Text. Jev von TypeSafe ist ein Beispiel. Siehe
-  [Decision-Model](#decision-model).
+  schreibt keinen Text. Es kann Rules beurteilen. Jev von TypeSafe ist ein
+  Beispiel. Siehe [Decision-Model](#decision-model).
 
 Wenn du OpenBot aus Code startest, kannst du auch eingebaute Models angeben.
 Siehe [Eingebaute Models](#eingebaute-models).
@@ -250,7 +250,9 @@ nennt ihr eigenes Model:
 - **[Bot-Memory](/de/docs/memory)** nutzt `botMemoryModel` in denselben
   Einstellungen. Wenn es `null` ist, lernen Bots nichts.
 
-`rulesModel` und `botMemoryModel` müssen `language`-Models sein. Der Katalog
+`rulesModel` kann ein `language`-Model oder ein `decision`-Model sein.
+`botMemoryModel` muss ein `language`-Model sein, weil der Memory-Bot Text
+schreibt. Sonst gibt OpenBot `400` mit `SettingsInvalid` zurück. Der Katalog
 nennt den `type` jedes Model, und ein Chat kann nur `language`-Models wählen.
 
 Ältere Versionen von OpenBot hatten `defaultModel` und `helperModel`. Beim
@@ -321,8 +323,8 @@ baut ihn neu, wenn sich der Anbieter ändert. OpenBot kann ein Decision-Model
 noch nicht über einen `openai-compat`-Anbieter fragen. Du kannst es dort
 verknüpfen, aber nutze einen `typesafe`-Anbieter, um es zu fragen.
 
-Noch kein Teil von OpenBot fragt ein Decision-Model. `rulesModel` und
-`botMemoryModel` nehmen nur Language-Models.
+Das Prüf-Modell für Rules kann ein Decision-Model nutzen. Setze `rulesModel`
+darauf. Siehe [Das Prüf-Modell](/de/docs/rules#das-prüf-modell).
 
 ## Ohne Model arbeiten
 
