@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Build, typecheck and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
+        with:
+          # Download prebuilt devenv packages instead of building them.
+          extra-conf: |
+            extra-substituters = https://devenv.cachix.org
+            extra-trusted-public-keys = devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw=
+      # Keeps Nix build results in the GitHub Actions cache between runs.
+      - uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
+        with:
+          use-flakehub: false
+          diagnostic-endpoint: ""
+      - name: Install devenv
+        run: nix profile add github:cachix/devenv/v2.4.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/pnpm
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+      - name: Install dependencies
+        run:
+          devenv shell -- pnpm install --frozen-lockfile --store-dir .cache/pnpm
+      - name: Build
+        run: devenv shell -- pnpm build
+      - name: Typecheck
+        run: devenv shell -- pnpm typecheck
+      - name: Test
+        run: devenv shell -- pnpm test
+      - name: Type tests
+        run: devenv shell -- pnpm test-types
+      - name: Examples
+        run: |
+          devenv shell -- node examples/basic.ts
+          devenv shell -- node examples/authorizer.ts
+          devenv shell -- node examples/openbot-rbac.ts
+
+  publish:
+    name: Publish to npm
+    needs: check
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # npm Trusted Publishing uses a GitHub OIDC token in place of an npm
+      # token. OIDC (OpenID Connect) lets npm see which workflow made the
+      # token.
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
+        with:
+          extra-conf: |
+            extra-substituters = https://devenv.cachix.org
+            extra-trusted-public-keys = devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw=
+      - uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
+        with:
+          use-flakehub: false
+          diagnostic-endpoint: ""
+      - name: Install devenv
+        run: nix profile add github:cachix/devenv/v2.4.0
+      - name: Check that the tag is the package version
+        run: |
+          version="$(devenv shell -- node -p 'require("./package.json").version' | tail -n 1)"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "The tag $GITHUB_REF_NAME is not v$version from package.json."
+            exit 1
+          fi
+      - name: Install dependencies
+        run: devenv shell -- pnpm install --frozen-lockfile
+      # npm 11.5.1 or newer can publish with Trusted Publishing. npm makes a
+      # provenance statement by itself. The prepack and prepublishOnly scripts
+      # build and check the package again.
+      - name: Publish
+        run: devenv shell -- npm publish
