@@ -9,9 +9,10 @@ import {
 } from "@openbot-build/core"
 import {
 	BotsApi,
-	type DelegationsApi,
+	DelegationsApi,
 	type Identity,
 	type MessageReceipt,
+	RequestsApi,
 } from "@openbot-build/api"
 import {
 	Clock,
@@ -93,12 +94,15 @@ const reason = {
 const model = {
 	type: "object",
 	properties: {
+		_tag: { const: "Config.Selection" },
 		provider: { type: "string" },
 		model: { type: "string" },
+		reasoningEffort: { type: "string" },
+		serviceTier: { type: "string" },
 	},
-	required: ["provider", "model"],
+	required: ["_tag", "provider", "model"],
 	description:
-		"Optional. The model of the new Bot. Without it, the new Bot uses your model.",
+		"Optional. The model of the new Bot, in the same form as the `model` of a Bot. Without it, the new Bot uses your model.",
 } as const
 const scope = {
 	type: "string",
@@ -107,67 +111,71 @@ const scope = {
 		"How long the decision lasts: this call only, this Chat, or until it is revoked.",
 } as const
 
-/** The longest time limit that a Bot can give: 30 days. */
-const maxMinutes = 30 * 24 * 60
+/** The limits take the same form as the `limits` of a Delegation. */
 const DelegateInput = Schema.Struct({
 	bot: Schema.optionalKey(Schema.String),
 	task: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20000)),
 	reason: Schema.optionalKey(Schema.String),
 	delegation: Schema.optionalKey(Schema.String),
-	timeLimitMinutes: Schema.Finite.check(
-		Schema.isGreaterThan(0),
-		Schema.isLessThanOrEqualTo(maxMinutes),
-	),
-	maxSteps: Schema.optionalKey(
-		Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
-	),
-	budgetUsd: Schema.optionalKey(Schema.Finite.check(Schema.isGreaterThan(0))),
+	limits: DelegationsApi.DelegationLimits,
 })
-/** The limits of new work, from the words of the Bot. */
-const limitsOf = (
-	input: typeof DelegateInput.Type,
-): DelegationsApi.DelegationLimits => ({
-	timeMs: Math.max(1000, Math.round(input.timeLimitMinutes * 60 * 1000)),
-	...(input.maxSteps === undefined ? {} : { steps: input.maxSteps }),
-	...(input.budgetUsd === undefined
-		? {}
-		: { budgetMicros: Math.max(1, Math.round(input.budgetUsd * 1_000_000)) }),
-})
+const limitsParameter = {
+	type: "object",
+	properties: {
+		timeMs: {
+			type: "integer",
+			minimum: 1000,
+			maximum: 30 * 24 * 60 * 60 * 1000,
+			description:
+				"Required. How many milliseconds the work may run, from 1 second to 30 days.",
+		},
+		steps: {
+			type: "integer",
+			minimum: 1,
+			description:
+				"Optional. How many model steps the work may use. A step is one call to the model.",
+		},
+		budgetMicros: {
+			type: "integer",
+			minimum: 1,
+			description:
+				"Optional. How much the model calls of the work, and of the work that it gives away, may cost, in micro-USD. One US dollar is 1,000,000 micro-USD.",
+		},
+	},
+	required: ["timeMs"],
+	description:
+		"The limits of the work. At a limit the work pauses, and the decider above that Bot says whether it goes on.",
+} as const
 const CancelInput = Schema.Struct({
 	delegation: Schema.String,
 	reason: Schema.optionalKey(Schema.String),
 })
+/** The fields of the new Bot take the same form as in `CreateBotRequest`. */
 const CreateInput = Schema.Struct({
-	name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
-	role: Schema.String.check(Schema.isMaxLength(500)),
-	instructions: Schema.String.check(Schema.isMaxLength(20000)),
-	model: Schema.optionalKey(
-		Schema.Struct({
-			provider: Config.Selection.fields.provider,
-			model: Config.Selection.fields.model,
-		}),
-	),
+	name: BotsApi.CreateBotRequest.fields.name,
+	role: BotsApi.CreateBotRequest.fields.role,
+	instructions: BotsApi.CreateBotRequest.fields.instructions,
+	model: BotsApi.CreateBotRequest.fields.model,
 	reason: Schema.String,
 })
 /** The model of a new Bot: the model in the tool call, or else the model of the Bot that makes it. */
 const modelOf = (
 	input: typeof CreateInput.Type,
 	creator: BotsApi.Bot,
-): { readonly model?: Config.Selection } =>
-	input.model !== undefined
-		? { model: Config.Selection.make(input.model) }
-		: creator.model === undefined
-			? {}
-			: { model: creator.model }
+): { readonly model?: Config.Selection } => {
+	const model = input.model ?? creator.model
+	return model === undefined ? {} : { model }
+}
 const BotInput = Schema.Struct({ bot: Schema.String })
 const ConfideInput = Schema.Struct({ words: Schema.String })
+/** A decision takes the same `scope` and `reason` as `ResolveRequest`. */
 const ApproveInput = Schema.Struct({
 	scope: BotsApi.GrantScope,
-	reason: Schema.optionalKey(Schema.String),
+	reason: RequestsApi.ResolveRequest.fields.reason,
 })
 const DenyInput = Schema.Struct({
-	reason: Schema.String,
-	remember: Schema.optionalKey(Schema.Boolean),
+	reason: Schema.String.check(Schema.isMaxLength(2000)),
+	scope: RequestsApi.ResolveRequest.fields.scope,
 })
 const QuestionInput = Schema.Struct({ question: Schema.String })
 const NoteInput = Schema.Struct({ note: Schema.String })
@@ -508,7 +516,7 @@ export const make: Effect.Effect<typeof BotPlugin.Service, never, Services> =
 		const workEntries = (input: ForOwnerInput): ReadonlyArray<Entry> => [
 			entry(
 				names.delegate,
-				`Give a task to a Bot. Leave out \`bot\` to give it to yourself: a new helper with your role and no history does it. The call returns at once, and the work runs on its own. Its result comes back to this Chat as a message. Use a Bot id from ${names.list}. To add to earlier work, give its \`delegation\` id. Write everything that the task needs in \`task\`, because the other Bot does not see this Chat. Give each task a time limit. You can also limit its model steps and its cost. At a limit the work pauses, and the decider above that Bot says whether it goes on.`,
+				`Give a task to a Bot. Leave out \`bot\` to give it to yourself: a new helper with your role and no history does it. The call returns at once, and the work runs on its own. Its result comes back to this Chat as a message. Use a Bot id from ${names.list}. To add to earlier work, give its \`delegation\` id. Write everything that the task needs in \`task\`, because the other Bot does not see this Chat. Give each task \`limits\` with a time limit. You can also limit its model steps and its cost. At a limit the work pauses, and the decider above that Bot says whether it goes on.`,
 				{
 					type: "object",
 					properties: {
@@ -516,22 +524,9 @@ export const make: Effect.Effect<typeof BotPlugin.Service, never, Services> =
 						task: text,
 						reason,
 						delegation: text,
-						timeLimitMinutes: {
-							type: "number",
-							description: `Required. How many minutes the work may run, more than 0 and up to ${maxMinutes}.`,
-						},
-						maxSteps: {
-							type: "integer",
-							description:
-								"Optional. How many model steps the work may use. A step is one call to the model.",
-						},
-						budgetUsd: {
-							type: "number",
-							description:
-								"Optional. How much the model calls of the work, and of the work that it gives away, may cost, in US dollars.",
-						},
+						limits: limitsParameter,
 					},
-					required: ["task", "timeLimitMinutes"],
+					required: ["task", "limits"],
 				},
 				(raw, context) =>
 					Effect.gen(function* () {
@@ -541,7 +536,8 @@ export const make: Effect.Effect<typeof BotPlugin.Service, never, Services> =
 						)
 						if (Option.isNone(decoded))
 							return json({
-								error: `Give \`task\` and \`timeLimitMinutes\`. \`timeLimitMinutes\` is a number more than 0 and up to ${maxMinutes}. \`maxSteps\` is a whole number from 1. \`budgetUsd\` is a number more than 0.`,
+								error:
+									"Give `task` and `limits`. `limits.timeMs` is a whole number of milliseconds, from 1000 to 2592000000. `limits.steps` and `limits.budgetMicros` are whole numbers from 1.",
 							})
 						const brief = decoded.value
 						const organizationId = current.caller.organizationId
@@ -593,7 +589,7 @@ export const make: Effect.Effect<typeof BotPlugin.Service, never, Services> =
 								},
 								bot: stored.delegation.bot,
 								task: brief.task,
-								limits: limitsOf(brief),
+								limits: brief.limits,
 								...(stored.delegation.chat === null
 									? {}
 									: { chat: stored.delegation.chat }),
@@ -648,7 +644,7 @@ export const make: Effect.Effect<typeof BotPlugin.Service, never, Services> =
 							},
 							bot: target.value.id,
 							task: brief.task,
-							limits: limitsOf(brief),
+							limits: brief.limits,
 							...(brief.reason === undefined ? {} : { reason: brief.reason }),
 							status: answer._tag === "Allow" ? "queued" : "authorizing",
 							...(answer._tag === "Pending" ? { request: answer.request } : {}),
@@ -900,10 +896,10 @@ export const make: Effect.Effect<typeof BotPlugin.Service, never, Services> =
 				),
 				entry(
 					names.deny,
-					"Deny the request and say why. Set remember to deny the same request in future too.",
+					"Deny the request and say why. Give a scope of chat or lifetime to deny the same request in this Chat or in future too.",
 					{
 						type: "object",
-						properties: { reason: text, remember: { type: "boolean" } },
+						properties: { reason: text, scope },
 						required: ["reason"],
 					},
 					(raw) =>
@@ -912,9 +908,7 @@ export const make: Effect.Effect<typeof BotPlugin.Service, never, Services> =
 								decide({
 									allow: false,
 									reason: value.reason,
-									...(value.remember === true
-										? { scope: "lifetime" as const }
-										: {}),
+									...(value.scope === undefined ? {} : { scope: value.scope }),
 								}),
 							),
 						),

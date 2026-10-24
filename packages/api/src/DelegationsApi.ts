@@ -61,8 +61,13 @@ export type DelegationLimit = typeof DelegationLimit.Type
  * required. When the decider lets the work go on, it gets the same limits again.
  */
 export const DelegationLimits = Schema.Struct({
-	/** The running time, in milliseconds. Time in a pause does not count. */
-	timeMs: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1000)),
+	/**
+	 * The running time, in milliseconds, from 1 second to 30 days. Time in a pause
+	 * does not count.
+	 */
+	timeMs: Schema.Int.check(
+		Schema.isBetween({ minimum: 1000, maximum: 30 * 24 * 60 * 60 * 1000 }),
+	),
 	/** The model steps of the task Chat. A step is one call to the model. */
 	steps: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
 	/** The cost of the model calls of the work and of all the work it gave away, in micro-USD. */

@@ -143,7 +143,9 @@ it can:
   `openbot_computers_acquire`. A child Bot can ask for a Computer of the Bot
   that gave it work.
 - Make a new sandbox with `openbot_computers_create`. The Computer belongs to
-  its person, and the Bot gets the right to use it.
+  its person, and the Bot gets the right to use it. The tool takes `name`,
+  `source`, `desktop` and `pauseAfter` in the same form as `POST /v1/computers`,
+  and a `reason`. The `source` must be a provider.
 - Give up its right with `openbot_computers_release`. With `destroy`, it also
   deletes the Computer.
 - Run commands, change files, open ports and use the desktop. A screenshot comes

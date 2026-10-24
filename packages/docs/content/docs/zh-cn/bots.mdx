@@ -134,7 +134,9 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 Bot 可以拥有 Bots。所以 Bot 可以组建自己的团队，团队中的每个成员都保留自己的记忆。
 
 - Bot 用 `openbot_create_bot` 工具创建一个归它所有的 Bot。人则通过
-  `POST /v1/bots` 并带上 `bot` 字段来创建。
+  `POST /v1/bots` 并带上 `bot` 字段来创建。这个工具接收的
+  `name`、`role`、`instructions` 和 `model` 与 `POST /v1/bots`
+  的格式相同，另外还有一个 `reason`。
 - 一个 Bot 用这个工具创建的 Bot 会得到创建它的 Bot 的
   `model`。工具调用可以指定另一个 `model`。
 - 所有者是

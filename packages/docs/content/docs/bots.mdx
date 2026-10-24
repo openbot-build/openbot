@@ -147,7 +147,9 @@ A Bot can own Bots. So a Bot can build its own team, and each member of the team
 keeps its own memory.
 
 - A Bot makes a Bot that it owns with the `openbot_create_bot` tool. A person
-  makes one with `POST /v1/bots` and the `bot` field.
+  makes one with `POST /v1/bots` and the `bot` field. The tool takes `name`,
+  `role`, `instructions` and `model` in the same form as `POST /v1/bots`, and a
+  `reason`.
 - A Bot that another Bot makes with the tool gets the `model` of the Bot that
   makes it. The tool call can name another `model`.
 - The owner is `{ "_tag": "Bot", "bot": "<owner ID>", "userId": "<member>" }`.

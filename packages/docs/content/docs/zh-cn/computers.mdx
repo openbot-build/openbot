@@ -132,7 +132,9 @@ Bot 有用于 Computer 的工具。它用 `openbot_computers_list`
 - 用 `openbot_computers_acquire`
   请求一台已有 Computer 的使用权。子 Bot 可以请求把工作交给它的那个 Bot 的 Computer。
 - 用 `openbot_computers_create`
-  创建一个新沙箱。这台 Computer 属于 Bot 的那个人，Bot 得到它的使用权。
+  创建一个新沙箱。这台 Computer 属于 Bot 的那个人，Bot 得到它的使用权。这个工具接收的
+  `name`、`source`、`desktop` 和 `pauseAfter` 与 `POST /v1/computers`
+  的格式相同，另外还有一个 `reason`。`source` 必须是一个 provider。
 - 用 `openbot_computers_release` 放弃它的使用权。带上 `destroy`
   时，它还会删除这台 Computer。
 - 运行命令、修改文件、打开端口和使用桌面。截图会作为图片返回，模型可以看到它。

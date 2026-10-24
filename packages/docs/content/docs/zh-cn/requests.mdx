@@ -64,7 +64,9 @@ Programmer → Scout**。各步如下：
 Bot 在一个简短的**审查 Chat**（review
 Chat）中做决定。它读取自己的角色、自己的指令，并把请求当作数据来读。它不读取自己很长的历史。它用工具
 `openbot_approve`、`openbot_deny`、`openbot_ask` 和 `openbot_escalate`
-做决定，也可以用 `openbot_propose_rule` 提议一条 Rule。审查 Chat 的 `kind` 为
+做决定，也可以用 `openbot_propose_rule` 提议一条 Rule。`openbot_approve` 和
+`openbot_deny` 接收的 `scope` 和 `reason`
+与人的回答格式相同。见[回答请求](#回答请求)。审查 Chat 的 `kind` 为
 `"review"`。做出决定后它会关闭，并且不出现在普通的 Chat 列表中。如果审查结束时没有做出决定，请求会交给下一个决策者。
 
 ---

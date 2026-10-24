@@ -80,10 +80,12 @@ each Bot on the way gets a Grant, with the scope that it chose.
 A Bot decides in a short **review Chat**. It reads its role, its instructions
 and the request as data. It does not read its own long history. It decides with
 the tools `openbot_approve`, `openbot_deny`, `openbot_ask` and
-`openbot_escalate`, and it can propose a Rule with `openbot_propose_rule`. A
-review Chat has `kind: "review"`. It closes after the decision, and it is not in
-the normal list of Chats. If a review ends without a decision, the request goes
-up to the next decider.
+`openbot_escalate`, and it can propose a Rule with `openbot_propose_rule`.
+`openbot_approve` and `openbot_deny` take `scope` and `reason` in the same form
+as the answer of a person. See [Answer a request](#answer-a-request). A review
+Chat has `kind: "review"`. It closes after the decision, and it is not in the
+normal list of Chats. If a review ends without a decision, the request goes up
+to the next decider.
 
 ---
 

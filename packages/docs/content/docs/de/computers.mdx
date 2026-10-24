@@ -151,7 +151,10 @@ kann er:
   nutzen, den es schon gibt. Ein Kind-Bot kann nach einem Computer des Bots
   fragen, der ihm Arbeit gegeben hat.
 - Mit `openbot_computers_create` eine neue Sandbox erstellen. Der Computer
-  gehört seiner Person, und der Bot bekommt das Recht, ihn zu nutzen.
+  gehört seiner Person, und der Bot bekommt das Recht, ihn zu nutzen. Das
+  Werkzeug nimmt `name`, `source`, `desktop` und `pauseAfter` in derselben Form
+  wie `POST /v1/computers`, und einen `reason`. Die `source` muss ein Provider
+  sein.
 - Mit `openbot_computers_release` sein Recht aufgeben. Mit `destroy` löscht er
   auch den Computer.
 - Befehle ausführen, Dateien ändern, Ports öffnen und den Desktop nutzen. Ein

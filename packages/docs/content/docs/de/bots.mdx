@@ -155,7 +155,8 @@ Teammitglied behält sein eigenes Gedächtnis.
 
 - Ein Bot erstellt einen Bot, der ihm gehört, mit dem Werkzeug
   `openbot_create_bot`. Eine Person erstellt einen mit `POST /v1/bots` und dem
-  Feld `bot`.
+  Feld `bot`. Das Werkzeug nimmt `name`, `role`, `instructions` und `model` in
+  derselben Form wie `POST /v1/bots`, und einen `reason`.
 - Ein Bot, den ein anderer Bot mit dem Werkzeug erstellt, bekommt das `model`
   des Bots, der ihn erstellt. Der Aufruf des Werkzeugs kann ein anderes `model`
   nennen.

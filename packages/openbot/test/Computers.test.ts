@@ -137,7 +137,8 @@ const answer = (text: string) =>
 	)
 
 /**
- * A scripted model. `run <id>` runs a command, `get <id>` asks for the Computer.
+ * A scripted model. `run <id>` runs a command, `get <id>` asks for the Computer,
+ * and `make <provider>` makes a Computer.
  * After a tool result, it answers with that result.
  */
 const model = Effect.runSync(
@@ -159,6 +160,13 @@ const model = Effect.runSync(
 					return call(names.run, { computer: id, command: "echo hi" })
 				if (verb === "get")
 					return call(names.acquire, { computer: id, reason: "I need it." })
+				if (verb === "make")
+					return call(names.create, {
+						name: "Bot box",
+						source: { _tag: "Provider", provider: id, template: null },
+						pauseAfter: 600,
+						reason: "I need a box.",
+					})
 				return answer("Hello.")
 			}),
 	}),
@@ -622,6 +630,34 @@ it(
 			assert.strictEqual(ran.view.status, "Completed")
 			assert.match(lastText(ran.view), /ran: echo hi/)
 			assert.ok(fake.log.includes("run sbx-0 echo hi"))
+
+			// The Bot makes a Computer with the same fields as the route.
+			await talk(asAlice, bot, "make " + provider.id)
+			const making = await until("a request to make a Computer", async () =>
+				(
+					await json(
+						Schema.Array(RequestsApi.CapabilityRequest),
+						send(alice.session, "/v1/requests?status=pending"),
+					)
+				).find((entry) => entry.capability.action === "computers.create"),
+			)
+			assert.strictEqual(making.capability.target, provider.id)
+			const made = await send(
+				alice.session,
+				"/v1/requests/" + making.id,
+				"POST",
+				{ expected: making.revision, decision: "allow" },
+			)
+			assert.strictEqual(made.status, 200, await made.clone().text())
+			const box = await until("the new Computer", async () =>
+				(
+					await json(
+						Schema.Array(ComputersApi.Computer),
+						send(alice.session, "/v1/computers"),
+					)
+				).find((entry) => entry.name === "Bot box"),
+			)
+			assert.strictEqual(box.pauseAfter, 600)
 		} finally {
 			await host.close()
 		}

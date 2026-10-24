@@ -91,10 +91,12 @@ Ein Bot entscheidet in einem kurzen **Prüf-Chat** (Review Chat). Er liest seine
 Rolle, seine Anweisungen und den Request als Daten. Er liest nicht seinen
 eigenen langen Verlauf. Er entscheidet mit den Tools `openbot_approve`,
 `openbot_deny`, `openbot_ask` und `openbot_escalate`, und er kann mit
-`openbot_propose_rule` eine Rule vorschlagen. Ein Prüf-Chat hat
-`kind: "review"`. Er schließt nach der Entscheidung und steht nicht in der
-normalen Liste der Chats. Wenn eine Prüfung ohne Entscheidung endet, geht der
-Request zum nächsten Entscheider hinauf.
+`openbot_propose_rule` eine Rule vorschlagen. `openbot_approve` und
+`openbot_deny` nehmen `scope` und `reason` in derselben Form wie die Antwort
+einer Person. Siehe [Einen Request beantworten](#einen-request-beantworten). Ein
+Prüf-Chat hat `kind: "review"`. Er schließt nach der Entscheidung und steht
+nicht in der normalen Liste der Chats. Wenn eine Prüfung ohne Entscheidung
+endet, geht der Request zum nächsten Entscheider hinauf.
 
 ---
 

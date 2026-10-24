@@ -35,15 +35,13 @@ OpenBot gives every Bot these tools:
 
 `openbot_delegate` takes these fields:
 
-| Field              | Meaning                                                                                                                       |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| `task`             | Required. What to do, with everything that the work needs. The other Bot does not see the Chat that gives the work.           |
-| `timeLimitMinutes` | Required. How many minutes the work may run. More than 0, and up to 43,200 (30 days). See [Limits](#limits).                  |
-| `maxSteps`         | Optional. How many model steps the work may use. A step is one call to the model.                                             |
-| `budgetUsd`        | Optional. How much the model calls of the work, and of all the work that it gives away, may cost, in US dollars.              |
-| `bot`              | Optional. The ID of the Bot that does the work. Without it, the Bot gives the work to itself.                                 |
-| `reason`           | Why the Bot gives this work. It is required for a Bot that it does not own. A decider reads it.                               |
-| `delegation`       | Optional. The ID of earlier work of this Chat. The new task goes on with it. See [Add to earlier work](#add-to-earlier-work). |
+| Field        | Meaning                                                                                                                                                                           |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `task`       | Required. What to do, with everything that the work needs. The other Bot does not see the Chat that gives the work.                                                               |
+| `limits`     | Required. The limits of the work: `timeMs`, and if you like `steps` and `budgetMicros`. They have the same form as the `limits` of the work that you read. See [Limits](#limits). |
+| `bot`        | Optional. The ID of the Bot that does the work. Without it, the Bot gives the work to itself.                                                                                     |
+| `reason`     | Why the Bot gives this work. It is required for a Bot that it does not own. A decider reads it.                                                                                   |
+| `delegation` | Optional. The ID of earlier work of this Chat. The new task goes on with it. See [Add to earlier work](#add-to-earlier-work).                                                     |
 
 The tool returns at once:
 
@@ -153,9 +151,12 @@ decider above the Bot that does the work says whether it goes on.
 | `steps`  | No       | The model steps of the task Chat. A step is one call to the model.                                   |
 | `budget` | No       | The cost of the model calls of the task Chat, and of all the work that it gave away, layer by layer. |
 
-A Bot gives the limits in `openbot_delegate`. Work from a
-[trigger](/docs/triggers), and work from before limits, have no limits of their
-own. They get the time limit `delegationTimeLimitMs` of the
+A Bot gives the limits in `limits` of `openbot_delegate`, for example
+`{ "timeMs": 1800000, "steps": 40 }`. They have the same form as the `limits` of
+the work that you [read](#watch-the-work): `timeMs` from 1 second to 30 days,
+and `steps` and `budgetMicros` from 1. Work from a [trigger](/docs/triggers),
+and work from before limits, have no limits of their own. They get the time
+limit `delegationTimeLimitMs` of the
 [organization](/docs/organization#settings), and no other limits. A model
 without a price costs 0, so it never uses up a budget. See
 [Usage](/docs/usage#prices).

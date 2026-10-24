@@ -38,15 +38,13 @@ OpenBot gibt jedem Bot diese Werkzeuge:
 
 `openbot_delegate` nimmt diese Felder:
 
-| Feld               | Bedeutung                                                                                                                                                   |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `task`             | Pflicht. Was zu tun ist, mit allem, was die Arbeit braucht. Der andere Bot sieht den Chat nicht, der die Arbeit gibt.                                       |
-| `timeLimitMinutes` | Pflicht. Wie viele Minuten die Arbeit laufen darf. Mehr als 0 und bis zu 43.200 (30 Tage). Siehe [Grenzen](#grenzen).                                       |
-| `maxSteps`         | Optional. Wie viele Modellschritte die Arbeit nutzen darf. Ein Schritt ist ein Aufruf des Modells.                                                          |
-| `budgetUsd`        | Optional. Wie viel die Modellaufrufe der Arbeit und aller Arbeit, die sie abgibt, kosten dürfen, in US-Dollar.                                              |
-| `bot`              | Optional. Die ID des Bots, der die Arbeit macht. Ohne dieses Feld gibt der Bot die Arbeit an sich selbst.                                                   |
-| `reason`           | Warum der Bot diese Arbeit gibt. Es ist Pflicht für einen Bot, der ihm nicht gehört. Ein Entscheider liest es.                                              |
-| `delegation`       | Optional. Die ID früherer Arbeit dieses Chats. Die neue Aufgabe geht mit ihr weiter. Siehe [Zu früherer Arbeit hinzufügen](#zu-früherer-arbeit-hinzufügen). |
+| Feld         | Bedeutung                                                                                                                                                                               |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `task`       | Pflicht. Was zu tun ist, mit allem, was die Arbeit braucht. Der andere Bot sieht den Chat nicht, der die Arbeit gibt.                                                                   |
+| `limits`     | Pflicht. Die Grenzen der Arbeit: `timeMs`, und wenn du willst `steps` und `budgetMicros`. Sie haben dieselbe Form wie die `limits` der Arbeit, die du liest. Siehe [Grenzen](#grenzen). |
+| `bot`        | Optional. Die ID des Bots, der die Arbeit macht. Ohne dieses Feld gibt der Bot die Arbeit an sich selbst.                                                                               |
+| `reason`     | Warum der Bot diese Arbeit gibt. Es ist Pflicht für einen Bot, der ihm nicht gehört. Ein Entscheider liest es.                                                                          |
+| `delegation` | Optional. Die ID früherer Arbeit dieses Chats. Die neue Aufgabe geht mit ihr weiter. Siehe [Zu früherer Arbeit hinzufügen](#zu-früherer-arbeit-hinzufügen).                             |
 
 Das Werkzeug kehrt sofort zurück:
 
@@ -162,7 +160,10 @@ Entscheider über dem Bot, der die Arbeit macht, sagt, ob es weitergeht.
 | `steps`  | Nein    | Die Modellschritte des Task-Chats. Ein Schritt ist ein Aufruf des Modells.                               |
 | `budget` | Nein    | Die Kosten der Modellaufrufe des Task-Chats und aller Arbeit, die er abgegeben hat, Schicht für Schicht. |
 
-Ein Bot gibt die Grenzen in `openbot_delegate`. Arbeit von einem
+Ein Bot gibt die Grenzen in `limits` von `openbot_delegate`, zum Beispiel
+`{ "timeMs": 1800000, "steps": 40 }`. Sie haben dieselbe Form wie die `limits`
+der Arbeit, die du [liest](#die-arbeit-beobachten): `timeMs` von 1 Sekunde bis
+30 Tage, und `steps` und `budgetMicros` ab 1. Arbeit von einem
 [Trigger](/de/docs/triggers) und Arbeit von vor den Grenzen haben keine eigenen
 Grenzen. Sie bekommen die Zeitgrenze `delegationTimeLimitMs` der
 [Organization](/de/docs/organization#einstellungen) und keine anderen Grenzen.

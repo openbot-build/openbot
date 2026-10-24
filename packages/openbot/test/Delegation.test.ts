@@ -86,7 +86,7 @@ const model = Effect.runSync(
 							? answer("I wait for the deeper task.")
 							: call(names.delegate, {
 									task: "deeper task",
-									timeLimitMinutes: 60,
+									limits: { timeMs: 3600000 },
 								})
 					if (input.includes("One more thing"))
 						return answer("One more thing done.")
@@ -103,44 +103,43 @@ const model = Effect.runSync(
 				if (input.includes("research slowly"))
 					return call(names.delegate, {
 						task: "slow research",
-						timeLimitMinutes: 60,
+						limits: { timeMs: 3600000 },
 					})
 				if (input.includes("add to the research"))
 					return call(names.delegate, {
-						timeLimitMinutes: 60,
+						limits: { timeMs: 3600000 },
 						delegation: known.research,
 						task: "Also look at the tests.",
 					})
 				if (input.includes("continue the research"))
 					return call(names.delegate, {
-						timeLimitMinutes: 60,
+						limits: { timeMs: 3600000 },
 						delegation: known.research,
 						task: "One more thing.",
 					})
 				if (input.includes("step carefully"))
 					return call(names.delegate, {
 						task: "stepping task",
-						timeLimitMinutes: 60,
-						maxSteps: 1,
+						limits: { timeMs: 3600000, steps: 1 },
 					})
 				if (input.includes("research with a short time"))
 					return call(names.delegate, {
 						task: "slow research",
-						timeLimitMinutes: 0.02,
+						limits: { timeMs: 1200 },
 					})
 				if (input.includes("go deep with a short time"))
 					return call(names.delegate, {
 						task: "deep task",
-						timeLimitMinutes: 0.05,
+						limits: { timeMs: 3000 },
 					})
 				if (input.includes("go deep"))
 					return call(names.delegate, {
 						task: "deep task",
-						timeLimitMinutes: 60,
+						limits: { timeMs: 3600000 },
 					})
 				if (input.includes("ask the other Bot"))
 					return call(names.delegate, {
-						timeLimitMinutes: 60,
+						limits: { timeMs: 3600000 },
 						bot: known.other,
 						reason: "The other Bot knows this.",
 						task: "Other work.",

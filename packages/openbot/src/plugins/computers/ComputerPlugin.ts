@@ -91,20 +91,26 @@ const ReleaseInput = Schema.Struct({
 	destroy: Schema.optionalKey(Schema.Boolean),
 	reason: Schema.optionalKey(Schema.String),
 })
+/**
+ * The fields of the new Computer take the same form as in `CreateComputerRequest`.
+ * A Bot makes only sandboxes, so the source is a provider.
+ */
 const CreateInput = Schema.Struct({
-	provider: Schema.String,
-	name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(120)),
-	template: Schema.optionalKey(Schema.String),
-	desktop: Schema.optionalKey(Schema.Boolean),
+	name: ComputersApi.CreateComputerRequest.fields.name,
+	source: ComputersApi.ComputerSource.cases.Provider,
+	desktop: ComputersApi.CreateComputerRequest.fields.desktop,
+	pauseAfter: ComputersApi.CreateComputerRequest.fields.pauseAfter,
 	reason: Schema.optionalKey(Schema.String),
 })
+/** Paths and ports take the same form as in the Computer routes. */
+const Path = ComputersApi.FileContent.fields.path
 const RunInput = Schema.Struct({
 	computer: Schema.String,
 	...ComputersApi.RunCommandRequest.fields,
 })
 const ReadInput = Schema.Struct({
 	computer: Schema.String,
-	path: Schema.String,
+	path: Path,
 	encoding: Schema.optionalKey(ComputersApi.FileEncoding),
 })
 const WriteInput = Schema.Struct({
@@ -113,14 +119,11 @@ const WriteInput = Schema.Struct({
 })
 const PathInput = Schema.Struct({
 	computer: Schema.String,
-	path: Schema.String,
+	path: Path,
 })
 const PortInput = Schema.Struct({
 	computer: Schema.String,
-	port: Schema.Int.check(
-		Schema.isGreaterThanOrEqualTo(1),
-		Schema.isLessThanOrEqualTo(65535),
-	),
+	port: ComputersApi.OpenPort.fields.port,
 	reason: Schema.optionalKey(Schema.String),
 })
 const DesktopInput = Schema.Struct({
@@ -131,6 +134,7 @@ const DesktopInput = Schema.Struct({
 	),
 })
 
+const pathProperty = { type: "string", minLength: 1, maxLength: 4096 } as const
 const computerProperty = {
 	type: "string",
 	description: `The ID of the Computer, from ${names.list}.`,
@@ -456,24 +460,40 @@ export const make = Effect.gen(function* () {
 			{
 				type: "object",
 				properties: {
-					provider: {
-						type: "string",
-						description: `The ID of a Computer provider, from ${names.list}.`,
-					},
 					name: { type: "string" },
-					template: {
-						type: "string",
+					source: {
+						type: "object",
+						properties: {
+							_tag: { const: "Provider" },
+							provider: {
+								type: "string",
+								description: `The ID of a Computer provider, from ${names.list}.`,
+							},
+							template: {
+								type: ["string", "null"],
+								description:
+									"A template or image of the provider. null for the default.",
+							},
+						},
+						required: ["_tag", "provider", "template"],
 						description:
-							"A template or image of the provider. Leave it out for the default.",
+							"Where the Computer comes from, in the same form as the `source` of a Computer.",
 					},
 					desktop: {
 						type: "boolean",
 						description:
 							"Ask for a desktop, for screenshots, the mouse and the keyboard.",
 					},
+					pauseAfter: {
+						type: ["integer", "null"],
+						minimum: 60,
+						maximum: 604800,
+						description:
+							"Seconds without work before the Computer pauses, from 60 to 604800. null to never pause.",
+					},
 					reason: reasonProperty,
 				},
-				required: ["provider", "name"],
+				required: ["name", "source"],
 			},
 			(request) =>
 				Effect.gen(function* () {
@@ -483,16 +503,13 @@ export const make = Effect.gen(function* () {
 							current.caller,
 							{
 								name: request.name,
-								source: {
-									_tag: "Provider",
-									provider: ComputersApi.ComputerProviderId.make(
-										request.provider,
-									),
-									template: request.template ?? null,
-								},
+								source: request.source,
 								...(request.desktop === undefined
 									? {}
 									: { desktop: request.desktop }),
+								...(request.pauseAfter === undefined
+									? {}
+									: { pauseAfter: request.pauseAfter }),
 							},
 							current.bot.id,
 						),
@@ -503,12 +520,12 @@ export const make = Effect.gen(function* () {
 				Effect.gen(function* () {
 					const current = yield* work
 					const provider = yield* authorized(
-						providers.get(current.caller, request.provider),
+						providers.get(current.caller, request.source.provider),
 					)
 					return yield* ask({
 						capability: {
 							action: "computers.create",
-							target: request.provider,
+							target: request.source.provider,
 						},
 						computerOwner: provider.owner,
 						reason: request.reason ?? `Make the Computer ${request.name}.`,
@@ -583,7 +600,7 @@ export const make = Effect.gen(function* () {
 				type: "object",
 				properties: {
 					computer: computerProperty,
-					path: { type: "string" },
+					path: pathProperty,
 					encoding: {
 						type: "string",
 						enum: ["utf8", "base64"],
@@ -607,7 +624,7 @@ export const make = Effect.gen(function* () {
 				type: "object",
 				properties: {
 					computer: computerProperty,
-					path: { type: "string" },
+					path: pathProperty,
 					content: { type: "string" },
 					encoding: { type: "string", enum: ["utf8", "base64"] },
 				},
@@ -624,7 +641,7 @@ export const make = Effect.gen(function* () {
 			PathInput,
 			{
 				type: "object",
-				properties: { computer: computerProperty, path: { type: "string" } },
+				properties: { computer: computerProperty, path: pathProperty },
 				required: ["computer", "path"],
 			},
 			(request) =>
@@ -640,7 +657,7 @@ export const make = Effect.gen(function* () {
 			PathInput,
 			{
 				type: "object",
-				properties: { computer: computerProperty, path: { type: "string" } },
+				properties: { computer: computerProperty, path: pathProperty },
 				required: ["computer", "path"],
 			},
 			(request) =>
@@ -656,7 +673,7 @@ export const make = Effect.gen(function* () {
 				type: "object",
 				properties: {
 					computer: computerProperty,
-					port: { type: "integer" },
+					port: { type: "integer", minimum: 1, maximum: 65535 },
 					reason: reasonProperty,
 				},
 				required: ["computer", "port"],
