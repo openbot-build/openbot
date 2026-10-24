@@ -305,13 +305,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 还有一些路由读取一个 Chat 的工作：
 
-| 路由                                   | 列出什么                                                                            |
-| -------------------------------------- | ----------------------------------------------------------------------------------- |
-| `GET /v1/chats/:chatId/delegations`    | 这个 Chat 交给 Bots 的工作。见 [委派](/zh-cn/docs/delegation#查看工作)。            |
-| `GET /v1/chats/:chatId/confessions`    | Bot 用 `confide` 说的话。见 [展示告解](/zh-cn/docs/client#展示告解)。               |
-| `GET /v1/chats/:chatId/enrichments`    | 记忆 Bot 在每个 Turn 的输入中添加了什么。见 [记忆](/zh-cn/docs/memory#告解和补充)。 |
-| `GET /v1/chats/:chatId/code-runs`      | 这个 Chat 的 [Code Mode](/zh-cn/docs/code-mode) 程序。                              |
-| `GET /v1/chats/:chatId/app-operations` | 这个 Chat 的 [App](/zh-cn/docs/apps) 调用。                                         |
+| 路由                                   | 列出什么                                                                      |
+| -------------------------------------- | ----------------------------------------------------------------------------- |
+| `GET /v1/chats/:chatId/delegations`    | 这个 Chat 交给 Bots 的工作。见 [委派](/zh-cn/docs/delegation#查看工作)。      |
+| `GET /v1/chats/:chatId/confessions`    | Bot 用 `confide` 说的话。见 [展示告解](/zh-cn/docs/client#展示告解)。         |
+| `GET /v1/chats/:chatId/enrichments`    | 记忆 Bot 如何重写每个 Turn 的输入。见 [记忆](/zh-cn/docs/memory#告解和补充)。 |
+| `GET /v1/chats/:chatId/code-runs`      | 这个 Chat 的 [Code Mode](/zh-cn/docs/code-mode) 程序。                        |
+| `GET /v1/chats/:chatId/app-operations` | 这个 Chat 的 [App](/zh-cn/docs/apps) 调用。                                   |
 
 ---
 

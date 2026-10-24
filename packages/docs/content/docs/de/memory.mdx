@@ -100,17 +100,17 @@ bekommt der Bot trotzdem eine Antwort, aber er lernt nichts.
 
 Wenn ein Turn beginnt, liest der Memory-Bot die Eingabe der Person. Er
 überspringt Mitteilungen, denn sie sind nicht die Worte einer Person. Wenn
-Einträge helfen, fügt er der Eingabe kurze Worte hinzu. Er darf nur Worte
-hinzufügen: Er darf kein Wort entfernen oder ändern, und OpenBot prüft das. Er
-darf nur Einträge nutzen, die die Leser der Antwort sehen dürfen. In einer
-Channel-Gruppe sind das nur Einträge für die Gruppe oder für alle.
+Einträge helfen, schreibt er die Eingabe mit ihnen neu. Er darf die Worte
+ändern, aber er muss alles behalten, was die Person sagt und fragt. Er darf nur
+Einträge nutzen, die die Leser der Antwort sehen dürfen, und OpenBot prüft das.
+In einer Channel-Gruppe sind das nur Einträge für die Gruppe oder für alle.
 
-Das Model sieht die Eingabe mit den Ergänzungen. Der Verlauf des Chats behält
-die Worte der Person. Der Bot weiß nicht, dass die Ergänzungen aus dem Memory
-kommen. Er sieht sie als seine eigene Erfahrung. Requests und ihre Prüfungen
-sehen nur, was der Bot fragt, nie die Ergänzungen.
+Das Model sieht die neue Eingabe. Der Verlauf des Chats behält die Worte der
+Person. Der Bot weiß nicht, dass die Änderungen aus dem Memory kommen. Er sieht
+sie als seine eigene Erfahrung. Requests und ihre Prüfungen sehen nur, was der
+Bot fragt, nie die Änderungen.
 
-Wenn `botMemory` aus ist, wird nichts hinzugefügt.
+Wenn `botMemory` aus ist, ändert sich die Eingabe nicht.
 
 ---
 
@@ -228,8 +228,10 @@ Zwei Routen zeigen, was in einem deiner Chats passiert ist:
 - `GET /v1/chats/:chatId/confessions` listet, was der Bot anvertraut hat, und
   die Antworten. Lies [Beichten zeigen](/de/docs/client#beichten-zeigen), bevor
   du sie Personen zeigst.
-- `GET /v1/chats/:chatId/enrichments` listet, was der Memory-Bot der Eingabe
-  jedes Turns hinzugefügt hat, und die Einträge, die er genutzt hat.
+- `GET /v1/chats/:chatId/enrichments` listet, wie der Memory-Bot die Eingabe
+  jedes Turns neu geschrieben hat: den neuen `text`, die Worte der Person in
+  `original` und die Einträge, die er genutzt hat. Ältere Einträge haben kein
+  `original`.
 
 Beide brauchen `read` auf dem Chat. So kann nur die Person sie lesen, der der
 Chat gehört.

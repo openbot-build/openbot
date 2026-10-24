@@ -341,13 +341,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 Weitere Routen lesen die Arbeit eines Chats:
 
-| Route                                  | Was sie auflistet                                                                                                     |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `GET /v1/chats/:chatId/delegations`    | Die Arbeit, die dieser Chat an Bots gegeben hat. Siehe [Delegation](/de/docs/delegation#die-arbeit-beobachten).       |
-| `GET /v1/chats/:chatId/confessions`    | Was der Bot mit `confide` gesagt hat. Siehe [Beichten zeigen](/de/docs/client#beichten-zeigen).                       |
-| `GET /v1/chats/:chatId/enrichments`    | Was der Memory-Bot zur Eingabe jedes Turns hinzugefügt hat. Siehe [Memory](/de/docs/memory#beichten-und-ergänzungen). |
-| `GET /v1/chats/:chatId/code-runs`      | Die Programme des Chats im [Code Mode](/de/docs/code-mode).                                                           |
-| `GET /v1/chats/:chatId/app-operations` | Die Aufrufe von [Apps](/de/docs/apps) im Chat.                                                                        |
+| Route                                  | Was sie auflistet                                                                                                         |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/chats/:chatId/delegations`    | Die Arbeit, die dieser Chat an Bots gegeben hat. Siehe [Delegation](/de/docs/delegation#die-arbeit-beobachten).           |
+| `GET /v1/chats/:chatId/confessions`    | Was der Bot mit `confide` gesagt hat. Siehe [Beichten zeigen](/de/docs/client#beichten-zeigen).                           |
+| `GET /v1/chats/:chatId/enrichments`    | Wie der Memory-Bot die Eingabe jedes Turns neu geschrieben hat. Siehe [Memory](/de/docs/memory#beichten-und-ergänzungen). |
+| `GET /v1/chats/:chatId/code-runs`      | Die Programme des Chats im [Code Mode](/de/docs/code-mode).                                                               |
+| `GET /v1/chats/:chatId/app-operations` | Die Aufrufe von [Apps](/de/docs/apps) im Chat.                                                                            |
 
 ---
 

@@ -93,18 +93,18 @@ answer, but nothing is learned.
 ## How the Bot uses memory
 
 When a Turn starts, the memory Bot reads the input of the person. It skips
-notices, because they are not the words of a person. When entries help, it adds
-short words to the input. It may only add words: it may not remove or change a
-word, and OpenBot checks this. It may only use entries that the readers of the
-answer may see. In a Channel group, those are only entries for the group or for
-everyone.
+notices, because they are not the words of a person. When entries help, it
+writes the input again with them. It may change the words, but it must keep all
+that the person says and asks. It may only use entries that the readers of the
+answer may see, and OpenBot checks this. In a Channel group, those are only
+entries for the group or for everyone.
 
-The model sees the input with the additions. The history of the Chat keeps the
-words of the person. The Bot does not know that the additions come from memory.
-It sees them as its own experience. Requests and their reviews see only what the
-Bot asks, never the additions.
+The model sees the new input. The history of the Chat keeps the words of the
+person. The Bot does not know that the changes come from memory. It sees them as
+its own experience. Requests and their reviews see only what the Bot asks, never
+the changes.
 
-When `botMemory` is off, nothing is added.
+When `botMemory` is off, the input does not change.
 
 ---
 
@@ -216,8 +216,9 @@ Two routes show what happened in one of your Chats:
 - `GET /v1/chats/:chatId/confessions` lists what the Bot confided, and the
   answers. Read [Show confessions](/docs/client#show-confessions) before you
   show them to people.
-- `GET /v1/chats/:chatId/enrichments` lists what the memory Bot added to the
-  input of each Turn, and the entries that it used.
+- `GET /v1/chats/:chatId/enrichments` lists how the memory Bot wrote the input
+  of each Turn again: the new `text`, the words of the person in `original`, and
+  the entries that it used. Older records have no `original`.
 
 Both need `read` on the Chat, so only the person who owns the Chat can read
 them.

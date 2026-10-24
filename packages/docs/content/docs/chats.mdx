@@ -328,13 +328,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 More routes read the work of a Chat:
 
-| Route                                  | What it lists                                                                                              |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `GET /v1/chats/:chatId/delegations`    | The work that this Chat gave to Bots. See [Delegation](/docs/delegation#watch-the-work).                   |
-| `GET /v1/chats/:chatId/confessions`    | What the Bot said with `confide`. See [Show confessions](/docs/client#show-confessions).                   |
-| `GET /v1/chats/:chatId/enrichments`    | What the memory Bot added to the input of each Turn. See [Memory](/docs/memory#confessions-and-additions). |
-| `GET /v1/chats/:chatId/code-runs`      | The [Code Mode](/docs/code-mode) programs of the Chat.                                                     |
-| `GET /v1/chats/:chatId/app-operations` | The [App](/docs/apps) calls of the Chat.                                                                   |
+| Route                                  | What it lists                                                                                                |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `GET /v1/chats/:chatId/delegations`    | The work that this Chat gave to Bots. See [Delegation](/docs/delegation#watch-the-work).                     |
+| `GET /v1/chats/:chatId/confessions`    | What the Bot said with `confide`. See [Show confessions](/docs/client#show-confessions).                     |
+| `GET /v1/chats/:chatId/enrichments`    | How the memory Bot wrote the input of each Turn again. See [Memory](/docs/memory#confessions-and-additions). |
+| `GET /v1/chats/:chatId/code-runs`      | The [Code Mode](/docs/code-mode) programs of the Chat.                                                       |
+| `GET /v1/chats/:chatId/app-operations` | The [App](/docs/apps) calls of the Chat.                                                                     |
 
 ---
 
