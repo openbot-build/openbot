@@ -1,4 +1,4 @@
-import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
+import type { Services as AuthorizationServices } from "../authorization/Check.ts"
 import { BotsApi, type Caller } from "@openbot-build/api"
 import { Effect } from "effect"
 import { Settings } from "../settings/Settings.ts"
@@ -18,7 +18,7 @@ export const check = (
 ): Effect.Effect<BotsApi.Bot, Failure, Bots | AuthorizationServices> =>
 	Effect.gen(function* () {
 		const bots = yield* Bots
-		const bot = yield* bots.access(caller, id, "bots.delegate")
+		const bot = yield* bots.access(caller, id, "delegate")
 		const top =
 			bot.owner._tag === "Organization" ||
 			(bot.owner._tag === "Member" && bot.owner.userId === caller.userId)

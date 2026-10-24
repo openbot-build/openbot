@@ -1,12 +1,12 @@
-import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
+import type { Services as AuthorizationServices } from "../authorization/Check.ts"
 import {
+	Authorization,
 	ChatConflict,
 	ChatStorageUnavailable,
 	ChatsApi,
 	FilesApi,
 	Identity,
 	OpenBotApi,
-	Permissions,
 	type Caller,
 	BotsApi,
 	type SendMessageRequest,
@@ -20,8 +20,7 @@ import { Coordinator } from "../bots/Coordinator.ts"
 import { Delegations } from "../bots/Delegations.ts"
 import { MemoryBot } from "../bots/MemoryBot.ts"
 import { Files } from "../files/Files.ts"
-import { can } from "../authorization/Check.ts"
-import { resourceKey } from "../authorization/Policy.ts"
+import { check } from "../authorization/Check.ts"
 import type * as Chats from "./Chats.ts"
 import * as ChatHost from "./ChatHost.ts"
 
@@ -90,7 +89,7 @@ const implementations = Effect.gen(function* () {
 				const caller = yield* Identity
 				// Work for a Bot needs the delegate permission on it.
 				const bot = yield* bots
-					.access(caller, params.botId, "bots.delegate")
+					.access(caller, params.botId, "delegate")
 					.pipe(Effect.provideContext(services))
 				if (bot.archived)
 					return yield* BotsApi.BotInvalid.make({
@@ -128,20 +127,14 @@ const implementations = Effect.gen(function* () {
 				// A new model also needs the permission to use models.
 				if (payload.model !== undefined && payload.model !== null) {
 					const caller = yield* Identity
-					const key = resourceKey({
-						subject: caller,
-						kind: "model",
-						id: Option.none(),
-					})
-					if (
-						!(yield* can({ caller, permission: "models.use", key }).pipe(
-							Effect.provideContext(services),
-						))
-					)
-						return yield* Permissions.PermissionDenied.make({
-							permission: "models.use",
-							resource: key,
-						})
+					yield* check(caller, {
+						action: "use",
+						resource: Authorization.Model.make({
+							organizationId: caller.organizationId,
+							provider: payload.model.provider,
+							id: payload.model.model,
+						}),
+					}).pipe(Effect.provideContext(services))
 				}
 				return yield* (yield* current).update(params.chatId, payload)
 			}),

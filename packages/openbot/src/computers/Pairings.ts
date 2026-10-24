@@ -7,7 +7,7 @@ import {
 import { type Caller, ComputersApi } from "@openbot-build/api"
 import { and, count, eq, gt, lt } from "drizzle-orm"
 import { Clock, Context, Effect, Layer } from "effect"
-import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
+import type { Services as AuthorizationServices } from "../authorization/Check.ts"
 import * as Db from "../database/Database.ts"
 import { computerPairings } from "../database/Schema.ts"
 import { Secrets } from "../secrets/Secrets.ts"

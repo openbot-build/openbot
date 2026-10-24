@@ -3,7 +3,7 @@ import type { Chat } from "@openbot-build/core"
 import { BotsApi } from "@openbot-build/api"
 import { Clock, Context, Effect, Layer, Option } from "effect"
 import { BotRecords } from "../bots/BotRecords.ts"
-import { covers } from "./Capability.ts"
+import { decidingGrant } from "./Policy.ts"
 
 type Grant = BotsApi.Grant
 
@@ -96,22 +96,14 @@ export const make: Effect.Effect<typeof Grants.Service, never, BotRecords> =
 						status: "active",
 					})
 					.pipe(
-						Effect.map((list) => {
-							const matching = list.filter(
-								(grant) =>
-									covers({
-										stored: grant.capability,
-										request: input.capability,
-									}) &&
-									(grant.scope !== "chat" || grant.chat === input.chat),
-							)
-							return Option.orElse(
-								Option.fromNullishOr(
-									matching.find((grant) => grant.effect === "deny"),
-								),
-								() => Option.fromNullishOr(matching[0]),
-							)
-						}),
+						Effect.map((list) =>
+							decidingGrant({
+								grants: list,
+								bot: input.bot,
+								capability: input.capability,
+								chat: input.chat,
+							}),
+						),
 					),
 			use: (organizationId, grant) =>
 				grant.scope === "once"

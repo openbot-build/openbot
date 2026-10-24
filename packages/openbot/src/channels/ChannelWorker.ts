@@ -1,4 +1,8 @@
-import type { Caller, RequestsApi } from "@openbot-build/api"
+import {
+	Authorization,
+	type Caller,
+	type RequestsApi,
+} from "@openbot-build/api"
 import { Chat, Turn } from "@openbot-build/core"
 import type { ChatResponseSseEvent } from "@openbot-build/api"
 import {
@@ -17,8 +21,7 @@ import {
 import { Bots } from "../bots/Bots.ts"
 import { Signals, type Signal } from "../bots/Signals.ts"
 import { Backend } from "../app/Backend.ts"
-import { can } from "../authorization/Check.ts"
-import { resourceKey } from "../authorization/Policy.ts"
+import { allows } from "../authorization/Check.ts"
 import { Requests } from "../capabilities/Requests.ts"
 import { resolveAsPerson } from "../capabilities/Resolve.ts"
 import { Organization } from "../organization/Organization.ts"
@@ -184,7 +187,7 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 			const signals = yield* Signals
 			const services = yield* Effect.context<
 				| Effect.Services<ReturnType<typeof resolveAsPerson>>
-				| Effect.Services<ReturnType<typeof can>>
+				| Effect.Services<ReturnType<typeof allows>>
 				| Effect.Services<ReturnType<typeof bots.access>>
 			>()
 			const scope = yield* Effect.scope
@@ -290,7 +293,7 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 						userId: stored.actor,
 					}
 					const bot = yield* bots
-						.access(actor, stored.bot, "bots.delegate")
+						.access(actor, stored.bot, "delegate")
 						.pipe(Effect.provideContext(services))
 					const chats = yield* backend.forCaller(actor)
 					const title =
@@ -398,13 +401,11 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 				Effect.gen(function* () {
 					const organizationId = claimed.organizationId
 					const caller: Caller = { kind: "member", organizationId, userId }
-					const allowed = yield* can({
-						caller,
-						permission: "channels.use",
-						key: resourceKey({
-							subject: caller,
-							kind: "channel",
-							id: Option.some(stored.id),
+					const allowed = yield* allows(caller, {
+						action: "use",
+						resource: Authorization.Channel.make({
+							organizationId,
+							id: stored.id,
 						}),
 					}).pipe(Effect.provideContext(services))
 					const active = yield* organization.activeMember(
@@ -420,7 +421,7 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 							"You may not use this Channel. Ask an administrator of your organization.",
 						)
 					const found = yield* chatOf(organizationId, stored, event).pipe(
-						Effect.catchTag(["BotNotFound", "PermissionDenied"], () =>
+						Effect.catchTag(["BotNotFound", "Forbidden", "Pending"], () =>
 							Effect.succeed(null),
 						),
 					)
@@ -484,13 +485,12 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 					const button = readButton(event.value)
 					if (button === undefined) return
 					const caller: Caller = { kind: "member", organizationId, userId }
-					const allowed = yield* can({
-						caller,
-						permission: "requests.resolve",
-						key: resourceKey({
-							subject: caller,
-							kind: "request",
-							id: Option.some(button.request),
+					const allowed = yield* allows(caller, {
+						action: "resolve",
+						resource: Authorization.Request.make({
+							organizationId,
+							ownerUserId: userId,
+							id: button.request,
 						}),
 					}).pipe(Effect.provideContext(services))
 					const answer = allowed

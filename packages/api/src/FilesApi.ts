@@ -8,7 +8,7 @@ import {
 } from "effect/http-api"
 import { Multipart } from "effect/http"
 import { BotAuth } from "./AuthApi.ts"
-import { Authorize, Required, requires } from "./Permissions.ts"
+import { Authorize, Required, own } from "./Authorization.ts"
 
 export const FileId = Schema.String.check(
 	Schema.isMinLength(1),
@@ -133,10 +133,10 @@ export const FileErrors = [
 ] as const
 
 const fileParams = { fileId: FileId }
-const read = [requires("files.read").on("file")]
-const write = [requires("files.write").on("file")]
-const readOne = [requires("files.read").on("file", "fileId")]
-const writeOne = [requires("files.write").on("file", "fileId")]
+const read = [own("read", "File")]
+const write = [own("write", "File")]
+const readOne = [own("read", "File", "fileId")]
+const writeOne = [own("write", "File", "fileId")]
 
 export class FilesApi extends HttpApiGroup.make("files")
 	.add(

@@ -1,0 +1,95 @@
+/**
+ * The Grants of a Bot as an ability policy. Each Grant is one rule, with the
+ * ID of the Grant. A deny Grant wins over an allow Grant, as
+ * `denyOverrides` says.
+ */
+import { BotsApi } from "@openbot-build/api"
+import { Domain, Policy, Resource } from "@nmnmcc/ability"
+import { Effect, Option, Schema } from "effect"
+import type { Chat } from "@openbot-build/core"
+
+/** The Bot that tries a capability, in one Chat. */
+const BotCaller = Schema.Struct({ bot: Schema.String, chat: Schema.String })
+
+/**
+ * One capability request. `arguments` is the JSON text of the arguments, or
+ * `{}` when there are none. `chat` is the Chat of the request.
+ */
+export class CapabilityRequest extends Resource.Class<CapabilityRequest>()(
+	"Capability",
+	{
+		actions: BotsApi.CapabilityAction.literals,
+		fields: {
+			target: Schema.String,
+			arguments: Schema.String,
+			chat: Schema.String,
+		},
+	},
+) {}
+
+export const Capabilities = Domain.make({
+	principal: BotCaller,
+	resources: [CapabilityRequest],
+})
+
+const argumentsOf = (capability: BotsApi.Capability) =>
+	JSON.stringify(capability.arguments ?? {})
+
+/**
+ * The policy of a list of Grants. A Grant with the target `*` covers every
+ * target. A Grant with arguments covers only the same arguments, and a Grant
+ * with no arguments covers any arguments. A Chat Grant counts only in its
+ * own Chat.
+ */
+export const policyOf = (grants: ReadonlyArray<BotsApi.Grant>) =>
+	Policy.define(Capabilities)(function* (_) {
+		for (const grant of grants) {
+			const { capability } = grant
+			const make = grant.effect === "allow" ? _.allow : _.deny
+			yield* make(capability.action, CapabilityRequest, {
+				id: grant.id,
+				when: ($) =>
+					$.and(
+						...(capability.target === "*"
+							? []
+							: [$.eq("target", capability.target)]),
+						...(capability.arguments === undefined
+							? []
+							: [$.eq("arguments", argumentsOf(capability))]),
+						...(grant.scope === "chat" && grant.chat !== undefined
+							? [$.eq("chat", grant.chat)]
+							: []),
+					),
+			})
+		}
+	})
+
+/** The Grant that decides a request, if one does. */
+export const decidingGrant = (input: {
+	readonly grants: ReadonlyArray<BotsApi.Grant>
+	readonly bot: string
+	readonly capability: BotsApi.Capability
+	readonly chat: Chat.Id
+}): Option.Option<BotsApi.Grant> => {
+	const policy = policyOf(input.grants)
+	const request = {
+		principal: { bot: input.bot, chat: input.chat },
+		action: input.capability.action,
+		resource: CapabilityRequest.make({
+			target: input.capability.target,
+			arguments: argumentsOf(input.capability),
+			chat: input.chat,
+		}),
+	}
+	// A policy of Grants has no predicates, so it runs at once.
+	const { decision, steps } = Effect.runSync(Policy.explain(policy, request))
+	if (decision._tag === "NotApplicable") return Option.none()
+	// The rules are tested in order, so the first rule that applies with the
+	// same effect is the one that decides. Its ID is the ID of the Grant.
+	const winner = steps.find(
+		(step) => step.applies && step.rule._tag === decision._tag,
+	)
+	return Option.fromNullishOr(
+		input.grants.find((grant) => grant.id === winner?.rule.id),
+	)
+}

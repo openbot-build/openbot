@@ -504,7 +504,7 @@ export const platformAdmins = table("openbot_platform_admins", {
 	addedAt: bigint("added_at", { mode: "number" }).notNull(),
 })
 
-/** Custom roles. Built-in roles live in the API contract. Policies are JSON text. */
+/** Custom roles. Built-in roles live in the API contract. The policy is JSON text. */
 export const roles = table(
 	"openbot_roles",
 	{
@@ -514,7 +514,7 @@ export const roles = table(
 		id: text().notNull(),
 		name: text().notNull(),
 		description: text().notNull(),
-		policies: text().notNull(),
+		policy: text().notNull(),
 		createdAt: bigint("created_at", { mode: "number" }).notNull(),
 		updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
 	},
@@ -648,7 +648,7 @@ export const ssoConnections = table(
 	(t) => [index("openbot_sso_connections_organization").on(t.organizationId)],
 )
 
-/** Roles and policies are JSON text. */
+/** The roles and the policy are JSON text. */
 export const members = table(
 	"openbot_members",
 	{
@@ -662,7 +662,7 @@ export const members = table(
 		name: text(),
 		status: text().notNull(),
 		roles: text().notNull(),
-		policies: text().notNull(),
+		policy: text().notNull(),
 		joinedAt: bigint("joined_at", { mode: "number" }).notNull(),
 	},
 	(t) => [primaryKey({ columns: [t.organizationId, t.userId] })],
@@ -718,7 +718,7 @@ export const tokens = table(
 		name: text().notNull(),
 		prefix: text().notNull(),
 		hash: text().notNull().unique(),
-		policies: text().notNull(),
+		policy: text().notNull(),
 		createdAt: bigint("created_at", { mode: "number" }).notNull(),
 		expiresAt: bigint("expires_at", { mode: "number" }),
 		lastUsedAt: bigint("last_used_at", { mode: "number" }),

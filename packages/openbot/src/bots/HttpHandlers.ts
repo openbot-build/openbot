@@ -1,4 +1,4 @@
-import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
+import type { Services as AuthorizationServices } from "../authorization/Check.ts"
 import {
 	Account,
 	BotsApi,
@@ -10,7 +10,7 @@ import {
 import { Effect, Option, Schema } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { AuditLog } from "../audit/AuditLog.ts"
-import { botKey } from "../authorization/Policy.ts"
+import { botKey } from "../audit/Resources.ts"
 import { Grants } from "../capabilities/Grants.ts"
 import { Rules } from "../capabilities/Rules.ts"
 import { BotMemories, homeOf } from "./BotMemories.ts"
@@ -38,7 +38,7 @@ export const layer = (publicOrigin: string) =>
 			const access = (
 				caller: Caller,
 				id: string,
-				permission: "bots.read" | "bots.write" | "bots.share",
+				permission: "read" | "write" | "share",
 			) =>
 				bots
 					.access(caller, id, permission)
@@ -67,7 +67,7 @@ export const layer = (publicOrigin: string) =>
 			 */
 			const memoryOf = (caller: Caller, id: string) =>
 				Effect.gen(function* () {
-					const bot = yield* access(caller, id, "bots.read")
+					const bot = yield* access(caller, id, "read")
 					return {
 						bot,
 						home: homeOf(caller.organizationId, bot),
@@ -80,7 +80,7 @@ export const layer = (publicOrigin: string) =>
 			/** The memory Bot and the purge belong to the people of the Bot, not to its members. */
 			const ownMemory = (caller: Caller, id: string) =>
 				Effect.gen(function* () {
-					const bot = yield* access(caller, id, "bots.write")
+					const bot = yield* access(caller, id, "write")
 					if (bot.source !== undefined)
 						return yield* BotsApi.BotInvalid.make({
 							message:
@@ -117,7 +117,7 @@ export const layer = (publicOrigin: string) =>
 				)
 				.handle("getBot", ({ params }) =>
 					Effect.flatMap(Identity, (caller) =>
-						access(caller, params.botId, "bots.read"),
+						access(caller, params.botId, "read"),
 					),
 				)
 				.handle("updateBot", ({ params, payload }) =>
@@ -204,14 +204,14 @@ export const layer = (publicOrigin: string) =>
 				.handle("listRules", ({ params }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const bot = yield* access(caller, params.botId, "bots.read")
+						const bot = yield* access(caller, params.botId, "read")
 						return yield* rules.list(caller.organizationId, bot.id)
 					}),
 				)
 				.handle("createRule", ({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const bot = yield* access(caller, params.botId, "bots.write")
+						const bot = yield* access(caller, params.botId, "write")
 						const rule = yield* rules.create(caller.organizationId, {
 							bot: bot.id,
 							author: { _tag: "Person", userId: caller.userId },
@@ -225,7 +225,7 @@ export const layer = (publicOrigin: string) =>
 				.handle("updateRule", ({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const bot = yield* access(caller, params.botId, "bots.write")
+						const bot = yield* access(caller, params.botId, "write")
 						const rule = yield* rules.update(
 							caller.organizationId,
 							bot.id,
@@ -243,7 +243,7 @@ export const layer = (publicOrigin: string) =>
 				.handle("listGrants", ({ params, query }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const bot = yield* access(caller, params.botId, "bots.read")
+						const bot = yield* access(caller, params.botId, "read")
 						return yield* grants.list(
 							caller.organizationId,
 							bot.id,
@@ -254,7 +254,7 @@ export const layer = (publicOrigin: string) =>
 				.handle("createGrant", ({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const bot = yield* access(caller, params.botId, "bots.write")
+						const bot = yield* access(caller, params.botId, "write")
 						if (payload.scope === "chat")
 							return yield* BotsApi.BotInvalid.make({
 								message:
@@ -280,7 +280,7 @@ export const layer = (publicOrigin: string) =>
 				.handle("revokeGrant", ({ params }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const bot = yield* access(caller, params.botId, "bots.write")
+						const bot = yield* access(caller, params.botId, "write")
 						const revoked = yield* grants.revoke(
 							caller.organizationId,
 							bot.id,
@@ -294,14 +294,14 @@ export const layer = (publicOrigin: string) =>
 				.handle("listBotMembers", ({ params }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const bot = yield* access(caller, params.botId, "bots.share")
+						const bot = yield* access(caller, params.botId, "share")
 						return yield* bots.members(caller.organizationId, bot.id)
 					}),
 				)
 				.handle("removeBotMember", ({ params }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const bot = yield* access(caller, params.botId, "bots.share")
+						const bot = yield* access(caller, params.botId, "share")
 						const removed = yield* bots.removeMember(
 							caller.organizationId,
 							bot.id,
@@ -317,7 +317,7 @@ export const layer = (publicOrigin: string) =>
 				.handle("createBotInvitation", ({ params, payload }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const bot = yield* access(caller, params.botId, "bots.share")
+						const bot = yield* access(caller, params.botId, "share")
 						if (!shareable(bot))
 							return yield* BotsApi.BotInvalid.make({
 								message:
@@ -375,7 +375,7 @@ export const layer = (publicOrigin: string) =>
 				.handle("listBotInvitations", ({ params, query }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const bot = yield* access(caller, params.botId, "bots.share")
+						const bot = yield* access(caller, params.botId, "share")
 						return yield* organization
 							.listBotInvitations(caller.organizationId, bot.id, query.status)
 							.pipe(Effect.mapError(unavailable))
@@ -384,7 +384,7 @@ export const layer = (publicOrigin: string) =>
 				.handle("botInvitationSecret", ({ params }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const bot = yield* access(caller, params.botId, "bots.share")
+						const bot = yield* access(caller, params.botId, "share")
 						const { invitation, link } = yield* organization
 							.botInvitation(caller.organizationId, bot.id, params.invitationId)
 							.pipe(
@@ -411,7 +411,7 @@ export const layer = (publicOrigin: string) =>
 				.handle("revokeBotInvitation", ({ params }) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
-						const bot = yield* access(caller, params.botId, "bots.share")
+						const bot = yield* access(caller, params.botId, "share")
 						const invitation = yield* organization
 							.revokeBotInvitation(
 								caller.organizationId,

@@ -10,10 +10,11 @@ import { BotId } from "./BotsApi.ts"
 import { BotAuth, ReturnTo } from "./AuthApi.ts"
 import {
 	Authorize,
+	AuthorizationErrors,
 	GroupRequired,
-	PermissionErrors,
-	requires,
-} from "./Permissions.ts"
+	channel,
+	own,
+} from "./Authorization.ts"
 import { SecretInput, SecretState, Version } from "./Settings.ts"
 
 export const ChannelId = Schema.String.check(
@@ -302,7 +303,7 @@ export class ChannelHookDenied extends Schema.TaggedError<ChannelHookDenied>()(
 ) {}
 
 export const ChannelErrors = [
-	...PermissionErrors,
+	...AuthorizationErrors,
 	ChannelNotFound.pipe(HttpApiSchema.status(404)),
 	ChannelConflict.pipe(HttpApiSchema.status(409)),
 	ChannelInvalid.pipe(HttpApiSchema.status(400)),
@@ -310,7 +311,7 @@ export const ChannelErrors = [
 	ChannelsUnavailable.pipe(HttpApiSchema.status(503)),
 ] as const
 const LinkErrors = [
-	...PermissionErrors,
+	...AuthorizationErrors,
 	ChannelLinkInvalid.pipe(HttpApiSchema.status(404)),
 	ChannelIdentityNotFound.pipe(HttpApiSchema.status(404)),
 	ChannelsUnavailable.pipe(HttpApiSchema.status(503)),
@@ -400,8 +401,8 @@ export class ChannelsApi extends HttpApiGroup.make("channels")
 	)
 	.annotate(HttpApi.PayloadParseOptions, { onExcessProperty: "error" })
 	.annotate(GroupRequired, {
-		read: [requires("channels.read").on("channel", "channelId")],
-		write: [requires("channels.write").on("channel", "channelId")],
+		read: [channel("read", "channelId")],
+		write: [channel("write", "channelId")],
 	})
 	.middleware(Authorize)
 	.middleware(BotAuth) {}
@@ -448,8 +449,8 @@ export class ChannelLinksApi extends HttpApiGroup.make("channelLinks")
 		),
 	)
 	.annotate(GroupRequired, {
-		read: [requires("channel_identities.read").on("user")],
-		write: [requires("channel_identities.write").on("user")],
+		read: [own("read", "ChannelIdentity")],
+		write: [own("write", "ChannelIdentity")],
 	})
 	.middleware(Authorize)
 	.middleware(BotAuth) {}

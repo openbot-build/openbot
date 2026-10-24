@@ -19,13 +19,17 @@ export * as Settings from "./Settings.ts"
 export * as PlatformApi from "./PlatformApi.ts"
 export * as ModelProvidersApi from "./ModelProvidersApi.ts"
 export * as SsoApi from "./SsoApi.ts"
-export * as Permissions from "./Permissions.ts"
+export * as Authorization from "./Authorization.ts"
+export * as Roles from "./Roles.ts"
 export {
+	Auth,
 	Authorize,
-	AuthorizationUnavailable,
-	PermissionDenied,
-} from "./Permissions.ts"
-export { PlatformAuthorize } from "./PlatformApi.ts"
+	Forbidden,
+	PlatformAuth,
+	PlatformAuthorize,
+	PolicyUnavailable,
+} from "./Authorization.ts"
+export type { OpenBotDomain, OpenBotPolicy } from "./Authorization.ts"
 export {
 	SettingsConflict,
 	SettingsInvalid,

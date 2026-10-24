@@ -3,6 +3,8 @@ import { Effect, Layer, ManagedRuntime, Option, Redacted, Result } from "effect"
 import { NodeServices } from "@effect/platform-node"
 import * as BrowserHost from "./BrowserHost.ts"
 import { withCookie, withToken } from "./Caller.ts"
+import * as Policies from "./Policies.ts"
+import { Authorization } from "@openbot-build/api"
 import * as DatabasePostgres from "../src/database/DatabasePostgres.ts"
 import * as Setup from "../src/platform/Setup.ts"
 import * as PlatformAdminsPostgres from "../src/platform/PlatformAdminsPostgres.ts"
@@ -48,13 +50,9 @@ it(
 				"PATCH",
 				{
 					expectedVersion: settings.version,
-					policyCeiling: [
-						{
-							effect: "deny",
-							permissionGroups: ["chats.read"],
-							resources: ["openbot.org.{org}"],
-						},
-					],
+					ceiling: Policies.json(function* (_) {
+						yield* _.deny("read", Authorization.Chat, Policies.inOrganization)
+					}),
 				},
 			)
 			assert.strictEqual(ceiling.status, 200, await ceiling.clone().text())
@@ -70,7 +68,7 @@ it(
 					await account(root.session, "/v1/platform/settings", "PATCH", {
 						expectedVersion: updated.version,
 						organizationCreation: "platform_admins",
-						policyCeiling: [],
+						ceiling: Policies.json(function* () {}),
 					})
 				).status,
 				200,
@@ -367,7 +365,7 @@ it(
 			)
 			assert.strictEqual((await inUse.json())._tag, "ModelProviderInUse")
 
-			// A token works on the platform only when its own policies say so.
+			// A token works on the platform only when its own policy says so.
 			const plain = await (
 				await account(root.session, "/v1/user/tokens", "POST", {
 					name: "plain",
@@ -381,13 +379,9 @@ it(
 			const platformToken = await (
 				await account(root.session, "/v1/user/tokens", "POST", {
 					name: "platform",
-					policies: [
-						{
-							effect: "allow",
-							permissionGroups: ["platform.read"],
-							resources: ["openbot.platform"],
-						},
-					],
+					policy: Policies.json(function* (_) {
+						yield* _.allow("read", Authorization.Platform)
+					}),
 				})
 			).json()
 			assert.strictEqual(

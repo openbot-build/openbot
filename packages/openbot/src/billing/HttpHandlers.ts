@@ -7,7 +7,7 @@ import {
 import { Clock, Effect, Layer } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { AuditLog } from "../audit/AuditLog.ts"
-import { organizationKey } from "../authorization/Policy.ts"
+import { organizationKey } from "../audit/Resources.ts"
 import { Billing, periodStart } from "./Billing.ts"
 
 const unavailable = () => BillingApi.BillingUnavailable.make({})

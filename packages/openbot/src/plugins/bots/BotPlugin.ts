@@ -1,4 +1,4 @@
-import type { Services as AuthorizationServices } from "../../authorization/Authorize.ts"
+import type { Services as AuthorizationServices } from "../../authorization/Check.ts"
 import {
 	Bot,
 	type Chat,
@@ -210,6 +210,8 @@ type Services =
 	| Rules
 	| Signals
 	| Reminders
+	| Organization
+	| Settings
 	| AuthorizationServices
 
 /** What the Chats of one member give to the Bot plugin. */

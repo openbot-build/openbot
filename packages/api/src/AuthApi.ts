@@ -7,7 +7,7 @@ import {
 	HttpApiSecurity,
 } from "effect/http-api"
 import { Account, Identity } from "./Identity.ts"
-import { RoleId } from "./Permissions.ts"
+import { RoleId } from "./Roles.ts"
 
 export const SessionCookie = "__Host-openbot-session"
 /** Better Auth keeps the sign-in state in this cookie during an OpenID Connect round trip. */

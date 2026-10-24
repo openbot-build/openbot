@@ -1,4 +1,8 @@
-import { OrganizationApi, Permissions } from "@openbot-build/api"
+import {
+	Authorization,
+	OrganizationApi,
+	Roles as RolesApi,
+} from "@openbot-build/api"
 import { Clock, Effect, Layer, Option, Schema } from "effect"
 import { and, asc, eq } from "drizzle-orm"
 import { randomUUID } from "node:crypto"
@@ -6,15 +10,16 @@ import { roles } from "../database/Schema.ts"
 import { builtin, Roles, RolesUnavailable } from "./Roles.ts"
 import * as Db from "../database/Database.ts"
 
-const PolicyList = Schema.fromJsonString(Permissions.Policies)
-const decodePolicies = Schema.decodeUnknownSync(PolicyList)
+const PolicyJson = Schema.fromJsonString(Authorization.PolicySchema)
+const decodePolicy = Schema.decodeUnknownSync(PolicyJson)
+const encodePolicy = Schema.encodeSync(PolicyJson)
 
-const view = (row: typeof roles.$inferSelect): Permissions.Role => ({
+const view = (row: typeof roles.$inferSelect): RolesApi.Role => ({
 	id: row.id,
 	name: row.name,
 	description: row.description,
 	builtin: false,
-	policies: decodePolicies(row.policies),
+	policy: decodePolicy(row.policy),
 })
 
 export const make = Effect.gen(function* () {
@@ -23,7 +28,7 @@ export const make = Effect.gen(function* () {
 	const where = (organizationId: string, roleId: string) =>
 		and(eq(roles.organizationId, organizationId), eq(roles.id, roleId))
 	const readOnly = (roleId: string) =>
-		Permissions.isBuiltinRole(roleId)
+		RolesApi.isBuiltinRole(roleId)
 			? Effect.fail(OrganizationApi.RoleReadOnly.make({ roleId }))
 			: Effect.void
 
@@ -42,7 +47,7 @@ export const make = Effect.gen(function* () {
 		list: (organizationId) =>
 			Effect.map(custom(organizationId), (custom) => [...builtin, ...custom]),
 		get: (organizationId, roleId) =>
-			Permissions.isBuiltinRole(roleId)
+			RolesApi.isBuiltinRole(roleId)
 				? Effect.succeed(
 						Option.fromNullishOr(builtin.find((role) => role.id === roleId)),
 					)
@@ -64,7 +69,7 @@ export const make = Effect.gen(function* () {
 					id: "role_" + randomUUID().replaceAll("-", ""),
 					name: input.name.trim(),
 					description: input.description,
-					policies: JSON.stringify(input.policies),
+					policy: encodePolicy(input.policy),
 					createdAt: now,
 					updatedAt: now,
 				}
@@ -82,9 +87,9 @@ export const make = Effect.gen(function* () {
 						...(patch.description === undefined
 							? {}
 							: { description: patch.description }),
-						...(patch.policies === undefined
+						...(patch.policy === undefined
 							? {}
-							: { policies: JSON.stringify(patch.policies) }),
+							: { policy: encodePolicy(patch.policy) }),
 						updatedAt: now,
 					})
 					.where(where(organizationId, roleId))

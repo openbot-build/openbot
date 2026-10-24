@@ -1,4 +1,5 @@
 import {
+	Authorization,
 	type Caller,
 	Identity,
 	ModelProvidersApi,
@@ -8,7 +9,12 @@ import { Effect, Option } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { AuditLog } from "../audit/AuditLog.ts"
 import { Billing } from "../billing/Billing.ts"
-import { organizationKey } from "../authorization/Policy.ts"
+import { organizationKey } from "../audit/Resources.ts"
+import {
+	type Services as AuthorizationServices,
+	filter,
+	matches,
+} from "../authorization/Check.ts"
 import { Settings } from "../settings/Settings.ts"
 import {
 	ModelProviders,
@@ -57,6 +63,7 @@ export const layer = HttpApiBuilder.group(
 			const audit = yield* AuditLog
 			const settings = yield* Settings
 			const billing = yield* Billing
+			const services = yield* Effect.context<AuthorizationServices>()
 			const record = (
 				caller: Caller,
 				action:
@@ -120,9 +127,36 @@ export const layer = HttpApiBuilder.group(
 				)
 			return handlers
 				.handle("getModelCatalog", () =>
-					Effect.flatMap(Identity, (caller) =>
-						registry.view(caller.organizationId),
-					).pipe(Effect.mapError(unavailable)),
+					Effect.gen(function* () {
+						const caller = yield* Identity
+						const catalog = yield* registry
+							.view(caller.organizationId)
+							.pipe(Effect.mapError(unavailable))
+						// The catalog has only the models that the caller may use, and
+						// the providers of those models.
+						const usable = yield* filter(caller, {
+							action: "use",
+							kind: "Model",
+							where: { organizationId: caller.organizationId },
+						}).pipe(Effect.provideContext(services))
+						const models = catalog.models.filter((model) =>
+							matches(
+								usable,
+								Authorization.Model.make({
+									organizationId: caller.organizationId,
+									provider: model.provider,
+									id: model.id,
+								}),
+							),
+						)
+						return {
+							...catalog,
+							providers: catalog.providers.filter((provider) =>
+								models.some((model) => model.provider === provider.id),
+							),
+							models,
+						}
+					}),
 				)
 				.handle("listModels", () =>
 					Effect.flatMap(Identity, (caller) => models.list(owned(caller))).pipe(

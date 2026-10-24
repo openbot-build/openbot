@@ -4,7 +4,7 @@ import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 import { Invocation } from "./AppExecution.ts"
 import { ExperienceErrors } from "./ExperienceErrors.ts"
 import { ChatConflict } from "./ChatsApi.ts"
-import { Required, requires } from "./Permissions.ts"
+import { Required, own } from "./Authorization.ts"
 
 const errors = [
 	...ExperienceErrors,
@@ -20,7 +20,7 @@ export const AppOperationsApi = HttpApiGroup.make("appOperations").add(
 		params: { chatId: Chat.Id },
 		success: Schema.Array(Invocation),
 		error: errors,
-	}).annotate(Required, [requires("chats.read").on("chat", "chatId")]),
+	}).annotate(Required, [own("read", "Chat", "chatId")]),
 	HttpApiEndpoint.post("respond", "/v1/app-operations/:id/inputs", {
 		params: { id: Schema.String },
 		payload: Schema.Struct({

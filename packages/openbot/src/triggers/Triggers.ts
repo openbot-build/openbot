@@ -1,15 +1,16 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
-import {
-	BotsApi,
-	type Caller,
-	Permissions,
-	TriggersApi,
-} from "@openbot-build/api"
-import { and, eq, isNull, lte, or } from "drizzle-orm"
+import { BotsApi, type Caller, TriggersApi } from "@openbot-build/api"
+import { and, eq, lte } from "drizzle-orm"
 import { Clock, Context, Cron, Effect, Layer, Option, Result } from "effect"
-import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
-import { can } from "../authorization/Check.ts"
-import { triggerKey, triggerPlace } from "../authorization/Policy.ts"
+import type { Services as AuthorizationServices } from "../authorization/Check.ts"
+import {
+	type Errors as CheckErrors,
+	check as checkAct,
+	filter,
+	guard,
+} from "../authorization/Check.ts"
+import { triggerResource } from "../authorization/Resources.ts"
+import { toWhere } from "../authorization/Sql.ts"
 import { triggers } from "../database/Schema.ts"
 import * as Db from "../database/Database.ts"
 
@@ -42,8 +43,7 @@ export type Failure =
 	| TriggersApi.TriggerConflict
 	| TriggersApi.TriggerInvalid
 	| TriggersApi.TriggerStorageUnavailable
-	| Permissions.PermissionDenied
-	| Permissions.AuthorizationUnavailable
+	| CheckErrors
 
 /** The triggers of an organization: their prompts, schedules and webhooks. */
 export class Triggers extends Context.Service<
@@ -52,11 +52,11 @@ export class Triggers extends Context.Service<
 		readonly list: (
 			caller: Caller,
 		) => Effect.Effect<ReadonlyArray<Trigger>, Failure, AuthorizationServices>
-		/** Reads a trigger. With `triggers.write`, the caller must also be able to change it. */
+		/** Reads a trigger. With `write`, the caller must also be able to change it. */
 		readonly get: (
 			caller: Caller,
 			id: string,
-			permission?: "triggers.read" | "triggers.write",
+			action?: "read" | "write",
 		) => Effect.Effect<Trigger, Failure, AuthorizationServices>
 		readonly create: (
 			caller: Caller,
@@ -163,28 +163,22 @@ export const make = Effect.gen(function* () {
 		stored(db.select().from(triggers).where(where(organizationId, id))).pipe(
 			Effect.map((rows) => Option.map(Option.fromNullishOr(rows[0]), fromRow)),
 		)
-	const keyOf = (caller: Caller, trigger: Pick<Trigger, "id" | "owner">) =>
-		triggerKey({ ...trigger, organizationId: caller.organizationId })
 	/** A caller who cannot read a trigger does not learn that it exists. */
-	const access = (
-		caller: Caller,
-		id: string,
-		permission: Permissions.PermissionGroupId,
-	) =>
+	const access = (caller: Caller, id: string, action: "read" | "write") =>
 		Effect.gen(function* () {
 			const found = yield* find(caller.organizationId, id)
 			if (Option.isNone(found)) return yield* notFound(id)
-			const key = keyOf(caller, found.value)
-			if (!(yield* can({ caller, permission: "triggers.read", key })))
-				return yield* notFound(id)
-			if (
-				permission !== "triggers.read" &&
-				!(yield* can({ caller, permission, key }))
+			yield* guard(
+				caller,
+				{
+					action,
+					resource: triggerResource({
+						...found.value,
+						organizationId: caller.organizationId,
+					}),
+				},
+				() => notFound(id),
 			)
-				return yield* Permissions.PermissionDenied.make({
-					permission,
-					resource: key,
-				})
 			return found.value
 		})
 	const check = (schedule: TriggersApi.Schedule | null, now: number) =>
@@ -262,7 +256,7 @@ export const make = Effect.gen(function* () {
 		>,
 	) =>
 		Effect.gen(function* () {
-			const current = yield* access(caller, id, "triggers.write")
+			const current = yield* access(caller, id, "write")
 			if (expected !== undefined && expected !== current.revision)
 				return yield* TriggersApi.TriggerConflict.make({
 					message: "The trigger changed. Read it again and retry.",
@@ -285,58 +279,44 @@ export const make = Effect.gen(function* () {
 	return Triggers.of({
 		list: (caller) =>
 			Effect.gen(function* () {
-				const places = [caller.userId, null] as const
-				const readable: Array<string | null> = []
-				for (const userId of places)
-					if (
-						yield* can({
-							caller,
-							permission: "triggers.read",
-							key: triggerPlace({
-								organizationId: caller.organizationId,
-								userId,
-							}),
-						})
-					)
-						readable.push(userId)
-				if (readable.length === 0) return []
+				const readable = yield* filter(caller, {
+					action: "read",
+					kind: "Trigger",
+					where: { organizationId: caller.organizationId },
+				}).pipe(
+					Effect.flatMap((condition) =>
+						toWhere(condition, {
+							ownerUserId: triggers.ownerUserId,
+							id: triggers.id,
+						}),
+					),
+				)
 				const rows = yield* stored(
 					db
 						.select()
 						.from(triggers)
 						.where(
-							and(
-								eq(triggers.organizationId, caller.organizationId),
-								or(
-									...readable.map((userId) =>
-										userId === null
-											? isNull(triggers.ownerUserId)
-											: eq(triggers.ownerUserId, userId),
-									),
-								),
-							),
+							and(eq(triggers.organizationId, caller.organizationId), readable),
 						)
 						.orderBy(triggers.createdAt),
 				)
 				return rows.map(fromRow)
 			}),
-		get: (caller, id, permission = "triggers.read") =>
-			access(caller, id, permission),
+		get: (caller, id, action = "read") => access(caller, id, action),
 		create: (caller, input) =>
 			Effect.gen(function* () {
 				const owner: TriggersApi.TriggerOwner =
 					input.shared === true
 						? { _tag: "Organization" }
 						: { _tag: "Member", userId: caller.userId }
-				const place = triggerPlace({
-					organizationId: caller.organizationId,
-					userId: owner._tag === "Member" ? owner.userId : null,
+				yield* checkAct(caller, {
+					action: "write",
+					kind: "Trigger",
+					where: {
+						organizationId: caller.organizationId,
+						ownerUserId: owner._tag === "Member" ? owner.userId : null,
+					},
 				})
-				if (!(yield* can({ caller, permission: "triggers.write", key: place })))
-					return yield* Permissions.PermissionDenied.make({
-						permission: "triggers.write",
-						resource: place,
-					})
 				const now = yield* Clock.currentTimeMillis
 				const schedule = input.schedule ?? null
 				yield* check(schedule, now)
@@ -381,7 +361,7 @@ export const make = Effect.gen(function* () {
 			),
 		remove: (caller, id) =>
 			Effect.gen(function* () {
-				const trigger = yield* access(caller, id, "triggers.write")
+				const trigger = yield* access(caller, id, "write")
 				yield* stored(
 					db.delete(triggers).where(where(caller.organizationId, id)),
 				)

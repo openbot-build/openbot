@@ -65,6 +65,7 @@ import * as TokensPostgres from "../auth/TokensPostgres.ts"
 import * as AuditLogPostgres from "../audit/AuditLogPostgres.ts"
 import * as OrganizationPostgres from "../organization/OrganizationPostgres.ts"
 import * as PlatformAdminsPostgres from "../platform/PlatformAdminsPostgres.ts"
+import * as AuthorizationLayer from "../authorization/Layer.ts"
 import * as RolesPostgres from "../authorization/RolesPostgres.ts"
 import * as ModelRegistry from "../models/ModelRegistry.ts"
 import * as BillingPostgres from "../billing/BillingPostgres.ts"
@@ -333,43 +334,50 @@ export const layer = <
 					BetterAuth.layer({ ...config, databaseUrl: options.databaseUrl }),
 			),
 		),
-	).pipe(
-		Layer.provideMerge(apps),
-		Layer.provideMerge(Triggers.layer),
-		Layer.provideMerge(Layer.merge(channels, computers)),
-		Layer.provideMerge(bots),
-		Layer.provideMerge(index),
-		Layer.provideMerge(Governance.layer),
-		Layer.provideMerge(TokensPostgres.layer),
-		Layer.provideMerge(OrganizationPostgres.layer),
-		Layer.provideMerge(PlatformAdminsPostgres.layer),
-		Layer.provideMerge(RolesPostgres.layer),
-		Layer.provideMerge(
-			ModelRegistry.layer(
-				options.builtinModels === undefined
-					? {}
-					: { builtin: options.builtinModels },
-			),
-		),
-		Layer.provideMerge(ModelProvidersPostgres.layer),
-		Layer.provideMerge(ModelsPostgres.layer),
-		Layer.provideMerge(BillingPostgres.layer),
-		Layer.provideMerge(RateLimit.layer),
-		Layer.provideMerge(
-			Layer.merge(
-				TokenThrottle.layer,
-				Files.layer.pipe(Layer.provide(NodeCrypto.layer)),
-			),
-		),
-		Layer.provideMerge(
-			SsoPostgres.layer.pipe(
-				Layer.provide(options.domainControl ?? DomainControl.layer),
-			),
-		),
-		Layer.provideMerge(AuditLogPostgres.layer),
-		Layer.provideMerge(Layer.succeed(IndexNamespace, indexNamespace)),
-		Layer.provideMerge(Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
 	)
+		.pipe(
+			Layer.provideMerge(apps),
+			Layer.provideMerge(Triggers.layer),
+			Layer.provideMerge(Layer.merge(channels, computers)),
+			Layer.provideMerge(bots),
+			Layer.provideMerge(index),
+			Layer.provideMerge(Governance.layer),
+			// One pipe takes at most 20 functions, so the rest is in a second pipe.
+		)
+		.pipe(
+			Layer.provideMerge(AuthorizationLayer.layer),
+			Layer.provideMerge(TokensPostgres.layer),
+			Layer.provideMerge(OrganizationPostgres.layer),
+			Layer.provideMerge(PlatformAdminsPostgres.layer),
+			Layer.provideMerge(RolesPostgres.layer),
+			Layer.provideMerge(
+				ModelRegistry.layer(
+					options.builtinModels === undefined
+						? {}
+						: { builtin: options.builtinModels },
+				),
+			),
+			Layer.provideMerge(ModelProvidersPostgres.layer),
+			Layer.provideMerge(ModelsPostgres.layer),
+			Layer.provideMerge(BillingPostgres.layer),
+			Layer.provideMerge(RateLimit.layer),
+			Layer.provideMerge(
+				Layer.merge(
+					TokenThrottle.layer,
+					Files.layer.pipe(Layer.provide(NodeCrypto.layer)),
+				),
+			),
+			Layer.provideMerge(
+				SsoPostgres.layer.pipe(
+					Layer.provide(options.domainControl ?? DomainControl.layer),
+				),
+			),
+			Layer.provideMerge(AuditLogPostgres.layer),
+			Layer.provideMerge(Layer.succeed(IndexNamespace, indexNamespace)),
+			Layer.provideMerge(
+				Layer.merge(NodeServices.layer, FetchHttpClient.layer),
+			),
+		)
 	return Layer.mergeAll(
 		Views.layer,
 		AppExperience.layer,

@@ -1,6 +1,6 @@
 import { BotAuth } from "./AuthApi.ts"
 import { Chat, Turn } from "@openbot-build/core"
-import { Authorize, GroupRequired, requires } from "./Permissions.ts"
+import { Authorize, GroupRequired, own } from "./Authorization.ts"
 import { BotId } from "./BotsApi.ts"
 import { Schema } from "effect"
 import {
@@ -119,8 +119,8 @@ export class DelegationsApi extends HttpApiGroup.make("delegations")
 	.annotate(HttpApi.PayloadParseOptions, { onExcessProperty: "error" })
 	// A Delegation belongs to a Chat of the caller. The handlers check that it is one.
 	.annotate(GroupRequired, {
-		read: [requires("chats.read").on("chat")],
-		write: [requires("chats.write").on("chat")],
+		read: [own("read", "Chat")],
+		write: [own("write", "Chat")],
 	})
 	.middleware(Authorize)
 	.middleware(BotAuth) {}

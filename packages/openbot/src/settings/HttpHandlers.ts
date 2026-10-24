@@ -1,4 +1,4 @@
-import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
+import type { Services as AuthorizationServices } from "../authorization/Check.ts"
 import { Identity, OpenBotApi, Settings as Api } from "@openbot-build/api"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
@@ -37,7 +37,13 @@ export const layerMember = HttpApiBuilder.group(
 												message: `There is no Bot ${error.bot}.`,
 											}),
 										),
-									PermissionDenied: () =>
+									Forbidden: () =>
+										Effect.fail(
+											Api.SettingsInvalid.make({
+												message: `You cannot give work to Bot ${defaultBot}.`,
+											}),
+										),
+									Pending: () =>
 										Effect.fail(
 											Api.SettingsInvalid.make({
 												message: `You cannot give work to Bot ${defaultBot}.`,
@@ -51,7 +57,7 @@ export const layerMember = HttpApiBuilder.group(
 										Effect.fail(Api.SettingsUnavailable.make({})),
 									BotStorageUnavailable: () =>
 										Effect.fail(Api.SettingsUnavailable.make({})),
-									AuthorizationUnavailable: () =>
+									PolicyUnavailable: () =>
 										Effect.fail(Api.SettingsUnavailable.make({})),
 								}),
 							)

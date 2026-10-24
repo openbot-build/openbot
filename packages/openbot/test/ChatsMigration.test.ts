@@ -13,7 +13,8 @@ import {
 	Store,
 	Turn,
 } from "@openbot-build/core"
-import { BotMemory, BotsApi, Permissions, Settings } from "@openbot-build/api"
+import { Authorization, BotMemory, BotsApi } from "@openbot-build/api"
+import { Policy } from "@nmnmcc/ability"
 import { migrate } from "drizzle-orm/effect-postgres/migrator"
 import {
 	Effect,
@@ -1403,18 +1404,9 @@ describe("Sessions become Chats, and stored values that named Sessions name Chat
 	})
 
 	it("policies use the words of Chats", async () => {
-		const expected = [
-			{
-				effect: "allow",
-				permissionGroups: ["chats.read", "chats.write", "bots.read"],
-				resources: [
-					"openbot.org.{org}.user.{self}.chat",
-					"openbot.org.{org}.user.{self}.chat.ses_new",
-					"openbot.org.{org}.user.{self}",
-				],
-			},
-		]
-		const decodePolicies = decodeJson(Permissions.Policies)
+		// A later migration changes policies into ability policies. The keys of
+		// Chats become paths with `chat`, so the rules about Chats stay.
+		const decodePolicy = decodeJson(Authorization.PolicySchema)
 		for (const table of [
 			"openbot_roles",
 			"openbot_members",
@@ -1423,12 +1415,26 @@ describe("Sessions become Chats, and stored values that named Sessions name Chat
 			const rows = await query(
 				(sql) =>
 					sql<{
-						readonly policies: string
-					}>`select policies from ${sql(table)}`,
+						readonly policy: string
+					}>`select policy from ${sql(table)}`,
 			)
-			assert.deepStrictEqual<unknown>(
-				decodePolicies(rows[0]!.policies),
-				expected,
+			const policy = decodePolicy(rows[0]!.policy)
+			const own = Authorization.Chat.make({
+				organizationId: "org_a",
+				ownerUserId: "user_a",
+				id: "ses_new",
+			})
+			assert.strictEqual(
+				Policy.decideSync(policy, {
+					principal: {
+						kind: "member",
+						userId: "user_a",
+						organizationId: "org_a",
+					},
+					action: "write",
+					resource: own,
+				})._tag,
+				"Allow",
 				table,
 			)
 		}
@@ -1445,11 +1451,12 @@ describe("Sessions become Chats, and stored values that named Sessions name Chat
 					readonly document: string
 				}>`select document from openbot_settings where scope_kind = 'platform'`,
 		)
-		assert.deepStrictEqual<unknown>(
-			Schema.decodeUnknownSync(Settings.CeilingPolicies)(
-				JSON.parse(platform[0]!.document).policyCeiling,
+		assert.isTrue(
+			Authorization.onlyDenies(
+				Schema.decodeUnknownSync(Authorization.CeilingSchema)(
+					JSON.parse(platform[0]!.document).ceiling,
+				),
 			),
-			[{ ...expected[0], effect: "deny" }],
 		)
 	})
 

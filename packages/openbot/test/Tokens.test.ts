@@ -1,9 +1,10 @@
 import { assert, it, vi } from "@effect/vitest"
-import { AuthApi } from "@openbot-build/api"
+import { AuthApi, Authorization } from "@openbot-build/api"
 import { Redacted } from "effect"
 import * as BrowserHost from "./BrowserHost.ts"
 import { withCookie, withToken } from "./Caller.ts"
 import { message } from "./Messages.ts"
+import * as Policies from "./Policies.ts"
 
 it(
 	"User tokens authenticate headless clients, stay with their member and stop working when revoked",
@@ -78,12 +79,12 @@ it(
 				[],
 			)
 
-			// A token made without policies cannot manage tokens.
+			// A token made without a policy cannot manage tokens.
 			const denied = await keyed(secret, "/v1/user/tokens", "POST", {
 				name: "Minted",
 			})
 			assert.strictEqual(denied.status, 403)
-			assert.strictEqual((await denied.json())._tag, "PermissionDenied")
+			assert.strictEqual((await denied.json())._tag, "Forbidden")
 			assert.strictEqual((await keyed(secret, "/v1/user/tokens")).status, 403)
 
 			const foreignOrigin = await fetch(host.address + "/v1/user/tokens", {
@@ -104,25 +105,33 @@ it(
 					.status,
 				400,
 			)
+			// A token policy that names another organization gives nothing, because
+			// every check also needs the policy of the member in its own organization.
 			const foreignPolicy = await account(
 				alice.session,
 				"/v1/user/tokens",
 				"POST",
 				{
 					name: "Other organization",
-					policies: [
-						{
-							effect: "allow",
-							permissionGroups: ["chats.read"],
-							resources: ["openbot.org.someone-else"],
-						},
-					],
+					policy: Policies.json(function* (_) {
+						yield* _.allow("read", Authorization.Chat, {
+							when: ($) => $.under("org", "someone-else"),
+						})
+					}),
 				},
 			)
-			assert.strictEqual(foreignPolicy.status, 400)
+			assert.strictEqual(foreignPolicy.status, 201)
+			const foreign = await foreignPolicy.json()
+			assert.strictEqual((await keyed(foreign.secret, "/v1/chats")).status, 403)
 			assert.strictEqual(
-				(await foreignPolicy.json())._tag,
-				"TokenPolicyInvalid",
+				(
+					await account(
+						alice.session,
+						"/v1/user/tokens/" + encodeURIComponent(foreign.token.id),
+						"DELETE",
+					)
+				).status,
+				204,
 			)
 
 			assert.strictEqual(
@@ -203,14 +212,14 @@ it(
 			const alice = await host.login("alice")
 			const account = withCookie({ address: host.address, publicOrigin })
 			const keyed = withToken(host.address)
-			const make = async (policies: unknown) => {
+			const make = async (policy: unknown) => {
 				const response = await account(
 					alice.session,
 					"/v1/user/tokens",
 					"POST",
 					{
 						name: "Scoped",
-						policies,
+						policy,
 					},
 				)
 				assert.strictEqual(response.status, 201, await response.clone().text())
@@ -227,13 +236,11 @@ it(
 			const chatPath = "/v1/chats/" + encodeURIComponent(receipt.chat)
 			const messages = "/v1/bots/" + encodeURIComponent(bot) + "/messages"
 
-			const readOnly = await make([
-				{
-					effect: "allow",
-					permissionGroups: ["chats.read"],
-					resources: ["openbot.org.{org}.user.{self}"],
-				},
-			])
+			const readOnly = await make(
+				Policies.json(function* (_) {
+					yield* _.allow("read", Authorization.Chat, Policies.own)
+				}),
+			)
 			assert.strictEqual((await keyed(readOnly, "/v1/chats")).status, 200)
 			const read = await keyed(readOnly, chatPath)
 			assert.strictEqual(read.status, 200, await read.clone().text())
@@ -243,7 +250,7 @@ it(
 				mode: "plan",
 			})
 			assert.strictEqual(write.status, 403)
-			assert.strictEqual((await write.json()).permission, "chats.write")
+			assert.deepInclude(await write.json(), { action: "write", kind: "Chat" })
 			assert.strictEqual(
 				(await keyed(readOnly, messages, "POST", { input: "Not allowed" }))
 					.status,
@@ -251,44 +258,46 @@ it(
 			)
 
 			// A deny wins over an allow in the same token.
-			const allowed = [
-				{
-					effect: "allow",
-					permissionGroups: [
-						"responses.run",
-						"chats.read",
-						"chats.write",
-						"bots.read",
-						"bots.delegate",
-					],
-					resources: ["openbot.org.{org}"],
-				},
-			]
-			const full = await make(allowed)
+			const allowChats = function* (_: Policies.Builder) {
+				yield* _.allow(
+					["run", "read", "write"],
+					Authorization.Chat,
+					Policies.inOrganization,
+				)
+				yield* _.allow(
+					["read", "delegate"],
+					Authorization.Bot,
+					Policies.inOrganization,
+				)
+			}
+			const full = await make(Policies.json(allowChats))
 			const sent = await keyed(full, messages, "POST", { input: "Allowed" })
 			assert.strictEqual(sent.status, 202, await sent.clone().text())
-			const denied = await make([
-				...allowed,
-				{
-					effect: "deny",
-					permissionGroups: ["chats.write"],
-					resources: ["openbot.org.{org}.user.{self}.chat"],
-				},
-			])
+			const denied = await make(
+				Policies.json(function* (_) {
+					yield* allowChats(_)
+					yield* _.deny("write", Authorization.Chat, Policies.own)
+				}),
+			)
 			assert.strictEqual((await keyed(denied, "/v1/chats")).status, 200)
 			const refused = await keyed(denied, messages, "POST", { input: "No" })
 			assert.strictEqual(refused.status, 403)
-			assert.strictEqual((await refused.json()).permission, "chats.write")
+			assert.deepInclude(await refused.json(), {
+				action: "write",
+				kind: "Chat",
+			})
 
 			// A token never gets more than its member. Alice is a Super Administrator,
 			// but she loses organization.write here, and so does her broad token.
-			const broad = await make([
-				{
-					effect: "allow",
-					permissionGroups: ["organization.read", "organization.write"],
-					resources: ["openbot.org.{org}"],
-				},
-			])
+			const broad = await make(
+				Policies.json(function* (_) {
+					yield* _.allow(
+						["read", "write"],
+						Authorization.Organization,
+						Policies.inOrganization,
+					)
+				}),
+			)
 			assert.strictEqual(
 				(await keyed(broad, "/v1/organization", "PATCH", { name: "Acme" }))
 					.status,

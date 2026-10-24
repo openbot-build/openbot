@@ -1,4 +1,4 @@
-import { Permissions, UserTokensApi } from "@openbot-build/api"
+import { Authorization, UserTokensApi } from "@openbot-build/api"
 import type { PgClient } from "@effect/sql-pg"
 import {
 	Clock,
@@ -12,10 +12,6 @@ import {
 import { and, count, eq, sql } from "drizzle-orm"
 import { createHash, randomBytes, randomUUID } from "node:crypto"
 import { tokens } from "../database/Schema.ts"
-import {
-	defaultTokenPolicies,
-	inOrganization,
-} from "../authorization/Policy.ts"
 import { Tokens } from "./Tokens.ts"
 import { AuthUnavailable, CredentialRejected } from "./Model.ts"
 import * as Db from "../database/Database.ts"
@@ -24,9 +20,9 @@ const day = 24 * 60 * 60 * 1000
 /** Do not write on every request, but keep the usage information useful. */
 const lastUsedResolution = 60 * 1000
 
-const decodePolicies = Schema.decodeUnknownSync(
-	Schema.fromJsonString(Permissions.Policies),
-)
+const PolicyJson = Schema.fromJsonString(Authorization.PolicySchema)
+const decodePolicy = Schema.decodeUnknownSync(PolicyJson)
+const encodePolicy = Schema.encodeSync(PolicyJson)
 const hash = (secret: string) =>
 	createHash("sha256").update(secret).digest("hex")
 const iso = (millis: number) => DateTime.formatIso(DateTime.makeUnsafe(millis))
@@ -34,7 +30,7 @@ const view = (row: typeof tokens.$inferSelect): UserTokensApi.Token => ({
 	id: row.id,
 	name: row.name,
 	prefix: row.prefix,
-	policies: decodePolicies(row.policies),
+	policy: decodePolicy(row.policy),
 	createdAt: iso(row.createdAt),
 	expiresAt: row.expiresAt === null ? null : iso(row.expiresAt),
 	lastUsedAt: row.lastUsedAt === null ? null : iso(row.lastUsedAt),
@@ -58,19 +54,9 @@ export const make: Effect.Effect<
 	return Tokens.of({
 		create: (owner, input) =>
 			Effect.gen(function* () {
-				const policies = input.policies ?? defaultTokenPolicies
-				if (
-					!inOrganization({
-						policies,
-						organizationId: owner.organizationId,
-						// A platform admin can make a token for the platform API.
-						platform: true,
-					})
-				)
-					return yield* UserTokensApi.TokenPolicyInvalid.make({
-						message:
-							"A token policy can only name resources in your own organization.",
-					})
+				// The policy of a token can never give more than its member has,
+				// because a check needs both to allow the act.
+				const policy = input.policy ?? Authorization.defaultTokenPolicy
 				return yield* db.transaction((tx) =>
 					Effect.gen(function* () {
 						// Create tokens one at a time per member, so concurrent requests keep the limit.
@@ -95,7 +81,7 @@ export const make: Effect.Effect<
 							name: input.name.trim(),
 							prefix: secret.slice(0, UserTokensApi.SecretPrefix.length + 8),
 							hash: hash(secret),
-							policies: JSON.stringify(policies),
+							policy: encodePolicy(policy),
 							createdAt: now,
 							expiresAt:
 								input.expiresInDays === undefined
@@ -109,10 +95,7 @@ export const make: Effect.Effect<
 				)
 			}).pipe(
 				Effect.mapError((error) =>
-					error._tag === "TokenLimitReached" ||
-					error._tag === "TokenPolicyInvalid"
-						? error
-						: unavailable(),
+					error._tag === "TokenLimitReached" ? error : unavailable(),
 				),
 			),
 		list: (owner) =>

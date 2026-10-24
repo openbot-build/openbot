@@ -520,8 +520,8 @@ const startApi = async (
 				OrganizationFixture.layerUnusedPlatform,
 				Secrets.layer(Redacted.make("test:" + "11".repeat(32))),
 				BotFixture.layerBotServices.pipe(
-					Layer.provide(TokensPostgres.layer),
 					Layer.provide(OrganizationFixture.layerAuthorization),
+					Layer.provide(TokensPostgres.layer),
 				),
 				Layer.succeed(Auth.Auth, auth),
 				Layer.succeed(Backend, { get: unused, forCaller: unused }),

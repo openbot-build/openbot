@@ -7,7 +7,7 @@ import {
 } from "effect/http-api"
 import { NoStore } from "./AuthApi.ts"
 import { Caller } from "./Identity.ts"
-import { Policies, Required } from "./Permissions.ts"
+import { PolicyInput, PolicySchema, Required } from "./Authorization.ts"
 
 /** Every user token starts with this marker, so leaked tokens are easy to spot. */
 export const SecretPrefix = "obut_"
@@ -27,7 +27,7 @@ export const Token = Schema.Struct({
 	/** The first characters of the secret. They help people spot a token without showing it. */
 	prefix: Schema.String,
 	/** A token can never do more than its member can do at the time of the request. */
-	policies: Policies,
+	policy: PolicySchema,
 	createdAt: Schema.String,
 	expiresAt: Schema.NullOr(Schema.String),
 	lastUsedAt: Schema.NullOr(Schema.String),
@@ -40,7 +40,7 @@ export const CreateTokenRequest = Schema.Struct({
 		Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 365 })),
 	),
 	/** Leave this out to allow everything that the member can do, except managing tokens. */
-	policies: Schema.optionalKey(Policies.check(Schema.isMinLength(1))),
+	policy: Schema.optionalKey(PolicyInput),
 })
 export type CreateTokenRequest = typeof CreateTokenRequest.Type
 export const CreatedToken = Schema.Struct({
@@ -64,10 +64,6 @@ export class TokenLimitReached extends Schema.TaggedError<TokenLimitReached>()(
 	"TokenLimitReached",
 	{ limit: Schema.Int },
 ) {}
-export class TokenPolicyInvalid extends Schema.TaggedError<TokenPolicyInvalid>()(
-	"TokenPolicyInvalid",
-	{ message: Schema.String },
-) {}
 export class TokenStorageUnavailable extends Schema.TaggedError<TokenStorageUnavailable>()(
 	"TokenStorageUnavailable",
 	{},
@@ -87,11 +83,7 @@ export const UserTokensApi = HttpApiGroup.make("userTokens")
 		HttpApiEndpoint.post("createToken", UserTokensPath, {
 			payload: CreateTokenRequest,
 			success: CreatedToken.pipe(HttpApiSchema.status(201)),
-			error: [
-				...errors,
-				TokenLimitReached.pipe(HttpApiSchema.status(409)),
-				TokenPolicyInvalid.pipe(HttpApiSchema.status(400)),
-			],
+			error: [...errors, TokenLimitReached.pipe(HttpApiSchema.status(409))],
 		}),
 		HttpApiEndpoint.delete(
 			"revokeToken",
@@ -109,7 +101,7 @@ export const UserTokensApi = HttpApiGroup.make("userTokens")
 			.annotate(Required, [])
 			.annotate(
 				OpenApi.Description,
-				"Shows who the caller is and, for a token, its policies. Every caller can use it.",
+				"Shows who the caller is and, for a token, its policy. Every caller can use it.",
 			),
 	)
 	.middleware(NoStore)

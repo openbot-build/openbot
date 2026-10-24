@@ -42,7 +42,7 @@ export const PlatformDocument = Schema.Struct({
 		}),
 	),
 	organizationCreation: Api.OrganizationCreation,
-	policyCeiling: Api.CeilingPolicies,
+	ceiling: Api.PlatformSettings.fields.ceiling,
 	appRestrictions: Api.PlatformSettings.fields.appRestrictions,
 	/** Missing in documents from before Code Mode. Then the defaults apply. */
 	codeMode: Schema.optionalKey(Api.CodeMode),

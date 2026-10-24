@@ -9,8 +9,8 @@ import { Effect, Option, type Schema } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { AuditLog } from "../audit/AuditLog.ts"
-import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
-import { computerKey } from "../authorization/Policy.ts"
+import type { Services as AuthorizationServices } from "../authorization/Check.ts"
+import { computerKey } from "../audit/Resources.ts"
 import type { Machine } from "./Computer.ts"
 import { ComputerProviders, unavailable } from "./ComputerProviders.ts"
 import { Computers } from "./Computers.ts"
@@ -106,7 +106,7 @@ export const layerProviders = HttpApiBuilder.group(
 					Effect.gen(function* () {
 						const caller = yield* Identity
 						const provider = yield* providers
-							.get(caller, params.providerId, "computer_providers.write")
+							.get(caller, params.providerId, "write")
 							.pipe(Effect.provideContext(services))
 						yield* providers
 							.remove(caller, params.providerId)
@@ -196,7 +196,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 				Effect.gen(function* () {
 					const caller = yield* Identity
 					const computer = yield* computers
-						.get(caller, params.computerId, "computers.write")
+						.get(caller, params.computerId, "write")
 						.pipe(Effect.provideContext(services))
 					yield* computers
 						.remove(caller, params.computerId)

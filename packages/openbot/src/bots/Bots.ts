@@ -1,10 +1,16 @@
 import { randomUUID } from "node:crypto"
-import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
+import type { Services as AuthorizationServices } from "../authorization/Check.ts"
 import type { Config } from "@openbot-build/core"
-import { BotsApi, type Caller, Permissions } from "@openbot-build/api"
+import { type Authorization, BotsApi, type Caller } from "@openbot-build/api"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
-import { can } from "../authorization/Check.ts"
-import { botKey, rootOf } from "../authorization/Policy.ts"
+import {
+	type Errors as CheckErrors,
+	check,
+	filter,
+	guard,
+	matches,
+} from "../authorization/Check.ts"
+import { botResource, rootOf } from "../authorization/Resources.ts"
 import { BotRecords, type Keys } from "./BotRecords.ts"
 
 type Bot = BotsApi.Bot
@@ -15,8 +21,10 @@ export type Failure =
 	| BotsApi.BotConflict
 	| BotsApi.BotInvalid
 	| BotsApi.BotStorageUnavailable
-	| Permissions.PermissionDenied
-	| Permissions.AuthorizationUnavailable
+	| CheckErrors
+
+/** An action on a Bot, such as `read` or `delegate`. */
+export type Action = (typeof Authorization.Bot.actions)[number]
 
 /** The member that work is done for. */
 export interface Subject {
@@ -34,11 +42,14 @@ export class Bots extends Context.Service<
 			organizationId: string,
 			id: string,
 		) => Effect.Effect<Option.Option<Bot>, BotsApi.BotStorageUnavailable>
-		/** Reads a Bot and checks that the caller has the permission on it. */
+		/**
+		 * Reads a Bot and checks that the caller may do the action on it. A caller
+		 * who may not read the Bot gets `BotNotFound`.
+		 */
 		readonly access: (
 			caller: Caller,
 			id: string,
-			permission: Permissions.PermissionGroupId,
+			action: Action,
 		) => Effect.Effect<Bot, Failure, AuthorizationServices>
 		readonly list: (
 			caller: Caller,
@@ -184,7 +195,9 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 				),
 			)
 		const notFound = (id: string) => BotsApi.BotNotFound.make({ bot: id })
-		const access: typeof Bots.Service.access = (caller, id, permission) =>
+		const resourceOf = (caller: Caller, bot: Bot) =>
+			botResource({ ...bot, organizationId: caller.organizationId })
+		const access: typeof Bots.Service.access = (caller, id, action) =>
 			Effect.gen(function* () {
 				const bot = yield* find(caller.organizationId, id).pipe(
 					Effect.flatMap(
@@ -194,27 +207,18 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 						}),
 					),
 				)
-				const key = botKey({
-					...bot,
-					organizationId: caller.organizationId,
-				})
 				// A caller who cannot read the Bot does not learn that it exists.
-				if (!(yield* can({ caller, permission: "bots.read", key })))
-					return yield* notFound(id)
-				if (
-					permission !== "bots.read" &&
-					!(yield* can({ caller, permission, key }))
+				yield* guard(
+					caller,
+					{ action, resource: resourceOf(caller, bot) },
+					() => notFound(id),
 				)
-					return yield* Permissions.PermissionDenied.make({
-						permission,
-						resource: key,
-					})
 				return bot
 			})
 		const change = (
 			caller: Caller,
 			id: string,
-			permission: Permissions.PermissionGroupId,
+			action: Action,
 			expected: number,
 			update: (
 				bot: Bot,
@@ -224,7 +228,7 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 			records.transaction(
 				"bot:" + caller.organizationId + ":" + id,
 				Effect.gen(function* () {
-					const bot = yield* access(caller, id, permission)
+					const bot = yield* access(caller, id, action)
 					if (bot.revision !== expected)
 						return yield* BotsApi.BotConflict.make({
 							message: "The Bot changed. Read it again and retry.",
@@ -239,12 +243,8 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 				}),
 			)
 		const visible = (caller: Caller, list: ReadonlyArray<Bot>) =>
-			Effect.filter(list, (bot) =>
-				can({
-					caller,
-					permission: "bots.read",
-					key: botKey({ ...bot, organizationId: caller.organizationId }),
-				}),
+			Effect.map(filter(caller, { action: "read", kind: "Bot" }), (readable) =>
+				list.filter((bot) => matches(readable, resourceOf(caller, bot))),
 			)
 		/** Archives Bots and every Bot below them in the owner tree. */
 		const archiveTree = (
@@ -336,24 +336,14 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 			updatedAt: input.now,
 		})
 		const writable = (caller: Caller, bot: Bot) =>
-			Effect.gen(function* () {
-				const key = botKey({
-					...bot,
-					organizationId: caller.organizationId,
-				})
-				if (!(yield* can({ caller, permission: "bots.write", key })))
-					return yield* Permissions.PermissionDenied.make({
-						permission: "bots.write",
-						resource: key,
-					})
-			})
+			check(caller, { action: "write", resource: resourceOf(caller, bot) })
 		return Bots.of({
 			find,
 			access,
 			list: (caller, input) =>
 				Effect.gen(function* () {
 					if (input.bot !== undefined) {
-						yield* access(caller, input.bot, "bots.read")
+						yield* access(caller, input.bot, "read")
 						const below = yield* bots
 							.list(caller.organizationId, { scope: input.bot })
 							.pipe(Effect.flatMap(resolveAll))
@@ -383,7 +373,7 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 						})
 					const owner: Bot["owner"] =
 						input.bot !== undefined
-							? ownerFor(yield* access(caller, input.bot, "bots.read"))
+							? ownerFor(yield* access(caller, input.bot, "read"))
 							: input.shared === true
 								? { _tag: "Organization" }
 								: { _tag: "Member", userId: caller.userId }
@@ -411,7 +401,7 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 					const bot = yield* change(
 						caller,
 						id,
-						"bots.write",
+						"write",
 						input.expected,
 						(bot) => {
 							// The people of the shared Bot change these fields, not its members.

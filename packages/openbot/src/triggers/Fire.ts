@@ -5,7 +5,7 @@ import { Delegations } from "../bots/Delegations.ts"
 import { Signal, Signals } from "../bots/Signals.ts"
 import { Backend } from "../app/Backend.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
-import { triggerKey } from "../authorization/Policy.ts"
+import { triggerKey } from "../audit/Resources.ts"
 import type * as ChatHost from "../chats/ChatHost.ts"
 import { Triggers } from "./Triggers.ts"
 
@@ -36,7 +36,7 @@ export const fire = (input: {
 			organizationId: input.organizationId,
 			userId: input.trigger.actor,
 		}
-		const bot = yield* bots.access(caller, input.trigger.bot, "bots.delegate")
+		const bot = yield* bots.access(caller, input.trigger.bot, "delegate")
 		const chats = yield* backend.forCaller(caller)
 		const chain: ChatHost.Chain = {
 			organizationId: input.organizationId,

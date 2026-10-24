@@ -1,5 +1,5 @@
 import { BotAuth } from "./AuthApi.ts"
-import { Authorize, Decision, GroupRequired, requires } from "./Permissions.ts"
+import { Authorize, Decision, GroupRequired, own } from "./Authorization.ts"
 import { Chat, Turn } from "@openbot-build/core"
 import { Schema } from "effect"
 import {
@@ -134,8 +134,8 @@ export class RequestsApi extends HttpApiGroup.make("requests")
 	)
 	.annotate(HttpApi.PayloadParseOptions, { onExcessProperty: "error" })
 	.annotate(GroupRequired, {
-		read: [requires("requests.resolve").on("request")],
-		write: [requires("requests.resolve").on("request")],
+		read: [own("resolve", "Request")],
+		write: [own("resolve", "Request")],
 	})
 	.middleware(Authorize)
 	.middleware(BotAuth) {}

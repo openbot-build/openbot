@@ -3,7 +3,8 @@ import { Schema } from "effect"
 import { HttpApiSchema } from "effect/http-api"
 import { BotId } from "./BotsApi.ts"
 import { Restriction } from "./AppIndexApi.ts"
-import { Policy, RoleId } from "./Permissions.ts"
+import { CeilingInput, CeilingSchema } from "./Authorization.ts"
+import { RoleId } from "./Roles.ts"
 import { PlanApproval } from "./PlanApproval.ts"
 
 /**
@@ -78,15 +79,6 @@ export const IdentityProviderInput = Schema.Struct({
 	clientSecret: Schema.optionalKey(Schema.NullOr(SecretInput)),
 })
 export type IdentityProviderInput = typeof IdentityProviderInput.Type
-
-/** A platform policy can only deny. It applies in every organization. */
-export const CeilingPolicy = Schema.Struct({
-	...Policy.fields,
-	effect: Schema.Literal("deny"),
-})
-export const CeilingPolicies = Schema.Array(CeilingPolicy).check(
-	Schema.isMaxLength(50),
-)
 
 export const OrganizationCreation = Schema.Literals([
 	"anyone",
@@ -301,8 +293,8 @@ export const PlatformSettings = Schema.Struct({
 	identityProvider: Schema.NullOr(IdentityProvider),
 	/** Who can create a new organization. */
 	organizationCreation: OrganizationCreation,
-	/** Deny policies that apply in every organization, before its own policies. */
-	policyCeiling: CeilingPolicies,
+	/** Deny rules that apply in every organization, before its own policies. */
+	ceiling: CeilingSchema,
 	/** Apps that the App Index hides, with the reason. */
 	appRestrictions: Schema.Array(Restriction).check(Schema.isMaxLength(1000)),
 	codeMode: CodeMode,
@@ -318,7 +310,7 @@ export const UpdatePlatformSettingsRequest = Schema.Struct({
 	publicOrigin: Schema.optionalKey(PublicOrigin),
 	identityProvider: Schema.optionalKey(Schema.NullOr(IdentityProviderInput)),
 	organizationCreation: Schema.optionalKey(OrganizationCreation),
-	policyCeiling: Schema.optionalKey(CeilingPolicies),
+	ceiling: Schema.optionalKey(CeilingInput),
 	appRestrictions: Schema.optionalKey(
 		Schema.Array(Restriction).check(Schema.isMaxLength(1000)),
 	),

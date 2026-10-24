@@ -1,10 +1,16 @@
 import { randomBytes } from "node:crypto"
-import { type Caller, ComputersApi, Permissions } from "@openbot-build/api"
-import { and, eq, isNull, or } from "drizzle-orm"
+import { type Caller, ComputersApi } from "@openbot-build/api"
+import { and, eq } from "drizzle-orm"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
-import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
-import { can } from "../authorization/Check.ts"
-import { computerKey, computerPlace } from "../authorization/Policy.ts"
+import type { Services as AuthorizationServices } from "../authorization/Check.ts"
+import {
+	type Errors as CheckErrors,
+	check,
+	filter,
+	guard,
+} from "../authorization/Check.ts"
+import { computerProviderResource } from "../authorization/Resources.ts"
+import { toWhere } from "../authorization/Sql.ts"
 import * as Db from "../database/Database.ts"
 import { computerProviders, computers } from "../database/Schema.ts"
 import { hint, Secrets } from "../secrets/Secrets.ts"
@@ -53,8 +59,7 @@ export type Failure =
 	| ComputersApi.ComputerConflict
 	| ComputersApi.ComputerInvalid
 	| ComputersApi.ComputersUnavailable
-	| Permissions.PermissionDenied
-	| Permissions.AuthorizationUnavailable
+	| CheckErrors
 
 const binding = (id: string) => `openbot_computer_providers:${id}:credentials`
 
@@ -124,10 +129,7 @@ export class ComputerProviders extends Context.Service<
 		readonly get: (
 			caller: Caller,
 			id: string,
-			permission?:
-				| "computer_providers.read"
-				| "computer_providers.use"
-				| "computer_providers.write",
+			action?: "read" | "use" | "write",
 		) => Effect.Effect<ComputerProvider, Failure, AuthorizationServices>
 		readonly create: (
 			caller: Caller,
@@ -183,57 +185,44 @@ export const make = Effect.gen(function* () {
 				}),
 			}
 		})
-	const keyOf = (
-		caller: Caller,
-		provider: Pick<ComputerProvider, "id" | "owner">,
-	) =>
-		computerKey({
-			organizationId: caller.organizationId,
-			id: provider.id,
-			owner: provider.owner,
-			kind: "computer_provider",
-		})
 	/** A caller who cannot read a provider does not learn that it exists. */
 	const access = (
 		caller: Caller,
 		id: string,
-		permission: Permissions.PermissionGroupId,
+		action: "read" | "use" | "write",
 	) =>
 		Effect.gen(function* () {
 			const found = yield* row(caller.organizationId, id)
 			if (Option.isNone(found)) return yield* notFound(id)
 			const provider = fromRow(found.value)
-			const key = keyOf(caller, provider)
-			if (!(yield* can({ caller, permission: "computer_providers.read", key })))
-				return yield* notFound(id)
-			if (
-				permission !== "computer_providers.read" &&
-				!(yield* can({ caller, permission, key }))
+			yield* guard(
+				caller,
+				{
+					action,
+					resource: computerProviderResource({
+						...provider,
+						organizationId: caller.organizationId,
+					}),
+				},
+				() => notFound(id),
 			)
-				return yield* Permissions.PermissionDenied.make({
-					permission,
-					resource: key,
-				})
 			return { provider, row: found.value }
 		})
 	return ComputerProviders.of({
 		list: (caller) =>
 			Effect.gen(function* () {
-				const readable: Array<string | null> = []
-				for (const userId of [caller.userId, null])
-					if (
-						yield* can({
-							caller,
-							permission: "computer_providers.read",
-							key: computerPlace({
-								organizationId: caller.organizationId,
-								userId,
-								kind: "computer_provider",
-							}),
-						})
-					)
-						readable.push(userId)
-				if (readable.length === 0) return []
+				const readable = yield* filter(caller, {
+					action: "read",
+					kind: "ComputerProvider",
+					where: { organizationId: caller.organizationId },
+				}).pipe(
+					Effect.flatMap((condition) =>
+						toWhere(condition, {
+							ownerUserId: computerProviders.ownerUserId,
+							id: computerProviders.id,
+						}),
+					),
+				)
 				const rows = yield* stored(
 					db
 						.select()
@@ -241,40 +230,23 @@ export const make = Effect.gen(function* () {
 						.where(
 							and(
 								eq(computerProviders.organizationId, caller.organizationId),
-								or(
-									...readable.map((userId) =>
-										userId === null
-											? isNull(computerProviders.ownerUserId)
-											: eq(computerProviders.ownerUserId, userId),
-									),
-								),
+								readable,
 							),
 						)
 						.orderBy(computerProviders.createdAt),
 				)
 				return rows.map(fromRow)
 			}),
-		get: (caller, id, permission = "computer_providers.read") =>
-			Effect.map(access(caller, id, permission), (found) => found.provider),
+		get: (caller, id, action = "read") =>
+			Effect.map(access(caller, id, action), (found) => found.provider),
 		create: (caller, input, verify) =>
 			Effect.gen(function* () {
 				const userId = input.shared === true ? null : caller.userId
-				const place = computerPlace({
-					organizationId: caller.organizationId,
-					userId,
-					kind: "computer_provider",
+				yield* check(caller, {
+					action: "write",
+					kind: "ComputerProvider",
+					where: { organizationId: caller.organizationId, ownerUserId: userId },
 				})
-				if (
-					!(yield* can({
-						caller,
-						permission: "computer_providers.write",
-						key: place,
-					}))
-				)
-					return yield* Permissions.PermissionDenied.make({
-						permission: "computer_providers.write",
-						resource: place,
-					})
 				yield* verify(input.credentials)
 				const now = yield* Clock.currentTimeMillis
 				const id = "cpp_" + randomBytes(16).toString("hex")
@@ -297,11 +269,7 @@ export const make = Effect.gen(function* () {
 			}),
 		update: (caller, id, input, verify) =>
 			Effect.gen(function* () {
-				const { provider } = yield* access(
-					caller,
-					id,
-					"computer_providers.write",
-				)
+				const { provider } = yield* access(caller, id, "write")
 				if (input.expectedVersion !== provider.version)
 					return yield* ComputersApi.ComputerConflict.make({
 						version: provider.version,
@@ -345,7 +313,7 @@ export const make = Effect.gen(function* () {
 			}),
 		remove: (caller, id) =>
 			Effect.gen(function* () {
-				yield* access(caller, id, "computer_providers.write")
+				yield* access(caller, id, "write")
 				const used = yield* stored(
 					db
 						.select({ id: computers.id })

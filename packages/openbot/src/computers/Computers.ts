@@ -1,16 +1,17 @@
 import { createHash, randomBytes } from "node:crypto"
-import {
-	BotsApi,
-	type Caller,
-	ComputersApi,
-	Permissions,
-} from "@openbot-build/api"
-import { and, desc, eq, inArray, isNull, or } from "drizzle-orm"
+import { BotsApi, type Caller, ComputersApi } from "@openbot-build/api"
+import { and, desc, eq, inArray, isNull } from "drizzle-orm"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { Bots } from "../bots/Bots.ts"
-import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
-import { can } from "../authorization/Check.ts"
-import { computerKey, computerPlace } from "../authorization/Policy.ts"
+import type { Services as AuthorizationServices } from "../authorization/Check.ts"
+import {
+	type Errors as CheckErrors,
+	check,
+	filter,
+	guard,
+} from "../authorization/Check.ts"
+import { computerResource } from "../authorization/Resources.ts"
+import { toWhere } from "../authorization/Sql.ts"
 import * as Db from "../database/Database.ts"
 import { computerAccess, computers, computerUsage } from "../database/Schema.ts"
 import type { ComputerError, Machine } from "./Computer.ts"
@@ -49,8 +50,7 @@ export type Failure =
 	| ComputersApi.ComputerNotReady
 	| ComputersApi.ComputerProviderFailed
 	| ComputersApi.ComputersUnavailable
-	| Permissions.PermissionDenied
-	| Permissions.AuthorizationUnavailable
+	| CheckErrors
 
 /** A Computer is idle this long before OpenBot pauses it, unless it says otherwise. */
 export const defaultPauseAfter = 10 * 60
@@ -86,8 +86,8 @@ const fromDriver = (error: ComputerError) =>
 		? ComputersApi.ComputerNotReady.make({ state: "offline" })
 		: ComputersApi.ComputerProviderFailed.make({ message: error.message })
 
-/** Which permission a caller needs on a Computer. */
-export type Need = "computers.read" | "computers.use" | "computers.write"
+/** Which action a caller needs on a Computer. */
+export type Need = "read" | "use" | "write"
 
 /** The Computers of an organization, and the rights of Bots to use them. */
 export class Computers extends Context.Service<
@@ -262,33 +262,23 @@ export const make = Effect.gen(function* () {
 		stored(db.select().from(computers).where(where(organizationId, id))).pipe(
 			Effect.map((rows) => Option.fromNullishOr(rows[0])),
 		)
-	const keyOf = (
-		organizationId: string,
-		computer: Pick<Computer, "id" | "owner">,
-	) =>
-		computerKey({
-			organizationId,
-			id: computer.id,
-			owner: computer.owner,
-			kind: "computer",
-		})
 	/** A caller who cannot read a Computer does not learn that it exists. */
 	const access = (caller: Caller, id: string, need: Need) =>
 		Effect.gen(function* () {
 			const found = yield* row(caller.organizationId, id)
 			if (Option.isNone(found)) return yield* notFound(id)
 			const computer = fromRow(found.value)
-			const key = keyOf(caller.organizationId, computer)
-			if (!(yield* can({ caller, permission: "computers.read", key })))
-				return yield* notFound(id)
-			if (
-				need !== "computers.read" &&
-				!(yield* can({ caller, permission: need, key }))
+			yield* guard(
+				caller,
+				{
+					action: need,
+					resource: computerResource({
+						...computer,
+						organizationId: caller.organizationId,
+					}),
+				},
+				() => notFound(id),
 			)
-				return yield* Permissions.PermissionDenied.make({
-					permission: need,
-					resource: key,
-				})
 			return { computer, row: found.value }
 		})
 
@@ -401,41 +391,31 @@ export const make = Effect.gen(function* () {
 			} satisfies ComputersApi.ComputerAccess
 		})
 
-	const placeFor = (caller: Caller, shared: boolean) =>
-		computerPlace({
-			organizationId: caller.organizationId,
-			userId: shared ? null : caller.userId,
-			kind: "computer",
-		})
-
 	const mayCreate = (caller: Caller, shared: boolean) =>
-		Effect.gen(function* () {
-			const place = placeFor(caller, shared)
-			if (!(yield* can({ caller, permission: "computers.write", key: place })))
-				return yield* Permissions.PermissionDenied.make({
-					permission: "computers.write",
-					resource: place,
-				})
+		check(caller, {
+			action: "write",
+			kind: "Computer",
+			where: {
+				organizationId: caller.organizationId,
+				ownerUserId: shared ? null : caller.userId,
+			},
 		})
 
 	const service: Computers["Service"] = {
 		list: (caller, bot) =>
 			Effect.gen(function* () {
-				const readable: Array<string | null> = []
-				for (const userId of [caller.userId, null])
-					if (
-						yield* can({
-							caller,
-							permission: "computers.read",
-							key: computerPlace({
-								organizationId: caller.organizationId,
-								userId,
-								kind: "computer",
-							}),
-						})
-					)
-						readable.push(userId)
-				if (readable.length === 0) return []
+				const readable = yield* filter(caller, {
+					action: "read",
+					kind: "Computer",
+					where: { organizationId: caller.organizationId },
+				}).pipe(
+					Effect.flatMap((condition) =>
+						toWhere(condition, {
+							ownerUserId: computers.ownerUserId,
+							id: computers.id,
+						}),
+					),
+				)
 				const held =
 					bot === undefined
 						? undefined
@@ -458,13 +438,7 @@ export const make = Effect.gen(function* () {
 						.where(
 							and(
 								eq(computers.organizationId, caller.organizationId),
-								or(
-									...readable.map((userId) =>
-										userId === null
-											? isNull(computers.ownerUserId)
-											: eq(computers.ownerUserId, userId),
-									),
-								),
+								readable,
 								held === undefined ? undefined : inArray(computers.id, held),
 							),
 						)
@@ -472,7 +446,7 @@ export const make = Effect.gen(function* () {
 				)
 				return rows.map(fromRow)
 			}),
-		get: (caller, id, need = "computers.read") =>
+		get: (caller, id, need = "read") =>
 			Effect.map(access(caller, id, need), (found) => found.computer),
 		create: (caller, input, bot) =>
 			Effect.gen(function* () {
@@ -511,7 +485,7 @@ export const make = Effect.gen(function* () {
 					const provider = yield* providers.get(
 						caller,
 						input.source.provider,
-						"computer_providers.use",
+						"use",
 					)
 					const { credentials } = yield* providers.credentials(
 						caller.organizationId,
@@ -551,7 +525,7 @@ export const make = Effect.gen(function* () {
 			}),
 		update: (caller, id, input) =>
 			Effect.gen(function* () {
-				const { computer } = yield* access(caller, id, "computers.write")
+				const { computer } = yield* access(caller, id, "write")
 				if (input.expectedVersion !== computer.version)
 					return yield* ComputersApi.ComputerConflict.make({
 						version: computer.version,
@@ -591,7 +565,7 @@ export const make = Effect.gen(function* () {
 			}),
 		remove: (caller, id) =>
 			Effect.gen(function* () {
-				const { row: current } = yield* access(caller, id, "computers.write")
+				const { row: current } = yield* access(caller, id, "write")
 				const machine = yield* machineOf(current).pipe(Effect.option)
 				if (Option.isSome(machine))
 					yield* machine.value.destroy.pipe(Effect.mapError(fromDriver))
@@ -602,7 +576,7 @@ export const make = Effect.gen(function* () {
 			}),
 		pause: (caller, id) =>
 			Effect.gen(function* () {
-				const { row: current } = yield* access(caller, id, "computers.use")
+				const { row: current } = yield* access(caller, id, "use")
 				const machine = yield* machineOf(current)
 				if (machine.pausable === undefined)
 					return yield* ComputersApi.ComputerUnsupported.make({
@@ -616,7 +590,7 @@ export const make = Effect.gen(function* () {
 			}),
 		resume: (caller, id) =>
 			Effect.gen(function* () {
-				const { row: current } = yield* access(caller, id, "computers.use")
+				const { row: current } = yield* access(caller, id, "use")
 				const machine = yield* machineOf(current)
 				if (current.state === "paused" && machine.pausable !== undefined) {
 					yield* work(machine.pausable.resume)
@@ -626,7 +600,7 @@ export const make = Effect.gen(function* () {
 			}),
 		machine: (caller, id) =>
 			Effect.gen(function* () {
-				const { row: current } = yield* access(caller, id, "computers.use")
+				const { row: current } = yield* access(caller, id, "use")
 				if (current.state === "failed" || current.state === "offline")
 					return yield* ComputersApi.ComputerNotReady.make({
 						state: current.state,
@@ -652,7 +626,7 @@ export const make = Effect.gen(function* () {
 		work,
 		setConnectorToken: (caller, id) =>
 			Effect.gen(function* () {
-				const { computer } = yield* access(caller, id, "computers.write")
+				const { computer } = yield* access(caller, id, "write")
 				if (computer.source._tag !== "Connector")
 					return yield* invalid("Only a connector Computer has a token.")
 				const token = newToken()
@@ -716,7 +690,7 @@ export const make = Effect.gen(function* () {
 				))[0]
 				if (existing !== undefined) {
 					// The person must be able to change the Computer to give it a new token.
-					yield* access(caller, existing.id, "computers.write")
+					yield* access(caller, existing.id, "write")
 					yield* stored(
 						db
 							.update(computers)
@@ -759,7 +733,7 @@ export const make = Effect.gen(function* () {
 			}),
 		bots: (caller, id) =>
 			Effect.gen(function* () {
-				yield* access(caller, id, "computers.read")
+				yield* access(caller, id, "read")
 				const rows = yield* stored(
 					db
 						.select()
@@ -781,24 +755,22 @@ export const make = Effect.gen(function* () {
 			}),
 		grant: (caller, id, bot) =>
 			Effect.gen(function* () {
-				yield* access(caller, id, "computers.use")
-				const target = yield* botsService
-					.access(caller, bot, "bots.write")
-					.pipe(
-						Effect.catchTags({
-							BotNotFound: () => invalid("The Bot does not exist."),
-							BotStorageUnavailable: () => Effect.fail(unavailable()),
-							BotConflict: () => invalid("The Bot changed. Try again."),
-							BotInvalid: (error) => invalid(error.message),
-						}),
-					)
+				yield* access(caller, id, "use")
+				const target = yield* botsService.access(caller, bot, "write").pipe(
+					Effect.catchTags({
+						BotNotFound: () => invalid("The Bot does not exist."),
+						BotStorageUnavailable: () => Effect.fail(unavailable()),
+						BotConflict: () => invalid("The Bot changed. Try again."),
+						BotInvalid: (error) => invalid(error.message),
+					}),
+				)
 				if (target.archived)
 					return yield* invalid("An archived Bot cannot use a Computer.")
 				return yield* grantRow(caller.organizationId, id, bot, caller.userId)
 			}),
 		revoke: (caller, id, bot) =>
 			Effect.gen(function* () {
-				yield* access(caller, id, "computers.use")
+				yield* access(caller, id, "use")
 				yield* stored(
 					db
 						.delete(computerAccess)
@@ -869,7 +841,7 @@ export const make = Effect.gen(function* () {
 			}),
 		usage: (caller, id) =>
 			Effect.gen(function* () {
-				yield* access(caller, id, "computers.read")
+				yield* access(caller, id, "read")
 				const now = yield* Clock.currentTimeMillis
 				const rows = yield* stored(
 					db

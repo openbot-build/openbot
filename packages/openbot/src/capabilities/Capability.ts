@@ -1,37 +1,19 @@
 import { createHash } from "node:crypto"
 import {
+	Authorization,
 	type BotsApi,
 	type Caller,
 	type ComputersApi,
-	type Permissions,
 } from "@openbot-build/api"
-import { Option } from "effect"
+import type { Authorizer } from "@nmnmcc/ability"
 import {
-	botKey,
-	botPlace,
-	computerKey,
-	resourceKey,
+	botResource,
+	computerProviderResource,
+	computerResource,
 	rootOf,
-} from "../authorization/Policy.ts"
+} from "../authorization/Resources.ts"
 
 export type Capability = BotsApi.Capability
-
-/**
- * True when a stored capability covers a request.
- * The target `*` covers every target. Stored arguments must match exactly, and no arguments match any.
- */
-export const covers = ({
-	stored,
-	request,
-}: {
-	readonly stored: Capability
-	readonly request: Capability
-}) =>
-	stored.action === request.action &&
-	(stored.target === "*" || stored.target === request.target) &&
-	(stored.arguments === undefined ||
-		JSON.stringify(stored.arguments) ===
-			JSON.stringify(request.arguments ?? {}))
 
 /** A short and stable text that names a capability, for logs, prompts and cache keys. */
 export const describe = (capability: Capability) =>
@@ -46,10 +28,10 @@ export const hash = (value: unknown) =>
 	createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 40)
 
 /**
- * The member permission that a capability needs, and its resource key.
- * A Bot never does more than the member it works for, so this check comes first.
+ * The act of the member that a capability needs. A Bot never does more than
+ * the member it works for, so this check comes first.
  */
-export const permission = (input: {
+export const memberTarget = (input: {
 	readonly caller: Caller
 	readonly capability: Capability
 	readonly chat: string
@@ -59,64 +41,58 @@ export const permission = (input: {
 	readonly self: BotsApi.Bot
 	/**
 	 * The owner of the target Computer, or of the Computer provider for `computers.create`.
-	 * Without it, OpenBot uses the place of the member, so a shared target is denied.
+	 * Without it, OpenBot uses the member as the owner, so a shared target is denied.
 	 */
 	readonly computerOwner?: ComputersApi.ComputerOwner
-}): {
-	readonly permission: Permissions.PermissionGroupId
-	readonly key: string
-} => {
-	const subject = {
-		organizationId: input.caller.organizationId,
-		userId: input.caller.userId,
-	}
-	const personal: ComputersApi.ComputerOwner = {
-		_tag: "Member",
-		userId: subject.userId,
-	}
-	const onBot = (permission: Permissions.PermissionGroupId) => ({
-		permission,
-		key:
-			input.bot === undefined
-				? resourceKey({ subject, kind: "bot", id: Option.none() })
-				: botKey({ ...input.bot, organizationId: subject.organizationId }),
-	})
+}): Authorizer.Target<Authorization.OpenBot> => {
+	const organizationId = input.caller.organizationId
+	const userId = input.caller.userId
+	const personal: ComputersApi.ComputerOwner = { _tag: "Member", userId }
 	switch (input.capability.action) {
 		case "apps.call":
 			return {
-				permission: "apps.use",
-				key: resourceKey({ subject, kind: "apps", id: Option.none() }),
+				action: "use",
+				resource: Authorization.App.make({
+					organizationId,
+					ownerUserId: userId,
+				}),
 			}
 		case "bots.create":
 			return {
-				permission: "bots.write",
-				key: botPlace({
-					organizationId: subject.organizationId,
-					root: rootOf(input.self.owner),
-				}),
+				action: "write",
+				kind: "Bot",
+				where: { organizationId, ownerUserId: rootOf(input.self.owner) },
 			}
 		case "bots.delegate":
-			return onBot("bots.delegate")
+			return input.bot === undefined
+				? {
+						action: "delegate",
+						kind: "Bot",
+						where: { organizationId, ownerUserId: null },
+					}
+				: {
+						action: "delegate",
+						resource: botResource({ ...input.bot, organizationId }),
+					}
 		// Carrying out a plan is work in the Chat, like a tool call.
 		case "plans.run":
 		case "tools.call":
 			return {
-				permission: "responses.run",
-				key: resourceKey({
-					subject,
-					kind: "chat",
-					id: Option.some(input.chat),
+				action: "run",
+				resource: Authorization.Chat.make({
+					organizationId,
+					ownerUserId: userId,
+					id: input.chat,
 				}),
 			}
 		// A Bot makes a Computer with an account at a provider, for its member.
 		case "computers.create":
 			return {
-				permission: "computer_providers.use",
-				key: computerKey({
-					organizationId: subject.organizationId,
+				action: "use",
+				resource: computerProviderResource({
+					organizationId,
 					id: input.capability.target,
 					owner: input.computerOwner ?? personal,
-					kind: "computer_provider",
 				}),
 			}
 		// The Bot can only get or use a Computer that its member can use.
@@ -124,25 +100,21 @@ export const permission = (input: {
 		case "computers.expose":
 		case "computers.delete":
 			return {
-				permission:
-					input.capability.action === "computers.delete"
-						? "computers.write"
-						: "computers.use",
-				key: computerKey({
-					organizationId: subject.organizationId,
+				action:
+					input.capability.action === "computers.delete" ? "write" : "use",
+				resource: computerResource({
+					organizationId,
 					id: input.capability.target,
 					owner: input.computerOwner ?? personal,
-					kind: "computer",
 				}),
 			}
-		// Posting to a Channel needs the same permission as talking in it.
+		// Posting to a Channel needs the same act as talking in it.
 		case "channels.send":
 			return {
-				permission: "channels.use",
-				key: resourceKey({
-					subject,
-					kind: "channel",
-					id: Option.some(input.capability.target),
+				action: "use",
+				resource: Authorization.Channel.make({
+					organizationId,
+					id: input.capability.target,
 				}),
 			}
 	}

@@ -1,6 +1,7 @@
 import { Effect, Layer, Option, Stream } from "effect"
 import { Organization } from "../src/organization/Organization.ts"
 import { AuditLog } from "../src/audit/AuditLog.ts"
+import * as AuthorizationLayer from "../src/authorization/Layer.ts"
 import { Roles, builtin } from "../src/authorization/Roles.ts"
 import { Settings } from "../src/settings/Settings.ts"
 import {
@@ -8,7 +9,7 @@ import {
 	memberDefaults,
 	organizationDefaults,
 } from "../src/settings/Documents.ts"
-import type { AppIndexApi } from "@openbot-build/api"
+import { type AppIndexApi, Authorization } from "@openbot-build/api"
 import { PlatformAdmins } from "../src/platform/PlatformAdmins.ts"
 import { ModelProviders } from "../src/models/ModelProviders.ts"
 import { Models } from "../src/models/Models.ts"
@@ -39,7 +40,7 @@ export const layerEveryoneAdministrator = Layer.succeed(Organization, {
 			name: null,
 			status: "active" as const,
 			roles: ["super_administrator" as const],
-			policies: [],
+			policy: Authorization.emptyPolicy,
 			joinedAt: "2026-01-01T00:00:00.000Z",
 		}),
 	activeMember: (_, userId) =>
@@ -49,7 +50,7 @@ export const layerEveryoneAdministrator = Layer.succeed(Organization, {
 			name: null,
 			status: "active" as const,
 			roles: ["super_administrator" as const],
-			policies: [],
+			policy: Authorization.emptyPolicy,
 			joinedAt: "2026-01-01T00:00:00.000Z",
 		}),
 	get: () => Effect.die("unused"),
@@ -105,7 +106,7 @@ export const layerSettings = (
 							authSecret: "unused",
 							identityProvider: null,
 							organizationCreation: "anyone" as const,
-							policyCeiling: [],
+							ceiling: Authorization.emptyPolicy,
 							appRestrictions: options.appRestrictions,
 						},
 						version: 1,
@@ -130,11 +131,24 @@ export const layerSettings = (
 
 export const layerDefaultSettings = layerSettings()
 
-/** What the authorization check needs for a faked member. */
-export const layerAuthorization = Layer.mergeAll(
-	layerEveryoneAdministrator,
-	layerBuiltinRoles,
-	layerDefaultSettings,
+/**
+ * The authorizer, with what it needs for a faked member. The caller gives the
+ * tokens. Nobody is a platform admin.
+ */
+export const layerAuthorization = AuthorizationLayer.layer.pipe(
+	Layer.provideMerge(
+		Layer.mergeAll(
+			layerEveryoneAdministrator,
+			layerBuiltinRoles,
+			layerDefaultSettings,
+			Layer.succeed(PlatformAdmins, {
+				list: Effect.succeed([]),
+				add: () => Effect.die("unused"),
+				remove: () => Effect.die("unused"),
+				check: () => Effect.succeed(false),
+			}),
+		),
+	),
 )
 
 /**

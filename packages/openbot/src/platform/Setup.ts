@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto"
-import type { Settings as Api } from "@openbot-build/api"
+import { Authorization, type Settings as Api } from "@openbot-build/api"
 import { Effect, Option, Schema } from "effect"
 import { hint, Secrets } from "../secrets/Secrets.ts"
 import {
@@ -143,9 +143,9 @@ export const run = (input: Input) =>
 				onNone: () => "anyone" as const,
 				onSome: (current) => current.document.organizationCreation,
 			}),
-			policyCeiling: Option.match(current, {
-				onNone: () => [],
-				onSome: (current) => current.document.policyCeiling,
+			ceiling: Option.match(current, {
+				onNone: () => Authorization.emptyPolicy,
+				onSome: (current) => current.document.ceiling,
 			}),
 			appRestrictions: Option.match(current, {
 				onNone: () => [],

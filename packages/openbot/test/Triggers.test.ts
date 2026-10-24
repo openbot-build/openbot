@@ -1,6 +1,7 @@
 import { assert, it } from "@effect/vitest"
 import { PgClient } from "@effect/sql-pg"
 import {
+	Authorization,
 	ChatSummary,
 	ChatView,
 	DelegationsApi,
@@ -11,6 +12,7 @@ import { Effect, Redacted, Schema, Stream } from "effect"
 import { LanguageModel, type Prompt, Response } from "effect/ai"
 import { dataNote } from "../src/triggers/Fire.ts"
 import * as BrowserHost from "./BrowserHost.ts"
+import * as Policies from "./Policies.ts"
 
 const publicOrigin = "https://triggers.example.com"
 const usage = {
@@ -285,6 +287,57 @@ it(
 			assert.strictEqual(
 				(await send(alice.session, "/v1/triggers/" + team.id, "DELETE")).status,
 				204,
+			)
+		} finally {
+			await host.close()
+		}
+	},
+)
+
+it(
+	"a deny rule on one trigger hides it from the list and from a read",
+	{ timeout: 60000 },
+	async () => {
+		const host = await BrowserHost.start({ publicOrigin, model })
+		try {
+			const { send, json } = client(host)
+			const alice = await host.login("triggers-deny")
+			await host.defaultBot(alice.session)
+			const create = (prompt: string) =>
+				json(
+					TriggersApi.Trigger,
+					send(alice.session, "/v1/triggers", "POST", { prompt }),
+				)
+			const open = await create("Open")
+			const hidden = await create("Hidden")
+			const listed = async () =>
+				(
+					await json(
+						Schema.Array(TriggersApi.Trigger),
+						send(alice.session, "/v1/triggers"),
+					)
+				).map((trigger) => trigger.id)
+			assert.sameMembers(await listed(), [open.id, hidden.id])
+
+			const changed = await send(
+				alice.session,
+				"/v1/organization/members/" + encodeURIComponent(alice.identity.userId),
+				"PATCH",
+				{
+					policy: Policies.json(function* (_) {
+						yield* _.deny("read", Authorization.Trigger, {
+							when: ($) => $.eq("id", hidden.id),
+						})
+					}),
+				},
+			)
+			assert.strictEqual(changed.status, 200, await changed.clone().text())
+			// The list query has the condition of the policy, so the database
+			// leaves out the trigger.
+			assert.deepStrictEqual(await listed(), [open.id])
+			assert.strictEqual(
+				(await send(alice.session, "/v1/triggers/" + hidden.id)).status,
+				404,
 			)
 		} finally {
 			await host.close()

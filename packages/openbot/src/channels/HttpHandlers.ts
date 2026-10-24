@@ -12,8 +12,8 @@ import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { Bots } from "../bots/Bots.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
-import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
-import { organizationKey, segment } from "../authorization/Policy.ts"
+import type { Services as AuthorizationServices } from "../authorization/Check.ts"
+import { organizationKey, segment } from "../audit/Resources.ts"
 import {
 	Channels,
 	type Credentials,
@@ -77,7 +77,7 @@ export const layer = (publicOrigin: string) =>
 			 * must be able to give work to the Bot, and the Bot must belong to the organization.
 			 */
 			const checkBot = (caller: Caller, id: BotsApi.BotId) =>
-				bots.access(caller, id, "bots.delegate").pipe(
+				bots.access(caller, id, "delegate").pipe(
 					Effect.provideContext(services),
 					Effect.catchTags({
 						BotNotFound: () => Effect.fail(invalid(`There is no Bot ${id}.`)),

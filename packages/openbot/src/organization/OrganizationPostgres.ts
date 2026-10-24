@@ -1,8 +1,8 @@
 import {
 	BotsApi,
 	type AuthApi,
+	Authorization,
 	OrganizationApi,
-	Permissions,
 	PlatformApi,
 } from "@openbot-build/api"
 import type { PgClient } from "@effect/sql-pg"
@@ -29,7 +29,7 @@ import {
 	tokens,
 } from "../database/Schema.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
-import { organizationKey, userKey } from "../authorization/Policy.ts"
+import { organizationKey, userKey } from "../audit/Resources.ts"
 import { Settings } from "../settings/Settings.ts"
 import {
 	type Account,
@@ -40,9 +40,10 @@ import {
 import * as Db from "../database/Database.ts"
 
 const Roles = Schema.fromJsonString(OrganizationApi.Roles)
-const PolicyList = Schema.fromJsonString(Permissions.Policies)
+const PolicyJson = Schema.fromJsonString(Authorization.PolicySchema)
 const decodeRoles = Schema.decodeUnknownSync(Roles)
-const decodePolicies = Schema.decodeUnknownSync(PolicyList)
+const decodePolicy = Schema.decodeUnknownSync(PolicyJson)
+const encodePolicy = Schema.encodeSync(PolicyJson)
 const decodeStatus = Schema.decodeUnknownSync(OrganizationApi.MemberStatus)
 const decodeOrganizationStatus = Schema.decodeUnknownSync(
 	OrganizationApi.OrganizationStatus,
@@ -65,7 +66,7 @@ const memberView = (
 	name: row.name,
 	status: decodeStatus(row.status),
 	roles: decodeRoles(row.roles),
-	policies: decodePolicies(row.policies),
+	policy: decodePolicy(row.policy),
 	joinedAt: iso(row.joinedAt),
 })
 const decodeInvitationStatus = Schema.decodeUnknownSync(
@@ -197,7 +198,7 @@ export const make: Effect.Effect<
 				name: account.name ?? null,
 				status: "active",
 				roles: JSON.stringify(roles),
-				policies: JSON.stringify([]),
+				policy: encodePolicy(Authorization.emptyPolicy),
 				joinedAt: now,
 			})
 			.onConflictDoNothing()
@@ -516,7 +517,7 @@ export const make: Effect.Effect<
 				...member,
 				...(patch.status === undefined ? {} : { status: patch.status }),
 				...(patch.roles === undefined ? {} : { roles: patch.roles }),
-				...(patch.policies === undefined ? {} : { policies: patch.policies }),
+				...(patch.policy === undefined ? {} : { policy: patch.policy }),
 			})
 			return updateMembers(
 				organizationId,
@@ -527,7 +528,7 @@ export const make: Effect.Effect<
 						.set({
 							status: apply(member).status,
 							roles: JSON.stringify(apply(member).roles),
-							policies: JSON.stringify(apply(member).policies),
+							policy: encodePolicy(apply(member).policy),
 						})
 						.where(memberWhere(organizationId, userId))
 						.pipe(Effect.as(apply(member))),

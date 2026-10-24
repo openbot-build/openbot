@@ -14,16 +14,14 @@ import {
 } from "./Invitation.ts"
 import { AccountAuth, NoStore } from "./AuthApi.ts"
 import {
-	CreateRoleRequest,
-	PermissionErrors,
-	PermissionGroup,
-	Policies,
+	AuthorizationErrors,
+	PolicyInput,
+	PolicySchema,
 	Required,
-	requires,
-	Role,
-	RoleId,
-	UpdateRoleRequest,
-} from "./Permissions.ts"
+	ResourceInfo,
+	organization,
+} from "./Authorization.ts"
+import { CreateRoleRequest, Role, RoleId, UpdateRoleRequest } from "./Roles.ts"
 import {
 	OrganizationSettings,
 	SettingsErrors,
@@ -62,15 +60,15 @@ export const Member = Schema.Struct({
 	name: Schema.NullOr(Schema.String),
 	status: MemberStatus,
 	roles: Roles,
-	/** Extra policies for this member, on top of the policies of the roles. */
-	policies: Policies,
+	/** An extra policy for this member, on top of the policies of the roles. */
+	policy: PolicySchema,
 	joinedAt: Schema.String,
 })
 export type Member = typeof Member.Type
 export const UpdateMemberRequest = Schema.Struct({
 	status: Schema.optionalKey(MemberStatus),
 	roles: Schema.optionalKey(Roles),
-	policies: Schema.optionalKey(Policies),
+	policy: Schema.optionalKey(PolicyInput),
 })
 export type UpdateMemberRequest = typeof UpdateMemberRequest.Type
 
@@ -195,10 +193,6 @@ export class LastSuperAdministrator extends Schema.TaggedError<LastSuperAdminist
 	"LastSuperAdministrator",
 	{},
 ) {}
-export class PolicyInvalid extends Schema.TaggedError<PolicyInvalid>()(
-	"PolicyInvalid",
-	{ message: Schema.String },
-) {}
 export class RoleNotFound extends Schema.TaggedError<RoleNotFound>()(
 	"RoleNotFound",
 	{ roleId: Schema.String },
@@ -227,32 +221,30 @@ const errors = [
 /** Changing a member can also need Super Administrator rights, so these endpoints can deny on their own. */
 const memberErrors = [
 	...errors,
-	...PermissionErrors,
+	...AuthorizationErrors,
 	MemberNotFound.pipe(HttpApiSchema.status(404)),
 	LastSuperAdministrator.pipe(HttpApiSchema.status(409)),
-	PolicyInvalid.pipe(HttpApiSchema.status(400)),
 ] as const
 
 /** Inviting with a role can also need Super Administrator rights, so these endpoints can deny on their own. */
 const invitationErrors = [
 	...errors,
-	...PermissionErrors,
+	...AuthorizationErrors,
 	InvitationNotFound.pipe(HttpApiSchema.status(404)),
 	InvitationInvalid.pipe(HttpApiSchema.status(400)),
 	RoleNotFound.pipe(HttpApiSchema.status(404)),
 ] as const
 
-const readMembers = [requires("members.read").on("organization")]
-const writeMembers = [requires("members.write").on("organization")]
-const writeRoles = [requires("roles.write").on("organization")]
+const readMembers = [organization("read", "Member")]
+const writeMembers = [organization("write", "Member")]
+const writeRoles = [organization("write", "Role")]
 /** A role cannot give more than the person who writes it has, so these endpoints can deny on their own. */
 const roleErrors = [
 	...errors,
-	...PermissionErrors,
+	...AuthorizationErrors,
 	RoleNotFound.pipe(HttpApiSchema.status(404)),
 	RoleInUse.pipe(HttpApiSchema.status(409)),
 	RoleReadOnly.pipe(HttpApiSchema.status(409)),
-	PolicyInvalid.pipe(HttpApiSchema.status(400)),
 ] as const
 
 export class OrganizationApi extends HttpApiGroup.make("organization").add(
@@ -263,7 +255,7 @@ export class OrganizationApi extends HttpApiGroup.make("organization").add(
 	HttpApiEndpoint.patch("updateOrganization", "/v1/organization", {
 		payload: UpdateOrganizationRequest,
 		success: Organization,
-		error: [...errors, ...PermissionErrors],
+		error: [...errors, ...AuthorizationErrors],
 	}),
 	HttpApiEndpoint.get("listMembers", "/v1/organization/members", {
 		query: {
@@ -290,7 +282,7 @@ export class OrganizationApi extends HttpApiGroup.make("organization").add(
 		.annotate(Required, writeMembers)
 		.annotate(
 			OpenApi.Description,
-			"Changes the status, roles or extra policies of a member. A suspended member cannot sign in, and their tokens stop working.",
+			"Changes the status, roles or extra policy of a member. A suspended member cannot sign in, and their tokens stop working.",
 		),
 	HttpApiEndpoint.delete("removeMember", "/v1/organization/members/:userId", {
 		params: { userId: Schema.String },
@@ -333,11 +325,10 @@ export class OrganizationApi extends HttpApiGroup.make("organization").add(
 	)
 		.annotate(Required, writeMembers)
 		.annotate(OpenApi.Description, "Takes back a pending invitation."),
-	HttpApiEndpoint.get(
-		"listPermissionGroups",
-		"/v1/organization/permission_groups",
-		{ success: Schema.Array(PermissionGroup), error: errors },
-	),
+	HttpApiEndpoint.get("listResources", "/v1/organization/resources", {
+		success: Schema.Array(ResourceInfo),
+		error: errors,
+	}),
 	HttpApiEndpoint.get("getSettings", "/v1/organization/settings", {
 		success: OrganizationSettings,
 		error: [...errors, ...SettingsErrors],
@@ -345,7 +336,7 @@ export class OrganizationApi extends HttpApiGroup.make("organization").add(
 	HttpApiEndpoint.patch("updateSettings", "/v1/organization/settings", {
 		payload: UpdateOrganizationSettingsRequest,
 		success: OrganizationSettings,
-		error: [...errors, ...SettingsErrors, ...PermissionErrors],
+		error: [...errors, ...SettingsErrors, ...AuthorizationErrors],
 	}).annotate(
 		OpenApi.Description,
 		"Changes the settings. Send the `version` that you read as `expectedVersion`. If someone changed the settings since then, the change fails with SettingsConflict. Every instance uses the new settings right away.",
@@ -370,7 +361,7 @@ export class OrganizationApi extends HttpApiGroup.make("organization").add(
 		.annotate(Required, writeRoles)
 		.annotate(
 			OpenApi.Description,
-			"Creates a custom role. Its policies cannot allow anything that you cannot do yourself.",
+			"Creates a custom role. Its policy cannot allow anything that you cannot do yourself.",
 		),
 	HttpApiEndpoint.patch("updateRole", "/v1/organization/roles/:roleId", {
 		params: { roleId: Schema.String },
@@ -381,7 +372,7 @@ export class OrganizationApi extends HttpApiGroup.make("organization").add(
 		.annotate(Required, writeRoles)
 		.annotate(
 			OpenApi.Description,
-			"Changes a custom role. Every member with the role gets the new policies at once.",
+			"Changes a custom role. Every member with the role gets the new policy at once.",
 		),
 	HttpApiEndpoint.delete("deleteRole", "/v1/organization/roles/:roleId", {
 		params: { roleId: Schema.String },
@@ -406,7 +397,7 @@ export class OrganizationApi extends HttpApiGroup.make("organization").add(
 		}),
 		error: errors,
 	})
-		.annotate(Required, [requires("audit_logs.read").on("organization")])
+		.annotate(Required, [organization("read", "AuditLog")])
 		.annotate(
 			OpenApi.Description,
 			"Lists audit log entries, newest first. `actor` filters by user ID.",

@@ -32,12 +32,12 @@ import { AppOperationsApi } from "./AppOperationsApi.ts"
 import { CodeRunsApi } from "./CodeRunsApi.ts"
 import { AppViewsApi } from "./AppViewsApi.ts"
 import { BudgetsApi, UsageApi } from "./BillingApi.ts"
-import { Authorize, GroupRequired, requires } from "./Permissions.ts"
+import { Authorize, GroupRequired, organization, own } from "./Authorization.ts"
 
-const connection = (permission: Parameters<typeof requires>[0]) => [
-	requires(permission).on("connection", "connectionId"),
+const connection = (action: "read" | "write") => [
+	own(action, "Connection", "connectionId"),
 ]
-const apps = [requires("apps.use").on("apps")]
+const apps = [own("use", "App")]
 
 /**
  * The shared contract for server handlers, typed clients and generated documentation.
@@ -47,16 +47,16 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 	.add(
 		DeveloperPublicApi,
 		DeveloperApi.annotate(GroupRequired, {
-			read: [requires("apps.publish").on("apps")],
-			write: [requires("apps.publish").on("apps")],
+			read: [own("publish", "App")],
+			write: [own("publish", "App")],
 		})
 			.middleware(Authorize)
 			.middleware(BotAuth),
 		AppIndexApi,
 		AppAuthorizationPublicApi,
 		AppAuthorizationApi.annotate(GroupRequired, {
-			read: connection("connections.read"),
-			write: connection("connections.write"),
+			read: connection("read"),
+			write: connection("write"),
 		})
 			.middleware(Authorize)
 			.middleware(BotAuth),
@@ -90,14 +90,14 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 			.middleware(Authorize)
 			.middleware(BotAuth),
 		AppExperienceApi.annotate(GroupRequired, {
-			read: connection("connections.read"),
-			write: connection("connections.write"),
+			read: connection("read"),
+			write: connection("write"),
 		})
 			.middleware(Authorize)
 			.middleware(BotAuth),
 		ConnectionsApi.annotate(GroupRequired, {
-			read: connection("connections.read"),
-			write: connection("connections.write"),
+			read: connection("read"),
+			write: connection("write"),
 		})
 			.middleware(Authorize)
 			.middleware(BotAuth),
@@ -106,26 +106,26 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 		OrganizationsApi,
 		PlatformApi,
 		UserTokensApi.annotate(GroupRequired, {
-			read: [requires("tokens.read").on("user")],
-			write: [requires("tokens.write").on("user")],
+			read: [own("read", "Token")],
+			write: [own("write", "Token")],
 		})
 			.middleware(Authorize)
 			.middleware(BotAuth),
 		OrganizationApi.annotate(GroupRequired, {
-			read: [requires("organization.read").on("organization")],
-			write: [requires("organization.write").on("organization")],
+			read: [organization("read", "Organization")],
+			write: [organization("write", "Organization")],
 		})
 			.middleware(Authorize)
 			.middleware(BotAuth),
 		ModelProvidersApi.annotate(GroupRequired, {
-			read: [requires("model_providers.read").on("organization")],
-			write: [requires("model_providers.write").on("organization")],
+			read: [organization("read", "ModelProvider")],
+			write: [organization("write", "ModelProvider")],
 		})
 			.middleware(Authorize)
 			.middleware(BotAuth),
 		SsoApi.annotate(GroupRequired, {
-			read: [requires("sso.read").on("organization")],
-			write: [requires("sso.write").on("organization")],
+			read: [organization("read", "Sso")],
+			write: [organization("write", "Sso")],
 		})
 			.middleware(Authorize)
 			.middleware(BotAuth),

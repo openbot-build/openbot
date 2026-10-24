@@ -8,7 +8,11 @@ import {
 } from "effect/http-api"
 import { BotId } from "./BotsApi.ts"
 import { BotAuth } from "./AuthApi.ts"
-import { Authorize, GroupRequired, PermissionErrors } from "./Permissions.ts"
+import {
+	Authorize,
+	AuthorizationErrors,
+	GroupRequired,
+} from "./Authorization.ts"
 import { PublicOrigin, SecretInput, SecretState, Version } from "./Settings.ts"
 
 export const ComputerId = Schema.String.check(
@@ -526,7 +530,7 @@ export class PairingInvalid extends Schema.TaggedError<PairingInvalid>()(
 ) {}
 
 export const ComputerErrors = [
-	...PermissionErrors,
+	...AuthorizationErrors,
 	ComputerNotFound.pipe(HttpApiSchema.status(404)),
 	ComputerProviderNotFound.pipe(HttpApiSchema.status(404)),
 	ComputerConflict.pipe(HttpApiSchema.status(409)),

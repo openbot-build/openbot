@@ -1,5 +1,5 @@
 import type { Chat } from "@openbot-build/core"
-import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
+import type { Services as AuthorizationServices } from "../authorization/Check.ts"
 import type {
 	BotsApi,
 	AppExecution,
@@ -7,9 +7,9 @@ import type {
 	ComputersApi,
 } from "@openbot-build/api"
 import { Context, Data, Effect, HashMap, Layer, Option, Ref } from "effect"
-import { can } from "../authorization/Check.ts"
+import { allows } from "../authorization/Check.ts"
 import { Signal, Signals } from "../bots/Signals.ts"
-import { type Capability, describe, permission } from "./Capability.ts"
+import { type Capability, describe, memberTarget } from "./Capability.ts"
 import { Grants } from "./Grants.ts"
 import { Judge } from "./Judge.ts"
 import { type Ask, Requests, chatOf } from "./Requests.ts"
@@ -49,7 +49,7 @@ export interface Attempt {
 /**
  * Checks each attempt of a Bot to use a capability. Bots have no limits that they know of.
  * The steps are: the policy of the member, Grants, Rules with the judge, and then a request
- * to the decider above the Bot.
+ * to the decider above the Bot. The Grants of a Bot are an ability policy, see `Policy.ts`.
  */
 export class Gate extends Context.Service<
 	Gate,
@@ -185,7 +185,7 @@ export const make: Effect.Effect<
 								: Answer.Pending({ request: stored.request.id }),
 						),
 					)
-			const needed = permission({
+			const needed = memberTarget({
 				caller: current.caller,
 				capability: attempt.capability,
 				chat: current.chat,
@@ -195,11 +195,7 @@ export const make: Effect.Effect<
 					? {}
 					: { computerOwner: attempt.computerOwner }),
 			})
-			const member = yield* can({
-				caller: current.caller,
-				permission: needed.permission,
-				key: needed.key,
-			}).pipe(
+			const member = yield* allows(current.caller, needed).pipe(
 				Effect.provideContext(services),
 				Effect.orElseSucceed(() => false),
 			)

@@ -1,6 +1,6 @@
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { BotAuth } from "./AuthApi.ts"
-import { Authorize, GroupRequired, requires } from "./Permissions.ts"
+import { Authorize, GroupRequired, own } from "./Authorization.ts"
 import {
 	MemberSettings,
 	SettingsErrors,
@@ -24,8 +24,8 @@ export class MemberSettingsApi extends HttpApiGroup.make("memberSettings")
 		),
 	)
 	.annotate(GroupRequired, {
-		read: [requires("chats.read").on("user")],
-		write: [requires("chats.write").on("user")],
+		read: [own("read", "Chat")],
+		write: [own("write", "Chat")],
 	})
 	.middleware(Authorize)
 	.middleware(BotAuth) {}

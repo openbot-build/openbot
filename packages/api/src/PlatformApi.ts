@@ -2,7 +2,6 @@ import { Schema } from "effect"
 import {
 	HttpApiEndpoint,
 	HttpApiGroup,
-	HttpApiMiddleware,
 	HttpApiSchema,
 	OpenApi,
 } from "effect/http-api"
@@ -16,7 +15,6 @@ import {
 	SetModelPriceRequest,
 	UpdateCreditsRequest,
 } from "./BillingApi.ts"
-import { Account } from "./Identity.ts"
 import {
 	CreatePlatformModelProviderRequest,
 	CreatePlatformModelRequest,
@@ -31,25 +29,16 @@ import {
 	OrganizationStatus,
 	OrganizationStorageUnavailable,
 } from "./OrganizationApi.ts"
-import { PermissionErrors } from "./Permissions.ts"
+import {
+	GroupRequired,
+	onPlatform,
+	PlatformAuthorize,
+} from "./Authorization.ts"
 import {
 	PlatformSettings,
 	SettingsErrors,
 	UpdatePlatformSettingsRequest,
 } from "./Settings.ts"
-
-/**
- * Lets only platform admins in. GET needs `platform.read` and every other method
- * needs `platform.write`. A user token must also allow that permission group on
- * `openbot.platform` in its own policies.
- * @effect-expect-leaking RouteContext
- */
-export class PlatformAuthorize extends HttpApiMiddleware.Service<
-	PlatformAuthorize,
-	{ readonly requires: Account }
->()("@openbot-build/api/PlatformApi/PlatformAuthorize", {
-	error: PermissionErrors,
-}) {}
 
 export const PlatformAdmin = Schema.Struct({
 	/** A person becomes a platform admin when they sign in with this verified email. */
@@ -319,6 +308,10 @@ export class PlatformApi extends HttpApiGroup.make("platform")
 			},
 		),
 	)
+	.annotate(GroupRequired, {
+		read: [onPlatform("read")],
+		write: [onPlatform("write")],
+	})
 	.middleware(PlatformAuthorize)
 	.middleware(AccountAuth)
 	.middleware(NoStore) {}

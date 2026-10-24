@@ -3,16 +3,14 @@ import {
 	type AccountCaller,
 	ModelProvidersApi,
 	OpenBotApi,
-	Permissions,
 	PlatformApi,
 	Settings as SettingsApi,
 } from "@openbot-build/api"
-import { Effect, Layer, Option } from "effect"
+import { Effect, Option } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { AuditLog } from "../audit/AuditLog.ts"
-import { Tokens } from "../auth/Tokens.ts"
 import { Billing } from "../billing/Billing.ts"
-import { decide, organizationKey } from "../authorization/Policy.ts"
+import { organizationKey, platformKey } from "../audit/Resources.ts"
 import { checkUnused } from "../models/HttpHandlers.ts"
 import {
 	ModelProviders,
@@ -30,71 +28,6 @@ import { PlatformAdmins } from "./PlatformAdmins.ts"
 
 /** Platform actions go to this audit log, apart from the logs of organizations. */
 export const platformLog = "platform"
-
-/**
- * Only platform admins pass. A user token must also allow the permission group
- * on `openbot.platform` in its own policies, so an ordinary token never
- * works on the platform by accident.
- */
-export const layerAuthorize = Layer.effect(
-	PlatformApi.PlatformAuthorize,
-	Effect.gen(function* () {
-		const admins = yield* PlatformAdmins
-		const tokens = yield* Tokens
-		return (httpEffect, { endpoint }) =>
-			Effect.gen(function* () {
-				const account = yield* Account
-				const permission: Permissions.PermissionGroupId =
-					endpoint.method === "GET" ? "platform.read" : "platform.write"
-				const denied = Permissions.PermissionDenied.make({
-					permission,
-					resource: Permissions.platformResource,
-				})
-				const admin = yield* admins
-					.check({ id: account.userId })
-					.pipe(
-						Effect.mapError(() =>
-							Permissions.AuthorizationUnavailable.make({}),
-						),
-					)
-				if (!admin) return yield* denied
-				if (
-					account.kind === "user_token" &&
-					account.tokenId !== undefined &&
-					account.organizationId !== undefined
-				) {
-					const token = yield* tokens
-						.find(
-							{
-								userId: account.userId,
-								organizationId: account.organizationId,
-							},
-							account.tokenId,
-						)
-						.pipe(
-							Effect.mapError(() =>
-								Permissions.AuthorizationUnavailable.make({}),
-							),
-						)
-					const allowed = Option.exists(
-						token,
-						(token) =>
-							decide({
-								subject: {
-									organizationId: account.organizationId ?? "",
-									userId: account.userId,
-								},
-								permission,
-								key: Permissions.platformResource,
-								policies: token.policies,
-							}) === "allow",
-					)
-					if (!allowed) return yield* denied
-				}
-				return yield* httpEffect
-			})
-	}),
-)
 
 const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 	Effect.gen(function* () {
@@ -254,7 +187,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 					)
 					yield* record(account, {
 						action: "settings.updated",
-						resource: Permissions.platformResource,
+						resource: platformKey,
 						details: {
 							changes: [
 								...Object.keys(changes),
@@ -312,7 +245,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 						.pipe(Effect.mapError(unavailable))
 					yield* record(account, {
 						action: "member.updated",
-						resource: Permissions.platformResource,
+						resource: platformKey,
 						details: { platformAdmin: "added", email: added.email },
 					})
 					return added
@@ -332,7 +265,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 						)
 					yield* record(account, {
 						action: "member.updated",
-						resource: Permissions.platformResource,
+						resource: platformKey,
 						details: { platformAdmin: "removed", email: params.email },
 					})
 				}),
@@ -351,7 +284,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 					const created = yield* models.create(platformOwner, payload)
 					yield* record(account, {
 						action: "model.created",
-						resource: Permissions.platformResource,
+						resource: platformKey,
 						details: { modelId: created.id, name: created.name },
 					})
 					return modelView(created)
@@ -367,7 +300,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 					)
 					yield* record(account, {
 						action: "model.updated",
-						resource: Permissions.platformResource,
+						resource: platformKey,
 						details: { modelId: updated.id, name: updated.name },
 					})
 					return modelView(updated)
@@ -380,7 +313,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 					yield* models.delete(platformOwner, model.id)
 					yield* record(account, {
 						action: "model.deleted",
-						resource: Permissions.platformResource,
+						resource: platformKey,
 						details: { modelId: model.id, name: model.name },
 					})
 				}),
@@ -399,7 +332,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 					const created = yield* providers.create(platformOwner, payload)
 					yield* record(account, {
 						action: "model_provider.created",
-						resource: Permissions.platformResource,
+						resource: platformKey,
 						details: { providerId: created.id, name: created.name },
 					})
 					return view(created)
@@ -415,7 +348,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 					)
 					yield* record(account, {
 						action: "model_provider.updated",
-						resource: Permissions.platformResource,
+						resource: platformKey,
 						details: { providerId: updated.id, name: updated.name },
 					})
 					return view(updated)
@@ -443,7 +376,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 						.pipe(Effect.mapError(unavailable))
 					yield* record(account, {
 						action: "model_price.set",
-						resource: Permissions.platformResource,
+						resource: platformKey,
 						details: { providerId: provider.id, ...price },
 					})
 					return price
@@ -505,7 +438,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 					yield* providers.delete(platformOwner, provider.id)
 					yield* record(account, {
 						action: "model_provider.deleted",
-						resource: Permissions.platformResource,
+						resource: platformKey,
 						details: { providerId: provider.id, name: provider.name },
 					})
 				}),

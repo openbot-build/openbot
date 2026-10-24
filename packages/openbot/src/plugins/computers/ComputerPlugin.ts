@@ -12,7 +12,7 @@ import {
 	Stream,
 } from "effect"
 import { Prompt, Tool, Toolkit } from "effect/ai"
-import type { Services as AuthorizationServices } from "../../authorization/Authorize.ts"
+import type { Services as AuthorizationServices } from "../../authorization/Check.ts"
 import { Answer, Gate, remember } from "../../capabilities/Gate.ts"
 import { Work } from "../../capabilities/Work.ts"
 import type { Machine } from "../../computers/Computer.ts"

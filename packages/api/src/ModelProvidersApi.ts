@@ -7,7 +7,7 @@ import {
 	OpenApi,
 } from "effect/http-api"
 import { ModelPrice, ModelPrices, SetModelPriceRequest } from "./BillingApi.ts"
-import { PermissionErrors, Required, requires } from "./Permissions.ts"
+import { AuthorizationErrors, Required } from "./Authorization.ts"
 import { SecretInput, SecretState, Version } from "./Settings.ts"
 
 /** The API that a provider speaks. */
@@ -279,7 +279,7 @@ export const ModelProviderErrors = [
 	ModelConflict.pipe(HttpApiSchema.status(409)),
 	ModelInUse.pipe(HttpApiSchema.status(409)),
 ] as const
-const errors = [...ModelProviderErrors, ...PermissionErrors] as const
+const errors = [...ModelProviderErrors, ...AuthorizationErrors] as const
 
 const ProviderParams = { providerId: Schema.String }
 const ModelParams = { modelId: Schema.String }
@@ -290,10 +290,11 @@ export class ModelProvidersApi extends HttpApiGroup.make("modelProviders").add(
 		success: ModelCatalog,
 		error: errors,
 	})
-		.annotate(Required, [requires("models.use").on("organization")])
+		// Every member may ask. The list has only the models that the caller may use.
+		.annotate(Required, [])
 		.annotate(
 			OpenApi.Description,
-			"Lists the models that the organization can use now, for each provider that offers them.",
+			"Lists the models that the caller may use now, for each provider that offers them.",
 		),
 	HttpApiEndpoint.get("listModels", "/v1/organization/models", {
 		success: Schema.Struct({ items: Schema.Array(Model) }),

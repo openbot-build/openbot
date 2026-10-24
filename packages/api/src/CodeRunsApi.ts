@@ -3,7 +3,7 @@ import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api"
 import * as AppExecution from "./AppExecution.ts"
 import { ExperienceErrors } from "./ExperienceErrors.ts"
-import { requires, Required } from "./Permissions.ts"
+import { Required, own } from "./Authorization.ts"
 
 /**
  * Code Mode lets the Bot write a short JavaScript program that calls App tools.
@@ -117,5 +117,5 @@ export const CodeRunsApi = HttpApiGroup.make("codeRuns").add(
 		params: { chatId: Chat.Id },
 		success: Schema.Array(CodeRun),
 		error: ExperienceErrors,
-	}).annotate(Required, [requires("chats.read").on("chat", "chatId")]),
+	}).annotate(Required, [own("read", "Chat", "chatId")]),
 )

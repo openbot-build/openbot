@@ -8,7 +8,7 @@ import {
 import { DateTime, Effect, Option } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { AuditLog } from "../audit/AuditLog.ts"
-import { organizationKey } from "../authorization/Policy.ts"
+import { organizationKey } from "../audit/Resources.ts"
 import { type Connection, Sso } from "./Sso.ts"
 
 const iso = (millis: number) => DateTime.formatIso(DateTime.makeUnsafe(millis))

@@ -9,10 +9,10 @@ import {
 import { BotAuth } from "./AuthApi.ts"
 import {
 	Authorize,
+	AuthorizationErrors,
 	GroupRequired,
-	PermissionErrors,
-	requires,
-} from "./Permissions.ts"
+	organization,
+} from "./Authorization.ts"
 import { Version } from "./Settings.ts"
 
 /**
@@ -343,7 +343,7 @@ export class BillingUnavailable extends Schema.TaggedError<BillingUnavailable>()
 ) {}
 
 const usageErrors = [
-	...PermissionErrors,
+	...AuthorizationErrors,
 	BillingUnavailable.pipe(HttpApiSchema.status(503)),
 	UsageQueryInvalid.pipe(HttpApiSchema.status(400)),
 ] as const
@@ -396,8 +396,8 @@ export class UsageApi extends HttpApiGroup.make("usage")
 		}),
 	)
 	.annotate(GroupRequired, {
-		read: [requires("usage.read").on("organization")],
-		write: [requires("usage.read").on("organization")],
+		read: [organization("read", "Usage")],
+		write: [organization("read", "Usage")],
 	})
 	.middleware(Authorize)
 	.middleware(BotAuth) {}
@@ -446,8 +446,8 @@ export class BudgetsApi extends HttpApiGroup.make("budgets")
 	)
 	.annotate(HttpApi.PayloadParseOptions, { onExcessProperty: "error" })
 	.annotate(GroupRequired, {
-		read: [requires("budgets.read").on("organization")],
-		write: [requires("budgets.write").on("organization")],
+		read: [organization("read", "Budget")],
+		write: [organization("write", "Budget")],
 	})
 	.middleware(Authorize)
 	.middleware(BotAuth) {}

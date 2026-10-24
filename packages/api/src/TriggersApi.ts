@@ -9,7 +9,11 @@ import {
 } from "effect/http-api"
 import { BotId } from "./BotsApi.ts"
 import { BotAuth } from "./AuthApi.ts"
-import { Authorize, GroupRequired, PermissionErrors } from "./Permissions.ts"
+import {
+	Authorize,
+	AuthorizationErrors,
+	GroupRequired,
+} from "./Authorization.ts"
 
 export const TriggerId = Schema.String.check(
 	Schema.isMinLength(1),
@@ -117,7 +121,7 @@ export class TriggerHookDenied extends Schema.TaggedError<TriggerHookDenied>()(
 
 /** The handlers check permissions on triggers themselves, so these errors are listed here too. */
 export const TriggerErrors = [
-	...PermissionErrors,
+	...AuthorizationErrors,
 	TriggerNotFound.pipe(HttpApiSchema.status(404)),
 	TriggerConflict.pipe(HttpApiSchema.status(409)),
 	TriggerInvalid.pipe(HttpApiSchema.status(400)),

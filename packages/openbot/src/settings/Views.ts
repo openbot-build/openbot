@@ -35,7 +35,7 @@ export const platform = (
 						},
 					},
 		organizationCreation: document.organizationCreation,
-		policyCeiling: document.policyCeiling,
+		ceiling: document.ceiling,
 		appRestrictions: document.appRestrictions,
 		codeMode: codeModeOf(document),
 		rateLimit: rateLimitOf(document),

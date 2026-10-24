@@ -1,4 +1,4 @@
-import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
+import type { Services as AuthorizationServices } from "../authorization/Check.ts"
 import {
 	type Caller,
 	Identity,
@@ -11,7 +11,7 @@ import { HttpApiBuilder } from "effect/http-api"
 import { Bots } from "../bots/Bots.ts"
 import * as DefaultBot from "../bots/DefaultBot.ts"
 import { AuditLog } from "../audit/AuditLog.ts"
-import { triggerKey } from "../authorization/Policy.ts"
+import { triggerKey } from "../audit/Resources.ts"
 import { fire } from "./Fire.ts"
 import { Triggers } from "./Triggers.ts"
 
@@ -48,7 +48,7 @@ export const layer = (publicOrigin: string) =>
 			const botFor = (caller: Caller, bot: string | undefined) =>
 				(bot === undefined
 					? DefaultBot.resolve(caller)
-					: bots.access(caller, bot, "bots.delegate")
+					: bots.access(caller, bot, "delegate")
 				).pipe(
 					Effect.provideContext(services),
 					Effect.catchTags({
@@ -109,7 +109,7 @@ export const layer = (publicOrigin: string) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
 						const current = yield* triggers
-							.get(caller, params.triggerId, "triggers.write")
+							.get(caller, params.triggerId, "write")
 							.pipe(Effect.provideContext(services))
 						// The caller becomes the actor, so it must be able to give work to the Bot.
 						yield* botFor(caller, payload.bot ?? current.bot)
@@ -135,7 +135,7 @@ export const layer = (publicOrigin: string) =>
 					Effect.gen(function* () {
 						const caller = yield* Identity
 						const current = yield* triggers
-							.get(caller, params.triggerId, "triggers.write")
+							.get(caller, params.triggerId, "write")
 							.pipe(Effect.provideContext(services))
 						yield* botFor(caller, current.bot)
 						const { trigger, secret } = yield* triggers

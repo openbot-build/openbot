@@ -5,7 +5,7 @@ import {
 	HttpApiSchema,
 	OpenApi,
 } from "effect/http-api"
-import { PermissionErrors } from "./Permissions.ts"
+import { AuthorizationErrors } from "./Authorization.ts"
 import {
 	ClientId,
 	Issuer,
@@ -119,7 +119,7 @@ export class SsoUnavailable extends Schema.TaggedError<SsoUnavailable>()(
 	{},
 ) {}
 const errors = [
-	...PermissionErrors,
+	...AuthorizationErrors,
 	DomainNotFound.pipe(HttpApiSchema.status(404)),
 	DomainTaken.pipe(HttpApiSchema.status(409)),
 	DomainNotVerified.pipe(HttpApiSchema.status(409)),

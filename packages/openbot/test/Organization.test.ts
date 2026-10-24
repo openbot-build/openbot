@@ -1,9 +1,10 @@
 import { assert, it } from "@effect/vitest"
-import { AuthApi } from "@openbot-build/api"
+import { AuthApi, Authorization } from "@openbot-build/api"
 import { Effect, Layer, Redacted } from "effect"
 import { DomainControl } from "../src/apps/DomainControl.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 import { withCookie, withToken } from "./Caller.ts"
+import * as Policies from "./Policies.ts"
 
 const publicOrigin = "https://api.example.com"
 const member = (userId: string) =>
@@ -180,13 +181,13 @@ it(
 				{
 					name: "Log reader",
 					description: "Reads the audit log.",
-					policies: [
-						{
-							effect: "allow",
-							permissionGroups: ["audit_logs.read"],
-							resources: ["openbot.org.{org}"],
-						},
-					],
+					policy: Policies.json(function* (_) {
+						yield* _.allow(
+							"read",
+							Authorization.AuditLog,
+							Policies.inOrganization,
+						)
+					}),
 				},
 			)
 			assert.strictEqual(created.status, 200, await created.clone().text())
@@ -234,17 +235,31 @@ it(
 				{
 					name: "Everything",
 					description: "Too much.",
-					policies: [
-						{
-							effect: "allow",
-							permissionGroups: ["chats.read"],
-							resources: ["openbot.org.{org}"],
-						},
-					],
+					policy: Policies.json(function* (_) {
+						yield* _.allow("read", Authorization.Chat, Policies.inOrganization)
+					}),
 				},
 			)
 			assert.strictEqual(escalation.status, 403)
-			assert.strictEqual((await escalation.json())._tag, "PermissionDenied")
+			assert.deepInclude(await escalation.json(), {
+				_tag: "Forbidden",
+				action: "read",
+				kind: "Chat",
+			})
+			// He can give what he has himself: his own Chats.
+			const ownChats = await account(
+				bob.session,
+				"/v1/organization/roles",
+				"POST",
+				{
+					name: "Own Chats",
+					description: "Enough.",
+					policy: Policies.json(function* (_) {
+						yield* _.allow("read", Authorization.Chat, Policies.own)
+					}),
+				},
+			)
+			assert.strictEqual(ownChats.status, 200, await ownChats.clone().text())
 		} finally {
 			await host.close()
 		}
@@ -273,9 +288,9 @@ it(
 			})
 			assert.strictEqual(change.status, 403)
 			assert.deepStrictEqual(await change.json(), {
-				_tag: "PermissionDenied",
-				permission: "organization.write",
-				resource: "openbot.org." + alice.identity.organizationId,
+				_tag: "Forbidden",
+				action: "write",
+				kind: "Organization",
 			})
 			assert.strictEqual(
 				(await account(bob.session, "/v1/organization/members")).status,
@@ -332,13 +347,13 @@ it(
 				member(carol.identity.userId),
 				"PATCH",
 				{
-					policies: [
-						{
-							effect: "allow",
-							permissionGroups: ["members.write"],
-							resources: ["openbot.org.{org}"],
-						},
-					],
+					policy: Policies.json(function* (_) {
+						yield* _.allow(
+							"write",
+							Authorization.Member,
+							Policies.inOrganization,
+						)
+					}),
 				},
 			)
 			assert.strictEqual(allow.status, 403)
@@ -363,19 +378,15 @@ it(
 			assert.strictEqual(last.status, 409)
 			assert.strictEqual((await last.json())._tag, "LastSuperAdministrator")
 
-			// An Administrator can take a permission away with a deny policy.
+			// An Administrator can take an act away with a deny rule.
 			const deny = await account(
 				bob.session,
 				member(carol.identity.userId),
 				"PATCH",
 				{
-					policies: [
-						{
-							effect: "deny",
-							permissionGroups: ["responses.run"],
-							resources: ["openbot.org.{org}"],
-						},
-					],
+					policy: Policies.json(function* (_) {
+						yield* _.deny("run", Authorization.Chat, Policies.inOrganization)
+					}),
 				},
 			)
 			assert.strictEqual(deny.status, 200, await deny.clone().text())
@@ -387,7 +398,7 @@ it(
 				{ input: "Hello" },
 			)
 			assert.strictEqual(run.status, 403)
-			assert.strictEqual((await run.json()).permission, "responses.run")
+			assert.deepInclude(await run.json(), { action: "run", kind: "Chat" })
 
 			// A suspended member is out, with the cookie and with every token.
 			const token = await (
@@ -445,14 +456,25 @@ it(
 			assert.strictEqual(byBob.items.length, 1)
 			assert.strictEqual(byBob.items[0].actor.userId, bob.identity.userId)
 
-			const groups = await (
-				await account(alice.session, "/v1/organization/permission_groups")
+			const resources = await (
+				await account(alice.session, "/v1/organization/resources")
 			).json()
+			const chat = resources.find(
+				(resource: { readonly kind: string }) => resource.kind === "Chat",
+			)
 			assert.ok(
-				groups.some(
-					(group: { readonly id: string }) => group.id === "responses.run",
+				chat.actions.some(
+					(action: { readonly name: string }) => action.name === "run",
 				),
 			)
+			assert.deepStrictEqual(chat.path, [
+				"org",
+				"{organizationId}",
+				"user",
+				"{ownerUserId}",
+				"chat",
+				"{id}",
+			])
 			const roles = await (
 				await account(alice.session, "/v1/organization/roles")
 			).json()

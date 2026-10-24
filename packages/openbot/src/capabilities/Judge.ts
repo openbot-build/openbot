@@ -1,4 +1,4 @@
-import { type BotsApi, Permissions } from "@openbot-build/api"
+import { Authorization, type BotsApi } from "@openbot-build/api"
 import { Context, Data, Duration, Effect, Layer, Option, Schema } from "effect"
 import { LanguageModel, Prompt } from "effect/ai"
 import { BotRecords } from "../bots/BotRecords.ts"
@@ -7,7 +7,7 @@ import { attribute } from "../billing/MeteredModel.ts"
 
 /** What the judge model returns. */
 export const Verdict = Schema.Struct({
-	decision: Schema.Literals([...Permissions.Decision.literals, "no_match"]),
+	decision: Schema.Literals([...Authorization.Decision.literals, "no_match"]),
 	citations: Schema.Array(
 		Schema.Struct({ rule: Schema.String, quote: Schema.String }),
 	),

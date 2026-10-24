@@ -1,7 +1,7 @@
 import { BotAuth } from "./AuthApi.ts"
 import { Chat, Config, Item, Turn } from "@openbot-build/core"
 import * as BotMemory from "./BotMemory.ts"
-import { Authorize, GroupRequired, Required, requires } from "./Permissions.ts"
+import { Authorize, GroupRequired, Required, own } from "./Authorization.ts"
 import { BotErrors, BotId } from "./BotsApi.ts"
 import { Delegation, DelegationId } from "./DelegationsApi.ts"
 import { FileId, FileInvalid } from "./FilesApi.ts"
@@ -402,10 +402,7 @@ export class ChatsApi extends HttpApiGroup.make("chats")
 			success: sendSuccess,
 			error: [...sendErrors, ...BotErrors],
 		})
-			.annotate(Required, [
-				requires("responses.run").on("chat"),
-				requires("chats.write").on("chat"),
-			])
+			.annotate(Required, [own("run", "Chat"), own("write", "Chat")])
 			.annotate(
 				OpenApi.Description,
 				"Sends a message to your Chat with this Bot. OpenBot makes the Chat the first time. When the Bot is free, the message starts a Turn at once. When the Bot works for you, it reads the message at its next step. You need `bots.delegate` on the Bot.",
@@ -416,7 +413,7 @@ export class ChatsApi extends HttpApiGroup.make("chats")
 			success: sendSuccess,
 			error: sendErrors,
 		})
-			.annotate(Required, [requires("responses.run").on("chat", "chatId")])
+			.annotate(Required, [own("run", "Chat", "chatId")])
 			.annotate(
 				OpenApi.Description,
 				"Sends a message to a direct Chat or a task Chat. In a task Chat, the Bot reads it as a message from you.",
@@ -576,8 +573,8 @@ export class ChatsApi extends HttpApiGroup.make("chats")
 	)
 	.annotate(HttpApi.PayloadParseOptions, { onExcessProperty: "error" })
 	.annotate(GroupRequired, {
-		read: [requires("chats.read").on("chat", "chatId")],
-		write: [requires("chats.write").on("chat", "chatId")],
+		read: [own("read", "Chat", "chatId")],
+		write: [own("write", "Chat", "chatId")],
 	})
 	.middleware(Authorize)
 	.middleware(BotAuth) {}

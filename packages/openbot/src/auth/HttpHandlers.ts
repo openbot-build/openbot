@@ -10,12 +10,11 @@ import { Effect, Layer, Option } from "effect"
 import { HttpEffect, HttpRouter, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { AuditLog } from "../audit/AuditLog.ts"
-import * as Authorize from "../authorization/Authorize.ts"
-import { userKey } from "../authorization/Policy.ts"
+import { userKey } from "../audit/Resources.ts"
+import * as AuthorizationLayer from "../authorization/Layer.ts"
 import { Tokens } from "./Tokens.ts"
 import { Auth } from "./Auth.ts"
 import * as HttpMiddleware from "./HttpMiddleware.ts"
-import * as PlatformHandlers from "../platform/HttpHandlers.ts"
 
 /** Better Auth serves its own routes. OpenBot adds the session and user token routes. */
 export const layer = (config: { readonly publicOrigin: string }) => {
@@ -110,8 +109,7 @@ export const layer = (config: { readonly publicOrigin: string }) => {
 			Layer.mergeAll(
 				HttpMiddleware.layerBotAuth(config),
 				HttpMiddleware.layerAccountAuth(config),
-				Authorize.layer,
-				PlatformHandlers.layerAuthorize,
+				AuthorizationLayer.layer,
 				HttpMiddleware.layerSessionAuth,
 				HttpMiddleware.layerOrigin(config),
 				HttpMiddleware.layerNoStore,

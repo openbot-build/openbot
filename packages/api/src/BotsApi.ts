@@ -1,10 +1,10 @@
 import { AccountAuth, BotAuth, NoStore, ReturnTo } from "./AuthApi.ts"
 import {
 	Authorize,
+	AuthorizationErrors,
 	Decision,
 	GroupRequired,
-	PermissionErrors,
-} from "./Permissions.ts"
+} from "./Authorization.ts"
 import { Chat, Config } from "@openbot-build/core"
 import * as BotMemory from "./BotMemory.ts"
 import { Name } from "./Name.ts"
@@ -243,7 +243,7 @@ export class BotStorageUnavailable extends Schema.TaggedError<BotStorageUnavaila
 ) {}
 /** The handlers check permissions on Bots themselves, so these errors are listed here too. */
 export const BotErrors = [
-	...PermissionErrors,
+	...AuthorizationErrors,
 	BotNotFound.pipe(HttpApiSchema.status(404)),
 	BotConflict.pipe(HttpApiSchema.status(409)),
 	BotInvalid.pipe(HttpApiSchema.status(400)),
