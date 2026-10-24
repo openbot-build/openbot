@@ -335,6 +335,15 @@ export const AppReadRules = Schema.Array(AppReadRule).check(
 export const RequestTimeout = Schema.Int.check(
 	Schema.isBetween({ minimum: 1000, maximum: 7 * 24 * 60 * 60 * 1000 }),
 )
+/**
+ * How long delegated work may run before it pauses and asks its decider, in
+ * milliseconds. Work that sets no time limit, such as the work of a trigger, uses it.
+ */
+export const DelegationTimeLimit = Schema.Int.check(
+	Schema.isBetween({ minimum: 60 * 1000, maximum: 30 * 24 * 60 * 60 * 1000 }),
+)
+/** One hour. */
+export const delegationTimeLimitDefault = 60 * 60 * 1000
 export const DefaultRoles = Schema.Array(RoleId).check(Schema.isMinLength(1))
 
 export const OrganizationSettings = Schema.Struct({
@@ -348,6 +357,8 @@ export const OrganizationSettings = Schema.Struct({
 	/** Let the memory Bot learn from Chats and add to the input of Turns. */
 	botMemory: Schema.Boolean,
 	requestTimeoutMs: RequestTimeout,
+	/** The time limit of delegated work that sets none itself. */
+	delegationTimeLimitMs: DelegationTimeLimit,
 	/** How plans are approved when no member, Bot or Chat sets it. */
 	planApproval: PlanApproval,
 	appReadRules: AppReadRules,
@@ -370,6 +381,7 @@ export const UpdateOrganizationSettingsRequest = Schema.Struct({
 	decisionModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
 	botMemory: Schema.optionalKey(Schema.Boolean),
 	requestTimeoutMs: Schema.optionalKey(RequestTimeout),
+	delegationTimeLimitMs: Schema.optionalKey(DelegationTimeLimit),
 	planApproval: Schema.optionalKey(PlanApproval),
 	appReadRules: Schema.optionalKey(AppReadRules),
 	defaultRoles: Schema.optionalKey(DefaultRoles),

@@ -24,11 +24,15 @@ export const DelegationResultStatus = Schema.Literals([
 	"cancelled",
 ])
 export type DelegationResultStatus = typeof DelegationResultStatus.Type
-/** The status of a Delegation that has not ended yet. */
+/**
+ * The status of a Delegation that has not ended yet. Work is `paused` when it reached
+ * one of its limits, or when work above it did. Then a decider says whether it goes on.
+ */
 export const OpenDelegationStatus = Schema.Literals([
 	"authorizing",
 	"queued",
 	"running",
+	"paused",
 ])
 export type OpenDelegationStatus = typeof OpenDelegationStatus.Type
 export const DelegationStatus = Schema.Literals([
@@ -47,6 +51,47 @@ export const DelegationParent = Schema.Struct({
 	toolCallId: Schema.optionalKey(Schema.String),
 })
 export type DelegationParent = typeof DelegationParent.Type
+
+/** A limit of delegated work. */
+export const DelegationLimit = Schema.Literals(["time", "steps", "budget"])
+export type DelegationLimit = typeof DelegationLimit.Type
+
+/**
+ * How much the work may use before it pauses and asks its decider. The time is
+ * required. When the decider lets the work go on, it gets the same limits again.
+ */
+export const DelegationLimits = Schema.Struct({
+	/** The running time, in milliseconds. Time in a pause does not count. */
+	timeMs: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1000)),
+	/** The model steps of the task Chat. A step is one call to the model. */
+	steps: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+	/** The cost of the model calls of the work and of all the work it gave away, in micro-USD. */
+	budgetMicros: Schema.optionalKey(
+		Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+	),
+})
+export type DelegationLimits = typeof DelegationLimits.Type
+
+/** What the work used since it started. The cost is the cost when OpenBot last checked it. */
+export const DelegationUsage = Schema.Struct({
+	timeMs: Schema.Finite,
+	steps: Schema.Int,
+	costMicros: Schema.Finite,
+})
+export type DelegationUsage = typeof DelegationUsage.Type
+
+/**
+ * Why paused work waits. `request` is the request that decides whether the work goes
+ * on. Work below paused work pauses too: then `delegation` is the work above it whose
+ * limit was reached, and `request` is null, because only that work asks.
+ */
+export const DelegationPause = Schema.Struct({
+	limit: DelegationLimit,
+	request: Schema.NullOr(Schema.String),
+	delegation: Schema.optionalKey(DelegationId),
+	at: Schema.Finite,
+})
+export type DelegationPause = typeof DelegationPause.Type
 
 /**
  * One piece of work that a Bot gave to a Bot, maybe to itself. The work runs in its
@@ -67,6 +112,11 @@ export const Delegation = Schema.Struct({
 	reason: Schema.optionalKey(Schema.String),
 	/** The last answer of the work. It is `null` until the work ends. */
 	result: Schema.NullOr(Schema.String),
+	/** Missing on work from before limits. */
+	limits: Schema.optionalKey(DelegationLimits),
+	usage: Schema.optionalKey(DelegationUsage),
+	/** Set while the work is `paused`. */
+	pause: Schema.optionalKey(DelegationPause),
 	createdAt: Schema.Finite,
 	updatedAt: Schema.Finite,
 })

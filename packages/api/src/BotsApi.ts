@@ -124,6 +124,11 @@ export const CapabilityAction = Schema.Literals([
 	"plans.run",
 	/** A Bot posts to a chat of a Channel. The target is the Channel. */
 	"channels.send",
+	/**
+	 * Delegated work reached one of its limits and wants to go on. The target is the
+	 * Delegation. The arguments name the limit.
+	 */
+	"delegations.continue",
 	/** A Bot gets the right to use a Computer that exists. The target is the Computer. */
 	"computers.acquire",
 	/** A Bot makes a new Computer at a provider. The target is the Computer provider. */
