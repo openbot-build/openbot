@@ -121,7 +121,7 @@
     javascript = {
       enable = true;
       lsp.enable = false;
-      package = multiverse.nodejs_26."26.6.0";
+      package = multiverse.nodejs_26."26.12.0";
     };
   };
 

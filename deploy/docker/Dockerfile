@@ -2,7 +2,7 @@
 # check=error=true
 
 # Build stages make only JavaScript, so they run on the build machine's own platform.
-FROM --platform=$BUILDPLATFORM node:26.6.0-trixie-slim@sha256:80f12a4030a00d8f78ebc4602bc3ef0f984932f498649b8ed3c0a740a6dff4a8 AS workspace
+FROM --platform=$BUILDPLATFORM node:26.12.0-trixie-slim@sha256:e556a144463cc8dc53afe8de6d2fa0db5c132fd39ffa232c17641bd40df2bf11 AS workspace
 RUN npm install --global pnpm@9.15.9
 WORKDIR /workspace
 # This layer changes only when the lockfile changes, so the registry cache keeps the downloaded packages.
@@ -22,11 +22,11 @@ RUN pnpm --filter @openbot-build/protocol-test... build \
     && pnpm --filter @openbot-build/protocol-test deploy --prod /deployment
 
 # The Node.js binary for the target platform, at the same version as development.
-FROM node:26.6.0-trixie-slim@sha256:80f12a4030a00d8f78ebc4602bc3ef0f984932f498649b8ed3c0a740a6dff4a8 AS node
+FROM node:26.12.0-trixie-slim@sha256:e556a144463cc8dc53afe8de6d2fa0db5c132fd39ffa232c17641bd40df2bf11 AS node
 
 # Distroless has no shell and no package manager. Its user is "nonroot" (65532).
 # The cc image has the C and C++ libraries that Node.js needs, except libatomic.
-FROM gcr.io/distroless/cc-debian13:nonroot@sha256:b7e81cb1af38d9345680e68bcf564d388f96304e25222030fc8c051faf8565b3 AS runtime
+FROM gcr.io/distroless/cc-debian13:nonroot@sha256:3ee00291cf386ec52a552e6a858d555debd74776eb4bfa53fa3df2cd6677515e AS runtime
 COPY --link --from=node /usr/lib/*-linux-gnu/libatomic.so.1* /usr/lib/
 COPY --link --from=node /usr/local/bin/node /usr/local/bin/node
 ENV NODE_ENV=production
