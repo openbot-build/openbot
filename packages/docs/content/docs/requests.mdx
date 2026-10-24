@@ -17,18 +17,19 @@ what each answer does.
 
 ## Capabilities
 
-| Action              | Target                     | When a Bot uses it                                                      |
-| ------------------- | -------------------------- | ----------------------------------------------------------------------- |
-| `apps.call`         | `<connection>/<tool name>` | It calls an App tool.                                                   |
-| `tools.call`        | The tool name              | It calls a tool of the host that asks for approval.                     |
-| `bots.delegate`     | The ID of the other Bot    | It gives work to a Bot that is not itself and that it does not own.     |
-| `bots.create`       | `*`                        | It makes a Bot that it owns.                                            |
-| `plans.run`         | The ID of the Chat         | It wants to carry out its plan. See [Plan mode](/docs/chats#plan-mode). |
-| `channels.send`     | The ID of the Channel      | It posts to another chat of a [Channel](/docs/channels).                |
-| `computers.acquire` | The ID of the Computer     | It asks for the right to use a [Computer](/docs/computers).             |
-| `computers.create`  | The ID of the provider     | It makes a new sandbox at a Computer provider.                          |
-| `computers.delete`  | The ID of the Computer     | It deletes a Computer with its files.                                   |
-| `computers.expose`  | The ID of the Computer     | It gives a port of a Computer a public address.                         |
+| Action                 | Target                     | When a Bot uses it                                                      |
+| ---------------------- | -------------------------- | ----------------------------------------------------------------------- |
+| `apps.call`            | `<connection>/<tool name>` | It calls an App tool.                                                   |
+| `tools.call`           | The tool name              | It calls a tool of the host that asks for approval.                     |
+| `bots.delegate`        | The ID of the other Bot    | It gives work to a Bot that is not itself and that it does not own.     |
+| `bots.create`          | `*`                        | It makes a Bot that it owns.                                            |
+| `plans.run`            | The ID of the Chat         | It wants to carry out its plan. See [Plan mode](/docs/chats#plan-mode). |
+| `channels.send`        | The ID of the Channel      | It posts to another chat of a [Channel](/docs/channels).                |
+| `delegations.continue` | The ID of the work         | Its work reached a [limit](/docs/delegation#limits) and wants to go on. |
+| `computers.acquire`    | The ID of the Computer     | It asks for the right to use a [Computer](/docs/computers).             |
+| `computers.create`     | The ID of the provider     | It makes a new sandbox at a Computer provider.                          |
+| `computers.delete`     | The ID of the Computer     | It deletes a Computer with its files.                                   |
+| `computers.expose`     | The ID of the Computer     | It gives a port of a Computer a public address.                         |
 
 Each capability tool takes a `reason`. App tools get an extra `openbot_reason`
 parameter for it. OpenBot never sends it to the App.

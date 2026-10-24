@@ -18,18 +18,19 @@ Requests beantwortet und was jede Antwort bewirkt.
 
 ## Fähigkeiten
 
-| Aktion              | Ziel                       | Wann ein Bot sie nutzt                                                         |
-| ------------------- | -------------------------- | ------------------------------------------------------------------------------ |
-| `apps.call`         | `<connection>/<tool name>` | Er ruft ein Tool einer App auf.                                                |
-| `tools.call`        | Der Name des Tools         | Er ruft ein Tool des Hosts auf, das um Erlaubnis fragt.                        |
-| `bots.delegate`     | Die ID des anderen Bot     | Er gibt Arbeit an einen Bot, der nicht er selbst ist und der ihm nicht gehört. |
-| `bots.create`       | `*`                        | Er erstellt einen Bot, der ihm gehört.                                         |
-| `plans.run`         | Die ID des Chats           | Er will seinen Plan ausführen. Siehe [Plan-Modus](/de/docs/chats#plan-modus).  |
-| `channels.send`     | Die ID des Channel         | Er schreibt in einen anderen Chat eines [Channel](/de/docs/channels).          |
-| `computers.acquire` | Die ID des Computer        | Er fragt nach dem Recht, einen [Computer](/de/docs/computers) zu nutzen.       |
-| `computers.create`  | Die ID des Providers       | Er erstellt eine neue Sandbox bei einem Computer-Provider.                     |
-| `computers.delete`  | Die ID des Computer        | Er löscht einen Computer mit seinen Dateien.                                   |
-| `computers.expose`  | Die ID des Computer        | Er gibt einem Port eines Computer eine öffentliche Adresse.                    |
+| Aktion                 | Ziel                       | Wann ein Bot sie nutzt                                                                     |
+| ---------------------- | -------------------------- | ------------------------------------------------------------------------------------------ |
+| `apps.call`            | `<connection>/<tool name>` | Er ruft ein Tool einer App auf.                                                            |
+| `tools.call`           | Der Name des Tools         | Er ruft ein Tool des Hosts auf, das um Erlaubnis fragt.                                    |
+| `bots.delegate`        | Die ID des anderen Bot     | Er gibt Arbeit an einen Bot, der nicht er selbst ist und der ihm nicht gehört.             |
+| `bots.create`          | `*`                        | Er erstellt einen Bot, der ihm gehört.                                                     |
+| `plans.run`            | Die ID des Chats           | Er will seinen Plan ausführen. Siehe [Plan-Modus](/de/docs/chats#plan-modus).              |
+| `channels.send`        | Die ID des Channel         | Er schreibt in einen anderen Chat eines [Channel](/de/docs/channels).                      |
+| `delegations.continue` | Die ID der Arbeit          | Seine Arbeit hat eine [Grenze](/de/docs/delegation#grenzen) erreicht und will weitergehen. |
+| `computers.acquire`    | Die ID des Computer        | Er fragt nach dem Recht, einen [Computer](/de/docs/computers) zu nutzen.                   |
+| `computers.create`     | Die ID des Providers       | Er erstellt eine neue Sandbox bei einem Computer-Provider.                                 |
+| `computers.delete`     | Die ID des Computer        | Er löscht einen Computer mit seinen Dateien.                                               |
+| `computers.expose`     | Die ID des Computer        | Er gibt einem Port eines Computer eine öffentliche Adresse.                                |
 
 Jedes Tool für eine Fähigkeit nimmt einen `reason` (einen Grund). Tools einer
 App bekommen dafür einen zusätzlichen Parameter `openbot_reason`. OpenBot

@@ -9,8 +9,11 @@ another Bot, or to the same Bot. The work runs in its own **task Chat**, with
 its own context, at the same time as other work. The Bot that gave the work does
 not wait. It goes on, or it ends its answer. When the work ends, the result
 comes back to its Chat as a [notice](/docs/chats#notices). So a Bot always stays
-free to answer people, and much work can run in parallel. This page shows the
-Bot tools, how the work runs and ends, and how to watch it and stop it.
+free to answer people, and much work can run in parallel. Each piece of work has
+**limits**: a time limit, and if you like, a limit of model steps and a budget.
+At a limit the work pauses, and a decider says whether it goes on. This page
+shows the Bot tools, how the work runs and ends, its limits, and how to watch it
+and stop it.
 
 ---
 
@@ -32,12 +35,15 @@ OpenBot gives every Bot these tools:
 
 `openbot_delegate` takes these fields:
 
-| Field        | Meaning                                                                                                                       |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| `task`       | Required. What to do, with everything that the work needs. The other Bot does not see the Chat that gives the work.           |
-| `bot`        | Optional. The ID of the Bot that does the work. Without it, the Bot gives the work to itself.                                 |
-| `reason`     | Why the Bot gives this work. It is required for a Bot that it does not own. A decider reads it.                               |
-| `delegation` | Optional. The ID of earlier work of this Chat. The new task goes on with it. See [Add to earlier work](#add-to-earlier-work). |
+| Field              | Meaning                                                                                                                       |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `task`             | Required. What to do, with everything that the work needs. The other Bot does not see the Chat that gives the work.           |
+| `timeLimitMinutes` | Required. How many minutes the work may run. More than 0, and up to 43,200 (30 days). See [Limits](#limits).                  |
+| `maxSteps`         | Optional. How many model steps the work may use. A step is one call to the model.                                             |
+| `budgetUsd`        | Optional. How much the model calls of the work, and of all the work that it gives away, may cost, in US dollars.              |
+| `bot`              | Optional. The ID of the Bot that does the work. Without it, the Bot gives the work to itself.                                 |
+| `reason`           | Why the Bot gives this work. It is required for a Bot that it does not own. A decider reads it.                               |
+| `delegation`       | Optional. The ID of earlier work of this Chat. The new task goes on with it. See [Add to earlier work](#add-to-earlier-work). |
 
 The tool returns at once:
 
@@ -63,8 +69,9 @@ Who can get the work:
 There is no limit on how deep work goes, or on how much work runs at the same
 time. A Bot can give work to itself, and that work can give more work. Bot A can
 give work to Bot B, and B can give work back to A. Nothing waits, so nothing
-gets stuck. Only [budgets and rate limits](/docs/usage) stop work that costs too
-much.
+gets stuck. The [limits](#limits) of each piece of work, and
+[budgets and rate limits](/docs/usage), stop work that runs too long or costs
+too much.
 
 ### Add to earlier work
 
@@ -72,9 +79,10 @@ To give more work to the same context, send the ID of earlier work as
 `delegation`. The work must come from the same Chat.
 
 - When that work still runs, the new `task` goes into its task Chat as a
-  message. The Bot there reads it at its next step. The ID stays the same.
+  message. The Bot there reads it at its next step. The ID stays the same, and
+  the work keeps its limits.
 - When that work has ended, OpenBot makes a new delegation in the same task
-  Chat. So the Bot there still has all of its history.
+  Chat, with the new limits. So the Bot there still has all of its history.
 
 ---
 
@@ -134,6 +142,57 @@ gets its result too.
 
 ---
 
+## Limits
+
+Each piece of work has limits. When it reaches one, it **pauses**, and the
+decider above the Bot that does the work says whether it goes on.
+
+| Limit    | Required | What counts                                                                                          |
+| -------- | -------- | ---------------------------------------------------------------------------------------------------- |
+| `time`   | Yes      | The running time of the work, from its start. Time in a pause does not count.                        |
+| `steps`  | No       | The model steps of the task Chat. A step is one call to the model.                                   |
+| `budget` | No       | The cost of the model calls of the task Chat, and of all the work that it gave away, layer by layer. |
+
+A Bot gives the limits in `openbot_delegate`. Work from a
+[trigger](/docs/triggers), and work from before limits, have no limits of their
+own. They get the time limit `delegationTimeLimitMs` of the
+[organization](/docs/organization#settings), and no other limits. A model
+without a price costs 0, so it never uses up a budget. See
+[Usage](/docs/usage#prices).
+
+OpenBot checks the steps and the budget before each model step. It checks the
+time at the end of the time, also while no step runs. Then:
+
+1. The work becomes `paused`. A running Turn of its task Chat stops. A model
+   step that runs at the end of the time stops in the middle.
+2. The work that it gave away pauses too, layer by layer. Each piece of it gets
+   a `pause` with `delegation`, the ID of the work at the limit. It does not ask
+   for a decision itself. It waits for the decision about the work above it.
+3. OpenBot checks the capability `delegations.continue` for the Bot of the
+   paused work, like each other [request](/docs/requests). The target is the ID
+   of the work, and `arguments` has the `limit`. Usually this makes a request
+   for the decider above that Bot: its owner Bot, or the person at the top.
+
+While the work is paused, input to its task Chat stays in the history, but no
+model step runs. The parent Chat lists the work as paused in its open work.
+
+The decider answers the request:
+
+- **Allow:** the work goes on. Its limits start again from now, so it gets the
+  same time, steps and budget once more. The `reason` of the decision goes to
+  the task Chat as a message, so the decider can give the Bot more instructions.
+  The work below goes on too.
+- **Deny:** the work stops and becomes `cancelled`, with the work below it. The
+  parent Chat gets a notice with the reason. The same happens when nobody
+  answers in time.
+- **Ask:** the decider asks a question. This is a deny with the question, so the
+  work stops too, and the parent Chat gets the question with the result.
+
+A decision with the scope `chat` or `lifetime` is kept as a Grant. Then the same
+work goes on at the same limit without a new request.
+
+---
+
 ## Watch the work
 
 `GET /v1/chats/:chatId/delegations` lists the work that one Chat gave away.
@@ -150,6 +209,8 @@ work of your own Chats. Other work returns `404` with `DelegationNotFound`.
 	"task": "Add the endpoint for the trip list, with tests.",
 	"reason": "The Programmer writes the code of this project.",
 	"result": null,
+	"limits": { "timeMs": 1800000, "steps": 40 },
+	"usage": { "timeMs": 5000, "steps": 3, "costMicros": 0 },
 	"createdAt": 1792486800000,
 	"updatedAt": 1792486805000
 }
@@ -159,14 +220,29 @@ work of your own Chats. Other work returns `404` with `DelegationNotFound`.
 [trigger](/docs/triggers) has `trigger` and a `parent` with no `turn` and no
 `toolCallId`.
 
-| Status        | Meaning                                                        |
-| ------------- | -------------------------------------------------------------- |
-| `authorizing` | The work waits for a [request](/docs/requests) to be answered. |
-| `queued`      | The work may start. OpenBot starts it now.                     |
-| `running`     | The Bot works on it.                                           |
-| `completed`   | The work is done. `result` holds the last answer.              |
-| `failed`      | The work failed or was not allowed. `result` says why.         |
-| `cancelled`   | The work was stopped.                                          |
+`limits` holds the limits: `timeMs`, and `steps` and `budgetMicros` when the
+work has them. A budget is in micro-USD: one US dollar is 1,000,000 micro-USD.
+`usage` is what the work used since it started. Its `costMicros` is the cost
+when OpenBot last checked it. Work from before limits has neither field.
+
+Paused work has `pause`:
+
+| Field        | Meaning                                                                       |
+| ------------ | ----------------------------------------------------------------------------- |
+| `limit`      | `time`, `steps` or `budget`.                                                  |
+| `request`    | The request that decides whether the work goes on. `null` for the work below. |
+| `delegation` | Only for the work below: the ID of the work above it whose limit was reached. |
+| `at`         | When the work paused.                                                         |
+
+| Status        | Meaning                                                                   |
+| ------------- | ------------------------------------------------------------------------- |
+| `authorizing` | The work waits for a [request](/docs/requests) to be answered.            |
+| `queued`      | The work may start. OpenBot starts it now.                                |
+| `running`     | The Bot works on it.                                                      |
+| `paused`      | The work reached a limit and waits for a decision. See [Limits](#limits). |
+| `completed`   | The work is done. `result` holds the last answer.                         |
+| `failed`      | The work failed or was not allowed. `result` says why.                    |
+| `cancelled`   | The work was stopped.                                                     |
 
 ---
 

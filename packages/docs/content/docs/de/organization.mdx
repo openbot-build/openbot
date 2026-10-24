@@ -138,6 +138,7 @@ liest sie. Es braucht `read` auf `Organization`.
 	"decisionModel": null,
 	"botMemory": true,
 	"requestTimeoutMs": 86400000,
+	"delegationTimeLimitMs": 3600000,
 	"planApproval": {
 		"approver": "chain",
 		"timeoutMs": 86400000,
@@ -156,18 +157,19 @@ liest sie. Es braucht `read` auf `Organization`.
 }
 ```
 
-| Feld               | Standard                                                         | Was es tut                                                                                                                                     |
-| ------------------ | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rulesModel`       | `null`                                                           | Das Model, das [Rules](/de/docs/rules) beurteilt. `null` heißt: Kein Model beurteilt sie. Siehe [Models](/de/docs/models#ein-model-auswählen). |
-| `botMemoryModel`   | `null`                                                           | Das Model, das [Bot-Memory](/de/docs/memory) lernt. `null` heißt: Bots lernen nichts.                                                          |
-| `decisionModel`    | `null`                                                           | Das Decision-Model, zum Beispiel Jev. Es muss ein `decision`-Model sein. `null` heißt: keins. Siehe [Models](/de/docs/models#decision-model).  |
-| `botMemory`        | `true`                                                           | Der Memory-Bot lernt aus Chats und ergänzt die Eingabe von Turns.                                                                              |
-| `requestTimeoutMs` | 24 Stunden                                                       | Wie lange ein [Request](/de/docs/requests) auf eine Antwort wartet, bevor OpenBot ihn ablehnt. Von 1 Sekunde bis 7 Tage.                       |
-| `planApproval`     | den Entscheider darüber fragen, nach 24 Stunden ein Plan bleiben | Wie ein Plan erlaubt wird, wenn kein Member, Bot und kein Chat es festlegt. Siehe [Plan-Modus](/de/docs/chats#plan-modus).                     |
-| `appReadRules`     | `[]`                                                             | App-Werkzeuge, die nur lesen: `{ cardUrl, tool }`. Siehe [Requests](/de/docs/requests).                                                        |
-| `defaultRoles`     | `["member"]`                                                     | Die Roles eines neuen Members.                                                                                                                 |
-| `joinByDomain`     | `true`                                                           | Menschen mit einer geprüften E-Mail in einer bestätigten Domain der Organisation treten bei, wenn sie sich anmelden.                           |
-| `tokenRate`        | keine Grenze                                                     | Token Rates jedes Bereichs. Wo die Platform eine kleinere Rate setzt, gilt die kleinere Rate. Siehe [Token Rate](/de/docs/usage#token-rate).   |
+| Feld                    | Standard                                                         | Was es tut                                                                                                                                     |
+| ----------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rulesModel`            | `null`                                                           | Das Model, das [Rules](/de/docs/rules) beurteilt. `null` heißt: Kein Model beurteilt sie. Siehe [Models](/de/docs/models#ein-model-auswählen). |
+| `botMemoryModel`        | `null`                                                           | Das Model, das [Bot-Memory](/de/docs/memory) lernt. `null` heißt: Bots lernen nichts.                                                          |
+| `decisionModel`         | `null`                                                           | Das Decision-Model, zum Beispiel Jev. Es muss ein `decision`-Model sein. `null` heißt: keins. Siehe [Models](/de/docs/models#decision-model).  |
+| `botMemory`             | `true`                                                           | Der Memory-Bot lernt aus Chats und ergänzt die Eingabe von Turns.                                                                              |
+| `requestTimeoutMs`      | 24 Stunden                                                       | Wie lange ein [Request](/de/docs/requests) auf eine Antwort wartet, bevor OpenBot ihn ablehnt. Von 1 Sekunde bis 7 Tage.                       |
+| `delegationTimeLimitMs` | 1 Stunde                                                         | Die Zeitgrenze von [Arbeit](/de/docs/delegation#grenzen), die keine eigene hat, wie die Arbeit eines Triggers. Von 1 Minute bis 30 Tage.       |
+| `planApproval`          | den Entscheider darüber fragen, nach 24 Stunden ein Plan bleiben | Wie ein Plan erlaubt wird, wenn kein Member, Bot und kein Chat es festlegt. Siehe [Plan-Modus](/de/docs/chats#plan-modus).                     |
+| `appReadRules`          | `[]`                                                             | App-Werkzeuge, die nur lesen: `{ cardUrl, tool }`. Siehe [Requests](/de/docs/requests).                                                        |
+| `defaultRoles`          | `["member"]`                                                     | Die Roles eines neuen Members.                                                                                                                 |
+| `joinByDomain`          | `true`                                                           | Menschen mit einer geprüften E-Mail in einer bestätigten Domain der Organisation treten bei, wenn sie sich anmelden.                           |
+| `tokenRate`             | keine Grenze                                                     | Token Rates jedes Bereichs. Wo die Platform eine kleinere Rate setzt, gilt die kleinere Rate. Siehe [Token Rate](/de/docs/usage#token-rate).   |
 
 `PATCH /v1/organization/settings` ändert sie. Es braucht `write` auf
 `Organization`. Der Body braucht `expectedVersion`, also die `version`, die du
