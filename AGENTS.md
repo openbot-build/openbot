@@ -14,7 +14,8 @@
 
 ## Language
 
-- Write all text in [Basic English](https://en.wikipedia.org/wiki/Basic_English). This covers docs, comments, error messages, logs, prompts, test names, test data, and commit messages.
+- Write all text that goes into the repository in [Basic English](https://en.wikipedia.org/wiki/Basic_English). This covers docs, comments, error messages, logs, prompts, test names, test data, and commit messages.
+- These language rules are only for the repository. They do not cover your talk with the user. Answer the user in their language and in a normal style.
 - Use the 850 words of Basic English where you can, plus the technical words you need. Use short sentences, one idea in each sentence, and active voice. Explain a technical word the first time you use it.
 - English is the source language. Use another language only for translations on the docs site:
   - The docs are in English, Simplified Chinese (`zh-cn`), and German (`de`). Translations live in `packages/docs/content/docs/<locale>/`.
