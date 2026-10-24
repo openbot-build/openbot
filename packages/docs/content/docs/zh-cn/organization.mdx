@@ -120,7 +120,6 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		"model": "gpt-4.1-mini"
 	},
 	"botMemoryModel": null,
-	"decisionModel": null,
 	"botMemory": true,
 	"requestTimeoutMs": 86400000,
 	"delegationTimeLimitMs": 3600000,
@@ -146,7 +145,6 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | ----------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `rulesModel`            | `null`                            | 用来判断 [Rules](/zh-cn/docs/rules) 的模型。`null` 表示没有模型判断它们。见 [Models](/zh-cn/docs/models#选择模型)。 |
 | `botMemoryModel`        | `null`                            | 用来学习 [Bot memory](/zh-cn/docs/memory) 的模型。`null` 表示 Bot 什么都不学。                                      |
-| `decisionModel`         | `null`                            | 决策模型，例如 Jev。它必须是 `decision` 模型。`null` 表示没有。见 [Models](/zh-cn/docs/models#决策模型)。           |
 | `botMemory`             | `true`                            | 让记忆 Bot 从 Chat 中学习，并补充 Turn 的输入。                                                                     |
 | `requestTimeoutMs`      | 24 小时                           | 一个 [request](/zh-cn/docs/requests) 等待回答的时间，超时后 OpenBot 会拒绝它。范围是 1 秒到 7 天。                  |
 | `delegationTimeLimitMs` | 1 小时                            | 没有自己时间限制的[工作](/zh-cn/docs/delegation#限制)使用的时间限制，例如触发器的工作。范围是 1 分钟到 30 天。      |

@@ -88,7 +88,6 @@ export const delegationTimeLimitOf = (document: {
 export const OrganizationDocument = Schema.Struct({
 	rulesModel: Api.OrganizationSettings.fields.rulesModel,
 	botMemoryModel: Api.OrganizationSettings.fields.botMemoryModel,
-	decisionModel: Api.OrganizationSettings.fields.decisionModel,
 	botMemory: Schema.Boolean,
 	requestTimeoutMs: Api.RequestTimeout,
 	/** Missing in documents from before delegation limits. Then it is one hour. */
@@ -106,7 +105,6 @@ export type OrganizationDocument = typeof OrganizationDocument.Type
 export const organizationDefaults: OrganizationDocument = {
 	rulesModel: null,
 	botMemoryModel: null,
-	decisionModel: null,
 	botMemory: true,
 	requestTimeoutMs: 24 * 60 * 60 * 1000,
 	planApproval: PlanApproval.defaults,

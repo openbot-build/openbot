@@ -84,11 +84,15 @@ export class ModelRegistry extends Context.Service<
 			LanguageModel.LanguageModel,
 			Config.ModelConfigurationError
 		>
-		/** The decision model of the organization. None when its settings name none. */
+		/**
+		 * The decision model that a selection names. It fails when no provider of
+		 * the organization offers it, or when it is not a `decision` model.
+		 */
 		readonly decision: (
 			organizationId: string,
+			selection: Config.Selection,
 		) => Effect.Effect<
-			Option.Option<DecisionModel.DecisionModel>,
+			DecisionModel.DecisionModel,
 			Config.ModelConfigurationError
 		>
 	}
@@ -399,32 +403,31 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				)
 			})
 
-		const decision = (organizationId: string) =>
+		const decision = (organizationId: string, selection: Config.Selection) =>
 			Effect.gen(function* () {
-				const selection = (yield* organizationSettings(organizationId)).document
-					.decisionModel
-				if (selection === null) return Option.none()
 				const offer = (yield* stored(organizationId)).offers.find(
 					(offer) =>
 						offer.provider.id === selection.provider &&
 						offer.model.id === selection.model,
 				)
-				if (offer === undefined || offer.model.type !== "decision")
+				if (offer === undefined)
 					return yield* new Config.ModelConfigurationError({
 						reason: "model-not-found",
-						message:
-							"No provider of the organization offers its decision model now.",
+						message: "No provider of the organization offers this model.",
+					})
+				if (offer.model.type !== "decision")
+					return yield* new Config.ModelConfigurationError({
+						reason: "model-not-found",
+						message: "This is a language model, not a decision model.",
 					})
 				const key = JSON.stringify([offer.provider.id, offer.model.upstream])
-				return Option.some(
-					yield* cached(
-						builtDecisions,
-						key,
-						offer.provider,
-						DecisionModel.DecisionModel,
-						(apiKey) =>
-							decisionLayer(offer.provider, apiKey, offer.model.upstream),
-					),
+				return yield* cached(
+					builtDecisions,
+					key,
+					offer.provider,
+					DecisionModel.DecisionModel,
+					(apiKey) =>
+						decisionLayer(offer.provider, apiKey, offer.model.upstream),
 				)
 			})
 
@@ -574,8 +577,6 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 								),
 							})),
 						],
-						decisionModel: (yield* organizationSettings(organizationId))
-							.document.decisionModel,
 					}
 				}),
 			resolve,

@@ -148,8 +148,8 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 修改之后的下一次模型调用会使用新的密钥、端点或关联。OpenBot 对每个模型只构建一次，在它的提供方变化时再重新构建。
 
-当[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel`、`botMemoryModel`
-或 `decisionModel` 指向某个提供方时，你不能移除它。OpenBot 会返回 `409` 和
+当[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel` 或 `botMemoryModel`
+指向某个提供方时，你不能移除它。OpenBot 会返回 `409` 和
 `ModelProviderInUse`。请先修改设置。
 
 ---
@@ -201,8 +201,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 				"effectiveFrom": "2026-10-20T08:00:00.000Z"
 			}
 		}
-	],
-	"decisionModel": null
+	]
 }
 ```
 
@@ -261,12 +260,9 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: applic
 
 ## 决策模型
 
-[组织设置](/zh-cn/docs/organization#设置)中的 `decisionModel`
-指明你的组织的决策模型。它必须是你的某个提供方提供的 `decision`
-模型。否则 OpenBot 返回 `400` 和 `SettingsInvalid`。`null`
-表示你的组织没有决策模型。
+你的组织没有一个专门设置决策模型的地方。每一种用到模型的地方都指明自己的模型。有些地方既可以用决策模型，也可以用语言模型，所以给整个组织固定一个决策模型并不合适。
 
-例如，要通过 TypeSafe 使用 Jev，先添加模型，再添加关联它的提供方，最后修改设置：
+例如，要通过 TypeSafe 使用 Jev，先添加模型，再添加关联它的提供方：
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" -H "Content-Type: application/json" \
@@ -282,13 +278,10 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" -H "Content-Type: application/jso
     "models": [{ "model": "jev-latest", "modelOwner": "organization" }]
   }' \
   https://api.example.com/v1/organization/model_providers
-
-curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H "Content-Type: application/json" \
-  -d '{"expectedVersion":3,"decisionModel":{"_tag":"Config.Selection","provider":"prov_9a2b...","model":"jev-latest"}}' \
-  https://api.example.com/v1/organization/settings
 ```
 
-`GET /v1/organization/model_catalog` 把这个设置显示为 `decisionModel`。
+之后，`GET /v1/organization/model_catalog` 会列出 Jev，并带有
+`"type": "decision"`。
 
 OpenBot 用 Effect 的 TypeSafe 客户端（`@effect/ai-typesafe`）调用 `typesafe`
 提供方。它把每个请求发到 `<endpoint>/systemone`，把 API 密钥作为 bearer
@@ -297,7 +290,8 @@ token，并把 `upstream`
 `openai-compat` 提供方询问决策模型。你可以在那里关联它，但要询问它，请使用
 `typesafe` 提供方。
 
-OpenBot 目前还没有任何部分会询问决策模型。
+OpenBot 目前还没有任何部分会询问决策模型。`rulesModel` 和 `botMemoryModel`
+只接受语言模型。
 
 ## 没有模型时运行
 

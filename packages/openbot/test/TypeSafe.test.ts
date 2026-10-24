@@ -2,7 +2,7 @@
 // @effect-diagnostics strictEffectProvide:off
 
 import { assert, it } from "@effect/vitest"
-import { Effect, Layer, Option, Redacted, Schema, Stream } from "effect"
+import { Effect, Layer, Redacted, Schema, Stream } from "effect"
 import { Decision, DecisionModel } from "effect/ai"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { Config } from "@openbot-build/core"
@@ -144,7 +144,6 @@ const jev: StoredModel = {
 /** A registry over fixed providers and settings, without a database. */
 const registryWith = (input: {
 	readonly providers: ReadonlyArray<Stored>
-	readonly decisionModel: Config.Selection | null
 	readonly http: Layer.Layer<HttpClient.HttpClient>
 }) =>
 	Layer.effect(ModelRegistry.ModelRegistry, ModelRegistry.make()).pipe(
@@ -170,10 +169,7 @@ const registryWith = (input: {
 				platform: Effect.die("unused"),
 				organization: () =>
 					Effect.succeed({
-						document: {
-							...organizationDefaults,
-							decisionModel: input.decisionModel,
-						},
+						document: organizationDefaults,
 						version: 1,
 						updatedAt: 1,
 					}),
@@ -196,57 +192,46 @@ const selection = (providerId: string) =>
 		model: "jev" as Config.Selection["model"],
 	})
 
-it.effect(
-	"the registry builds the decision model that the organization settings name",
-	() =>
-		Effect.gen(function* () {
-			const http = fakeTypeSafe()
-			const label = yield* Effect.gen(function* () {
-				const registry = yield* ModelRegistry.ModelRegistry
-				const model = yield* registry.decision(organizationId)
-				assert.ok(Option.isSome(model))
-				const again = yield* registry.decision(organizationId)
-				// The registry builds each decision model once.
-				assert.strictEqual(Option.getOrThrow(again), model.value)
-				const answer = yield* DecisionModel.decide(Triage, {
-					input: "I paid two times.",
-				}).pipe(Effect.provideService(DecisionModel.DecisionModel, model.value))
-				return answer.answers.route.label
-			}).pipe(
-				Effect.provide(
-					registryWith({
-						providers: [provider({ id: "prov_ts", kind: "typesafe" })],
-						decisionModel: selection("prov_ts"),
-						http: http.layer,
-					}),
-				),
+it.effect("the registry builds the decision model that a selection names", () =>
+	Effect.gen(function* () {
+		const http = fakeTypeSafe()
+		const label = yield* Effect.gen(function* () {
+			const registry = yield* ModelRegistry.ModelRegistry
+			const model = yield* registry.decision(
+				organizationId,
+				selection("prov_ts"),
 			)
-			assert.strictEqual(label, "billing")
-			assert.strictEqual(
-				http.sent[0]?.url,
-				"https://decisions.example.com/v1/systemone",
+			const again = yield* registry.decision(
+				organizationId,
+				selection("prov_ts"),
 			)
-			assert.strictEqual(http.sent[0]?.body.model, "jev-latest")
-		}),
+			// The registry builds each decision model once.
+			assert.strictEqual(again, model)
+			const answer = yield* DecisionModel.decide(Triage, {
+				input: "I paid two times.",
+			}).pipe(Effect.provideService(DecisionModel.DecisionModel, model))
+			return answer.answers.route.label
+		}).pipe(
+			Effect.provide(
+				registryWith({
+					providers: [provider({ id: "prov_ts", kind: "typesafe" })],
+					http: http.layer,
+				}),
+			),
+		)
+		assert.strictEqual(label, "billing")
+		assert.strictEqual(
+			http.sent[0]?.url,
+			"https://decisions.example.com/v1/systemone",
+		)
+		assert.strictEqual(http.sent[0]?.body.model, "jev-latest")
+	}),
 )
 
 it.effect(
-	"the registry gives no decision model when the settings name none, and an error when the model is gone",
+	"the registry gives an error when no provider offers the decision model, or cannot ask it",
 	() =>
 		Effect.gen(function* () {
-			const none = yield* Effect.flatMap(
-				ModelRegistry.ModelRegistry,
-				(registry) => registry.decision(organizationId),
-			).pipe(
-				Effect.provide(
-					registryWith({
-						providers: [provider({ id: "prov_ts", kind: "typesafe" })],
-						decisionModel: null,
-						http: fakeTypeSafe().layer,
-					}),
-				),
-			)
-			assert.ok(Option.isNone(none))
 			for (const [providers, message] of [
 				[[], /No provider of the organization offers/],
 				[
@@ -256,13 +241,12 @@ it.effect(
 			] as const) {
 				const failed = yield* Effect.flatMap(
 					ModelRegistry.ModelRegistry,
-					(registry) => registry.decision(organizationId),
+					(registry) => registry.decision(organizationId, selection("prov_ts")),
 				).pipe(
 					Effect.flip,
 					Effect.provide(
 						registryWith({
 							providers,
-							decisionModel: selection("prov_ts"),
 							http: fakeTypeSafe().layer,
 						}),
 					),

@@ -206,7 +206,7 @@ it("models in old providers move to their own table, and their IDs stay the same
 	}
 })
 
-it("old models become language models, and old organization settings get no decision model", async () => {
+it("old models become language models, and old organization settings keep no decision model", async () => {
 	const database = await PostgresTest.start()
 	const before = await mkdtemp(join(tmpdir(), "openbot-migrations-"))
 	await using runtime = ManagedRuntime.make(
@@ -280,7 +280,6 @@ it("old models become language models, and old organization settings get no deci
 						[
 							"org_a",
 							{
-								decisionModel: null,
 								rulesModel: null,
 								botMemoryModel: null,
 								planApproval,
@@ -289,7 +288,6 @@ it("old models become language models, and old organization settings get no deci
 						[
 							"org_b",
 							{
-								decisionModel: selection,
 								rulesModel: null,
 								botMemoryModel: null,
 								planApproval,
@@ -403,7 +401,6 @@ it("the old default model moves to Bots without a model, and the old helper mode
 						[
 							"org_a",
 							{
-								decisionModel: null,
 								rulesModel: selection("big"),
 								botMemoryModel: selection("big"),
 								planApproval,
@@ -412,7 +409,6 @@ it("the old default model moves to Bots without a model, and the old helper mode
 						[
 							"org_b",
 							{
-								decisionModel: null,
 								rulesModel: selection("small"),
 								botMemoryModel: selection("small"),
 								planApproval,
@@ -421,7 +417,6 @@ it("the old default model moves to Bots without a model, and the old helper mode
 						[
 							"org_c",
 							{
-								decisionModel: null,
 								rulesModel: null,
 								botMemoryModel: null,
 								planApproval,

@@ -165,8 +165,8 @@ Der nächste Aufruf eines Modells nach einer Änderung nutzt den neuen Schlüsse
 Endpoint oder die neuen Verknüpfungen. OpenBot baut jedes Model einmal und baut
 es neu, wenn sich sein Anbieter ändert.
 
-Du kannst einen Anbieter nicht entfernen, solange `rulesModel`, `botMemoryModel`
-oder `decisionModel` in den
+Du kannst einen Anbieter nicht entfernen, solange `rulesModel` oder
+`botMemoryModel` in den
 [Einstellungen der Organization](/de/docs/organization#einstellungen) ihn nennt.
 OpenBot gibt `409` mit `ModelProviderInUse` zurück. Ändere zuerst die
 Einstellung.
@@ -222,8 +222,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 				"effectiveFrom": "2026-10-20T08:00:00.000Z"
 			}
 		}
-	],
-	"decisionModel": null
+	]
 }
 ```
 
@@ -288,15 +287,13 @@ Deny-Regel für `use` auf `Model` mit dem Feld `provider`. Siehe
 
 ## Decision-Model
 
-`decisionModel` in den
-[Einstellungen der Organization](/de/docs/organization#einstellungen) nennt das
-Decision-Model (Entscheidungs-Model) deiner Organization. Es muss ein
-`decision`-Model sein, das einer deiner Anbieter anbietet. Sonst gibt OpenBot
-`400` mit `SettingsInvalid` zurück. `null` heißt: Deine Organization hat kein
-Decision-Model.
+Deine Organization hat keine Einstellung für ein einziges Decision-Model
+(Entscheidungs-Model). Jede Nutzung eines Model nennt ihr eigenes Model. Manche
+Nutzungen können ein Decision-Model oder ein Language-Model nehmen. Darum passt
+ein festes Decision-Model für die ganze Organization nicht zu ihnen.
 
-Um zum Beispiel Jev über TypeSafe zu nutzen, füge das Model hinzu, dann einen
-Anbieter, der es verknüpft, und dann die Einstellung:
+Um zum Beispiel Jev über TypeSafe zu nutzen, füge das Model hinzu und dann einen
+Anbieter, der es verknüpft:
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" -H "Content-Type: application/json" \
@@ -312,13 +309,9 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" -H "Content-Type: application/jso
     "models": [{ "model": "jev-latest", "modelOwner": "organization" }]
   }' \
   https://api.example.com/v1/organization/model_providers
-
-curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H "Content-Type: application/json" \
-  -d '{"expectedVersion":3,"decisionModel":{"_tag":"Config.Selection","provider":"prov_9a2b...","model":"jev-latest"}}' \
-  https://api.example.com/v1/organization/settings
 ```
 
-`GET /v1/organization/model_catalog` zeigt die Einstellung als `decisionModel`.
+Danach zeigt `GET /v1/organization/model_catalog` Jev mit `"type": "decision"`.
 
 OpenBot ruft einen `typesafe`-Anbieter mit dem TypeSafe-Client von Effect
 (`@effect/ai-typesafe`) auf. Es schickt jede Anfrage an `<endpoint>/systemone`,
@@ -328,7 +321,8 @@ baut ihn neu, wenn sich der Anbieter ändert. OpenBot kann ein Decision-Model
 noch nicht über einen `openai-compat`-Anbieter fragen. Du kannst es dort
 verknüpfen, aber nutze einen `typesafe`-Anbieter, um es zu fragen.
 
-Noch kein Teil von OpenBot fragt das Decision-Model.
+Noch kein Teil von OpenBot fragt ein Decision-Model. `rulesModel` und
+`botMemoryModel` nehmen nur Language-Models.
 
 ## Ohne Model arbeiten
 

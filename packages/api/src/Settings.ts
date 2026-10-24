@@ -352,8 +352,6 @@ export const OrganizationSettings = Schema.Struct({
 	rulesModel: Schema.NullOr(Config.Selection),
 	/** The model of the memory Bot of each Bot. Null means that Bots learn no memory. */
 	botMemoryModel: Schema.NullOr(Config.Selection),
-	/** The decision model, such as Jev. It must be a model of type `decision`. Null means none. */
-	decisionModel: Schema.NullOr(Config.Selection),
 	/** Let the memory Bot learn from Chats and add to the input of Turns. */
 	botMemory: Schema.Boolean,
 	requestTimeoutMs: RequestTimeout,
@@ -378,7 +376,6 @@ export const UpdateOrganizationSettingsRequest = Schema.Struct({
 	expectedVersion: Version,
 	rulesModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
 	botMemoryModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
-	decisionModel: Schema.optionalKey(Schema.NullOr(Config.Selection)),
 	botMemory: Schema.optionalKey(Schema.Boolean),
 	requestTimeoutMs: Schema.optionalKey(RequestTimeout),
 	delegationTimeLimitMs: Schema.optionalKey(DelegationTimeLimit),

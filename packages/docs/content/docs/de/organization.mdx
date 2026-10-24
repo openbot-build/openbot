@@ -135,7 +135,6 @@ liest sie. Es braucht `read` auf `Organization`.
 		"model": "gpt-4.1-mini"
 	},
 	"botMemoryModel": null,
-	"decisionModel": null,
 	"botMemory": true,
 	"requestTimeoutMs": 86400000,
 	"delegationTimeLimitMs": 3600000,
@@ -161,7 +160,6 @@ liest sie. Es braucht `read` auf `Organization`.
 | ----------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `rulesModel`            | `null`                                                           | Das Model, das [Rules](/de/docs/rules) beurteilt. `null` heißt: Kein Model beurteilt sie. Siehe [Models](/de/docs/models#ein-model-auswählen). |
 | `botMemoryModel`        | `null`                                                           | Das Model, das [Bot-Memory](/de/docs/memory) lernt. `null` heißt: Bots lernen nichts.                                                          |
-| `decisionModel`         | `null`                                                           | Das Decision-Model, zum Beispiel Jev. Es muss ein `decision`-Model sein. `null` heißt: keins. Siehe [Models](/de/docs/models#decision-model).  |
 | `botMemory`             | `true`                                                           | Der Memory-Bot lernt aus Chats und ergänzt die Eingabe von Turns.                                                                              |
 | `requestTimeoutMs`      | 24 Stunden                                                       | Wie lange ein [Request](/de/docs/requests) auf eine Antwort wartet, bevor OpenBot ihn ablehnt. Von 1 Sekunde bis 7 Tage.                       |
 | `delegationTimeLimitMs` | 1 Stunde                                                         | Die Zeitgrenze von [Arbeit](/de/docs/delegation#grenzen), die keine eigene hat, wie die Arbeit eines Triggers. Von 1 Minute bis 30 Tage.       |

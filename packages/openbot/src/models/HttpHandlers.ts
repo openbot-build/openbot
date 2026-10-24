@@ -43,8 +43,7 @@ export const checkUnused = (input: {
 				.pipe(Effect.mapError(unavailable))
 			if (
 				current.document.rulesModel?.provider === input.providerId ||
-				current.document.botMemoryModel?.provider === input.providerId ||
-				current.document.decisionModel?.provider === input.providerId
+				current.document.botMemoryModel?.provider === input.providerId
 			)
 				return yield* ModelProvidersApi.ModelProviderInUse.make({
 					providerId: input.providerId,

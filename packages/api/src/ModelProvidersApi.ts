@@ -1,4 +1,3 @@
-import { Config } from "@openbot-build/core"
 import { Schema } from "effect"
 import {
 	HttpApiEndpoint,
@@ -231,8 +230,6 @@ export const ModelCatalog = Schema.Struct({
 			price: Schema.optionalKey(ModelPrice),
 		}),
 	),
-	/** The decision model of the organization, or null when it has none. */
-	decisionModel: Schema.NullOr(Config.Selection),
 })
 export type ModelCatalog = typeof ModelCatalog.Type
 

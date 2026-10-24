@@ -403,7 +403,7 @@ it(
 )
 
 it(
-	"An organization sets a decision model with a decision provider and a decision model",
+	"An organization links decision models to a decision provider",
 	{ timeout: 60000 },
 	async () => {
 		const host = await BrowserHost.start({
@@ -499,9 +499,8 @@ it(
 					[both.id, "jev-latest", "decision"],
 				],
 			)
-			assert.strictEqual(catalog.decisionModel, null)
 
-			// Each setting takes only the right type of model.
+			// The Rules and Bot memory settings take only language models.
 			const selection = (providerId: string, model: string) => ({
 				_tag: "Config.Selection",
 				provider: providerId,
@@ -517,8 +516,6 @@ it(
 				})
 			}
 			for (const changes of [
-				{ decisionModel: selection(both.id, "chat") },
-				{ decisionModel: selection(decisions.id, "missing") },
 				{ rulesModel: selection(both.id, "jev-latest") },
 				{ botMemoryModel: selection(decisions.id, "jev-latest") },
 			]) {
@@ -526,32 +523,6 @@ it(
 				assert.strictEqual(refused.status, 400, JSON.stringify(changes))
 				assert.strictEqual((await refused.json())._tag, "SettingsInvalid")
 			}
-			const saved = await update({
-				decisionModel: selection(decisions.id, "jev-latest"),
-			})
-			assert.strictEqual(saved.status, 200, await saved.clone().text())
-			assert.deepStrictEqual(
-				(await saved.json()).decisionModel,
-				selection(decisions.id, "jev-latest"),
-			)
-			assert.deepStrictEqual(
-				(
-					await (
-						await account(alice.session, "/v1/organization/model_catalog")
-					).json()
-				).decisionModel,
-				selection(decisions.id, "jev-latest"),
-			)
-
-			// The provider cannot go while the decision model names it.
-			const inUse = await account(
-				alice.session,
-				"/v1/organization/model_providers/" + decisions.id,
-				"DELETE",
-			)
-			assert.strictEqual((await inUse.json())._tag, "ModelProviderInUse")
-			const cleared = await update({ decisionModel: null })
-			assert.strictEqual((await cleared.json()).decisionModel, null)
 		} finally {
 			await host.close()
 		}

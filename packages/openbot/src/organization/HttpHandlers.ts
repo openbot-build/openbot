@@ -60,10 +60,7 @@ const organizationGroup = HttpApiBuilder.group(
 						details,
 					})
 					.pipe(Effect.mapError(unavailable))
-			/**
-			 * A decision model must be a `decision` model that a provider offers.
-			 * The Rules and Bot memory models must not be `decision` models.
-			 */
+			/** The Rules and Bot memory models must not be `decision` models. */
 			const checkModels = (
 				caller: Caller,
 				changes: Omit<
@@ -72,9 +69,8 @@ const organizationGroup = HttpApiBuilder.group(
 				>,
 			) =>
 				Effect.gen(function* () {
-					const { rulesModel, botMemoryModel, decisionModel } = changes
-					if ((rulesModel ?? botMemoryModel ?? decisionModel ?? null) === null)
-						return
+					const { rulesModel, botMemoryModel } = changes
+					if ((rulesModel ?? botMemoryModel ?? null) === null) return
 					const catalog = yield* registry
 						.view(caller.organizationId)
 						.pipe(
@@ -98,15 +94,6 @@ const organizationGroup = HttpApiBuilder.group(
 							return yield* SettingsApi.SettingsInvalid.make({
 								message: `${name} cannot be a decision model.`,
 							})
-					if (
-						decisionModel !== undefined &&
-						decisionModel !== null &&
-						typeOf(decisionModel) !== "decision"
-					)
-						return yield* SettingsApi.SettingsInvalid.make({
-							message:
-								"decisionModel must be a decision model that a provider of the organization offers.",
-						})
 				})
 			/** Fails unless the caller is a Super Administrator. */
 			const requireSuperAdministrator = (
