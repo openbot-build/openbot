@@ -3,11 +3,18 @@ title: Protokolltest
 description: Ein öffentlicher Testdienst für Hosts und Clients des App Protocol.
 ---
 
-Der **Protokolltest-Dienst** ist ein öffentlicher Testpartner für das [OpenBot App Protocol](/de/docs/protocol). Er veröffentlicht erfundene Apps, die jede Art des Verbindens und Anmeldens abdecken. Nutze ihn, um einen Host, einen Client oder OpenBot selbst zu testen.
+Der **Protokolltest-Dienst** ist ein öffentlicher Testpartner für das
+[OpenBot App Protocol](/de/docs/protocol). Er veröffentlicht erfundene Apps, die
+jede Art des Verbindens und Anmeldens abdecken. Nutze ihn, um einen Host, einen
+Client oder OpenBot selbst zu testen.
 
-Der Dienst liegt im Ordner `protocol-test` des Repositorys. Sein Paketname ist `@openbot-build/protocol-test`. Er nutzt MCP `2026-07-28`, Streamable HTTP über HTTPS und MCP Apps `2026-01-26`. Die Beispiele nutzen `https://protocol-test.example.com` als seinen Origin.
+Der Dienst liegt im Ordner `protocol-test` des Repositorys. Sein Paketname ist
+`@openbot-build/protocol-test`. Er nutzt MCP `2026-07-28`, Streamable HTTP über
+HTTPS und MCP Apps `2026-01-26`. Die Beispiele nutzen
+`https://protocol-test.example.com` als seinen Origin.
 
-Ein laufender Dienst liefert unter `/guide` auch eine vollständige Anleitung als reinen Text aus.
+Ein laufender Dienst liefert unter `/guide` auch eine vollständige Anleitung als
+reinen Text aus.
 
 <Callout type="warn">
 	Alle Konten und Geheimnisse auf dieser Seite sind öffentlich und erfunden.
@@ -29,9 +36,14 @@ Ein laufender Dienst liefert unter `/guide` auch eine vollständige Anleitung al
 | `oauth-preregistered`      | `/mcp/oauth-preregistered`      | Ein registrierter öffentlicher oder vertraulicher Client mit PKCE       |
 | `oauth-client-credentials` | `/mcp/oauth-client-credentials` | Ein vertraulicher Maschinen-Client                                      |
 
-Jede App hat eine Seite unter `/apps/<id>`, einen Catalog unter `/apps/<id>/catalog.json` und eine Card unter `/apps/<id>/server-card.json`. Der Haupt-Catalog unter `/.well-known/ai-catalog.json` führt sie alle auf. `/scenarios.json` führt jedes Szenario und jede Fixture als JSON auf. `/healthz` und `/readyz` melden den Status.
+Jede App hat eine Seite unter `/apps/<id>`, einen Catalog unter
+`/apps/<id>/catalog.json` und eine Card unter `/apps/<id>/server-card.json`. Der
+Haupt-Catalog unter `/.well-known/ai-catalog.json` führt sie alle auf.
+`/scenarios.json` führt jedes Szenario und jede Fixture als JSON auf. `/healthz`
+und `/readyz` melden den Status.
 
-Um es in OpenBot auszuprobieren, verbinde `protocol-test.example.com` so, wie es unter [Apps](/de/docs/apps#eine-app-verbinden) beschrieben ist.
+Um es in OpenBot auszuprobieren, verbinde `protocol-test.example.com` so, wie es
+unter [Apps](/de/docs/apps#eine-app-verbinden) beschrieben ist.
 
 ### Lebensdauer der Daten
 
@@ -43,7 +55,9 @@ Um es in OpenBot auszuprobieren, verbinde `protocol-test.example.com` so, wie es
 | Autorisierungs-Code | 1 Minute   |
 | Zustimmungs-Anfrage | 10 Minuten |
 
-Jedes Szenario hat seine eigenen Workspaces. In OAuth-Szenarien hat auch jedes Konto seine eigenen. Andere Szenarien teilen Daten. Wähle also eine Workspace-ID, die sonst niemand nutzt.
+Jedes Szenario hat seine eigenen Workspaces. In OAuth-Szenarien hat auch jedes
+Konto seine eigenen. Andere Szenarien teilen Daten. Wähle also eine
+Workspace-ID, die sonst niemand nutzt.
 
 ---
 
@@ -56,9 +70,12 @@ Jedes Szenario hat seine eigenen Workspaces. In OAuth-Szenarien hat auch jedes K
 | `protocol-test-confidential-basic`                      | `client_secret_basic` | Öffentliches `/callback`                                                                     |
 | `protocol-test-confidential-post`                       | `client_secret_post`  | Öffentliches `/callback`                                                                     |
 
-Beide vertraulichen Clients nutzen das Geheimnis `protocol-test-client-secret`. Für andere Callbacks nutze dein eigenes öffentliches CIMD-Dokument oder die dynamische Registrierung unter `/oauth/dcr/register`.
+Beide vertraulichen Clients nutzen das Geheimnis `protocol-test-client-secret`.
+Für andere Callbacks nutze dein eigenes öffentliches CIMD-Dokument oder die
+dynamische Registrierung unter `/oauth/dcr/register`.
 
-Auf der Anmeldeseite kannst du den Zugriff als **Alice** oder **Bob** erlauben oder ablehnen.
+Auf der Anmeldeseite kannst du den Zugriff als **Alice** oder **Bob** erlauben
+oder ablehnen.
 
 | Scope        | Erlaubt                                                       |
 | ------------ | ------------------------------------------------------------- |
@@ -69,9 +86,17 @@ Auf der Anmeldeseite kannst du den Zugriff als **Alice** oder **Bob** erlauben o
 
 ## OAuth-Abläufe
 
-Jeder Modus (`cimd`, `dcr`, `preregistered`, `client-credentials`) hat seinen eigenen Issuer unter `/oauth/<mode>`. Die Issuer-Metadaten liegen unter `/.well-known/oauth-authorization-server/oauth/<mode>`. Die Protected Resource Metadata liegen unter `/.well-known/oauth-protected-resource/mcp/oauth-<mode>`.
+Jeder Modus (`cimd`, `dcr`, `preregistered`, `client-credentials`) hat seinen
+eigenen Issuer unter `/oauth/<mode>`. Die Issuer-Metadaten liegen unter
+`/.well-known/oauth-authorization-server/oauth/<mode>`. Die Protected Resource
+Metadata liegen unter `/.well-known/oauth-protected-resource/mcp/oauth-<mode>`.
 
-Für eine Anmeldung im Browser öffne `/oauth/<mode>/authorize` mit `response_type=code`, `client_id`, der genauen `redirect_uri`, `resource`, `scope`, `state` und einer S256-`code_challenge`. Tausche dann den Code einmal unter `/oauth/<mode>/token` mit dem PKCE-Verifier ein. Jede Anfrage muss die genaue `resource` senden, zum Beispiel `https://protocol-test.example.com/mcp/oauth-cimd`.
+Für eine Anmeldung im Browser öffne `/oauth/<mode>/authorize` mit
+`response_type=code`, `client_id`, der genauen `redirect_uri`, `resource`,
+`scope`, `state` und einer S256-`code_challenge`. Tausche dann den Code einmal
+unter `/oauth/<mode>/token` mit dem PKCE-Verifier ein. Jede Anfrage muss die
+genaue `resource` senden, zum Beispiel
+`https://protocol-test.example.com/mcp/oauth-cimd`.
 
 Ein Maschinen-Token holen:
 
@@ -84,21 +109,32 @@ curl https://protocol-test.example.com/oauth/client-credentials/token \
   --data-urlencode scope='test:read test:write'
 ```
 
-Ein Token nur zum Lesen versteckt die Schreib-Werkzeuge. Ein Schreibvorgang ohne `test:write` bekommt 403. Ein falsches, abgelaufenes, widerrufenes Token oder ein Token für die falsche Ressource bekommt 401. Ein Refresh fügt nie Scopes hinzu. `/oauth/<mode>/revoke` widerruft alle Tokens des Grants.
+Ein Token nur zum Lesen versteckt die Schreib-Werkzeuge. Ein Schreibvorgang ohne
+`test:write` bekommt 403. Ein falsches, abgelaufenes, widerrufenes Token oder
+ein Token für die falsche Ressource bekommt 401. Ein Refresh fügt nie Scopes
+hinzu. `/oauth/<mode>/revoke` widerruft alle Tokens des Grants.
 
 ---
 
 ## Was du testen kannst
 
-- **Werkzeuge.** `echo`, `add`, `identity`, `content_samples`, `read_workspace`, `write_note` (mit einem `idempotencyKey`), `delete_note` (mit einer `expectedRevision`), `ui_read_workspace` (nur für die App), `test_error`, `wait` und `notify`.
-- **Nachfragen.** `request_form`, `request_url`, `request_sampling` und `request_roots` nehmen `{ "text": "..." }` und bitten den Client um mehr Eingaben.
-- **Ressourcen.** `protocol-test://about`, `protocol-test://binary`, `protocol-test://workspace/<workspace>` und 110 Fixtures zum Blättern.
+- **Werkzeuge.** `echo`, `add`, `identity`, `content_samples`, `read_workspace`,
+  `write_note` (mit einem `idempotencyKey`), `delete_note` (mit einer
+  `expectedRevision`), `ui_read_workspace` (nur für die App), `test_error`,
+  `wait` und `notify`.
+- **Nachfragen.** `request_form`, `request_url`, `request_sampling` und
+  `request_roots` nehmen `{ "text": "..." }` und bitten den Client um mehr
+  Eingaben.
+- **Ressourcen.** `protocol-test://about`, `protocol-test://binary`,
+  `protocol-test://workspace/<workspace>` und 110 Fixtures zum Blättern.
 - **Prompt.** `summarize_workspace`, mit Vervollständigung.
-- **Ansicht.** `ui://protocol-test/workspace.html`, eine MCP-Apps-Ansicht eines Workspaces.
+- **Ansicht.** `ui://protocol-test/workspace.html`, eine MCP-Apps-Ansicht eines
+  Workspaces.
 
 ### Fixtures für Erkennung und Indizierung
 
-Jede Fixture (Testvorlage) hat eine Card unter `/fixtures/<id>/server-card.json`.
+Jede Fixture (Testvorlage) hat eine Card unter
+`/fixtures/<id>/server-card.json`.
 
 | ID              | Was du sehen solltest                                            |
 | --------------- | ---------------------------------------------------------------- |
@@ -125,11 +161,15 @@ PROTOCOL_TEST_PUBLIC_ORIGIN=https://protocol-test.example.com \
   devenv shell -- pnpm --filter @openbot-build/protocol-test start
 ```
 
-Der Dienst spricht standardmäßig HTTP. Er erwartet einen TLS-Proxy davor. Wenn du HTTPS direkt auf deinem Computer anbieten willst, setze den Origin auf `https://localhost:7445`, den Port auf `7445` und beide TLS-Pfade. Sorge dann dafür, dass dein Host dem Zertifikat vertraut.
+Der Dienst spricht standardmäßig HTTP. Er erwartet einen TLS-Proxy davor. Wenn
+du HTTPS direkt auf deinem Computer anbieten willst, setze den Origin auf
+`https://localhost:7445`, den Port auf `7445` und beide TLS-Pfade. Sorge dann
+dafür, dass dein Host dem Zertifikat vertraut.
 
 ## Mit Docker starten
 
-Das Ziel `protocol-test` in `deploy/docker/Dockerfile` erzeugt das Image. Baue es und starte es:
+Das Ziel `protocol-test` in `deploy/docker/Dockerfile` erzeugt das Image. Baue
+es und starte es:
 
 ```sh
 devenv shell -- docker buildx bake -f deploy/docker/docker-bake.hcl --load protocol-test
@@ -138,7 +178,11 @@ devenv shell -- docker run -d --name protocol-test -p 127.0.0.1:3001:3001 \
   openbot-protocol-test:local
 ```
 
-Der Dienst hört nur auf `127.0.0.1:3001`. Setze einen TLS-Proxy davor, der Streaming unterstützt. `deploy/docker/protocol-test.nginx.conf` ist ein Beispiel. `deploy/docker/compose.production.yaml` startet das Image `openbot-protocol-test` genauso, ohne Datenbank. Starte nur eine Kopie, denn alle Daten liegen in einem Prozess.
+Der Dienst hört nur auf `127.0.0.1:3001`. Setze einen TLS-Proxy davor, der
+Streaming unterstützt. `deploy/docker/protocol-test.nginx.conf` ist ein
+Beispiel. `deploy/docker/compose.production.yaml` startet das Image
+`openbot-protocol-test` genauso, ohne Datenbank. Starte nur eine Kopie, denn
+alle Daten liegen in einem Prozess.
 
 ## Konfiguration
 
@@ -150,4 +194,6 @@ Der Dienst hört nur auf `127.0.0.1:3001`. Setze einen TLS-Proxy davor, der Stre
 | `PROTOCOL_TEST_ALLOWED_ORIGINS`                   | Der öffentliche Origin | Browser-Origins, die ihn aufrufen dürfen, durch Kommas getrennt. |
 | `PROTOCOL_TEST_TLS_KEY`, `PROTOCOL_TEST_TLS_CERT` | Nicht gesetzt          | Dateipfade. Setze beide, um HTTPS direkt anzubieten.             |
 
-Server-Clients senden keinen Header `Origin`. Darum funktionieren sie immer. Ein Browser-Client funktioniert nur, wenn sein genauer Origin in `PROTOCOL_TEST_ALLOWED_ORIGINS` steht.
+Server-Clients senden keinen Header `Origin`. Darum funktionieren sie immer. Ein
+Browser-Client funktioniert nur, wenn sein genauer Origin in
+`PROTOCOL_TEST_ALLOWED_ORIGINS` steht.

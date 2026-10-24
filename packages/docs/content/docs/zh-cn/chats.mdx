@@ -3,8 +3,9 @@ title: Chats
 description: 和 Bot 说话。它总是马上回答，长的工作会并行运行。
 ---
 
-**Chat**（聊天）是和一个 [Bot](/zh-cn/docs/bots) 的对话。你不用创建、选择或关闭 Chat。你给一个 Bot 发消息，OpenBot 就为你和这个 Bot 保留一个 Chat。Bot 总是马上回答。长的工作会交给其他 Chat 并行运行，结果之后会回到你的 Chat。
-本页介绍如何和 Bot 说话，以及如何读取 Chat。每个路由都接受用户令牌或 session cookie。见 [身份验证](/zh-cn/docs/authentication)。
+**Chat**（聊天）是和一个 [Bot](/zh-cn/docs/bots)
+的对话。你不用创建、选择或关闭 Chat。你给一个 Bot 发消息，OpenBot 就为你和这个 Bot 保留一个 Chat。Bot 总是马上回答。长的工作会交给其他 Chat 并行运行，结果之后会回到你的 Chat。本页介绍如何和 Bot 说话，以及如何读取 Chat。每个路由都接受用户令牌或 session
+cookie。见 [身份验证](/zh-cn/docs/authentication)。
 
 | 术语     | 含义                                                                             |
 | -------- | -------------------------------------------------------------------------------- |
@@ -27,7 +28,9 @@ description: 和 Bot 说话。它总是马上回答，长的工作会并行运�
 | `task`    | 每次一个 Bot 把工作交给一个 Bot，或者一个[触发器](/zh-cn/docs/triggers)触发时。见 [委派](/zh-cn/docs/delegation)。 | 交出这项工作的 Chat 的所有者。 |
 | `review`  | 一个 Bot 必须决定一个 [request](/zh-cn/docs/requests) 时。                                                         | 这个请求为之服务的人。         |
 
-每个人和每个 Bot 只有一个 direct Chat。Chat 没有终点。只要人们还在和 Bot 说话，它就一直继续，除非你[删除它的历史](#删除历史)。review Chat 在做出决定后关闭。
+每个人和每个 Bot 只有一个 direct
+Chat。Chat 没有终点。只要人们还在和 Bot 说话，它就一直继续，除非你[删除它的历史](#删除历史)。review
+Chat 在做出决定后关闭。
 
 ---
 
@@ -42,7 +45,10 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/bots/$BOT/messages
 ```
 
-消息会进入你和这个 Bot 的 direct Chat。第一条消息会创建这个 Chat。你需要在这个 Bot 上拥有 `bots.delegate`。要知道先和哪个 Bot 说话，请从 `GET /v1/me/settings` 读取 `defaultBot`。见 [你的默认 Bot](/zh-cn/docs/bots#你的默认-bot)。
+消息会进入你和这个 Bot 的 direct
+Chat。第一条消息会创建这个 Chat。你需要在这个 Bot 上拥有
+`bots.delegate`。要知道先和哪个 Bot 说话，请从 `GET /v1/me/settings` 读取
+`defaultBot`。见 [你的默认 Bot](/zh-cn/docs/bots#你的默认-bot)。
 
 | 字段         | 含义                                                                                          |
 | ------------ | --------------------------------------------------------------------------------------------- |
@@ -74,9 +80,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 未知字段会返回 `400`。
 
-消息里也可以有你上传的文件，用 `input_image` 和 `input_file` 部分。见[把文件交给 Bot](/zh-cn/docs/files#把文件交给-bot)。
+消息里也可以有你上传的文件，用 `input_image` 和 `input_file`
+部分。见[把文件交给 Bot](/zh-cn/docs/files#把文件交给-bot)。
 
-`POST /v1/chats/:chatId/messages` 接受同样的请求体。它用于 direct Chat，或者当你想给一个 Bot 的工作补充内容时，用于 task Chat。在 task Chat 中，Bot 把你的消息当作你发来的消息来读。其他种类的 Chat 会返回 `409` 和 `ChatConflict`。
+`POST /v1/chats/:chatId/messages` 接受同样的请求体。它用于 direct
+Chat，或者当你想给一个 Bot 的工作补充内容时，用于 task Chat。在 task
+Chat 中，Bot 把你的消息当作你发来的消息来读。其他种类的 Chat 会返回 `409` 和
+`ChatConflict`。
 
 ### 回答
 
@@ -110,12 +120,19 @@ OpenBot 立即返回 `202`：
 | `steered`  | 你的一个 Turn 正在运行，Bot 会在下一步读取这条消息。`turn` 就是这个 Turn。          |
 | `queued`   | 另一个人的 Turn 正在运行。这条消息等待自己的 Turn。`turn` 和 `response` 是 `null`。 |
 
-`response` 的形状和 OpenAI Responses API 的 response 一样。对话就是 Chat，一个 response 就是一个 Turn。请求结束后，工作会继续进行。之后用 `GET /v1/chats/:chatId`（`response` 字段）、[等待路由](#读取-chat)，或 `GET /v1/chats/:chatId/turns/:turnId` 读取结果。
-最终的 `status` 是 `completed`、`incomplete`、`failed` 或 `cancelled`。`output` 中的每一项都是一条 assistant 消息，包含 `output_text` 部分。`usage` 显示 token 用量。
+`response` 的形状和 OpenAI Responses
+API 的 response 一样。对话就是 Chat，一个 response 就是一个 Turn。请求结束后，工作会继续进行。之后用
+`GET /v1/chats/:chatId`（`response` 字段）、[等待路由](#读取-chat)，或
+`GET /v1/chats/:chatId/turns/:turnId` 读取结果。最终的 `status` 是
+`completed`、`incomplete`、`failed` 或 `cancelled`。`output`
+中的每一项都是一条 assistant 消息，包含 `output_text` 部分。`usage`
+显示 token 用量。
 
 ### 以流的形式获取回答
 
-使用 `"stream": true` 时，启动 Turn 的消息会得到 `200` 和 Server-Sent Events（SSE）。SSE 是一种简单的格式，用来通过 HTTP 传送事件流。没有启动 Turn 的消息会得到普通的 `202` 回答。
+使用 `"stream": true` 时，启动 Turn 的消息会得到 `200` 和 Server-Sent
+Events（SSE）。SSE 是一种简单的格式，用来通过 HTTP 传送事件流。没有启动 Turn 的消息会得到普通的
+`202` 回答。
 
 ```sh
 curl -N -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -129,8 +146,10 @@ event: response.output_text.delta
 data: {"type":"response.output_text.delta","chat":"chat_7d21…","turn":"t-19aa","step":1,"sequence_number":4,"item_id":"i-02","output_index":0,"content_index":0,"delta":"Day 1: ","logprobs":[]}
 ```
 
-事件按这个顺序到达：`response.created`、`response.in_progress`、`response.output_item.added`、`response.content_part.added`、多个 `response.output_text.delta`、`response.output_text.done`、`response.content_part.done`、`response.output_item.done`。最后一个事件是 `response.completed`、`response.incomplete`、`response.failed` 或 `response.cancelled` 之一。
-这个流只是观察 Turn。如果你关闭它，Turn 会继续运行。
+事件按这个顺序到达：`response.created`、`response.in_progress`、`response.output_item.added`、`response.content_part.added`、多个
+`response.output_text.delta`、`response.output_text.done`、`response.content_part.done`、`response.output_item.done`。最后一个事件是
+`response.completed`、`response.incomplete`、`response.failed` 或
+`response.cancelled` 之一。这个流只是观察 Turn。如果你关闭它，Turn 会继续运行。
 
 ### 常见错误
 
@@ -151,14 +170,21 @@ data: {"type":"response.output_text.delta","chat":"chat_7d21…","turn":"t-19aa"
 
 每个 Chat 都有一个**收件箱**（inbox）。每条输入都先进入收件箱：可以是人发来的消息，也可以是 OpenBot 发来的通知。收件箱按下面的规则把每条输入交给一个 Turn：
 
-1. **Chat 空闲。** 输入马上启动一个新 Turn。收件箱中同一个 author 的所有等待输入都进入这个 Turn。
-2. **同一个 author 的 Turn 正在运行。** 输入会引导（steer）这个 Turn：Bot 在下一个模型步骤读取它。
-3. **另一个 author 的 Turn 正在运行。** 输入会等待。正在运行的 Turn 结束后，它启动自己的 Turn。这种情况出现在 Channel 的群聊中，那里有很多人在说话。
-4. **一个 Turn 结束。** 收件箱中的下一条输入启动下一个 Turn。每种结束之后都会这样：`Completed`、`Failed` 和 `Interrupted`。
+1. **Chat 空闲。**
+   输入马上启动一个新 Turn。收件箱中同一个 author 的所有等待输入都进入这个 Turn。
+2. **同一个 author 的 Turn 正在运行。**
+   输入会引导（steer）这个 Turn：Bot 在下一个模型步骤读取它。
+3. **另一个 author 的 Turn 正在运行。**
+   输入会等待。正在运行的 Turn 结束后，它启动自己的 Turn。这种情况出现在 Channel 的群聊中，那里有很多人在说话。
+4. **一个 Turn 结束。**
+   收件箱中的下一条输入启动下一个 Turn。每种结束之后都会这样：`Completed`、`Failed`
+   和 `Interrupted`。
 
-**author** 是这条输入为之服务的人。对于消息，它是发送消息的人，加上这个人登录的方式。所以同一个人用另一个用户令牌发来的消息，算作另一个 author。通知的 author 是它所说的那项工作的 author。
+**author**
+是这条输入为之服务的人。对于消息，它是发送消息的人，加上这个人登录的方式。所以同一个人用另一个用户令牌发来的消息，算作另一个 author。通知的 author 是它所说的那项工作的 author。
 
-如果一个 Turn 在读到 steer 消息之前就结束了，它会把这条消息放回收件箱，所以输入不会丢失。Chat 的视图在 `inbox` 中显示等待的输入数量。
+如果一个 Turn 在读到 steer 消息之前就结束了，它会把这条消息放回收件箱，所以输入不会丢失。Chat 的视图在
+`inbox` 中显示等待的输入数量。
 
 ---
 
@@ -166,11 +192,14 @@ data: {"type":"response.output_text.delta","chat":"chat_7d21…","turn":"t-19aa"
 
 Turn 从不等待。任何需要外部时间的事情，之后都会作为**通知**（notice）回来：这是一条来自 OpenBot、而不是来自人的新输入。
 
-- 一个 Bot 把工作交给一个 Bot。工具调用马上返回。工作结束时，结果作为通知回来。见 [委派](/zh-cn/docs/delegation)。
-- 一个工具调用需要决定。这个工具调用马上得到一个待定的结果。回答作为通知回来。调用被允许时，它就在那时运行。见 [Requests](/zh-cn/docs/requests)。
+- 一个 Bot 把工作交给一个 Bot。工具调用马上返回。工作结束时，结果作为通知回来。见
+  [委派](/zh-cn/docs/delegation)。
+- 一个工具调用需要决定。这个工具调用马上得到一个待定的结果。回答作为通知回来。调用被允许时，它就在那时运行。见
+  [Requests](/zh-cn/docs/requests)。
 - 一个 Bot 请求一个[提醒](#提醒)。到了那个时间，备注作为通知回来。
 
-通知是带有 `origin.notice` 的输入 Item。它的 `kind` 说明它是关于什么的，`ref` 指出那件东西，例如一个委派的 ID：
+通知是带有 `origin.notice` 的输入 Item。它的 `kind` 说明它是关于什么的，`ref`
+指出那件东西，例如一个委派的 ID：
 
 | `kind`       | 它带来什么                                                   |
 | ------------ | ------------------------------------------------------------ |
@@ -184,7 +213,9 @@ Turn 从不等待。任何需要外部时间的事情，之后都会作为**通�
 | `app`        | 来自 [App 视图](/zh-cn/docs/apps#app-视图)的一条消息。       |
 | `todos`      | 关于[待办列表](#待办列表)中未完成项的提醒。                  |
 
-通知的文字以 `[OpenBot]` 开头。Bot 知道这样的文字来自 OpenBot，不是来自人，它把它当作数据来读，而不是当作指令。[记忆 Bot](/zh-cn/docs/memory#记忆-bot) 永远不会把通知当作人说的话。
+通知的文字以 `[OpenBot]`
+开头。Bot 知道这样的文字来自 OpenBot，不是来自人，它把它当作数据来读，而不是当作指令。[记忆 Bot](/zh-cn/docs/memory#记忆-bot)
+永远不会把通知当作人说的话。
 
 通知和消息一样经过收件箱。所以你和 Bot 说话时，一个结果可能同时到达。它会引导你的 Turn，或者等待下一个 Turn。
 
@@ -192,7 +223,8 @@ Turn 从不等待。任何需要外部时间的事情，之后都会作为**通�
 
 ## 未完成的工作
 
-**未完成的工作**（open work）是一个 Chat 还没有结束的工作：它交给 Bots 的工作、它等待决定的请求，以及它的提醒。之后每一项都会作为通知回来。
+**未完成的工作**（open
+work）是一个 Chat 还没有结束的工作：它交给 Bots 的工作、它等待决定的请求，以及它的提醒。之后每一项都会作为通知回来。
 
 Chat 视图中的 `open` 会统计它们：
 
@@ -202,15 +234,20 @@ Chat 视图中的 `open` 会统计它们：
 
 每个 Turn 开始时，Bot 会看到一个未完成工作的列表：每个委派的 ID、Bot 和第一行，每个请求，以及每个提醒和它的时间。所以它知道什么会回来。
 
-未完成的工作也决定 task Chat 的工作什么时候结束。见 [委派](/zh-cn/docs/delegation#工作何时结束)。
+未完成的工作也决定 task Chat 的工作什么时候结束。见
+[委派](/zh-cn/docs/delegation#工作何时结束)。
 
 ---
 
 ## 读取 Chat
 
-`GET /v1/chats` 列出你的 direct Chat 和 channel Chat，最早的排在前面。加上 `bot=<id>` 可以列出某个 Bot 的 Chat。加上 `kind=<kind>` 可以只列出一种，例如 `task` 或 `review`。每个摘要包含 `chat`、`status`、`turn`、一个简短的 `response` 和 `activity`。
+`GET /v1/chats` 列出你的 direct Chat 和 channel Chat，最早的排在前面。加上
+`bot=<id>` 可以列出某个 Bot 的 Chat。加上 `kind=<kind>` 可以只列出一种，例如
+`task` 或 `review`。每个摘要包含 `chat`、`status`、`turn`、一个简短的 `response`
+和 `activity`。
 
-`GET /v1/chats/:chatId` 返回一个 Chat 的视图。读取永远不会启动工作。下面是它的简短形式：
+`GET /v1/chats/:chatId`
+返回一个 Chat 的视图。读取永远不会启动工作。下面是它的简短形式：
 
 ```json
 {
@@ -251,9 +288,15 @@ Chat 视图中的 `open` 会统计它们：
 | `GET /v1/chats/:chatId/turns/:turnId`       | `{ "turn": {...}, "response": {...} }`。                                                                                                                |
 | `GET /v1/chats/:chatId/turns/:turnId/items` | 一个 Turn 的 Items，使用 `after`（一个 Item ID）和 `limit`。                                                                                            |
 
-Turn 记录包含 `status`、`settings`、`steps`、`usage`、`input`（它的输入 Items 的 ID）、`items`、`startedAt` 和 `completedAt`。`author` 是这个 Turn 为之工作的人。在 [Channel](/zh-cn/docs/channels) 中，它是写下这条消息的人。每个 Item 包含 `id`、`seq`（它在历史中的位置）、`content` 和 `origin`（`chat`、`turn`、`step`，通知还有 `notice`）。
+Turn 记录包含
+`status`、`settings`、`steps`、`usage`、`input`（它的输入 Items 的 ID）、`items`、`startedAt`
+和 `completedAt`。`author` 是这个 Turn 为之工作的人。在
+[Channel](/zh-cn/docs/channels) 中，它是写下这条消息的人。每个 Item 包含
+`id`、`seq`（它在历史中的位置）、`content` 和
+`origin`（`chat`、`turn`、`step`，通知还有 `notice`）。
 
-要等待变化，请使用长轮询。当 revision 不再等于 `after`，或者超时结束时，OpenBot 会回答。最长等待 30 秒。由通知启动的 Turn 也会在这里出现。
+要等待变化，请使用长轮询。当 revision 不再等于
+`after`，或者超时结束时，OpenBot 会回答。最长等待 30 秒。由通知启动的 Turn 也会在这里出现。
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -283,9 +326,11 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/chats/$CHAT/interrupt
 ```
 
-Turn 的状态变成 `Interrupted`，响应的状态变成 `cancelled`。没有 Turn 在运行时，什么都不会变化。回答是这个 Chat 的视图。
+Turn 的状态变成 `Interrupted`，响应的状态变成
+`cancelled`。没有 Turn 在运行时，什么都不会变化。回答是这个 Chat 的视图。
 
-中断只停止 Turn。这个 Chat 交给 Bots 的工作会继续，结果仍然会回来。它的请求和提醒也仍然未完成。要全部停止，请发送 `{ "delegations": true }`。这时 OpenBot 还会取消这个 Chat 交出去的工作、这些工作又交出去的工作，以及这个 Chat 的请求和提醒。
+中断只停止 Turn。这个 Chat 交给 Bots 的工作会继续，结果仍然会回来。它的请求和提醒也仍然未完成。要全部停止，请发送
+`{ "delegations": true }`。这时 OpenBot 还会取消这个 Chat 交出去的工作、这些工作又交出去的工作，以及这个 Chat 的请求和提醒。
 
 中断之后，收件箱中的下一条输入会启动下一个 Turn。
 
@@ -293,9 +338,13 @@ Turn 的状态变成 `Interrupted`，响应的状态变成 `cancelled`。没有 
 
 ## 待办列表
 
-每个 Chat 都有一个待办列表。当工作不止一步时，Bot 用工具 `openbot_todos` 来维护它。每一项都有 `id`、`content` 和 `status`。`status` 是 `pending`、`in_progress` 或 `done`。同一时间只能有一项是 `in_progress`。
+每个 Chat 都有一个待办列表。当工作不止一步时，Bot 用工具 `openbot_todos`
+来维护它。每一项都有 `id`、`content` 和 `status`。`status` 是
+`pending`、`in_progress` 或 `done`。同一时间只能有一项是 `in_progress`。
 
-只要还有一项不是 `done`，Bot 就会继续工作。如果 Bot 想在还有未完成项时结束 Turn，OpenBot 会给它一条通知，列出未完成的项，Bot 就会再做一步。对列表的每一种状态，OpenBot 只这样做一次。当 Chat 有[未完成的工作](#未完成的工作)时，它不会这样做，因为那些工作会作为通知回来。如果在 Turn 结束时每一项都是 `done`，列表就会变空，所以旧的列表不会一直留在一个没有终点的 Chat 中。
+只要还有一项不是
+`done`，Bot 就会继续工作。如果 Bot 想在还有未完成项时结束 Turn，OpenBot 会给它一条通知，列出未完成的项，Bot 就会再做一步。对列表的每一种状态，OpenBot 只这样做一次。当 Chat 有[未完成的工作](#未完成的工作)时，它不会这样做，因为那些工作会作为通知回来。如果在 Turn 结束时每一项都是
+`done`，列表就会变空，所以旧的列表不会一直留在一个没有终点的 Chat 中。
 
 用 `GET /v1/chats/:chatId/todos` 读取列表：
 
@@ -319,28 +368,40 @@ Turn 的状态变成 `Interrupted`，响应的状态变成 `cancelled`。没有 
 }
 ```
 
-返回的是 Chat 的视图。旧的 revision 会返回 `409` 和 `ChatConflict`。如果两项的 `id` 相同，或者不止一项是 `in_progress`，也会返回同样的错误。
+返回的是 Chat 的视图。旧的 revision 会返回 `409` 和 `ChatConflict`。如果两项的
+`id` 相同，或者不止一项是 `in_progress`，也会返回同样的错误。
 
 ---
 
 ## 提醒
 
-Bot 可以用工具 `openbot_remind` 之后再回到某件事上。它给出 `seconds`，或者给出 `until` 和一个日期时间，例如 `2026-10-23T09:00:00Z`，再加上一个 `note`（备注）。这个工具马上返回 `{ "reminder": "rem_…", "at": "<time>" }`，Turn 接着运行。到了那个时间，备注会作为通知回到这个 Chat。
+Bot 可以用工具 `openbot_remind` 之后再回到某件事上。它给出 `seconds`，或者给出
+`until` 和一个日期时间，例如 `2026-10-23T09:00:00Z`，再加上一个
+`note`（备注）。这个工具马上返回
+`{ "reminder": "rem_…", "at": "<time>" }`，Turn 接着运行。到了那个时间，备注会作为通知回到这个 Chat。
 
 OpenBot 会保存每一个提醒。重启以后，提醒仍然会按时到来。如果提醒的时间在没有服务器运行时就过了，它会在启动后马上到来。OpenBot 也会每分钟查找一次到期的提醒。
 
-提醒是[未完成的工作](#未完成的工作)。带 `{ "delegations": true }` 的中断会取消它。取消它所在 task Chat 的工作，或者删除它所在的 Chat，也会取消它。
+提醒是[未完成的工作](#未完成的工作)。带 `{ "delegations": true }`
+的中断会取消它。取消它所在 task Chat 的工作，或者删除它所在的 Chat，也会取消它。
 
 ---
 
 ## 计划模式
 
-在 `plan` 模式下，Bot 可以查资料，但还不改动任何东西。它只能用只读取的工具：列出和读取 Bots 的 Bot 工具、App 的资源和 prompt，以及组织在 `appReadRules` 中列出的 App 工具。它也能用待办工具、提醒工具和 `openbot_submit_plan`。
+在 `plan`
+模式下，Bot 可以查资料，但还不改动任何东西。它只能用只读取的工具：列出和读取 Bots 的 Bot 工具、App 的资源和 prompt，以及组织在
+`appReadRules` 中列出的 App 工具。它也能用待办工具、提醒工具和
+`openbot_submit_plan`。
 
-计划写好后，Bot 调用 `openbot_submit_plan`，把步骤作为待办列表，再加一段简短的总结。OpenBot 会保存这个列表，并像任何 [request](/zh-cn/docs/requests) 一样检查能力 `plans.run`。
+计划写好后，Bot 调用
+`openbot_submit_plan`，把步骤作为待办列表，再加一段简短的总结。OpenBot 会保存这个列表，并像任何
+[request](/zh-cn/docs/requests) 一样检查能力 `plans.run`。
 
-- 计划马上被允许时，Chat 切换到 `build` 模式。这个 Turn 之后会开始一个带着所有工具的新 Turn，Bot 执行计划。
-- 计划需要决定时，工具马上返回一个待定的结果，Turn 结束。之后计划被允许时，Chat 切换到 `build` 模式，一条通知会启动一个新 Turn 来执行计划。
+- 计划马上被允许时，Chat 切换到 `build`
+  模式。这个 Turn 之后会开始一个带着所有工具的新 Turn，Bot 执行计划。
+- 计划需要决定时，工具马上返回一个待定的结果，Turn 结束。之后计划被允许时，Chat 切换到
+  `build` 模式，一条通知会启动一个新 Turn 来执行计划。
 - 计划被拒绝时，一条通知把原因告诉 Bot。Chat 留在 `plan` 模式。
 
 批准设置决定由谁回答，以及没人及时回答时会怎样：
@@ -357,16 +418,21 @@ OpenBot 会保存每一个提醒。重启以后，提醒仍然会按时到来。
 
 你可以在四个地方设置它。设置了的地方里，最具体的那个生效，即使它更宽松：
 
-1. Chat：用 `PATCH /v1/chats/:chatId` 设置 `planApproval`。发送 `null` 可以移除它。
+1. Chat：用 `PATCH /v1/chats/:chatId` 设置 `planApproval`。发送 `null`
+   可以移除它。
 2. Bot：[Bot](/zh-cn/docs/bots) 上的 `planApproval`。
-3. 你自己：`PATCH /v1/me/settings`，内容是 `{ "expectedVersion": 0, "planApproval": { ... } }`。用 `GET /v1/me/settings` 读取你的设置。同一份设置里也有你的[默认 Bot](/zh-cn/docs/bots#你的默认-bot)。
-4. 组织：[设置](/zh-cn/docs/organization#设置)中的 `planApproval`。它只是默认值，不能禁止更宽松的设置。
+3. 你自己：`PATCH /v1/me/settings`，内容是
+   `{ "expectedVersion": 0, "planApproval": { ... } }`。用 `GET /v1/me/settings`
+   读取你的设置。同一份设置里也有你的[默认 Bot](/zh-cn/docs/bots#你的默认-bot)。
+4. 组织：[设置](/zh-cn/docs/organization#设置)中的
+   `planApproval`。它只是默认值，不能禁止更宽松的设置。
 
 ---
 
 ## 模型和执行模式
 
-新的 Chat 使用它的 Bot 的 `model`。`GET /v1/chats/:chatId/models` 显示你可以选择的模型：
+新的 Chat 使用它的 Bot 的 `model`。`GET /v1/chats/:chatId/models`
+显示你可以选择的模型：
 
 ```json
 {
@@ -412,9 +478,14 @@ OpenBot 会保存每一个提醒。重启以后，提醒仍然会按时到来。
 | `model`        | 可选。这个 Chat 的模型。它还需要 `models.use`。`null` 让 Chat 重新使用它的 Bot 的模型。 |
 | `planApproval` | 可选。见 [计划模式](#计划模式)。`null` 会移除它。                                       |
 
-错误的模型会返回 `400` 和 `ChatModelInvalid`。`reason` 是 `provider-not-found`、`model-not-found` 或 `unsupported-option`。OpenBot 如何得到它的模型，见 [Models](/zh-cn/docs/models)。
+错误的模型会返回 `400` 和 `ChatModelInvalid`。`reason` 是
+`provider-not-found`、`model-not-found` 或
+`unsupported-option`。OpenBot 如何得到它的模型，见
+[Models](/zh-cn/docs/models)。
 
-执行模式是 `build` 或 `plan`。`build` 是普通模式：Bot 直接做事。在 `plan` 模式下，Bot 先写一个计划。OpenBot 把模式保存在 Chat 上，并把它复制到每个新 Turn 的 `settings` 中。
+执行模式是 `build` 或 `plan`。`build` 是普通模式：Bot 直接做事。在 `plan`
+模式下，Bot 先写一个计划。OpenBot 把模式保存在 Chat 上，并把它复制到每个新 Turn 的
+`settings` 中。
 
 ---
 
@@ -424,23 +495,36 @@ Chat 没有终点，所以它的历史可能变得比模型的上下文窗口还
 
 在每个模型步骤之前，OpenBot 会估计这个 Chat 的输入 token 数。大约四个字符的 JSON 算一个 token。当估计值达到模型上下文窗口的 90% 时，这个 Chat 的模型会为较早的上下文写一段摘要。最新的消息保持原样。
 
-- 上下文窗口来自目录中的模型。见 [模型](/zh-cn/docs/models#添加模型) 中的 `contextWindow`。
-- 在代码中给出的模型，例如[内置模型](/zh-cn/docs/models#内置模型)，可以用 `autoCompactTokenLimit` 设一个更低的限制。
+- 上下文窗口来自目录中的模型。见 [模型](/zh-cn/docs/models#添加模型) 中的
+  `contextWindow`。
+- 在代码中给出的模型，例如[内置模型](/zh-cn/docs/models#内置模型)，可以用
+  `autoCompactTokenLimit` 设一个更低的限制。
 - 不知道上下文窗口的模型不会被压缩。
 
-历史总是保留每个 Item，`GET /v1/chats/:chatId/items` 会显示全部。只有模型读到的内容会变小。写摘要的调用的用量来源是 `compaction`。见 [用量](/zh-cn/docs/usage)。
+历史总是保留每个 Item，`GET /v1/chats/:chatId/items`
+会显示全部。只有模型读到的内容会变小。写摘要的调用的用量来源是 `compaction`。见
+[用量](/zh-cn/docs/usage)。
 
-OpenBot 默认不使用提供方的原生压缩，例如 OpenAI 的 `/responses/compact`。运行 [core 库](/zh-cn/docs/packages#core) 的程序可以给出自己的 `ContextCompaction` 服务，例如 `ResponsesCompaction.layer()`。
+OpenBot 默认不使用提供方的原生压缩，例如 OpenAI 的 `/responses/compact`。运行
+[core 库](/zh-cn/docs/packages#core) 的程序可以给出自己的 `ContextCompaction`
+服务，例如 `ResponsesCompaction.layer()`。
 
 ---
 
 ## 删除历史
 
-`DELETE /v1/chats/:chatId` 删除一个 direct Chat 或 channel Chat 的历史，并返回 `204`。它会先停止正在运行的 Turn，并取消这个 Chat [未完成的工作](#未完成的工作)。task Chat 和 review Chat 会返回 `409` 和 `ChatConflict`。
+`DELETE /v1/chats/:chatId` 删除一个 direct Chat 或 channel Chat 的历史，并返回
+`204`。它会先停止正在运行的 Turn，并取消这个 Chat
+[未完成的工作](#未完成的工作)。task Chat 和 review Chat 会返回 `409` 和
+`ChatConflict`。
 
 之后这个 Chat 不再保留它指向的[文件](/zh-cn/docs/files#文件怎样被删除)。
 
-删除一个 direct Chat 后，你给这个 Bot 的下一条消息会开始一个新的、空的 Chat，它有新的 ID。同样，channel Chat 被删除后，那个聊天里的下一条消息会开始一个新的 Chat。Bot 从这个 Chat 学到的东西仍然留在它的 [Bot 记忆](/zh-cn/docs/memory)中。要把这些也删除，请清除 Tag `chat:<id>`。见 [读取和修改](/zh-cn/docs/memory#读取和修改)。
+删除一个 direct
+Chat 后，你给这个 Bot 的下一条消息会开始一个新的、空的 Chat，它有新的 ID。同样，channel
+Chat 被删除后，那个聊天里的下一条消息会开始一个新的 Chat。Bot 从这个 Chat 学到的东西仍然留在它的
+[Bot 记忆](/zh-cn/docs/memory)中。要把这些也删除，请清除 Tag `chat:<id>`。见
+[读取和修改](/zh-cn/docs/memory#读取和修改)。
 
 ---
 
@@ -448,7 +532,8 @@ OpenBot 默认不使用提供方的原生压缩，例如 OpenAI 的 `/responses/
 
 一个 Turn 在一个服务器进程中运行。它运行时，服务器每 30 秒给它的 Chat 做一次标记。OpenBot 每分钟查看一次所有 Chat：
 
-- 如果一个 Turn 显示它在运行，但它的 Chat 已经 2 分钟没有标记，它就属于一台已经停止的服务器。OpenBot 把它结束为 `Interrupted`。没有结果的工具调用会得到一个结果，说明结果无法获得。这个 Turn 没有读到的输入会回到收件箱。
+- 如果一个 Turn 显示它在运行，但它的 Chat 已经 2 分钟没有标记，它就属于一台已经停止的服务器。OpenBot 把它结束为
+  `Interrupted`。没有结果的工具调用会得到一个结果，说明结果无法获得。这个 Turn 没有读到的输入会回到收件箱。
 - 如果一个 Chat 的收件箱中有输入，而且没有正在运行的 Turn，它会得到一个新 Turn。
 
 所以服务器停止时，输入不会丢失，也不会有 Chat 卡住。

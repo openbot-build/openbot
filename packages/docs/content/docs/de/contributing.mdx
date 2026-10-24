@@ -1,16 +1,23 @@
 ---
 title: Mitwirken
-description: Richte den Code ein, führe die Prüfungen aus und folge den Projektregeln.
+description:
+  Richte den Code ein, führe die Prüfungen aus und folge den Projektregeln.
 ---
 
-Diese Seite ist für Menschen, die OpenBot selbst ändern. Sie zeigt dir, wie du deinen Computer einrichtest, den Server und die Prüfungen startest und dich im Code zurechtfindest.
+Diese Seite ist für Menschen, die OpenBot selbst ändern. Sie zeigt dir, wie du
+deinen Computer einrichtest, den Server und die Prüfungen startest und dich im
+Code zurechtfindest.
 
 ---
 
 ## Einrichten
 
-Du brauchst [devenv](https://devenv.sh). devenv gibt dir genau die Werkzeuge für das Projekt: Node.js, pnpm, PostgreSQL, mkcert und mehr. [Docker](https://docs.docker.com/get-docker/) brauchst du nur, um die Images zu bauen und zu prüfen. Siehe [Betrieb](/de/docs/deploy#die-images-bauen).
-Führe jeden Befehl über `devenv shell -- <command>` aus. So nutzt du immer diese Werkzeuge.
+Du brauchst [devenv](https://devenv.sh). devenv gibt dir genau die Werkzeuge für
+das Projekt: Node.js, pnpm, PostgreSQL, mkcert und mehr.
+[Docker](https://docs.docker.com/get-docker/) brauchst du nur, um die Images zu
+bauen und zu prüfen. Siehe [Betrieb](/de/docs/deploy#die-images-bauen). Führe
+jeden Befehl über `devenv shell -- <command>` aus. So nutzt du immer diese
+Werkzeuge.
 
 <Steps>
 <Step>
@@ -32,9 +39,13 @@ devenv shell -- pnpm dev:setup
 devenv shell -- mkcert -install
 ```
 
-`dev:setup` erstellt `.env.development` mit einem neuen, zufälligen geheimen Schlüssel in `OPENBOT_SECRET_KEYS`. Es erstellt auch ein lokales TLS-Zertifikat in `.devenv/dev/`.
-Wenn deine `.env.development` aus einer älteren Version stammt, lösche sie und führe `dev:setup` noch einmal aus. Du kannst auch die Entwicklungs-Datenbank zurücksetzen. Siehe [Konfiguration](/de/docs/configuration#entwicklung).
-`mkcert -install` sorgt dafür, dass dein Computer diesem Zertifikat vertraut.
+`dev:setup` erstellt `.env.development` mit einem neuen, zufälligen geheimen
+Schlüssel in `OPENBOT_SECRET_KEYS`. Es erstellt auch ein lokales TLS-Zertifikat
+in `.devenv/dev/`. Wenn deine `.env.development` aus einer älteren Version
+stammt, lösche sie und führe `dev:setup` noch einmal aus. Du kannst auch die
+Entwicklungs-Datenbank zurücksetzen. Siehe
+[Konfiguration](/de/docs/configuration#entwicklung). `mkcert -install` sorgt
+dafür, dass dein Computer diesem Zertifikat vertraut.
 
 </Step>
 <Step>
@@ -47,19 +58,24 @@ devenv shell -- pnpm dev
 
 `pnpm dev` führt `devenv up` aus. Das macht diese Schritte:
 
-1. Es startet PostgreSQL 18 auf `127.0.0.1:5433`, mit dem Benutzer `openbot_dev`. devenv startet es als normalen Prozess. Seine Daten liegen in `.devenv/state/postgres`.
+1. Es startet PostgreSQL 18 auf `127.0.0.1:5433`, mit dem Benutzer
+   `openbot_dev`. devenv startet es als normalen Prozess. Seine Daten liegen in
+   `.devenv/state/postgres`.
 2. Es installiert die Pakete mit `pnpm install --frozen-lockfile`.
 3. Es baut OpenBot und die Pakete, die OpenBot braucht.
 4. Es führt die Datenbank-Migrationen aus.
-5. Es startet den Entwicklungsserver unter `https://localhost:8443`. Der Server schreibt die Plattform-Einstellungen für diesen Origin selbst. Darum gibt es keinen Einrichtungsschritt.
+5. Es startet den Entwicklungsserver unter `https://localhost:8443`. Der Server
+   schreibt die Plattform-Einstellungen für diesen Origin selbst. Darum gibt es
+   keinen Einrichtungsschritt.
 
 Wenn du eine Datei in `packages/*/src` änderst, startet devenv OpenBot neu.
 
 </Step>
 </Steps>
 
-Der Entwicklungsserver nutzt ein lokales Testkonto, Test-Models und eine Test-App. Kein externer Dienst ist nötig.
-Wie du dich anmeldest und ein User Token erstellst, steht unter [Schnellstart](/de/docs/quickstart).
+Der Entwicklungsserver nutzt ein lokales Testkonto, Test-Models und eine
+Test-App. Kein externer Dienst ist nötig. Wie du dich anmeldest und ein User
+Token erstellst, steht unter [Schnellstart](/de/docs/quickstart).
 
 ---
 
@@ -75,10 +91,18 @@ Wie du dich anmeldest und ein User Token erstellst, steht unter [Schnellstart](/
 | `devenv shell -- pnpm --filter @openbot-build/core test` | Führt die Tests eines Pakets aus.                                                 |
 | `devenv shell -- treefmt`                                | Formatiert den Code mit Prettier und nixfmt.                                      |
 
-Führe `pnpm build` vor `pnpm typecheck` aus. Pakete importieren einander aus ihren gebauten Dateien.
+Führe `pnpm build` vor `pnpm typecheck` aus. Pakete importieren einander aus
+ihren gebauten Dateien.
 
-Tests nutzen [Vitest](https://vitest.dev) mit [`@effect/vitest`](https://www.npmjs.com/package/@effect/vitest). Ein Test, der einen Effect ausführt, nutzt `it.effect`. Er gibt dem Test eine Test-Uhr: Die Zeit läuft nur weiter, wenn der Test sie weiterstellt. Ein Test, der echte Zeit braucht, zum Beispiel einer mit einem echten Server, nutzt `it.live`. Tests von OpenBot starten ihren eigenen kurzlebigen PostgreSQL-Server mit den Werkzeugen aus devenv. Sie brauchen keine Geheimnisse und keine externen Dienste.
-GitHub Actions führt dieselben Befehle `build`, `typecheck` und `test` aus. Siehe [Betrieb](/de/docs/deploy#github-actions).
+Tests nutzen [Vitest](https://vitest.dev) mit
+[`@effect/vitest`](https://www.npmjs.com/package/@effect/vitest). Ein Test, der
+einen Effect ausführt, nutzt `it.effect`. Er gibt dem Test eine Test-Uhr: Die
+Zeit läuft nur weiter, wenn der Test sie weiterstellt. Ein Test, der echte Zeit
+braucht, zum Beispiel einer mit einem echten Server, nutzt `it.live`. Tests von
+OpenBot starten ihren eigenen kurzlebigen PostgreSQL-Server mit den Werkzeugen
+aus devenv. Sie brauchen keine Geheimnisse und keine externen Dienste. GitHub
+Actions führt dieselben Befehle `build`, `typecheck` und `test` aus. Siehe
+[Betrieb](/de/docs/deploy#github-actions).
 
 ---
 
@@ -97,15 +121,19 @@ GitHub Actions führt dieselben Befehle `build`, `typecheck` und `test` aus. Sie
 | `references/`              | Quellcode anderer Open-Source-Projekte, als Git-Submodule. Nur zum Lesen.                                        |
 | `devenv.nix`               | Die Entwicklungswerkzeuge, Einstellungen und Prozesse.                                                           |
 
-Der Ordner `references/` gehört nicht zum Build. Um diesen Code zu lesen, hole ihn mit `git submodule update --init`.
+Der Ordner `references/` gehört nicht zum Build. Um diesen Code zu lesen, hole
+ihn mit `git submodule update --init`.
 
-Für ein neues Paket kopierst du `packages/template/` nach `packages/<name>/`. Ändere dann seinen Namen, seinen Einstiegspunkt und seine Abhängigkeiten.
+Für ein neues Paket kopierst du `packages/template/` nach `packages/<name>/`.
+Ändere dann seinen Namen, seinen Einstiegspunkt und seine Abhängigkeiten.
 
 ---
 
 ## Die Doku-Seite
 
-Die Doku-Seite ist eine [Astro](https://astro.build)-Seite, gebaut mit [Starlight](https://starlight.astro.build). Der Build erzeugt nur statische Dateien. Starte sie mit:
+Die Doku-Seite ist eine [Astro](https://astro.build)-Seite, gebaut mit
+[Starlight](https://starlight.astro.build). Der Build erzeugt nur statische
+Dateien. Starte sie mit:
 
 ```sh
 devenv shell -- pnpm --filter @openbot-build/docs dev
@@ -124,13 +152,19 @@ devenv shell -- pnpm --filter @openbot-build/docs dev
 | `src/pages/openapi.json.ts` | Liefert `openapi.json` unter `/openapi.json` aus, damit man es herunterladen kann.  |
 | `scripts/api.ts`            | Erzeugt `openapi.json` aus dem API-Vertrag.                                         |
 
-Die API-Referenz unter `/docs/api` entsteht aus `openapi.json`, mit dem Plugin [starlight-openapi](https://github.com/HiDeoo/starlight-openapi). Schreibe sie nicht von Hand.
-Das Skript läuft vor jedem `dev` und `build`. Wenn du den API-Vertrag in `@openbot-build/api` änderst, ändert sich auch die Referenz.
-Wenn du dem Vertrag eine Gruppe hinzufügst, gib ihr in `scripts/api.ts` einen Titel und eine Beschreibung. Bis du das tust, bricht das Skript mit einem Fehler ab.
-Der Build erzeugt auch `/llms.txt` und `/llms-full.txt`. Sie enthalten die Doku als reinen Text für KI-Werkzeuge.
-Um zu prüfen, dass jede Seite gebaut wird, führe `devenv shell -- pnpm --filter @openbot-build/docs build` aus.
+Die API-Referenz unter `/docs/api` entsteht aus `openapi.json`, mit dem Plugin
+[starlight-openapi](https://github.com/HiDeoo/starlight-openapi). Schreibe sie
+nicht von Hand. Das Skript läuft vor jedem `dev` und `build`. Wenn du den
+API-Vertrag in `@openbot-build/api` änderst, ändert sich auch die Referenz. Wenn
+du dem Vertrag eine Gruppe hinzufügst, gib ihr in `scripts/api.ts` einen Titel
+und eine Beschreibung. Bis du das tust, bricht das Skript mit einem Fehler ab.
+Der Build erzeugt auch `/llms.txt` und `/llms-full.txt`. Sie enthalten die Doku
+als reinen Text für KI-Werkzeuge. Um zu prüfen, dass jede Seite gebaut wird,
+führe `devenv shell -- pnpm --filter @openbot-build/docs build` aus.
 
-Jeder Push auf `main` veröffentlicht die Seite auf [openbot.build](https://openbot.build). Siehe [Die Doku-Seite veröffentlichen](/de/docs/deploy#die-doku-seite-veröffentlichen).
+Jeder Push auf `main` veröffentlicht die Seite auf
+[openbot.build](https://openbot.build). Siehe
+[Die Doku-Seite veröffentlichen](/de/docs/deploy#die-doku-seite-veröffentlichen).
 
 ---
 
@@ -138,38 +172,57 @@ Jeder Push auf `main` veröffentlicht die Seite auf [openbot.build](https://open
 
 ### Basic English
 
-Schreibe allen Text in [Basic English](https://en.wikipedia.org/wiki/Basic_English) (Grundenglisch). Das gilt für Doku, Code-Kommentare, Fehlermeldungen, Logs, Prompts und Test-Texte.
-Nutze, wo es geht, die 850 Wörter von Basic English und dazu die Fachwörter, die du brauchst. Nutze kurze Sätze. Erkläre jeden Fachbegriff, wenn du ihn zum ersten Mal nutzt.
+Schreibe allen Text in
+[Basic English](https://en.wikipedia.org/wiki/Basic_English) (Grundenglisch).
+Das gilt für Doku, Code-Kommentare, Fehlermeldungen, Logs, Prompts und
+Test-Texte. Nutze, wo es geht, die 850 Wörter von Basic English und dazu die
+Fachwörter, die du brauchst. Nutze kurze Sätze. Erkläre jeden Fachbegriff, wenn
+du ihn zum ersten Mal nutzt.
 
-Englisch ist die Quelle für allen Text. Die Doku gibt es auch auf vereinfachtem Chinesisch und auf Deutsch. Die Startseite gibt es in noch viel mehr Sprachen.
-Wenn du eine englische Seite änderst, ändere ihre Übersetzungen in derselben Änderung. Eine Übersetzung behält dieselben Überschriften in derselben Reihenfolge. Ihre Links führen zu Seiten in ihrer eigenen Sprache, zum Beispiel `/de/docs/deploy`.
-Wenn du Text auf der Startseite änderst, ändere ihn in jeder Datei in `src/landing/messages/`.
-Die API-Referenz gibt es nur auf Englisch.
+Englisch ist die Quelle für allen Text. Die Doku gibt es auch auf vereinfachtem
+Chinesisch und auf Deutsch. Die Startseite gibt es in noch viel mehr Sprachen.
+Wenn du eine englische Seite änderst, ändere ihre Übersetzungen in derselben
+Änderung. Eine Übersetzung behält dieselben Überschriften in derselben
+Reihenfolge. Ihre Links führen zu Seiten in ihrer eigenen Sprache, zum Beispiel
+`/de/docs/deploy`. Wenn du Text auf der Startseite änderst, ändere ihn in jeder
+Datei in `src/landing/messages/`. Die API-Referenz gibt es nur auf Englisch.
 
 ### Headless
 
-OpenBot hat keine Benutzeroberfläche. Füge dem Repository keine Seiten, Frontends oder Client-Apps hinzu. Die Doku-Seite ist die einzige Ausnahme.
-Jede neue Funktion beginnt als Operation im Vertrag `@openbot-build/api`. Danach behandelt der Server sie.
-Jede Operation muss mit einem User Token und mit dem Anmelde-Cookie funktionieren. Sie muss auch sagen, welche Berechtigung sie braucht, mit einer Annotation `Required` oder `GroupRequired`. Siehe [Berechtigungen](/de/docs/permissions).
+OpenBot hat keine Benutzeroberfläche. Füge dem Repository keine Seiten,
+Frontends oder Client-Apps hinzu. Die Doku-Seite ist die einzige Ausnahme. Jede
+neue Funktion beginnt als Operation im Vertrag `@openbot-build/api`. Danach
+behandelt der Server sie. Jede Operation muss mit einem User Token und mit dem
+Anmelde-Cookie funktionieren. Sie muss auch sagen, welche Berechtigung sie
+braucht, mit einer Annotation `Required` oder `GroupRequired`. Siehe
+[Berechtigungen](/de/docs/permissions).
 
 ### Ein aktuelles Modell
 
-Behalte keine alten Wege für alte Aufrufer, alte Clients oder alte Daten. Wenn sich ein Vertrag oder der Speicher ändern muss, ändere ihn direkt.
-Die einzige Ausnahme ist eine kleine Korrektur für einen Fehler in einem externen Paket oder Werkzeug.
+Behalte keine alten Wege für alte Aufrufer, alte Clients oder alte Daten. Wenn
+sich ein Vertrag oder der Speicher ändern muss, ändere ihn direkt. Die einzige
+Ausnahme ist eine kleine Korrektur für einen Fehler in einem externen Paket oder
+Werkzeug.
 
 ### Zuerst Effect-Daten
 
-Nutze die unveränderlichen Datentypen von Effect, zum Beispiel `HashMap`, `Chunk` und `Option`. Nutze die veränderlichen Typen von JavaScript nur, wenn du sie wirklich brauchst.
+Nutze die unveränderlichen Datentypen von Effect, zum Beispiel `HashMap`,
+`Chunk` und `Option`. Nutze die veränderlichen Typen von JavaScript nur, wenn du
+sie wirklich brauchst.
 
 ### Kleine, echte Änderungen
 
-Baue, was echten Nutzen bringt. Halte jede Änderung fokussiert und teste die Teile, die wirklich kaputtgehen können.
+Baue, was echten Nutzen bringt. Halte jede Änderung fokussiert und teste die
+Teile, die wirklich kaputtgehen können.
 
-Die vollständigen Regeln für Mitwirkende stehen in `AGENTS.md` im Hauptordner des Repositorys.
+Die vollständigen Regeln für Mitwirkende stehen in `AGENTS.md` im Hauptordner
+des Repositorys.
 
 ---
 
 ## Lizenz
 
-OpenBot nutzt die GNU Affero General Public License, nur Version 3 (`AGPL-3.0-only`). Der vollständige Text steht in der Datei `LICENSE` im Hauptordner des Repositorys.
-Wenn du eine Änderung einreichst, stimmst du zu, dass sie dieselbe Lizenz nutzt.
+OpenBot nutzt die GNU Affero General Public License, nur Version 3
+(`AGPL-3.0-only`). Der vollständige Text steht in der Datei `LICENSE` im
+Hauptordner des Repositorys. Wenn du eine Änderung einreichst, stimmst du zu,
+dass sie dieselbe Lizenz nutzt.

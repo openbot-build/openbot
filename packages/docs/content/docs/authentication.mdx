@@ -1,10 +1,12 @@
 ---
 title: Authentication
-description: Sign in, choose an organization, create user tokens, and call the API.
+description:
+  Sign in, choose an organization, create user tokens, and call the API.
 ---
 
-This page shows how people sign in to OpenBot and how programs call the API.
-A person signs in once in a browser. Then the person creates user tokens for scripts and services.
+This page shows how people sign in to OpenBot and how programs call the API. A
+person signs in once in a browser. Then the person creates user tokens for
+scripts and services.
 
 There are two ways to call the business routes under `/v1`:
 
@@ -19,11 +21,16 @@ Both ways need a permission for each call. See [Permissions](/docs/permissions).
 
 ## Sign in
 
-OpenBot does not keep passwords. It uses OpenID Connect providers. OpenID Connect (OIDC) is a standard way to let another service check who a person is.
+OpenBot does not keep passwords. It uses OpenID Connect providers. OpenID
+Connect (OIDC) is a standard way to let another service check who a person is.
 There are two kinds of providers:
 
-- The **platform provider** signs in people for the whole platform. A platform admin sets it. See [Set up the platform provider](#set-up-the-platform-provider).
-- An **SSO connection** is the provider of one organization. It signs in people with an email in the verified domains of that organization. See [SSO and domains](/docs/sso).
+- The **platform provider** signs in people for the whole platform. A platform
+  admin sets it. See
+  [Set up the platform provider](#set-up-the-platform-provider).
+- An **SSO connection** is the provider of one organization. It signs in people
+  with an email in the verified domains of that organization. See
+  [SSO and domains](/docs/sso).
 
 To start a sign-in, your client sends this request from the OpenBot origin:
 
@@ -38,16 +45,28 @@ curl -X POST https://api.example.com/auth/sign-in \
 { "url": "https://id.example.com/authorize?..." }
 ```
 
-Both fields are optional. OpenBot uses the domain of `email` to pick the provider. When the domain has an SSO connection, the `url` goes to it. Otherwise it goes to the platform provider. When there is neither, OpenBot returns `503` with `SignInUnavailable`.
+Both fields are optional. OpenBot uses the domain of `email` to pick the
+provider. When the domain has an SSO connection, the `url` goes to it. Otherwise
+it goes to the platform provider. When there is neither, OpenBot returns `503`
+with `SignInUnavailable`.
 
-Send the browser to that `url`. The answer also sets the login state cookie. After the person signs in, the provider sends the browser back to OpenBot. OpenBot sets the session cookie and sends the browser to `returnTo`. See [Return paths](#return-paths).
-If the sign-in fails, the browser goes to `/auth/error?error=<code>` and gets no cookie.
+Send the browser to that `url`. The answer also sets the login state cookie.
+After the person signs in, the provider sends the browser back to OpenBot.
+OpenBot sets the session cookie and sends the browser to `returnTo`. See
+[Return paths](#return-paths). If the sign-in fails, the browser goes to
+`/auth/error?error=<code>` and gets no cookie.
 
 ### Better Auth routes
 
-OpenBot uses [Better Auth](https://better-auth.com) for sign-in. Better Auth serves its routes under `/auth/*`, as its [Effect guide](https://better-auth.com/docs/integrations/effect) shows. These routes are not in the API reference. The [Better Auth docs](https://better-auth.com/docs/concepts/api) describe them.
+OpenBot uses [Better Auth](https://better-auth.com) for sign-in. Better Auth
+serves its routes under `/auth/*`, as its
+[Effect guide](https://better-auth.com/docs/integrations/effect) shows. These
+routes are not in the API reference. The
+[Better Auth docs](https://better-auth.com/docs/concepts/api) describe them.
 
-You can still use them directly. The platform provider has the provider ID `oidc` and the callback `/auth/callback/oidc`. An SSO connection uses its own ID as the provider ID, and its callback is `/auth/callback/<connectionId>`.
+You can still use them directly. The platform provider has the provider ID
+`oidc` and the callback `/auth/callback/oidc`. An SSO connection uses its own ID
+as the provider ID, and its callback is `/auth/callback/<connectionId>`.
 
 ```sh
 curl -X POST https://api.example.com/auth/sign-in/social \
@@ -56,13 +75,19 @@ curl -X POST https://api.example.com/auth/sign-in/social \
   -d '{ "provider": "oidc", "callbackURL": "https://api.example.com/settings/keys" }'
 ```
 
-The `callbackURL` must be on the OpenBot origin. If it is not, Better Auth returns `403`.
+The `callbackURL` must be on the OpenBot origin. If it is not, Better Auth
+returns `403`.
 
 ### Set up the platform provider
 
-Register OpenBot as a client at your provider. Use `<publicOrigin>/auth/callback/oidc` as the redirect URI. OpenBot asks for the scopes `openid profile email`.
+Register OpenBot as a client at your provider. Use
+`<publicOrigin>/auth/callback/oidc` as the redirect URI. OpenBot asks for the
+scopes `openid profile email`.
 
-Then give the provider to OpenBot. On a new platform, the setup program does this with `--oidc-issuer`, `--oidc-client-id` and `--oidc-client-secret`. Later, a platform admin changes it with `PATCH /v1/platform/settings`. See [Platform](/docs/platform).
+Then give the provider to OpenBot. On a new platform, the setup program does
+this with `--oidc-issuer`, `--oidc-client-id` and `--oidc-client-secret`. Later,
+a platform admin changes it with `PATCH /v1/platform/settings`. See
+[Platform](/docs/platform).
 
 | Setting                         | Value                                                                           |
 | ------------------------------- | ------------------------------------------------------------------------------- |
@@ -71,13 +96,16 @@ Then give the provider to OpenBot. On a new platform, the setup program does thi
 | `identityProvider.clientSecret` | The client secret. Leave it out for a public client.                            |
 | `publicOrigin`                  | The public HTTPS origin of OpenBot, for example `https://api.example.com`.      |
 
-Without a client secret, OpenBot signs in as a public client with PKCE. PKCE is a check that protects the sign-in code.
-A platform can have no provider at all. Then people sign in only through SSO connections.
+Without a client secret, OpenBot signs in as a public client with PKCE. PKCE is
+a check that protects the sign-in code. A platform can have no provider at all.
+Then people sign in only through SSO connections.
 
 ### Development account
 
-The development server (`devenv shell -- pnpm dev`) uses one local test account and no provider. The account is `developer@localhost.test`, and it is a platform admin.
-Only the development entry point offers this. The production program never does. See [Configuration](/docs/configuration#development).
+The development server (`devenv shell -- pnpm dev`) uses one local test account
+and no provider. The account is `developer@localhost.test`, and it is a platform
+admin. Only the development entry point offers this. The production program
+never does. See [Configuration](/docs/configuration#development).
 
 This command signs in and saves the cookie in a file:
 
@@ -90,7 +118,8 @@ curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
 
 ### Read and end the sign-in
 
-`GET /auth/session` returns the signed-in account and its organizations. It needs the session cookie.
+`GET /auth/session` returns the signed-in account and its organizations. It
+needs the session cookie.
 
 ```json
 {
@@ -118,25 +147,36 @@ curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
 | `memberships`   | The organizations of the account, with its status and roles in each one.                                     |
 | `platformAdmin` | `true` when the account is a platform admin. Then it can use `/v1/platform`. See [Platform](/docs/platform). |
 
-`POST /auth/sign-out` ends the sign-in. It is a Better Auth route. Send a JSON body (`{}`) and the `Origin` header (see below). It returns `200`.
+`POST /auth/sign-out` ends the sign-in. It is a Better Auth route. Send a JSON
+body (`{}`) and the `Origin` header (see below). It returns `200`.
 
 ---
 
 ## Membership
 
-One platform has many organizations. A user and an organization are separate. One account can create organizations and be a member of many of them. When an account signs in, OpenBot checks where it belongs:
+One platform has many organizations. A user and an organization are separate.
+One account can create organizations and be a member of many of them. When an
+account signs in, OpenBot checks where it belongs:
 
-1. It joins the organization that verified the domain of its verified email, when that organization allows `joinByDomain`.
+1. It joins the organization that verified the domain of its verified email,
+   when that organization allows `joinByDomain`.
 2. It joins the organization of its SSO connection, if it signed in through one.
-3. OpenBot never makes an organization for it. Without one, organization routes answer `403` with `MembershipRequired`. The account can still [create an organization](/docs/organization#create-an-organization) or [accept an invitation](/docs/organization#answer-an-invitation).
+3. OpenBot never makes an organization for it. Without one, organization routes
+   answer `403` with `MembershipRequired`. The account can still
+   [create an organization](/docs/organization#create-an-organization) or
+   [accept an invitation](/docs/organization#answer-an-invitation).
 
-OpenBot also does these checks on each request with the session cookie. See [Organization](/docs/organization#who-can-join).
+OpenBot also does these checks on each request with the session cookie. See
+[Organization](/docs/organization#who-can-join).
 
-A suspended member gets `403` with `MembershipRequired` when they use the cookie. Their tokens stop working at once and get `401` with `AuthenticationRequired`.
+A suspended member gets `403` with `MembershipRequired` when they use the
+cookie. Their tokens stop working at once and get `401` with
+`AuthenticationRequired`.
 
 ### Choose an organization
 
-A request with the session cookie must say which organization it acts in. Send the ID in the `OpenBot-Organization` header:
+A request with the session cookie must say which organization it acts in. Send
+the ID in the `OpenBot-Organization` header:
 
 ```sh
 curl -b cookies.txt \
@@ -145,7 +185,8 @@ curl -b cookies.txt \
 ```
 
 - Without the header, OpenBot uses your only active organization.
-- If you have more than one active organization and send no header, OpenBot returns `400` with `OrganizationRequired`.
+- If you have more than one active organization and send no header, OpenBot
+  returns `400` with `OrganizationRequired`.
 
 A user token belongs to one organization. It ignores the header.
 
@@ -153,16 +194,20 @@ A user token belongs to one organization. It ignores the header.
 
 ## The session cookie
 
-After sign-in, the browser holds the cookie `__Host-openbot-session`. It is `Secure`, `HttpOnly` and `SameSite=Lax`.
+After sign-in, the browser holds the cookie `__Host-openbot-session`. It is
+`Secure`, `HttpOnly` and `SameSite=Lax`.
 
 - A sign-in lasts 30 days.
 - OpenBot renews it after one day of use.
 
 ### The Origin rule
 
-A cookie goes with every browser request, even from other sites. So OpenBot checks where a write comes from.
-When you use the cookie, every `POST`, `PUT`, `PATCH` and `DELETE` request must send an `Origin` header.
-The header must be exactly equal to `publicOrigin` in the [platform settings](/docs/platform#platform-settings). If it is not, OpenBot returns `403` with `ForbiddenOrigin`.
+A cookie goes with every browser request, even from other sites. So OpenBot
+checks where a write comes from. When you use the cookie, every `POST`, `PUT`,
+`PATCH` and `DELETE` request must send an `Origin` header. The header must be
+exactly equal to `publicOrigin` in the
+[platform settings](/docs/platform#platform-settings). If it is not, OpenBot
+returns `403` with `ForbiddenOrigin`.
 
 ```sh
 curl -b cookies.txt \
@@ -178,13 +223,19 @@ Requests with a user token do not need the `Origin` header.
 
 ## User tokens
 
-A user token lets a program act for you. A token can never do more than you can do. It can also have its own policies, so it does less. See [Permissions](/docs/permissions).
+A user token lets a program act for you. A token can never do more than you can
+do. It can also have its own policies, so it does less. See
+[Permissions](/docs/permissions).
 
-You can manage tokens with the session cookie, or with a token that has the `tokens.write` permission. A token made without policies cannot manage tokens.
+You can manage tokens with the session cookie, or with a token that has the
+`tokens.write` permission. A token made without policies cannot manage tokens.
 
-A token belongs to one organization: the organization of the request that made it. With the cookie, send the `OpenBot-Organization` header to choose it. See [Choose an organization](#choose-an-organization).
+A token belongs to one organization: the organization of the request that made
+it. With the cookie, send the `OpenBot-Organization` header to choose it. See
+[Choose an organization](#choose-an-organization).
 
-See the full shapes in the [User tokens reference](/docs/api/operations/tags/user-tokens/).
+See the full shapes in the
+[User tokens reference](/docs/api/operations/tags/user-tokens/).
 
 ### Create a token
 
@@ -230,7 +281,8 @@ OpenBot returns `201`:
 	keeps only a SHA-256 hash of it.
 </Callout>
 
-Every secret starts with `obut_`, so a leaked token is easy to spot. The `prefix` is the first 13 characters. Use it to tell your tokens apart.
+Every secret starts with `obut_`, so a leaked token is easy to spot. The
+`prefix` is the first 13 characters. Use it to tell your tokens apart.
 
 ### List tokens
 
@@ -238,8 +290,9 @@ Every secret starts with `obut_`, so a leaked token is easy to spot. The `prefix
 curl -b cookies.txt https://api.example.com/v1/user/tokens
 ```
 
-The answer is `{ "items": [ ... ] }`, oldest first. The list never contains secrets.
-`lastUsedAt` changes at most once a minute. Expired tokens stay in the list until you revoke them.
+The answer is `{ "items": [ ... ] }`, oldest first. The list never contains
+secrets. `lastUsedAt` changes at most once a minute. Expired tokens stay in the
+list until you revoke them.
 
 ### Revoke a token
 
@@ -253,7 +306,8 @@ OpenBot returns `204` and deletes the token. The token stops working at once.
 
 ### Check a token
 
-`GET /v1/tokens/verify` shows who the caller is. For a token, it also shows the token and its policies. Every caller can use it.
+`GET /v1/tokens/verify` shows who the caller is. For a token, it also shows the
+token and its policies. Every caller can use it.
 
 ```json
 {
@@ -281,7 +335,8 @@ With the session cookie, `caller.kind` is `member` and `token` is `null`.
 | `409`  | `TokenLimitReached`       | You already have 25 tokens. The body has `"limit": 25`.                    |
 | `503`  | `TokenStorageUnavailable` | OpenBot cannot reach its database.                                         |
 
-A member can hold 25 tokens at a time. Expired tokens count too, so revoke old tokens to make room.
+A member can hold 25 tokens at a time. Expired tokens count too, so revoke old
+tokens to make room.
 
 ---
 
@@ -294,23 +349,37 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/chats
 ```
 
-A revoked, expired or unknown token gets `401` with `AuthenticationRequired`. If OpenBot cannot check the token, it returns `503` with `AuthenticationUnavailable`.
+A revoked, expired or unknown token gets `401` with `AuthenticationRequired`. If
+OpenBot cannot check the token, it returns `503` with
+`AuthenticationUnavailable`.
 
 ### Your own space
 
-Inside the organization, each member has their own Chats, Apps and connections. Your tokens and your cookie see only your own.
-If you ask for a Chat of another member, OpenBot answers `404`, as if it does not exist.
+Inside the organization, each member has their own Chats, Apps and connections.
+Your tokens and your cookie see only your own. If you ask for a Chat of another
+member, OpenBot answers `404`, as if it does not exist.
 
 ---
 
 ## Return paths
 
-Some flows send the browser back to your client after a round trip. You choose the place with `returnTo`.
+Some flows send the browser back to your client after a round trip. You choose
+the place with `returnTo`.
 
-A return path must be a path on the same origin. It must start with one `/`. It cannot point to `/auth/*`, `/v1/*` or `/development/*`, because OpenBot owns those paths. The default is `/`.
+A return path must be a path on the same origin. It must start with one `/`. It
+cannot point to `/auth/*`, `/v1/*` or `/development/*`, because OpenBot owns
+those paths. The default is `/`.
 
-OpenBot has no pages, so your client must serve these paths. Two flows add a query value:
+OpenBot has no pages, so your client must serve these paths. Two flows add a
+query value:
 
-- **App authorization.** When an App sign-in comes back and the person is signed in, OpenBot finishes the flow. The browser goes to the return path with `?authorization=<flowId>`. Your client can read the result with `GET /v1/app-authorizations/<flowId>`.
-  If the person is not signed in, the browser goes to `/?authorization=<flowId>`. Your client signs the person in with `POST /auth/sign-in` (see [Sign in](#sign-in)), with this address as `returnTo`. Then it calls `POST /v1/app-authorizations/<flowId>/complete` to finish the flow.
-- **Developer tests.** A developer test authorization returns to `/?developerTest=<testId>`.
+- **App authorization.** When an App sign-in comes back and the person is signed
+  in, OpenBot finishes the flow. The browser goes to the return path with
+  `?authorization=<flowId>`. Your client can read the result with
+  `GET /v1/app-authorizations/<flowId>`. If the person is not signed in, the
+  browser goes to `/?authorization=<flowId>`. Your client signs the person in
+  with `POST /auth/sign-in` (see [Sign in](#sign-in)), with this address as
+  `returnTo`. Then it calls `POST /v1/app-authorizations/<flowId>/complete` to
+  finish the flow.
+- **Developer tests.** A developer test authorization returns to
+  `/?developerTest=<testId>`.

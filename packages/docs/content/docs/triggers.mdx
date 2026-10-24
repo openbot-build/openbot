@@ -1,9 +1,14 @@
 ---
 title: Triggers
-description: Give a task to a Bot with a prompt, on a schedule or from a webhook.
+description:
+  Give a task to a Bot with a prompt, on a schedule or from a webhook.
 ---
 
-A **trigger** gives one task with one prompt to one Bot. It fires on a schedule, from a webhook, or both. It does nothing else: the Bot decides how to do the work. It can plan first, keep a [todo list](/docs/chats#todo-list), and give work to other Bots. When the task ends, its result goes to your [Chat](/docs/chats) with the Bot.
+A **trigger** gives one task with one prompt to one Bot. It fires on a schedule,
+from a webhook, or both. It does nothing else: the Bot decides how to do the
+work. It can plan first, keep a [todo list](/docs/chats#todo-list), and give
+work to other Bots. When the task ends, its result goes to your
+[Chat](/docs/chats) with the Bot.
 
 ---
 
@@ -24,33 +29,50 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `shared`   | Optional. `true` makes a shared trigger that belongs to the organization.                                  |
 | `enabled`  | Optional. `false` keeps the trigger from firing. The default is `true`.                                    |
 
-The answer is `201` with the trigger. It has `nextRunAt`, the next time that the schedule fires, and `lastFiredAt`.
+The answer is `201` with the trigger. It has `nextRunAt`, the next time that the
+schedule fires, and `lastFiredAt`.
 
-`GET /v1/triggers` lists your triggers and the shared ones. `GET`, `PATCH` and `DELETE /v1/triggers/:triggerId` read, change and delete one. A change needs `expected`, the `revision` that you read. An old revision returns `409` with `TriggerConflict`.
+`GET /v1/triggers` lists your triggers and the shared ones. `GET`, `PATCH` and
+`DELETE /v1/triggers/:triggerId` read, change and delete one. A change needs
+`expected`, the `revision` that you read. An old revision returns `409` with
+`TriggerConflict`.
 
 ---
 
 ## What a firing does
 
-Each firing gives the task to the Bot as a [delegation](/docs/delegation). The work runs in a new task Chat of the Bot. Its first input is the prompt, from "a trigger". The delegation has `trigger` with the ID of the trigger.
+Each firing gives the task to the Bot as a [delegation](/docs/delegation). The
+work runs in a new task Chat of the Bot. Its first input is the prompt, from "a
+trigger". The delegation has `trigger` with the ID of the trigger.
 
-When the work ends, its result goes as a [notice](/docs/chats#notices) to the direct Chat of the actor with the Bot. OpenBot makes that Chat when it does not exist yet. So the Bot reads the result there, and it can tell the actor about it or go on with the work. The [audit log](/docs/organization#audit-log) records `trigger.fired` with the ID of the delegation in `details.delegation`.
+When the work ends, its result goes as a [notice](/docs/chats#notices) to the
+direct Chat of the actor with the Bot. OpenBot makes that Chat when it does not
+exist yet. So the Bot reads the result there, and it can tell the actor about it
+or go on with the work. The [audit log](/docs/organization#audit-log) records
+`trigger.fired` with the ID of the delegation in `details.delegation`.
 
-To find the work of a trigger, read `GET /v1/chats/:chatId/delegations` for that direct Chat, or list the task Chats of the Bot with `GET /v1/chats?kind=task&bot=<id>`.
+To find the work of a trigger, read `GET /v1/chats/:chatId/delegations` for that
+direct Chat, or list the task Chats of the Bot with
+`GET /v1/chats?kind=task&bot=<id>`.
 
 ---
 
 ## Schedules
 
-A schedule has a `cron` text with five fields, such as `0 9 * * 1-5` for 9:00 on work days. `timeZone` is an IANA time zone, such as `Europe/Berlin`. Without it, the time zone is UTC. A cron text that is not valid returns `400` with `TriggerInvalid`.
+A schedule has a `cron` text with five fields, such as `0 9 * * 1-5` for 9:00 on
+work days. `timeZone` is an IANA time zone, such as `Europe/Berlin`. Without it,
+the time zone is UTC. A cron text that is not valid returns `400` with
+`TriggerInvalid`.
 
-OpenBot looks for schedules that are due every 15 seconds. When many servers run, each trigger fires only once.
+OpenBot looks for schedules that are due every 15 seconds. When many servers
+run, each trigger fires only once.
 
 ---
 
 ## Webhooks
 
-`PUT /v1/triggers/:triggerId/webhook` makes a webhook secret. OpenBot shows it only once:
+`PUT /v1/triggers/:triggerId/webhook` makes a webhook secret. OpenBot shows it
+only once:
 
 ```json
 {
@@ -68,17 +90,26 @@ curl -H "Authorization: Bearer $WEBHOOK_SECRET" \
   https://api.example.com/v1/hooks/triggers/trg_4c1e...
 ```
 
-The answer is `202` with the `delegation`. The JSON body goes to the Bot with the task. OpenBot marks it as data from another system, not as an instruction. A wrong secret, a trigger without a webhook, or a disabled trigger returns `401` with `TriggerHookDenied`.
+The answer is `202` with the `delegation`. The JSON body goes to the Bot with
+the task. OpenBot marks it as data from another system, not as an instruction. A
+wrong secret, a trigger without a webhook, or a disabled trigger returns `401`
+with `TriggerHookDenied`.
 
-A new `PUT` makes a new secret, and the old one stops working. `DELETE /v1/triggers/:triggerId/webhook` removes the webhook.
+A new `PUT` makes a new secret, and the old one stops working.
+`DELETE /v1/triggers/:triggerId/webhook` removes the webhook.
 
 ---
 
 ## Who the work is for
 
-The work of a trigger is for its **actor**: the last member who created or changed the trigger or its webhook. So a change makes you the actor. The task Chat belongs to the actor, and the result goes to the Chat of the actor. The actor must be able to give work to the Bot. If the actor cannot do that any more, the trigger does not fire.
+The work of a trigger is for its **actor**: the last member who created or
+changed the trigger or its webhook. So a change makes you the actor. The task
+Chat belongs to the actor, and the result goes to the Chat of the actor. The
+actor must be able to give work to the Bot. If the actor cannot do that any
+more, the trigger does not fire.
 
-The Bot works as it does in any task. It has no extra limits, and it asks for new capabilities with [requests](/docs/requests). The requests go to the actor.
+The Bot works as it does in any task. It has no extra limits, and it asks for
+new capabilities with [requests](/docs/requests). The requests go to the actor.
 
 ---
 
@@ -89,4 +120,6 @@ The Bot works as it does in any task. It has no extra limits, and it asks for ne
 | `triggers.read`  | Read triggers: their schedules and webhooks.                       |
 | `triggers.write` | Create, change and delete triggers, and set their webhook secrets. |
 
-Your own triggers are below `openbot.org.<org>.user.<user>.trigger`. Shared triggers are below `openbot.org.<org>.trigger`. Every member can read the shared triggers. Administrators can change them. See [Permissions](/docs/permissions).
+Your own triggers are below `openbot.org.<org>.user.<user>.trigger`. Shared
+triggers are below `openbot.org.<org>.trigger`. Every member can read the shared
+triggers. Administrators can change them. See [Permissions](/docs/permissions).

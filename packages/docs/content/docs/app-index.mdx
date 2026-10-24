@@ -3,9 +3,12 @@ title: App Index
 description: Search the public list of Apps without signing in.
 ---
 
-The **App Index** is a public list of Apps. Anyone can search it. You do not need to sign in or send a user token. The Index only holds public App descriptions. It never holds accounts, settings, sign-ins, or results.
+The **App Index** is a public list of Apps. Anyone can search it. You do not
+need to sign in or send a user token. The Index only holds public App
+descriptions. It never holds accounts, settings, sign-ins, or results.
 
-The Bot uses the same Index through the `openbot_search_apps` and `openbot_app_details` tools. See [Apps](/docs/apps#apps-in-turns).
+The Bot uses the same Index through the `openbot_search_apps` and
+`openbot_app_details` tools. See [Apps](/docs/apps#apps-in-turns).
 
 ---
 
@@ -28,7 +31,10 @@ curl https://api.example.com/v1/app-index/sources
 ]
 ```
 
-The `openbot` source is the Index of this OpenBot server. A deployment owner can add the Index of other OpenBot servers in code. OpenBot reads them without user credentials. In development mode the source name is `OpenBot Development Index`, and `simulated` is `true`.
+The `openbot` source is the Index of this OpenBot server. A deployment owner can
+add the Index of other OpenBot servers in code. OpenBot reads them without user
+credentials. In development mode the source name is `OpenBot Development Index`,
+and `simulated` is `true`.
 
 ---
 
@@ -90,20 +96,27 @@ The answer is a page:
 - `entry.card` is the full public Server Card, with icons and usage examples.
 - `entry.evidence` shows where the publisher lists this Card.
 - `matches` says which fields matched your query.
-- `check` is the last index check. See [How Apps get indexed](#how-apps-get-indexed).
-- `restriction` appears when the deployment blocks the App. See [Host restrictions](#host-restrictions).
+- `check` is the last index check. See
+  [How Apps get indexed](#how-apps-get-indexed).
+- `restriction` appears when the deployment blocks the App. See
+  [Host restrictions](#host-restrictions).
 
-Results are sorted by Card name, then by Card URL. When the same App is in more than one source, it appears once, with all its `sources`.
+Results are sorted by Card name, then by Card URL. When the same App is in more
+than one source, it appears once, with all its `sources`.
 
 ### Paging
 
-When `nextCursor` is not `null`, there are more results. Send the same `query` and `source` again with `cursor` set to that value.
+When `nextCursor` is not `null`, there are more results. Send the same `query`
+and `source` again with `cursor` set to that value.
 
-If the search or its sources change between pages, you get 400 `IndexInputInvalid`. Start again from the first page.
+If the search or its sources change between pages, you get 400
+`IndexInputInvalid`. Start again from the first page.
 
 ### Partial results
 
-When one source fails, you still get results from the others. The `issues` list names each failed source and gives a `message`. Show these issues to the user, so they know the list may not be complete.
+When one source fails, you still get results from the others. The `issues` list
+names each failed source and gives a `message`. Show these issues to the user,
+so they know the list may not be complete.
 
 When every source fails, you get 503 `IndexUnavailable` with the `issues`.
 
@@ -117,7 +130,8 @@ Read one App by its Card URL:
 curl "https://api.example.com/v1/app-index/app?cardUrl=https%3A%2F%2Fapps.example.com%2Fmcp%2Fserver-card"
 ```
 
-The answer has the same shape as one item in `apps`. You can add `source` to read from one source only.
+The answer has the same shape as one item in `apps`. You can add `source` to
+read from one source only.
 
 | Status | Error               | Meaning                                    |
 | ------ | ------------------- | ------------------------------------------ |
@@ -130,20 +144,28 @@ The answer has the same shape as one item in `apps`. You can add `source` to rea
 
 ## How Apps get indexed
 
-Nobody needs to register an App. An App joins the Index after a user connects it:
+Nobody needs to register an App. An App joins the Index after a user connects
+it:
 
 1. A user saves a connection to the App. Manual connections are not indexed.
-2. OpenBot puts the Card URL in a queue. The connection does not wait for this. It works even when the Index is down.
-3. A background worker reads the Card again with no user data and no credentials. It checks that:
-   - the Card is public and valid, and has an endpoint that supports the protocol;
+2. OpenBot puts the Card URL in a queue. The connection does not wait for this.
+   It works even when the Index is down.
+3. A background worker reads the Card again with no user data and no
+   credentials. It checks that:
+   - the Card is public and valid, and has an endpoint that supports the
+     protocol;
    - `robots.txt` allows the `OpenBot` user bot;
    - the Card has no `noindex` rule;
    - a publisher Catalog lists the same Card URL.
 4. If all checks pass, OpenBot saves the public entry.
 
-The publisher Catalog can be at the Card's own origin under `/.well-known/ai-catalog.json`, in an `ai-catalog` link on the Card response, or on the page named in the Card's `websiteUrl`. A copy of the Card in someone else's Catalog is not enough.
+The publisher Catalog can be at the Card's own origin under
+`/.well-known/ai-catalog.json`, in an `ai-catalog` link on the Card response, or
+on the page named in the Card's `websiteUrl`. A copy of the Card in someone
+else's Catalog is not enough.
 
-OpenBot checks each App again about every hour. After a failed or unsure check, it tries again after about one minute.
+OpenBot checks each App again about every hour. After a failed or unsure check,
+it tries again after about one minute.
 
 | `check._tag`  | Meaning                                                                             |
 | ------------- | ----------------------------------------------------------------------------------- |
@@ -154,7 +176,8 @@ OpenBot checks each App again about every hour. After a failed or unsure check, 
 | `Unconfirmed` | A needed check did not finish. An existing entry stays.                             |
 | `Failed`      | The check could not run.                                                            |
 
-Publishers can also ask for a check from the [developer tools](/docs/developer-tools#ask-for-indexing).
+Publishers can also ask for a check from the
+[developer tools](/docs/developer-tools#ask-for-indexing).
 
 ---
 
@@ -162,13 +185,19 @@ Publishers can also ask for a check from the [developer tools](/docs/developer-t
 
 A publisher controls whether their App is in the Index:
 
-- **`noindex`.** Send `X-Robots-Tag: noindex` on the Card response. You can also send `X-Robots-Tag: OpenBot: noindex` to target only this crawler. At the next check, OpenBot removes the entry, or never adds it.
-- **Remove the Card from your Catalog.** At the next check, OpenBot withdraws the entry.
-- **`robots.txt`.** Block the `OpenBot` user bot. At the next check, OpenBot excludes the App, and it no longer shows in search.
+- **`noindex`.** Send `X-Robots-Tag: noindex` on the Card response. You can also
+  send `X-Robots-Tag: OpenBot: noindex` to target only this crawler. At the next
+  check, OpenBot removes the entry, or never adds it.
+- **Remove the Card from your Catalog.** At the next check, OpenBot withdraws
+  the entry.
+- **`robots.txt`.** Block the `OpenBot` user bot. At the next check, OpenBot
+  excludes the App, and it no longer shows in search.
 
-If your Catalog cannot be reached, that is not a withdrawal. The check is `Unconfirmed`, and the entry stays.
+If your Catalog cannot be reached, that is not a withdrawal. The check is
+`Unconfirmed`, and the entry stays.
 
-Removing an Index entry never removes anyone's connection. Users can still use an App that is not in the Index.
+Removing an Index entry never removes anyone's connection. Users can still use
+an App that is not in the Index.
 
 <Callout type="info">
 	`noindex` only controls the public Index. It does not protect your App. Use
@@ -179,7 +208,10 @@ Removing an Index entry never removes anyone's connection. Users can still use a
 
 ## Host restrictions
 
-A platform admin can block some Apps. Each restriction has a `cardUrl`, a public `reason`, and an HTTPS `appealUrl`. They live in `appRestrictions` in the platform settings. Change them with `PATCH /v1/platform/settings`. See [Platform](/docs/platform#platform-settings).
+A platform admin can block some Apps. Each restriction has a `cardUrl`, a public
+`reason`, and an HTTPS `appealUrl`. They live in `appRestrictions` in the
+platform settings. Change them with `PATCH /v1/platform/settings`. See
+[Platform](/docs/platform#platform-settings).
 
 A blocked App:
 
@@ -187,6 +219,8 @@ A blocked App:
 - is excluded at that check, and then no longer shows in search;
 - returns 403 `IndexRestricted` from the details call;
 - cannot be connected (403 `AppRestricted`);
-- has the availability `Restricted` in existing connections, so the Bot cannot use it.
+- has the availability `Restricted` in existing connections, so the Bot cannot
+  use it.
 
-See the full shapes in the [API reference](/docs/api/operations/tags/app-index/).
+See the full shapes in the
+[API reference](/docs/api/operations/tags/app-index/).

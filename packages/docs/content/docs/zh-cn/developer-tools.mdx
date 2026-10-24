@@ -5,7 +5,8 @@ description: 检查、测试和管理你发布的 App。
 
 这些工具面向发布 App 的人。你可以检查你的 App、证明你控制它、与团队共享访问权限、运行私密测试、请求收录，以及在出现问题时收到通知。
 
-只有检查调用是公开的。其他所有调用都需要用户令牌或 session cookie，以及 `apps.publish` 权限。参见[身份验证](/zh-cn/docs/authentication)。
+只有检查调用是公开的。其他所有调用都需要用户令牌或 session cookie，以及
+`apps.publish` 权限。参见[身份验证](/zh-cn/docs/authentication)。
 
 ---
 
@@ -27,7 +28,8 @@ curl -X POST https://api.example.com/v1/developer/inspect \
 | `issues` | 需要修复的问题。每个问题都有一个 `code`、一个 `stage`、一个 `severity`（`blocking` 或 `suggestion`）、一个 `message` 和一个 `repair` 提示。                                          |
 | `stages` | 每个检查步骤：`Input`、`Discovery`、`CardRead`、`CardSchema`、`Compatibility`、`PublisherAssociation` 和 `Eligibility`。每个都是 `Passed`、`Failed`、`Unconfirmed` 或 `NotChecked`。 |
 
-`Eligible` 结果并不表示 App 已经在 Index 中。参见 [App Index](/zh-cn/docs/app-index#app-如何被收录)。
+`Eligible` 结果并不表示 App 已经在 Index 中。参见
+[App Index](/zh-cn/docs/app-index#app-如何被收录)。
 
 ---
 
@@ -52,16 +54,19 @@ curl -X POST https://api.example.com/v1/developer/claims \
   -d '{ "_tag": "PublisherHostname", "hostname": "apps.example.com" }'
 ```
 
-对于单个 App，发送 `{ "_tag": "AppCard", "cardUrl": "https://apps.example.com/mcp/server-card" }`。主机名必须是一个确切的公开名称，不能带端口、路径或通配符。
+对于单个 App，发送
+`{ "_tag": "AppCard", "cardUrl": "https://apps.example.com/mcp/server-card" }`。主机名必须是一个确切的公开名称，不能带端口、路径或通配符。
 
-响应中有一个 `id` 和一个形如 `openbot-verification=...` 的 `token`。声明保留 24 小时。
+响应中有一个 `id` 和一个形如 `openbot-verification=...` 的
+`token`。声明保留 24 小时。
 
 </Step>
 <Step>
 
 ### 发布令牌
 
-对于主机名，在 `_openbot-verification.<hostname>` 添加一条 DNS TXT 记录。用完整的令牌作为值：
+对于主机名，在 `_openbot-verification.<hostname>` 添加一条 DNS
+TXT 记录。用完整的令牌作为值：
 
 ```txt
 _openbot-verification.apps.example.com.  TXT  "openbot-verification=abc123..."
@@ -80,7 +85,8 @@ _openbot-verification.apps.example.com.  TXT  "openbot-verification=abc123..."
 }
 ```
 
-OpenBot 在 Card 确切的 URL 读取它，不跟随重定向。你的 `robots.txt` 必须允许 `OpenBot` 用户代理。
+OpenBot 在 Card 确切的 URL 读取它，不跟随重定向。你的 `robots.txt` 必须允许
+`OpenBot` 用户代理。
 
 </Step>
 <Step>
@@ -92,7 +98,10 @@ curl -X POST https://api.example.com/v1/developer/claims/<claim id>/verify \
   -H "Authorization: Bearer $OPENBOT_TOKEN"
 ```
 
-成功时，你会得到一份**证明**（proof）。你会成为这个范围的 `administrator`。失败时，你会得到 409 `DeveloperConflict`。它的 `reason` 可能是 `ProofMismatch`、`ClaimExpired`、`VerificationUnavailable`、`RobotsDenied`、`RobotsUnconfirmed` 或 `CardUnconfirmed`。
+成功时，你会得到一份**证明**（proof）。你会成为这个范围的
+`administrator`。失败时，你会得到 409 `DeveloperConflict`。它的 `reason` 可能是
+`ProofMismatch`、`ClaimExpired`、`VerificationUnavailable`、`RobotsDenied`、`RobotsUnconfirmed`
+或 `CardUnconfirmed`。
 
 </Step>
 </Steps>
@@ -100,10 +109,14 @@ curl -X POST https://api.example.com/v1/developer/claims/<claim id>/verify \
 请保留令牌。证明的有效期是 7 天，OpenBot 每天都会重新检查它：
 
 - 如果令牌不见了，证明会立刻变成 `Suspended`。
-- 如果检查无法运行，证明会变成 `Unconfirmed`。在到期之前它仍然有效。OpenBot 会在大约一分钟后重试。
+- 如果检查无法运行，证明会变成
+  `Unconfirmed`。在到期之前它仍然有效。OpenBot 会在大约一分钟后重试。
 - `Suspended` 的证明不提供任何访问权限。
 
-要立刻检查，请调用 `POST /v1/developer/proofs/:id/verify`。要放弃一份证明，请调用 `POST /v1/developer/proofs/:id/relinquish`。要取消一个声明，请调用 `POST /v1/developer/claims/:id/revoke`。
+要立刻检查，请调用
+`POST /v1/developer/proofs/:id/verify`。要放弃一份证明，请调用
+`POST /v1/developer/proofs/:id/relinquish`。要取消一个声明，请调用
+`POST /v1/developer/claims/:id/revoke`。
 
 `GET /v1/developer` 返回你的 App、你的证明，以及你的访问授权 `grants`。
 
@@ -119,11 +132,16 @@ curl -X POST https://api.example.com/v1/developer/claims/<claim id>/verify \
 | `maintainer`    | 保存报告、运行测试和请求收录。             |
 | `viewer`        | 读取 App、报告和收录请求。不能修改。       |
 
-1. 邀请：`POST /v1/developer/proofs/:id/invitations`，带上 `{ "role": "maintainer" }` 或 `"viewer"`。邀请保留 7 天。
-2. 把邀请的 `id` 发给对方。对方用 `GET /v1/developer/invitations/:id` 读取它，用 `POST /v1/developer/invitations/:id/accept` 接受它。
-3. 管理：`GET /v1/developer/proofs/:id/members`、带新 `role` 的 `PUT /v1/developer/members/:id`，以及 `DELETE /v1/developer/members/:id`。成员也可以移除自己。
+1. 邀请：`POST /v1/developer/proofs/:id/invitations`，带上
+   `{ "role": "maintainer" }` 或 `"viewer"`。邀请保留 7 天。
+2. 把邀请的 `id` 发给对方。对方用 `GET /v1/developer/invitations/:id` 读取它，用
+   `POST /v1/developer/invitations/:id/accept` 接受它。
+3. 管理：`GET /v1/developer/proofs/:id/members`、带新 `role` 的
+   `PUT /v1/developer/members/:id`，以及
+   `DELETE /v1/developer/members/:id`。成员也可以移除自己。
 
-要取消邀请，请调用 `POST /v1/developer/invitations/:id/revoke`。证明结束时，它的成员也会失去访问权限。
+要取消邀请，请调用
+`POST /v1/developer/invitations/:id/revoke`。证明结束时，它的成员也会失去访问权限。
 
 ---
 
@@ -140,7 +158,8 @@ curl -X POST https://api.example.com/v1/developer/claims/<claim id>/verify \
 | 删除你保存的一份报告 | `DELETE /v1/developer/reports/:id`                                                  |
 | 列出你保存的报告     | `GET /v1/developer/personal-reports`                                                |
 
-比较结果会列出 `introduced`（新出现）、`resolved`（已解决）和 `persisting`（仍存在）的问题。
+比较结果会列出 `introduced`（新出现）、`resolved`（已解决）和
+`persisting`（仍存在）的问题。
 
 ---
 
@@ -148,22 +167,31 @@ curl -X POST https://api.example.com/v1/developer/claims/<claim id>/verify \
 
 测试会像用户一样从 OpenBot 连接你的 App。它是私密的。它不保存用户连接，也不把 App 加入 Index。测试在一小时后结束。
 
-1. 用你自己的 UUID 创建一个测试：`POST /v1/developer/tests`，带上 `{ "id", "cardUrl", "remoteIndex" }`。
+1. 用你自己的 UUID 创建一个测试：`POST /v1/developer/tests`，带上
+   `{ "id", "cardUrl", "remoteIndex" }`。
 2. 如果端点需要设置，就发送它们：`PUT /v1/developer/tests/:id/configuration`，带上一个由键和值组成的对象。键和[连接](/zh-cn/docs/apps#审查并创建连接)中的相同。
-3. 运行它：`POST /v1/developer/tests/:id/run`。用 `GET /v1/developer/tests/:id` 读取结果。
+3. 运行它：`POST /v1/developer/tests/:id/run`。用 `GET /v1/developer/tests/:id`
+   读取结果。
 
-每次运行都有 `stages`：`configuration`、`negotiation`、`tools`、`resources`、`resourceTemplates` 和 `prompts`。每个阶段都是 `Passed`、`Failed`、`NotAdvertised` 或 `NotChecked`。测试的 `status` 最终为 `Succeeded` 或 `Failed`。
+每次运行都有
+`stages`：`configuration`、`negotiation`、`tools`、`resources`、`resourceTemplates`
+和 `prompts`。每个阶段都是 `Passed`、`Failed`、`NotAdvertised` 或
+`NotChecked`。测试的 `status` 最终为 `Succeeded` 或 `Failed`。
 
 ### 在测试中登录
 
 当 App 需要账号时，测试状态会变成 `AwaitingAuthorization`。
 
-1. 开始登录：`POST /v1/developer/tests/:id/authorization`，带上 `{ "scopes": [] }`。如果 App 有多个提供方，请加上 `issuer`。
+1. 开始登录：`POST /v1/developer/tests/:id/authorization`，带上
+   `{ "scopes": [] }`。如果 App 有多个提供方，请加上 `issuer`。
 2. 在浏览器中打开 `authorization.authorizationUrl` 并登录。
-3. 提供方把你跳转到 `/auth/developer/apps/callback`。OpenBot 再把你跳转到 `/?developerTest=<testId>`。
+3. 提供方把你跳转到 `/auth/developer/apps/callback`。OpenBot 再把你跳转到
+   `/?developerTest=<testId>`。
 4. 完成：`POST /v1/developer/tests/:id/authorization/complete`。然后再次运行测试。
 
-完成后，请调用 `POST /v1/developer/tests/:id/cleanup`。在提供方允许的情况下，OpenBot 会撤销测试中的登录，并删除保存的令牌。你也可以 `cancel` 一个正在运行的测试，或者 `DELETE` 它。
+完成后，请调用
+`POST /v1/developer/tests/:id/cleanup`。在提供方允许的情况下，OpenBot 会撤销测试中的登录，并删除保存的令牌。你也可以
+`cancel` 一个正在运行的测试，或者 `DELETE` 它。
 
 ---
 
@@ -178,9 +206,12 @@ curl -X POST https://api.example.com/v1/developer/indexing \
   -d '{ "cardUrl": "https://apps.example.com/mcp/server-card" }'
 ```
 
-OpenBot 会先检查这个 App。如果它不符合条件，你会得到 409 和 `reason`。如果本部署屏蔽了这个 App，你会得到 403 `DeveloperRestricted`。
+OpenBot 会先检查这个 App。如果它不符合条件，你会得到 409 和
+`reason`。如果本部署屏蔽了这个 App，你会得到 403 `DeveloperRestricted`。
 
-请求的 `status` 从 `Accepted` 依次变为 `Waiting`、`Verifying` 和 `Completed`。完成后，`check` 中有结果。用 `GET /v1/developer/indexing` 列出请求，或用 `GET /v1/developer/indexing/:id` 读取一个请求。
+请求的 `status` 从 `Accepted` 依次变为 `Waiting`、`Verifying` 和
+`Completed`。完成后，`check` 中有结果。用 `GET /v1/developer/indexing`
+列出请求，或用 `GET /v1/developer/indexing/:id` 读取一个请求。
 
 ---
 
@@ -194,8 +225,12 @@ OpenBot 大约每小时检查一次你管理的 App。有变化时，它会给�
 | `IssueResolved` | 一个阻塞问题消失了。                       |
 | `AccessChanged` | 某份证明的状态变了，或者你失去了成员权限。 |
 
-用 `GET /v1/developer/notifications` 读取通知。用 `before` 读取更早的页面。用 `POST /v1/developer/notifications/:id/read` 把一条通知标记为已读。
+用 `GET /v1/developer/notifications` 读取通知。用 `before` 读取更早的页面。用
+`POST /v1/developer/notifications/:id/read` 把一条通知标记为已读。
 
-问题通知对每个 App 默认打开。要为某个 App 关闭它们，请发送 `PUT /v1/developer/subscriptions`，带上 `{ "cardUrl": "...", "enabled": false }`。用 `GET /v1/developer/subscriptions` 列出你的设置。
+问题通知对每个 App 默认打开。要为某个 App 关闭它们，请发送
+`PUT /v1/developer/subscriptions`，带上
+`{ "cardUrl": "...", "enabled": false }`。用 `GET /v1/developer/subscriptions`
+列出你的设置。
 
 在 [API 参考](/docs/api/operations/tags/developer-tools/)中查看完整的结构。

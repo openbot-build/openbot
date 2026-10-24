@@ -3,17 +3,21 @@ title: SSO 和域名
 description: 验证邮箱域名，并使用你的组织的 OpenID Connect 提供方让人登录。
 ---
 
-SSO（单点登录）让人们使用自己公司的账户提供方登录。
-组织可以为它拥有的邮箱域名添加自己的 OpenID Connect 提供方。OpenID Connect（OIDC）是一种标准方式，让另一个服务来确认一个人的身份。
+SSO（单点登录）让人们使用自己公司的账户提供方登录。组织可以为它拥有的邮箱域名添加自己的 OpenID
+Connect 提供方。OpenID
+Connect（OIDC）是一种标准方式，让另一个服务来确认一个人的身份。
 
-本页说明如何验证域名，如何添加 SSO 连接，以及登录时如何选择提供方。
-所有路由都在 `/v1/organization` 下。读取需要 `sso.read`。修改需要 `sso.write`。见 [权限](/zh-cn/docs/permissions)。
+本页说明如何验证域名，如何添加 SSO 连接，以及登录时如何选择提供方。所有路由都在
+`/v1/organization` 下。读取需要 `sso.read`。修改需要 `sso.write`。见
+[权限](/zh-cn/docs/permissions)。
 
 ---
 
 ## 已验证的域名
 
-邮箱域名是邮箱地址中 `@` 后面的部分，例如 `example.com`。在域名起作用之前，组织必须证明它拥有这个域名。它通过一条 DNS TXT 记录来证明。
+邮箱域名是邮箱地址中 `@` 后面的部分，例如
+`example.com`。在域名起作用之前，组织必须证明它拥有这个域名。它通过一条 DNS
+TXT 记录来证明。
 
 <Steps>
 <Step>
@@ -42,7 +46,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ### 添加 TXT 记录
 
-在你的 DNS 服务商那里添加一条 TXT 记录。名称使用 `recordName`，值使用 `recordValue`。
+在你的 DNS 服务商那里添加一条 TXT 记录。名称使用 `recordName`，值使用
+`recordValue`。
 
 </Step>
 <Step>
@@ -54,19 +59,27 @@ curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/organization/domains/example.com/verify
 ```
 
-OpenBot 会查询这条 TXT 记录。记录正确时，回答中会有 `verifiedAt` 时间。
-如果 OpenBot 找不到这条记录，它返回 `409` 和 `DomainNotVerified`。DNS 的修改可能需要一些时间生效，所以请稍后再试。
+OpenBot 会查询这条 TXT 记录。记录正确时，回答中会有 `verifiedAt`
+时间。如果 OpenBot 找不到这条记录，它返回 `409` 和
+`DomainNotVerified`。DNS 的修改可能需要一些时间生效，所以请稍后再试。
 
 </Step>
 </Steps>
 
-一个域名只能由一个组织验证。如果另一个组织先验证了它，OpenBot 返回 `409` 和 `DomainTaken`。
+一个域名只能由一个组织验证。如果另一个组织先验证了它，OpenBot 返回 `409` 和
+`DomainTaken`。
 
-`GET /v1/organization/domains` 列出所有域名。`DELETE /v1/organization/domains/:domain` 删除一个域名。如果某个 SSO 连接正在使用这个域名，删除会返回 `409` 和 `DomainInUse`。
+`GET /v1/organization/domains`
+列出所有域名。`DELETE /v1/organization/domains/:domain`
+删除一个域名。如果某个 SSO 连接正在使用这个域名，删除会返回 `409` 和
+`DomainInUse`。
 
 ### 按域名加入
 
-已验证的域名还决定谁能加入组织。当 [组织设置](/zh-cn/docs/organization#设置) 中的 `joinByDomain` 为 `true` 时，拥有该域名下已验证邮箱的人在登录时就会加入组织。他们会得到组织的 `defaultRoles`。`joinByDomain` 默认为 `true`。
+已验证的域名还决定谁能加入组织。当 [组织设置](/zh-cn/docs/organization#设置)
+中的 `joinByDomain` 为 `true`
+时，拥有该域名下已验证邮箱的人在登录时就会加入组织。他们会得到组织的
+`defaultRoles`。`joinByDomain` 默认为 `true`。
 
 ---
 
@@ -76,8 +89,9 @@ SSO 连接是组织的一个 OpenID Connect 提供方。邮箱属于它的域名
 
 ### 注册客户端
 
-先在你的提供方那里把 OpenBot 注册为客户端。OpenBot 会请求 `openid profile email` 这几个 scope（权限范围）。
-创建连接后，把它的 `redirectUri` 添加到该客户端允许的重定向 URI 中。
+先在你的提供方那里把 OpenBot 注册为客户端。OpenBot 会请求 `openid profile email`
+这几个 scope（权限范围）。创建连接后，把它的 `redirectUri`
+添加到该客户端允许的重定向 URI 中。
 
 ### 创建连接
 
@@ -120,8 +134,10 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 }
 ```
 
-`redirectUri` 是 `<publicOrigin>/auth/callback/<connectionId>`。请在提供方那里注册它。
-client secret 永远不会返回。回答中显示的是 `{ set, hint }`。见 [Platform](/zh-cn/docs/platform#机密永远不会返回)。
+`redirectUri` 是
+`<publicOrigin>/auth/callback/<connectionId>`。请在提供方那里注册它。client
+secret 永远不会返回。回答中显示的是 `{ set, hint }`。见
+[Platform](/zh-cn/docs/platform#机密永远不会返回)。
 
 ### 修改或删除连接
 
@@ -132,27 +148,33 @@ client secret 永远不会返回。回答中显示的是 `{ set, hint }`。见 [
 | `PATCH /v1/organization/sso_connections/:connectionId`  | 修改一个连接。 |
 | `DELETE /v1/organization/sso_connections/:connectionId` | 删除一个连接。 |
 
-`PATCH` 的请求体需要 `expectedVersion`，也就是你读到的 `version`。如果在你读取之后有人修改了这个连接，OpenBot 返回 `409` 和 `SsoConnectionConflict`。
-对于 `clientSecret`，不填就保留当前的 secret。发送 `null` 会把它变成公共客户端。
+`PATCH` 的请求体需要 `expectedVersion`，也就是你读到的
+`version`。如果在你读取之后有人修改了这个连接，OpenBot 返回 `409` 和
+`SsoConnectionConflict`。对于 `clientSecret`，不填就保留当前的 secret。发送
+`null` 会把它变成公共客户端。
 
 每个实例都会立即使用新的或修改过的连接。如果某个实例漏掉了变更通知，它也会在 30 秒内获取到变更。
 
 ### 强制使用 SSO
 
-当 `enforce: true` 时，邮箱属于该连接域名的人必须通过它登录。他们不能使用平台提供方。
-当 `enforce: false` 时，他们也可以使用平台提供方登录。
+当 `enforce: true`
+时，邮箱属于该连接域名的人必须通过它登录。他们不能使用平台提供方。当
+`enforce: false` 时，他们也可以使用平台提供方登录。
 
 ### 规则
 
 - 一个连接只让邮箱属于它自己域名的人登录。
-- 通过某个连接登录的人会加入该连接的组织。即使 `joinByDomain` 为 `false`，也是如此。
+- 通过某个连接登录的人会加入该连接的组织。即使 `joinByDomain` 为
+  `false`，也是如此。
 - OpenBot 从不关联账户。每个账户只有一个登录提供方。所以，一个人先用平台提供方登录，再用 SSO 连接登录，会得到两个不同的账户。
 
 ---
 
 ## 使用正确的提供方登录
 
-`POST /auth/sign-in` 开始浏览器登录。它不需要凭据。它会检查 `Origin` 请求头，和每次使用 cookie 的写操作一样。见 [身份验证](/zh-cn/docs/authentication#origin-规则)。
+`POST /auth/sign-in` 开始浏览器登录。它不需要凭据。它会检查 `Origin`
+请求头，和每次使用 cookie 的写操作一样。见
+[身份验证](/zh-cn/docs/authentication#origin-规则)。
 
 ```sh
 curl -X POST https://api.example.com/auth/sign-in \
@@ -171,7 +193,9 @@ curl -X POST https://api.example.com/auth/sign-in \
 2. 否则，`url` 指向平台提供方。
 3. 如果两者都没有，OpenBot 返回 `503` 和 `SignInUnavailable`。
 
-把浏览器跳转到 `url`。这个回答还会设置登录状态 cookie，Better Auth 需要它来完成登录。登录后，浏览器会跳转到 `returnTo`。见 [返回路径](/zh-cn/docs/authentication#返回路径)。
+把浏览器跳转到 `url`。这个回答还会设置登录状态 cookie，Better
+Auth 需要它来完成登录。登录后，浏览器会跳转到 `returnTo`。见
+[返回路径](/zh-cn/docs/authentication#返回路径)。
 
 ---
 

@@ -3,7 +3,10 @@ title: Channels
 description: Talk with a Bot in Slack, Lark, Telegram or your own chat system.
 ---
 
-A **Channel** is one bot of your organization on one chat platform, such as a Slack app or a Telegram bot. People talk with the Bot of the Channel in direct chats and group chats. OpenBot stays headless: a Channel is a link between the platform and the API, not a user interface.
+A **Channel** is one bot of your organization on one chat platform, such as a
+Slack app or a Telegram bot. People talk with the Bot of the Channel in direct
+chats and group chats. OpenBot stays headless: a Channel is a link between the
+platform and the API, not a user interface.
 
 | Kind       | Platform                                                                          |
 | ---------- | --------------------------------------------------------------------------------- |
@@ -12,7 +15,9 @@ A **Channel** is one bot of your organization on one chat platform, such as a Sl
 | `telegram` | A Telegram bot.                                                                   |
 | `custom`   | Any other system that speaks the [Channel protocol](#custom-channels) of OpenBot. |
 
-Every platform sends its events to a **webhook** (an address that OpenBot calls back). OpenBot checks the signature of each event, answers at once, and does the work later.
+Every platform sends its events to a **webhook** (an address that OpenBot calls
+back). OpenBot checks the signature of each event, answers at once, and does the
+work later.
 
 ---
 
@@ -35,91 +40,148 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `linkPath`    | Optional. A path on your public origin where your client lets a person [link their account](#link-your-account).       |
 | `enabled`     | Optional. `false` stops the Channel. Its webhook then returns `401`.                                                   |
 
-The answer is `201` with the Channel. Give its `webhookUrl` to the platform. The caller becomes the **actor** of the Channel. The chats of the Channel are [Chats](/docs/chats) of the actor. The actor must be able to give work to the Bot.
+The answer is `201` with the Channel. Give its `webhookUrl` to the platform. The
+caller becomes the **actor** of the Channel. The chats of the Channel are
+[Chats](/docs/chats) of the actor. The actor must be able to give work to the
+Bot.
 
-`GET`, `PATCH` and `DELETE /v1/organization/channels/:channelId` read, change and delete one Channel. A change needs `expectedVersion`, the `version` that you read. An old version returns `409` with `ChannelConflict`. A change makes the caller the actor. Leave out `credentials` to keep the secrets. The kind of a Channel cannot change.
+`GET`, `PATCH` and `DELETE /v1/organization/channels/:channelId` read, change
+and delete one Channel. A change needs `expectedVersion`, the `version` that you
+read. An old version returns `409` with `ChannelConflict`. A change makes the
+caller the actor. Leave out `credentials` to keep the secrets. The kind of a
+Channel cannot change.
 
 ### Slack
 
-`credentials`: `{ "kind": "slack", "botToken": "xoxb-...", "signingSecret": "..." }`
+`credentials`:
+`{ "kind": "slack", "botToken": "xoxb-...", "signingSecret": "..." }`
 
-1. In the Slack app, turn on **Event Subscriptions** with the `webhookUrl` as the request URL. Add the bot events `app_mention` and `message.im`.
-2. Turn on **Interactivity** with the same `webhookUrl`, so the buttons of the bot work.
+1. In the Slack app, turn on **Event Subscriptions** with the `webhookUrl` as
+   the request URL. Add the bot events `app_mention` and `message.im`.
+2. Turn on **Interactivity** with the same `webhookUrl`, so the buttons of the
+   bot work.
 3. Give the bot the scopes `chat:write`, `app_mentions:read` and `im:history`.
 
-OpenBot checks the `X-Slack-Signature` of each request. A request older than 5 minutes is refused.
+OpenBot checks the `X-Slack-Signature` of each request. A request older than 5
+minutes is refused.
 
 ### Lark
 
-`credentials`: `{ "kind": "lark", "domain": "feishu", "appId": "cli_...", "appSecret": "...", "verificationToken": "...", "encryptKey": "..." }`
+`credentials`:
+`{ "kind": "lark", "domain": "feishu", "appId": "cli_...", "appSecret": "...", "verificationToken": "...", "encryptKey": "..." }`
 
-`domain` is `feishu` for Feishu in China and `lark` for Lark in other places. In the Lark app, set an **Encrypt Key** and use the `webhookUrl` as the request URL for events and for card callbacks. Add the event `im.message.receive_v1`. OpenBot checks the signature and the verification token of each event.
+`domain` is `feishu` for Feishu in China and `lark` for Lark in other places. In
+the Lark app, set an **Encrypt Key** and use the `webhookUrl` as the request URL
+for events and for card callbacks. Add the event `im.message.receive_v1`.
+OpenBot checks the signature and the verification token of each event.
 
 ### Telegram
 
 `credentials`: `{ "kind": "telegram", "botToken": "123456:..." }`
 
-OpenBot calls `setWebhook` for you with a secret of its own. Telegram sends that secret back with each update. In a group, the bot gets only messages that name it or answer it, unless you turn off its privacy mode.
+OpenBot calls `setWebhook` for you with a secret of its own. Telegram sends that
+secret back with each update. In a group, the bot gets only messages that name
+it or answer it, unless you turn off its privacy mode.
 
 ---
 
 ## Link your account
 
-The bot only works for members of the organization. When a person who is not linked writes to the bot, nothing runs. The bot sends them a **link code** instead. It sends the code where only that person sees it: in the direct chat, or as a private message in a group when the platform has them. A code lasts 15 minutes.
+The bot only works for members of the organization. When a person who is not
+linked writes to the bot, nothing runs. The bot sends them a **link code**
+instead. It sends the code where only that person sees it: in the direct chat,
+or as a private message in a group when the platform has them. A code lasts 15
+minutes.
 
-With `linkPath`, the bot sends a link such as `https://api.example.com/link?code=ocl_...`. Your client on that path signs the person in and then calls:
+With `linkPath`, the bot sends a link such as
+`https://api.example.com/link?code=ocl_...`. Your client on that path signs the
+person in and then calls:
 
 1. `GET /v1/channel-links/:code` to show who the code is for.
-2. `POST /v1/channel-links/:code/accept` to link the account to the caller. A code works only once.
+2. `POST /v1/channel-links/:code/accept` to link the account to the caller. A
+   code works only once.
 
-The link needs a `POST`, so nobody can link an account by sending a person a link alone. Without `linkPath`, the bot sends only the code, and the person accepts it with the same calls.
+The link needs a `POST`, so nobody can link an account by sending a person a
+link alone. Without `linkPath`, the bot sends only the code, and the person
+accepts it with the same calls.
 
-`GET /v1/user/channel-identities` lists your linked accounts. `DELETE /v1/user/channel-identities/:channelId/:externalUserId` unlinks one. An administrator lists the people of a Channel with `GET /v1/organization/channels/:channelId/identities`, and unlinks one with `DELETE` on `.../identities/:externalUserId`.
+`GET /v1/user/channel-identities` lists your linked accounts.
+`DELETE /v1/user/channel-identities/:channelId/:externalUserId` unlinks one. An
+administrator lists the people of a Channel with
+`GET /v1/organization/channels/:channelId/identities`, and unlinks one with
+`DELETE` on `.../identities/:externalUserId`.
 
 ---
 
 ## Chats of a Channel
 
-Each chat on the platform is one lasting Chat with `kind: "channel"`: one Chat for each direct chat and one for each group chat. The Chat has the name of the chat as its `title`. List them with `GET /v1/chats?kind=channel` as the actor.
+Each chat on the platform is one lasting Chat with `kind: "channel"`: one Chat
+for each direct chat and one for each group chat. The Chat has the name of the
+chat as its `title`. List them with `GET /v1/chats?kind=channel` as the actor.
 
 - In a direct chat, every message goes to the Bot.
-- In a group chat, only a message that names the bot goes to the Bot. Each message starts with the name of the person who wrote it, so the Bot knows who speaks.
-- A message from a person while the Bot works for that same person goes into the running Turn. The Bot reads it at its next step.
-- A message from another person waits in the [inbox](/docs/chats#the-inbox) of the Chat. It runs as its own Turn after the running Turn ends.
-- While a Turn runs, the bot shows its text and changes the message as it grows. A long answer goes out in parts.
-- The answer of every Turn goes to the chat. This is also true for a Turn that a [notice](/docs/chats#notices) starts, such as the result of work that the Bot gave away. So the Bot can say "I will look into it", and post the result later.
+- In a group chat, only a message that names the bot goes to the Bot. Each
+  message starts with the name of the person who wrote it, so the Bot knows who
+  speaks.
+- A message from a person while the Bot works for that same person goes into the
+  running Turn. The Bot reads it at its next step.
+- A message from another person waits in the [inbox](/docs/chats#the-inbox) of
+  the Chat. It runs as its own Turn after the running Turn ends.
+- While a Turn runs, the bot shows its text and changes the message as it grows.
+  A long answer goes out in parts.
+- The answer of every Turn goes to the chat. This is also true for a Turn that a
+  [notice](/docs/chats#notices) starts, such as the result of work that the Bot
+  gave away. So the Bot can say "I will look into it", and post the result
+  later.
 - OpenBot drops an event that the platform sends a second time.
 
 ### Each Turn works for its speaker
 
-A Turn in a chat works for the person who wrote its message, not for the actor. OpenBot calls that person the **author** of the Turn. Its `author` field is their user ID. So:
+A Turn in a chat works for the person who wrote its message, not for the actor.
+OpenBot calls that person the **author** of the Turn. Its `author` field is
+their user ID. So:
 
 - the [permissions](/docs/permissions) of the author decide what the Bot may do,
 - [requests](/docs/requests) go to the author,
 - the Bot knows that it works with the author, and learns about them.
 
-A person needs `channels.use` on the Channel to talk with its Bot. A member who is not active any more cannot use it.
+A person needs `channels.use` on the Channel to talk with its Bot. A member who
+is not active any more cannot use it.
 
 ---
 
 ## Approvals in chat
 
-When a request waits for a person, the bot sends a card with three buttons: **Allow once**, **Allow in this chat** and **Deny**. **Allow in this chat** makes a Grant with the scope `chat`. See [Requests](/docs/requests#answer-a-request). Plans that wait for approval in [plan mode](/docs/chats#plan-mode) get the same card. The card goes to the direct chat of the person when they linked an account on this Channel. Otherwise it goes to the chat of the work. This is also true for a request from work that the Bot gave away, such as a task Chat for this chat.
+When a request waits for a person, the bot sends a card with three buttons:
+**Allow once**, **Allow in this chat** and **Deny**. **Allow in this chat**
+makes a Grant with the scope `chat`. See
+[Requests](/docs/requests#answer-a-request). Plans that wait for approval in
+[plan mode](/docs/chats#plan-mode) get the same card. The card goes to the
+direct chat of the person when they linked an account on this Channel. Otherwise
+it goes to the chat of the work. This is also true for a request from work that
+the Bot gave away, such as a task Chat for this chat.
 
-Only the person that the request waits for can press a button. When the request changes, the card shows the decision.
+Only the person that the request waits for can press a button. When the request
+changes, the card shows the decision.
 
-Bots can also post to another chat of the same Channel with the tool `openbot_channel_send`. Each post is the capability `channels.send`, so the [chain of deciders](/docs/requests#the-chain-of-deciders) decides it.
+Bots can also post to another chat of the same Channel with the tool
+`openbot_channel_send`. Each post is the capability `channels.send`, so the
+[chain of deciders](/docs/requests#the-chain-of-deciders) decides it.
 
 ---
 
 ## Custom Channels
 
-A custom Channel connects any other chat system. Make it with `credentials`: `{ "kind": "custom", "endpoint": "https://chat.example.com/openbot" }`. Then make its signing secret with `PUT /v1/organization/channels/:channelId/secret`. OpenBot shows the secret only once. A new secret stops the old one.
+A custom Channel connects any other chat system. Make it with `credentials`:
+`{ "kind": "custom", "endpoint": "https://chat.example.com/openbot" }`. Then
+make its signing secret with `PUT /v1/organization/channels/:channelId/secret`.
+OpenBot shows the secret only once. A new secret stops the old one.
 
 Both ways sign the same way. Each request has two headers:
 
 - `X-OpenBot-Timestamp`: the time in seconds.
-- `X-OpenBot-Signature`: `sha256=` and the hex HMAC-SHA256 of `timestamp + "." + body` with the secret.
+- `X-OpenBot-Signature`: `sha256=` and the hex HMAC-SHA256 of
+  `timestamp + "." + body` with the secret.
 
 Your system sends events to the `webhookUrl`:
 
@@ -134,9 +196,15 @@ Your system sends events to the `webhookUrl`:
 }
 ```
 
-`id` must be unique in the Channel. A button press is `{ "type": "action", "id", "conversation", "sender", "value" }`.
+`id` must be unique in the Channel. A button press is
+`{ "type": "action", "id", "conversation", "sender", "value" }`.
 
-OpenBot sends messages to the `endpoint`. A `send` has `markdown`, optional `buttons`, and `conversation`, `person` or both. With both, only that person should see it in that chat. With only `person`, it goes to a direct chat. Answer with `{ "ref": "<message id>" }`, and add `conversation` when OpenBot did not send one. An `edit` has `conversation`, `ref` and the new `markdown`. OpenBot only calls public addresses.
+OpenBot sends messages to the `endpoint`. A `send` has `markdown`, optional
+`buttons`, and `conversation`, `person` or both. With both, only that person
+should see it in that chat. With only `person`, it goes to a direct chat. Answer
+with `{ "ref": "<message id>" }`, and add `conversation` when OpenBot did not
+send one. An `edit` has `conversation`, `ref` and the new `markdown`. OpenBot
+only calls public addresses.
 
 ---
 
@@ -150,7 +218,9 @@ OpenBot sends messages to the `endpoint`. A `send` has `markdown`, optional `but
 | `channel_identities.read`  | Read your linked accounts.                                                |
 | `channel_identities.write` | Link and unlink your accounts.                                            |
 
-Channels are below `openbot.org.<org>.channel`. Administrators manage them. Every member may use them and link their own accounts. See [Permissions](/docs/permissions).
+Channels are below `openbot.org.<org>.channel`. Administrators manage them.
+Every member may use them and link their own accounts. See
+[Permissions](/docs/permissions).
 
 ---
 

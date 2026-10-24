@@ -1,15 +1,20 @@
 ---
 title: Models
-description: Verbinde OpenBot mit Sprachmodellen, über Models und Model Providers.
+description:
+  Verbinde OpenBot mit Sprachmodellen, über Models und Model Providers.
 ---
 
-Ein Bot braucht ein Sprachmodell, um zu arbeiten. OpenBot enthält kein Modell. Du verbindest eins.
-OpenBot speichert dafür zwei Arten von Einträgen:
+Ein Bot braucht ein Sprachmodell, um zu arbeiten. OpenBot enthält kein Modell.
+Du verbindest eins. OpenBot speichert dafür zwei Arten von Einträgen:
 
-- Ein **Model** beschreibt ein Sprachmodell, zum Beispiel `gpt-5`: seinen Namen, seine Optionen und seine Grenzen. Ein Model gehört nicht zu einem Anbieter.
-- Ein **Model Provider** (Modell-Anbieter) ist ein Dienst für Modelle mit seinem API-Schlüssel. Ein Anbieter **verknüpft** die Models, die er anbietet. Eine Verknüpfung kann manche Werte des Model nur für diesen Anbieter ändern.
+- Ein **Model** beschreibt ein Sprachmodell, zum Beispiel `gpt-5`: seinen Namen,
+  seine Optionen und seine Grenzen. Ein Model gehört nicht zu einem Anbieter.
+- Ein **Model Provider** (Modell-Anbieter) ist ein Dienst für Modelle mit seinem
+  API-Schlüssel. Ein Anbieter **verknüpft** die Models, die er anbietet. Eine
+  Verknüpfung kann manche Werte des Model nur für diesen Anbieter ändern.
 
-Du fügst beide über die API hinzu. OpenBot speichert sie in der Datenbank. So nutzt jede Instanz dieselben.
+Du fügst beide über die API hinzu. OpenBot speichert sie in der Datenbank. So
+nutzt jede Instanz dieselben.
 
 Die Platform oder eine Organization besitzt jedes Model und jeden Anbieter:
 
@@ -18,20 +23,26 @@ Die Platform oder eine Organization besitzt jedes Model und jeden Anbieter:
 | Organization | Eine Organization, mit ihrem eigenen Schlüssel         | Nur diese Organization. Das heißt "Bring your own key" (bring deinen eigenen Schlüssel mit).             |
 | Platform     | Ein Admin der Platform, mit dem Schlüssel der Platform | Die Organizations in ihrer `availability`. Siehe [Platform](/de/docs/platform#geteilte-model-providers). |
 
-Eine Organization kann ein Model eines Anbieters nur nutzen, wenn sie sowohl den Anbieter als auch das Model nutzen darf.
+Eine Organization kann ein Model eines Anbieters nur nutzen, wenn sie sowohl den
+Anbieter als auch das Model nutzen darf.
 
 Jedes Model hat einen von zwei Typen:
 
-- Ein `language`-Model schreibt Text und ruft Werkzeuge auf. Es führt Turns aus, beurteilt Rules und lernt Bot-Memory.
-- Ein `decision`-Model wählt nur eine Antwort aus einer festen Liste. Es schreibt keinen Text. Jev von TypeSafe ist ein Beispiel. Siehe [Decision-Model](#decision-model).
+- Ein `language`-Model schreibt Text und ruft Werkzeuge auf. Es führt Turns aus,
+  beurteilt Rules und lernt Bot-Memory.
+- Ein `decision`-Model wählt nur eine Antwort aus einer festen Liste. Es
+  schreibt keinen Text. Jev von TypeSafe ist ein Beispiel. Siehe
+  [Decision-Model](#decision-model).
 
-Wenn du OpenBot aus Code startest, kannst du auch eingebaute Models angeben. Siehe [Eingebaute Models](#eingebaute-models).
+Wenn du OpenBot aus Code startest, kannst du auch eingebaute Models angeben.
+Siehe [Eingebaute Models](#eingebaute-models).
 
 ---
 
 ## Ein Model hinzufügen
 
-`POST /v1/organization/models` fügt deiner Organization ein Model hinzu. Es braucht `model_providers.write`.
+`POST /v1/organization/models` fügt deiner Organization ein Model hinzu. Es
+braucht `model_providers.write`.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -49,7 +60,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `contextWindow`    | Optional. Die Größe des Kontextfensters, in Tokens.                                                                                                                                       |
 | `maxOutputTokens`  | Optional. Die meisten Tokens, die das Model in einer Antwort schreiben kann.                                                                                                              |
 
-Wenn deine Organization schon ein Model mit dieser `id` hat, gibt OpenBot `409` mit `ModelConflict` zurück.
+Wenn deine Organization schon ein Model mit dieser `id` hat, gibt OpenBot `409`
+mit `ModelConflict` zurück.
 
 | Route                                     | Was sie tut                                                                                                |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -58,12 +70,15 @@ Wenn deine Organization schon ein Model mit dieser `id` hat, gibt OpenBot `409` 
 | `PATCH /v1/organization/models/:modelId`  | Ändert ein Model. Der Body braucht `expectedVersion`. Schicke `null` für eine Grenze, um sie zu entfernen. |
 | `DELETE /v1/organization/models/:modelId` | Entfernt ein Model.                                                                                        |
 
-Lesen braucht `model_providers.read`. Änderungen brauchen `model_providers.write`.
-Du kannst ein Model nicht entfernen, solange einer deiner Anbieter es verknüpft. OpenBot gibt `409` mit `ModelInUse` zurück. Entferne zuerst die Verknüpfung.
+Lesen braucht `model_providers.read`. Änderungen brauchen
+`model_providers.write`. Du kannst ein Model nicht entfernen, solange einer
+deiner Anbieter es verknüpft. OpenBot gibt `409` mit `ModelInUse` zurück.
+Entferne zuerst die Verknüpfung.
 
 ## Einen Anbieter hinzufügen
 
-`POST /v1/organization/model_providers` fügt deiner Organization einen Anbieter hinzu. Es braucht `model_providers.write`.
+`POST /v1/organization/model_providers` fügt deiner Organization einen Anbieter
+hinzu. Es braucht `model_providers.write`.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -94,7 +109,10 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `anthropic`     | Anthropic Messages API.                                     |
 | `openai-compat` | OpenAI Chat Completions API und Dienste, die sie nachbauen. |
 
-OpenBot verbindet sich nur mit öffentlichen Adressen. Für einen Model-Server in deinem eigenen Netzwerk oder auf deiner Maschine muss der Betreiber seinen Host in `OPENBOT_OUTBOUND_ALLOW` schreiben. Bis dahin schlagen Aufrufe an ihn fehl. Siehe [Ausgehende Verbindungen](/de/docs/configuration#ausgehende-verbindungen).
+OpenBot verbindet sich nur mit öffentlichen Adressen. Für einen Model-Server in
+deinem eigenen Netzwerk oder auf deiner Maschine muss der Betreiber seinen Host
+in `OPENBOT_OUTBOUND_ALLOW` schreiben. Bis dahin schlagen Aufrufe an ihn fehl.
+Siehe [Ausgehende Verbindungen](/de/docs/configuration#ausgehende-verbindungen).
 
 Jede Verknüpfung hat diese Felder:
 
@@ -108,10 +126,15 @@ Jede Verknüpfung hat diese Felder:
 | `contextWindow`    | Optional. Ersetzt das `contextWindow` des Model für diesen Anbieter.                               |
 | `maxOutputTokens`  | Optional. Ersetzt `maxOutputTokens` des Model für diesen Anbieter.                                 |
 
-Ein Anbieter deiner Organization kann deine eigenen Models verknüpfen und die geteilten Models, die die Platform dir zur Verfügung stellt. Für jedes andere Model gibt OpenBot `404` mit `ModelNotFound` zurück.
+Ein Anbieter deiner Organization kann deine eigenen Models verknüpfen und die
+geteilten Models, die die Platform dir zur Verfügung stellt. Für jedes andere
+Model gibt OpenBot `404` mit `ModelNotFound` zurück.
 
-OpenBot antwortet mit dem Anbieter. Seine `id` beginnt mit `prov_`. Eine Anbieter-ID ist in der ganzen Platform eindeutig. Eine Auswahl eines Model nennt sie als `provider`.
-Der API-Schlüssel kommt nie zurück. Die Antwort zeigt stattdessen `apiKey: { set, hint }`. Siehe [Platform](/de/docs/platform#geheimnisse-kommen-nie-zurück).
+OpenBot antwortet mit dem Anbieter. Seine `id` beginnt mit `prov_`. Eine
+Anbieter-ID ist in der ganzen Platform eindeutig. Eine Auswahl eines Model nennt
+sie als `provider`. Der API-Schlüssel kommt nie zurück. Die Antwort zeigt
+stattdessen `apiKey: { set, hint }`. Siehe
+[Platform](/de/docs/platform#geheimnisse-kommen-nie-zurück).
 
 ### Einen Anbieter ändern oder entfernen
 
@@ -122,9 +145,14 @@ Der API-Schlüssel kommt nie zurück. Die Antwort zeigt stattdessen `apiKey: { s
 | `PATCH /v1/organization/model_providers/:providerId`  | Ändert einen Anbieter.   |
 | `DELETE /v1/organization/model_providers/:providerId` | Entfernt einen Anbieter. |
 
-Lesen braucht `model_providers.read`. Änderungen brauchen `model_providers.write`.
+Lesen braucht `model_providers.read`. Änderungen brauchen
+`model_providers.write`.
 
-Der Body von `PATCH` braucht `expectedVersion`, also die `version`, die du gelesen hast. Wenn jemand den Anbieter geändert hat, nachdem du ihn gelesen hast, gibt OpenBot `409` mit `ModelProviderConflict` zurück. Lass `apiKey` weg, um den aktuellen Schlüssel zu behalten. Schicke `models`, um alle Verknüpfungen des Anbieters zu ersetzen.
+Der Body von `PATCH` braucht `expectedVersion`, also die `version`, die du
+gelesen hast. Wenn jemand den Anbieter geändert hat, nachdem du ihn gelesen
+hast, gibt OpenBot `409` mit `ModelProviderConflict` zurück. Lass `apiKey` weg,
+um den aktuellen Schlüssel zu behalten. Schicke `models`, um alle Verknüpfungen
+des Anbieters zu ersetzen.
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -133,16 +161,24 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/organization/model_providers/prov_4c1e...
 ```
 
-Der nächste Aufruf eines Modells nach einer Änderung nutzt den neuen Schlüssel, Endpoint oder die neuen Verknüpfungen. OpenBot baut jedes Model einmal und baut es neu, wenn sich sein Anbieter ändert.
+Der nächste Aufruf eines Modells nach einer Änderung nutzt den neuen Schlüssel,
+Endpoint oder die neuen Verknüpfungen. OpenBot baut jedes Model einmal und baut
+es neu, wenn sich sein Anbieter ändert.
 
-Du kannst einen Anbieter nicht entfernen, solange `rulesModel`, `botMemoryModel` oder `decisionModel` in den [Einstellungen der Organization](/de/docs/organization#einstellungen) ihn nennt. OpenBot gibt `409` mit `ModelProviderInUse` zurück. Ändere zuerst die Einstellung.
+Du kannst einen Anbieter nicht entfernen, solange `rulesModel`, `botMemoryModel`
+oder `decisionModel` in den
+[Einstellungen der Organization](/de/docs/organization#einstellungen) ihn nennt.
+OpenBot gibt `409` mit `ModelProviderInUse` zurück. Ändere zuerst die
+Einstellung.
 
 ---
 
 ## Ein Model auswählen
 
-`GET /v1/organization/model_catalog` listet die Models, die deine Organization jetzt nutzen kann. Es braucht `models.use`.
-Jeder Eintrag ist ein Model eines Anbieters, mit den Werten der Verknüpfung schon angewendet. Ein Model, das zwei Anbieter verknüpfen, erscheint zweimal.
+`GET /v1/organization/model_catalog` listet die Models, die deine Organization
+jetzt nutzen kann. Es braucht `models.use`. Jeder Eintrag ist ein Model eines
+Anbieters, mit den Werten der Verknüpfung schon angewendet. Ein Model, das zwei
+Anbieter verknüpfen, erscheint zweimal.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -190,7 +226,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 }
 ```
 
-`price` ist der aktuelle Preis des Model bei diesem Anbieter. Er fehlt, wenn niemand einen Preis gesetzt hat. Siehe [Preise](/de/docs/usage#preise).
+`price` ist der aktuelle Preis des Model bei diesem Anbieter. Er fehlt, wenn
+niemand einen Preis gesetzt hat. Siehe [Preise](/de/docs/usage#preise).
 
 Eine Auswahl eines Model nennt den Anbieter und die Model-ID:
 
@@ -198,17 +235,32 @@ Eine Auswahl eines Model nennt den Anbieter und die Model-ID:
 { "_tag": "Config.Selection", "provider": "prov_4c1e...", "model": "qwen3-32b" }
 ```
 
-OpenBot wählt nie ein Model für dich. Es gibt kein Standard-Model. Jede Nutzung nennt ihr eigenes Model:
+OpenBot wählt nie ein Model für dich. Es gibt kein Standard-Model. Jede Nutzung
+nennt ihr eigenes Model:
 
-- **Ein neuer [Chat](/de/docs/chats)** nutzt das `model` seines [Bots](/de/docs/bots). Wenn der Bot kein Model hat, schlägt die erste Nachricht an ihn mit `400`, `ChatModelInvalid` und dem Grund `missing` fehl. Ein neuer Bot hat kein Model, wenn du ihm keines gibst. Setze also sein `model`, wenn du ihn erstellst, oder später mit `PATCH /v1/bots/:id`.
-- **Das Prüf-Modell für [Rules](/de/docs/rules)** nutzt `rulesModel` in den [Einstellungen der Organization](/de/docs/organization#einstellungen). Wenn es `null` ist, gibt das Prüf-Modell keine Antwort. Dann entscheidet eine Person oder ein Bot.
-- **[Bot-Memory](/de/docs/memory)** nutzt `botMemoryModel` in denselben Einstellungen. Wenn es `null` ist, lernen Bots nichts.
+- **Ein neuer [Chat](/de/docs/chats)** nutzt das `model` seines
+  [Bots](/de/docs/bots). Wenn der Bot kein Model hat, schlägt die erste
+  Nachricht an ihn mit `400`, `ChatModelInvalid` und dem Grund `missing` fehl.
+  Ein neuer Bot hat kein Model, wenn du ihm keines gibst. Setze also sein
+  `model`, wenn du ihn erstellst, oder später mit `PATCH /v1/bots/:id`.
+- **Das Prüf-Modell für [Rules](/de/docs/rules)** nutzt `rulesModel` in den
+  [Einstellungen der Organization](/de/docs/organization#einstellungen). Wenn es
+  `null` ist, gibt das Prüf-Modell keine Antwort. Dann entscheidet eine Person
+  oder ein Bot.
+- **[Bot-Memory](/de/docs/memory)** nutzt `botMemoryModel` in denselben
+  Einstellungen. Wenn es `null` ist, lernen Bots nichts.
 
-`rulesModel` und `botMemoryModel` müssen `language`-Models sein. Der Katalog nennt den `type` jedes Model, und ein Chat kann nur `language`-Models wählen.
+`rulesModel` und `botMemoryModel` müssen `language`-Models sein. Der Katalog
+nennt den `type` jedes Model, und ein Chat kann nur `language`-Models wählen.
 
-Ältere Versionen von OpenBot hatten `defaultModel` und `helperModel`. Beim Update gibt OpenBot das alte `defaultModel` jedem Bot, der kein Model hat. `rulesModel` und `botMemoryModel` bekommen das alte Helfer-Modell: `helperModel`, sonst `defaultModel`. Wenn beide `null` waren, bleiben die neuen Werte leer, und du musst sie setzen.
+Ältere Versionen von OpenBot hatten `defaultModel` und `helperModel`. Beim
+Update gibt OpenBot das alte `defaultModel` jedem Bot, der kein Model hat.
+`rulesModel` und `botMemoryModel` bekommen das alte Helfer-Modell:
+`helperModel`, sonst `defaultModel`. Wenn beide `null` waren, bleiben die neuen
+Werte leer, und du musst sie setzen.
 
-So gibst du zum Beispiel einem Bot ein Model. Schicke seine aktuelle `revision` als `expected`:
+So gibst du zum Beispiel einem Bot ein Model. Schicke seine aktuelle `revision`
+als `expected`:
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
@@ -216,7 +268,8 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: applic
   https://api.example.com/v1/bots/$BOT_ID
 ```
 
-Ein Chat kann seine eigene Auswahl speichern. Schicke die aktuelle Revision des Chats als `expected`:
+Ein Chat kann seine eigene Auswahl speichern. Schicke die aktuelle Revision des
+Chats als `expected`:
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
@@ -224,15 +277,25 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: applic
   https://api.example.com/v1/chats/$CHAT_ID
 ```
 
-Sende `"model": null`, um wieder das Model des Bots zu nutzen. `GET /v1/chats/:id/models` zeigt dieselben Models für einen Chat. Alle Felder findest du in der [API-Referenz für Chats](/docs/api/operations/tags/chats/).
+Sende `"model": null`, um wieder das Model des Bots zu nutzen.
+`GET /v1/chats/:id/models` zeigt dieselben Models für einen Chat. Alle Felder
+findest du in der [API-Referenz für Chats](/docs/api/operations/tags/chats/).
 
-Um festzulegen, welche Anbieter ein Member auswählen darf, nutze `models.use` auf `openbot.org.<org>.model.<providerId>`. Siehe [Berechtigungen](/de/docs/permissions#models-begrenzen).
+Um festzulegen, welche Anbieter ein Member auswählen darf, nutze `models.use`
+auf `openbot.org.<org>.model.<providerId>`. Siehe
+[Berechtigungen](/de/docs/permissions#models-begrenzen).
 
 ## Decision-Model
 
-`decisionModel` in den [Einstellungen der Organization](/de/docs/organization#einstellungen) nennt das Decision-Model (Entscheidungs-Model) deiner Organization. Es muss ein `decision`-Model sein, das einer deiner Anbieter anbietet. Sonst gibt OpenBot `400` mit `SettingsInvalid` zurück. `null` heißt: Deine Organization hat kein Decision-Model.
+`decisionModel` in den
+[Einstellungen der Organization](/de/docs/organization#einstellungen) nennt das
+Decision-Model (Entscheidungs-Model) deiner Organization. Es muss ein
+`decision`-Model sein, das einer deiner Anbieter anbietet. Sonst gibt OpenBot
+`400` mit `SettingsInvalid` zurück. `null` heißt: Deine Organization hat kein
+Decision-Model.
 
-Um zum Beispiel Jev über TypeSafe zu nutzen, füge das Model hinzu, dann einen Anbieter, der es verknüpft, und dann die Einstellung:
+Um zum Beispiel Jev über TypeSafe zu nutzen, füge das Model hinzu, dann einen
+Anbieter, der es verknüpft, und dann die Einstellung:
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" -H "Content-Type: application/json" \
@@ -256,28 +319,40 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H "Content-Type: applic
 
 `GET /v1/organization/model_catalog` zeigt die Einstellung als `decisionModel`.
 
-OpenBot ruft einen `typesafe`-Anbieter mit dem TypeSafe-Client von Effect (`@effect/ai-typesafe`) auf. Es schickt jede Anfrage an `<endpoint>/systemone`, mit dem API-Schlüssel als Bearer-Token, und schickt `upstream` als Namen des Model. OpenBot baut den Client einmal für jeden Anbieter und jedes Model und baut ihn neu, wenn sich der Anbieter ändert.
-OpenBot kann ein Decision-Model noch nicht über einen `openai-compat`-Anbieter fragen. Du kannst es dort verknüpfen, aber nutze einen `typesafe`-Anbieter, um es zu fragen.
+OpenBot ruft einen `typesafe`-Anbieter mit dem TypeSafe-Client von Effect
+(`@effect/ai-typesafe`) auf. Es schickt jede Anfrage an `<endpoint>/systemone`,
+mit dem API-Schlüssel als Bearer-Token, und schickt `upstream` als Namen des
+Model. OpenBot baut den Client einmal für jeden Anbieter und jedes Model und
+baut ihn neu, wenn sich der Anbieter ändert. OpenBot kann ein Decision-Model
+noch nicht über einen `openai-compat`-Anbieter fragen. Du kannst es dort
+verknüpfen, aber nutze einen `typesafe`-Anbieter, um es zu fragen.
 
 Noch kein Teil von OpenBot fragt das Decision-Model.
 
 ## Ohne Model arbeiten
 
-Eine Organization ohne Anbieter kann ihre Chats trotzdem lesen und ihren Verlauf löschen. Sie kann nicht mit einem Bot sprechen, weil jeder Turn ein Model braucht. Siehe [Ein Model auswählen](#ein-model-auswählen).
+Eine Organization ohne Anbieter kann ihre Chats trotzdem lesen und ihren Verlauf
+löschen. Sie kann nicht mit einem Bot sprechen, weil jeder Turn ein Model
+braucht. Siehe [Ein Model auswählen](#ein-model-auswählen).
 
-Eine Nachricht an einen Bot schlägt mit dem Status `503` und dem Fehler `ChatExecutionUnavailable` fehl, wenn kein Model ihren Turn ausführen kann:
+Eine Nachricht an einen Bot schlägt mit dem Status `503` und dem Fehler
+`ChatExecutionUnavailable` fehl, wenn kein Model ihren Turn ausführen kann:
 
 ```json
 { "_tag": "ChatExecutionUnavailable", "chat": "..." }
 ```
 
-Eine Mitteilung von OpenBot, zum Beispiel das Ergebnis einer Delegation, kommt trotzdem in die Inbox ihres Chats. Siehe [Mitteilungen](/de/docs/chats#mitteilungen).
+Eine Mitteilung von OpenBot, zum Beispiel das Ergebnis einer Delegation, kommt
+trotzdem in die Inbox ihres Chats. Siehe
+[Mitteilungen](/de/docs/chats#mitteilungen).
 
 ---
 
 ## Eingebaute Models
 
-Wenn du OpenBot aus deinem eigenen Programm startest, kannst du mit der Option `builtinModels` Models im Code angeben. Siehe [Aus Code starten](/de/docs/server).
+Wenn du OpenBot aus deinem eigenen Programm startest, kannst du mit der Option
+`builtinModels` Models im Code angeben. Siehe
+[Aus Code starten](/de/docs/server).
 
 - Jede Organization kann sie nutzen.
 - Die API kann sie nicht ändern.
@@ -291,7 +366,8 @@ Wenn du OpenBot aus deinem eigenen Programm startest, kannst du mit der Option `
 | `models`    | Die Models, die erscheinen sollen, als Werte vom Typ `Config.Model`.                         |
 | `resolve`   | Eine Funktion, die eine Auswahl bekommt und ein Effect mit einem `LanguageModel` zurückgibt. |
 
-Dieses Beispiel gibt ein Anthropic-Modell an, mit einem Schlüssel aus der Umgebung deines Programms:
+Dieses Beispiel gibt ein Anthropic-Modell an, mit einem Schlüssel aus der
+Umgebung deines Programms:
 
 ```ts
 import { NodeRuntime } from "@effect/platform-node"
@@ -360,12 +436,16 @@ NodeRuntime.runMain(
 )
 ```
 
-Wenn `resolve` fehlschlägt, gibt das Starten eines Turn `503` zurück.
-Der Einstiegspunkt für die Entwicklung nutzt `builtinModels` für seine Test-Modelle. Ein vollständiges Beispiel findest du in `packages/openbot/src/app/DevelopmentModel.ts`.
+Wenn `resolve` fehlschlägt, gibt das Starten eines Turn `503` zurück. Der
+Einstiegspunkt für die Entwicklung nutzt `builtinModels` für seine Test-Modelle.
+Ein vollständiges Beispiel findest du in
+`packages/openbot/src/app/DevelopmentModel.ts`.
 
 ### Anbieter-Module
 
-Ein Anbieter-Modul macht aus einem Modell-Namen ein `LanguageModel` für eine Art von API. `@openbot-build/openbot` exportiert drei davon. Jedes hat dieselben Teile:
+Ein Anbieter-Modul macht aus einem Modell-Namen ein `LanguageModel` für eine Art
+von API. `@openbot-build/openbot` exportiert drei davon. Jedes hat dieselben
+Teile:
 
 | Teil                        | Was er tut                                                                       |
 | --------------------------- | -------------------------------------------------------------------------------- |
@@ -381,14 +461,20 @@ Ein Anbieter-Modul macht aus einem Modell-Namen ein `LanguageModel` für eine Ar
 | `AnthropicProvider`    | `anthropic`     | Anthropic Messages API.                                                                                                |
 
 OpenBot nutzt diese Module auch für die gespeicherten Anbieter.
-Kontext-Verdichtung (Context Compaction) macht einen langen Verlauf kürzer, damit er in das Kontextfenster des Modells passt. OpenBot macht das für jeden Chat mit einer Zusammenfassung, die das Model des Chats schreibt. Standardmäßig nutzt es `ResponsesCompaction` nicht. Siehe [Kompaktierung](/de/docs/chats#kompaktierung).
-Ein kurzes Beispiel für jeden Anbieter findest du unter [Pakete](/de/docs/packages).
+Kontext-Verdichtung (Context Compaction) macht einen langen Verlauf kürzer,
+damit er in das Kontextfenster des Modells passt. OpenBot macht das für jeden
+Chat mit einer Zusammenfassung, die das Model des Chats schreibt. Standardmäßig
+nutzt es `ResponsesCompaction` nicht. Siehe
+[Kompaktierung](/de/docs/chats#kompaktierung). Ein kurzes Beispiel für jeden
+Anbieter findest du unter [Pakete](/de/docs/packages).
 
 ---
 
 ## Models für die Entwicklung
 
-Der Server für die Entwicklung (`devenv shell -- pnpm dev`) ruft kein echtes Modell auf. Er nutzt stattdessen Test-Modelle. Sie geben jedes Mal dieselbe Antwort. So kannst du Clients ohne Kosten testen.
+Der Server für die Entwicklung (`devenv shell -- pnpm dev`) ruft kein echtes
+Modell auf. Er nutzt stattdessen Test-Modelle. Sie geben jedes Mal dieselbe
+Antwort. So kannst du Clients ohne Kosten testen.
 
 Die Anbieter-ID ist `development`. Die Model-IDs sind:
 
@@ -400,7 +486,8 @@ Die Anbieter-ID ist `development`. Die Model-IDs sind:
 | `mock-app`     | Ruft ein Tool der Test-App auf und gibt ihren echten Inhalt zurück.                                   |
 | `mock-failure` | Schickt etwas Text und schlägt dann absichtlich mit einem Fehler des Modells fehl.                    |
 
-Die Token-Zahlen in ihren Antworten sind nicht echt. Um eins auszuwählen, speichere es in einem Chat:
+Die Token-Zahlen in ihren Antworten sind nicht echt. Um eins auszuwählen,
+speichere es in einem Chat:
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
@@ -408,4 +495,6 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: applic
   https://localhost:8443/v1/chats/$CHAT_ID
 ```
 
-Der Einstiegspunkt für die Entwicklung gibt diese Models mit `builtinModels` an. So kann jede Organization der Platform für die Entwicklung sie nutzen. Das Programm für den Betrieb nutzt sie nie.
+Der Einstiegspunkt für die Entwicklung gibt diese Models mit `builtinModels` an.
+So kann jede Organization der Platform für die Entwicklung sie nutzen. Das
+Programm für den Betrieb nutzt sie nie.

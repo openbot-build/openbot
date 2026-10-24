@@ -3,11 +3,12 @@ title: Model
 description: 通过模型和模型提供方，把 OpenBot 连接到语言模型。
 ---
 
-Bot 需要一个语言模型才能工作。OpenBot 不自带模型。你需要连接一个。
-OpenBot 为此保存两种记录：
+Bot 需要一个语言模型才能工作。OpenBot 不自带模型。你需要连接一个。OpenBot 为此保存两种记录：
 
-- **Model**（模型）描述一个语言模型，比如 `gpt-5`：它的名称、选项和限制。模型不属于某个提供方。
-- **Model Provider**（模型提供方）是一个模型服务和它的 API 密钥。提供方会**关联**它提供的模型。关联可以只为这个提供方修改模型的某些值。
+- **Model**（模型）描述一个语言模型，比如
+  `gpt-5`：它的名称、选项和限制。模型不属于某个提供方。
+- **Model
+  Provider**（模型提供方）是一个模型服务和它的 API 密钥。提供方会**关联**它提供的模型。关联可以只为这个提供方修改模型的某些值。
 
 两者都通过 API 添加。OpenBot 把它们保存在数据库中，所以每个实例使用的都是同一份。
 
@@ -23,7 +24,8 @@ OpenBot 为此保存两种记录：
 每个模型有两种类型之一：
 
 - `language` 模型会写文本、调用工具。它运行 Turn、评判 Rule，并学习 Bot 记忆。
-- `decision` 模型只从固定的列表中选一个答案。它不写文本。TypeSafe 的 Jev 就是一个例子。见[决策模型](#决策模型)。
+- `decision`
+  模型只从固定的列表中选一个答案。它不写文本。TypeSafe 的 Jev 就是一个例子。见[决策模型](#决策模型)。
 
 当你从代码中运行 OpenBot 时，还可以提供内置模型。参见[内置模型](#内置模型)。
 
@@ -31,7 +33,8 @@ OpenBot 为此保存两种记录：
 
 ## 添加模型
 
-`POST /v1/organization/models` 向你的组织添加一个模型。它需要 `model_providers.write`。
+`POST /v1/organization/models` 向你的组织添加一个模型。它需要
+`model_providers.write`。
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -49,7 +52,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `contextWindow`    | 可选。上下文窗口的大小，单位是 token。                                                                               |
 | `maxOutputTokens`  | 可选。模型在一次回答中最多能写的 token 数。                                                                          |
 
-如果你的组织已经有一个使用这个 `id` 的模型，OpenBot 会返回 `409` 和 `ModelConflict`。
+如果你的组织已经有一个使用这个 `id` 的模型，OpenBot 会返回 `409` 和
+`ModelConflict`。
 
 | 路由                                      | 作用                                                                       |
 | ----------------------------------------- | -------------------------------------------------------------------------- |
@@ -58,12 +62,14 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `PATCH /v1/organization/models/:modelId`  | 修改一个模型。请求体需要 `expectedVersion`。某个限制传 `null` 即可删除它。 |
 | `DELETE /v1/organization/models/:modelId` | 移除一个模型。                                                             |
 
-读取需要 `model_providers.read`。修改需要 `model_providers.write`。
-当你的某个提供方关联着一个模型时，你不能移除它。OpenBot 会返回 `409` 和 `ModelInUse`。请先移除关联。
+读取需要 `model_providers.read`。修改需要
+`model_providers.write`。当你的某个提供方关联着一个模型时，你不能移除它。OpenBot 会返回
+`409` 和 `ModelInUse`。请先移除关联。
 
 ## 添加提供方
 
-`POST /v1/organization/model_providers` 向你的组织添加一个提供方。它需要 `model_providers.write`。
+`POST /v1/organization/model_providers` 向你的组织添加一个提供方。它需要
+`model_providers.write`。
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -94,7 +100,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `anthropic`     | Anthropic Messages API。                        |
 | `openai-compat` | OpenAI Chat Completions API，以及仿照它的服务。 |
 
-OpenBot 只连接公网地址。如果模型服务器在你自己的网络中或你的机器上，运维人员必须把它的主机写进 `OPENBOT_OUTBOUND_ALLOW`。在那之前，对它的调用都会失败。参见[出站连接](/zh-cn/docs/configuration#出站连接)。
+OpenBot 只连接公网地址。如果模型服务器在你自己的网络中或你的机器上，运维人员必须把它的主机写进
+`OPENBOT_OUTBOUND_ALLOW`。在那之前，对它的调用都会失败。参见[出站连接](/zh-cn/docs/configuration#出站连接)。
 
 每个关联有下面这些字段：
 
@@ -108,10 +115,13 @@ OpenBot 只连接公网地址。如果模型服务器在你自己的网络中或
 | `contextWindow`    | 可选。为这个提供方替换模型的 `contextWindow`。                 |
 | `maxOutputTokens`  | 可选。为这个提供方替换模型的 `maxOutputTokens`。               |
 
-你组织的提供方可以关联你自己的模型，以及平台向你开放的共享模型。对于任何其他模型，OpenBot 会返回 `404` 和 `ModelNotFound`。
+你组织的提供方可以关联你自己的模型，以及平台向你开放的共享模型。对于任何其他模型，OpenBot 会返回
+`404` 和 `ModelNotFound`。
 
-OpenBot 会返回这个提供方。它的 `id` 以 `prov_` 开头。提供方 ID 在整个平台中是唯一的。模型选择用 `provider` 指明它。
-API 密钥永远不会返回。响应中显示的是 `apiKey: { set, hint }`。参见 [Platform](/zh-cn/docs/platform#机密永远不会返回)。
+OpenBot 会返回这个提供方。它的 `id` 以 `prov_`
+开头。提供方 ID 在整个平台中是唯一的。模型选择用 `provider`
+指明它。API 密钥永远不会返回。响应中显示的是 `apiKey: { set, hint }`。参见
+[Platform](/zh-cn/docs/platform#机密永远不会返回)。
 
 ### 修改或移除提供方
 
@@ -124,7 +134,10 @@ API 密钥永远不会返回。响应中显示的是 `apiKey: { set, hint }`。�
 
 读取需要 `model_providers.read`。修改需要 `model_providers.write`。
 
-`PATCH` 的请求体需要 `expectedVersion`，也就是你读到的 `version`。如果有人在你读取之后修改了提供方，OpenBot 会返回 `409` 和 `ModelProviderConflict`。不填 `apiKey` 即可保留当前密钥。发送 `models` 会替换提供方的所有关联。
+`PATCH` 的请求体需要 `expectedVersion`，也就是你读到的
+`version`。如果有人在你读取之后修改了提供方，OpenBot 会返回 `409` 和
+`ModelProviderConflict`。不填 `apiKey` 即可保留当前密钥。发送 `models`
+会替换提供方的所有关联。
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -135,14 +148,16 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 修改之后的下一次模型调用会使用新的密钥、端点或关联。OpenBot 对每个模型只构建一次，在它的提供方变化时再重新构建。
 
-当[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel`、`botMemoryModel` 或 `decisionModel` 指向某个提供方时，你不能移除它。OpenBot 会返回 `409` 和 `ModelProviderInUse`。请先修改设置。
+当[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel`、`botMemoryModel`
+或 `decisionModel` 指向某个提供方时，你不能移除它。OpenBot 会返回 `409` 和
+`ModelProviderInUse`。请先修改设置。
 
 ---
 
 ## 选择模型
 
-`GET /v1/organization/model_catalog` 列出你的组织现在可以使用的模型。它需要 `models.use`。
-每一项都是某个提供方的一个模型，关联中的值已经应用。被两个提供方关联的模型会显示两次。
+`GET /v1/organization/model_catalog` 列出你的组织现在可以使用的模型。它需要
+`models.use`。每一项都是某个提供方的一个模型，关联中的值已经应用。被两个提供方关联的模型会显示两次。
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -190,7 +205,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 }
 ```
 
-`price` 是这个模型在这个提供方那里的当前价格。没有人设置价格时，它不存在。参见[价格](/zh-cn/docs/usage#价格)。
+`price`
+是这个模型在这个提供方那里的当前价格。没有人设置价格时，它不存在。参见[价格](/zh-cn/docs/usage#价格)。
 
 模型选择同时指明提供方和模型 ID：
 
@@ -200,13 +216,24 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 OpenBot 从不替你选模型。没有默认模型。每种用途都要指明自己的模型：
 
-- **新的 [Chat](/zh-cn/docs/chats)** 使用它的 [Bot](/zh-cn/docs/bots) 的 `model`。Bot 没有模型时，给它的第一条消息会失败，返回 `400`、`ChatModelInvalid` 和原因 `missing`。新的 Bot 没有模型，除非你给它一个。所以请在创建时设置它的 `model`，或之后用 `PATCH /v1/bots/:id` 设置。
-- **[Rule](/zh-cn/docs/rules) 的评判**使用[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel`。它为 `null` 时，评判不给出答案，由人或 Bot 来决定。
-- **[Bot 记忆](/zh-cn/docs/memory)**使用同一份设置中的 `botMemoryModel`。它为 `null` 时，Bot 什么都不学。
+- **新的 [Chat](/zh-cn/docs/chats)** 使用它的 [Bot](/zh-cn/docs/bots) 的
+  `model`。Bot 没有模型时，给它的第一条消息会失败，返回
+  `400`、`ChatModelInvalid` 和原因
+  `missing`。新的 Bot 没有模型，除非你给它一个。所以请在创建时设置它的
+  `model`，或之后用 `PATCH /v1/bots/:id` 设置。
+- **[Rule](/zh-cn/docs/rules)
+  的评判**使用[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel`。它为
+  `null` 时，评判不给出答案，由人或 Bot 来决定。
+- **[Bot 记忆](/zh-cn/docs/memory)**使用同一份设置中的 `botMemoryModel`。它为
+  `null` 时，Bot 什么都不学。
 
-`rulesModel` 和 `botMemoryModel` 必须是 `language` 模型。目录会给出每个模型的 `type`，Chat 只能选择 `language` 模型。
+`rulesModel` 和 `botMemoryModel` 必须是 `language` 模型。目录会给出每个模型的
+`type`，Chat 只能选择 `language` 模型。
 
-旧版本的 OpenBot 有 `defaultModel` 和 `helperModel`。升级时，OpenBot 把旧的 `defaultModel` 给每个没有模型的 Bot。`rulesModel` 和 `botMemoryModel` 得到旧的辅助模型：`helperModel`，没有时用 `defaultModel`。如果两者都是 `null`，新的值保持为空，你必须设置它们。
+旧版本的 OpenBot 有 `defaultModel` 和 `helperModel`。升级时，OpenBot 把旧的
+`defaultModel` 给每个没有模型的 Bot。`rulesModel` 和 `botMemoryModel`
+得到旧的辅助模型：`helperModel`，没有时用 `defaultModel`。如果两者都是
+`null`，新的值保持为空，你必须设置它们。
 
 例如，要给一个 Bot 设置模型，把它当前的 `revision` 作为 `expected` 发送：
 
@@ -224,13 +251,19 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: applic
   https://api.example.com/v1/chats/$CHAT_ID
 ```
 
-发送 `"model": null` 可以重新使用 Bot 的模型。`GET /v1/chats/:id/models` 为一个 Chat 显示同样的模型。所有字段参见 [Chats API 参考](/docs/api/operations/tags/chats/)。
+发送 `"model": null` 可以重新使用 Bot 的模型。`GET /v1/chats/:id/models`
+为一个 Chat 显示同样的模型。所有字段参见
+[Chats API 参考](/docs/api/operations/tags/chats/)。
 
-要限制成员可以选择哪些提供方，请在 `openbot.org.<org>.model.<providerId>` 上使用 `models.use`。参见[权限](/zh-cn/docs/permissions#限制模型)。
+要限制成员可以选择哪些提供方，请在 `openbot.org.<org>.model.<providerId>` 上使用
+`models.use`。参见[权限](/zh-cn/docs/permissions#限制模型)。
 
 ## 决策模型
 
-[组织设置](/zh-cn/docs/organization#设置)中的 `decisionModel` 指明你的组织的决策模型。它必须是你的某个提供方提供的 `decision` 模型。否则 OpenBot 返回 `400` 和 `SettingsInvalid`。`null` 表示你的组织没有决策模型。
+[组织设置](/zh-cn/docs/organization#设置)中的 `decisionModel`
+指明你的组织的决策模型。它必须是你的某个提供方提供的 `decision`
+模型。否则 OpenBot 返回 `400` 和 `SettingsInvalid`。`null`
+表示你的组织没有决策模型。
 
 例如，要通过 TypeSafe 使用 Jev，先添加模型，再添加关联它的提供方，最后修改设置：
 
@@ -256,8 +289,12 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H "Content-Type: applic
 
 `GET /v1/organization/model_catalog` 把这个设置显示为 `decisionModel`。
 
-OpenBot 用 Effect 的 TypeSafe 客户端（`@effect/ai-typesafe`）调用 `typesafe` 提供方。它把每个请求发到 `<endpoint>/systemone`，把 API 密钥作为 bearer token，并把 `upstream` 作为模型名发送。OpenBot 为每个提供方和模型只构建一次客户端，在提供方变化时再重新构建。
-OpenBot 还不能通过 `openai-compat` 提供方询问决策模型。你可以在那里关联它，但要询问它，请使用 `typesafe` 提供方。
+OpenBot 用 Effect 的 TypeSafe 客户端（`@effect/ai-typesafe`）调用 `typesafe`
+提供方。它把每个请求发到 `<endpoint>/systemone`，把 API 密钥作为 bearer
+token，并把 `upstream`
+作为模型名发送。OpenBot 为每个提供方和模型只构建一次客户端，在提供方变化时再重新构建。OpenBot 还不能通过
+`openai-compat` 提供方询问决策模型。你可以在那里关联它，但要询问它，请使用
+`typesafe` 提供方。
 
 OpenBot 目前还没有任何部分会询问决策模型。
 
@@ -265,19 +302,22 @@ OpenBot 目前还没有任何部分会询问决策模型。
 
 没有任何提供方的组织，仍然可以读取它已有的 Chat，并删除它们的历史。它不能和 Bot 说话，因为每个 Turn 都需要模型。见[选择模型](#选择模型)。
 
-当没有模型能运行一条消息的 Turn 时，发给 Bot 的这条消息会失败，返回状态 `503` 和错误 `ChatExecutionUnavailable`：
+当没有模型能运行一条消息的 Turn 时，发给 Bot 的这条消息会失败，返回状态 `503`
+和错误 `ChatExecutionUnavailable`：
 
 ```json
 { "_tag": "ChatExecutionUnavailable", "chat": "..." }
 ```
 
-OpenBot 的通知，例如一个委派的结果，仍然会进入它所在 Chat 的收件箱。见 [通知](/zh-cn/docs/chats#通知)。
+OpenBot 的通知，例如一个委派的结果，仍然会进入它所在 Chat 的收件箱。见
+[通知](/zh-cn/docs/chats#通知)。
 
 ---
 
 ## 内置模型
 
-当你从自己的程序中运行 OpenBot 时，可以用 `builtinModels` 选项在代码中提供模型。参见[从代码运行](/zh-cn/docs/server)。
+当你从自己的程序中运行 OpenBot 时，可以用 `builtinModels`
+选项在代码中提供模型。参见[从代码运行](/zh-cn/docs/server)。
 
 - 每个组织都可以使用它们。
 - API 不能修改它们。
@@ -360,12 +400,14 @@ NodeRuntime.runMain(
 )
 ```
 
-当 `resolve` 失败时，启动 Turn 会返回 `503`。
-开发入口用 `builtinModels` 提供它的测试模型。完整示例参见 `packages/openbot/src/app/DevelopmentModel.ts`。
+当 `resolve` 失败时，启动 Turn 会返回 `503`。开发入口用 `builtinModels`
+提供它的测试模型。完整示例参见 `packages/openbot/src/app/DevelopmentModel.ts`。
 
 ### 提供方模块
 
-提供方模块为某一种 API 把模型名称变成一个 `LanguageModel`。`@openbot-build/openbot` 导出了三个这样的模块。每个模块都有同样的部分：
+提供方模块为某一种 API 把模型名称变成一个
+`LanguageModel`。`@openbot-build/openbot`
+导出了三个这样的模块。每个模块都有同样的部分：
 
 | 部分                        | 作用                                                           |
 | --------------------------- | -------------------------------------------------------------- |
@@ -380,9 +422,11 @@ NodeRuntime.runMain(
 | `OpenAiCompatProvider` | `openai-compat` | OpenAI Chat Completions API，以及仿照它的服务。                                  |
 | `AnthropicProvider`    | `anthropic`     | Anthropic Messages API。                                                         |
 
-OpenBot 对保存的提供方也使用这些模块。
-上下文压缩（context compaction）会把很长的历史变短，让它能放进模型的上下文窗口。OpenBot 会为每个 Chat 做这件事：由这个 Chat 的模型写一段摘要。它默认不使用 `ResponsesCompaction`。见 [压缩](/zh-cn/docs/chats#压缩)。
-每个提供方的简短示例参见 [Packages](/zh-cn/docs/packages)。
+OpenBot 对保存的提供方也使用这些模块。上下文压缩（context
+compaction）会把很长的历史变短，让它能放进模型的上下文窗口。OpenBot 会为每个 Chat 做这件事：由这个 Chat 的模型写一段摘要。它默认不使用
+`ResponsesCompaction`。见
+[压缩](/zh-cn/docs/chats#压缩)。每个提供方的简短示例参见
+[Packages](/zh-cn/docs/packages)。
 
 ---
 
@@ -408,4 +452,5 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: applic
   https://localhost:8443/v1/chats/$CHAT_ID
 ```
 
-开发入口通过 `builtinModels` 提供这些模型，所以开发平台的每个组织都可以使用它们。生产程序永远不会使用它们。
+开发入口通过 `builtinModels`
+提供这些模型，所以开发平台的每个组织都可以使用它们。生产程序永远不会使用它们。

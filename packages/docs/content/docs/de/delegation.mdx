@@ -1,11 +1,19 @@
 ---
 title: Delegation
-description: Wie Bots Arbeit an andere Bots oder an sich selbst geben und die Ergebnisse zurückbekommen.
+description:
+  Wie Bots Arbeit an andere Bots oder an sich selbst geben und die Ergebnisse
+  zurückbekommen.
 ---
 
-**Delegation** heißt, dass ein Bot einem Bot eine Aufgabe gibt. Die Aufgabe kann an einen anderen Bot gehen oder an denselben Bot. Die Arbeit läuft in ihrem eigenen **Task-Chat**, mit ihrem eigenen Kontext, zur selben Zeit wie andere Arbeit. Der Bot, der die Arbeit gegeben hat, wartet nicht. Er macht weiter, oder er beendet seine Antwort. Wenn die Arbeit endet, kommt das Ergebnis als [Mitteilung](/de/docs/chats#mitteilungen) in seinen Chat zurück.
-So bleibt ein Bot immer frei, Menschen zu antworten, und viel Arbeit kann parallel laufen.
-Diese Seite zeigt die Bot-Werkzeuge, wie die Arbeit läuft und endet, und wie du sie beobachtest und stoppst.
+**Delegation** heißt, dass ein Bot einem Bot eine Aufgabe gibt. Die Aufgabe kann
+an einen anderen Bot gehen oder an denselben Bot. Die Arbeit läuft in ihrem
+eigenen **Task-Chat**, mit ihrem eigenen Kontext, zur selben Zeit wie andere
+Arbeit. Der Bot, der die Arbeit gegeben hat, wartet nicht. Er macht weiter, oder
+er beendet seine Antwort. Wenn die Arbeit endet, kommt das Ergebnis als
+[Mitteilung](/de/docs/chats#mitteilungen) in seinen Chat zurück. So bleibt ein
+Bot immer frei, Menschen zu antworten, und viel Arbeit kann parallel laufen.
+Diese Seite zeigt die Bot-Werkzeuge, wie die Arbeit läuft und endet, und wie du
+sie beobachtest und stoppst.
 
 ---
 
@@ -46,34 +54,63 @@ Das Werkzeug kehrt sofort zurück:
 
 Wer die Arbeit bekommen kann:
 
-- **Der Bot selbst.** Lass `bot` weg. Ein neuer Helfer mit derselben Rolle und ohne Verlauf macht die Arbeit. Das braucht keine Entscheidung.
+- **Der Bot selbst.** Lass `bot` weg. Ein neuer Helfer mit derselben Rolle und
+  ohne Verlauf macht die Arbeit. Das braucht keine Entscheidung.
 - **Ein Bot, der ihm gehört.** Das braucht keine Entscheidung.
-- **Jeder andere Bot.** Das ist die Fähigkeit `bots.delegate`, und sie braucht einen `reason`. Beim ersten Mal muss der Entscheider über dem Bot zustimmen. Siehe [Requests](/de/docs/requests). Solange der Entscheider entscheidet, ist der Status `authorizing`. Wenn die Arbeit erlaubt wird, startet sie. Wenn sie abgelehnt wird, wird der Status `failed`, und der Chat bekommt eine Mitteilung mit dem Grund.
+- **Jeder andere Bot.** Das ist die Fähigkeit `bots.delegate`, und sie braucht
+  einen `reason`. Beim ersten Mal muss der Entscheider über dem Bot zustimmen.
+  Siehe [Requests](/de/docs/requests). Solange der Entscheider entscheidet, ist
+  der Status `authorizing`. Wenn die Arbeit erlaubt wird, startet sie. Wenn sie
+  abgelehnt wird, wird der Status `failed`, und der Chat bekommt eine Mitteilung
+  mit dem Grund.
 
-Es gibt keine Grenze dafür, wie tief Arbeit geht oder wie viel Arbeit zur selben Zeit läuft. Ein Bot kann sich selbst Arbeit geben, und diese Arbeit kann wieder Arbeit geben. Bot A kann Bot B Arbeit geben, und B kann A wieder Arbeit geben. Nichts wartet, also bleibt nichts hängen. Nur [Budgets und Rate Limits](/de/docs/usage) stoppen Arbeit, die zu viel kostet.
+Es gibt keine Grenze dafür, wie tief Arbeit geht oder wie viel Arbeit zur selben
+Zeit läuft. Ein Bot kann sich selbst Arbeit geben, und diese Arbeit kann wieder
+Arbeit geben. Bot A kann Bot B Arbeit geben, und B kann A wieder Arbeit geben.
+Nichts wartet, also bleibt nichts hängen. Nur
+[Budgets und Rate Limits](/de/docs/usage) stoppen Arbeit, die zu viel kostet.
 
 ### Zu früherer Arbeit hinzufügen
 
-Um demselben Kontext mehr Arbeit zu geben, sende die ID früherer Arbeit als `delegation`. Die Arbeit muss aus demselben Chat kommen.
+Um demselben Kontext mehr Arbeit zu geben, sende die ID früherer Arbeit als
+`delegation`. Die Arbeit muss aus demselben Chat kommen.
 
-- Wenn diese Arbeit noch läuft, geht die neue `task` als Nachricht in ihren Task-Chat. Der Bot dort liest sie bei seinem nächsten Schritt. Die ID bleibt dieselbe.
-- Wenn diese Arbeit beendet ist, erstellt OpenBot eine neue Delegation im selben Task-Chat. So hat der Bot dort noch seinen ganzen Verlauf.
+- Wenn diese Arbeit noch läuft, geht die neue `task` als Nachricht in ihren
+  Task-Chat. Der Bot dort liest sie bei seinem nächsten Schritt. Die ID bleibt
+  dieselbe.
+- Wenn diese Arbeit beendet ist, erstellt OpenBot eine neue Delegation im selben
+  Task-Chat. So hat der Bot dort noch seinen ganzen Verlauf.
 
 ---
 
 ## Wo die Arbeit läuft
 
-Jede Delegation läuft in einem Task-Chat des Bots, der die Arbeit macht. Der Task-Chat hat `kind: "task"` und einen `parent` mit dem Chat und der Delegation, die die Arbeit gegeben haben. Seine erste Eingabe ist eine Mitteilung mit der Aufgabe, zum Beispiel `[OpenBot] Assistant gives you this task: …`. Siehe [Chats](/de/docs/chats).
+Jede Delegation läuft in einem Task-Chat des Bots, der die Arbeit macht. Der
+Task-Chat hat `kind: "task"` und einen `parent` mit dem Chat und der Delegation,
+die die Arbeit gegeben haben. Seine erste Eingabe ist eine Mitteilung mit der
+Aufgabe, zum Beispiel `[OpenBot] Assistant gives you this task: …`. Siehe
+[Chats](/de/docs/chats).
 
-Die Arbeit ist für dieselbe Person wie die Arbeit, die sie gegeben hat. Also entscheiden die [Berechtigungen](/de/docs/permissions) dieser Person, was der Bot darf, und Requests gehen an dieselben Entscheider. Ein Task-Chat gehört dem Besitzer des Chats, der die Arbeit gegeben hat. In einem [Channel](/de/docs/channels) ist das der Actor des Channel. Der Besitzer kann Task-Chats lesen wie seine anderen Chats.
+Die Arbeit ist für dieselbe Person wie die Arbeit, die sie gegeben hat. Also
+entscheiden die [Berechtigungen](/de/docs/permissions) dieser Person, was der
+Bot darf, und Requests gehen an dieselben Entscheider. Ein Task-Chat gehört dem
+Besitzer des Chats, der die Arbeit gegeben hat. In einem
+[Channel](/de/docs/channels) ist das der Actor des Channel. Der Besitzer kann
+Task-Chats lesen wie seine anderen Chats.
 
-Eine Person kann einem Task-Chat auch mit `POST /v1/chats/:chatId/messages` eine Nachricht schicken. Der Bot dort liest sie als Nachricht von der Person.
+Eine Person kann einem Task-Chat auch mit `POST /v1/chats/:chatId/messages` eine
+Nachricht schicken. Der Bot dort liest sie als Nachricht von der Person.
 
 ---
 
 ## Wann die Arbeit endet
 
-Die Arbeit eines Task-Chats endet, wenn einer seiner Turns endet und der Chat keine [offene Arbeit](/de/docs/chats#offene-arbeit) hat. Offene Arbeit ist die Arbeit, die der Task-Chat abgegeben hat, seine Requests, die auf eine Entscheidung warten, seine Erinnerungen und Eingaben in seiner Inbox. Solange etwas davon offen ist, bleibt die Arbeit `running`. Die Ergebnisse kommen als Mitteilungen zurück, sie starten neue Turns, und die Arbeit geht weiter.
+Die Arbeit eines Task-Chats endet, wenn einer seiner Turns endet und der Chat
+keine [offene Arbeit](/de/docs/chats#offene-arbeit) hat. Offene Arbeit ist die
+Arbeit, die der Task-Chat abgegeben hat, seine Requests, die auf eine
+Entscheidung warten, seine Erinnerungen und Eingaben in seiner Inbox. Solange
+etwas davon offen ist, bleibt die Arbeit `running`. Die Ergebnisse kommen als
+Mitteilungen zurück, sie starten neue Turns, und die Arbeit geht weiter.
 
 Das Ende des letzten Turns gibt das Ergebnis:
 
@@ -83,7 +120,8 @@ Das Ende des letzten Turns gibt das Ergebnis:
 | `Failed`           | `failed`        | Der Fehler.                                |
 | `Interrupted`      | `cancelled`     | Ein Hinweis, dass die Arbeit gestoppt hat. |
 
-Dann bekommt der Chat, der die Arbeit gegeben hat, eine Mitteilung, zum Beispiel:
+Dann bekommt der Chat, der die Arbeit gegeben hat, eine Mitteilung, zum
+Beispiel:
 
 ```text
 [OpenBot] The work dlg_9f1e… that you gave to Programmer is done.
@@ -92,15 +130,25 @@ Result:
 Added the endpoint and two tests.
 ```
 
-Die Mitteilung geht durch die [Inbox](/de/docs/chats#die-inbox) dieses Chats. Wenn der Chat frei ist, startet sie einen neuen Turn, und der Bot macht mit dem Ergebnis weiter. Wenn der Bot vielen Bots Arbeit gegeben hat, kommt jedes Ergebnis für sich zurück, sobald es fertig ist.
+Die Mitteilung geht durch die [Inbox](/de/docs/chats#die-inbox) dieses Chats.
+Wenn der Chat frei ist, startet sie einen neuen Turn, und der Bot macht mit dem
+Ergebnis weiter. Wenn der Bot vielen Bots Arbeit gegeben hat, kommt jedes
+Ergebnis für sich zurück, sobald es fertig ist.
 
-Ein Task-Chat kann einen neuen Turn bekommen, nachdem seine Arbeit beendet ist, zum Beispiel wenn eine Person ihm eine Nachricht schickt oder wenn eine späte Mitteilung ankommt. Dann erstellt OpenBot eine neue Delegation für denselben Task-Chat. Wenn diese neue Runde endet, bekommt der Eltern-Chat auch ihr Ergebnis.
+Ein Task-Chat kann einen neuen Turn bekommen, nachdem seine Arbeit beendet ist,
+zum Beispiel wenn eine Person ihm eine Nachricht schickt oder wenn eine späte
+Mitteilung ankommt. Dann erstellt OpenBot eine neue Delegation für denselben
+Task-Chat. Wenn diese neue Runde endet, bekommt der Eltern-Chat auch ihr
+Ergebnis.
 
 ---
 
 ## Die Arbeit beobachten
 
-`GET /v1/chats/:chatId/delegations` listet die Arbeit auf, die ein Chat abgegeben hat. `GET /v1/delegations/:delegationId` liest ein Stück Arbeit. Du siehst nur die Arbeit deiner eigenen Chats. Andere Arbeit ergibt `404` mit `DelegationNotFound`.
+`GET /v1/chats/:chatId/delegations` listet die Arbeit auf, die ein Chat
+abgegeben hat. `GET /v1/delegations/:delegationId` liest ein Stück Arbeit. Du
+siehst nur die Arbeit deiner eigenen Chats. Andere Arbeit ergibt `404` mit
+`DelegationNotFound`.
 
 ```json
 {
@@ -117,7 +165,9 @@ Ein Task-Chat kann einen neuen Turn bekommen, nachdem seine Arbeit beendet ist, 
 }
 ```
 
-`chat` ist der Task-Chat. Er ist `null`, bis die Arbeit startet. Arbeit von einem [Trigger](/de/docs/triggers) hat `trigger` und einen `parent` ohne `turn` und ohne `toolCallId`.
+`chat` ist der Task-Chat. Er ist `null`, bis die Arbeit startet. Arbeit von
+einem [Trigger](/de/docs/triggers) hat `trigger` und einen `parent` ohne `turn`
+und ohne `toolCallId`.
 
 | Status        | Bedeutung                                                                         |
 | ------------- | --------------------------------------------------------------------------------- |
@@ -134,14 +184,23 @@ Ein Task-Chat kann einen neuen Turn bekommen, nachdem seine Arbeit beendet ist, 
 
 Es gibt vier Wege, Arbeit zu stoppen:
 
-- Der Bot ruft `openbot_cancel_delegation` mit der ID der `delegation` und einem optionalen `reason` auf. Sein Chat bekommt keine Mitteilung, weil der Bot die Arbeit selbst gestoppt hat.
-- Du rufst `POST /v1/delegations/:delegationId/cancel` mit dem Body `{}` auf. Die Antwort ist die Delegation. Der Chat, der die Arbeit gegeben hat, bekommt eine Mitteilung.
-- Du [unterbrichst](/de/docs/chats#unterbrechen) den Chat, der die Arbeit gegeben hat, mit `{ "delegations": true }`.
-- Du [löschst](/de/docs/chats#den-verlauf-löschen) den Chat, der die Arbeit gegeben hat.
+- Der Bot ruft `openbot_cancel_delegation` mit der ID der `delegation` und einem
+  optionalen `reason` auf. Sein Chat bekommt keine Mitteilung, weil der Bot die
+  Arbeit selbst gestoppt hat.
+- Du rufst `POST /v1/delegations/:delegationId/cancel` mit dem Body `{}` auf.
+  Die Antwort ist die Delegation. Der Chat, der die Arbeit gegeben hat, bekommt
+  eine Mitteilung.
+- Du [unterbrichst](/de/docs/chats#unterbrechen) den Chat, der die Arbeit
+  gegeben hat, mit `{ "delegations": true }`.
+- Du [löschst](/de/docs/chats#den-verlauf-löschen) den Chat, der die Arbeit
+  gegeben hat.
 
-Ein Abbruch stoppt den laufenden Turn des Task-Chats. Er stoppt auch die Arbeit, die der Task-Chat abgegeben hat, Schicht für Schicht, und seine Requests und Erinnerungen. Jedes Stück Arbeit wird `cancelled`.
+Ein Abbruch stoppt den laufenden Turn des Task-Chats. Er stoppt auch die Arbeit,
+die der Task-Chat abgegeben hat, Schicht für Schicht, und seine Requests und
+Erinnerungen. Jedes Stück Arbeit wird `cancelled`.
 
-Ein normales Unterbrechen stoppt nur den laufenden Turn. Die Arbeit, die der Chat abgegeben hat, geht weiter.
+Ein normales Unterbrechen stoppt nur den laufenden Turn. Die Arbeit, die der
+Chat abgegeben hat, geht weiter.
 
 ---
 
@@ -153,4 +212,5 @@ Ein normales Unterbrechen stoppt nur den laufenden Turn. Die Arbeit, die der Cha
 | `409`  | `DelegationConflict`           | Die Arbeit hat sich zur selben Zeit geändert. Lies sie neu. |
 | `503`  | `DelegationStorageUnavailable` | OpenBot erreicht seine Datenbank nicht.                     |
 
-Alle Felder findest du in der [Delegations-Referenz](/docs/api/operations/tags/delegations/).
+Alle Felder findest du in der
+[Delegations-Referenz](/docs/api/operations/tags/delegations/).

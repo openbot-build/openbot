@@ -3,9 +3,9 @@ title: 委派
 description: Bots 如何把工作交给其他 Bots 或交给自己，并拿回结果。
 ---
 
-**委派**（Delegation）是指一个 Bot 把任务交给一个 Bot。任务可以交给另一个 Bot，也可以交给同一个 Bot。工作在它自己的 **task Chat** 中运行，有自己的上下文，并和其他工作同时进行。交出工作的 Bot 不会等待。它继续做事，或者结束它的回答。工作结束时，结果作为[通知](/zh-cn/docs/chats#通知)回到它的 Chat。
-所以 Bot 总是有空回答人，而且很多工作可以并行运行。
-本页介绍 Bot 工具、工作如何运行和结束，以及如何查看和停止它。
+**委派**（Delegation）是指一个 Bot 把任务交给一个 Bot。任务可以交给另一个 Bot，也可以交给同一个 Bot。工作在它自己的
+**task Chat**
+中运行，有自己的上下文，并和其他工作同时进行。交出工作的 Bot 不会等待。它继续做事，或者结束它的回答。工作结束时，结果作为[通知](/zh-cn/docs/chats#通知)回到它的 Chat。所以 Bot 总是有空回答人，而且很多工作可以并行运行。本页介绍 Bot 工具、工作如何运行和结束，以及如何查看和停止它。
 
 ---
 
@@ -46,34 +46,54 @@ OpenBot 给每个 Bot 提供这些工具：
 
 谁可以接到工作：
 
-- **Bot 自己。** 不填 `bot`。一个角色相同、没有历史的新助手来做这项工作。这不需要决定。
+- **Bot 自己。** 不填
+  `bot`。一个角色相同、没有历史的新助手来做这项工作。这不需要决定。
 - **它拥有的 Bot。** 这不需要决定。
-- **任何其他 Bot。** 这是能力 `bots.delegate`，需要一个 `reason`。第一次时，Bot 上方的决策者必须同意。见 [Requests](/zh-cn/docs/requests)。决策者做决定时，状态是 `authorizing`。工作被允许时，它就开始。被拒绝时，状态变成 `failed`，Chat 会收到一条带有原因的通知。
+- **任何其他 Bot。** 这是能力 `bots.delegate`，需要一个
+  `reason`。第一次时，Bot 上方的决策者必须同意。见
+  [Requests](/zh-cn/docs/requests)。决策者做决定时，状态是
+  `authorizing`。工作被允许时，它就开始。被拒绝时，状态变成
+  `failed`，Chat 会收到一条带有原因的通知。
 
-工作能往下走多深，同时能运行多少工作，都没有限制。Bot 可以把工作交给自己，那项工作又可以交出更多工作。Bot A 可以把工作交给 Bot B，B 也可以把工作交回给 A。没有谁在等待，所以不会卡住。只有[预算和速率限制](/zh-cn/docs/usage)会拦住花费太多的工作。
+工作能往下走多深，同时能运行多少工作，都没有限制。Bot 可以把工作交给自己，那项工作又可以交出更多工作。Bot
+A 可以把工作交给 Bot
+B，B 也可以把工作交回给 A。没有谁在等待，所以不会卡住。只有[预算和速率限制](/zh-cn/docs/usage)会拦住花费太多的工作。
 
 ### 接着之前的工作
 
-要在同一个上下文中再交出工作，请把之前那项工作的 ID 作为 `delegation` 发送。那项工作必须来自同一个 Chat。
+要在同一个上下文中再交出工作，请把之前那项工作的 ID 作为 `delegation`
+发送。那项工作必须来自同一个 Chat。
 
-- 那项工作还在运行时，新的 `task` 会作为一条消息进入它的 task Chat。那里的 Bot 在下一步读取它。ID 保持不变。
-- 那项工作已经结束时，OpenBot 在同一个 task Chat 中创建一个新的委派。所以那里的 Bot 仍然有它全部的历史。
+- 那项工作还在运行时，新的 `task` 会作为一条消息进入它的 task
+  Chat。那里的 Bot 在下一步读取它。ID 保持不变。
+- 那项工作已经结束时，OpenBot 在同一个 task
+  Chat 中创建一个新的委派。所以那里的 Bot 仍然有它全部的历史。
 
 ---
 
 ## 工作在哪里运行
 
-每个委派都在做这项工作的 Bot 的一个 task Chat 中运行。task Chat 的 `kind` 为 `"task"`，它的 `parent` 指出交出工作的 Chat 和委派。它的第一条输入是一条带着任务的通知，例如 `[OpenBot] Assistant gives you this task: …`。见 [Chats](/zh-cn/docs/chats)。
+每个委派都在做这项工作的 Bot 的一个 task Chat 中运行。task Chat 的 `kind` 为
+`"task"`，它的 `parent`
+指出交出工作的 Chat 和委派。它的第一条输入是一条带着任务的通知，例如
+`[OpenBot] Assistant gives you this task: …`。见 [Chats](/zh-cn/docs/chats)。
 
-这项工作和交出它的工作为同一个人服务。所以这个人的[权限](/zh-cn/docs/permissions)决定 Bot 可以做什么，请求也会交给同样的决策者。task Chat 属于交出工作的那个 Chat 的所有者。在 [Channel](/zh-cn/docs/channels) 中，所有者是这个 Channel 的 actor。所有者可以像读取自己其他的 Chat 一样读取 task Chat。
+这项工作和交出它的工作为同一个人服务。所以这个人的[权限](/zh-cn/docs/permissions)决定 Bot 可以做什么，请求也会交给同样的决策者。task
+Chat 属于交出工作的那个 Chat 的所有者。在 [Channel](/zh-cn/docs/channels)
+中，所有者是这个 Channel 的 actor。所有者可以像读取自己其他的 Chat 一样读取 task
+Chat。
 
-人也可以用 `POST /v1/chats/:chatId/messages` 给 task Chat 发消息。那里的 Bot 会把它当作这个人发来的消息来读。
+人也可以用 `POST /v1/chats/:chatId/messages` 给 task
+Chat 发消息。那里的 Bot 会把它当作这个人发来的消息来读。
 
 ---
 
 ## 工作何时结束
 
-当 task Chat 的一个 Turn 结束，而且这个 Chat 没有[未完成的工作](/zh-cn/docs/chats#未完成的工作)时，它的工作就结束了。未完成的工作包括这个 task Chat 交出去的工作、它等待决定的请求、它的提醒，以及它收件箱中的输入。只要还有其中一项没完成，工作就保持 `running`。结果作为通知回来，它们会启动新的 Turn，工作接着进行。
+当 task
+Chat 的一个 Turn 结束，而且这个 Chat 没有[未完成的工作](/zh-cn/docs/chats#未完成的工作)时，它的工作就结束了。未完成的工作包括这个 task
+Chat 交出去的工作、它等待决定的请求、它的提醒，以及它收件箱中的输入。只要还有其中一项没完成，工作就保持
+`running`。结果作为通知回来，它们会启动新的 Turn，工作接着进行。
 
 最后一个 Turn 的结束方式决定结果：
 
@@ -94,13 +114,18 @@ Added the endpoint and two tests.
 
 这条通知经过那个 Chat 的[收件箱](/zh-cn/docs/chats#收件箱)。Chat 空闲时，它会启动一个新 Turn，Bot 带着结果继续工作。当 Bot 把工作交给了很多 Bots 时，每个结果一准备好就单独回来。
 
-task Chat 的工作结束后，它还可能得到新的 Turn，例如有人给它发消息，或者一条迟到的通知到来。这时 OpenBot 会为同一个 task Chat 创建一个新的委派。这一轮新的工作结束时，父 Chat 也会收到它的结果。
+task
+Chat 的工作结束后，它还可能得到新的 Turn，例如有人给它发消息，或者一条迟到的通知到来。这时 OpenBot 会为同一个 task
+Chat 创建一个新的委派。这一轮新的工作结束时，父 Chat 也会收到它的结果。
 
 ---
 
 ## 查看工作
 
-`GET /v1/chats/:chatId/delegations` 列出一个 Chat 交出去的工作。`GET /v1/delegations/:delegationId` 读取一项工作。你只能看到你自己的 Chat 的工作。其他工作会返回 `404` 和 `DelegationNotFound`。
+`GET /v1/chats/:chatId/delegations`
+列出一个 Chat 交出去的工作。`GET /v1/delegations/:delegationId`
+读取一项工作。你只能看到你自己的 Chat 的工作。其他工作会返回 `404` 和
+`DelegationNotFound`。
 
 ```json
 {
@@ -117,7 +142,9 @@ task Chat 的工作结束后，它还可能得到新的 Turn，例如有人给�
 }
 ```
 
-`chat` 是 task Chat。工作开始之前它是 `null`。来自[触发器](/zh-cn/docs/triggers)的工作有 `trigger`，它的 `parent` 没有 `turn` 和 `toolCallId`。
+`chat` 是 task Chat。工作开始之前它是
+`null`。来自[触发器](/zh-cn/docs/triggers)的工作有 `trigger`，它的 `parent` 没有
+`turn` 和 `toolCallId`。
 
 | 状态          | 含义                                                      |
 | ------------- | --------------------------------------------------------- |
@@ -134,12 +161,15 @@ task Chat 的工作结束后，它还可能得到新的 Turn，例如有人给�
 
 有四种方式停止工作：
 
-- Bot 调用 `openbot_cancel_delegation`，带上 `delegation` ID 和可选的 `reason`。它的 Chat 不会收到通知，因为是 Bot 自己停止了这项工作。
-- 你调用 `POST /v1/delegations/:delegationId/cancel`，请求体为 `{}`。回答是这个委派。交出工作的 Chat 会收到一条通知。
+- Bot 调用 `openbot_cancel_delegation`，带上 `delegation` ID 和可选的
+  `reason`。它的 Chat 不会收到通知，因为是 Bot 自己停止了这项工作。
+- 你调用 `POST /v1/delegations/:delegationId/cancel`，请求体为
+  `{}`。回答是这个委派。交出工作的 Chat 会收到一条通知。
 - 你用 `{ "delegations": true }` [中断](/zh-cn/docs/chats#中断)交出工作的 Chat。
 - 你[删除](/zh-cn/docs/chats#删除历史)交出工作的 Chat。
 
-取消会停止 task Chat 中正在运行的 Turn。它还会一层一层地停止这个 task Chat 交出去的工作，以及它的请求和提醒。每项工作都变成 `cancelled`。
+取消会停止 task Chat 中正在运行的 Turn。它还会一层一层地停止这个 task
+Chat 交出去的工作，以及它的请求和提醒。每项工作都变成 `cancelled`。
 
 普通的中断只停止正在运行的 Turn。这个 Chat 交出去的工作会继续。
 

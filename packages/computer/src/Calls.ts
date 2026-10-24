@@ -188,16 +188,14 @@ const operate = Effect.fnUntraced(function* (
 		case "Run": {
 			// Node says "spawn bash ENOENT" when the folder is missing, so check the folder first.
 			const folder = at(operation.request.cwd ?? ".")
-			const info = yield* fs
-				.stat(folder)
-				.pipe(
-					Effect.mapError(
-						() =>
-							new CallFailed({
-								message: `The folder ${folder} does not exist.`,
-							}),
-					),
-				)
+			const info = yield* fs.stat(folder).pipe(
+				Effect.mapError(
+					() =>
+						new CallFailed({
+							message: `The folder ${folder} does not exist.`,
+						}),
+				),
+			)
 			if (info.type !== "Directory")
 				return yield* new CallFailed({ message: `${folder} is not a folder.` })
 			return yield* run(operation.request, options)

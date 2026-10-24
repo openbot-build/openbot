@@ -3,15 +3,20 @@ title: App Protocol
 description: Publish an App on the web so that any Bot host can find and use it.
 ---
 
-The **OpenBot App Protocol** is an open way to publish an App on the web. Any Bot host can then find the App, connect to it, and use it. You do not need a developer account, a registry, or a review. An HTTPS address that you control is enough.
+The **OpenBot App Protocol** is an open way to publish an App on the web. Any
+Bot host can then find the App, connect to it, and use it. You do not need a
+developer account, a registry, or a review. An HTTPS address that you control is
+enough.
 
-This page describes draft **V1.1**. In this page, "must" means a rule, "should" means a strong advice, and "may" means an option. All domains are examples.
+This page describes draft **V1.1**. In this page, "must" means a rule, "should"
+means a strong advice, and "may" means an option. All domains are examples.
 
 ---
 
 ## Standards it uses
 
-The protocol adds very little of its own. It picks existing standards and puts them together.
+The protocol adds very little of its own. It picks existing standards and puts
+them together.
 
 | Part                                  | Question it answers      |
 | ------------------------------------- | ------------------------ |
@@ -20,7 +25,8 @@ The protocol adds very little of its own. It picks existing standards and puts t
 | MCP `2026-07-28` over Streamable HTTP | What can the App do?     |
 | MCP Apps `2026-01-26`                 | How does it show a view? |
 
-MCP (Model Context Protocol) is a standard way for AI hosts to call tools on a server. The protocol has no own RPC methods, fixed tool names, or UI language.
+MCP (Model Context Protocol) is a standard way for AI hosts to call tools on a
+server. The protocol has no own RPC methods, fixed tool names, or UI language.
 
 ---
 
@@ -28,7 +34,8 @@ MCP (Model Context Protocol) is a standard way for AI hosts to call tools on a s
 
 ### AI Catalog
 
-To be found by domain, put an AI Catalog at `/.well-known/ai-catalog.json`. Serve it as `application/ai-catalog+json`.
+To be found by domain, put an AI Catalog at `/.well-known/ai-catalog.json`.
+Serve it as `application/ai-catalog+json`.
 
 ```json
 {
@@ -43,11 +50,14 @@ To be found by domain, put an AI Catalog at `/.well-known/ai-catalog.json`. Serv
 }
 ```
 
-A Catalog may point to Cards on other domains. This lets someone else host the service for you.
+A Catalog may point to Cards on other domains. This lets someone else host the
+service for you.
 
 ### Server Card
 
-Each App must have its own stable Card URL. Serve the Card as `application/mcp-server-card+json`. It must list at least one HTTPS endpoint that supports MCP `2026-07-28`.
+Each App must have its own stable Card URL. Serve the Card as
+`application/mcp-server-card+json`. It must list at least one HTTPS endpoint
+that supports MCP `2026-07-28`.
 
 ```json
 {
@@ -67,15 +77,20 @@ Each App must have its own stable Card URL. Serve the Card as `application/mcp-s
 }
 ```
 
-The **Card URL is the App's identity**. The `name` and the Catalog `identifier` only describe the App. Two Apps with the same name are never merged.
+The **Card URL is the App's identity**. The `name` and the Catalog `identifier`
+only describe the App. Two Apps with the same name are never merged.
 
-A remote may ask for settings, such as `headers` or URL `variables`. Mark secrets with `isSecret: true`. Hosts keep these values private to each user.
+A remote may ask for settings, such as `headers` or URL `variables`. Mark
+secrets with `isSecret: true`. Hosts keep these values private to each user.
 
-Serve the Catalog and the Card with `ETag` or `Last-Modified`. Hosts send conditional requests and expect `304 Not Modified` when nothing changed.
+Serve the Catalog and the Card with `ETag` or `Last-Modified`. Hosts send
+conditional requests and expect `304 Not Modified` when nothing changed.
 
 ### Icons and usage examples
 
-Use the standard Card `icons` list (`src`, `mimeType`, `sizes`, `theme`). Hosts must still show your App when an icon is missing. Hosts never run SVG files as HTML.
+Use the standard Card `icons` list (`src`, `mimeType`, `sizes`, `theme`). Hosts
+must still show your App when an icon is missing. Hosts never run SVG files as
+HTML.
 
 You may add usage examples under `_meta["openbot/presentation"]`:
 
@@ -114,16 +129,20 @@ You may add usage examples under `_meta["openbot/presentation"]`:
 | `description` | Optional. Up to 500 characters.                                                                                                         |
 | `preview`     | Optional. HTTPS `src`, `alt` up to 500 characters, `width` and `height` from 1 to 8192, `mimeType` one of PNG, JPEG, WebP, AVIF or SVG. |
 
-Examples must only hold public or made-up data. Hosts show them as plain text. Looking at or picking an example never adds an App, signs in, or runs a tool. Hosts ignore a broken presentation block and keep using the Card.
+Examples must only hold public or made-up data. Hosts show them as plain text.
+Looking at or picking an example never adds an App, signs in, or runs a tool.
+Hosts ignore a broken presentation block and keep using the Card.
 
 ---
 
 ## Discovery from a domain or link
 
-A host must accept four kinds of input: a domain, an App page URL, a Catalog URL, or a Card URL.
+A host must accept four kinds of input: a domain, an App page URL, a Catalog
+URL, or a Card URL.
 
 - **Domain.** The host reads `https://<domain>/.well-known/ai-catalog.json`.
-- **App page.** The page points to its Catalog with a link tag or an HTTP `Link` header:
+- **App page.** The page points to its Catalog with a link tag or an HTTP `Link`
+  header:
 
   ```html
   <link
@@ -133,17 +152,24 @@ A host must accept four kinds of input: a domain, an App page URL, a Catalog URL
   />
   ```
 
-  The host reads only these static links. It never runs page scripts. It keeps the full path, so a page for one App does not turn into the whole domain.
+  The host reads only these static links. It never runs page scripts. It keeps
+  the full path, so a page for one App does not turn into the whole domain.
 
-- **Catalog with many Cards.** The host asks the user to choose. It never adds a whole Catalog.
+- **Catalog with many Cards.** The host asks the user to choose. It never adds a
+  whole Catalog.
 
-An **App Link** is a normal HTTPS URL, best an App page. A **QR code** holds the same URL. There is no special QR format or URI scheme. Links must not hold tokens or private data. Opening a link only starts a review. It grants no access and runs nothing.
+An **App Link** is a normal HTTPS URL, best an App page. A **QR code** holds the
+same URL. There is no special QR format or URI scheme. Links must not hold
+tokens or private data. Opening a link only starts a review. It grants no access
+and runs nothing.
 
 ---
 
 ## Connect and call
 
-Adding, signing in, and running are three separate steps. Adding saves the connection. Signing in grants clear access. Running needs the user's intent, a valid sign-in, and the host's own rules.
+Adding, signing in, and running are three separate steps. Adding saves the
+connection. Signing in grants clear access. Running needs the user's intent, a
+valid sign-in, and the host's own rules.
 
 After the user adds the App, the host:
 
@@ -151,23 +177,33 @@ After the user adds the App, the host:
 2. calls `tools/list`, `resources/list` and `prompts/list`;
 3. does the work with `tools/call`, `resources/read` and `prompts/get`.
 
-All messages, results, and errors follow MCP. Name your tools by what they do, such as `create_event`. Describe input with `inputSchema`. Return structured output with `outputSchema` and `structuredContent`. Always return a clear text result too.
+All messages, results, and errors follow MCP. Name your tools by what they do,
+such as `create_event`. Describe input with `inputSchema`. Return structured
+output with `outputSchema` and `structuredContent`. Always return a clear text
+result too.
 
 ### Account sign-in
 
 An App that needs a user account must use MCP authorization. This is OAuth 2.1:
 
-- **Protected Resource Metadata.** The App answers 401 or 403 with a challenge that points to its metadata. The metadata names the authorization servers and scopes.
-- **Client ID Metadata Document.** The host's client ID is an HTTPS URL to a public JSON document. Authorization servers read it. No one has to register the host by hand. Both sides must support this.
-- **PKCE with S256.** It protects the sign-in code. Requests also send the exact `resource`.
+- **Protected Resource Metadata.** The App answers 401 or 403 with a challenge
+  that points to its metadata. The metadata names the authorization servers and
+  scopes.
+- **Client ID Metadata Document.** The host's client ID is an HTTPS URL to a
+  public JSON document. Authorization servers read it. No one has to register
+  the host by hand. Both sides must support this.
+- **PKCE with S256.** It protects the sign-in code. Requests also send the exact
+  `resource`.
 
-Your App may still ask for a login, a plan, or a business permission. This is not a registry step.
+Your App may still ask for a login, a plan, or a business permission. This is
+not a registry step.
 
 ---
 
 ## MCP Apps views
 
-An App may show an interactive view. A tool links to a UI resource in its metadata:
+An App may show an interactive view. A tool links to a UI resource in its
+metadata:
 
 ```json
 {
@@ -180,7 +216,9 @@ An App may show an interactive view. A tool links to a UI resource in its metada
 }
 ```
 
-The resource must use a `ui://` URI and the type `text/html;profile=mcp-app`. The host reads it with `resources/read`. The host declares `io.modelcontextprotocol/ui` in its client capabilities.
+The resource must use a `ui://` URI and the type `text/html;profile=mcp-app`.
+The host reads it with `resources/read`. The host declares
+`io.modelcontextprotocol/ui` in its client capabilities.
 
 | Purpose                   | Standard method                                                          | Direction                  |
 | ------------------------- | ------------------------------------------------------------------------ | -------------------------- |
@@ -196,8 +234,10 @@ The resource must use a `ui://` URI and the type `text/html;profile=mcp-app`. Th
 Rules for views:
 
 - The host waits until the view is ready before it sends tool data.
-- A tool with `visibility: ["app"]` is only for the view. Visibility is not access control. Your server must still check permissions.
-- If a view fails to load, the host must not run the tool again. The text result is still there.
+- A tool with `visibility: ["app"]` is only for the view. Visibility is not
+  access control. Your server must still check permissions.
+- If a view fails to load, the host must not run the tool again. The text result
+  is still there.
 
 ---
 
@@ -211,41 +251,55 @@ A host keeps three separate things:
 | Index entry     | The public Card and the publisher evidence. Used for search. | Public              |
 | User connection | The user's settings, sign-in, and access.                    | Private to the user |
 
-Many users can connect the same App. Removing one connection never affects another user or the Index. A public Index that is down must not block a known connection.
+Many users can connect the same App. Removing one connection never affects
+another user or the Index. A public Index that is down must not block a known
+connection.
 
 ---
 
 ## Public indexing
 
-**When you list a Card in your public AI Catalog, you allow public indexing of it.** The host must confirm this from your own documents. A copy in someone else's Catalog is only a hint.
+**When you list a Card in your public AI Catalog, you allow public indexing of
+it.** The host must confirm this from your own documents. A copy in someone
+else's Catalog is only a hint.
 
-The crawler works without user data. It uses the user bot token `OpenBot` and follows `robots.txt` (RFC 9309). It accepts publisher evidence from:
+The crawler works without user data. It uses the user bot token `OpenBot` and
+follows `robots.txt` (RFC 9309). It accepts publisher evidence from:
 
 - the Catalog at the Card origin's `/.well-known/ai-catalog.json`;
 - a Catalog named by an `ai-catalog` `Link` header on the Card response;
 - a Catalog linked from the page in the Card's `websiteUrl`.
 
-To opt out, send `X-Robots-Tag: noindex` on the Card. `noindex` is not access control. If you remove the Card from your Catalog, the host removes the Index entry at its next check. A Catalog that cannot be reached is not a removal.
+To opt out, send `X-Robots-Tag: noindex` on the Card. `noindex` is not access
+control. If you remove the Card from your Catalog, the host removes the Index
+entry at its next check. A Catalog that cannot be reached is not a removal.
 
-No registry is needed to publish, add, or call an App. A host may also read other registries. See how OpenBot does this in [App Index](/docs/app-index).
+No registry is needed to publish, add, or call an App. A host may also read
+other registries. See how OpenBot does this in [App Index](/docs/app-index).
 
 ---
 
 ## Safety rules
 
 - All connections use HTTPS. Hosts show the real source of each App.
-- Names, icons, Index entries, and tool notes are not trust signals. App content is data, never host instructions.
-- Public crawlers limit size, time, and redirects. They check each target and never reach private, loopback, or cloud metadata addresses. The library defaults are 1 MiB, 10 seconds, and 5 redirects.
-- Writes need a permission check. Writes that may be retried need a business idempotency key.
+- Names, icons, Index entries, and tool notes are not trust signals. App content
+  is data, never host instructions.
+- Public crawlers limit size, time, and redirects. They check each target and
+  never reach private, loopback, or cloud metadata addresses. The library
+  defaults are 1 MiB, 10 seconds, and 5 redirects.
+- Writes need a permission check. Writes that may be retried need a business
+  idempotency key.
 - When the result of a call is unknown, the host must not retry it blindly.
-- A change of endpoint, provider, or scopes needs a new review. Old tokens never move to a new target.
+- A change of endpoint, provider, or scopes needs a new review. Old tokens never
+  move to a new target.
 - Removing a connection stops all calls and deletes its tokens.
 
 ---
 
 ## Use the library
 
-`@openbot-build/protocol` implements this protocol with Effect 4. It is version 0.1.0 and is not yet on npm. Use it inside this repository's pnpm workspace.
+`@openbot-build/protocol` implements this protocol with Effect 4. It is version
+0.1.0 and is not yet on npm. Use it inside this repository's pnpm workspace.
 
 | Entry point                                  | Use                                                |
 | -------------------------------------------- | -------------------------------------------------- |
@@ -300,7 +354,9 @@ export const publisher = McpPublisher.layer({
 })
 ```
 
-Serve `publisher` with Effect `HttpRouter.serve`. Building the layer does no I/O. The `publication` also takes `etag`, `lastModified`, `cacheControl`, and `noindex`. Use `McpPublisher.registerUi` to add a `ui://` view resource.
+Serve `publisher` with Effect `HttpRouter.serve`. Building the layer does no
+I/O. The `publication` also takes `etag`, `lastModified`, `cacheControl`, and
+`noindex`. Use `McpPublisher.registerUi` to add a `ui://` view resource.
 
 Discover an App:
 
@@ -318,4 +374,6 @@ const result = await Effect.runPromise(
 )
 ```
 
-The result is `Single` or `Multiple`. To test your own App against a real host, use the [protocol test service](/docs/protocol-test) and the [developer tools](/docs/developer-tools).
+The result is `Single` or `Multiple`. To test your own App against a real host,
+use the [protocol test service](/docs/protocol-test) and the
+[developer tools](/docs/developer-tools).

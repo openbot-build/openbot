@@ -1,9 +1,15 @@
 ---
 title: Bots teilen
-description: Lade andere Personen ein, einen deiner Bots in ihrer eigenen Organisation zu nutzen, per E-Mail oder mit einem Link.
+description:
+  Lade andere Personen ein, einen deiner Bots in ihrer eigenen Organisation zu
+  nutzen, per E-Mail oder mit einem Link.
 ---
 
-Du kannst einen Bot mit Personen außerhalb deiner Organisation teilen. Das ist so, wie du ein Member zu einer Organisation hinzufügst. Du lädst eine Person per E-Mail ein, oder du erstellst einen **Einladungslink**. Dein Client kann den Link als QR-Code zeigen. Die Person nimmt die Einladung an. Danach nutzt sie den Bot in ihrer eigenen Organisation.
+Du kannst einen Bot mit Personen außerhalb deiner Organisation teilen. Das ist
+so, wie du ein Member zu einer Organisation hinzufügst. Du lädst eine Person per
+E-Mail ein, oder du erstellst einen **Einladungslink**. Dein Client kann den
+Link als QR-Code zeigen. Die Person nimmt die Einladung an. Danach nutzt sie den
+Bot in ihrer eigenen Organisation.
 
 | Wort            | Bedeutung                                                                                             |
 | --------------- | ----------------------------------------------------------------------------------------------------- |
@@ -16,9 +22,13 @@ Du kannst einen Bot mit Personen außerhalb deiner Organisation teilen. Das ist 
 
 ## Personen einladen
 
-Du brauchst `bots.share` für den Bot. Members können ihre eigenen Bots teilen. Administratoren können auch die gemeinsamen Bots der Organisation teilen. Du kannst nur einen obersten Bot teilen: einen, der einem Member oder der Organisation gehört und der nicht archiviert ist.
+Du brauchst `bots.share` für den Bot. Members können ihre eigenen Bots teilen.
+Administratoren können auch die gemeinsamen Bots der Organisation teilen. Du
+kannst nur einen obersten Bot teilen: einen, der einem Member oder der
+Organisation gehört und der nicht archiviert ist.
 
-Um eine Person einzuladen, sende ihre E-Mail. Die Einladung gilt 7 Tage, wie eine [Einladung in die Organisation](/de/docs/organization#einladungen):
+Um eine Person einzuladen, sende ihre E-Mail. Die Einladung gilt 7 Tage, wie
+eine [Einladung in die Organisation](/de/docs/organization#einladungen):
 
 ```sh
 curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -27,7 +37,8 @@ curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/bots/$BOT/invitations
 ```
 
-Um einen Einladungslink zu erstellen, lass `email` weg. Viele Personen können denselben Link nutzen.
+Um einen Einladungslink zu erstellen, lass `email` weg. Viele Personen können
+denselben Link nutzen.
 
 ```sh
 curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -60,19 +71,30 @@ curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
 }
 ```
 
-`url` ist der öffentliche Origin, dann `path`, dann `#` und das Geheimnis. Ein Browser sendet den Teil nach `#` nie an einen Server. So kommt das Geheimnis nie in ein Server-Log. `url` ist `null`, wenn es keinen `path` gibt. Zeige `url` als QR-Code, oder baue deine eigene Adresse aus `secret`.
+`url` ist der öffentliche Origin, dann `path`, dann `#` und das Geheimnis. Ein
+Browser sendet den Teil nach `#` nie an einen Server. So kommt das Geheimnis nie
+in ein Server-Log. `url` ist `null`, wenn es keinen `path` gibt. Zeige `url` als
+QR-Code, oder baue deine eigene Adresse aus `secret`.
 
-`GET /v1/bots/:botId/invitations/:invitationId/secret` gibt dir das Geheimnis und die `url` eines Links noch einmal, zum Beispiel um den QR-Code noch einmal zu drucken. OpenBot speichert das Geheimnis verschlüsselt. Es speichert auch einen Hash, um den Link zu finden.
+`GET /v1/bots/:botId/invitations/:invitationId/secret` gibt dir das Geheimnis
+und die `url` eines Links noch einmal, zum Beispiel um den QR-Code noch einmal
+zu drucken. OpenBot speichert das Geheimnis verschlüsselt. Es speichert auch
+einen Hash, um den Link zu finden.
 
-`GET /v1/bots/:botId/invitations` listet die Einladungen auf. `DELETE /v1/bots/:botId/invitations/:invitationId` zieht eine Einladung zurück. Danach kann niemand sie annehmen. Die Personen, die sie vorher angenommen haben, bleiben Bot-Mitglieder.
+`GET /v1/bots/:botId/invitations` listet die Einladungen auf.
+`DELETE /v1/bots/:botId/invitations/:invitationId` zieht eine Einladung zurück.
+Danach kann niemand sie annehmen. Die Personen, die sie vorher angenommen haben,
+bleiben Bot-Mitglieder.
 
 ---
 
 ## Eine Einladung annehmen
 
-Die eingeladene Person meldet sich an. Sie nutzt das Session-Cookie oder ihr eigenes User-Token.
+Die eingeladene Person meldet sich an. Sie nutzt das Session-Cookie oder ihr
+eigenes User-Token.
 
-- Eine Einladung per E-Mail erscheint in `GET /v1/invitations`, mit `bot`. Nimm sie mit ihrer ID an.
+- Eine Einladung per E-Mail erscheint in `GET /v1/invitations`, mit `bot`. Nimm
+  sie mit ihrer ID an.
 - Für einen Link sende sein Geheimnis.
 
 ```sh
@@ -82,15 +104,21 @@ curl -X POST -H "Authorization: Bearer $THEIR_TOKEN" \
   https://api.example.com/v1/bot-invitations/accept
 ```
 
-`organization` ist die Organisation, in der die Person den Bot nutzt. Sie muss ein aktives Member davon sein. Sie kann es weglassen, wenn sie nur eine Organisation hat oder wenn sie ein User-Token nutzt. Die Antwort ist ihr neuer verknüpfter Bot.
+`organization` ist die Organisation, in der die Person den Bot nutzt. Sie muss
+ein aktives Member davon sein. Sie kann es weglassen, wenn sie nur eine
+Organisation hat oder wenn sie ein User-Token nutzt. Die Antwort ist ihr neuer
+verknüpfter Bot.
 
-Wenn die Person den Bot schon nutzt, bekommt sie ihren verknüpften Bot zurück. Um eine Einladung per E-Mail abzulehnen, nutze `POST /v1/invitations/:invitationId/decline`.
+Wenn die Person den Bot schon nutzt, bekommt sie ihren verknüpften Bot zurück.
+Um eine Einladung per E-Mail abzulehnen, nutze
+`POST /v1/invitations/:invitationId/decline`.
 
 ---
 
 ## Einen geteilten Bot nutzen
 
-Der verknüpfte Bot ist ein Bot des Bot-Mitglieds, in seiner eigenen Organisation. Er hat `source`. Das nennt deinen Bot:
+Der verknüpfte Bot ist ein Bot des Bot-Mitglieds, in seiner eigenen
+Organisation. Er hat `source`. Das nennt deinen Bot:
 
 ```json
 {
@@ -103,15 +131,30 @@ Der verknüpfte Bot ist ein Bot des Bot-Mitglieds, in seiner eigenen Organisatio
 
 Das Bot-Mitglied arbeitet damit wie mit seinen eigenen Bots:
 
-- Es spricht mit ihm in seinem eigenen [Chat](/de/docs/chats), in seiner eigenen Organisation, und kann ihn zu seinem Standard-Bot machen.
-- Der Bot arbeitet mit den Berechtigungen des Bot-Mitglieds, mit seinen verbundenen [Apps](/de/docs/apps) und mit seinen anderen Bots. Er kann den Bots des Bot-Mitglieds Arbeit geben.
-- Seine [Requests](/de/docs/requests) gehen an das Bot-Mitglied. Dessen Entscheidungen, [Grants](/de/docs/requests#einen-request-beantworten) und [Rules](/de/docs/rules) gelten nur in seiner Organisation. Deine gelten nur in deiner.
-- Die Organisation des Bot-Mitglieds bezahlt die Models. Wenn dein Bot ein Model nennt, das seine Organisation nicht hat, nutzt sein Chat es nicht. Er nutzt das Standard-Model des Servers, wenn der Server eines hat.
+- Es spricht mit ihm in seinem eigenen [Chat](/de/docs/chats), in seiner eigenen
+  Organisation, und kann ihn zu seinem Standard-Bot machen.
+- Der Bot arbeitet mit den Berechtigungen des Bot-Mitglieds, mit seinen
+  verbundenen [Apps](/de/docs/apps) und mit seinen anderen Bots. Er kann den
+  Bots des Bot-Mitglieds Arbeit geben.
+- Seine [Requests](/de/docs/requests) gehen an das Bot-Mitglied. Dessen
+  Entscheidungen, [Grants](/de/docs/requests#einen-request-beantworten) und
+  [Rules](/de/docs/rules) gelten nur in seiner Organisation. Deine gelten nur in
+  deiner.
+- Die Organisation des Bot-Mitglieds bezahlt die Models. Wenn dein Bot ein Model
+  nennt, das seine Organisation nicht hat, nutzt sein Chat es nicht. Er nutzt
+  das Standard-Model des Servers, wenn der Server eines hat.
 - Du siehst nie seine Chats.
 
-Name, Rolle, Anweisungen und Model kommen immer von deinem Bot. Wenn du sie änderst, ändert sich auch jeder verknüpfte Bot. Ein Bot-Mitglied kann sie nicht ändern. Ein Bot-Mitglied kann `planApproval` ändern.
+Name, Rolle, Anweisungen und Model kommen immer von deinem Bot. Wenn du sie
+änderst, ändert sich auch jeder verknüpfte Bot. Ein Bot-Mitglied kann sie nicht
+ändern. Ein Bot-Mitglied kann `planApproval` ändern.
 
-Der Bot hat [einen Memory-Pool](/de/docs/memory), in deiner Organisation. Was er in der Organisation eines Bot-Mitglieds lernt, ist für dieses Bot-Mitglied, in dieser Organisation. Niemand liest das Memory über eine andere Person: du nicht, und andere Bot-Mitglieder auch nicht. Du kannst mit einem Purge entfernen, was ein Bot-Mitglied hinterlassen hat, ohne es zu lesen. Nur du verwaltest den Memory-Bot.
+Der Bot hat [einen Memory-Pool](/de/docs/memory), in deiner Organisation. Was er
+in der Organisation eines Bot-Mitglieds lernt, ist für dieses Bot-Mitglied, in
+dieser Organisation. Niemand liest das Memory über eine andere Person: du nicht,
+und andere Bot-Mitglieder auch nicht. Du kannst mit einem Purge entfernen, was
+ein Bot-Mitglied hinterlassen hat, ohne es zu lesen. Nur du verwaltest den
+Memory-Bot.
 
 ---
 
@@ -122,7 +165,8 @@ Der Bot hat [einen Memory-Pool](/de/docs/memory), in deiner Organisation. Was er
 | `GET /v1/bots/:botId/members`            | Listet die Bot-Mitglieder auf: ihre User-ID und Organisation und ihren verknüpften Bot. |
 | `DELETE /v1/bots/:botId/members/:userId` | Entfernt eine Person. Ihr verknüpfter Bot hört sofort auf zu arbeiten.                  |
 
-Beide brauchen `bots.share`. Ein verknüpfter Bot hört auch auf, wenn du deinen Bot archivierst.
+Beide brauchen `bots.share`. Ein verknüpfter Bot hört auch auf, wenn du deinen
+Bot archivierst.
 
 Ein Bot-Mitglied geht, wenn es seinen verknüpften Bot archiviert.
 

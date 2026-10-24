@@ -1,20 +1,34 @@
 # OpenBot
 
-OpenBot is an open source Bot platform with no user interface of its own. You use it through an HTTP API.
+OpenBot is an open source Bot platform with no user interface of its own. You
+use it through an HTTP API.
 
-You give work to a Bot in plain language. OpenBot runs the work on a server, keeps the history, asks people before risky actions, and gives back results you can check. You bring the client: a script, a service, a chat bot, or your own app.
+You give work to a Bot in plain language. OpenBot runs the work on a server,
+keeps the history, asks people before risky actions, and gives back results you
+can check. You bring the client: a script, a service, a chat bot, or your own
+app.
 
 ## Features
 
-- **API first.** Every feature is an HTTP call. One typed contract makes the server, the TypeScript client, and the API reference.
-- **User tokens.** Sign in once in a browser, make a token, and call the API from any program.
-- **Organization and permissions.** Many people can share one OpenBot. Roles and policies decide what each person and each token may do.
-- **Sessions and Timelines.** Work happens in Sessions and Turns. The Timeline keeps versions, so you can go back and try again.
-- **Bot for Bots.** Your default Bot acts for you and gives work to a team of lasting Bots and their Session Bots. Each Bot has its own context and memory.
-- **Lazy capabilities.** Bots have no preset limits. When a Bot tries something new, the decider above it answers, and Grants and Rules keep the answer.
-- **Plans, todos and triggers.** A Bot can plan first and wait for approval, keep a todo list, and wait. A trigger starts its work on a schedule or from a webhook.
-- **Channels.** People talk with a Bot in Slack, Lark, Telegram or their own chat system. Each Turn works for the person who wrote the message.
-- **Open Apps.** Bots find and use Apps that publishers put on the open web with the OpenBot App Protocol.
+- **API first.** Every feature is an HTTP call. One typed contract makes the
+  server, the TypeScript client, and the API reference.
+- **User tokens.** Sign in once in a browser, make a token, and call the API
+  from any program.
+- **Organization and permissions.** Many people can share one OpenBot. Roles and
+  policies decide what each person and each token may do.
+- **Sessions and Timelines.** Work happens in Sessions and Turns. The Timeline
+  keeps versions, so you can go back and try again.
+- **Bot for Bots.** Your default Bot acts for you and gives work to a team of
+  lasting Bots and their Session Bots. Each Bot has its own context and memory.
+- **Lazy capabilities.** Bots have no preset limits. When a Bot tries something
+  new, the decider above it answers, and Grants and Rules keep the answer.
+- **Plans, todos and triggers.** A Bot can plan first and wait for approval,
+  keep a todo list, and wait. A trigger starts its work on a schedule or from a
+  webhook.
+- **Channels.** People talk with a Bot in Slack, Lark, Telegram or their own
+  chat system. Each Turn works for the person who wrote the message.
+- **Open Apps.** Bots find and use Apps that publishers put on the open web with
+  the OpenBot App Protocol.
 
 ## Quick start
 
@@ -26,7 +40,8 @@ devenv shell -- mkcert -install
 devenv shell -- pnpm dev
 ```
 
-OpenBot now runs at `https://localhost:8443` with a test account and test models. Sign in and make a user token:
+OpenBot now runs at `https://localhost:8443` with a test account and test
+models. Sign in and make a user token:
 
 ```sh
 curl -c cookies.txt -X POST -H 'Origin: https://localhost:8443' -H 'Content-Type: application/json' \
@@ -79,6 +94,11 @@ Read [AGENTS.md](./AGENTS.md) for the rules of the project.
 
 ## License
 
-OpenBot is free software under the [GNU Affero General Public License, version 3 only](./LICENSE) (`AGPL-3.0-only`).
+OpenBot is free software under the
+[GNU Affero General Public License, version 3 only](./LICENSE)
+(`AGPL-3.0-only`).
 
-In short: you can use, change, and share OpenBot. If you share a changed copy, or let people use a changed copy over a network, you must give them the source code of your changes under the same license. The [LICENSE](./LICENSE) file has the full, legal text. Only that text decides what you can do.
+In short: you can use, change, and share OpenBot. If you share a changed copy,
+or let people use a changed copy over a network, you must give them the source
+code of your changes under the same license. The [LICENSE](./LICENSE) file has
+the full, legal text. Only that text decides what you can do.

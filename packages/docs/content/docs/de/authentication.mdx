@@ -1,10 +1,13 @@
 ---
 title: Authentifizierung
-description: Melde dich an, wähle eine Organisation, erstelle User-Tokens und rufe die API auf.
+description:
+  Melde dich an, wähle eine Organisation, erstelle User-Tokens und rufe die API
+  auf.
 ---
 
-Diese Seite zeigt, wie sich Menschen bei OpenBot anmelden und wie Programme die API aufrufen.
-Eine Person meldet sich einmal im Browser an. Danach erstellt sie User-Tokens für Skripte und Dienste.
+Diese Seite zeigt, wie sich Menschen bei OpenBot anmelden und wie Programme die
+API aufrufen. Eine Person meldet sich einmal im Browser an. Danach erstellt sie
+User-Tokens für Skripte und Dienste.
 
 Es gibt zwei Wege, die fachlichen Routen unter `/v1` aufzurufen:
 
@@ -13,19 +16,26 @@ Es gibt zwei Wege, die fachlichen Routen unter `/v1` aufzurufen:
 | User-Token     | Skripte, Backend-Dienste, Bots            | `Authorization: Bearer <token>`     |
 | Session-Cookie | Ein Browser-Client auf dem OpenBot-Origin | Das Cookie `__Host-openbot-session` |
 
-Beide Wege brauchen für jeden Aufruf eine Berechtigung. Siehe [Berechtigungen](/de/docs/permissions).
+Beide Wege brauchen für jeden Aufruf eine Berechtigung. Siehe
+[Berechtigungen](/de/docs/permissions).
 
 ---
 
 ## Anmelden
 
-OpenBot speichert keine Passwörter. Es nutzt OpenID-Connect-Anbieter. OpenID Connect (OIDC) ist ein Standard. Damit prüft ein anderer Dienst, wer eine Person ist.
-Es gibt zwei Arten von Anbietern:
+OpenBot speichert keine Passwörter. Es nutzt OpenID-Connect-Anbieter. OpenID
+Connect (OIDC) ist ein Standard. Damit prüft ein anderer Dienst, wer eine Person
+ist. Es gibt zwei Arten von Anbietern:
 
-- Der **Platform-Anbieter** meldet Menschen für die ganze Platform an. Ein Platform-Admin legt ihn fest. Siehe [Den Platform-Anbieter einrichten](#den-platform-anbieter-einrichten).
-- Eine **SSO-Verbindung** ist der Anbieter einer einzelnen Organisation. Sie meldet Menschen an, deren E-Mail zu den geprüften Domains dieser Organisation gehört. Siehe [SSO und Domains](/de/docs/sso).
+- Der **Platform-Anbieter** meldet Menschen für die ganze Platform an. Ein
+  Platform-Admin legt ihn fest. Siehe
+  [Den Platform-Anbieter einrichten](#den-platform-anbieter-einrichten).
+- Eine **SSO-Verbindung** ist der Anbieter einer einzelnen Organisation. Sie
+  meldet Menschen an, deren E-Mail zu den geprüften Domains dieser Organisation
+  gehört. Siehe [SSO und Domains](/de/docs/sso).
 
-Um eine Anmeldung zu starten, sendet dein Client diese Anfrage vom OpenBot-Origin:
+Um eine Anmeldung zu starten, sendet dein Client diese Anfrage vom
+OpenBot-Origin:
 
 ```sh
 curl -X POST https://api.example.com/auth/sign-in \
@@ -38,16 +48,29 @@ curl -X POST https://api.example.com/auth/sign-in \
 { "url": "https://id.example.com/authorize?..." }
 ```
 
-Beide Felder sind optional. OpenBot wählt den Anbieter nach der Domain von `email`. Hat die Domain eine SSO-Verbindung, führt die `url` dorthin. Sonst führt sie zum Platform-Anbieter. Gibt es keins von beiden, antwortet OpenBot mit `503` und `SignInUnavailable`.
+Beide Felder sind optional. OpenBot wählt den Anbieter nach der Domain von
+`email`. Hat die Domain eine SSO-Verbindung, führt die `url` dorthin. Sonst
+führt sie zum Platform-Anbieter. Gibt es keins von beiden, antwortet OpenBot mit
+`503` und `SignInUnavailable`.
 
-Schick den Browser zu dieser `url`. Die Antwort setzt auch das Cookie für den Anmeldestatus. Nach der Anmeldung schickt der Anbieter den Browser zurück zu OpenBot. OpenBot setzt das Session-Cookie und schickt den Browser zu `returnTo`. Siehe [Rückkehrpfade](#rückkehrpfade).
-Wenn die Anmeldung fehlschlägt, geht der Browser zu `/auth/error?error=<code>` und bekommt kein Cookie.
+Schick den Browser zu dieser `url`. Die Antwort setzt auch das Cookie für den
+Anmeldestatus. Nach der Anmeldung schickt der Anbieter den Browser zurück zu
+OpenBot. OpenBot setzt das Session-Cookie und schickt den Browser zu `returnTo`.
+Siehe [Rückkehrpfade](#rückkehrpfade). Wenn die Anmeldung fehlschlägt, geht der
+Browser zu `/auth/error?error=<code>` und bekommt kein Cookie.
 
 ### Better-Auth-Routen
 
-OpenBot nutzt [Better Auth](https://better-auth.com) für die Anmeldung. Better Auth stellt seine Routen unter `/auth/*` bereit, so wie es sein [Effect-Leitfaden](https://better-auth.com/docs/integrations/effect) zeigt. Diese Routen stehen nicht in der API-Referenz. Die [Better-Auth-Dokumentation](https://better-auth.com/docs/concepts/api) beschreibt sie.
+OpenBot nutzt [Better Auth](https://better-auth.com) für die Anmeldung. Better
+Auth stellt seine Routen unter `/auth/*` bereit, so wie es sein
+[Effect-Leitfaden](https://better-auth.com/docs/integrations/effect) zeigt.
+Diese Routen stehen nicht in der API-Referenz. Die
+[Better-Auth-Dokumentation](https://better-auth.com/docs/concepts/api)
+beschreibt sie.
 
-Du kannst sie trotzdem direkt nutzen. Der Platform-Anbieter hat die Anbieter-ID `oidc` und den Callback `/auth/callback/oidc`. Eine SSO-Verbindung nutzt ihre eigene ID als Anbieter-ID. Ihr Callback ist `/auth/callback/<connectionId>`.
+Du kannst sie trotzdem direkt nutzen. Der Platform-Anbieter hat die Anbieter-ID
+`oidc` und den Callback `/auth/callback/oidc`. Eine SSO-Verbindung nutzt ihre
+eigene ID als Anbieter-ID. Ihr Callback ist `/auth/callback/<connectionId>`.
 
 ```sh
 curl -X POST https://api.example.com/auth/sign-in/social \
@@ -56,13 +79,19 @@ curl -X POST https://api.example.com/auth/sign-in/social \
   -d '{ "provider": "oidc", "callbackURL": "https://api.example.com/settings/keys" }'
 ```
 
-Die `callbackURL` muss auf dem OpenBot-Origin liegen. Wenn nicht, antwortet Better Auth mit `403`.
+Die `callbackURL` muss auf dem OpenBot-Origin liegen. Wenn nicht, antwortet
+Better Auth mit `403`.
 
 ### Den Platform-Anbieter einrichten
 
-Registriere OpenBot als Client bei deinem Anbieter. Nutze `<publicOrigin>/auth/callback/oidc` als Redirect-URI. OpenBot fragt nach den Scopes `openid profile email`.
+Registriere OpenBot als Client bei deinem Anbieter. Nutze
+`<publicOrigin>/auth/callback/oidc` als Redirect-URI. OpenBot fragt nach den
+Scopes `openid profile email`.
 
-Dann gib OpenBot den Anbieter. Auf einer neuen Platform macht das das Einrichtungsprogramm mit `--oidc-issuer`, `--oidc-client-id` und `--oidc-client-secret`. Später ändert ein Platform-Admin ihn mit `PATCH /v1/platform/settings`. Siehe [Platform](/de/docs/platform).
+Dann gib OpenBot den Anbieter. Auf einer neuen Platform macht das das
+Einrichtungsprogramm mit `--oidc-issuer`, `--oidc-client-id` und
+`--oidc-client-secret`. Später ändert ein Platform-Admin ihn mit
+`PATCH /v1/platform/settings`. Siehe [Platform](/de/docs/platform).
 
 | Einstellung                     | Wert                                                                                     |
 | ------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -71,13 +100,17 @@ Dann gib OpenBot den Anbieter. Auf einer neuen Platform macht das das Einrichtun
 | `identityProvider.clientSecret` | Das Client-Secret. Lass es bei einem öffentlichen Client weg.                            |
 | `publicOrigin`                  | Der öffentliche HTTPS-Origin von OpenBot, zum Beispiel `https://api.example.com`.        |
 
-Ohne Client-Secret meldet sich OpenBot als öffentlicher Client mit PKCE an. PKCE ist eine Prüfung, die den Anmeldecode schützt.
-Eine Platform kann auch gar keinen Anbieter haben. Dann melden sich Menschen nur über SSO-Verbindungen an.
+Ohne Client-Secret meldet sich OpenBot als öffentlicher Client mit PKCE an. PKCE
+ist eine Prüfung, die den Anmeldecode schützt. Eine Platform kann auch gar
+keinen Anbieter haben. Dann melden sich Menschen nur über SSO-Verbindungen an.
 
 ### Entwicklungskonto
 
-Der Entwicklungsserver (`devenv shell -- pnpm dev`) nutzt ein lokales Testkonto und keinen Anbieter. Das Konto ist `developer@localhost.test`, und es ist ein Platform-Admin.
-Nur der Einstiegspunkt für die Entwicklung bietet das an. Das Produktionsprogramm tut das nie. Siehe [Konfiguration](/de/docs/configuration#entwicklung).
+Der Entwicklungsserver (`devenv shell -- pnpm dev`) nutzt ein lokales Testkonto
+und keinen Anbieter. Das Konto ist `developer@localhost.test`, und es ist ein
+Platform-Admin. Nur der Einstiegspunkt für die Entwicklung bietet das an. Das
+Produktionsprogramm tut das nie. Siehe
+[Konfiguration](/de/docs/configuration#entwicklung).
 
 Dieser Befehl meldet dich an und speichert das Cookie in einer Datei:
 
@@ -90,7 +123,8 @@ curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
 
 ### Die Anmeldung lesen und beenden
 
-`GET /auth/session` gibt das angemeldete Konto und seine Organisationen zurück. Es braucht das Session-Cookie.
+`GET /auth/session` gibt das angemeldete Konto und seine Organisationen zurück.
+Es braucht das Session-Cookie.
 
 ```json
 {
@@ -118,25 +152,40 @@ curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
 | `memberships`   | Die Organisationen des Kontos, mit seinem Status und seinen Roles in jeder davon.                                       |
 | `platformAdmin` | `true`, wenn das Konto ein Platform-Admin ist. Dann kann es `/v1/platform` nutzen. Siehe [Platform](/de/docs/platform). |
 
-`POST /auth/sign-out` beendet die Anmeldung. Es ist eine Better-Auth-Route. Sende einen JSON-Body (`{}`) und den Header `Origin` (siehe unten). Die Antwort ist `200`.
+`POST /auth/sign-out` beendet die Anmeldung. Es ist eine Better-Auth-Route.
+Sende einen JSON-Body (`{}`) und den Header `Origin` (siehe unten). Die Antwort
+ist `200`.
 
 ---
 
 ## Mitgliedschaft
 
-Eine Platform hat viele Organisationen. Ein User und eine Organisation sind getrennt. Ein Konto kann Organisationen erstellen und Member (Mitglied) in vielen davon sein. Wenn sich ein Konto anmeldet, prüft OpenBot, wohin es gehört:
+Eine Platform hat viele Organisationen. Ein User und eine Organisation sind
+getrennt. Ein Konto kann Organisationen erstellen und Member (Mitglied) in
+vielen davon sein. Wenn sich ein Konto anmeldet, prüft OpenBot, wohin es gehört:
 
-1. Es tritt der Organisation bei, die die Domain seiner geprüften E-Mail bestätigt hat, wenn diese Organisation `joinByDomain` erlaubt.
-2. Es tritt der Organisation seiner SSO-Verbindung bei, wenn es sich über eine angemeldet hat.
-3. OpenBot erstellt nie eine Organisation für es. Ohne Organisation antworten Routen einer Organisation mit `403` und `MembershipRequired`. Das Konto kann trotzdem [eine Organisation erstellen](/de/docs/organization#eine-organisation-erstellen) oder [eine Einladung annehmen](/de/docs/organization#auf-eine-einladung-antworten).
+1. Es tritt der Organisation bei, die die Domain seiner geprüften E-Mail
+   bestätigt hat, wenn diese Organisation `joinByDomain` erlaubt.
+2. Es tritt der Organisation seiner SSO-Verbindung bei, wenn es sich über eine
+   angemeldet hat.
+3. OpenBot erstellt nie eine Organisation für es. Ohne Organisation antworten
+   Routen einer Organisation mit `403` und `MembershipRequired`. Das Konto kann
+   trotzdem
+   [eine Organisation erstellen](/de/docs/organization#eine-organisation-erstellen)
+   oder
+   [eine Einladung annehmen](/de/docs/organization#auf-eine-einladung-antworten).
 
-OpenBot macht diese Prüfungen auch bei jeder Anfrage mit dem Session-Cookie. Siehe [Organisation](/de/docs/organization#wer-beitreten-kann).
+OpenBot macht diese Prüfungen auch bei jeder Anfrage mit dem Session-Cookie.
+Siehe [Organisation](/de/docs/organization#wer-beitreten-kann).
 
-Ein gesperrtes Member bekommt `403` mit `MembershipRequired`, wenn es das Cookie nutzt. Seine Tokens funktionieren sofort nicht mehr und bekommen `401` mit `AuthenticationRequired`.
+Ein gesperrtes Member bekommt `403` mit `MembershipRequired`, wenn es das Cookie
+nutzt. Seine Tokens funktionieren sofort nicht mehr und bekommen `401` mit
+`AuthenticationRequired`.
 
 ### Eine Organisation wählen
 
-Eine Anfrage mit dem Session-Cookie muss sagen, in welcher Organisation sie handelt. Sende die ID im Header `OpenBot-Organization`:
+Eine Anfrage mit dem Session-Cookie muss sagen, in welcher Organisation sie
+handelt. Sende die ID im Header `OpenBot-Organization`:
 
 ```sh
 curl -b cookies.txt \
@@ -145,7 +194,8 @@ curl -b cookies.txt \
 ```
 
 - Ohne den Header nutzt OpenBot deine einzige aktive Organisation.
-- Wenn du mehr als eine aktive Organisation hast und keinen Header sendest, antwortet OpenBot mit `400` und `OrganizationRequired`.
+- Wenn du mehr als eine aktive Organisation hast und keinen Header sendest,
+  antwortet OpenBot mit `400` und `OrganizationRequired`.
 
 Ein User-Token gehört zu einer Organisation. Es ignoriert den Header.
 
@@ -153,16 +203,20 @@ Ein User-Token gehört zu einer Organisation. Es ignoriert den Header.
 
 ## Das Session-Cookie
 
-Nach der Anmeldung hat der Browser das Cookie `__Host-openbot-session`. Es ist `Secure`, `HttpOnly` und `SameSite=Lax`.
+Nach der Anmeldung hat der Browser das Cookie `__Host-openbot-session`. Es ist
+`Secure`, `HttpOnly` und `SameSite=Lax`.
 
 - Eine Anmeldung gilt 30 Tage.
 - OpenBot verlängert sie nach einem Tag Nutzung.
 
 ### Die Origin-Regel
 
-Ein Cookie geht mit jeder Anfrage des Browsers mit, auch von anderen Websites. Darum prüft OpenBot, woher ein Schreibzugriff kommt.
-Wenn du das Cookie nutzt, muss jede Anfrage mit `POST`, `PUT`, `PATCH` und `DELETE` einen Header `Origin` senden.
-Der Header muss genau gleich `publicOrigin` in den [Platform-Einstellungen](/de/docs/platform#einstellungen-der-platform) sein. Sonst antwortet OpenBot mit `403` und `ForbiddenOrigin`.
+Ein Cookie geht mit jeder Anfrage des Browsers mit, auch von anderen Websites.
+Darum prüft OpenBot, woher ein Schreibzugriff kommt. Wenn du das Cookie nutzt,
+muss jede Anfrage mit `POST`, `PUT`, `PATCH` und `DELETE` einen Header `Origin`
+senden. Der Header muss genau gleich `publicOrigin` in den
+[Platform-Einstellungen](/de/docs/platform#einstellungen-der-platform) sein.
+Sonst antwortet OpenBot mit `403` und `ForbiddenOrigin`.
 
 ```sh
 curl -b cookies.txt \
@@ -178,13 +232,20 @@ Anfragen mit einem User-Token brauchen den Header `Origin` nicht.
 
 ## User-Tokens
 
-Mit einem User-Token kann ein Programm für dich handeln. Ein Token kann nie mehr tun als du. Es kann auch eigene Policies haben, damit es weniger tut. Siehe [Berechtigungen](/de/docs/permissions).
+Mit einem User-Token kann ein Programm für dich handeln. Ein Token kann nie mehr
+tun als du. Es kann auch eigene Policies haben, damit es weniger tut. Siehe
+[Berechtigungen](/de/docs/permissions).
 
-Du kannst Tokens mit dem Session-Cookie verwalten oder mit einem Token, das die Berechtigung `tokens.write` hat. Ein Token ohne Policies kann keine Tokens verwalten.
+Du kannst Tokens mit dem Session-Cookie verwalten oder mit einem Token, das die
+Berechtigung `tokens.write` hat. Ein Token ohne Policies kann keine Tokens
+verwalten.
 
-Ein Token gehört zu einer Organisation: zu der Organisation der Anfrage, die es erstellt hat. Mit dem Cookie sendest du den Header `OpenBot-Organization`, um sie zu wählen. Siehe [Eine Organisation wählen](#eine-organisation-wählen).
+Ein Token gehört zu einer Organisation: zu der Organisation der Anfrage, die es
+erstellt hat. Mit dem Cookie sendest du den Header `OpenBot-Organization`, um
+sie zu wählen. Siehe [Eine Organisation wählen](#eine-organisation-wählen).
 
-Die vollständigen Formen findest du in der [Referenz zu User-Tokens](/docs/api/operations/tags/user-tokens/).
+Die vollständigen Formen findest du in der
+[Referenz zu User-Tokens](/docs/api/operations/tags/user-tokens/).
 
 ### Ein Token erstellen
 
@@ -230,7 +291,8 @@ OpenBot antwortet mit `201`:
 	Ort. OpenBot behält nur einen SHA-256-Hash davon.
 </Callout>
 
-Jedes Secret beginnt mit `obut_`. So erkennt man ein geleaktes Token leicht. Der `prefix` sind die ersten 13 Zeichen. Damit kannst du deine Tokens unterscheiden.
+Jedes Secret beginnt mit `obut_`. So erkennt man ein geleaktes Token leicht. Der
+`prefix` sind die ersten 13 Zeichen. Damit kannst du deine Tokens unterscheiden.
 
 ### Tokens auflisten
 
@@ -238,8 +300,9 @@ Jedes Secret beginnt mit `obut_`. So erkennt man ein geleaktes Token leicht. Der
 curl -b cookies.txt https://api.example.com/v1/user/tokens
 ```
 
-Die Antwort ist `{ "items": [ ... ] }`, das älteste zuerst. Die Liste enthält nie Secrets.
-`lastUsedAt` ändert sich höchstens einmal pro Minute. Abgelaufene Tokens bleiben in der Liste, bis du sie widerrufst.
+Die Antwort ist `{ "items": [ ... ] }`, das älteste zuerst. Die Liste enthält
+nie Secrets. `lastUsedAt` ändert sich höchstens einmal pro Minute. Abgelaufene
+Tokens bleiben in der Liste, bis du sie widerrufst.
 
 ### Ein Token widerrufen
 
@@ -249,11 +312,13 @@ curl -X DELETE -b cookies.txt \
   https://api.example.com/v1/user/tokens/5f0c2a8e-7d1b-4c3e-9a55-2b6f1e8d4c10
 ```
 
-OpenBot antwortet mit `204` und löscht das Token. Das Token funktioniert sofort nicht mehr.
+OpenBot antwortet mit `204` und löscht das Token. Das Token funktioniert sofort
+nicht mehr.
 
 ### Ein Token prüfen
 
-`GET /v1/tokens/verify` zeigt, wer der Aufrufer ist. Bei einem Token zeigt es auch das Token und seine Policies. Jeder Aufrufer kann es nutzen.
+`GET /v1/tokens/verify` zeigt, wer der Aufrufer ist. Bei einem Token zeigt es
+auch das Token und seine Policies. Jeder Aufrufer kann es nutzen.
 
 ```json
 {
@@ -281,7 +346,8 @@ Mit dem Session-Cookie ist `caller.kind` gleich `member` und `token` ist `null`.
 | `409`  | `TokenLimitReached`       | Du hast schon 25 Tokens. Der Body enthält `"limit": 25`.                                |
 | `503`  | `TokenStorageUnavailable` | OpenBot erreicht seine Datenbank nicht.                                                 |
 
-Ein Member kann 25 Tokens gleichzeitig haben. Abgelaufene Tokens zählen mit. Widerrufe also alte Tokens, um Platz zu schaffen.
+Ein Member kann 25 Tokens gleichzeitig haben. Abgelaufene Tokens zählen mit.
+Widerrufe also alte Tokens, um Platz zu schaffen.
 
 ---
 
@@ -294,23 +360,38 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/chats
 ```
 
-Ein widerrufenes, abgelaufenes oder unbekanntes Token bekommt `401` mit `AuthenticationRequired`. Wenn OpenBot das Token nicht prüfen kann, antwortet es mit `503` und `AuthenticationUnavailable`.
+Ein widerrufenes, abgelaufenes oder unbekanntes Token bekommt `401` mit
+`AuthenticationRequired`. Wenn OpenBot das Token nicht prüfen kann, antwortet es
+mit `503` und `AuthenticationUnavailable`.
 
 ### Dein eigener Bereich
 
-In der Organisation hat jedes Member seine eigenen Chats, Apps und Verbindungen. Deine Tokens und dein Cookie sehen nur deine eigenen.
-Wenn du nach einem Chat eines anderen Members fragst, antwortet OpenBot mit `404`, als ob es ihn nicht gäbe.
+In der Organisation hat jedes Member seine eigenen Chats, Apps und Verbindungen.
+Deine Tokens und dein Cookie sehen nur deine eigenen. Wenn du nach einem Chat
+eines anderen Members fragst, antwortet OpenBot mit `404`, als ob es ihn nicht
+gäbe.
 
 ---
 
 ## Rückkehrpfade
 
-Manche Abläufe schicken den Browser nach einem Umweg zurück zu deinem Client. Du wählst den Ort mit `returnTo`.
+Manche Abläufe schicken den Browser nach einem Umweg zurück zu deinem Client. Du
+wählst den Ort mit `returnTo`.
 
-Ein Rückkehrpfad muss ein Pfad auf demselben Origin sein. Er muss mit genau einem `/` beginnen. Er darf nicht auf `/auth/*`, `/v1/*` oder `/development/*` zeigen, weil diese Pfade OpenBot gehören. Der Standard ist `/`.
+Ein Rückkehrpfad muss ein Pfad auf demselben Origin sein. Er muss mit genau
+einem `/` beginnen. Er darf nicht auf `/auth/*`, `/v1/*` oder `/development/*`
+zeigen, weil diese Pfade OpenBot gehören. Der Standard ist `/`.
 
-OpenBot hat keine Seiten. Dein Client muss diese Pfade also selbst bereitstellen. Zwei Abläufe fügen einen Query-Wert hinzu:
+OpenBot hat keine Seiten. Dein Client muss diese Pfade also selbst
+bereitstellen. Zwei Abläufe fügen einen Query-Wert hinzu:
 
-- **App-Autorisierung.** Wenn eine App-Anmeldung zurückkommt und die Person angemeldet ist, beendet OpenBot den Ablauf. Der Browser geht zum Rückkehrpfad mit `?authorization=<flowId>`. Dein Client kann das Ergebnis mit `GET /v1/app-authorizations/<flowId>` lesen.
-  Wenn die Person nicht angemeldet ist, geht der Browser zu `/?authorization=<flowId>`. Dein Client meldet die Person mit `POST /auth/sign-in` an (siehe [Anmelden](#anmelden)), mit dieser Adresse als `returnTo`. Dann ruft er `POST /v1/app-authorizations/<flowId>/complete` auf, um den Ablauf zu beenden.
-- **Entwickler-Tests.** Eine Autorisierung für einen Entwickler-Test kehrt zu `/?developerTest=<testId>` zurück.
+- **App-Autorisierung.** Wenn eine App-Anmeldung zurückkommt und die Person
+  angemeldet ist, beendet OpenBot den Ablauf. Der Browser geht zum Rückkehrpfad
+  mit `?authorization=<flowId>`. Dein Client kann das Ergebnis mit
+  `GET /v1/app-authorizations/<flowId>` lesen. Wenn die Person nicht angemeldet
+  ist, geht der Browser zu `/?authorization=<flowId>`. Dein Client meldet die
+  Person mit `POST /auth/sign-in` an (siehe [Anmelden](#anmelden)), mit dieser
+  Adresse als `returnTo`. Dann ruft er
+  `POST /v1/app-authorizations/<flowId>/complete` auf, um den Ablauf zu beenden.
+- **Entwickler-Tests.** Eine Autorisierung für einen Entwickler-Test kehrt zu
+  `/?developerTest=<testId>` zurück.

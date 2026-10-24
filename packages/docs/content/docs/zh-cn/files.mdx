@@ -5,7 +5,9 @@ description: 上传图片、PDF 和其他文件，并在消息中把它们交给
 
 **文件**是你交给 OpenBot 的一张图片、一个 PDF 或其他文档。你上传一次，然后在给 Bot 的消息中指明它。Bot 的模型就能看到这个文件。
 
-OpenBot 把每个文件的字节保存在**对象存储**中：一种保存文件、使用 S3 API 的服务，例如 AWS S3、Cloudflare R2、MinIO 或 RustFS。平台管理员负责设置存储。见[设置存储](#设置存储)。
+OpenBot 把每个文件的字节保存在**对象存储**中：一种保存文件、使用 S3
+API 的服务，例如 AWS S3、Cloudflare
+R2、MinIO 或 RustFS。平台管理员负责设置存储。见[设置存储](#设置存储)。
 
 每个文件属于一个组织中的一个成员。其他人不能读取它。
 
@@ -17,7 +19,8 @@ OpenBot 把每个文件的字节保存在**对象存储**中：一种保存文�
 
 ### 通过 OpenBot
 
-把文件以 `multipart/form-data` 发送到 `POST /v1/files`。字段 `file` 放文件。OpenBot 接受其他字段，例如 `purpose`，但不使用它们。
+把文件以 `multipart/form-data` 发送到 `POST /v1/files`。字段 `file`
+放文件。OpenBot 接受其他字段，例如 `purpose`，但不使用它们。
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -37,7 +40,9 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 }
 ```
 
-文件立刻就是 `ready`。OpenBot 从表单读取媒体类型。当表单写的是 `application/octet-stream` 时，OpenBot 会根据文件名的结尾猜测类型，例如 `.png` 或 `.pdf`。
+文件立刻就是 `ready`。OpenBot 从表单读取媒体类型。当表单写的是
+`application/octet-stream` 时，OpenBot 会根据文件名的结尾猜测类型，例如 `.png`
+或 `.pdf`。
 
 ### 直接上传到存储
 
@@ -65,9 +70,12 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
    }
    ```
 
-2. 用 `PUT` 把字节发送到 `url`，并带上这些 `headers`。这个地址 15 分钟内有效。签名包含媒体类型和大小，所以存储不会接受别的字节。
+2. 用 `PUT` 把字节发送到 `url`，并带上这些
+   `headers`。这个地址 15 分钟内有效。签名包含媒体类型和大小，所以存储不会接受别的字节。
 
-3. 用 `POST /v1/files/:fileId/complete` 完成文件。OpenBot 会检查字节已经在存储中，并且大小正确。然后文件就是 `ready`。
+3. 用 `POST /v1/files/:fileId/complete`
+   完成文件。OpenBot 会检查字节已经在存储中，并且大小正确。然后文件就是
+   `ready`。
 
 一个小时内没有人完成的文件会被删除。
 
@@ -78,7 +86,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ### 限制
 
-平台设置决定文件最大多大，以及 OpenBot 接受哪些媒体类型。默认情况下，一个文件最大 20 MB，允许这些类型：
+平台设置决定文件最大多大，以及 OpenBot 接受哪些媒体类型。默认情况下，一个文件最大 20
+MB，允许这些类型：
 
 - `image/png`、`image/jpeg`、`image/gif`、`image/webp`
 - `application/pdf`
@@ -86,13 +95,17 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 每个模型只接受某些类型。模型不接受的文件会让 Turn 失败。所以列表中只保留你的模型能读的类型。
 
-平台管理员还可以用 `files.quotaBytes` 给每个成员一个配额。配额是一个成员的所有文件加起来最多能占的字节数。pending 的文件也算在内，所以直接上传在字节到达之前就占住了空间。放不下的文件返回 `413` 和 `FileQuotaExceeded`，并带有 `quotaBytes` 和 `usedBytes`。删除文件可以拿回空间。默认没有配额。
+平台管理员还可以用 `files.quotaBytes`
+给每个成员一个配额。配额是一个成员的所有文件加起来最多能占的字节数。pending 的文件也算在内，所以直接上传在字节到达之前就占住了空间。放不下的文件返回
+`413` 和 `FileQuotaExceeded`，并带有 `quotaBytes` 和
+`usedBytes`。删除文件可以拿回空间。默认没有配额。
 
 ---
 
 ## 把文件交给 Bot
 
-在消息的 `content` 中指明文件。`input_image` 接受媒体类型以 `image/` 开头的文件。`input_file` 接受任何文件，例如 PDF。
+在消息的 `content` 中指明文件。`input_image` 接受媒体类型以 `image/`
+开头的文件。`input_file` 接受任何文件，例如 PDF。
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -109,7 +122,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/bots/$BOT/messages
 ```
 
-文件必须是你自己的文件，并且必须是 `ready`。否则 OpenBot 返回 `400` 和 `FileInvalid`。
+文件必须是你自己的文件，并且必须是 `ready`。否则 OpenBot 返回 `400` 和
+`FileInvalid`。
 
 Chat 只保存文件的 ID，不保存它的字节。每次调用模型之前，OpenBot 从存储读取字节。如果文件已被删除，模型会在它的位置看到一条简短的说明。
 
@@ -124,7 +138,8 @@ Chat 只保存文件的 ID，不保存它的字节。每次调用模型之前，
 | `GET /v1/files/:fileId/content` | 给出一个已就绪文件的字节。                     |
 | `DELETE /v1/files/:fileId`      | 立刻删除一个文件。返回 `204`。                 |
 
-读取文件需要权限 `files.read`，上传和删除需要 `files.write`。每个成员对自己的文件都有这两个权限。见[权限](/zh-cn/docs/permissions)。
+读取文件需要权限 `files.read`，上传和删除需要
+`files.write`。每个成员对自己的文件都有这两个权限。见[权限](/zh-cn/docs/permissions)。
 
 ---
 
@@ -134,7 +149,8 @@ OpenBot 会删除没有人需要的文件。这叫**垃圾回收**。每个实�
 
 - 指明了一个文件的 Chat 会保留它。只要这个 Chat 还在，文件就会留着。
 - 当你删除这个 Chat 后，它就不再保留这个文件。见[删除历史](/zh-cn/docs/chats#删除历史)。
-- 没有任何 Chat 保留的文件，在一段时间内没人使用后会被删除。默认时间是 24 小时。平台管理员可以用 `files.unusedMs` 修改它。
+- 没有任何 Chat 保留的文件，在一段时间内没人使用后会被删除。默认时间是 24 小时。平台管理员可以用
+  `files.unusedMs` 修改它。
 - 没有人完成的文件在一小时后被删除。
 - 你删除的文件会立刻消失。它的字节会在下一次运行时离开存储。
 
@@ -144,7 +160,8 @@ OpenBot 会删除没有人需要的文件。这叫**垃圾回收**。每个实�
 
 ## 设置存储
 
-平台管理员在平台设置中以 `files.storage` 设置存储。也可以用 `openbot setup` 设置。见[平台](/zh-cn/docs/platform#设置)。
+平台管理员在平台设置中以 `files.storage` 设置存储。也可以用 `openbot setup`
+设置。见[平台](/zh-cn/docs/platform#设置)。
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -185,7 +202,8 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 `"storage": null` 会移除存储。之后没有人能上传文件。
 
-OpenBot 通过它的出站保护访问存储。私有网络上的存储必须在 `OPENBOT_OUTBOUND_ALLOW` 中。见[出站连接](/zh-cn/docs/configuration#出站连接)。
+OpenBot 通过它的出站保护访问存储。私有网络上的存储必须在
+`OPENBOT_OUTBOUND_ALLOW` 中。见[出站连接](/zh-cn/docs/configuration#出站连接)。
 
 访问密钥需要能在 bucket 中放入、读取和删除对象。不要让 bucket 自己让对象过期：由 OpenBot 决定文件何时消失。
 

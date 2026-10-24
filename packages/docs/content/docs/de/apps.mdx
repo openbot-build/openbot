@@ -3,9 +3,13 @@ title: Apps
 description: Verbinde externe Dienste, damit der Bot sie in Turns nutzen kann.
 ---
 
-Eine **App** ist ein externer Dienst, den der Bot nutzen kann. Jede App ist im Web mit dem [OpenBot App Protocol](/de/docs/protocol) veröffentlicht. Diese Seite zeigt dir, wie du eine App mit deinem Konto verbindest, dich bei ihr anmeldest und sie in Turns nutzt.
+Eine **App** ist ein externer Dienst, den der Bot nutzen kann. Jede App ist im
+Web mit dem [OpenBot App Protocol](/de/docs/protocol) veröffentlicht. Diese
+Seite zeigt dir, wie du eine App mit deinem Konto verbindest, dich bei ihr
+anmeldest und sie in Turns nutzt.
 
-Alle Beispiele nutzen ein Nutzer-Token. Dieselben Aufrufe funktionieren auch mit dem Session-Cookie. Siehe [Authentifizierung](/de/docs/authentication).
+Alle Beispiele nutzen ein Nutzer-Token. Dieselben Aufrufe funktionieren auch mit
+dem Session-Cookie. Siehe [Authentifizierung](/de/docs/authentication).
 
 | Wort             | Bedeutung                                                                                                                |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -23,7 +27,9 @@ Alle Beispiele nutzen ein Nutzer-Token. Dieselben Aufrufe funktionieren auch mit
 
 ### Die App finden
 
-Gib OpenBot die Adresse der App. Das kann eine Domain sein, eine Seite der App, ein Link zu einem Catalog oder ein Link zu einer Card. Ein QR-Code enthält denselben HTTPS-Link.
+Gib OpenBot die Adresse der App. Das kann eine Domain sein, eine Seite der App,
+ein Link zu einem Catalog oder ein Link zu einer Card. Ein QR-Code enthält
+denselben HTTPS-Link.
 
 ```sh
 curl -X POST https://api.example.com/v1/connection-drafts \
@@ -32,21 +38,29 @@ curl -X POST https://api.example.com/v1/connection-drafts \
   -d '{ "input": "apps.example.com" }'
 ```
 
-Die Antwort ist ein Entwurf (Draft) mit dem Status 201. Behalte seine `id` und `revision`. Das Feld `discovery` hat eine von zwei Arten:
+Die Antwort ist ein Entwurf (Draft) mit dem Status 201. Behalte seine `id` und
+`revision`. Das Feld `discovery` hat eine von zwei Arten:
 
 - `Single` hat einen `candidate`.
-- `Multiple` hat eine Liste `candidates`. Bitte den Nutzer, einen auszuwählen. OpenBot fügt nie einen ganzen Catalog hinzu.
+- `Multiple` hat eine Liste `candidates`. Bitte den Nutzer, einen auszuwählen.
+  OpenBot fügt nie einen ganzen Catalog hinzu.
 
-Jeder Kandidat hat eine `cardUrl`, die `card`, eine Liste `endpoints` und die `sources`, die zu ihm geführt haben. Jeder Endpoint hat einen `index` und die `requirements`, die er braucht, zum Beispiel einen Header für einen API-Schlüssel.
+Jeder Kandidat hat eine `cardUrl`, die `card`, eine Liste `endpoints` und die
+`sources`, die zu ihm geführt haben. Jeder Endpoint hat einen `index` und die
+`requirements`, die er braucht, zum Beispiel einen Header für einen
+API-Schlüssel.
 
-Wenn du nur schauen willst, ohne einen Entwurf zu speichern, schicke denselben Body an `POST /v1/apps/discover`. Die Suche fügt nie eine App hinzu, meldet sich nie an und ruft nie eine App auf.
+Wenn du nur schauen willst, ohne einen Entwurf zu speichern, schicke denselben
+Body an `POST /v1/apps/discover`. Die Suche fügt nie eine App hinzu, meldet sich
+nie an und ruft nie eine App auf.
 
 </Step>
 <Step>
 
 ### Die Connection prüfen und erstellen
 
-Zeige dem Nutzer den Namen der App, ihre Quelle und den Endpoint. Erstelle dann die Connection (Verbindung). Du musst `"confirmed": true` schicken.
+Zeige dem Nutzer den Namen der App, ihre Quelle und den Endpoint. Erstelle dann
+die Connection (Verbindung). Du musst `"confirmed": true` schicken.
 
 ```sh
 curl -X POST https://api.example.com/v1/connections \
@@ -63,9 +77,14 @@ curl -X POST https://api.example.com/v1/connections \
   }'
 ```
 
-Die Keys in `values` kommen aus den `requirements` des Endpoint. Sie sehen so aus: `variable:<name>`, `header:<name>` oder `header:<name>:variable:<name>`. OpenBot verschlüsselt diese Werte. Spätere Lese-Aufrufe zeigen nur Werte, die nicht geheim sind.
+Die Keys in `values` kommen aus den `requirements` des Endpoint. Sie sehen so
+aus: `variable:<name>`, `header:<name>` oder `header:<name>:variable:<name>`.
+OpenBot verschlüsselt diese Werte. Spätere Lese-Aufrufe zeigen nur Werte, die
+nicht geheim sind.
 
-OpenBot liest die Card noch einmal, bevor es speichert. Die neue Connection nutzt die `id` des Entwurfs als eigene `id`. Wenn du denselben Request noch einmal schickst, bekommst du dieselbe Connection zurück.
+OpenBot liest die Card noch einmal, bevor es speichert. Die neue Connection
+nutzt die `id` des Entwurfs als eigene `id`. Wenn du denselben Request noch
+einmal schickst, bekommst du dieselbe Connection zurück.
 
 </Step>
 <Step>
@@ -77,7 +96,9 @@ curl -X POST https://api.example.com/v1/connections/<connection id>/verify \
   -H "Authorization: Bearer $OPENBOT_TOKEN"
 ```
 
-`Verified` gibt die aktuellen Werte `protocolVersion`, `tools`, `resources`, `resourceTemplates` und `prompts` zurück. `Unavailable` gibt die Connection zurück, und ihre `availability` sagt, warum.
+`Verified` gibt die aktuellen Werte `protocolVersion`, `tools`, `resources`,
+`resourceTemplates` und `prompts` zurück. `Unavailable` gibt die Connection
+zurück, und ihre `availability` sagt, warum.
 
 </Step>
 </Steps>
@@ -111,9 +132,12 @@ Das Feld `availability` sagt dir, ob der Bot eine Connection nutzen kann.
 
 ## Bei einem Konto einer App anmelden
 
-Manche Apps brauchen das eigene Konto des Nutzers. OpenBot nutzt dafür OAuth mit PKCE. Der Nutzer meldet sich beim Anbieter der App an, nicht bei OpenBot.
+Manche Apps brauchen das eigene Konto des Nutzers. OpenBot nutzt dafür OAuth mit
+PKCE. Der Nutzer meldet sich beim Anbieter der App an, nicht bei OpenBot.
 
-1. Starte den Ablauf. Schicke die `revision` der Connection. Lass `scopes` leer, um die Scopes zu nutzen, die die App verlangt. `returnTo` ist ein Pfad mit demselben Ursprung. Der Standard ist `/`.
+1. Starte den Ablauf. Schicke die `revision` der Connection. Lass `scopes` leer,
+   um die Scopes zu nutzen, die die App verlangt. `returnTo` ist ein Pfad mit
+   demselben Ursprung. Der Standard ist `/`.
 
    ```sh
    curl -X POST https://api.example.com/v1/connections/<connection id>/authorization \
@@ -123,11 +147,17 @@ Manche Apps brauchen das eigene Konto des Nutzers. OpenBot nutzt dafür OAuth mi
    ```
 
 2. Lies die Antwort:
-   - `AuthorizationStarted` hat eine `flowId` und eine `authorizationUrl`. Öffne die URL im Browser des Nutzers.
-   - `IssuerSelectionRequired` listet `issuers`. Bitte den Nutzer, einen auszuwählen. Starte dann noch einmal mit `issuer`.
+   - `AuthorizationStarted` hat eine `flowId` und eine `authorizationUrl`. Öffne
+     die URL im Browser des Nutzers.
+   - `IssuerSelectionRequired` listet `issuers`. Bitte den Nutzer, einen
+     auszuwählen. Starte dann noch einmal mit `issuer`.
    - `AuthorizationNotRequired` heißt, dass die App keine Anmeldung braucht.
-3. Der Nutzer meldet sich an. Der Anbieter schickt den Browser an `https://api.example.com/auth/apps/callback`.
-4. OpenBot schickt den Browser an `returnTo?authorization=<flowId>`. Wenn der Browser keine OpenBot-Session hat, geht er zu `/?authorization=<flowId>`. Dein Client meldet den Nutzer zuerst an (siehe [Authentifizierung](/de/docs/authentication#anmelden)).
+3. Der Nutzer meldet sich an. Der Anbieter schickt den Browser an
+   `https://api.example.com/auth/apps/callback`.
+4. OpenBot schickt den Browser an `returnTo?authorization=<flowId>`. Wenn der
+   Browser keine OpenBot-Session hat, geht er zu `/?authorization=<flowId>`.
+   Dein Client meldet den Nutzer zuerst an (siehe
+   [Authentifizierung](/de/docs/authentication#anmelden)).
 5. Dein Client beendet den Ablauf:
 
    ```sh
@@ -135,11 +165,18 @@ Manche Apps brauchen das eigene Konto des Nutzers. OpenBot nutzt dafür OAuth mi
      -H "Authorization: Bearer $OPENBOT_TOKEN"
    ```
 
-Um den Ablauf zu sehen, rufe `GET /v1/app-authorizations/:flowId` auf. Sein `status` ist `Waiting`, `Received`, `Processing`, `Succeeded`, `Cancelled` oder `Failed`.
+Um den Ablauf zu sehen, rufe `GET /v1/app-authorizations/:flowId` auf. Sein
+`status` ist `Waiting`, `Received`, `Processing`, `Succeeded`, `Cancelled` oder
+`Failed`.
 
-Die OAuth-Client-ID von OpenBot ist ein öffentliches Dokument unter `https://api.example.com/v1/apps/client-metadata`. Anbieter lesen es. Darum musst du OpenBot nicht bei jedem Anbieter registrieren.
+Die OAuth-Client-ID von OpenBot ist ein öffentliches Dokument unter
+`https://api.example.com/v1/apps/client-metadata`. Anbieter lesen es. Darum
+musst du OpenBot nicht bei jedem Anbieter registrieren.
 
-Um dich bei der App abzumelden, schicke `DELETE /v1/connections/:connectionId/authorization`. Die Antwort ist `Revoked`, oder `LocalOnly`, wenn der Anbieter Tokens nicht zurückziehen kann. In beiden Fällen löscht OpenBot seine gespeicherten Tokens.
+Um dich bei der App abzumelden, schicke
+`DELETE /v1/connections/:connectionId/authorization`. Die Antwort ist `Revoked`,
+oder `LocalOnly`, wenn der Anbieter Tokens nicht zurückziehen kann. In beiden
+Fällen löscht OpenBot seine gespeicherten Tokens.
 
 ---
 
@@ -153,28 +190,55 @@ Um dich bei der App abzumelden, schicke `DELETE /v1/connections/:connectionId/au
 | Eine geänderte App prüfen         | Erstelle einen neuen Entwurf aus der Card URL. Dann `POST /v1/connections/:connectionId/revalidate`. |
 | Entfernen                         | `DELETE /v1/connections/:connectionId`                                                               |
 
-Ein Erneuern verlangt nie mehr Zugang. Wenn es fehlschlägt, wird die Connection `AuthorizationExpired`.
+Ein Erneuern verlangt nie mehr Zugang. Wenn es fehlschlägt, wird die Connection
+`AuthorizationExpired`.
 
-Wenn eine App ihren Endpoint, private Einstellungen, ihren Anbieter oder ihre Scopes ändert, wird die Connection `NeedsRevalidation`. Der Bot kann sie nicht nutzen, bis du sie prüfst. Schicke `{ "revision", "draftId", "remoteIndex", "values", "confirmed": true }` an `revalidate`. OpenBot schickt keine alten Tokens an einen neuen Endpoint. Eine App, die eine Anmeldung braucht, braucht dann eine neue Anmeldung.
+Wenn eine App ihren Endpoint, private Einstellungen, ihren Anbieter oder ihre
+Scopes ändert, wird die Connection `NeedsRevalidation`. Der Bot kann sie nicht
+nutzen, bis du sie prüfst. Schicke
+`{ "revision", "draftId", "remoteIndex", "values", "confirmed": true }` an
+`revalidate`. OpenBot schickt keine alten Tokens an einen neuen Endpoint. Eine
+App, die eine Anmeldung braucht, braucht dann eine neue Anmeldung.
 
-Entfernen gibt 204 zurück. OpenBot schaltet die Connection zuerst aus. Dann zieht es ihre Tokens zurück und löscht sie. Wenn das Aufräumen nicht fertig wird, bekommst du 409 `ConnectionCleanupPending`. Schicke dasselbe `DELETE` noch einmal, um es zu beenden.
+Entfernen gibt 204 zurück. OpenBot schaltet die Connection zuerst aus. Dann
+zieht es ihre Tokens zurück und löscht sie. Wenn das Aufräumen nicht fertig
+wird, bekommst du 409 `ConnectionCleanupPending`. Schicke dasselbe `DELETE` noch
+einmal, um es zu beenden.
 
 ### Manuelle Connections
 
-Du kannst auch einen MCP-Server verbinden, der keine Server Card hat. Schicke `POST /v1/connections/manual` mit einer neuen UUID als `id`, einem `name`, der HTTPS-`url`, `"transport": "streamable-http"` und `headers`. Ändere sie mit `PUT /v1/connections/:connectionId/manual`. Setze einen Header auf `null`, um ihn zu entfernen. Manuelle Connections kommen nie in den öffentlichen [App Index](/de/docs/app-index).
+Du kannst auch einen MCP-Server verbinden, der keine Server Card hat. Schicke
+`POST /v1/connections/manual` mit einer neuen UUID als `id`, einem `name`, der
+HTTPS-`url`, `"transport": "streamable-http"` und `headers`. Ändere sie mit
+`PUT /v1/connections/:connectionId/manual`. Setze einen Header auf `null`, um
+ihn zu entfernen. Manuelle Connections kommen nie in den öffentlichen
+[App Index](/de/docs/app-index).
 
 ---
 
 ## Apps in Turns
 
-Wenn ein Turn läuft, gibt OpenBot dem Modell ein Tool für jede Fähigkeit deiner nutzbaren Connections. Jeder Tool-Name sieht so aus: `openbot_<hash>`. Seine Beschreibung beginnt mit dem Namen der App, dem Namen der Connection und dem Namen der Fähigkeit.
+Wenn ein Turn läuft, gibt OpenBot dem Modell ein Tool für jede Fähigkeit deiner
+nutzbaren Connections. Jeder Tool-Name sieht so aus: `openbot_<hash>`. Seine
+Beschreibung beginnt mit dem Namen der App, dem Namen der Connection und dem
+Namen der Fähigkeit.
 
-- **Tools** werden zu Tools, die das Modell aufrufen kann. Tools, deren `visibility` kein `model` enthält, bleiben für das Modell versteckt.
+- **Tools** werden zu Tools, die das Modell aufrufen kann. Tools, deren
+  `visibility` kein `model` enthält, bleiben für das Modell versteckt.
 - **Resources**, **resource templates** und **prompts** werden zu Lese-Tools.
 
-Jeder Aufruf eines App-Tools geht zuerst durch die [Prüfung der Fähigkeit](/de/docs/requests). Der erste Aufruf eines Tools macht meistens einen Request, den ein Entscheider beantwortet. Ein Grant oder eine Rule kann dann spätere Aufrufe abdecken. Das Lesen von Resources und Prompts braucht keine Entscheidung. Das gilt auch für Tools, die die Organization in ihren [Einstellungen](/de/docs/organization#einstellungen) als Lesen markiert hat. Hinweise der App entscheiden das nie. Jedes App-Tool hat einen zusätzlichen Parameter `openbot_reason` für den Grund des Bot. OpenBot schickt ihn nie an die App.
+Jeder Aufruf eines App-Tools geht zuerst durch die
+[Prüfung der Fähigkeit](/de/docs/requests). Der erste Aufruf eines Tools macht
+meistens einen Request, den ein Entscheider beantwortet. Ein Grant oder eine
+Rule kann dann spätere Aufrufe abdecken. Das Lesen von Resources und Prompts
+braucht keine Entscheidung. Das gilt auch für Tools, die die Organization in
+ihren [Einstellungen](/de/docs/organization#einstellungen) als Lesen markiert
+hat. Hinweise der App entscheiden das nie. Jedes App-Tool hat einen zusätzlichen
+Parameter `openbot_reason` für den Grund des Bot. OpenBot schickt ihn nie an die
+App.
 
-Das Modell bekommt auch drei Helfer-Tools. Sie fügen nie eine App hinzu, melden sich nie an und geben nie eine Aktion frei.
+Das Modell bekommt auch drei Helfer-Tools. Sie fügen nie eine App hinzu, melden
+sich nie an und geben nie eine Aktion frei.
 
 | Tool                  | Was es tut                                                                            |
 | --------------------- | ------------------------------------------------------------------------------------- |
@@ -184,11 +248,15 @@ Das Modell bekommt auch drei Helfer-Tools. Sie fügen nie eine App hinzu, melden
 
 ### Code Mode
 
-Wenn die Platform [Code Mode](/de/docs/code-mode) einschaltet, bekommt das Modell auch `openbot_code_api` und `openbot_run_code`. Damit schreibt der Bot ein kurzes Programm, das diese Tools der Apps aufruft. Jeder Aufruf im Programm nimmt denselben Weg wie ein normaler Aufruf eines App-Tools.
+Wenn die Platform [Code Mode](/de/docs/code-mode) einschaltet, bekommt das
+Modell auch `openbot_code_api` und `openbot_run_code`. Damit schreibt der Bot
+ein kurzes Programm, das diese Tools der Apps aufruft. Jeder Aufruf im Programm
+nimmt denselben Weg wie ein normaler Aufruf eines App-Tools.
 
 ### App operations
 
-OpenBot speichert jeden Aufruf einer App als App operation. Lies sie mit `GET /v1/chats/:chatId/app-operations` oder `GET /v1/app-operations/:id`.
+OpenBot speichert jeden Aufruf einer App als App operation. Lies sie mit
+`GET /v1/chats/:chatId/app-operations` oder `GET /v1/app-operations/:id`.
 
 | Status                                    | Bedeutung                                                            |
 | ----------------------------------------- | -------------------------------------------------------------------- |
@@ -198,7 +266,9 @@ OpenBot speichert jeden Aufruf einer App als App operation. Lies sie mit `GET /v
 | `Completed`, `Failed`                     | Der Aufruf ist beendet. `result` enthält die Details.                |
 | `OutcomeUnknown`                          | OpenBot hat den Aufruf geschickt, aber keine klare Antwort bekommen. |
 
-Manche Apps stellen mitten in einem Aufruf eine Frage. Die Operation hat dann den Status `InputRequired`, eine Nummer `round` und die Anfrage der App in `result.request`. Schicke die Antwort mit derselben Runde:
+Manche Apps stellen mitten in einem Aufruf eine Frage. Die Operation hat dann
+den Status `InputRequired`, eine Nummer `round` und die Anfrage der App in
+`result.request`. Schicke die Antwort mit derselben Runde:
 
 ```sh
 curl -X POST https://api.example.com/v1/app-operations/<operation id>/inputs \
@@ -207,7 +277,10 @@ curl -X POST https://api.example.com/v1/app-operations/<operation id>/inputs \
   -d '{ "round": 1, "responses": { "<input key>": { "action": "accept", "content": { "label": "Team sync" } } } }'
 ```
 
-Die Keys in `responses` müssen zu den Keys der Eingabe-Anfragen der App passen. Jede Antwort nutzt das normale MCP-Ergebnis für diese Art von Anfrage. Das Beispiel oben beantwortet eine Formular-Anfrage. OpenBot prüft die Antworten, bevor es sie schickt.
+Die Keys in `responses` müssen zu den Keys der Eingabe-Anfragen der App passen.
+Jede Antwort nutzt das normale MCP-Ergebnis für diese Art von Anfrage. Das
+Beispiel oben beantwortet eine Formular-Anfrage. OpenBot prüft die Antworten,
+bevor es sie schickt.
 
 <Callout type="warn">
 	Wiederhole nie eine Operation, die mit `OutcomeUnknown` endet. Die App hat die
@@ -219,10 +292,17 @@ Die Keys in `responses` müssen zu den Keys der Eingabe-Anfragen der App passen.
 
 ## App-Ansichten
 
-Manche App-Tools kommen mit einer interaktiven Ansicht. Eine Ansicht ist eine HTML-Seite der App, wie MCP Apps sie festlegt. OpenBot hat keine Benutzeroberfläche. Darum zeigt dein Client die Ansicht. Du kannst diesen Teil überspringen. Jedes Ergebnis hat auch Text.
+Manche App-Tools kommen mit einer interaktiven Ansicht. Eine Ansicht ist eine
+HTML-Seite der App, wie MCP Apps sie festlegt. OpenBot hat keine
+Benutzeroberfläche. Darum zeigt dein Client die Ansicht. Du kannst diesen Teil
+überspringen. Jedes Ergebnis hat auch Text.
 
-1. Öffne die Ansicht für eine Operation: `POST /v1/app-operations/:operationId/view` mit `{ "chatId", "itemId" }`. Die Antwort hat eine `id` der Ansicht, die HTML-`resource`, die `tools` der Ansicht, die `arguments` des Aufrufs und das `result`.
-2. Zeige das HTML in einem iframe. Das Modul `@openbot-build/protocol/McpApps` hat einen Browser-Host, der das macht. Siehe [Protocol](/de/docs/protocol).
+1. Öffne die Ansicht für eine Operation:
+   `POST /v1/app-operations/:operationId/view` mit `{ "chatId", "itemId" }`. Die
+   Antwort hat eine `id` der Ansicht, die HTML-`resource`, die `tools` der
+   Ansicht, die `arguments` des Aufrufs und das `result`.
+2. Zeige das HTML in einem iframe. Das Modul `@openbot-build/protocol/McpApps`
+   hat einen Browser-Host, der das macht. Siehe [Protocol](/de/docs/protocol).
 3. Gib die Anfragen der Ansicht an OpenBot weiter:
 
 | Anfrage der Ansicht                        | Aufruf bei OpenBot                                                    |
@@ -234,13 +314,19 @@ Manche App-Tools kommen mit einer interaktiven Ansicht. Eine Ansicht ist eine HT
 | Eine Text-Nachricht schicken               | `POST /v1/app-views/:viewId/messages`                                 |
 | Schließen                                  | `DELETE /v1/app-views/:viewId`                                        |
 
-Aktionen einer Ansicht gehen durch dieselben Regeln zur Freigabe. Eine Nachricht aus der Ansicht geht als [Mitteilung](/de/docs/chats#mitteilungen) durch die [Inbox](/de/docs/chats#die-inbox) in den Chat. Der Bot liest sie bei seinem nächsten Schritt, oder sie startet einen neuen Turn. Wenn eine Ansicht nicht öffnen kann, bekommst du 409 `AppViewUnavailable`. Das Text-Ergebnis ist trotzdem da.
+Aktionen einer Ansicht gehen durch dieselben Regeln zur Freigabe. Eine Nachricht
+aus der Ansicht geht als [Mitteilung](/de/docs/chats#mitteilungen) durch die
+[Inbox](/de/docs/chats#die-inbox) in den Chat. Der Bot liest sie bei seinem
+nächsten Schritt, oder sie startet einen neuen Turn. Wenn eine Ansicht nicht
+öffnen kann, bekommst du 409 `AppViewUnavailable`. Das Text-Ergebnis ist
+trotzdem da.
 
 ---
 
 ## Exportieren, importieren und zurücksetzen
 
-Exportiere deine Liste von Apps. Die Datei enthält keine Geheimnisse und keine Anmeldungen.
+Exportiere deine Liste von Apps. Die Datei enthält keine Geheimnisse und keine
+Anmeldungen.
 
 ```sh
 curl https://api.example.com/v1/app-experience/export \
@@ -260,8 +346,15 @@ curl https://api.example.com/v1/app-experience/export \
 }
 ```
 
-Schicke dasselbe JSON an `POST /v1/app-experience/import`. Eine Datei kann bis zu 30 Apps enthalten. Der Import erstellt keine Connections. Für jede App bekommst du einen neuen Entwurf oder einen `error`. Das Feld `imported` des Entwurfs behält den Namen und den Endpoint. Prüfe jeden Entwurf und erstelle die Connection wie sonst auch.
+Schicke dasselbe JSON an `POST /v1/app-experience/import`. Eine Datei kann bis
+zu 30 Apps enthalten. Der Import erstellt keine Connections. Für jede App
+bekommst du einen neuen Entwurf oder einen `error`. Das Feld `imported` des
+Entwurfs behält den Namen und den Endpoint. Prüfe jeden Entwurf und erstelle die
+Connection wie sonst auch.
 
-`POST /v1/app-experience/reset` entfernt alle deine Connections und Entwürfe. Die Antwort listet die IDs in `removed` und offene Aufräum-Arbeiten in `pending`.
+`POST /v1/app-experience/reset` entfernt alle deine Connections und Entwürfe.
+Die Antwort listet die IDs in `removed` und offene Aufräum-Arbeiten in
+`pending`.
 
-Die vollständigen Formen von Request und Antwort findest du in der [API-Referenz](/docs/api/operations/tags/connections/).
+Die vollständigen Formen von Request und Antwort findest du in der
+[API-Referenz](/docs/api/operations/tags/connections/).

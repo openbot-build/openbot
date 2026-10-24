@@ -3,8 +3,8 @@ title: Permissions
 description: Permission groups, policies, roles and resource keys.
 ---
 
-This page shows how OpenBot decides if a caller may do something.
-Every call to `/v1` needs one or more permissions. OpenBot checks them before the call runs.
+This page shows how OpenBot decides if a caller may do something. Every call to
+`/v1` needs one or more permissions. OpenBot checks them before the call runs.
 
 The model has four parts:
 
@@ -15,7 +15,10 @@ The model has four parts:
 | Policy           | Says `allow` or `deny` for some permission groups on some resources.                       |
 | Role             | A named set of policies, such as Member or Administrator. Organizations can add their own. |
 
-A member gets the policies of their roles, plus their own extra policies. A user token gets the policies of its member, and also its own policies. The platform can add deny policies for every organization. See [The order of checks](#the-order-of-checks).
+A member gets the policies of their roles, plus their own extra policies. A user
+token gets the policies of its member, and also its own policies. The platform
+can add deny policies for every organization. See
+[The order of checks](#the-order-of-checks).
 
 ---
 
@@ -71,10 +74,13 @@ List them with `GET /v1/organization/permission_groups`.
 | `platform.read`            | Platform          | Read the platform settings, organizations, admins and shared models and model providers.   |
 | `platform.write`           | Platform          | Change the platform settings, organizations, admins and shared models and model providers. |
 
-`organization.read` and `organization.write` also cover the [organization settings](/docs/organization#settings).
-`platform.read` and `platform.write` only work on the resource `openbot.platform`, and only for platform admins. See [Platform groups](#platform-groups).
+`organization.read` and `organization.write` also cover the
+[organization settings](/docs/organization#settings). `platform.read` and
+`platform.write` only work on the resource `openbot.platform`, and only for
+platform admins. See [Platform groups](#platform-groups).
 
-The [API reference](/docs/api) lists the routes. The contract in `@openbot-build/api` says which permission each route needs.
+The [API reference](/docs/api) lists the routes. The contract in
+`@openbot-build/api` says which permission each route needs.
 
 ---
 
@@ -99,14 +105,20 @@ A resource key is a name with parts that dots separate:
 | One model provider       | `openbot.org.<org>.model.<provider>`                    |
 | The whole platform       | `openbot.platform`                                      |
 
-A Bot that another Bot owns has the key of the member or the organization at the top of its owner tree. So `openbot.org.<org>.user.<user>.bot.<bot>` is also the key of a Bot that a top Bot of that member owns. When a Bot makes a Bot, the member it works for needs `bots.write` on that place.
+A Bot that another Bot owns has the key of the member or the organization at the
+top of its owner tree. So `openbot.org.<org>.user.<user>.bot.<bot>` is also the
+key of a Bot that a top Bot of that member owns. When a Bot makes a Bot, the
+member it works for needs `bots.write` on that place.
 
-A key covers itself and every key below it. So `openbot.org.<org>` covers everything in the organization, and `openbot.org.<org>.user.<user>` covers everything of one member.
+A key covers itself and every key below it. So `openbot.org.<org>` covers
+everything in the organization, and `openbot.org.<org>.user.<user>` covers
+everything of one member.
 
 In a policy, you can write two placeholders:
 
 - `{org}` is the ID of the organization.
-- `{self}` is the user ID of the caller. For a token, it is the member of the token.
+- `{self}` is the user ID of the caller. For a token, it is the member of the
+  token.
 
 A dot inside an ID is written as `%2E`, so it never looks like a new part.
 
@@ -130,13 +142,17 @@ OpenBot decides in this order:
 2. If a matching policy says `allow`, the answer is yes.
 3. If no policy matches, the answer is no.
 
-A policy matches when it names the permission group, and one of its resources covers the key of the request.
+A policy matches when it names the permission group, and one of its resources
+covers the key of the request.
 
-A policy can only name resources in its own organization. Otherwise OpenBot returns `400`. Only the policies of a token can also name `openbot.platform`.
+A policy can only name resources in its own organization. Otherwise OpenBot
+returns `400`. Only the policies of a token can also name `openbot.platform`.
 
 ### Limit models
 
-`models.use` on `openbot.org.<org>.model.<provider>` covers the models of one [model provider](/docs/models). Use it to limit which providers a member may choose. This policy stops a member from using one provider:
+`models.use` on `openbot.org.<org>.model.<provider>` covers the models of one
+[model provider](/docs/models). Use it to limit which providers a member may
+choose. This policy stops a member from using one provider:
 
 ```json
 {
@@ -150,17 +166,24 @@ A policy can only name resources in its own organization. Otherwise OpenBot retu
 
 OpenBot checks three sets of policies, in this order:
 
-1. The **policy ceiling** of the platform. It only has `deny` policies, and they apply in every organization. See [Platform](/docs/platform#policy-ceiling).
-2. The **member policies**: the policies of the member's roles, plus their extra policies.
+1. The **policy ceiling** of the platform. It only has `deny` policies, and they
+   apply in every organization. See [Platform](/docs/platform#policy-ceiling).
+2. The **member policies**: the policies of the member's roles, plus their extra
+   policies.
 3. The **token policies**, when the caller uses a user token.
 
 A `deny` anywhere means no. Each set after the ceiling must also allow the call.
 
 ### Tokens never do more than their member
 
-A user token has two sets of policies: the policies of its member and its own policies. Both sets must say yes. So a token can do less than its member, but never more. If an administrator takes a role away from the member, every token of that member loses it too.
+A user token has two sets of policies: the policies of its member and its own
+policies. Both sets must say yes. So a token can do less than its member, but
+never more. If an administrator takes a role away from the member, every token
+of that member loses it too.
 
-A token made without `policies` gets this policy. It allows everything in the organization except managing tokens. It never includes `platform.read` or `platform.write`:
+A token made without `policies` gets this policy. It allows everything in the
+organization except managing tokens. It never includes `platform.read` or
+`platform.write`:
 
 ```json
 {
@@ -184,11 +207,14 @@ curl -b cookies.txt \
 
 ## Roles
 
-List them with `GET /v1/organization/roles`. The list has the built-in roles and the custom roles of the organization. Each role has `builtin: true` or `builtin: false`.
+List them with `GET /v1/organization/roles`. The list has the built-in roles and
+the custom roles of the organization. Each role has `builtin: true` or
+`builtin: false`.
 
 ### Built-in roles
 
-Every organization has these roles. They cannot change. A change returns `409` with `RoleReadOnly`.
+Every organization has these roles. They cannot change. A change returns `409`
+with `RoleReadOnly`.
 
 | Role                      | What it can do                                                                                                                                                                            |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -198,7 +224,8 @@ Every organization has these roles. They cannot change. A change returns `409` w
 | `member`                  | Work with your own Bots, Chats, triggers, Computers, connections and tokens, use the shared Bots, triggers, Computers, Channels and models of the organization, and read its settings.    |
 | `auditor`                 | Read the organization, its members, usage, budgets and the audit log. Nothing else.                                                                                                       |
 
-Some built-in roles also hold the groups for roles, model providers, SSO, Channels, usage and budgets:
+Some built-in roles also hold the groups for roles, model providers, SSO,
+Channels, usage and budgets:
 
 | Role                      | Extra groups for organization features                                                                                                                                     |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -207,7 +234,8 @@ Some built-in roles also hold the groups for roles, model providers, SSO, Channe
 | `administrator_read_only` | `model_providers.read`, `sso.read`, `channels.read`, `usage.read`, `budgets.read`.                                                                                         |
 | `auditor`                 | `usage.read`, `budgets.read`.                                                                                                                                              |
 
-To give a member less than a role, add a `deny` policy to the member. This example stops a member from running work, but lets them read their Chats:
+To give a member less than a role, add a `deny` policy to the member. This
+example stops a member from running work, but lets them read their Chats:
 
 ```sh
 curl -X PATCH -b cookies.txt \
@@ -219,8 +247,9 @@ curl -X PATCH -b cookies.txt \
 
 ### Custom roles
 
-An organization can add its own roles. A custom role has a name, a description and policies. Its ID starts with `role_`.
-Creating, changing and deleting custom roles needs `roles.write`.
+An organization can add its own roles. A custom role has a name, a description
+and policies. Its ID starts with `role_`. Creating, changing and deleting custom
+roles needs `roles.write`.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -236,21 +265,26 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `PATCH /v1/organization/roles/:roleId`  | Changes a custom role. |
 | `DELETE /v1/organization/roles/:roleId` | Deletes a custom role. |
 
-- The `allow` policies of a role cannot give anything that you cannot do yourself. Otherwise OpenBot returns `403` with `PermissionDenied`.
+- The `allow` policies of a role cannot give anything that you cannot do
+  yourself. Otherwise OpenBot returns `403` with `PermissionDenied`.
 - A change applies to every member with the role at once.
-- You cannot delete a role while a member or the `defaultRoles` of the organization use it. OpenBot returns `409` with `RoleInUse`.
+- You cannot delete a role while a member or the `defaultRoles` of the
+  organization use it. OpenBot returns `409` with `RoleInUse`.
 
-Give a custom role to a member with `PATCH /v1/organization/members/:userId`. See [Organization](/docs/organization#change-a-member).
+Give a custom role to a member with `PATCH /v1/organization/members/:userId`.
+See [Organization](/docs/organization#change-a-member).
 
 ---
 
 ## Platform groups
 
-`platform.read` and `platform.write` are for platform admins. They only work on the resource `openbot.platform`.
+`platform.read` and `platform.write` are for platform admins. They only work on
+the resource `openbot.platform`.
 
 - No role in an organization gives them, not even `super_administrator`.
 - A policy ceiling or a member policy cannot give them.
-- A user token of a platform admin gets them only when its own policies name them on `openbot.platform`.
+- A user token of a platform admin gets them only when its own policies name
+  them on `openbot.platform`.
 
 See [Platform](/docs/platform#call-the-platform-api) for an example token.
 
@@ -276,4 +310,5 @@ The body of `PermissionDenied` names the permission and the resource key:
 }
 ```
 
-You can only reach your own Chats and connections. A Chat of another member answers `404`, as if it does not exist.
+You can only reach your own Chats and connections. A Chat of another member
+answers `404`, as if it does not exist.

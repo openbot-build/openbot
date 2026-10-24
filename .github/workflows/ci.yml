@@ -38,7 +38,8 @@ jobs:
           key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: pnpm-${{ runner.os }}-
       - name: Install dependencies
-        run: devenv shell -- pnpm install --frozen-lockfile --store-dir .cache/pnpm
+        run:
+          devenv shell -- pnpm install --frozen-lockfile --store-dir .cache/pnpm
       - name: Build
         run: devenv shell -- pnpm build
         env:
@@ -129,7 +130,8 @@ jobs:
         uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
         env:
           REGISTRY: ghcr.io/${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}
+          RELEASE_TAG:
+            ${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}
         with:
           source: .
           files: deploy/docker/docker-bake.hcl

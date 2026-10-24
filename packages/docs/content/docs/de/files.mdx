@@ -1,23 +1,34 @@
 ---
 title: Dateien
-description: Bilder, PDFs und andere Dateien hochladen und sie einem Bot in einer Nachricht geben.
+description:
+  Bilder, PDFs und andere Dateien hochladen und sie einem Bot in einer Nachricht
+  geben.
 ---
 
-Eine **Datei** ist ein Bild, ein PDF oder ein anderes Dokument, das du OpenBot gibst. Du lädst sie einmal hoch und nennst sie dann in einer Nachricht an einen Bot. Das Model des Bots sieht die Datei.
+Eine **Datei** ist ein Bild, ein PDF oder ein anderes Dokument, das du OpenBot
+gibst. Du lädst sie einmal hoch und nennst sie dann in einer Nachricht an einen
+Bot. Das Model des Bots sieht die Datei.
 
-OpenBot hält die Bytes jeder Datei in einem **Objektspeicher**: einem Dienst, der Dateien speichert und die S3 API spricht, etwa AWS S3, Cloudflare R2, MinIO oder RustFS. Ein Admin der Platform richtet den Speicher ein. Siehe [Den Speicher einrichten](#den-speicher-einrichten).
+OpenBot hält die Bytes jeder Datei in einem **Objektspeicher**: einem Dienst,
+der Dateien speichert und die S3 API spricht, etwa AWS S3, Cloudflare R2, MinIO
+oder RustFS. Ein Admin der Platform richtet den Speicher ein. Siehe
+[Den Speicher einrichten](#den-speicher-einrichten).
 
-Jede Datei gehört einem Member einer Organization. Andere Leute können sie nicht lesen.
+Jede Datei gehört einem Member einer Organization. Andere Leute können sie nicht
+lesen.
 
 ---
 
 ## Eine Datei hochladen
 
-Es gibt zwei Wege zum Hochladen. Ein Admin der Platform kann jeden davon an- oder ausschalten.
+Es gibt zwei Wege zum Hochladen. Ein Admin der Platform kann jeden davon an-
+oder ausschalten.
 
 ### Durch OpenBot
 
-Sende die Datei als `multipart/form-data` an `POST /v1/files`. Das Feld `file` hat die Datei. OpenBot nimmt andere Felder an, etwa `purpose`, aber nutzt sie nicht.
+Sende die Datei als `multipart/form-data` an `POST /v1/files`. Das Feld `file`
+hat die Datei. OpenBot nimmt andere Felder an, etwa `purpose`, aber nutzt sie
+nicht.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -37,11 +48,14 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 }
 ```
 
-Die Datei ist sofort `ready`. OpenBot liest den Media Type aus dem Formular. Wenn das Formular `application/octet-stream` sagt, rät OpenBot den Typ aus dem Ende des Dateinamens, etwa `.png` oder `.pdf`.
+Die Datei ist sofort `ready`. OpenBot liest den Media Type aus dem Formular.
+Wenn das Formular `application/octet-stream` sagt, rät OpenBot den Typ aus dem
+Ende des Dateinamens, etwa `.png` oder `.pdf`.
 
 ### Direkt in den Speicher
 
-Bei großen Dateien kann der Client die Bytes selbst in den Speicher legen. Dann gehen die Bytes nicht durch OpenBot.
+Bei großen Dateien kann der Client die Bytes selbst in den Speicher legen. Dann
+gehen die Bytes nicht durch OpenBot.
 
 1. Frage mit `POST /v1/files/uploads` nach einer Adresse zum Hochladen:
 
@@ -65,9 +79,13 @@ Bei großen Dateien kann der Client die Bytes selbst in den Speicher legen. Dann
    }
    ```
 
-2. Sende die Bytes mit `PUT` an `url`, mit diesen `headers`. Die Adresse funktioniert 15 Minuten lang. Die Signatur deckt den Media Type und die Größe ab, darum nimmt der Speicher keine anderen Bytes an.
+2. Sende die Bytes mit `PUT` an `url`, mit diesen `headers`. Die Adresse
+   funktioniert 15 Minuten lang. Die Signatur deckt den Media Type und die Größe
+   ab, darum nimmt der Speicher keine anderen Bytes an.
 
-3. Schließe die Datei mit `POST /v1/files/:fileId/complete` ab. OpenBot prüft, dass die Bytes mit der richtigen Größe im Speicher sind. Dann ist die Datei `ready`.
+3. Schließe die Datei mit `POST /v1/files/:fileId/complete` ab. OpenBot prüft,
+   dass die Bytes mit der richtigen Größe im Speicher sind. Dann ist die Datei
+   `ready`.
 
 Eine Datei, die niemand in einer Stunde abschließt, wird gelöscht.
 
@@ -78,21 +96,33 @@ Eine Datei, die niemand in einer Stunde abschließt, wird gelöscht.
 
 ### Grenzen
 
-Die Einstellungen der Platform sagen, wie groß eine Datei sein darf und welche Media Types OpenBot annimmt. Standardmäßig darf eine Datei bis zu 20 MB haben, und diese Typen sind erlaubt:
+Die Einstellungen der Platform sagen, wie groß eine Datei sein darf und welche
+Media Types OpenBot annimmt. Standardmäßig darf eine Datei bis zu 20 MB haben,
+und diese Typen sind erlaubt:
 
 - `image/png`, `image/jpeg`, `image/gif`, `image/webp`
 - `application/pdf`
 - `text/plain`
 
-Jedes Model nimmt nur manche Typen an. Eine Datei, die das Model nicht annimmt, lässt den Turn scheitern. Halte die Liste darum bei Typen, die deine Models lesen können.
+Jedes Model nimmt nur manche Typen an. Eine Datei, die das Model nicht annimmt,
+lässt den Turn scheitern. Halte die Liste darum bei Typen, die deine Models
+lesen können.
 
-Ein Admin der Platform kann jedem Mitglied auch ein Kontingent mit `files.quotaBytes` geben. Das Kontingent ist die größte Zahl an Bytes, die alle Dateien eines Mitglieds zusammen haben dürfen. Auch Dateien in `pending` zählen. So hält ein direktes Hochladen seinen Platz, bevor die Bytes ankommen. Eine Datei, die nicht passt, gibt `413` mit `FileQuotaExceeded` zurück, mit `quotaBytes` und `usedBytes`. Lösche Dateien, um den Platz zurückzubekommen. Standardmäßig gibt es kein Kontingent.
+Ein Admin der Platform kann jedem Mitglied auch ein Kontingent mit
+`files.quotaBytes` geben. Das Kontingent ist die größte Zahl an Bytes, die alle
+Dateien eines Mitglieds zusammen haben dürfen. Auch Dateien in `pending` zählen.
+So hält ein direktes Hochladen seinen Platz, bevor die Bytes ankommen. Eine
+Datei, die nicht passt, gibt `413` mit `FileQuotaExceeded` zurück, mit
+`quotaBytes` und `usedBytes`. Lösche Dateien, um den Platz zurückzubekommen.
+Standardmäßig gibt es kein Kontingent.
 
 ---
 
 ## Eine Datei an einen Bot geben
 
-Nenne eine Datei im `content` einer Nachricht. `input_image` nimmt eine Datei, deren Media Type mit `image/` beginnt. `input_file` nimmt jede Datei, etwa ein PDF.
+Nenne eine Datei im `content` einer Nachricht. `input_image` nimmt eine Datei,
+deren Media Type mit `image/` beginnt. `input_file` nimmt jede Datei, etwa ein
+PDF.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -109,9 +139,12 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/bots/$BOT/messages
 ```
 
-Die Datei muss eine deiner eigenen Dateien sein, und sie muss `ready` sein. Sonst antwortet OpenBot mit `400` und `FileInvalid`.
+Die Datei muss eine deiner eigenen Dateien sein, und sie muss `ready` sein.
+Sonst antwortet OpenBot mit `400` und `FileInvalid`.
 
-Der Chat hält nur die ID der Datei, nicht ihre Bytes. Vor jedem Aufruf des Models liest OpenBot die Bytes aus dem Speicher. Wenn eine Datei gelöscht wurde, sieht das Model an ihrer Stelle eine kurze Notiz.
+Der Chat hält nur die ID der Datei, nicht ihre Bytes. Vor jedem Aufruf des
+Models liest OpenBot die Bytes aus dem Speicher. Wenn eine Datei gelöscht wurde,
+sieht das Model an ihrer Stelle eine kurze Notiz.
 
 ---
 
@@ -124,27 +157,39 @@ Der Chat hält nur die ID der Datei, nicht ihre Bytes. Vor jedem Aufruf des Mode
 | `GET /v1/files/:fileId/content` | Gibt die Bytes einer fertigen Datei.                              |
 | `DELETE /v1/files/:fileId`      | Löscht eine Datei sofort. Antwortet mit `204`.                    |
 
-Zum Lesen brauchst du die Permission `files.read`, zum Hochladen und Löschen `files.write`. Jeder Member hat beide für seine eigenen Dateien. Siehe [Permissions](/de/docs/permissions).
+Zum Lesen brauchst du die Permission `files.read`, zum Hochladen und Löschen
+`files.write`. Jeder Member hat beide für seine eigenen Dateien. Siehe
+[Permissions](/de/docs/permissions).
 
 ---
 
 ## Wie Dateien verschwinden
 
-OpenBot löscht Dateien, die niemand braucht. Das ist die **Garbage Collection**. Jede Instanz führt sie einmal pro Minute aus, und viele Instanzen können sie gleichzeitig ausführen.
+OpenBot löscht Dateien, die niemand braucht. Das ist die **Garbage Collection**.
+Jede Instanz führt sie einmal pro Minute aus, und viele Instanzen können sie
+gleichzeitig ausführen.
 
-- Ein Chat, der eine Datei nennt, hält sie. Die Datei bleibt, solange der Chat lebt.
-- Wenn du den Chat löschst, hält er die Datei nicht mehr. Siehe [Den Verlauf löschen](/de/docs/chats#den-verlauf-löschen).
-- Eine Datei, die kein Chat hält, wird gelöscht, wenn niemand sie eine Zeit lang genutzt hat. Die Standardzeit ist 24 Stunden. Ein Admin der Platform kann sie mit `files.unusedMs` ändern.
+- Ein Chat, der eine Datei nennt, hält sie. Die Datei bleibt, solange der Chat
+  lebt.
+- Wenn du den Chat löschst, hält er die Datei nicht mehr. Siehe
+  [Den Verlauf löschen](/de/docs/chats#den-verlauf-löschen).
+- Eine Datei, die kein Chat hält, wird gelöscht, wenn niemand sie eine Zeit lang
+  genutzt hat. Die Standardzeit ist 24 Stunden. Ein Admin der Platform kann sie
+  mit `files.unusedMs` ändern.
 - Eine Datei, die niemand abgeschlossen hat, wird nach einer Stunde gelöscht.
-- Eine Datei, die du löschst, ist sofort weg. Ihre Bytes verlassen den Speicher beim nächsten Lauf.
+- Eine Datei, die du löschst, ist sofort weg. Ihre Bytes verlassen den Speicher
+  beim nächsten Lauf.
 
-Wenn es keinen Speicher gibt, behält OpenBot die Zeilen gelöschter Dateien. Es entfernt ihre Bytes, wenn der Speicher zurückkommt.
+Wenn es keinen Speicher gibt, behält OpenBot die Zeilen gelöschter Dateien. Es
+entfernt ihre Bytes, wenn der Speicher zurückkommt.
 
 ---
 
 ## Den Speicher einrichten
 
-Ein Admin der Platform setzt den Speicher in den Einstellungen der Platform, als `files.storage`. Auch `openbot setup` kann ihn setzen. Siehe [Platform](/de/docs/platform#setup).
+Ein Admin der Platform setzt den Speicher in den Einstellungen der Platform, als
+`files.storage`. Auch `openbot setup` kann ihn setzen. Siehe
+[Platform](/de/docs/platform#setup).
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -185,9 +230,13 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 `"storage": null` entfernt den Speicher. Dann kann niemand Dateien hochladen.
 
-OpenBot erreicht den Speicher durch seinen Schutz für ausgehende Verbindungen. Ein Speicher in einem privaten Netz muss in `OPENBOT_OUTBOUND_ALLOW` stehen. Siehe [Ausgehende Verbindungen](/de/docs/configuration#ausgehende-verbindungen).
+OpenBot erreicht den Speicher durch seinen Schutz für ausgehende Verbindungen.
+Ein Speicher in einem privaten Netz muss in `OPENBOT_OUTBOUND_ALLOW` stehen.
+Siehe [Ausgehende Verbindungen](/de/docs/configuration#ausgehende-verbindungen).
 
-Der Access Key muss Objekte im Bucket ablegen, lesen und löschen können. Lass den Bucket Objekte nicht selbst ablaufen: OpenBot entscheidet, wann eine Datei verschwindet.
+Der Access Key muss Objekte im Bucket ablegen, lesen und löschen können. Lass
+den Bucket Objekte nicht selbst ablaufen: OpenBot entscheidet, wann eine Datei
+verschwindet.
 
 ---
 

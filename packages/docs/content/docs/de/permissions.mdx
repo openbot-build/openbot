@@ -4,7 +4,8 @@ description: Berechtigungsgruppen, Policies, Roles und Ressourcen-Schlüssel.
 ---
 
 Diese Seite zeigt, wie OpenBot entscheidet, ob ein Aufrufer etwas tun darf.
-Jeder Aufruf an `/v1` braucht eine oder mehrere Berechtigungen. OpenBot prüft sie, bevor der Aufruf läuft.
+Jeder Aufruf an `/v1` braucht eine oder mehrere Berechtigungen. OpenBot prüft
+sie, bevor der Aufruf läuft.
 
 Das Modell hat vier Teile:
 
@@ -15,7 +16,11 @@ Das Modell hat vier Teile:
 | Policy               | Sagt `allow` (erlauben) oder `deny` (verbieten) für einige Berechtigungsgruppen auf einigen Ressourcen.            |
 | Role                 | Eine benannte Menge von Policies, zum Beispiel Member oder Administrator. Organisationen können eigene hinzufügen. |
 
-Ein Member bekommt die Policies seiner Roles und dazu seine eigenen zusätzlichen Policies. Ein User-Token bekommt die Policies seines Members und auch seine eigenen Policies. Die Platform kann für jede Organisation `deny`-Policies hinzufügen. Siehe [Die Reihenfolge der Prüfungen](#die-reihenfolge-der-prüfungen).
+Ein Member bekommt die Policies seiner Roles und dazu seine eigenen zusätzlichen
+Policies. Ein User-Token bekommt die Policies seines Members und auch seine
+eigenen Policies. Die Platform kann für jede Organisation `deny`-Policies
+hinzufügen. Siehe
+[Die Reihenfolge der Prüfungen](#die-reihenfolge-der-prüfungen).
 
 ---
 
@@ -71,16 +76,21 @@ Liste sie mit `GET /v1/organization/permission_groups` auf.
 | `platform.read`            | Platform          | Die Platform-Einstellungen, Organisationen, Admins und gemeinsamen Models und Model Providers lesen.      |
 | `platform.write`           | Platform          | Die Platform-Einstellungen, Organisationen, Admins und gemeinsamen Models und Model Providers ändern.     |
 
-`organization.read` und `organization.write` gelten auch für die [Einstellungen der Organisation](/de/docs/organization#einstellungen).
-`platform.read` und `platform.write` funktionieren nur auf der Ressource `openbot.platform` und nur für Platform-Admins. Siehe [Platform-Gruppen](#platform-gruppen).
+`organization.read` und `organization.write` gelten auch für die
+[Einstellungen der Organisation](/de/docs/organization#einstellungen).
+`platform.read` und `platform.write` funktionieren nur auf der Ressource
+`openbot.platform` und nur für Platform-Admins. Siehe
+[Platform-Gruppen](#platform-gruppen).
 
-Die [API-Referenz](/docs/api) listet die Routen auf. Der Vertrag in `@openbot-build/api` sagt, welche Berechtigung jede Route braucht.
+Die [API-Referenz](/docs/api) listet die Routen auf. Der Vertrag in
+`@openbot-build/api` sagt, welche Berechtigung jede Route braucht.
 
 ---
 
 ## Ressourcen-Schlüssel
 
-Ein Ressourcen-Schlüssel ist ein Name aus Teilen, die durch Punkte getrennt sind:
+Ein Ressourcen-Schlüssel ist ein Name aus Teilen, die durch Punkte getrennt
+sind:
 
 | Ressource                  | Schlüssel                                               |
 | -------------------------- | ------------------------------------------------------- |
@@ -99,16 +109,25 @@ Ein Ressourcen-Schlüssel ist ein Name aus Teilen, die durch Punkte getrennt sin
 | Ein Model Provider         | `openbot.org.<org>.model.<provider>`                    |
 | Die ganze Platform         | `openbot.platform`                                      |
 
-Ein Bot, der einem anderen Bot gehört, hat den Schlüssel des Members oder der Organisation an der Spitze seines Besitzer-Baums. `openbot.org.<org>.user.<user>.bot.<bot>` ist also auch der Schlüssel eines Bots, der einem obersten Bot dieses Members gehört. Wenn ein Bot einen Bot erstellt, braucht das Member, für das er arbeitet, `bots.write` an dieser Stelle.
+Ein Bot, der einem anderen Bot gehört, hat den Schlüssel des Members oder der
+Organisation an der Spitze seines Besitzer-Baums.
+`openbot.org.<org>.user.<user>.bot.<bot>` ist also auch der Schlüssel eines
+Bots, der einem obersten Bot dieses Members gehört. Wenn ein Bot einen Bot
+erstellt, braucht das Member, für das er arbeitet, `bots.write` an dieser
+Stelle.
 
-Ein Schlüssel gilt für sich selbst und für jeden Schlüssel darunter. `openbot.org.<org>` gilt also für alles in der Organisation, und `openbot.org.<org>.user.<user>` gilt für alles eines Members.
+Ein Schlüssel gilt für sich selbst und für jeden Schlüssel darunter.
+`openbot.org.<org>` gilt also für alles in der Organisation, und
+`openbot.org.<org>.user.<user>` gilt für alles eines Members.
 
 In einer Policy kannst du zwei Platzhalter schreiben:
 
 - `{org}` ist die ID der Organisation.
-- `{self}` ist die User-ID des Aufrufers. Bei einem Token ist es das Member des Tokens.
+- `{self}` ist die User-ID des Aufrufers. Bei einem Token ist es das Member des
+  Tokens.
 
-Ein Punkt in einer ID wird als `%2E` geschrieben. So sieht er nie wie ein neuer Teil aus.
+Ein Punkt in einer ID wird als `%2E` geschrieben. So sieht er nie wie ein neuer
+Teil aus.
 
 ---
 
@@ -130,13 +149,19 @@ OpenBot entscheidet in dieser Reihenfolge:
 2. Wenn eine passende Policy `allow` sagt, ist die Antwort ja.
 3. Wenn keine Policy passt, ist die Antwort nein.
 
-Eine Policy passt, wenn sie die Berechtigungsgruppe nennt und eine ihrer Ressourcen den Schlüssel der Anfrage abdeckt.
+Eine Policy passt, wenn sie die Berechtigungsgruppe nennt und eine ihrer
+Ressourcen den Schlüssel der Anfrage abdeckt.
 
-Eine Policy kann nur Ressourcen in ihrer eigenen Organisation nennen. Sonst antwortet OpenBot mit `400`. Nur die Policies eines Tokens können auch `openbot.platform` nennen.
+Eine Policy kann nur Ressourcen in ihrer eigenen Organisation nennen. Sonst
+antwortet OpenBot mit `400`. Nur die Policies eines Tokens können auch
+`openbot.platform` nennen.
 
 ### Models begrenzen
 
-`models.use` auf `openbot.org.<org>.model.<provider>` gilt für die Models eines [Model Providers](/de/docs/models). Damit begrenzt du, welche Provider ein Member wählen darf. Diese Policy hindert ein Member daran, einen Provider zu nutzen:
+`models.use` auf `openbot.org.<org>.model.<provider>` gilt für die Models eines
+[Model Providers](/de/docs/models). Damit begrenzt du, welche Provider ein
+Member wählen darf. Diese Policy hindert ein Member daran, einen Provider zu
+nutzen:
 
 ```json
 {
@@ -150,17 +175,26 @@ Eine Policy kann nur Ressourcen in ihrer eigenen Organisation nennen. Sonst antw
 
 OpenBot prüft drei Mengen von Policies, in dieser Reihenfolge:
 
-1. Die **Policy-Obergrenze** der Platform. Sie hat nur `deny`-Policies, und diese gelten in jeder Organisation. Siehe [Platform](/de/docs/platform#obergrenze-für-policies).
-2. Die **Member-Policies**: die Policies der Roles des Members und dazu seine zusätzlichen Policies.
+1. Die **Policy-Obergrenze** der Platform. Sie hat nur `deny`-Policies, und
+   diese gelten in jeder Organisation. Siehe
+   [Platform](/de/docs/platform#obergrenze-für-policies).
+2. Die **Member-Policies**: die Policies der Roles des Members und dazu seine
+   zusätzlichen Policies.
 3. Die **Token-Policies**, wenn der Aufrufer ein User-Token nutzt.
 
-Ein `deny` an irgendeiner Stelle heißt nein. Jede Menge nach der Obergrenze muss den Aufruf außerdem erlauben.
+Ein `deny` an irgendeiner Stelle heißt nein. Jede Menge nach der Obergrenze muss
+den Aufruf außerdem erlauben.
 
 ### Tokens tun nie mehr als ihr Member
 
-Ein User-Token hat zwei Mengen von Policies: die Policies seines Members und seine eigenen Policies. Beide Mengen müssen ja sagen. Ein Token kann also weniger tun als sein Member, aber nie mehr. Wenn ein Administrator dem Member eine Role wegnimmt, verliert auch jedes Token dieses Members sie.
+Ein User-Token hat zwei Mengen von Policies: die Policies seines Members und
+seine eigenen Policies. Beide Mengen müssen ja sagen. Ein Token kann also
+weniger tun als sein Member, aber nie mehr. Wenn ein Administrator dem Member
+eine Role wegnimmt, verliert auch jedes Token dieses Members sie.
 
-Ein Token, das ohne `policies` erstellt wurde, bekommt diese Policy. Sie erlaubt alles in der Organisation, außer Tokens zu verwalten. Sie enthält nie `platform.read` oder `platform.write`:
+Ein Token, das ohne `policies` erstellt wurde, bekommt diese Policy. Sie erlaubt
+alles in der Organisation, außer Tokens zu verwalten. Sie enthält nie
+`platform.read` oder `platform.write`:
 
 ```json
 {
@@ -184,11 +218,14 @@ curl -b cookies.txt \
 
 ## Roles
 
-Liste sie mit `GET /v1/organization/roles` auf. Die Liste enthält die eingebauten Roles und die eigenen Roles der Organisation. Jede Role hat `builtin: true` oder `builtin: false`.
+Liste sie mit `GET /v1/organization/roles` auf. Die Liste enthält die
+eingebauten Roles und die eigenen Roles der Organisation. Jede Role hat
+`builtin: true` oder `builtin: false`.
 
 ### Eingebaute Roles
 
-Jede Organisation hat diese Roles. Sie lassen sich nicht ändern. Eine Änderung ergibt `409` mit `RoleReadOnly`.
+Jede Organisation hat diese Roles. Sie lassen sich nicht ändern. Eine Änderung
+ergibt `409` mit `RoleReadOnly`.
 
 | Role                      | Was sie kann                                                                                                                                                                                                         |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -198,7 +235,8 @@ Jede Organisation hat diese Roles. Sie lassen sich nicht ändern. Eine Änderung
 | `member`                  | Mit den eigenen Bots, Chats, Triggern, Computern, Verbindungen und Tokens arbeiten, die gemeinsamen Bots, Trigger, Computer, Channels und Models der Organisation nutzen und ihre Einstellungen lesen.               |
 | `auditor`                 | Die Organisation, ihre Members, die Nutzung, die Budgets und das Audit-Log lesen. Sonst nichts.                                                                                                                      |
 
-Einige eingebaute Roles haben auch die Gruppen für Roles, Model Providers, SSO, Channels, Nutzung und Budgets:
+Einige eingebaute Roles haben auch die Gruppen für Roles, Model Providers, SSO,
+Channels, Nutzung und Budgets:
 
 | Role                      | Zusätzliche Gruppen für Funktionen der Organisation                                                                                                                        |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -207,7 +245,9 @@ Einige eingebaute Roles haben auch die Gruppen für Roles, Model Providers, SSO,
 | `administrator_read_only` | `model_providers.read`, `sso.read`, `channels.read`, `usage.read`, `budgets.read`.                                                                                         |
 | `auditor`                 | `usage.read`, `budgets.read`.                                                                                                                                              |
 
-Um einem Member weniger zu geben als eine Role, füge dem Member eine `deny`-Policy hinzu. Dieses Beispiel hindert ein Member daran, Arbeit auszuführen. Es kann seine Chats aber weiter lesen:
+Um einem Member weniger zu geben als eine Role, füge dem Member eine
+`deny`-Policy hinzu. Dieses Beispiel hindert ein Member daran, Arbeit
+auszuführen. Es kann seine Chats aber weiter lesen:
 
 ```sh
 curl -X PATCH -b cookies.txt \
@@ -219,8 +259,9 @@ curl -X PATCH -b cookies.txt \
 
 ### Eigene Roles
 
-Eine Organisation kann eigene Roles hinzufügen. Eine eigene Role hat einen Namen, eine Beschreibung und Policies. Ihre ID beginnt mit `role_`.
-Eigene Roles erstellen, ändern und löschen braucht `roles.write`.
+Eine Organisation kann eigene Roles hinzufügen. Eine eigene Role hat einen
+Namen, eine Beschreibung und Policies. Ihre ID beginnt mit `role_`. Eigene Roles
+erstellen, ändern und löschen braucht `roles.write`.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -236,23 +277,29 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `PATCH /v1/organization/roles/:roleId`  | Ändert eine eigene Role.   |
 | `DELETE /v1/organization/roles/:roleId` | Löscht eine eigene Role.   |
 
-- Die `allow`-Policies einer Role können nichts geben, was du selbst nicht tun kannst. Sonst antwortet OpenBot mit `403` und `PermissionDenied`.
+- Die `allow`-Policies einer Role können nichts geben, was du selbst nicht tun
+  kannst. Sonst antwortet OpenBot mit `403` und `PermissionDenied`.
 - Eine Änderung gilt sofort für jedes Member mit dieser Role.
-- Du kannst eine Role nicht löschen, solange ein Member oder die `defaultRoles` der Organisation sie nutzen. OpenBot antwortet dann mit `409` und `RoleInUse`.
+- Du kannst eine Role nicht löschen, solange ein Member oder die `defaultRoles`
+  der Organisation sie nutzen. OpenBot antwortet dann mit `409` und `RoleInUse`.
 
-Gib einem Member eine eigene Role mit `PATCH /v1/organization/members/:userId`. Siehe [Organisation](/de/docs/organization#ein-member-ändern).
+Gib einem Member eine eigene Role mit `PATCH /v1/organization/members/:userId`.
+Siehe [Organisation](/de/docs/organization#ein-member-ändern).
 
 ---
 
 ## Platform-Gruppen
 
-`platform.read` und `platform.write` sind für Platform-Admins. Sie funktionieren nur auf der Ressource `openbot.platform`.
+`platform.read` und `platform.write` sind für Platform-Admins. Sie funktionieren
+nur auf der Ressource `openbot.platform`.
 
 - Keine Role in einer Organisation gibt sie, nicht einmal `super_administrator`.
 - Eine Policy-Obergrenze oder eine Member-Policy kann sie nicht geben.
-- Ein User-Token eines Platform-Admins bekommt sie nur, wenn seine eigenen Policies sie auf `openbot.platform` nennen.
+- Ein User-Token eines Platform-Admins bekommt sie nur, wenn seine eigenen
+  Policies sie auf `openbot.platform` nennen.
 
-Ein Beispiel-Token findest du unter [Platform](/de/docs/platform#die-api-der-platform-aufrufen).
+Ein Beispiel-Token findest du unter
+[Platform](/de/docs/platform#die-api-der-platform-aufrufen).
 
 ---
 
@@ -266,7 +313,8 @@ Ein Beispiel-Token findest du unter [Platform](/de/docs/platform#die-api-der-pla
 | `409`  | `RoleInUse`                | Ein Member oder die Standard-Roles nutzen die Role noch.                               |
 | `503`  | `AuthorizationUnavailable` | OpenBot kann die Roles und Policies des Aufrufers gerade nicht lesen.                  |
 
-Der Body von `PermissionDenied` nennt die Berechtigung und den Ressourcen-Schlüssel:
+Der Body von `PermissionDenied` nennt die Berechtigung und den
+Ressourcen-Schlüssel:
 
 ```json
 {
@@ -276,4 +324,5 @@ Der Body von `PermissionDenied` nennt die Berechtigung und den Ressourcen-Schlü
 }
 ```
 
-Du erreichst nur deine eigenen Chats und Verbindungen. Ein Chat eines anderen Members antwortet mit `404`, als ob es ihn nicht gäbe.
+Du erreichst nur deine eigenen Chats und Verbindungen. Ein Chat eines anderen
+Members antwortet mit `404`, als ob es ihn nicht gäbe.

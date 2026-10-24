@@ -1,14 +1,21 @@
 ---
 title: Computers
-description: Give Bots machines where they run commands, change files and use a desktop.
+description:
+  Give Bots machines where they run commands, change files and use a desktop.
 ---
 
-A **Computer** is a machine where a Bot works. The Bot runs shell commands, reads and writes files, opens ports and uses a desktop there. A Computer is one of two kinds:
+A **Computer** is a machine where a Bot works. The Bot runs shell commands,
+reads and writes files, opens ports and uses a desktop there. A Computer is one
+of two kinds:
 
-- A **sandbox** at a Computer provider, such as E2B or Daytona. You bring your own account at the provider. The provider bills you directly.
-- **Your own machine**, such as a laptop or a server. You pair it with OpenBot once. Then a small program on it keeps a connection to OpenBot.
+- A **sandbox** at a Computer provider, such as E2B or Daytona. You bring your
+  own account at the provider. The provider bills you directly.
+- **Your own machine**, such as a laptop or a server. You pair it with OpenBot
+  once. Then a small program on it keeps a connection to OpenBot.
 
-A Computer belongs to a member or to the organization, like a [trigger](/docs/triggers). Bots never own a Computer. A Bot gets the **right to use** a Computer. Many Bots can use the same Computer.
+A Computer belongs to a member or to the organization, like a
+[trigger](/docs/triggers). Bots never own a Computer. A Bot gets the **right to
+use** a Computer. Many Bots can use the same Computer.
 
 ---
 
@@ -28,9 +35,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `e2b`     | `apiKey`, `apiUrl`, `sandboxDomain` | Any service that speaks the E2B API: E2B, PPIO, Alibaba Cloud Bot Sandbox, or your own E2B. Set `apiUrl` and `sandboxDomain` for a service other than E2B. |
 | `daytona` | `apiKey`, `apiUrl`, `target`        | Daytona, hosted or your own. `target` is the region, such as `us` or `eu`.                                                                                 |
 
-OpenBot checks the key with the provider before it stores it. The key never comes out again. The API only shows its last characters. Send `"shared": true` to make a shared provider of the organization.
+OpenBot checks the key with the provider before it stores it. The key never
+comes out again. The API only shows its last characters. Send `"shared": true`
+to make a shared provider of the organization.
 
-`GET /v1/computer-providers` lists your providers and the shared ones. `GET`, `PATCH` and `DELETE /v1/computer-providers/:providerId` read, change and delete one. You cannot delete a provider while Computers use it.
+`GET /v1/computer-providers` lists your providers and the shared ones. `GET`,
+`PATCH` and `DELETE /v1/computer-providers/:providerId` read, change and delete
+one. You cannot delete a provider while Computers use it.
 
 ---
 
@@ -50,7 +61,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `pauseAfter` | Optional. Seconds without work before OpenBot pauses the Computer. The default is 600. `null` never pauses it.      |
 | `shared`     | Optional. `true` makes a shared Computer of the organization.                                                       |
 
-A Computer has a `state`: `starting`, `running`, `paused`, `offline` (your machine is not connected) or `failed`.
+A Computer has a `state`: `starting`, `running`, `paused`, `offline` (your
+machine is not connected) or `failed`.
 
 | Route                                                  | What it does                                                                 |
 | ------------------------------------------------------ | ---------------------------------------------------------------------------- |
@@ -63,7 +75,9 @@ A Computer has a `state`: `starting`, `running`, `paused`, `offline` (your machi
 | `POST /v1/computers/:computerId/desktop/stream`        | Gives an address where a person can watch and use the desktop.               |
 | `POST /v1/computers/:computerId/pause`, `/resume`      | Pauses or resumes the Computer.                                              |
 
-A command on a paused Computer resumes it first. `DELETE /v1/computers/:computerId` deletes the Computer and its sandbox. Its files are gone.
+A command on a paused Computer resumes it first.
+`DELETE /v1/computers/:computerId` deletes the Computer and its sandbox. Its
+files are gone.
 
 ---
 
@@ -76,7 +90,8 @@ npm install -g @openbot-build/cli @openbot-build/computer
 openbot computer pair --url https://api.example.com
 ```
 
-The command shows a code, such as `KDTW-7Q3M`. It works for 10 minutes. Check the machine and approve it:
+The command shows a code, such as `KDTW-7Q3M`. It works for 10 minutes. Check
+the machine and approve it:
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -87,15 +102,23 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/computer-pairings/KDTW-7Q3M/approve
 ```
 
-Only a person can approve a machine. `POST /v1/computer-pairings/:code/deny` stops the pairing. After you approve it, the command saves its token in `~/.config/openbot/computer.json` and ends. Then connect the machine:
+Only a person can approve a machine. `POST /v1/computer-pairings/:code/deny`
+stops the pairing. After you approve it, the command saves its token in
+`~/.config/openbot/computer.json` and ends. Then connect the machine:
 
 ```sh
 openbot computer connect
 ```
 
-It keeps a connection open to OpenBot, so the machine needs no open port. It connects again by itself after a break. `openbot computer status` shows the saved address and machine ID.
+It keeps a connection open to OpenBot, so the machine needs no open port. It
+connects again by itself after a break. `openbot computer status` shows the
+saved address and machine ID.
 
-When the same machine pairs again in the same organization, it keeps its Computer and gets a new token. For servers and scripts, create a Computer with `"source":{"_tag":"Connector"}`, then make a token with `PUT /v1/computers/:computerId/connector-token`. A new token closes the old connection.
+When the same machine pairs again in the same organization, it keeps its
+Computer and gets a new token. For servers and scripts, create a Computer with
+`"source":{"_tag":"Connector"}`, then make a token with
+`PUT /v1/computers/:computerId/connector-token`. A new token closes the old
+connection.
 
 ---
 
@@ -108,16 +131,27 @@ curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/computers/cmp_.../bots/bot_...
 ```
 
-You must be able to use the Computer and to change the Bot. `GET /v1/computers/:computerId/bots` lists the Bots with the right. `DELETE /v1/computers/:computerId/bots/:botId` takes the right away. The right also ends when the Bot is archived. The Computer stays.
+You must be able to use the Computer and to change the Bot.
+`GET /v1/computers/:computerId/bots` lists the Bots with the right.
+`DELETE /v1/computers/:computerId/bots/:botId` takes the right away. The right
+also ends when the Bot is archived. The Computer stays.
 
-A Bot has tools for Computers. It lists them with `openbot_computers_list`. Then it can:
+A Bot has tools for Computers. It lists them with `openbot_computers_list`. Then
+it can:
 
-- Ask for the right to use a Computer that exists, with `openbot_computers_acquire`. A child Bot can ask for a Computer of the Bot that gave it work.
-- Make a new sandbox with `openbot_computers_create`. The Computer belongs to its person, and the Bot gets the right to use it.
-- Give up its right with `openbot_computers_release`. With `destroy`, it also deletes the Computer.
-- Run commands, change files, open ports and use the desktop. A screenshot comes back as an image that the model sees.
+- Ask for the right to use a Computer that exists, with
+  `openbot_computers_acquire`. A child Bot can ask for a Computer of the Bot
+  that gave it work.
+- Make a new sandbox with `openbot_computers_create`. The Computer belongs to
+  its person, and the Bot gets the right to use it.
+- Give up its right with `openbot_computers_release`. With `destroy`, it also
+  deletes the Computer.
+- Run commands, change files, open ports and use the desktop. A screenshot comes
+  back as an image that the model sees.
 
-These four actions are [capabilities](/docs/requests#capabilities). The [chain of deciders](/docs/requests#the-chain-of-deciders) decides them, as for any other capability:
+These four actions are [capabilities](/docs/requests#capabilities). The
+[chain of deciders](/docs/requests#the-chain-of-deciders) decides them, as for
+any other capability:
 
 | Action              | Target                 | When a Bot uses it                       |
 | ------------------- | ---------------------- | ---------------------------------------- |
@@ -126,12 +160,17 @@ These four actions are [capabilities](/docs/requests#capabilities). The [chain o
 | `computers.delete`  | The ID of the Computer | It deletes a Computer with its files.    |
 | `computers.expose`  | The ID of the Computer | It gives a port a public address.        |
 
-All other work on a Computer needs no decision. The Computer is the boundary: a Bot with the right can do anything inside it.
+All other work on a Computer needs no decision. The Computer is the boundary: a
+Bot with the right can do anything inside it.
 
 ---
 
 ## Pause and usage
 
-OpenBot pauses a sandbox when it had no work for `pauseAfter` seconds. E2B keeps its files, memory and running programs. Daytona keeps its files and starts it again from them. Your own machines never pause.
+OpenBot pauses a sandbox when it had no work for `pauseAfter` seconds. E2B keeps
+its files, memory and running programs. Daytona keeps its files and starts it
+again from them. Your own machines never pause.
 
-`GET /v1/computers/:computerId/usage` lists the times when a Computer ran. The provider bills you for them. OpenBot only records them. It does not set a price, and budgets do not stop a Computer.
+`GET /v1/computers/:computerId/usage` lists the times when a Computer ran. The
+provider bills you for them. OpenBot only records them. It does not set a price,
+and budgets do not stop a Computer.

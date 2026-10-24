@@ -3,9 +3,12 @@ title: Packages
 description: The workspace packages and what each one is for.
 ---
 
-OpenBot is a pnpm workspace. Each package has one job. `openbot` puts the parts together into the server. You can use the other libraries on their own.
+OpenBot is a pnpm workspace. Each package has one job. `openbot` puts the parts
+together into the server. You can use the other libraries on their own.
 
-All packages are named `@openbot-build/<name>`, have version `0.1.0`, and use `effect@4.0.5`. They are not on npm yet. Use them from the workspace with `"workspace:*"`.
+All packages are named `@openbot-build/<name>`, have version `0.1.0`, and use
+`effect@4.0.5`. They are not on npm yet. Use them from the workspace with
+`"workspace:*"`.
 
 ---
 
@@ -23,7 +26,8 @@ All packages are named `@openbot-build/<name>`, have version `0.1.0`, and use `e
 | `computer`      | The `openbot computer` command, which pairs and connects your own [Computer](/docs/computers). |
 | `docs`          | This docs site.                                                                                |
 
-The examples below leave out the model. To run them, provide a `LanguageModel` Layer, for example from a [model provider](#model-providers) in `openbot`.
+The examples below leave out the model. To run them, provide a `LanguageModel`
+Layer, for example from a [model provider](#model-providers) in `openbot`.
 
 ---
 
@@ -42,7 +46,11 @@ The examples below leave out the model. To run them, provide a `LanguageModel` L
 | `Plugin`, `PluginComposition`, `PluginState` | Make and combine plugins, and give them saved state.                                                         |
 | `Skill`, `SkillMap`                          | Describe skills and keep a list of them.                                                                     |
 
-A **Chat** is one conversation with no end. Each input goes to its **inbox**. It starts a **Turn**, or it steers the running Turn. A Turn can have many model steps and tool calls. A Turn never waits: it runs, and then it ends. The store keeps the Items of a Chat in a log that only grows, so a long Chat stays cheap to save.
+A **Chat** is one conversation with no end. Each input goes to its **inbox**. It
+starts a **Turn**, or it steers the running Turn. A Turn can have many model
+steps and tool calls. A Turn never waits: it runs, and then it ends. The store
+keeps the Items of a Chat in a log that only grows, so a long Chat stays cheap
+to save.
 
 ```ts
 import { ChatRuntime, ChatStoreMemory, Store } from "@openbot-build/core"
@@ -69,21 +77,34 @@ const program = Effect.scoped(
 )
 ```
 
-`execute` starts a Turn, waits for it to end, and returns the Chat. `stream` gives events while the Turn runs. Both fail when a Turn already runs in the Chat.
+`execute` starts a Turn, waits for it to end, and returns the Chat. `stream`
+gives events while the Turn runs. Both fail when a Turn already runs in the
+Chat.
 
-`deliver` gives input to a Chat in one step, by the rules of the [inbox](/docs/chats#the-inbox). It starts a Turn when the Chat is idle, steers the running Turn when the input has the same `author`, and waits in the inbox otherwise. It returns `started`, `steered` or `queued`. After each Turn, the next input in the inbox starts the next Turn.
+`deliver` gives input to a Chat in one step, by the rules of the
+[inbox](/docs/chats#the-inbox). It starts a Turn when the Chat is idle, steers
+the running Turn when the input has the same `author`, and waits in the inbox
+otherwise. It returns `started`, `steered` or `queued`. After each Turn, the
+next input in the inbox starts the next Turn.
 
 ### Approvals
 
-A tool with `needsApproval` asks before each call. The runtime then asks the `Approvals` service. Give it as `approvals` in the Bot definition, or provide `Chat.Approvals`. It answers each call with one of three decisions:
+A tool with `needsApproval` asks before each call. The runtime then asks the
+`Approvals` service. Give it as `approvals` in the Bot definition, or provide
+`Chat.Approvals`. It answers each call with one of three decisions:
 
 - `Chat.Decision.Allow()` runs the call now.
-- `Chat.Decision.Deny({ reason })` does not run the call. The model sees the reason.
-- `Chat.Decision.Pending({ result })` does not run the call now. The model gets `result` at once, and the Turn goes on.
+- `Chat.Decision.Deny({ reason })` does not run the call. The model sees the
+  reason.
+- `Chat.Decision.Pending({ result })` does not run the call now. The model gets
+  `result` at once, and the Turn goes on.
 
 Without the service, every such call is pending. So a Turn never waits.
 
-When a decider allows a pending call later, give the call back with `deliver` and `approved`. The ID of the call must be new. The Turn that reads the input runs the call, and it does not ask again. Mark input from your program with `notice`, so that the model knows that it does not come from a person:
+When a decider allows a pending call later, give the call back with `deliver`
+and `approved`. The ID of the call must be new. The Turn that reads the input
+runs the call, and it does not ask again. Mark input from your program with
+`notice`, so that the model knows that it does not come from a person:
 
 ```ts
 import { Chat } from "@openbot-build/core"
@@ -118,7 +139,8 @@ yield *
 
 ### Plugins
 
-A plugin wraps the model loop. `Plugin.make` makes one. Its constructor runs once. The middleware it returns wraps the event stream of each Turn:
+A plugin wraps the model loop. `Plugin.make` makes one. Its constructor runs
+once. The middleware it returns wraps the event stream of each Turn:
 
 ```ts
 import { Plugin } from "@openbot-build/core"
@@ -137,31 +159,40 @@ const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
 )
 ```
 
-`PluginComposition.merge(a, b)` combines two plugins. `a` runs outside `b`.
-A plugin can also save its own data in the record of the Chat or in its state. Pass `plugin.stores` to `Store.define`, then use `PluginState.make`.
+`PluginComposition.merge(a, b)` combines two plugins. `a` runs outside `b`. A
+plugin can also save its own data in the record of the Chat or in its state.
+Pass `plugin.stores` to `Store.define`, then use `PluginState.make`.
 
 ### Skills
 
-`Skill.Descriptor` describes a skill. `SkillMap.Catalog` is a list of skills. When two lists have the same skill ID, the later one wins.
-Your program finds, loads, and runs the skills.
+`Skill.Descriptor` describes a skill. `SkillMap.Catalog` is a list of skills.
+When two lists have the same skill ID, the later one wins. Your program finds,
+loads, and runs the skills.
 
 ---
 
 ## Plugins in openbot
 
-`@openbot-build/openbot` has all plugins of OpenBot. The server uses its plugins, such as the Bot, App, and work plugins, in every Turn. The work plugin gives the Bot its todo list, its reminders and plan mode. You can also use the Turn limit plugins with your own `ChatRuntime`.
+`@openbot-build/openbot` has all plugins of OpenBot. The server uses its
+plugins, such as the Bot, App, and work plugins, in every Turn. The work plugin
+gives the Bot its todo list, its reminders and plan mode. You can also use the
+Turn limit plugins with your own `ChatRuntime`.
 
 ### Memory
 
-`BotMemory` has the types and helpers of [Bot memory](/docs/memory). The server uses them for the memory Bot and the memory API. The schemas of the memory API are in `api`, as `BotMemory`.
+`BotMemory` has the types and helpers of [Bot memory](/docs/memory). The server
+uses them for the memory Bot and the memory API. The schemas of the memory API
+are in `api`, as `BotMemory`.
 
 ### Turn limits
 
-Three plugins put a limit on each Turn. You can use one of them, or merge them with `PluginComposition.merge`. Each one counts only its own Turn.
+Three plugins put a limit on each Turn. You can use one of them, or merge them
+with `PluginComposition.merge`. Each one counts only its own Turn.
 
 #### Model steps
 
-`TurnLimiter` stops a Turn after a set number of model steps. The first model request counts as one step.
+`TurnLimiter` stops a Turn after a set number of model steps. The first model
+request counts as one step.
 
 ```ts
 import { TurnLimiter } from "@openbot-build/openbot"
@@ -183,7 +214,10 @@ It fails with one of two errors:
 
 #### Tokens
 
-`TokenLimiter` stops a Turn after it uses a set number of tokens. A token is a small piece of text that the model reads or writes. The plugin adds the input and output tokens of each model step. A model step that has started can finish. The next model step fails when the total reaches `maxTokens`.
+`TokenLimiter` stops a Turn after it uses a set number of tokens. A token is a
+small piece of text that the model reads or writes. The plugin adds the input
+and output tokens of each model step. A model step that has started can finish.
+The next model step fails when the total reaches `maxTokens`.
 
 ```ts
 import { TokenLimiter } from "@openbot-build/openbot"
@@ -198,7 +232,9 @@ const plugin = TokenLimiter.make({ maxTokens: 100_000 })
 
 #### Time
 
-`TimeLimiter` stops a Turn after a set time. `maxDuration` takes a number of milliseconds or a text such as `"5 minutes"`. When the time is up, the plugin stops the Turn at once. It also stops a model step or a tool call in the middle.
+`TimeLimiter` stops a Turn after a set time. `maxDuration` takes a number of
+milliseconds or a text such as `"5 minutes"`. When the time is up, the plugin
+stops the Turn at once. It also stops a model step or a tool call in the middle.
 
 ```ts
 import { TimeLimiter } from "@openbot-build/openbot"
@@ -215,7 +251,9 @@ const plugin = TimeLimiter.make({ maxDuration: "5 minutes" })
 
 ## Model providers
 
-`@openbot-build/openbot` has three model providers. Each one turns a model selection into a `LanguageModel` Layer. You give the API key. See [Models](/docs/models) for how OpenBot uses them.
+`@openbot-build/openbot` has three model providers. Each one turns a model
+selection into a `LanguageModel` Layer. You give the API key. See
+[Models](/docs/models) for how OpenBot uses them.
 
 ### OpenAiCompatProvider
 
@@ -247,12 +285,15 @@ const program = LanguageModel.generateText({ prompt: "Hello" }).pipe(
 )
 ```
 
-Leave out `apiUrl` to use `https://api.openai.com/v1`. A selection's `reasoningEffort` and `serviceTier` replace `reasoning_effort` and `service_tier` in the defaults.
+Leave out `apiUrl` to use `https://api.openai.com/v1`. A selection's
+`reasoningEffort` and `serviceTier` replace `reasoning_effort` and
+`service_tier` in the defaults.
 
 ### OpenAiProvider
 
-The same pattern, with `OpenAiProvider` and the provider ID `openai`. It uses the Responses API.
-It also has `ResponsesCompaction.layer()`, which makes long histories shorter with the native compaction of the Responses API.
+The same pattern, with `OpenAiProvider` and the provider ID `openai`. It uses
+the Responses API. It also has `ResponsesCompaction.layer()`, which makes long
+histories shorter with the native compaction of the Responses API.
 
 ```ts
 import { OpenAiProvider, ResponsesCompaction } from "@openbot-build/openbot"
@@ -268,7 +309,8 @@ const services = Layer.merge(
 
 ### AnthropicProvider
 
-The same pattern, with `AnthropicProvider` and the provider ID `anthropic`. It uses the Messages API.
+The same pattern, with `AnthropicProvider` and the provider ID `anthropic`. It
+uses the Messages API.
 
 ```ts
 import { AnthropicProvider } from "@openbot-build/openbot"
@@ -276,13 +318,15 @@ import { AnthropicProvider } from "@openbot-build/openbot"
 const provider = AnthropicProvider.make({ max_tokens: 1024 })
 ```
 
-`reasoningEffort` can be `low`, `medium`, or `high`. `serviceTier` can be `auto` or `standard_only`. Other values fail before any request.
+`reasoningEffort` can be `low`, `medium`, or `high`. `serviceTier` can be `auto`
+or `standard_only`. Other values fail before any request.
 
 ---
 
 ## protocol
 
-`@openbot-build/protocol` implements the OpenBot App Protocol. Publishers use it to put an App on the web. Hosts use it to find, connect to, and call Apps.
+`@openbot-build/protocol` implements the OpenBot App Protocol. Publishers use it
+to put an App on the web. Hosts use it to find, connect to, and call Apps.
 
 ```ts
 import { Document, McpPublisher } from "@openbot-build/protocol"
@@ -324,4 +368,5 @@ const publisher = McpPublisher.layer({
 })
 ```
 
-Serve `publisher` with `HttpRouter.serve` and an HTTP server Layer. See [Protocol](/docs/protocol) for the full guide.
+Serve `publisher` with `HttpRouter.serve` and an HTTP server Layer. See
+[Protocol](/docs/protocol) for the full guide.

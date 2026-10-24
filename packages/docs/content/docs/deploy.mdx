@@ -3,41 +3,61 @@ title: Deploy
 description: Run OpenBot on your own server.
 ---
 
-This page shows how to run OpenBot in production. You build a Docker image, prepare the database, set up the platform, and start the server behind a reverse proxy.
-For every setting, see [Configuration](/docs/configuration).
+This page shows how to run OpenBot in production. You build a Docker image,
+prepare the database, set up the platform, and start the server behind a reverse
+proxy. For every setting, see [Configuration](/docs/configuration).
 
 ---
 
 ## What you need
 
 - A Linux server with Docker and Docker Compose.
-- A domain name for OpenBot, such as `api.example.com`, and a TLS certificate for it.
-- An OpenID Connect provider for the platform, such as `https://id.example.com`. Register a client with the redirect URI `https://api.example.com/auth/callback/oidc`. You can skip it when people sign in only through the [SSO connections](/docs/sso) of organizations.
-- A model service, if you want the Bot to do work. You add it through the API after setup. See [Models](/docs/models).
+- A domain name for OpenBot, such as `api.example.com`, and a TLS certificate
+  for it.
+- An OpenID Connect provider for the platform, such as `https://id.example.com`.
+  Register a client with the redirect URI
+  `https://api.example.com/auth/callback/oidc`. You can skip it when people sign
+  in only through the [SSO connections](/docs/sso) of organizations.
+- A model service, if you want the Bot to do work. You add it through the API
+  after setup. See [Models](/docs/models).
 
 ## Build the images
 
-All Docker files are in `deploy/docker/`. One `Dockerfile` makes both images. Each image is a build target (a named last stage in the file):
+All Docker files are in `deploy/docker/`. One `Dockerfile` makes both images.
+Each image is a build target (a named last stage in the file):
 
 | Target          | Image                   | What it runs                                                                     |
 | --------------- | ----------------------- | -------------------------------------------------------------------------------- |
 | `openbot`       | `openbot`               | OpenBot and its migration program.                                               |
 | `protocol-test` | `openbot-protocol-test` | The test service for the App Protocol. See [Protocol test](/docs/protocol-test). |
 
-The file `docker-bake.hcl` tells [Docker Bake](https://docs.docker.com/build/bake/) how to build them. Run this from the root of the repository:
+The file `docker-bake.hcl` tells
+[Docker Bake](https://docs.docker.com/build/bake/) how to build them. Run this
+from the root of the repository:
 
 ```sh
 export OPENBOT_RELEASE=$(git rev-parse HEAD)
 TAG=$OPENBOT_RELEASE docker buildx bake -f deploy/docker/docker-bake.hcl --load
 ```
 
-This builds `openbot:$OPENBOT_RELEASE` and `openbot-protocol-test:$OPENBOT_RELEASE` for `linux/amd64`. `--load` puts them in your local Docker. Without `TAG`, the tag is `local`. To build only one image, add its target name, for example `openbot`.
+This builds `openbot:$OPENBOT_RELEASE` and
+`openbot-protocol-test:$OPENBOT_RELEASE` for `linux/amd64`. `--load` puts them
+in your local Docker. Without `TAG`, the tag is `local`. To build only one
+image, add its target name, for example `openbot`.
 
-On a computer that is not `x86_64`, Docker needs QEMU (a program that runs code for another processor) to build the images. Install it once with `docker run --privileged --rm tonistiigi/binfmt --install amd64`.
+On a computer that is not `x86_64`, Docker needs QEMU (a program that runs code
+for another processor) to build the images. Install it once with
+`docker run --privileged --rm tonistiigi/binfmt --install amd64`.
 
-Both images start from [distroless](https://github.com/GoogleContainerTools/distroless), with the same Node.js version as development. Distroless images have no shell and no package manager, so you cannot `docker exec` a shell in them. They run as the user `nonroot` (65532).
+Both images start from
+[distroless](https://github.com/GoogleContainerTools/distroless), with the same
+Node.js version as development. Distroless images have no shell and no package
+manager, so you cannot `docker exec` a shell in them. They run as the user
+`nonroot` (65532).
 
-The OpenBot image has Node.js, the bundled server, the bundled migration and setup programs, and the database migrations. It has no build tools and no secrets.
+The OpenBot image has Node.js, the bundled server, the bundled migration and
+setup programs, and the database migrations. It has no build tools and no
+secrets.
 
 | Path in the image           | What it is                                                |
 | --------------------------- | --------------------------------------------------------- |
@@ -46,17 +66,26 @@ The OpenBot image has Node.js, the bundled server, the bundled migration and set
 | `/app/dist/app/Setup.mjs`   | The setup program. It writes the first platform settings. |
 | `/app/migrations`           | The database migrations.                                  |
 
-The server in the image listens on `0.0.0.0:3000`. The image has a health check that calls `/health` every five seconds.
+The server in the image listens on `0.0.0.0:3000`. The image has a health check
+that calls `/health` every five seconds.
 
 ### Secrets as files
 
-OpenBot reads each setting from an environment variable first. When the variable is not set, OpenBot reads the file `/run/secrets/<NAME>` instead, for example `/run/secrets/OPENBOT_SECRET_KEYS`. This is where Docker and Compose put secrets. An empty file counts as not set. See [Configuration](/docs/configuration#secrets-as-files).
+OpenBot reads each setting from an environment variable first. When the variable
+is not set, OpenBot reads the file `/run/secrets/<NAME>` instead, for example
+`/run/secrets/OPENBOT_SECRET_KEYS`. This is where Docker and Compose put
+secrets. An empty file counts as not set. See
+[Configuration](/docs/configuration#secrets-as-files).
 
-Environment variables show in `docker inspect`. Files in `/run/secrets` do not. Compose uses files for all secrets.
+Environment variables show in `docker inspect`. Files in `/run/secrets` do not.
+Compose uses files for all secrets.
 
 ## Run with Docker
 
-Put your settings in a file, for example `openbot.env`. It needs only `OPENBOT_DATABASE_URL` and `OPENBOT_SECRET_KEYS`. Start from `deploy/docker/production.env.example`. `docker run` does not fill in `${POSTGRES_PASSWORD}`, so write the full `OPENBOT_DATABASE_URL` yourself.
+Put your settings in a file, for example `openbot.env`. It needs only
+`OPENBOT_DATABASE_URL` and `OPENBOT_SECRET_KEYS`. Start from
+`deploy/docker/production.env.example`. `docker run` does not fill in
+`${POSTGRES_PASSWORD}`, so write the full `OPENBOT_DATABASE_URL` yourself.
 
 Make the secret keys once:
 
@@ -71,15 +100,17 @@ See [Secret keys](/docs/configuration#secret-keys).
 
 ### Prepare the database
 
-The migration program only needs `OPENBOT_DATABASE_URL`. Run it before you start the server, and again before each new release:
+The migration program only needs `OPENBOT_DATABASE_URL`. Run it before you start
+the server, and again before each new release:
 
 ```sh
 docker run --rm --env-file openbot.env \
   openbot:$OPENBOT_RELEASE /app/dist/app/Migrate.mjs
 ```
 
-It is safe to run it more than once. It only applies the migrations that the database does not have yet.
-Migrations only go forward. There is no way to undo one, so make a backup first.
+It is safe to run it more than once. It only applies the migrations that the
+database does not have yet. Migrations only go forward. There is no way to undo
+one, so make a backup first.
 
 </Step>
 <Step>
@@ -97,9 +128,13 @@ docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
   --admin-email=alice@example.com
 ```
 
-It writes the public origin, the platform provider, and the first platform admins to the database. Give a client secret with `-e OPENBOT_SETUP_OIDC_CLIENT_SECRET=...`, not on the command line. See [Platform](/docs/platform#setup) for every flag.
+It writes the public origin, the platform provider, and the first platform
+admins to the database. Give a client secret with
+`-e OPENBOT_SETUP_OIDC_CLIENT_SECRET=...`, not on the command line. See
+[Platform](/docs/platform#setup) for every flag.
 
-You can also run setup after the server starts. Until then, every route except `/health` answers `503` with `SetupRequired`.
+You can also run setup after the server starts. Until then, every route except
+`/health` answers `503` with `SetupRequired`.
 
 </Step>
 <Step>
@@ -111,7 +146,8 @@ docker run -d --name openbot --env-file openbot.env \
   -p 127.0.0.1:8080:3000 openbot:$OPENBOT_RELEASE
 ```
 
-When the server starts, it checks that the database has all tables. If not, it stops and you see an error in the log.
+When the server starts, it checks that the database has all tables. If not, it
+stops and you see an error in the log.
 
 </Step>
 <Step>
@@ -126,9 +162,11 @@ curl http://127.0.0.1:8080/health
 { "status": "ok" }
 ```
 
-`/health` only shows that the HTTP server can answer. It does not check the database, the setup, or the model.
+`/health` only shows that the HTTP server can answer. It does not check the
+database, the setup, or the model.
 
-Alice can now sign in. She is a platform admin. Next, add a model and a model provider that links it. See [Models](/docs/models).
+Alice can now sign in. She is a platform admin. Next, add a model and a model
+provider that links it. See [Models](/docs/models).
 
 </Step>
 </Steps>
@@ -145,7 +183,10 @@ pnpm --filter @openbot-build/openbot setup --public-origin=https://api.example.c
 pnpm --filter @openbot-build/openbot start
 ```
 
-The package `@openbot-build/openbot` also has the commands `openbot-server`, `openbot-migrate` and `openbot-setup`. With the package `@openbot-build/cli`, you can also run them as `openbot server`, `openbot migrate` and `openbot setup`.
+The package `@openbot-build/openbot` also has the commands `openbot-server`,
+`openbot-migrate` and `openbot-setup`. With the package `@openbot-build/cli`,
+you can also run them as `openbot server`, `openbot migrate` and
+`openbot setup`.
 
 ---
 
@@ -160,15 +201,24 @@ The file `deploy/docker/compose.production.yaml` runs these services:
 | `openbot`       | `openbot:$OPENBOT_RELEASE`                          | `127.0.0.1:8080`, or `OPENBOT_PUBLISHED_PORT` |
 | `protocol-test` | `openbot-protocol-test:$OPENBOT_RELEASE`            | `127.0.0.1:3001`                              |
 
-`migrate` runs the migration program once, after PostgreSQL is healthy. `openbot` starts only when `migrate` succeeds. So `up` always migrates the database first.
+`migrate` runs the migration program once, after PostgreSQL is healthy.
+`openbot` starts only when `migrate` succeeds. So `up` always migrates the
+database first.
 
-The `protocol-test` service is the public test service for the App Protocol. See [Protocol test](/docs/protocol-test).
-The file needs `PROTOCOL_TEST_PUBLIC_ORIGIN` even if you only use OpenBot.
+The `protocol-test` service is the public test service for the App Protocol. See
+[Protocol test](/docs/protocol-test). The file needs
+`PROTOCOL_TEST_PUBLIC_ORIGIN` even if you only use OpenBot.
 
-Compose gives the secrets to the containers as files in `/run/secrets`, not as environment variables. These are `POSTGRES_PASSWORD`, `OPENBOT_DATABASE_URL`, and `OPENBOT_SECRET_KEYS`. Compose takes their values from `.env.production`.
-The `openbot` service gets only `OPENBOT_DATABASE_URL`, `OPENBOT_SECRET_KEYS`, and `OPENBOT_OUTBOUND_ALLOW`. It has no other environment variables, because every other setting lives in the database. The `migrate` service gets only `OPENBOT_DATABASE_URL`.
+Compose gives the secrets to the containers as files in `/run/secrets`, not as
+environment variables. These are `POSTGRES_PASSWORD`, `OPENBOT_DATABASE_URL`,
+and `OPENBOT_SECRET_KEYS`. Compose takes their values from `.env.production`.
+The `openbot` service gets only `OPENBOT_DATABASE_URL`, `OPENBOT_SECRET_KEYS`,
+and `OPENBOT_OUTBOUND_ALLOW`. It has no other environment variables, because
+every other setting lives in the database. The `migrate` service gets only
+`OPENBOT_DATABASE_URL`.
 
-In the template, `OPENBOT_DATABASE_URL` uses `${POSTGRES_PASSWORD}`, so you set the password only once.
+In the template, `OPENBOT_DATABASE_URL` uses `${POSTGRES_PASSWORD}`, so you set
+the password only once.
 
 <Steps>
 <Step>
@@ -202,7 +252,8 @@ TAG=$OPENBOT_RELEASE docker buildx bake -f deploy/docker/docker-bake.hcl --load
 docker compose --env-file .env.production -f deploy/docker/compose.production.yaml config --quiet
 ```
 
-This shows an error when a required setting is missing. Without `--quiet`, it prints the full setup with all values filled in.
+This shows an error when a required setting is missing. Without `--quiet`, it
+prints the full setup with all values filled in.
 
 </Step>
 <Step>
@@ -213,7 +264,8 @@ This shows an error when a required setting is missing. Without `--quiet`, it pr
 docker compose --env-file .env.production -f deploy/docker/compose.production.yaml up -d --wait
 ```
 
-`--wait` returns when all services are healthy. The images check their health every five seconds. When a service process stops, Compose starts it again.
+`--wait` returns when all services are healthy. The images check their health
+every five seconds. When a service process stops, Compose starts it again.
 
 </Step>
 <Step>
@@ -231,37 +283,46 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
   --admin-email=alice@example.com
 ```
 
-Until you do this, every route except `/health` answers `503` with `SetupRequired`. See [Platform](/docs/platform#setup).
+Until you do this, every route except `/health` answers `503` with
+`SetupRequired`. See [Platform](/docs/platform#setup).
 
 </Step>
 </Steps>
 
-To release a new version, build new images, set the new `OPENBOT_RELEASE`, back up the database, and run `up -d --wait` again. `migrate` runs again before the new OpenBot starts.
-Never delete the `postgres` volume. It holds all your data.
+To release a new version, build new images, set the new `OPENBOT_RELEASE`, back
+up the database, and run `up -d --wait` again. `migrate` runs again before the
+new OpenBot starts. Never delete the `postgres` volume. It holds all your data.
 
 ## Many instances
 
-You can run many OpenBot instances behind one load balancer. Give every instance:
+You can run many OpenBot instances behind one load balancer. Give every
+instance:
 
 - the same `OPENBOT_DATABASE_URL`,
 - the same `OPENBOT_SECRET_KEYS`,
-- the same `OPENBOT_OUTBOUND_ALLOW`, if you set it. See [Outbound connections](/docs/configuration#outbound-connections).
+- the same `OPENBOT_OUTBOUND_ALLOW`, if you set it. See
+  [Outbound connections](/docs/configuration#outbound-connections).
 
-Nothing else is needed. All shared settings live in the database. When an admin changes them, every instance uses the change at once. See [Configuration](/docs/configuration#how-a-change-reaches-every-instance).
-Run the migration program and the setup program only once, not on each instance.
+Nothing else is needed. All shared settings live in the database. When an admin
+changes them, every instance uses the change at once. See
+[Configuration](/docs/configuration#how-a-change-reaches-every-instance). Run
+the migration program and the setup program only once, not on each instance.
 
 ---
 
 ## TLS and the reverse proxy
 
-In production, a reverse proxy handles HTTPS and sends the traffic to OpenBot on `127.0.0.1:8080`.
-Leave `OPENBOT_TLS_CERT` and `OPENBOT_TLS_KEY` empty.
+In production, a reverse proxy handles HTTPS and sends the traffic to OpenBot on
+`127.0.0.1:8080`. Leave `OPENBOT_TLS_CERT` and `OPENBOT_TLS_KEY` empty.
 
 The proxy must:
 
-- send the `Origin`, `Cookie`, and `Authorization` headers to OpenBot without changes,
-- not buffer responses, because Turns can stream their output as server-sent events (SSE),
-- allow long responses. `GET /v1/chats/:id/wait` can wait for up to 30 seconds, and a stream lasts as long as its Turn.
+- send the `Origin`, `Cookie`, and `Authorization` headers to OpenBot without
+  changes,
+- not buffer responses, because Turns can stream their output as server-sent
+  events (SSE),
+- allow long responses. `GET /v1/chats/:id/wait` can wait for up to 30 seconds,
+  and a stream lasts as long as its Turn.
 
 <Tabs items={["nginx", "Caddy"]}>
 <Tab value="nginx">
@@ -301,8 +362,9 @@ api.example.com {
 
 ## Your own client on the same origin
 
-A browser client on the same origin as OpenBot can use the sign-in cookie. It needs no user token.
-To do this, your proxy sends some paths to OpenBot and all other paths to your client.
+A browser client on the same origin as OpenBot can use the sign-in cookie. It
+needs no user token. To do this, your proxy sends some paths to OpenBot and all
+other paths to your client.
 
 | Path            | Send to     | What it is                                             |
 | --------------- | ----------- | ------------------------------------------------------ |
@@ -313,14 +375,19 @@ To do this, your proxy sends some paths to OpenBot and all other paths to your c
 | `/docs`         | OpenBot     | The interactive API reference. Optional.               |
 | everything else | Your client | Your pages, including `/`.                             |
 
-When you mount your client at `/`, the service document of `GET /` is no longer public. That is fine. Clients can use the paths above directly.
+When you mount your client at `/`, the service document of `GET /` is no longer
+public. That is fine. Clients can use the paths above directly.
 
-After sign-in, OpenBot sends the browser back to a path on your client. The default is `/`. Your client must also handle these return addresses:
+After sign-in, OpenBot sends the browser back to a path on your client. The
+default is `/`. Your client must also handle these return addresses:
 
-- `/?authorization=<flowId>` after an App authorization. Call `completeAppAuthorization` next. See [Apps](/docs/apps).
-- `/?developerTest=<testId>` after a developer test authorization. See [Developer tools](/docs/developer-tools).
+- `/?authorization=<flowId>` after an App authorization. Call
+  `completeAppAuthorization` next. See [Apps](/docs/apps).
+- `/?developerTest=<testId>` after a developer test authorization. See
+  [Developer tools](/docs/developer-tools).
 
-A return path can be any path on the same origin, except paths under `/auth/`, `/v1/`, and `/development/`.
+A return path can be any path on the same origin, except paths under `/auth/`,
+`/v1/`, and `/development/`.
 
 ---
 
@@ -328,9 +395,15 @@ A return path can be any path on the same origin, except paths under `/auth/`, `
 
 Back up these things, and keep them together:
 
-1. **The database.** It holds the platform and organization settings, accounts, organizations and their members, user tokens, models and model providers, SSO connections, the audit log, Bots, Chats and their history, and App connections.
-2. **`OPENBOT_SECRET_KEYS`.** The keys decrypt the secrets in the database: App secrets, model provider keys, SSO client secrets, and the sign-in secret. A database backup without the keys cannot restore them.
-3. **The bucket of [files](/docs/files).** It holds the bytes of the files that people uploaded. The database only names them.
+1. **The database.** It holds the platform and organization settings, accounts,
+   organizations and their members, user tokens, models and model providers, SSO
+   connections, the audit log, Bots, Chats and their history, and App
+   connections.
+2. **`OPENBOT_SECRET_KEYS`.** The keys decrypt the secrets in the database: App
+   secrets, model provider keys, SSO client secrets, and the sign-in secret. A
+   database backup without the keys cannot restore them.
+3. **The bucket of [files](/docs/files).** It holds the bytes of the files that
+   people uploaded. The database only names them.
 
 With Compose, make a database backup like this:
 
@@ -339,7 +412,9 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
   exec -T postgres pg_dump -U openbot -Fc openbot > openbot-$(date +%F).dump
 ```
 
-To restore it, first stop OpenBot with `docker compose --env-file .env.production -f deploy/docker/compose.production.yaml stop openbot`. Then run `pg_restore`:
+To restore it, first stop OpenBot with
+`docker compose --env-file .env.production -f deploy/docker/compose.production.yaml stop openbot`.
+Then run `pg_restore`:
 
 ```sh
 docker compose --env-file .env.production -f deploy/docker/compose.production.yaml \
@@ -350,59 +425,94 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 
 ## GitHub Actions
 
-The workflow `.github/workflows/ci.yml` has two jobs. The second job runs only when the first one passes.
+The workflow `.github/workflows/ci.yml` has two jobs. The second job runs only
+when the first one passes.
 
 | Job      | What it does                                                               |
 | -------- | -------------------------------------------------------------------------- |
 | `check`  | Runs `pnpm build`, `pnpm typecheck`, and `pnpm -r test` in `devenv shell`. |
 | `images` | Builds, checks, scans, and publishes the Docker images.                    |
 
-Both jobs run on `ubuntu-latest`. They install Nix with the Determinate Nix installer, and then devenv 2.4.0. [Magic Nix Cache](https://github.com/DeterminateSystems/magic-nix-cache-action) keeps Nix build results in the GitHub Actions cache, so later runs do not build them again. The jobs also download prebuilt devenv packages from `devenv.cachix.org`. The `check` job keeps the pnpm store in a cache.
+Both jobs run on `ubuntu-latest`. They install Nix with the Determinate Nix
+installer, and then devenv 2.4.0.
+[Magic Nix Cache](https://github.com/DeterminateSystems/magic-nix-cache-action)
+keeps Nix build results in the GitHub Actions cache, so later runs do not build
+them again. The jobs also download prebuilt devenv packages from
+`devenv.cachix.org`. The `check` job keeps the pnpm store in a cache.
 
 The `images` job does these steps:
 
-1. [hadolint](https://github.com/hadolint/hadolint) and `docker buildx bake lint` check the `Dockerfile`. The second one runs the [Docker build checks](https://docs.docker.com/build/checks/).
-2. Docker Bake builds both images. Build layers stay in the GitHub Actions cache, with one cache for each image, so later runs build only what changed.
-3. `deploy/docker/check.sh` checks the images. See [Check the images](#check-the-images).
-4. [dive](https://github.com/wagoodman/dive) checks that the image layers do not waste space.
-5. [Trivy](https://trivy.dev) scans both images. The job fails when an image has a known `HIGH` or `CRITICAL` vulnerability that has a fix. Trivy does not see the Node.js version, because Node.js is copied into the image and not installed as a package.
-6. The job saves both images as the `images-<commit-sha>` artifact for seven days.
-7. For pushes, the job publishes the images. It uses the build cache, so it does not build again.
+1. [hadolint](https://github.com/hadolint/hadolint) and
+   `docker buildx bake lint` check the `Dockerfile`. The second one runs the
+   [Docker build checks](https://docs.docker.com/build/checks/).
+2. Docker Bake builds both images. Build layers stay in the GitHub Actions
+   cache, with one cache for each image, so later runs build only what changed.
+3. `deploy/docker/check.sh` checks the images. See
+   [Check the images](#check-the-images).
+4. [dive](https://github.com/wagoodman/dive) checks that the image layers do not
+   waste space.
+5. [Trivy](https://trivy.dev) scans both images. The job fails when an image has
+   a known `HIGH` or `CRITICAL` vulnerability that has a fix. Trivy does not see
+   the Node.js version, because Node.js is copied into the image and not
+   installed as a package.
+6. The job saves both images as the `images-<commit-sha>` artifact for seven
+   days.
+7. For pushes, the job publishes the images. It uses the build cache, so it does
+   not build again.
 
-The workflow runs for pull requests, pushes to `main`, and tags like `v1.2.3`. It publishes images only for pushes:
+The workflow runs for pull requests, pushes to `main`, and tags like `v1.2.3`.
+It publishes images only for pushes:
 
 | Event               | Published tags              |
 | ------------------- | --------------------------- |
 | A push to `main`    | `<commit-sha>` and `latest` |
 | A tag like `v1.2.3` | `<commit-sha>` and `v1.2.3` |
 
-The images go to the GitHub container registry, at `ghcr.io/openbot-build/openbot` and `ghcr.io/openbot-build/openbot/protocol-test`. The workflow does not deploy OpenBot. To use a published image with Compose, pull it and tag it as `openbot:<tag>`.
+The images go to the GitHub container registry, at
+`ghcr.io/openbot-build/openbot` and
+`ghcr.io/openbot-build/openbot/protocol-test`. The workflow does not deploy
+OpenBot. To use a published image with Compose, pull it and tag it as
+`openbot:<tag>`.
 
 ### Publish the docs site
 
-The workflow `.github/workflows/docs.yml` publishes the docs site to [GitHub Pages](https://docs.github.com/pages) at [openbot.build](https://openbot.build). It runs for each push to `main`. You can also start it by hand from the Actions tab.
+The workflow `.github/workflows/docs.yml` publishes the docs site to
+[GitHub Pages](https://docs.github.com/pages) at
+[openbot.build](https://openbot.build). It runs for each push to `main`. You can
+also start it by hand from the Actions tab.
 
 | Job      | What it does                                                                                                            |
 | -------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `build`  | Runs `pnpm --filter "@openbot-build/docs..." build` in `devenv shell`. This builds the docs and the packages they need. |
 | `deploy` | Sends `packages/docs/dist` to GitHub Pages.                                                                             |
 
-The `build` job sets `DOCS_URL` to `https://openbot.build`. Astro uses it for full page links, such as the sitemap. Only one deploy runs at a time.
+The `build` job sets `DOCS_URL` to `https://openbot.build`. Astro uses it for
+full page links, such as the sitemap. Only one deploy runs at a time.
 
-The repository settings must use **GitHub Actions** as the Pages source, with `openbot.build` as the custom domain. The DNS for `openbot.build` must point to GitHub Pages. See [Manage a custom domain](https://docs.github.com/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site).
+The repository settings must use **GitHub Actions** as the Pages source, with
+`openbot.build` as the custom domain. The DNS for `openbot.build` must point to
+GitHub Pages. See
+[Manage a custom domain](https://docs.github.com/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site).
 
 ### Check the images
 
-`deploy/docker/check.sh` starts `compose.production.yaml` with test settings. The extra file `compose.check.yaml` removes the host ports and adds two services. The `setup` service runs the setup program with test values after `migrate`, and before `openbot` starts. The `check` service runs the checks. `check.env` has the test settings. None of them are real secrets.
+`deploy/docker/check.sh` starts `compose.production.yaml` with test settings.
+The extra file `compose.check.yaml` removes the host ports and adds two
+services. The `setup` service runs the setup program with test values after
+`migrate`, and before `openbot` starts. The `check` service runs the checks.
+`check.env` has the test settings. None of them are real secrets.
 
-The `check` service runs `check.mjs` inside the Compose network, after OpenBot and the protocol test service are healthy. It checks that:
+The `check` service runs `check.mjs` inside the Compose network, after OpenBot
+and the protocol test service are healthy. It checks that:
 
 - `/v1/chats` returns `401` with no key and with a bad key,
 - `/openapi.json` works,
 - the protocol test Catalog has the right public origin,
 - MCP discovery on the protocol test service works.
 
-So the check also proves that migrations, the setup program, secret files, and health checks work in the real production setup. At the end, the script removes the containers and the test database.
+So the check also proves that migrations, the setup program, secret files, and
+health checks work in the real production setup. At the end, the script removes
+the containers and the test database.
 
 Run the same checks on your computer:
 

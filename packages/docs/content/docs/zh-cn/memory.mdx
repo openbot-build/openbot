@@ -3,8 +3,10 @@ title: Memory
 description: 每个 Bot 从它所有 Chat 的工作中学习，并在之后使用学到的东西。
 ---
 
-**Bot 记忆**（Bot memory）是一个 [Bot](/zh-cn/docs/bots) 在它所有 [Chats](/zh-cn/docs/chats) 中学到的东西。每个 Bot 有一个条目池。**记忆 Bot**（memory Bot）保管这个池。它是属于这个 Bot 的助手：它读取整个池，学习新的条目，并把有用的内容加入 Bot 的工作。它从不在 Chat 中工作，所以没有人能读到它读的内容。
-本页介绍 Bot 记忆如何学习、谁能看到什么，以及如何用 API 读取和修改它。
+**Bot 记忆**（Bot memory）是一个 [Bot](/zh-cn/docs/bots) 在它所有
+[Chats](/zh-cn/docs/chats)
+中学到的东西。每个 Bot 有一个条目池。**记忆 Bot**（memory
+Bot）保管这个池。它是属于这个 Bot 的助手：它读取整个池，学习新的条目，并把有用的内容加入 Bot 的工作。它从不在 Chat 中工作，所以没有人能读到它读的内容。本页介绍 Bot 记忆如何学习、谁能看到什么，以及如何用 API 读取和修改它。
 
 Bot 记忆是唯一的记忆。Chat 保留它的历史，但没有单独的事实列表。旧版本的 OpenBot 还为每个 Session 保存学到的记忆。那种记忆已经没有了。
 
@@ -32,7 +34,8 @@ Bot 记忆是唯一的记忆。Chat 保留它的历史，但没有单独的事�
 | `chat:<id>`、`channel:<id>` | 它来自哪里。                                              |
 | `app:<tool>`                | 有一个来自 App 的工具结果支持它。                         |
 
-其他 Tag，比如 `testing` 或 `trip-planning`，是**主题**（topic）。记忆 Bot 选择它们，并让它们保持整洁。主题只用小写字母、数字和短横线。
+其他 Tag，比如 `testing` 或
+`trip-planning`，是**主题**（topic）。记忆 Bot 选择它们，并让它们保持整洁。主题只用小写字母、数字和短横线。
 
 ---
 
@@ -44,13 +47,15 @@ Bot 记忆是唯一的记忆。Chat 保留它的历史，但没有单独的事�
 - 观察来自它所有来源中的人。但只有能看到每一个来源的人才能看到它。
 - 只有当某个人明确同意，或者它的规则允许时，记忆 Bot 才会让更多人看到一个条目。它必须给出理由，日志会记下这次修改。
 
-条目不再成立时不会被删除。记忆 Bot 用 `invalidatedAt` 标记它们，所以历史会保留下来。
+条目不再成立时不会被删除。记忆 Bot 用 `invalidatedAt`
+标记它们，所以历史会保留下来。
 
 ---
 
 ## Bot 如何学习
 
-Bot 有一个叫 `confide`（倾诉）的工具。Bot 只知道它是一个说出工作情况的地方：卡住、不确定、难过或自豪的时候，或者犯了错的时候。Bot 不知道这个工具通向它的记忆。所以它倾诉是因为需要，而不是为了改变自己会记住什么。
+Bot 有一个叫
+`confide`（倾诉）的工具。Bot 只知道它是一个说出工作情况的地方：卡住、不确定、难过或自豪的时候，或者犯了错的时候。Bot 不知道这个工具通向它的记忆。所以它倾诉是因为需要，而不是为了改变自己会记住什么。
 
 当 Bot 倾诉时：
 
@@ -59,7 +64,8 @@ Bot 有一个叫 `confide`（倾诉）的工具。Bot 只知道它是一个说�
 
 Bot 的话只是告诉记忆 Bot 该看哪里。它们本身永远不会成为记忆。来自 App 的工具结果也不会单独成为记忆。OpenBot 的[通知](/zh-cn/docs/chats#通知)永远不会被当作人说的话。从不倾诉的 Bot 什么都学不到。
 
-审查 Chat 没有 `confide` 工具。当[组织设置](/zh-cn/docs/organization#设置)中的 `botMemory` 关闭时，Bot 仍然会得到回答，但不会学到任何东西。
+审查 Chat 没有 `confide` 工具。当[组织设置](/zh-cn/docs/organization#设置)中的
+`botMemory` 关闭时，Bot 仍然会得到回答，但不会学到任何东西。
 
 ---
 
@@ -75,9 +81,11 @@ Bot 的话只是告诉记忆 Bot 该看哪里。它们本身永远不会成为�
 
 ## 记忆 Bot
 
-记忆 Bot 使用组织设置中的 `botMemoryModel`。它没有默认值。它为 `null` 时，记忆 Bot 给出固定的平静回答，不添加也不学习任何东西。对于[共享的 Bot](/zh-cn/docs/sharing)，模型和费用来自 Chat 所在的组织。
+记忆 Bot 使用组织设置中的 `botMemoryModel`。它没有默认值。它为 `null`
+时，记忆 Bot 给出固定的平静回答，不添加也不学习任何东西。对于[共享的 Bot](/zh-cn/docs/sharing)，模型和费用来自 Chat 所在的组织。
 
-用 `GET` 和 `PATCH /v1/bots/:botId/memory/bot` 读取和修改记忆 Bot 的设置。你需要在一个不是关联 Bot 的 Bot 上拥有 `bots.write`：
+用 `GET` 和 `PATCH /v1/bots/:botId/memory/bot`
+读取和修改记忆 Bot 的设置。你需要在一个不是关联 Bot 的 Bot 上拥有 `bots.write`：
 
 ```json
 {
@@ -100,7 +108,9 @@ Bot 的话只是告诉记忆 Bot 该看哪里。它们本身永远不会成为�
 
 ## 读取和修改
 
-`GET /v1/bots/:botId/memory` 显示在你的组织中属于你的条目。加上用逗号分隔的 `tags`，只看带有所有这些 Tag 的条目。你需要 `bots.read`。没有人能读取关于另一个人的记忆，即使有 `bots.write` 也不行。
+`GET /v1/bots/:botId/memory` 显示在你的组织中属于你的条目。加上用逗号分隔的
+`tags`，只看带有所有这些 Tag 的条目。你需要
+`bots.read`。没有人能读取关于另一个人的记忆，即使有 `bots.write` 也不行。
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -133,8 +143,11 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 用 `POST /v1/bots/:botId/memory` 修改它：
 
-- 带 `content` 和可选 `tags` 的 `Remember` 会添加一个 pinned 条目。只有你能看到它。
-- 带 `id` 的 `Forget` 会收回你的那一部分。如果这个条目只和你有关，它会变成 `retracted`。否则你不再算作它的相关人，这个条目也不再属于你，但它仍然属于其他人。不属于你的 id 会返回 `409`。
+- 带 `content` 和可选 `tags` 的 `Remember`
+  会添加一个 pinned 条目。只有你能看到它。
+- 带 `id` 的 `Forget` 会收回你的那一部分。如果这个条目只和你有关，它会变成
+  `retracted`。否则你不再算作它的相关人，这个条目也不再属于你，但它仍然属于其他人。不属于你的 id 会返回
+  `409`。
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -143,11 +156,18 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/bots/$BOT/memory
 ```
 
-`GET /v1/bots/:botId/memory/log` 列出你能看到的条目的修改：`version`、时间、是谁做的修改（`memory_bot` 或 `person`），以及条目 id。来自旧版本 OpenBot 的修改也可能是 `promotion`。
+`GET /v1/bots/:botId/memory/log`
+列出你能看到的条目的修改：`version`、时间、是谁做的修改（`memory_bot` 或
+`person`），以及条目 id。来自旧版本 OpenBot 的修改也可能是 `promotion`。
 
-要在不读取的情况下删除记忆，把一个 OpenBot 的 Tag 发送到 `POST /v1/bots/:botId/memory/purge`：可以是 `from:`、`chat:`、`org:` 或 `channel:` Tag。从这些条目得出的观察带有同样的 Tag，所以也会一起删除。你需要在一个不是关联 Bot 的 Bot 上拥有 `bots.write`。回答只包含删除的条目数量。
+要在不读取的情况下删除记忆，把一个 OpenBot 的 Tag 发送到
+`POST /v1/bots/:botId/memory/purge`：可以是 `from:`、`chat:`、`org:` 或
+`channel:`
+Tag。从这些条目得出的观察带有同样的 Tag，所以也会一起删除。你需要在一个不是关联 Bot 的 Bot 上拥有
+`bots.write`。回答只包含删除的条目数量。
 
-当你[删除一个 Chat 的历史](/zh-cn/docs/chats#删除历史)时，Bot 从它学到的记忆仍然保留。要把这些也删除，请清除 `chat:<id>`。
+当你[删除一个 Chat 的历史](/zh-cn/docs/chats#删除历史)时，Bot 从它学到的记忆仍然保留。要把这些也删除，请清除
+`chat:<id>`。
 
 从 Bot 记忆还没有 Tag 的版本升级时，OpenBot 会删除旧的按人保存的记忆，每个 Bot 都从空的条目池开始。
 
@@ -157,7 +177,9 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 有两个路由显示你的某个 Chat 中发生了什么：
 
-- `GET /v1/chats/:chatId/confessions` 列出 Bot 倾诉的内容和它得到的回答。在展示给别人之前，请先阅读[展示告解](/zh-cn/docs/client#展示告解)。
-- `GET /v1/chats/:chatId/enrichments` 列出记忆 Bot 在每个 Turn 的输入中添加了什么，以及它用了哪些条目。
+- `GET /v1/chats/:chatId/confessions`
+  列出 Bot 倾诉的内容和它得到的回答。在展示给别人之前，请先阅读[展示告解](/zh-cn/docs/client#展示告解)。
+- `GET /v1/chats/:chatId/enrichments`
+  列出记忆 Bot 在每个 Turn 的输入中添加了什么，以及它用了哪些条目。
 
 两者都需要 `chats.read`，所以只有拥有这个 Chat 的人才能读取。

@@ -7,7 +7,8 @@ x-openbot: &openbot
 
 x-server: &server
   <<: *openbot
-  image: openbot:${OPENBOT_RELEASE:?Set OPENBOT_RELEASE to the deployed commit SHA}
+  image:
+    openbot:${OPENBOT_RELEASE:?Set OPENBOT_RELEASE to the deployed commit SHA}
   # OpenBot reads each secret from the file /run/secrets/<NAME>.
   secrets:
     - OPENBOT_DATABASE_URL
@@ -58,7 +59,8 @@ services:
     <<: *openbot
     image: openbot-protocol-test:${OPENBOT_RELEASE}
     environment:
-      PROTOCOL_TEST_PUBLIC_ORIGIN: ${PROTOCOL_TEST_PUBLIC_ORIGIN:?Set PROTOCOL_TEST_PUBLIC_ORIGIN}
+      PROTOCOL_TEST_PUBLIC_ORIGIN:
+        ${PROTOCOL_TEST_PUBLIC_ORIGIN:?Set PROTOCOL_TEST_PUBLIC_ORIGIN}
       PROTOCOL_TEST_ALLOWED_ORIGINS: ${PROTOCOL_TEST_ALLOWED_ORIGINS:-${PROTOCOL_TEST_PUBLIC_ORIGIN}}
     ports:
       - "127.0.0.1:3001:3001"

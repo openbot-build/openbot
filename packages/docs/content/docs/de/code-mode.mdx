@@ -3,9 +3,16 @@ title: Code Mode
 description: Der Bot schreibt ein kurzes Programm, das Tools von Apps aufruft.
 ---
 
-Im **Code Mode** schreibt der Bot ein kurzes JavaScript-Programm, statt die Tools einer App einzeln aufzurufen. Das Programm ruft die Tools auf, arbeitet mit ihren Ergebnissen und gibt nur das zurück, was der Bot braucht. Das spart Tokens, denn große Ergebnisse bleiben im Programm und kommen nicht in den Kontext des Modells. Das Programm kann auch viele Tools auf einmal aufrufen.
+Im **Code Mode** schreibt der Bot ein kurzes JavaScript-Programm, statt die
+Tools einer App einzeln aufzurufen. Das Programm ruft die Tools auf, arbeitet
+mit ihren Ergebnissen und gibt nur das zurück, was der Bot braucht. Das spart
+Tokens, denn große Ergebnisse bleiben im Programm und kommen nicht in den
+Kontext des Modells. Das Programm kann auch viele Tools auf einmal aufrufen.
 
-Code Mode gibt dem Bot keine neuen Rechte. Jeder Aufruf einer App in einem Programm geht durch dieselbe [Prüfung der Fähigkeiten](/de/docs/requests) wie ein normaler Aufruf eines App-Tools. Jeder Aufruf ist auch eine normale [App operation](/de/docs/apps#app-operations).
+Code Mode gibt dem Bot keine neuen Rechte. Jeder Aufruf einer App in einem
+Programm geht durch dieselbe [Prüfung der Fähigkeiten](/de/docs/requests) wie
+ein normaler Aufruf eines App-Tools. Jeder Aufruf ist auch eine normale
+[App operation](/de/docs/apps#app-operations).
 
 | Wort     | Bedeutung                                                                                                                |
 | -------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -19,7 +26,8 @@ Code Mode gibt dem Bot keine neuen Rechte. Jeder Aufruf einer App in einem Progr
 
 ## Code Mode einschalten
 
-Code Mode ist am Anfang aus. Ein Admin der Platform schaltet ihn in den [Einstellungen der Platform](/de/docs/platform#einstellungen-der-platform) ein:
+Code Mode ist am Anfang aus. Ein Admin der Platform schaltet ihn in den
+[Einstellungen der Platform](/de/docs/platform#einstellungen-der-platform) ein:
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -35,20 +43,27 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `memoryMb`    | Wie viel Speicher ein Programm nutzen darf.                                                                   |
 | `outputBytes` | Der größte Rückgabewert eines Programms und die größte Menge an Log-Text, die es behält.                      |
 
-Diese Grenzen schützen den Server. Sie sind keine Grenzen für den Bot. Jede Instanz von OpenBot nutzt dieselben Grenzen. So verhält sich ein Programm gleich, wenn eine andere Instanz es noch einmal ausführt.
+Diese Grenzen schützen den Server. Sie sind keine Grenzen für den Bot. Jede
+Instanz von OpenBot nutzt dieselben Grenzen. So verhält sich ein Programm
+gleich, wenn eine andere Instanz es noch einmal ausführt.
 
 ---
 
 ## So nutzt der Bot ihn
 
-Der Bot bekommt zwei weitere Tools. Sie stehen neben den normalen Tools der Apps und ersetzen sie nicht.
+Der Bot bekommt zwei weitere Tools. Sie stehen neben den normalen Tools der Apps
+und ersetzen sie nicht.
 
 | Tool               | Was es tut                                                                                                  |
 | ------------------ | ----------------------------------------------------------------------------------------------------------- |
 | `openbot_code_api` | Zeigt die TypeScript-Deklarationen der Bindings. Der Bot kann sie nach Wörtern oder nach Connection suchen. |
 | `openbot_run_code` | Führt ein Programm aus und gibt sein Ergebnis, seine Log-Zeilen und eine Liste seiner Aufrufe zurück.       |
 
-Jedes Binding hat zwei Teile: die Connection und die Fähigkeit. Eine Connection mit dem Namen "Work calendar" und dem Tool `list-events` wird zu `apps.work_calendar.list_events`. `apps.call("work_calendar.list_events", args)` tut dasselbe. Auch Ressourcen und Prompts werden zu Bindings zum Lesen. Ein Programm kann so aussehen:
+Jedes Binding hat zwei Teile: die Connection und die Fähigkeit. Eine Connection
+mit dem Namen "Work calendar" und dem Tool `list-events` wird zu
+`apps.work_calendar.list_events`. `apps.call("work_calendar.list_events", args)`
+tut dasselbe. Auch Ressourcen und Prompts werden zu Bindings zum Lesen. Ein
+Programm kann so aussehen:
 
 ```js
 const [today, tomorrow] = await Promise.all([
@@ -62,7 +77,8 @@ console.log("events", busy.length)
 return busy.filter((event) => event.attendees > 10).map((event) => event.title)
 ```
 
-Ein Aufruf eines Tools gibt dem Programm das Ergebnis, das die App geschickt hat. Wenn ein Aufruf nicht klappt, bekommt das Programm einen `Error`:
+Ein Aufruf eines Tools gibt dem Programm das Ergebnis, das die App geschickt
+hat. Wenn ein Aufruf nicht klappt, bekommt das Programm einen `Error`:
 
 | Name des Fehlers   | Warum                                                                                                     |
 | ------------------ | --------------------------------------------------------------------------------------------------------- |
@@ -76,7 +92,11 @@ Das Programm kann diese Fehler abfangen und weitermachen.
 
 ## Wenn ein Aufruf eine Entscheidung braucht
 
-Manche Aufrufe einer App brauchen eine Entscheidung, zum Beispiel ein Tool, das schreibt. Dann hält das Programm bei diesem Aufruf an. Der Turn wartet nicht: Der Werkzeugaufruf des Programms bekommt sofort ein wartendes Ergebnis, und der Bot macht weiter. Der [Request](/de/docs/requests) hat den Aufruf der App in `app` und das Programm in `code`:
+Manche Aufrufe einer App brauchen eine Entscheidung, zum Beispiel ein Tool, das
+schreibt. Dann hält das Programm bei diesem Aufruf an. Der Turn wartet nicht:
+Der Werkzeugaufruf des Programms bekommt sofort ein wartendes Ergebnis, und der
+Bot macht weiter. Der [Request](/de/docs/requests) hat den Aufruf der App in
+`app` und das Programm in `code`:
 
 ```json
 {
@@ -91,15 +111,28 @@ Manche Aufrufe einer App brauchen eine Entscheidung, zum Beispiel ein Tool, das 
 }
 ```
 
-Nach der Entscheidung führt OpenBot das Programm im Hintergrund noch einmal von oben aus. Jeder Aufruf, der schon lief, gibt sein gespeichertes Ergebnis. OpenBot schickt ihn nicht noch einmal an die App. Dann läuft das Programm nach dem Aufruf weiter, der gewartet hat. Wenn es endet, kommt sein Ergebnis als [Mitteilung](/de/docs/chats#mitteilungen) in den Chat zurück, und der Bot macht damit weiter.
+Nach der Entscheidung führt OpenBot das Programm im Hintergrund noch einmal von
+oben aus. Jeder Aufruf, der schon lief, gibt sein gespeichertes Ergebnis.
+OpenBot schickt ihn nicht noch einmal an die App. Dann läuft das Programm nach
+dem Aufruf weiter, der gewartet hat. Wenn es endet, kommt sein Ergebnis als
+[Mitteilung](/de/docs/chats#mitteilungen) in den Chat zurück, und der Bot macht
+damit weiter.
 
-Das klappt nur, wenn das Programm jedes Mal dieselben Aufrufe in derselben Reihenfolge macht. Darum sieht das Programm in `Date.now()` eine feste Zeit, und `Math.random()` gibt in jedem Lauf dieselben Zahlen. Wenn ein Programm andere Aufrufe macht als vorher, stoppt OpenBot es mit `ReplayMismatch`. Das kann passieren, wenn sich eine Connection geändert hat, während das Programm gewartet hat. Nichts wird aus Versehen geschickt.
+Das klappt nur, wenn das Programm jedes Mal dieselben Aufrufe in derselben
+Reihenfolge macht. Darum sieht das Programm in `Date.now()` eine feste Zeit, und
+`Math.random()` gibt in jedem Lauf dieselben Zahlen. Wenn ein Programm andere
+Aufrufe macht als vorher, stoppt OpenBot es mit `ReplayMismatch`. Das kann
+passieren, wenn sich eine Connection geändert hat, während das Programm gewartet
+hat. Nichts wird aus Versehen geschickt.
 
 ---
 
 ## Code runs lesen
 
-`GET /v1/chats/:chatId/code-runs` listet die Programme eines Chats. `GET /v1/code-runs/:id` liest eines. Beide brauchen `apps.use`. Die Liste braucht auch `chats.read` für den Chat. Du siehst nur die Programme deiner eigenen Chats.
+`GET /v1/chats/:chatId/code-runs` listet die Programme eines Chats.
+`GET /v1/code-runs/:id` liest eines. Beide brauchen `apps.use`. Die Liste
+braucht auch `chats.read` für den Chat. Du siehst nur die Programme deiner
+eigenen Chats.
 
 ```json
 {

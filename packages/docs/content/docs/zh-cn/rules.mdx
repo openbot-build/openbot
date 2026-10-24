@@ -1,6 +1,7 @@
 ---
 title: Rule 与 Grant
-description: 保存关于能力的决定，可以是精确的 Grant，也可以是用自然语言写的 Rule。
+description:
+  保存关于能力的决定，可以是精确的 Grant，也可以是用自然语言写的 Rule。
 ---
 
 关于[请求](/zh-cn/docs/requests)的决定不必一次又一次地重做。OpenBot 用两种形式保存它们：
@@ -37,9 +38,11 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/bots/$BOT/grants
 ```
 
-`GET /v1/bots/:botId/grants` 列出 Grant。加上 `?status=active` 只看有效的 Grant。
+`GET /v1/bots/:botId/grants` 列出 Grant。加上 `?status=active`
+只看有效的 Grant。
 
-`DELETE /v1/bots/:botId/grants/:grantId` 撤销一个 Grant。OpenBot 还会撤销所有来源于它的 Grant，因此下方的 Bot 会失去通过它得到的权限。
+`DELETE /v1/bots/:botId/grants/:grantId`
+撤销一个 Grant。OpenBot 还会撤销所有来源于它的 Grant，因此下方的 Bot 会失去通过它得到的权限。
 
 ---
 
@@ -76,8 +79,11 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/bots/$BOT/rules/$RULE
 ```
 
-你也可以在回答请求时保存一条 Rule：在回答中带上 `rule`。参见[回答请求](/zh-cn/docs/requests#回答请求)。
+你也可以在回答请求时保存一条 Rule：在回答中带上
+`rule`。参见[回答请求](/zh-cn/docs/requests#回答请求)。
 
 ### 评判模型
 
-评判模型使用 **Rules 模型**。它是[组织设置](/zh-cn/docs/organization#设置)中的 `rulesModel`。它没有默认值。它为 `null` 时，评判不给出答案，由人或 Bot 来决定。对于相同的 Rule 和相同的能力，OpenBot 会保存每次评判的回答，因此同一个问题不会让评判模型再运行一次。
+评判模型使用 **Rules 模型**。它是[组织设置](/zh-cn/docs/organization#设置)中的
+`rulesModel`。它没有默认值。它为 `null`
+时，评判不给出答案，由人或 Bot 来决定。对于相同的 Rule 和相同的能力，OpenBot 会保存每次评判的回答，因此同一个问题不会让评判模型再运行一次。

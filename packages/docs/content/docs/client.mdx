@@ -3,10 +3,12 @@ title: Client
 description: Call OpenBot from TypeScript with typed requests and errors.
 ---
 
-`@openbot-build/client` is the TypeScript client for OpenBot. It is built from the same API contract as the server.
-Every request, answer, and error has a type. Your editor shows mistakes before you run the code.
+`@openbot-build/client` is the TypeScript client for OpenBot. It is built from
+the same API contract as the server. Every request, answer, and error has a
+type. Your editor shows mistakes before you run the code.
 
-The client uses [Effect](https://effect.website), a TypeScript library for typed programs. It runs in Node.js, Deno, Bun, workers, and browsers.
+The client uses [Effect](https://effect.website), a TypeScript library for typed
+programs. It runs in Node.js, Deno, Bun, workers, and browsers.
 
 ---
 
@@ -25,7 +27,8 @@ The OpenBot packages are not on npm yet. Use them from the OpenBot workspace:
 
 ## Make a client
 
-`layer` makes a Layer that gives you the `Client` service. A Layer is an Effect recipe that builds a service.
+`layer` makes a Layer that gives you the `Client` service. A Layer is an Effect
+recipe that builds a service.
 
 ```ts
 import { Client, layer } from "@openbot-build/client"
@@ -61,12 +64,15 @@ const id = await Effect.runPromise(
 
 To make a user token, see [Authentication](/docs/authentication).
 
-The client never saves the token and never puts it in a URL. `onUnauthorized` does not sign in or try the request again. Use it to tell the user, for example after a token expires or someone revokes it.
+The client never saves the token and never puts it in a URL. `onUnauthorized`
+does not sign in or try the request again. Use it to tell the user, for example
+after a token expires or someone revokes it.
 
 ## Call an operation
 
-Every operation is at `client.api.<group>.<operation>`. The names are the same as in the [API reference](/docs/api/).
-Each call takes one object with these optional fields:
+Every operation is at `client.api.<group>.<operation>`. The names are the same
+as in the [API reference](/docs/api/). Each call takes one object with these
+optional fields:
 
 | Field     | What it holds                         |
 | --------- | ------------------------------------- |
@@ -109,13 +115,15 @@ Some groups and their pages:
 | `platform`       | Manage the platform. Only for platform admins.            | [Platform](/docs/api/operations/tags/platform/)               |
 | `health`         | Read the service document and health.                     | [Health](/docs/api/operations/tags/service-and-health/)       |
 
-Every operation needs a permission. A call without it fails with `PermissionDenied`. See [Permissions](/docs/permissions).
+Every operation needs a permission. A call without it fails with
+`PermissionDenied`. See [Permissions](/docs/permissions).
 
 ## Handle errors
 
 Each failed call gives a typed error. The type `ClientError` lists all of them:
 
-- **API errors** from the contract. Each one has a `_tag`, such as `ChatNotFound` or `ChatConflict`.
+- **API errors** from the contract. Each one has a `_tag`, such as
+  `ChatNotFound` or `ChatConflict`.
 - **Schema errors** (`SchemaError`) when an answer does not match the contract.
 - **HTTP client errors** when the network fails.
 
@@ -145,7 +153,8 @@ All error schemas are exported from `@openbot-build/api`.
 
 ## Use the client in a browser
 
-A web app on the same origin as OpenBot can use the sign-in cookie instead of a token. Leave out `token`:
+A web app on the same origin as OpenBot can use the sign-in cookie instead of a
+token. Leave out `token`:
 
 ```ts
 import { layer } from "@openbot-build/client"
@@ -167,11 +176,14 @@ const ClientLive = layer({
 })
 ```
 
-The client sends requests with `credentials: "same-origin"`, so the browser adds the cookie.
-The browser also adds the `Origin` header. For requests that change data, OpenBot checks that it is exactly `publicOrigin` in the platform settings.
-Read the organizations of the person with `GET /auth/session`. See [Authentication](/docs/authentication#read-and-end-the-sign-in).
+The client sends requests with `credentials: "same-origin"`, so the browser adds
+the cookie. The browser also adds the `Origin` header. For requests that change
+data, OpenBot checks that it is exactly `publicOrigin` in the platform settings.
+Read the organizations of the person with `GET /auth/session`. See
+[Authentication](/docs/authentication#read-and-end-the-sign-in).
 
-To serve your web app on the same origin, see [Deploy](/docs/deploy#your-own-client-on-the-same-origin).
+To serve your web app on the same origin, see
+[Deploy](/docs/deploy#your-own-client-on-the-same-origin).
 
 <Callout type="warn">
 	Do not put a user token in browser code. Anyone who opens the page can read
@@ -180,23 +192,28 @@ To serve your web app on the same origin, see [Deploy](/docs/deploy#your-own-cli
 
 ## Custom setup
 
-`make({ baseUrl })` builds the `Client` service without the default parts. You then give it:
+`make({ baseUrl })` builds the `Client` service without the default parts. You
+then give it:
 
 - an `HttpClient` service,
 - client middleware for `BotAuth`, used by token routes,
-- client middleware for `AccountAuth`, used by routes that do not act in one organization, such as `/v1/organizations` and `/v1/platform`,
+- client middleware for `AccountAuth`, used by routes that do not act in one
+  organization, such as `/v1/organizations` and `/v1/platform`,
 - client middleware for `SessionAuth`, used by cookie-only routes.
 
-Use this when you need your own HTTP client, logging, or headers. See `packages/client/src/Client.ts` for how `layer` does it.
+Use this when you need your own HTTP client, logging, or headers. See
+`packages/client/src/Client.ts` for how `layer` does it.
 
 ---
 
 ## Show App views
 
-Some App tools come with a small user interface, called an MCP Apps view. MCP is the Model Context Protocol, a standard way for Bots to talk to tools.
-OpenBot keeps the view on the server. Your client only shows it.
+Some App tools come with a small user interface, called an MCP Apps view. MCP is
+the Model Context Protocol, a standard way for Bots to talk to tools. OpenBot
+keeps the view on the server. Your client only shows it.
 
-First open the view for an App operation. Then make a view client with `AppViews.make`:
+First open the view for an App operation. Then make a view client with
+`AppViews.make`:
 
 ```ts
 import { AppViews, Client } from "@openbot-build/client"
@@ -218,26 +235,42 @@ const program = Effect.gen(function* () {
 | `owner`    | A stable ID of the signed-in account. It keeps views of different accounts apart.                  |
 | `onChange` | Optional. Runs when an action in the view changes status. Use it to refresh requests and the Chat. |
 
-The result works with `mount` from `@openbot-build/protocol/McpApps`, which shows the view in an iframe. See [Protocol](/docs/protocol).
+The result works with `mount` from `@openbot-build/protocol/McpApps`, which
+shows the view in an iframe. See [Protocol](/docs/protocol).
 
-The view client holds no credentials. Every request goes through OpenBot, so the normal capability checks apply:
+The view client holds no credentials. Every request goes through OpenBot, so the
+normal capability checks apply:
 
 - It checks that each answer is a valid MCP result.
 - It sends each action once, with a new request ID.
-- It then checks the saved action every 250 milliseconds until it has a final result. It never sends the action again.
+- It then checks the saved action every 250 milliseconds until it has a final
+  result. It never sends the action again.
 
-When you close the view, the client stops checking. An action that OpenBot already accepted still runs to the end.
+When you close the view, the client stops checking. An action that OpenBot
+already accepted still runs to the end.
 
 ---
 
 ## Show confessions
 
-The Bot uses the `confide` tool to say how its work goes, and the [memory Bot](/docs/memory#how-the-bot-learns) answers it. People may read this: `GET /v1/chats/:chatId/confessions` lists it, and the calls are in the history of the Chat. But the Bot speaks there more freely than in its answers. So do not make it too easy to read:
+The Bot uses the `confide` tool to say how its work goes, and the
+[memory Bot](/docs/memory#how-the-bot-learns) answers it. People may read this:
+`GET /v1/chats/:chatId/confessions` lists it, and the calls are in the history
+of the Chat. But the Bot speaks there more freely than in its answers. So do not
+make it too easy to read:
 
-- Do not show confessions in the conversation. Fold the `confide` tool calls in the history, and do not tell people about them in a message.
-- Put them in a place that a person must open on purpose, such as a folded part of the details of a Chat.
-- Before you open them, say in one sentence what they are: a place where the Bot talks about its work, and where it does not expect to be quoted.
-- Do not show the words of a confession to the Bot again, for example in a later message. If the Bot learns that people quote what it confides, it stops confiding.
-- When a confession is about something that a person must fix, such as a deleted file, lead the person to the Items and actions of the Chat, not to the confession.
+- Do not show confessions in the conversation. Fold the `confide` tool calls in
+  the history, and do not tell people about them in a message.
+- Put them in a place that a person must open on purpose, such as a folded part
+  of the details of a Chat.
+- Before you open them, say in one sentence what they are: a place where the Bot
+  talks about its work, and where it does not expect to be quoted.
+- Do not show the words of a confession to the Bot again, for example in a later
+  message. If the Bot learns that people quote what it confides, it stops
+  confiding.
+- When a confession is about something that a person must fix, such as a deleted
+  file, lead the person to the Items and actions of the Chat, not to the
+  confession.
 
-The memory Bot also asks the Bot to tell the person plainly about mistakes. So the important things usually come up in the chat.
+The memory Bot also asks the Bot to tell the person plainly about mistakes. So
+the important things usually come up in the chat.

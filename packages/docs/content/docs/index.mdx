@@ -3,22 +3,31 @@ title: Intro
 description: Get to know OpenBot.
 ---
 
-**OpenBot** is an open source Bot platform with no user interface of its own. You use it through an HTTP API.
-A Bot is a program that takes a goal in plain language, plans the steps, uses tools, and gives back a result.
+**OpenBot** is an open source Bot platform with no user interface of its own.
+You use it through an HTTP API. A Bot is a program that takes a goal in plain
+language, plans the steps, uses tools, and gives back a result.
 
-OpenBot runs the Bot work on a server, keeps the history, and asks people before Bots use a new capability.
-You bring the client: a script, a backend service, a chat bot, or your own web or mobile app.
+OpenBot runs the Bot work on a server, keeps the history, and asks people before
+Bots use a new capability. You bring the client: a script, a backend service, a
+chat bot, or your own web or mobile app.
 
 ---
 
 ## What you can do
 
-- Talk to a **Bot** in one **Chat**. It always answers at once. Read the answer as one response or as a live stream.
-- Let the Bot give long work to other Bots, or to itself. The work runs in parallel, and each result comes back to your Chat.
-- Let the Bot use **Apps**: outside services that people connect to their account.
-- Keep a team of lasting **Bots**, such as a programmer and a writer. Each has its own Chats and memory, and they give work to each other.
-- Let a Bot plan first in **plan mode**, keep a **todo list**, and ask for a **reminder**. Start its work on a schedule or from a webhook with a **trigger**.
-- Bots have no preset limits. When a Bot tries something new, the decider above it answers a **request**, and the answer is kept.
+- Talk to a **Bot** in one **Chat**. It always answers at once. Read the answer
+  as one response or as a live stream.
+- Let the Bot give long work to other Bots, or to itself. The work runs in
+  parallel, and each result comes back to your Chat.
+- Let the Bot use **Apps**: outside services that people connect to their
+  account.
+- Keep a team of lasting **Bots**, such as a programmer and a writer. Each has
+  its own Chats and memory, and they give work to each other.
+- Let a Bot plan first in **plan mode**, keep a **todo list**, and ask for a
+  **reminder**. Start its work on a schedule or from a webhook with a
+  **trigger**.
+- Bots have no preset limits. When a Bot tries something new, the decider above
+  it answers a **request**, and the answer is kept.
 - Find Apps in a public **App Index**, and check your own App as a publisher.
 
 ---
@@ -35,7 +44,8 @@ You bring the client: a script, a backend service, a chat bot, or your own web o
 | API contract | One typed contract makes the server, the TypeScript client, and the [API reference](/docs/api/).               |
 | App Protocol | An open way to publish Apps on the web so that Bots can find and use them.                                     |
 
-Every OpenBot tells you where to go next. Send `GET /` to read its service document:
+Every OpenBot tells you where to go next. Send `GET /` to read its service
+document:
 
 ```sh
 curl https://api.example.com/
@@ -55,9 +65,11 @@ curl https://api.example.com/
 
 ## License
 
-OpenBot is free software under the GNU Affero General Public License, version 3 only (`AGPL-3.0-only`).
-If you run a changed copy of OpenBot for other people over a network, you must give them the source code of your changes.
-See the [LICENSE](https://github.com/openbot-build/openbot/blob/main/LICENSE) file for the full text.
+OpenBot is free software under the GNU Affero General Public License, version 3
+only (`AGPL-3.0-only`). If you run a changed copy of OpenBot for other people
+over a network, you must give them the source code of your changes. See the
+[LICENSE](https://github.com/openbot-build/openbot/blob/main/LICENSE) file for
+the full text.
 
 ---
 

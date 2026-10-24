@@ -3,9 +3,11 @@ title: 包
 description: 工作区中的各个包，以及每个包的用途。
 ---
 
-OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot` 把各部分组装成服务器。其他库可以单独使用。
+OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot`
+把各部分组装成服务器。其他库可以单独使用。
 
-所有包都命名为 `@openbot-build/<name>`，版本为 `0.1.0`，并使用 `effect@4.0.5`。它们还没有发布到 npm。请在工作区中用 `"workspace:*"` 使用它们。
+所有包都命名为 `@openbot-build/<name>`，版本为 `0.1.0`，并使用
+`effect@4.0.5`。它们还没有发布到 npm。请在工作区中用 `"workspace:*"` 使用它们。
 
 ---
 
@@ -23,7 +25,8 @@ OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot` 把各�
 | `computer`      | `openbot computer` 命令，用来配对和连接你自己的 [Computer](/zh-cn/docs/computers)。 |
 | `docs`          | 本文档网站。                                                                        |
 
-下面的示例省略了模型。要运行它们，请提供一个 `LanguageModel` Layer，例如来自 `openbot` 中的某个[模型提供方](#模型提供方)。
+下面的示例省略了模型。要运行它们，请提供一个 `LanguageModel` Layer，例如来自
+`openbot` 中的某个[模型提供方](#模型提供方)。
 
 ---
 
@@ -42,7 +45,9 @@ OpenBot 是一个 pnpm 工作区。每个包只做一件事。`openbot` 把各�
 | `Plugin`、`PluginComposition`、`PluginState` | 创建和组合插件，并为插件提供保存的状态。                                     |
 | `Skill`、`SkillMap`                          | 描述技能，并维护技能列表。                                                   |
 
-一个 **Chat**（聊天）是一段没有终点的对话。每条输入都先进入它的**收件箱**（inbox）。输入会启动一个 **Turn**（轮次），或者引导正在运行的 Turn。一个 Turn 可以包含多个模型步骤和工具调用。Turn 从不等待：它运行，然后结束。存储把 Chat 的 Item 保存在一个只会增长的日志中，所以很长的 Chat 保存起来也不贵。
+一个
+**Chat**（聊天）是一段没有终点的对话。每条输入都先进入它的**收件箱**（inbox）。输入会启动一个
+**Turn**（轮次），或者引导正在运行的 Turn。一个 Turn 可以包含多个模型步骤和工具调用。Turn 从不等待：它运行，然后结束。存储把 Chat 的 Item 保存在一个只会增长的日志中，所以很长的 Chat 保存起来也不贵。
 
 ```ts
 import { ChatRuntime, ChatStoreMemory, Store } from "@openbot-build/core"
@@ -69,21 +74,31 @@ const program = Effect.scoped(
 )
 ```
 
-`execute` 启动一个 Turn，等待它结束，然后返回这个 Chat。`stream` 在 Turn 运行时提供事件。如果 Chat 中已经有一个 Turn 在运行，两者都会失败。
+`execute` 启动一个 Turn，等待它结束，然后返回这个 Chat。`stream`
+在 Turn 运行时提供事件。如果 Chat 中已经有一个 Turn 在运行，两者都会失败。
 
-`deliver` 按[收件箱](/zh-cn/docs/chats#收件箱)的规则，一步把输入交给一个 Chat。Chat 空闲时，它启动一个 Turn；输入的 `author` 相同时，它引导正在运行的 Turn；否则它在收件箱中等待。它返回 `started`、`steered` 或 `queued`。每个 Turn 结束后，收件箱中的下一条输入启动下一个 Turn。
+`deliver`
+按[收件箱](/zh-cn/docs/chats#收件箱)的规则，一步把输入交给一个 Chat。Chat 空闲时，它启动一个 Turn；输入的
+`author` 相同时，它引导正在运行的 Turn；否则它在收件箱中等待。它返回
+`started`、`steered` 或
+`queued`。每个 Turn 结束后，收件箱中的下一条输入启动下一个 Turn。
 
 ### 批准
 
-带 `needsApproval` 的工具在每次调用前都会先问。这时运行时会问 `Approvals` 服务。你可以在 Bot 定义中把它作为 `approvals` 提供，也可以提供 `Chat.Approvals`。它对每次调用给出三种决定之一：
+带 `needsApproval` 的工具在每次调用前都会先问。这时运行时会问 `Approvals`
+服务。你可以在 Bot 定义中把它作为 `approvals` 提供，也可以提供
+`Chat.Approvals`。它对每次调用给出三种决定之一：
 
 - `Chat.Decision.Allow()` 让调用现在运行。
 - `Chat.Decision.Deny({ reason })` 不运行这个调用。模型会看到原因。
-- `Chat.Decision.Pending({ result })` 现在不运行这个调用。模型马上得到 `result`，Turn 继续。
+- `Chat.Decision.Pending({ result })` 现在不运行这个调用。模型马上得到
+  `result`，Turn 继续。
 
 没有这个服务时，每个这样的调用都是待定的。所以 Turn 从不等待。
 
-当决策者之后允许了一个待定的调用时，用 `deliver` 和 `approved` 把这个调用送回去。调用的 ID 必须是新的。读到这条输入的 Turn 会运行这个调用，而且不会再问一次。请用 `notice` 标记来自你的程序的输入，这样模型就知道它不是来自人：
+当决策者之后允许了一个待定的调用时，用 `deliver` 和 `approved`
+把这个调用送回去。调用的 ID 必须是新的。读到这条输入的 Turn 会运行这个调用，而且不会再问一次。请用
+`notice` 标记来自你的程序的输入，这样模型就知道它不是来自人：
 
 ```ts
 import { Chat } from "@openbot-build/core"
@@ -118,7 +133,8 @@ yield *
 
 ### 插件
 
-插件包裹模型循环。用 `Plugin.make` 创建插件。它的构造函数只运行一次。它返回的中间件包裹每个 Turn 的事件流：
+插件包裹模型循环。用 `Plugin.make`
+创建插件。它的构造函数只运行一次。它返回的中间件包裹每个 Turn 的事件流：
 
 ```ts
 import { Plugin } from "@openbot-build/core"
@@ -137,27 +153,33 @@ const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
 )
 ```
 
-`PluginComposition.merge(a, b)` 组合两个插件。`a` 在 `b` 的外层运行。
-插件还可以把自己的数据保存在 Chat 的记录中，或者保存在它的状态中。把 `plugin.stores` 传给 `Store.define`，然后使用 `PluginState.make`。
+`PluginComposition.merge(a, b)` 组合两个插件。`a` 在 `b`
+的外层运行。插件还可以把自己的数据保存在 Chat 的记录中，或者保存在它的状态中。把
+`plugin.stores` 传给 `Store.define`，然后使用 `PluginState.make`。
 
 ### 技能
 
-`Skill.Descriptor` 描述一个技能。`SkillMap.Catalog` 是一个技能列表。当两个列表中有相同的技能 ID 时，后面的那个生效。
-查找、加载和运行技能由你的程序负责。
+`Skill.Descriptor` 描述一个技能。`SkillMap.Catalog`
+是一个技能列表。当两个列表中有相同的技能 ID 时，后面的那个生效。查找、加载和运行技能由你的程序负责。
 
 ---
 
 ## openbot 中的插件
 
-`@openbot-build/openbot` 包含 OpenBot 的所有插件。服务器在每个 Turn 中都使用它的插件，例如 Bot、App 和工作插件。工作插件为 Bot 提供待办列表、提醒和计划模式。你也可以在自己的 `ChatRuntime` 中使用 Turn 限制插件。
+`@openbot-build/openbot`
+包含 OpenBot 的所有插件。服务器在每个 Turn 中都使用它的插件，例如 Bot、App 和工作插件。工作插件为 Bot 提供待办列表、提醒和计划模式。你也可以在自己的
+`ChatRuntime` 中使用 Turn 限制插件。
 
 ### 记忆
 
-`BotMemory` 包含 [Bot 记忆](/zh-cn/docs/memory)的类型和辅助函数。服务器用它们实现记忆 Bot 和记忆 API。记忆 API 的 schema 在 `api` 中，名为 `BotMemory`。
+`BotMemory` 包含
+[Bot 记忆](/zh-cn/docs/memory)的类型和辅助函数。服务器用它们实现记忆 Bot 和记忆 API。记忆 API 的 schema 在
+`api` 中，名为 `BotMemory`。
 
 ### Turn 限制
 
-有三个插件可以限制每个 Turn。你可以只用其中一个，也可以用 `PluginComposition.merge` 把它们合在一起。每个插件只计算自己的 Turn。
+有三个插件可以限制每个 Turn。你可以只用其中一个，也可以用
+`PluginComposition.merge` 把它们合在一起。每个插件只计算自己的 Turn。
 
 #### 模型步骤
 
@@ -183,7 +205,9 @@ const runtime =
 
 #### Token
 
-`TokenLimiter` 在 Turn 用掉设定数量的 token 后停止它。token 是模型读或写的一小段文字。插件把每个模型步骤的输入和输出 token 加在一起。已经开始的模型步骤可以完成。当总数达到 `maxTokens` 时，下一个模型步骤会失败。
+`TokenLimiter`
+在 Turn 用掉设定数量的 token 后停止它。token 是模型读或写的一小段文字。插件把每个模型步骤的输入和输出 token 加在一起。已经开始的模型步骤可以完成。当总数达到
+`maxTokens` 时，下一个模型步骤会失败。
 
 ```ts
 import { TokenLimiter } from "@openbot-build/openbot"
@@ -198,7 +222,9 @@ const plugin = TokenLimiter.make({ maxTokens: 100_000 })
 
 #### 时间
 
-`TimeLimiter` 在设定的时间过后停止 Turn。`maxDuration` 可以是毫秒数，也可以是 `"5 minutes"` 这样的文字。时间一到，插件会马上停止 Turn。模型步骤或工具调用进行到一半时也会被停止。
+`TimeLimiter` 在设定的时间过后停止 Turn。`maxDuration` 可以是毫秒数，也可以是
+`"5 minutes"`
+这样的文字。时间一到，插件会马上停止 Turn。模型步骤或工具调用进行到一半时也会被停止。
 
 ```ts
 import { TimeLimiter } from "@openbot-build/openbot"
@@ -215,7 +241,9 @@ const plugin = TimeLimiter.make({ maxDuration: "5 minutes" })
 
 ## 模型提供方
 
-`@openbot-build/openbot` 有三个模型提供方。每个提供方把一个模型选择变成一个 `LanguageModel` Layer。API 密钥由你提供。OpenBot 如何使用它们，请看[模型](/zh-cn/docs/models)。
+`@openbot-build/openbot` 有三个模型提供方。每个提供方把一个模型选择变成一个
+`LanguageModel`
+Layer。API 密钥由你提供。OpenBot 如何使用它们，请看[模型](/zh-cn/docs/models)。
 
 ### OpenAiCompatProvider
 
@@ -247,12 +275,15 @@ const program = LanguageModel.generateText({ prompt: "Hello" }).pipe(
 )
 ```
 
-省略 `apiUrl` 时，使用 `https://api.openai.com/v1`。模型选择中的 `reasoningEffort` 和 `serviceTier` 会替换默认值中的 `reasoning_effort` 和 `service_tier`。
+省略 `apiUrl` 时，使用 `https://api.openai.com/v1`。模型选择中的
+`reasoningEffort` 和 `serviceTier` 会替换默认值中的 `reasoning_effort` 和
+`service_tier`。
 
 ### OpenAiProvider
 
-用法相同，只是换成 `OpenAiProvider` 和提供方 ID `openai`。它使用 Responses API。
-它还有 `ResponsesCompaction.layer()`，用 Responses API 自带的压缩功能缩短很长的历史。
+用法相同，只是换成 `OpenAiProvider` 和提供方 ID `openai`。它使用 Responses
+API。它还有 `ResponsesCompaction.layer()`，用 Responses
+API 自带的压缩功能缩短很长的历史。
 
 ```ts
 import { OpenAiProvider, ResponsesCompaction } from "@openbot-build/openbot"
@@ -268,7 +299,8 @@ const services = Layer.merge(
 
 ### AnthropicProvider
 
-用法相同，只是换成 `AnthropicProvider` 和提供方 ID `anthropic`。它使用 Messages API。
+用法相同，只是换成 `AnthropicProvider` 和提供方 ID `anthropic`。它使用 Messages
+API。
 
 ```ts
 import { AnthropicProvider } from "@openbot-build/openbot"
@@ -276,13 +308,15 @@ import { AnthropicProvider } from "@openbot-build/openbot"
 const provider = AnthropicProvider.make({ max_tokens: 1024 })
 ```
 
-`reasoningEffort` 可以是 `low`、`medium` 或 `high`。`serviceTier` 可以是 `auto` 或 `standard_only`。其他值会在发出任何请求之前就失败。
+`reasoningEffort` 可以是 `low`、`medium` 或 `high`。`serviceTier` 可以是 `auto`
+或 `standard_only`。其他值会在发出任何请求之前就失败。
 
 ---
 
 ## protocol
 
-`@openbot-build/protocol` 实现了 OpenBot App Protocol。发布者用它把 App 放到网上。宿主用它查找、连接和调用 App。
+`@openbot-build/protocol` 实现了 OpenBot App
+Protocol。发布者用它把 App 放到网上。宿主用它查找、连接和调用 App。
 
 ```ts
 import { Document, McpPublisher } from "@openbot-build/protocol"
@@ -324,4 +358,5 @@ const publisher = McpPublisher.layer({
 })
 ```
 
-用 `HttpRouter.serve` 和一个 HTTP 服务器 Layer 来提供 `publisher`。完整指南请看[协议](/zh-cn/docs/protocol)。
+用 `HttpRouter.serve` 和一个 HTTP 服务器 Layer 来提供
+`publisher`。完整指南请看[协议](/zh-cn/docs/protocol)。

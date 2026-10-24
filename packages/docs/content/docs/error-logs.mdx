@@ -1,10 +1,12 @@
 ---
 title: Error logs
-description: How OpenBot logs failures, and how to send them to your own service.
+description:
+  How OpenBot logs failures, and how to send them to your own service.
 ---
 
 OpenBot writes a log line at level `Error` when something fails on the server.
-OpenBot does not send these logs to other services. You can add this yourself with an Effect logger.
+OpenBot does not send these logs to other services. You can add this yourself
+with an Effect logger.
 
 ---
 
@@ -16,9 +18,11 @@ OpenBot does not send these logs to other services. You can add this yourself wi
 | `turn`    | A Turn ends with the status `Failed`.                             |
 | `startup` | OpenBot fails to start, for example because of bad configuration. |
 
-Normal request errors, such as `400`, `401`, `404`, or `409`, are not logged as errors. Work that a person interrupts on purpose is not logged either.
+Normal request errors, such as `400`, `401`, `404`, or `409`, are not logged as
+errors. Work that a person interrupts on purpose is not logged either.
 
-Each error log has the message `OpenBot operation failed` and these annotations. An annotation is a named value that is attached to a log line.
+Each error log has the message `OpenBot operation failed` and these annotations.
+An annotation is a named value that is attached to a log line.
 
 | Annotation                               | Meaning                                                             |
 | ---------------------------------------- | ------------------------------------------------------------------- |
@@ -27,14 +31,16 @@ Each error log has the message `OpenBot operation failed` and these annotations.
 | `requestId`, `method`, `route`, `status` | For HTTP failures. `route` is the route pattern, not the real path. |
 | `chatId`, `turnId`                       | For Turn failures.                                                  |
 
-The log also has the cause of the failure. The cause can hold error messages and other private data.
+The log also has the cause of the failure. The cause can hold error messages and
+other private data.
 
 ---
 
 ## Send errors to your own service
 
-When you run OpenBot from your own code, add a logger with `Logger.layer`. Use `mergeWithExisting: true` to keep the other loggers.
-Provide it outside the server, so that it stays open until the server has closed.
+When you run OpenBot from your own code, add a logger with `Logger.layer`. Use
+`mergeWithExisting: true` to keep the other loggers. Provide it outside the
+server, so that it stays open until the server has closed.
 
 ```ts
 import { NodeRuntime } from "@effect/platform-node"
@@ -64,4 +70,5 @@ NodeRuntime.runMain(
 )
 ```
 
-A logger must not block. To call a slow service, put each event in a queue and send it from a background fiber. A fiber is a light thread that Effect runs.
+A logger must not block. To call a slow service, put each event in a queue and
+send it from a background fiber. A fiber is a light thread that Effect runs.

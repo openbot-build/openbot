@@ -3,9 +3,11 @@ title: App Index
 description: 不用登录，就能搜索公开的 App 列表。
 ---
 
-**App Index**（App 索引）是一个公开的 App 列表。任何人都可以搜索它。你不需要登录，也不需要发送用户令牌。Index 只保存公开的 App 描述。它永远不保存账号、设置、登录信息或结果。
+**App
+Index**（App 索引）是一个公开的 App 列表。任何人都可以搜索它。你不需要登录，也不需要发送用户令牌。Index 只保存公开的 App 描述。它永远不保存账号、设置、登录信息或结果。
 
-Bot 通过 `openbot_search_apps` 和 `openbot_app_details` 工具使用同一个 Index。参见 [App](/zh-cn/docs/apps#turn-中的-app)。
+Bot 通过 `openbot_search_apps` 和 `openbot_app_details`
+工具使用同一个 Index。参见 [App](/zh-cn/docs/apps#turn-中的-app)。
 
 ---
 
@@ -28,7 +30,9 @@ curl https://api.example.com/v1/app-index/sources
 ]
 ```
 
-`openbot` 来源是这台 OpenBot 服务器的 Index。部署所有者可以在代码中加入其他 OpenBot 服务器的 Index。OpenBot 读取它们时不使用用户凭据。在开发模式下，来源名称是 `OpenBot Development Index`，`simulated` 为 `true`。
+`openbot`
+来源是这台 OpenBot 服务器的 Index。部署所有者可以在代码中加入其他 OpenBot 服务器的 Index。OpenBot 读取它们时不使用用户凭据。在开发模式下，来源名称是
+`OpenBot Development Index`，`simulated` 为 `true`。
 
 ---
 
@@ -93,17 +97,23 @@ curl "https://api.example.com/v1/app-index/apps?query=calendar&limit=10"
 - `check` 是最近一次索引检查。参见 [App 如何被收录](#app-如何被收录)。
 - 当本部署屏蔽了这个 App 时，会出现 `restriction`。参见[宿主限制](#宿主限制)。
 
-结果先按 Card 名称排序，再按 Card URL 排序。当同一个 App 出现在多个来源中时，它只出现一次，并带有它所有的 `sources`。
+结果先按 Card 名称排序，再按 Card
+URL 排序。当同一个 App 出现在多个来源中时，它只出现一次，并带有它所有的
+`sources`。
 
 ### 分页
 
-当 `nextCursor` 不是 `null` 时，还有更多结果。再次发送同样的 `query` 和 `source`，并把 `cursor` 设为这个值。
+当 `nextCursor` 不是 `null` 时，还有更多结果。再次发送同样的 `query` 和
+`source`，并把 `cursor` 设为这个值。
 
-如果搜索条件或它的来源在两页之间发生了变化，你会得到 400 `IndexInputInvalid`。请从第一页重新开始。
+如果搜索条件或它的来源在两页之间发生了变化，你会得到 400
+`IndexInputInvalid`。请从第一页重新开始。
 
 ### 部分结果
 
-当一个来源失败时，你仍然会得到其他来源的结果。`issues` 列表会指出每个失败的来源，并给出一条 `message`。请把这些问题展示给用户，让他们知道列表可能不完整。
+当一个来源失败时，你仍然会得到其他来源的结果。`issues`
+列表会指出每个失败的来源，并给出一条
+`message`。请把这些问题展示给用户，让他们知道列表可能不完整。
 
 当所有来源都失败时，你会得到 503 `IndexUnavailable` 和 `issues`。
 
@@ -133,7 +143,8 @@ curl "https://api.example.com/v1/app-index/app?cardUrl=https%3A%2F%2Fapps.exampl
 任何人都不需要注册 App。App 在有用户连接它之后加入 Index：
 
 1. 用户保存一个到该 App 的连接。手动连接不会被收录。
-2. OpenBot 把 Card URL 放入一个队列。连接不会等待这一步。即使 Index 不可用，连接也能工作。
+2. OpenBot 把 Card
+   URL 放入一个队列。连接不会等待这一步。即使 Index 不可用，连接也能工作。
 3. 一个后台 worker 在没有用户数据、没有凭据的情况下再次读取 Card。它检查：
    - Card 是公开且有效的，并且有一个支持该协议的端点；
    - `robots.txt` 允许 `OpenBot` 用户代理；
@@ -141,7 +152,10 @@ curl "https://api.example.com/v1/app-index/app?cardUrl=https%3A%2F%2Fapps.exampl
    - 有一个发布者 Catalog 列出了同一个 Card URL。
 4. 如果所有检查都通过，OpenBot 会保存这个公开条目。
 
-发布者 Catalog 可以位于 Card 自身来源下的 `/.well-known/ai-catalog.json`，也可以是 Card 响应中的 `ai-catalog` 链接，或者是 Card 的 `websiteUrl` 指向的页面。别人的 Catalog 中有一份 Card 的副本是不够的。
+发布者 Catalog 可以位于 Card 自身来源下的
+`/.well-known/ai-catalog.json`，也可以是 Card 响应中的 `ai-catalog`
+链接，或者是 Card 的 `websiteUrl`
+指向的页面。别人的 Catalog 中有一份 Card 的副本是不够的。
 
 OpenBot 大约每小时重新检查一次每个 App。检查失败或结果不确定后，它会在大约一分钟后重试。
 
@@ -162,9 +176,11 @@ OpenBot 大约每小时重新检查一次每个 App。检查失败或结果不�
 
 发布者可以控制自己的 App 是否在 Index 中：
 
-- **`noindex`。** 在 Card 响应中发送 `X-Robots-Tag: noindex`。你也可以发送 `X-Robots-Tag: OpenBot: noindex`，只针对这个爬虫。在下次检查时，OpenBot 会移除这个条目，或者根本不添加它。
+- **`noindex`。** 在 Card 响应中发送 `X-Robots-Tag: noindex`。你也可以发送
+  `X-Robots-Tag: OpenBot: noindex`，只针对这个爬虫。在下次检查时，OpenBot 会移除这个条目，或者根本不添加它。
 - **从你的 Catalog 中移除 Card。** 在下次检查时，OpenBot 会撤回这个条目。
-- **`robots.txt`。** 屏蔽 `OpenBot` 用户代理。在下次检查时，OpenBot 会排除这个 App，它不会再出现在搜索中。
+- **`robots.txt`。** 屏蔽 `OpenBot`
+  用户代理。在下次检查时，OpenBot 会排除这个 App，它不会再出现在搜索中。
 
 如果你的 Catalog 无法访问，这不算撤回。检查结果为 `Unconfirmed`，条目会保留。
 
@@ -179,7 +195,10 @@ OpenBot 大约每小时重新检查一次每个 App。检查失败或结果不�
 
 ## 宿主限制
 
-平台管理员可以屏蔽一些 App。每条限制都有一个 `cardUrl`、一个公开的 `reason` 和一个 HTTPS `appealUrl`。它们位于平台设置的 `appRestrictions` 中。用 `PATCH /v1/platform/settings` 修改它们。参见 [Platform](/zh-cn/docs/platform#平台设置)。
+平台管理员可以屏蔽一些 App。每条限制都有一个 `cardUrl`、一个公开的 `reason`
+和一个 HTTPS `appealUrl`。它们位于平台设置的 `appRestrictions` 中。用
+`PATCH /v1/platform/settings` 修改它们。参见
+[Platform](/zh-cn/docs/platform#平台设置)。
 
 被屏蔽的 App：
 

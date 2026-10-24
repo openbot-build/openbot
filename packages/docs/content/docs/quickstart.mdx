@@ -12,7 +12,9 @@ You do not need an identity provider or a model key.
 
 You need:
 
-1. [devenv](https://devenv.sh) 2.0 or newer. It gives you the right Node.js, pnpm, PostgreSQL, and mkcert. devenv also runs the development database, so you do not need Docker.
+1. [devenv](https://devenv.sh) 2.0 or newer. It gives you the right Node.js,
+   pnpm, PostgreSQL, and mkcert. devenv also runs the development database, so
+   you do not need Docker.
 2. A copy of the code:
 
 ```sh
@@ -37,9 +39,10 @@ devenv shell -- pnpm dev:setup
 devenv shell -- mkcert -install
 ```
 
-The first command makes `.env.development` with a new secret key, and a certificate for `localhost`.
-If you have an `.env.development` from an older version, delete it first.
-The second command makes your computer trust that certificate. It can ask for your password.
+The first command makes `.env.development` with a new secret key, and a
+certificate for `localhost`. If you have an `.env.development` from an older
+version, delete it first. The second command makes your computer trust that
+certificate. It can ask for your password.
 
 </Step>
 
@@ -51,9 +54,10 @@ The second command makes your computer trust that certificate. It can ask for yo
 devenv shell -- pnpm dev
 ```
 
-This starts PostgreSQL, builds OpenBot, updates the database, and starts OpenBot at `https://localhost:8443`.
-The development server sets up the platform by itself, so you do not run the setup program.
-The first start can take a few minutes. Press **Ctrl+C** to stop. Your data stays in the database.
+This starts PostgreSQL, builds OpenBot, updates the database, and starts OpenBot
+at `https://localhost:8443`. The development server sets up the platform by
+itself, so you do not run the setup program. The first start can take a few
+minutes. Press **Ctrl+C** to stop. Your data stays in the database.
 
 </Step>
 
@@ -68,7 +72,8 @@ curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
   -d '{}'
 ```
 
-In development, this signs you in to the local test account `developer@localhost.test` at once. The sign-in cookie goes to `cookies.txt`.
+In development, this signs you in to the local test account
+`developer@localhost.test` at once. The sign-in cookie goes to `cookies.txt`.
 This account is a platform admin. It has no organization yet.
 
 </Step>
@@ -77,7 +82,8 @@ This account is a platform admin. It has no organization yet.
 
 ### Make an organization
 
-Bots, Chats and tokens belong to an [organization](/docs/organization). Make one for yourself:
+Bots, Chats and tokens belong to an [organization](/docs/organization). Make one
+for yourself:
 
 ```sh
 curl -b cookies.txt \
@@ -103,7 +109,8 @@ curl -b cookies.txt \
   https://localhost:8443/v1/user/tokens
 ```
 
-The token belongs to your new organization. The answer has a `secret` that starts with `obut_`. You see it only once, so keep it:
+The token belongs to your new organization. The answer has a `secret` that
+starts with `obut_`. You see it only once, so keep it:
 
 ```sh
 export OPENBOT_TOKEN=obut_...
@@ -124,7 +131,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://localhost:8443/v1/bots
 ```
 
-Take `id` from the answer. To use this Bot when you name no Bot, make it your [default Bot](/docs/bots#your-default-bot).
+Take `id` from the answer. To use this Bot when you name no Bot, make it your
+[default Bot](/docs/bots#your-default-bot).
 
 </Step>
 
@@ -141,7 +149,10 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://localhost:8443/v1/bots/<botId>/messages
 ```
 
-OpenBot makes your Chat with the Bot, and the message starts a Turn. The Turn runs in the background and you get `202` at once, with `delivery: "started"`. Add `"stream": true` to get the answer as a live stream. To read the answer later, take `chat` from the answer and call `GET /v1/chats/<chatId>`.
+OpenBot makes your Chat with the Bot, and the message starts a Turn. The Turn
+runs in the background and you get `202` at once, with `delivery: "started"`.
+Add `"stream": true` to get the answer as a live stream. To read the answer
+later, take `chat` from the answer and call `GET /v1/chats/<chatId>`.
 
 </Step>
 
@@ -155,6 +166,7 @@ See [Models](/docs/models) for the other test models.
 ## Next steps
 
 - Read how [Chats](/docs/chats) and Turns work.
-- Use a real identity provider: [Authentication](/docs/authentication) and [Platform](/docs/platform).
+- Use a real identity provider: [Authentication](/docs/authentication) and
+  [Platform](/docs/platform).
 - Add a real model: [Models](/docs/models).
 - Run OpenBot on a server: [Deploy](/docs/deploy).

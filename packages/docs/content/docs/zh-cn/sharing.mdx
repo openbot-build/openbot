@@ -1,6 +1,7 @@
 ---
 title: 分享 Bots
-description: 邀请其他人在他们自己的组织中使用你的某个 Bot，可以通过邮箱或链接邀请。
+description:
+  邀请其他人在他们自己的组织中使用你的某个 Bot，可以通过邮箱或链接邀请。
 ---
 
 你可以把一个 Bot 分享给组织外的人，就像把成员加入组织一样。你可以按邮箱邀请一个人，也可以创建一个**邀请链接**。你的客户端可以把这个链接显示成二维码。这个人接受邀请，然后在他们自己的组织中使用这个 Bot。
@@ -16,7 +17,8 @@ description: 邀请其他人在他们自己的组织中使用你的某个 Bot，
 
 ## 邀请别人
 
-你需要这个 Bot 上的 `bots.share`。成员可以分享自己的 Bots。管理员还可以分享组织的共享 Bots。只有顶层 Bot 才能被分享：它由一个成员或组织拥有，并且没有被归档。
+你需要这个 Bot 上的
+`bots.share`。成员可以分享自己的 Bots。管理员还可以分享组织的共享 Bots。只有顶层 Bot 才能被分享：它由一个成员或组织拥有，并且没有被归档。
 
 要邀请一个人，请发送这个人的邮箱。这个邀请的有效期是 7 天，和[组织邀请](/zh-cn/docs/organization#邀请)一样：
 
@@ -60,11 +62,16 @@ curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
 }
 ```
 
-`url` 由公开源、`path`、`#` 和密钥组成。浏览器从不把 `#` 后面的部分发给服务器，所以密钥永远不会进入服务器日志。没有 `path` 时，`url` 是 `null`。把 `url` 显示成二维码，或者用 `secret` 拼出你自己的地址。
+`url` 由公开源、`path`、`#` 和密钥组成。浏览器从不把 `#`
+后面的部分发给服务器，所以密钥永远不会进入服务器日志。没有 `path` 时，`url` 是
+`null`。把 `url` 显示成二维码，或者用 `secret` 拼出你自己的地址。
 
-`GET /v1/bots/:botId/invitations/:invitationId/secret` 再次给出链接的密钥和 `url`，例如用来再次打印二维码。OpenBot 把密钥加密保存，并保存一个哈希值来查找这个链接。
+`GET /v1/bots/:botId/invitations/:invitationId/secret` 再次给出链接的密钥和
+`url`，例如用来再次打印二维码。OpenBot 把密钥加密保存，并保存一个哈希值来查找这个链接。
 
-`GET /v1/bots/:botId/invitations` 列出邀请。`DELETE /v1/bots/:botId/invitations/:invitationId` 撤销一个邀请。之后，没有人能接受它。之前已经接受它的人仍然是成员。
+`GET /v1/bots/:botId/invitations`
+列出邀请。`DELETE /v1/bots/:botId/invitations/:invitationId`
+撤销一个邀请。之后，没有人能接受它。之前已经接受它的人仍然是成员。
 
 ---
 
@@ -82,15 +89,18 @@ curl -X POST -H "Authorization: Bearer $THEIR_TOKEN" \
   https://api.example.com/v1/bot-invitations/accept
 ```
 
-`organization` 是这个人使用这个 Bot 的组织。他们必须是这个组织的有效成员。当他们只有一个组织，或者使用用户令牌时，可以不填它。返回的是他们新的关联 Bot。
+`organization`
+是这个人使用这个 Bot 的组织。他们必须是这个组织的有效成员。当他们只有一个组织，或者使用用户令牌时，可以不填它。返回的是他们新的关联 Bot。
 
-如果这个人已经在使用这个 Bot，他们会得到原来的关联 Bot。要拒绝邮箱邀请，请使用 `POST /v1/invitations/:invitationId/decline`。
+如果这个人已经在使用这个 Bot，他们会得到原来的关联 Bot。要拒绝邮箱邀请，请使用
+`POST /v1/invitations/:invitationId/decline`。
 
 ---
 
 ## 使用共享的 Bot
 
-关联 Bot 是成员在他们自己的组织中的一个 Bot。它带有 `source`，`source` 指向你的 Bot：
+关联 Bot 是成员在他们自己的组织中的一个 Bot。它带有 `source`，`source`
+指向你的 Bot：
 
 ```json
 {
@@ -103,13 +113,18 @@ curl -X POST -H "Authorization: Bearer $THEIR_TOKEN" \
 
 成员像使用自己的 Bots 一样使用它：
 
-- 他们在自己的组织中，用自己的 [Chat](/zh-cn/docs/chats) 和它说话，并且可以把它设为自己的默认 Bot。
-- 它使用他们的权限、他们连接的 [Apps](/zh-cn/docs/apps)，以及他们的其他 Bots。它可以把工作交给他们的 Bots。
-- 它的 [requests](/zh-cn/docs/requests) 会发给这个成员。他们的决定、[Grants](/zh-cn/docs/requests#回答请求) 和 [Rules](/zh-cn/docs/rules) 只在他们的组织中有效。你的只在你的组织中有效。
+- 他们在自己的组织中，用自己的 [Chat](/zh-cn/docs/chats)
+  和它说话，并且可以把它设为自己的默认 Bot。
+- 它使用他们的权限、他们连接的
+  [Apps](/zh-cn/docs/apps)，以及他们的其他 Bots。它可以把工作交给他们的 Bots。
+- 它的 [requests](/zh-cn/docs/requests)
+  会发给这个成员。他们的决定、[Grants](/zh-cn/docs/requests#回答请求) 和
+  [Rules](/zh-cn/docs/rules) 只在他们的组织中有效。你的只在你的组织中有效。
 - 他们的组织为模型付费。如果你的 Bot 指定了一个他们的组织没有的模型，他们的 Chat 不会使用它。服务器有默认模型时，Chat 会使用这个默认模型。
 - 你永远看不到他们的 Chats。
 
-名字、角色、指令和模型总是来自你的 Bot。你修改它们时，每个关联 Bot 也会一起改变。成员不能修改它们。成员可以修改 `planApproval`。
+名字、角色、指令和模型总是来自你的 Bot。你修改它们时，每个关联 Bot 也会一起改变。成员不能修改它们。成员可以修改
+`planApproval`。
 
 这个 Bot 在你的组织中保存[一个记忆池](/zh-cn/docs/memory)。它在某个成员的组织中学到的内容属于这个成员，并且只在那个组织中有效。没有人能读取关于另一个人的记忆：你不能，其他成员也不能。你可以用 purge 删除一个成员留下的内容，而不用读取它。只有你能管理记忆 Bot。
 

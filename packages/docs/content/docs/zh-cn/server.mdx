@@ -3,10 +3,12 @@ title: 从代码中运行
 description: 在你自己的 TypeScript 程序中启动 OpenBot。
 ---
 
-`openbot` 程序能满足大多数需要。如果你需要更多，可以在自己的程序中启动 OpenBot。
-这样你就能加入自己的模型、工具、路由和 App Index 来源。
+`openbot`
+程序能满足大多数需要。如果你需要更多，可以在自己的程序中启动 OpenBot。这样你就能加入自己的模型、工具、路由和 App
+Index 来源。
 
-OpenBot 用 [Effect](https://effect.website) 构建。你用 Layer 来组装它。Layer 是 Effect 中用来构建服务的“配方”。创建 Layer 不会打开网络或数据库。这些操作在你启动它时才会发生。
+OpenBot 用 [Effect](https://effect.website)
+构建。你用 Layer 来组装它。Layer 是 Effect 中用来构建服务的“配方”。创建 Layer 不会打开网络或数据库。这些操作在你启动它时才会发生。
 
 ---
 
@@ -30,8 +32,10 @@ NodeRuntime.runMain(
 )
 ```
 
-`EnvironmentConfiguration.load` 读取[配置](/zh-cn/docs/configuration)中的变量。它返回 `host`、`port`、`databaseUrl`、`secretKeys` 和 `tls`。
-你也可以在代码中直接写出这些值。
+`EnvironmentConfiguration.load`
+读取[配置](/zh-cn/docs/configuration)中的变量。它返回
+`host`、`port`、`databaseUrl`、`secretKeys` 和
+`tls`。你也可以在代码中直接写出这些值。
 
 这个程序仍然需要一个平台。在用户使用之前，先运行一次设置程序。请看[平台](/zh-cn/docs/platform#设置)。
 
@@ -48,7 +52,8 @@ NodeRuntime.runMain(
 | `EnvironmentConfiguration`                               | 从环境变量读取实例设置。                                                        |
 | `Auth`、`Chats`、`AppHost`、`AppPlugin`、`Configuration` | 用于高级配置的服务类型。                                                        |
 
-子路径 `@openbot-build/openbot/Development` 导出开发服务器。见 [运行开发服务器](#运行开发服务器)。
+子路径 `@openbot-build/openbot/Development` 导出开发服务器。见
+[运行开发服务器](#运行开发服务器)。
 
 ---
 
@@ -68,12 +73,15 @@ NodeRuntime.runMain(
 
 ### 登录
 
-`Server.layer` 不接受登录选项。它从[平台设置](/zh-cn/docs/platform#平台设置)中读取公开源、平台提供方和登录密钥。
+`Server.layer`
+不接受登录选项。它从[平台设置](/zh-cn/docs/platform#平台设置)中读取公开源、平台提供方和登录密钥。
 
 - 在完成设置之前，除 `/health` 外的每个路由都返回 `503` 和 `SetupRequired`。
 - 当其中某个设置改变时，服务器会用新值构建一个新的应用。新应用先开始接收请求，然后旧应用停止。
 
-`Server.layerFixed` 则使用一份固定的 `auth` 配置，从不构建新应用。它还把应用的服务交给你的程序，所以测试可以使用它们。当数据库中没有平台设置时，它会先按 `auth` 的 `publicOrigin` 写入平台设置。测试和开发服务器使用它。
+`Server.layerFixed` 则使用一份固定的 `auth`
+配置，从不构建新应用。它还把应用的服务交给你的程序，所以测试可以使用它们。当数据库中没有平台设置时，它会先按
+`auth` 的 `publicOrigin` 写入平台设置。测试和开发服务器使用它。
 
 ### 应用选项
 
@@ -109,11 +117,13 @@ NodeRuntime.runMain(
 | `layerExecution` | 一个函数，为每个 Turn 构建额外的服务，例如工具处理器。          |
 
 模型来自数据库中的模型提供方和 `builtinModels`。请看[模型](/zh-cn/docs/models)。
-[Bot 记忆](/zh-cn/docs/memory)遵循[组织设置](/zh-cn/docs/organization#设置)中的 `botMemory`。
+[Bot 记忆](/zh-cn/docs/memory)遵循[组织设置](/zh-cn/docs/organization#设置)中的
+`botMemory`。
 
 ### 添加工具
 
-工具是模型可以调用的函数。用 Effect AI 创建它，然后把 toolkit 及其处理器交给 OpenBot：
+工具是模型可以调用的函数。用 Effect
+AI 创建它，然后把 toolkit 及其处理器交给 OpenBot：
 
 ```ts
 import { type Configuration, Server } from "@openbot-build/openbot"
@@ -140,13 +150,18 @@ const server = (settings: Configuration.Settings) =>
 	}).pipe(Layer.provide(handlers))
 ```
 
-如果每次调用都需要一个决定，就在 `Tool.make` 中加上 `needsApproval: true`。这样 OpenBot 会为它检查能力 `tools.call`。当这次调用需要决策者时，Bot 会得到一个待定的结果，调用会在之后被允许时运行。请看 [Request](/zh-cn/docs/requests)。
+如果每次调用都需要一个决定，就在 `Tool.make` 中加上
+`needsApproval: true`。这样 OpenBot 会为它检查能力
+`tools.call`。当这次调用需要决策者时，Bot 会得到一个待定的结果，调用会在之后被允许时运行。请看
+[Request](/zh-cn/docs/requests)。
 
 ---
 
 ## 你自己的路由
 
-`routes` 向同一个服务器添加 HTTP 路由。它是一个函数，接收当前的登录配置，返回一个 Layer。这个 Layer 可以用 `Auth` 服务检查登录 cookie。
+`routes`
+向同一个服务器添加 HTTP 路由。它是一个函数，接收当前的登录配置，返回一个 Layer。这个 Layer 可以用
+`Auth` 服务检查登录 cookie。
 
 ```ts
 import { HttpRouter, HttpServerResponse } from "effect/http"
@@ -164,19 +179,23 @@ Server.layer({ ...settings, routes: () => routes })
 
 ## 使用你自己的 HTTP 服务器
 
-`Server.layerApp(options)` 返回一个函数。这个函数接收一份登录配置，返回对应的 OpenBot 路由和服务。
-`Server.layerApi({ publicOrigin })` 只提供 OpenBot 的路由。它还会为失败的请求添加错误日志。
+`Server.layerApp(options)`
+返回一个函数。这个函数接收一份登录配置，返回对应的 OpenBot 路由和服务。
+`Server.layerApi({ publicOrigin })`
+只提供 OpenBot 的路由。它还会为失败的请求添加错误日志。
 
-`Server.layer` 和 `Server.layerFixed` 会启动它们自己的 Node.js 服务器。
-要把 OpenBot 放进你已有的服务器，请自己组装同样的部件。`layerFixed` 如何使用一份配置，请读 `packages/openbot/src/app/Server.ts`。平台设置改变时 `Server.layer` 如何构建新应用，请读 `packages/openbot/src/app/Supervisor.ts`。
-把登录密钥放在平台设置中，不要放在你自己的环境变量里。每个实例都必须使用同一个登录密钥。
+`Server.layer` 和 `Server.layerFixed`
+会启动它们自己的 Node.js 服务器。要把 OpenBot 放进你已有的服务器，请自己组装同样的部件。`layerFixed`
+如何使用一份配置，请读 `packages/openbot/src/app/Server.ts`。平台设置改变时
+`Server.layer` 如何构建新应用，请读
+`packages/openbot/src/app/Supervisor.ts`。把登录密钥放在平台设置中，不要放在你自己的环境变量里。每个实例都必须使用同一个登录密钥。
 
 ---
 
 ## 迁移数据库
 
-`DatabasePostgres.migrate` 应用迁移。`OpenBot.layerShared` 只检查表是否存在，不存在就失败。
-在启动服务器之前，用单独的程序运行迁移：
+`DatabasePostgres.migrate` 应用迁移。`OpenBot.layerShared`
+只检查表是否存在，不存在就失败。在启动服务器之前，用单独的程序运行迁移：
 
 ```ts
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
@@ -198,7 +217,8 @@ NodeRuntime.runMain(
 
 ## 运行开发服务器
 
-`pnpm dev` 运行开发服务器。它有一个本地测试账户、模拟的模型和一个模拟的 App。基于 OpenBot 构建的项目可以在自己的程序中运行同样的服务器：
+`pnpm dev`
+运行开发服务器。它有一个本地测试账户、模拟的模型和一个模拟的 App。基于 OpenBot 构建的项目可以在自己的程序中运行同样的服务器：
 
 ```ts
 import { NodeRuntime } from "@effect/platform-node"
@@ -228,9 +248,10 @@ NodeRuntime.runMain(
 )
 ```
 
-`Development.layer` 自己写入平台设置，所以它不需要设置程序。`Development.developmentSecret` 用第一个机密密钥生成登录密钥，所以重启后它保持不变。永远不要在生产环境中使用开发服务器。任何能访问它的人都可以登录。
+`Development.layer`
+自己写入平台设置，所以它不需要设置程序。`Development.developmentSecret`
+用第一个机密密钥生成登录密钥，所以重启后它保持不变。永远不要在生产环境中使用开发服务器。任何能访问它的人都可以登录。
 
 ## 把错误日志发送到你自己的服务
 
-OpenBot 把失败写成错误日志。添加你自己的 Effect 日志器，就能把它们发送到其他服务。
-每条日志包含什么，以及完整示例，请看[错误日志](/zh-cn/docs/error-logs)。
+OpenBot 把失败写成错误日志。添加你自己的 Effect 日志器，就能把它们发送到其他服务。每条日志包含什么，以及完整示例，请看[错误日志](/zh-cn/docs/error-logs)。

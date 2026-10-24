@@ -3,8 +3,7 @@ title: 配置
 description: 每个 OpenBot 实例从环境中读取什么，以及其他所有设置存放在哪里。
 ---
 
-OpenBot 可以运行多个实例。一个实例就是一个正在运行的 OpenBot 服务器进程。同一个部署的所有实例使用同一个数据库。
-本页列出每个实例在启动时读取的少数几个值。它也说明其他所有设置存放在哪里。
+OpenBot 可以运行多个实例。一个实例就是一个正在运行的 OpenBot 服务器进程。同一个部署的所有实例使用同一个数据库。本页列出每个实例在启动时读取的少数几个值。它也说明其他所有设置存放在哪里。
 
 ---
 
@@ -12,7 +11,8 @@ OpenBot 可以运行多个实例。一个实例就是一个正在运行的 OpenB
 
 设置分为两种：
 
-- **实例设置**属于一个实例。没有其他实例需要同样的值。它们来自环境变量或 `/run/secrets` 中的文件。
+- **实例设置**属于一个实例。没有其他实例需要同样的值。它们来自环境变量或
+  `/run/secrets` 中的文件。
 - **共享设置**在每个实例上都必须相同。它们存放在 PostgreSQL 中。你通过 API 修改它们，每个实例都会立刻使用修改后的值。
 
 只有一个例外：`OPENBOT_SECRET_KEYS`。每个实例都需要同样的密钥。但这些密钥用来加密数据库中的机密，所以它们不能存放在数据库中。每个实例从自己的环境中读取它们。
@@ -35,19 +35,20 @@ OpenBot 可以运行多个实例。一个实例就是一个正在运行的 OpenB
 | `OPENBOT_TLS_KEY`        | 否   |             | 该证书对应的 PEM 私钥文件的路径。              |
 | `OPENBOT_OUTBOUND_ALLOW` | 否   |             | OpenBot 可以连接的私有主机和 IP 范围。见下文。 |
 
-Docker 镜像设置了 `OPENBOT_HOST=0.0.0.0` 和 `OPENBOT_PORT=3000`，这样服务器可以接收来自容器外部的流量。
+Docker 镜像设置了 `OPENBOT_HOST=0.0.0.0` 和
+`OPENBOT_PORT=3000`，这样服务器可以接收来自容器外部的流量。
 
 ### 数据库
 
-`OPENBOT_DATABASE_URL` 的形式是：`postgres://openbot:secret@db.example.com:5432/openbot`。
-服务器、迁移程序和设置程序都会读取它。
+`OPENBOT_DATABASE_URL`
+的形式是：`postgres://openbot:secret@db.example.com:5432/openbot`。服务器、迁移程序和设置程序都会读取它。
 
 服务器启动时，会检查所有表是否都存在。如果不存在，它就会停止。请先运行迁移程序。参见[部署](/zh-cn/docs/deploy)。
 
 ### TLS
 
-同时设置 `OPENBOT_TLS_CERT` 和 `OPENBOT_TLS_KEY`，OpenBot 就会自己提供 HTTPS。两个都不设置，则提供普通 HTTP。
-如果只设置其中一个，OpenBot 不会启动。
+同时设置 `OPENBOT_TLS_CERT` 和
+`OPENBOT_TLS_KEY`，OpenBot 就会自己提供 HTTPS。两个都不设置，则提供普通 HTTP。如果只设置其中一个，OpenBot 不会启动。
 
 在生产环境中，通常由反向代理处理 HTTPS。这时两个值都留空。参见[部署](/zh-cn/docs/deploy)。
 
@@ -64,7 +65,8 @@ OpenBot 会连接别人给它的地址，例如模型提供方的端点、SSO �
 
 OpenBot 在 DNS 查询之后，检查每个新连接的真实地址。它也会检查每一次重定向。指向私有地址的主机名同样会被阻止。
 
-要有意开放一个私有目标，请把它写进 `OPENBOT_OUTBOUND_ALLOW`。条目之间用逗号分隔。每个条目是下面的一种：
+要有意开放一个私有目标，请把它写进
+`OPENBOT_OUTBOUND_ALLOW`。条目之间用逗号分隔。每个条目是下面的一种：
 
 | 条目         | 示例                           | 开放的内容                                             |
 | ------------ | ------------------------------ | ------------------------------------------------------ |
@@ -90,7 +92,8 @@ OPENBOT_OUTBOUND_ALLOW=localhost,10.20.0.0/16
 
 ## 机密密钥
 
-OpenBot 在数据库中保存一些机密。它用 `OPENBOT_SECRET_KEYS` 中的密钥加密它们。这些机密是：
+OpenBot 在数据库中保存一些机密。它用 `OPENBOT_SECRET_KEYS`
+中的密钥加密它们。这些机密是：
 
 - App 连接的私密数据，比如 App 凭据、私密设置和登录状态；
 - [模型提供方](/zh-cn/docs/models)的 API 密钥；
@@ -116,8 +119,7 @@ OPENBOT_SECRET_KEYS=k2:<64 hexadecimal characters>,k1:<64 hexadecimal characters
 echo "k1:$(openssl rand -hex 32)"
 ```
 
-给每个实例同样的列表。
-把密钥和数据库备份放在一起保管。如果你丢失了密钥，OpenBot 就无法读取数据库中的机密。
+给每个实例同样的列表。把密钥和数据库备份放在一起保管。如果你丢失了密钥，OpenBot 就无法读取数据库中的机密。
 
 ### 更换密钥
 
@@ -127,8 +129,8 @@ echo "k1:$(openssl rand -hex 32)"
 2. 把它放在列表的第一位，旧密钥放在它后面：`k2:<new>,k1:<old>`。
 3. 把新列表交给每个实例，然后重新启动它们。
 
-OpenBot 现在用 `k2` 封存新的机密。`k1` 封存的机密仍然可以打开。
-只要数据库中还有旧密钥封存的机密，就要把旧密钥留在列表中。
+OpenBot 现在用 `k2` 封存新的机密。`k1`
+封存的机密仍然可以打开。只要数据库中还有旧密钥封存的机密，就要把旧密钥留在列表中。
 
 <Callout type="warn">
 	不要把 `OPENBOT_SECRET_KEYS`
@@ -139,13 +141,16 @@ OpenBot 现在用 `k2` 封存新的机密。`k1` 封存的机密仍然可以打�
 
 ## 以文件形式提供机密
 
-当某个环境变量没有设置时，OpenBot 会改为读取文件 `/run/secrets/<NAME>`。比如，它从 `/run/secrets/OPENBOT_SECRET_KEYS` 读取 `OPENBOT_SECRET_KEYS`。Docker 和 Compose 会把机密放在这个文件夹中。
+当某个环境变量没有设置时，OpenBot 会改为读取文件
+`/run/secrets/<NAME>`。比如，它从 `/run/secrets/OPENBOT_SECRET_KEYS` 读取
+`OPENBOT_SECRET_KEYS`。Docker 和 Compose 会把机密放在这个文件夹中。
 
 - 环境变量总是优先，即使文件存在也是如此。
 - OpenBot 会去掉文件开头和结尾的空格与换行。
 - 空文件视为未设置。缺少文件或文件夹也视为未设置。
 
-这对本页的每个变量都有效。它对机密最有用，因为环境变量会显示在 `docker inspect` 中，而文件不会。
+这对本页的每个变量都有效。它对机密最有用，因为环境变量会显示在 `docker inspect`
+中，而文件不会。
 
 ---
 
@@ -153,13 +158,15 @@ OpenBot 现在用 `k2` 封存新的机密。`k1` 封存的机密仍然可以打�
 
 新数据库中没有共享设置。在大家使用 OpenBot 之前，你要运行一次设置程序。它会写入第一份平台设置和第一批平台管理员。
 
-在此之前，服务器可以启动，但除 `/health` 之外的每个路由都会返回 `503`，响应体如下：
+在此之前，服务器可以启动，但除 `/health` 之外的每个路由都会返回
+`503`，响应体如下：
 
 ```json
 { "_tag": "SetupRequired" }
 ```
 
-日志也会提示你运行设置。所有参数参见 [Platform](/zh-cn/docs/platform#设置)，命令参见[部署](/zh-cn/docs/deploy)。
+日志也会提示你运行设置。所有参数参见
+[Platform](/zh-cn/docs/platform#设置)，命令参见[部署](/zh-cn/docs/deploy)。
 
 ---
 
@@ -167,8 +174,10 @@ OpenBot 现在用 `k2` 封存新的机密。`k1` 封存的机密仍然可以打�
 
 其他所有设置都是保存在数据库中的共享设置。大部分设置在两份文档中：
 
-- **平台设置**，位于 `/v1/platform/settings`。只有平台管理员能修改。参见 [Platform](/zh-cn/docs/platform)。
-- **组织设置**，位于 `/v1/organization/settings`。每个组织都有自己的一份。参见[组织](/zh-cn/docs/organization#设置)。
+- **平台设置**，位于 `/v1/platform/settings`。只有平台管理员能修改。参见
+  [Platform](/zh-cn/docs/platform)。
+- **组织设置**，位于
+  `/v1/organization/settings`。每个组织都有自己的一份。参见[组织](/zh-cn/docs/organization#设置)。
 
 旧版本的 OpenBot 会读取更多环境变量。OpenBot 现在忽略它们。下表显示每个值的去处：
 
@@ -209,13 +218,16 @@ OpenBot 现在用 `k2` 封存新的机密。`k1` 封存的机密仍然可以打�
 
 每个缓存条目也会在 30 秒后过期。所以，错过消息的实例也会很快得到修改。
 
-修改 `publicOrigin`、平台身份提供方或登录密钥，会改变登录的工作方式。这时每个实例会在同一个进程中启动一个新的应用。新应用先开始接收请求，然后旧应用停止。不会丢失任何请求。
+修改
+`publicOrigin`、平台身份提供方或登录密钥，会改变登录的工作方式。这时每个实例会在同一个进程中启动一个新的应用。新应用先开始接收请求，然后旧应用停止。不会丢失任何请求。
 
 ---
 
 ## 生产环境 Compose
 
-Compose 文件 `deploy/docker/compose.production.yaml` 读取下面这些变量。只有 `OPENBOT_DATABASE_URL`、`OPENBOT_SECRET_KEYS` 和 `OPENBOT_OUTBOUND_ALLOW` 会传给 OpenBot。
+Compose 文件 `deploy/docker/compose.production.yaml` 读取下面这些变量。只有
+`OPENBOT_DATABASE_URL`、`OPENBOT_SECRET_KEYS` 和 `OPENBOT_OUTBOUND_ALLOW`
+会传给 OpenBot。
 
 | 变量                            | 必需 | 默认值                        | 含义                                                      |
 | ------------------------------- | ---- | ----------------------------- | --------------------------------------------------------- |
@@ -228,14 +240,19 @@ Compose 文件 `deploy/docker/compose.production.yaml` 读取下面这些变量�
 | `PROTOCOL_TEST_PUBLIC_ORIGIN`   | 是   |                               | 协议测试服务的公开 HTTPS 源。                             |
 | `PROTOCOL_TEST_ALLOWED_ORIGINS` | 否   | `PROTOCOL_TEST_PUBLIC_ORIGIN` | 协议测试服务接受的浏览器源。                              |
 
-Compose 文件把 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS` 以 `/run/secrets` 中文件的形式交给 OpenBot。它把 `OPENBOT_OUTBOUND_ALLOW` 作为环境变量交给 OpenBot。`openbot` 服务没有其他环境变量。参见[部署](/zh-cn/docs/deploy#用-compose-运行)。
-完整的模板在 `deploy/docker/production.env.example` 中。
+Compose 文件把 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS` 以 `/run/secrets`
+中文件的形式交给 OpenBot。它把 `OPENBOT_OUTBOUND_ALLOW`
+作为环境变量交给 OpenBot。`openbot`
+服务没有其他环境变量。参见[部署](/zh-cn/docs/deploy#用-compose-运行)。完整的模板在
+`deploy/docker/production.env.example` 中。
 
 ---
 
 ## 开发
 
-`devenv shell -- pnpm dev:setup` 会根据 `.env.development.example` 生成文件 `.env.development`。它会在 `OPENBOT_SECRET_KEYS` 中填入一个名为 `dev` 的新随机密钥。
+`devenv shell -- pnpm dev:setup` 会根据 `.env.development.example` 生成文件
+`.env.development`。它会在 `OPENBOT_SECRET_KEYS` 中填入一个名为 `dev`
+的新随机密钥。
 
 | 变量                        | 默认值    | 含义                                      |
 | --------------------------- | --------- | ----------------------------------------- |
@@ -263,15 +280,26 @@ Compose 文件把 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS` 以 `/run/sec
 | `OPENBOT_DEV_S3_ENDPOINT`   | `http://127.0.0.1:9000`                                     |
 | `OPENBOT_DEV_S3_BUCKET`     | `openbot`                                                   |
 
-只有开发入口会读取 `OPENBOT_DEV_PUBLIC_ORIGIN`。它不需要设置步骤。每次启动时，它会自己为这个源写入平台设置。它会把本地账号 `developer@localhost.test` 设为平台管理员，并打开本地测试登录。参见[身份验证](/zh-cn/docs/authentication#开发账户)。
+只有开发入口会读取
+`OPENBOT_DEV_PUBLIC_ORIGIN`。它不需要设置步骤。每次启动时，它会自己为这个源写入平台设置。它会把本地账号
+`developer@localhost.test`
+设为平台管理员，并打开本地测试登录。参见[身份验证](/zh-cn/docs/authentication#开发账户)。
 
 生产程序永远不会使用本地测试账号。没有任何开关可以打开它。
 
-开发服务器同样会阻止私有目标。要使用你机器上的模型服务器（例如 Ollama），请在 `.env.development` 中设置 `OPENBOT_OUTBOUND_ALLOW=localhost`。参见[出站连接](#出站连接)。
+开发服务器同样会阻止私有目标。要使用你机器上的模型服务器（例如 Ollama），请在
+`.env.development` 中设置
+`OPENBOT_OUTBOUND_ALLOW=localhost`。参见[出站连接](#出站连接)。
 
-devenv 还会为[文件](/zh-cn/docs/files)启动 [RustFS](https://rustfs.com)，一个小的对象存储。它的数据在 `.devenv/state/rustfs` 中。每次启动时，开发入口会创建 bucket `openbot`，并把存储写入平台设置。RustFS 在 `127.0.0.1` 上，这是一个私有地址。所以开发入口会为自己打开这一个主机。你不需要把它加入 `OPENBOT_OUTBOUND_ALLOW`。
+devenv 还会为[文件](/zh-cn/docs/files)启动
+[RustFS](https://rustfs.com)，一个小的对象存储。它的数据在
+`.devenv/state/rustfs` 中。每次启动时，开发入口会创建 bucket
+`openbot`，并把存储写入平台设置。RustFS 在 `127.0.0.1`
+上，这是一个私有地址。所以开发入口会为自己打开这一个主机。你不需要把它加入
+`OPENBOT_OUTBOUND_ALLOW`。
 
-要使用另一个数据库，请在 `.env.development` 中设置 `OPENBOT_DATABASE_URL`。参见[参与贡献](/zh-cn/docs/contributing)。
+要使用另一个数据库，请在 `.env.development` 中设置
+`OPENBOT_DATABASE_URL`。参见[参与贡献](/zh-cn/docs/contributing)。
 
 ---
 

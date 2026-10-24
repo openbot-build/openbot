@@ -3,14 +3,15 @@ title: Platform
 description: 平台管理员、设置程序、平台设置，以及共享的模型和模型提供方。
 ---
 
-Platform（平台）就是整个 OpenBot 部署。一个平台有许多组织。
-平台管理员负责运行平台。本页介绍如何设置平台，以及如何用 `/v1/platform` 管理它。
+Platform（平台）就是整个 OpenBot 部署。一个平台有许多组织。平台管理员负责运行平台。本页介绍如何设置平台，以及如何用
+`/v1/platform` 管理它。
 
 ---
 
 ## 平台管理员
 
-平台管理员管理平台。平台管理员**不是**每个组织的成员。除非他也是某个组织的成员，否则他不能读取这个组织的 Chat、Bot 或成员。他只能通过 `/v1/platform` 管理平台。
+平台管理员管理平台。平台管理员**不是**每个组织的成员。除非他也是某个组织的成员，否则他不能读取这个组织的 Chat、Bot 或成员。他只能通过
+`/v1/platform` 管理平台。
 
 平台管理员是一个电子邮件地址。当有人第一次用这个邮箱登录、并且提供方已验证该邮箱时，这个条目会关联到那个账号。
 
@@ -36,17 +37,21 @@ curl -b cookies.txt \
 }
 ```
 
-在 Bob 第一次登录之前，`userId` 为 `null`。
-平台必须至少保留一个管理员。移除最后一个管理员会返回 `409` 和 `LastPlatformAdmin`。
+在 Bob 第一次登录之前，`userId` 为
+`null`。平台必须至少保留一个管理员。移除最后一个管理员会返回 `409` 和
+`LastPlatformAdmin`。
 
 ---
 
 ## 设置
 
-新数据库中没有平台设置。在你运行设置程序之前，除 `/health` 之外的每个路由都会返回 `503` 和 `SetupRequired`。
+新数据库中没有平台设置。在你运行设置程序之前，除 `/health`
+之外的每个路由都会返回 `503` 和 `SetupRequired`。
 
-设置程序用 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS` 连接数据库。它会写入第一份平台设置和第一批平台管理员。
-在镜像中，它是 `/app/dist/app/Setup.mjs`。从源代码运行时，使用 `pnpm --filter @openbot-build/openbot setup`。这个包还提供命令 `openbot-setup`。
+设置程序用 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS`
+连接数据库。它会写入第一份平台设置和第一批平台管理员。在镜像中，它是
+`/app/dist/app/Setup.mjs`。从源代码运行时，使用
+`pnpm --filter @openbot-build/openbot setup`。这个包还提供命令 `openbot-setup`。
 
 ```sh
 docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
@@ -73,19 +78,28 @@ docker run --rm --env-file openbot.env openbot:$OPENBOT_RELEASE \
 | `--s3-path-style`        | 否             | 把 bucket 放在路径里。MinIO 和 RustFS 需要它。                                       |
 | `--force`                | 否             | 即使设置已存在也写入。只在恢复时使用，也就是没有任何平台管理员能登录的时候。         |
 
-`--oidc-issuer` 和 `--oidc-client-id` 要么一起设置，要么都不设置。当大家只通过各组织的 [SSO 连接](/zh-cn/docs/sso)登录时，两者都不设置。
+`--oidc-issuer` 和 `--oidc-client-id`
+要么一起设置，要么都不设置。当大家只通过各组织的
+[SSO 连接](/zh-cn/docs/sso)登录时，两者都不设置。
 
-命令行可能会出现在进程列表中。所以，你可以改用环境变量 `OPENBOT_SETUP_OIDC_CLIENT_SECRET` 提供客户端密钥，而不是 `--oidc-client-secret`。这是更好的做法。
+命令行可能会出现在进程列表中。所以，你可以改用环境变量
+`OPENBOT_SETUP_OIDC_CLIENT_SECRET` 提供客户端密钥，而不是
+`--oidc-client-secret`。这是更好的做法。
 
-四个存储参数 `--s3-endpoint`、`--s3-bucket`、`--s3-access-key-id` 和 `--s3-secret-access-key` 要一起设置，或者都不设置。你也可以用 `OPENBOT_SETUP_S3_SECRET_ACCESS_KEY` 提供密钥。不设置时，平台没有存储，直到管理员在平台设置中设置 `files`。
+四个存储参数 `--s3-endpoint`、`--s3-bucket`、`--s3-access-key-id` 和
+`--s3-secret-access-key` 要一起设置，或者都不设置。你也可以用
+`OPENBOT_SETUP_S3_SECRET_ACCESS_KEY`
+提供密钥。不设置时，平台没有存储，直到管理员在平台设置中设置 `files`。
 
-设置程序还会生成一个随机的登录密钥。Better Auth 用它来签名登录 cookie。OpenBot 加密保存它，你永远看不到它。
+设置程序还会生成一个随机的登录密钥。Better
+Auth 用它来签名登录 cookie。OpenBot 加密保存它，你永远看不到它。
 
 ### 再次运行设置
 
 - 使用同样的源和提供方时，设置程序什么也不改。它只会添加管理员邮箱。
 - 使用其他值时，设置程序会失败。它会告诉你改用 `PATCH /v1/platform/settings`。
-- 使用 `--force` 时，设置程序会写入新的值。它会保留当前的登录密钥，所以不会因此让任何人退出登录。
+- 使用 `--force`
+  时，设置程序会写入新的值。它会保留当前的登录密钥，所以不会因此让任何人退出登录。
 
 ---
 
@@ -161,11 +175,14 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 机密可以写入，但永远不会读出。响应中显示的是 `{ set, hint }`：
 
 - 当保存了机密时，`set` 为 `true`。
-- `hint` 是 `…` 加上最后 4 个字符，方便你区分不同的机密。对于短于 12 个字符的机密，它为 `null`。
+- `hint` 是 `…`
+  加上最后 4 个字符，方便你区分不同的机密。对于短于 12 个字符的机密，它为
+  `null`。
 
 ### 修改设置
 
-`PATCH` 的请求体需要 `expectedVersion`，也就是你读到的 `version`。只加入你想修改的字段。
+`PATCH` 的请求体需要 `expectedVersion`，也就是你读到的
+`version`。只加入你想修改的字段。
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -174,7 +191,8 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/platform/settings
 ```
 
-如果有人在你读取之后修改了设置，OpenBot 会返回 `409` 和 `SettingsConflict`，以及当前的 `version`。请重新读取设置，然后再试一次。
+如果有人在你读取之后修改了设置，OpenBot 会返回 `409` 和
+`SettingsConflict`，以及当前的 `version`。请重新读取设置，然后再试一次。
 
 `PATCH` 中的 `identityProvider` 是这样工作的：
 
@@ -196,8 +214,9 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ## 策略上限
 
-`policyCeiling` 是一组在每个组织中都生效的策略。它们只能是 `deny`。OpenBot 在组织的策略之前检查它们，所以任何角色、任何令牌都不能做它们拒绝的事。
-资源中可以用 `{org}` 表示请求所在的组织。参见[权限](/zh-cn/docs/permissions#策略)。
+`policyCeiling` 是一组在每个组织中都生效的策略。它们只能是
+`deny`。OpenBot 在组织的策略之前检查它们，所以任何角色、任何令牌都不能做它们拒绝的事。资源中可以用
+`{org}` 表示请求所在的组织。参见[权限](/zh-cn/docs/permissions#策略)。
 
 下面这个上限禁止每个组织添加自己的模型提供方：
 
@@ -220,7 +239,8 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ## 组织创建
 
-`organizationCreation` 决定谁可以调用 `POST /v1/organizations`。账号登录时，OpenBot 不会为它创建组织。
+`organizationCreation` 决定谁可以调用
+`POST /v1/organizations`。账号登录时，OpenBot 不会为它创建组织。
 
 | 值                | 结果                                                                  |
 | ----------------- | --------------------------------------------------------------------- |
@@ -233,9 +253,11 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ## 组织
 
-`GET /v1/platform/organizations` 分页列出平台的所有组织。使用 `limit`（1 到 100），以及值为上一页 `next` 的 `after`。
+`GET /v1/platform/organizations` 分页列出平台的所有组织。使用
+`limit`（1 到 100），以及值为上一页 `next` 的 `after`。
 
-`PATCH /v1/platform/organizations/:organizationId` 修改组织的 `status`：`active` 或 `suspended`。
+`PATCH /v1/platform/organizations/:organizationId` 修改组织的 `status`：`active`
+或 `suspended`。
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -244,15 +266,20 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/platform/organizations/org_8f3a
 ```
 
-任何人都不能使用被暂停的组织。它的令牌会立刻失效。把 `status` 设为 `active` 即可撤销暂停。
+任何人都不能使用被暂停的组织。它的令牌会立刻失效。把 `status` 设为 `active`
+即可撤销暂停。
 
-`GET /v1/platform/organizations/:organizationId/credits` 读取一个组织的额度。对同一路由使用 `PATCH` 可以打开或关闭额度，`POST .../credits/grants` 给出额度。参见[额度](/zh-cn/docs/usage#额度)。
+`GET /v1/platform/organizations/:organizationId/credits`
+读取一个组织的额度。对同一路由使用 `PATCH`
+可以打开或关闭额度，`POST .../credits/grants`
+给出额度。参见[额度](/zh-cn/docs/usage#额度)。
 
 ---
 
 ## 共享的模型提供方
 
-平台可以为模型提供方付费，并把它们共享给各个组织。它也可以共享模型。组织也可以使用自己的密钥。参见 [Model](/zh-cn/docs/models)。
+平台可以为模型提供方付费，并把它们共享给各个组织。它也可以共享模型。组织也可以使用自己的密钥。参见
+[Model](/zh-cn/docs/models)。
 
 | 路由                                                  | 作用                                                             |
 | ----------------------------------------------------- | ---------------------------------------------------------------- |
@@ -269,7 +296,8 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `GET /v1/platform/model_providers/:providerId/prices` | 列出一个共享的提供方的价格。参见[价格](/zh-cn/docs/usage#价格)。 |
 | `PUT /v1/platform/model_providers/:providerId/prices` | 为一个共享的提供方中的一个模型设置新价格。                       |
 
-请求体和组织的模型与提供方相同，只是多了 `availability`。先添加模型，再添加一个关联它的提供方：
+请求体和组织的模型与提供方相同，只是多了
+`availability`。先添加模型，再添加一个关联它的提供方：
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -295,11 +323,12 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `{ "_tag": "None" }`                                 | 没有任何组织。             |
 | `{ "_tag": "Selected", "organizations": ["org_…"] }` | 只有列出的组织。           |
 
-只有当两者的 `availability` 都允许时，组织才能看到共享提供方的共享模型。
-组织也可以把一个它能使用的共享模型关联到自己的提供方。这时它用自己的密钥使用这个模型。
+只有当两者的 `availability`
+都允许时，组织才能看到共享提供方的共享模型。组织也可以把一个它能使用的共享模型关联到自己的提供方。这时它用自己的密钥使用这个模型。
 
-共享提供方只能关联共享模型。当某个共享提供方关联着一个共享模型时，你不能移除这个模型：OpenBot 会返回 `409` 和 `ModelInUse`。
-当你移除一个共享模型时，OpenBot 也会移除各组织的提供方与它之间的关联。
+共享提供方只能关联共享模型。当某个共享提供方关联着一个共享模型时，你不能移除这个模型：OpenBot 会返回
+`409` 和
+`ModelInUse`。当你移除一个共享模型时，OpenBot 也会移除各组织的提供方与它之间的关联。
 
 ---
 
@@ -308,10 +337,12 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 `/v1/platform` 接受两种调用者：
 
 - 平台管理员的 **session cookie**。
-- 平台管理员的**用户令牌**。令牌自身的策略必须在资源 `openbot.platform` 上允许 `platform.read`（用于 `GET`）或 `platform.write`（用于其他所有方法）。
+- 平台管理员的**用户令牌**。令牌自身的策略必须在资源 `openbot.platform` 上允许
+  `platform.read`（用于 `GET`）或 `platform.write`（用于其他所有方法）。
 
-权限组 `platform.read` 和 `platform.write` 只对 `openbot.platform` 有效。组织中的任何角色都不会授予它们。
-没有指定 `policies` 创建的令牌永远得不到它们。所以，用于平台的令牌必须在创建时写明它们：
+权限组 `platform.read` 和 `platform.write` 只对 `openbot.platform`
+有效。组织中的任何角色都不会授予它们。没有指定 `policies`
+创建的令牌永远得不到它们。所以，用于平台的令牌必须在创建时写明它们：
 
 ```sh
 curl -b cookies.txt \
@@ -321,9 +352,11 @@ curl -b cookies.txt \
   https://api.example.com/v1/user/tokens
 ```
 
-只有在它的账号仍是平台管理员时，令牌才有效。其他调用者会得到 `403` 和 `PermissionDenied`。
+只有在它的账号仍是平台管理员时，令牌才有效。其他调用者会得到 `403` 和
+`PermissionDenied`。
 
-OpenBot 把每次平台修改写入审计日志，组织 ID 为 `platform`。API 目前还不能读取这些条目。
+OpenBot 把每次平台修改写入审计日志，组织 ID 为
+`platform`。API 目前还不能读取这些条目。
 
 在 [Platform 参考](/docs/api/operations/tags/platform/)中查看完整的结构。
 

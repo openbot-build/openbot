@@ -1,9 +1,14 @@
 ---
 title: Share Bots
-description: Invite other people to use one of your Bots in their own organization, by email or with a link.
+description:
+  Invite other people to use one of your Bots in their own organization, by
+  email or with a link.
 ---
 
-You can share a Bot with people outside your organization, like you add a member to an organization. You invite a person by email, or you make an **invitation link**. Your client can show the link as a QR code. The person accepts the invitation and then uses the Bot in their own organization.
+You can share a Bot with people outside your organization, like you add a member
+to an organization. You invite a person by email, or you make an **invitation
+link**. Your client can show the link as a QR code. The person accepts the
+invitation and then uses the Bot in their own organization.
 
 | Word            | Meaning                                                                                         |
 | --------------- | ----------------------------------------------------------------------------------------------- |
@@ -16,9 +21,13 @@ You can share a Bot with people outside your organization, like you add a member
 
 ## Invite people
 
-You need `bots.share` on the Bot. Members can share their own Bots. Administrators can also share the shared Bots of the organization. Only a top Bot can be shared: one that a member or the organization owns, and that is not archived.
+You need `bots.share` on the Bot. Members can share their own Bots.
+Administrators can also share the shared Bots of the organization. Only a top
+Bot can be shared: one that a member or the organization owns, and that is not
+archived.
 
-To invite one person, send their email. The invitation lasts 7 days, like an [invitation to the organization](/docs/organization#invitations):
+To invite one person, send their email. The invitation lasts 7 days, like an
+[invitation to the organization](/docs/organization#invitations):
 
 ```sh
 curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -27,7 +36,8 @@ curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/bots/$BOT/invitations
 ```
 
-To make an invitation link, leave out `email`. Many people can use the same link.
+To make an invitation link, leave out `email`. Many people can use the same
+link.
 
 ```sh
 curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -60,19 +70,28 @@ curl -X POST -H "Authorization: Bearer $OPENBOT_TOKEN" \
 }
 ```
 
-`url` is the public origin, then `path`, then `#` and the secret. A browser never sends the part after `#` to a server, so the secret never goes into a server log. `url` is `null` when there is no `path`. Show `url` as a QR code, or build your own address from `secret`.
+`url` is the public origin, then `path`, then `#` and the secret. A browser
+never sends the part after `#` to a server, so the secret never goes into a
+server log. `url` is `null` when there is no `path`. Show `url` as a QR code, or
+build your own address from `secret`.
 
-`GET /v1/bots/:botId/invitations/:invitationId/secret` gives the secret and the `url` of a link again, for example to print the QR code again. OpenBot keeps the secret sealed, and keeps a hash to find the link.
+`GET /v1/bots/:botId/invitations/:invitationId/secret` gives the secret and the
+`url` of a link again, for example to print the QR code again. OpenBot keeps the
+secret sealed, and keeps a hash to find the link.
 
-`GET /v1/bots/:botId/invitations` lists the invitations. `DELETE /v1/bots/:botId/invitations/:invitationId` revokes one. After that, nobody can accept it. The people who accepted it before stay members.
+`GET /v1/bots/:botId/invitations` lists the invitations.
+`DELETE /v1/bots/:botId/invitations/:invitationId` revokes one. After that,
+nobody can accept it. The people who accepted it before stay members.
 
 ---
 
 ## Accept an invitation
 
-The invited person signs in. They use the session cookie or their own user token.
+The invited person signs in. They use the session cookie or their own user
+token.
 
-- An email invitation shows in `GET /v1/invitations`, with `bot`. Accept it with its ID.
+- An email invitation shows in `GET /v1/invitations`, with `bot`. Accept it with
+  its ID.
 - For a link, send its secret.
 
 ```sh
@@ -82,15 +101,19 @@ curl -X POST -H "Authorization: Bearer $THEIR_TOKEN" \
   https://api.example.com/v1/bot-invitations/accept
 ```
 
-`organization` is the organization where the person uses the Bot. They must be an active member of it. They can leave it out when they have only one organization, or when they use a user token. The answer is their new linked Bot.
+`organization` is the organization where the person uses the Bot. They must be
+an active member of it. They can leave it out when they have only one
+organization, or when they use a user token. The answer is their new linked Bot.
 
-When the person already uses the Bot, they get their linked Bot back. To say no to an email invitation, use `POST /v1/invitations/:invitationId/decline`.
+When the person already uses the Bot, they get their linked Bot back. To say no
+to an email invitation, use `POST /v1/invitations/:invitationId/decline`.
 
 ---
 
 ## Use a shared Bot
 
-The linked Bot is a Bot of the member, in their own organization. It has `source`, which names your Bot:
+The linked Bot is a Bot of the member, in their own organization. It has
+`source`, which names your Bot:
 
 ```json
 {
@@ -103,15 +126,27 @@ The linked Bot is a Bot of the member, in their own organization. It has `source
 
 The member works with it like with their own Bots:
 
-- They talk to it in their own [Chat](/docs/chats), in their own organization, and can make it their default Bot.
-- It works with their permissions, their connected [Apps](/docs/apps), and their other Bots. It can give work to their Bots.
-- Its [requests](/docs/requests) go to the member. Their decisions, [Grants](/docs/requests#answer-a-request) and [Rules](/docs/rules) count only in their organization. Yours count only in yours.
-- Their organization pays for the models. When your Bot names a model that their organization does not have, their Chat does not use it. It uses the default model of the server, when the server has one.
+- They talk to it in their own [Chat](/docs/chats), in their own organization,
+  and can make it their default Bot.
+- It works with their permissions, their connected [Apps](/docs/apps), and their
+  other Bots. It can give work to their Bots.
+- Its [requests](/docs/requests) go to the member. Their decisions,
+  [Grants](/docs/requests#answer-a-request) and [Rules](/docs/rules) count only
+  in their organization. Yours count only in yours.
+- Their organization pays for the models. When your Bot names a model that their
+  organization does not have, their Chat does not use it. It uses the default
+  model of the server, when the server has one.
 - You never see their Chats.
 
-The name, role, instructions and model always come from your Bot. When you change them, every linked Bot changes too. A member cannot change them. A member can change `planApproval`.
+The name, role, instructions and model always come from your Bot. When you
+change them, every linked Bot changes too. A member cannot change them. A member
+can change `planApproval`.
 
-The Bot keeps [one memory pool](/docs/memory), in your organization. What it learns in the organization of a member is for that member, in that organization. Nobody reads the memory about another person: not you, and not other members. You can remove what a member left with a purge, without reading it. Only you manage the memory Bot.
+The Bot keeps [one memory pool](/docs/memory), in your organization. What it
+learns in the organization of a member is for that member, in that organization.
+Nobody reads the memory about another person: not you, and not other members.
+You can remove what a member left with a purge, without reading it. Only you
+manage the memory Bot.
 
 ---
 

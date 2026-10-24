@@ -3,16 +3,22 @@ title: Organization
 description: Organizations, members, settings, roles and the audit log.
 ---
 
-This page shows how many people share OpenBot. An organization is a group of people who share Bots, models and settings.
-One platform has many organizations. A user and an organization are separate things. A user can create organizations, also one just for themselves, and can be a member of many organizations.
+This page shows how many people share OpenBot. An organization is a group of
+people who share Bots, models and settings. One platform has many organizations.
+A user and an organization are separate things. A user can create organizations,
+also one just for themselves, and can be a member of many organizations.
 
-The routes of the current organization are under `/v1/organization`. They accept a user token or the session cookie. With the cookie, send the `OpenBot-Organization` header when you belong to more than one organization. See [Authentication](/docs/authentication#choose-an-organization).
+The routes of the current organization are under `/v1/organization`. They accept
+a user token or the session cookie. With the cookie, send the
+`OpenBot-Organization` header when you belong to more than one organization. See
+[Authentication](/docs/authentication#choose-an-organization).
 
 ---
 
 ## Who can join
 
-Each time an account signs in, OpenBot checks where it belongs. It also checks on each request with the session cookie.
+Each time an account signs in, OpenBot checks where it belongs. It also checks
+on each request with the session cookie.
 
 | Way              | Role it gets                           | Needs                                                                                                                 |
 | ---------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -21,16 +27,22 @@ Each time an account signs in, OpenBot checks where it belongs. It also checks o
 | SSO connection   | The `defaultRoles` of the organization | The account signed in through the SSO connection of the organization.                                                 |
 | New organization | `super_administrator`                  | The account calls `POST /v1/organizations`. See [Create an organization](#create-an-organization).                    |
 
-OpenBot never makes an organization for a new account. An account without any organization gets `403` with `MembershipRequired` from organization routes. It can still create an organization and answer invitations.
+OpenBot never makes an organization for a new account. An account without any
+organization gets `403` with `MembershipRequired` from organization routes. It
+can still create an organization and answer invitations.
 
-Older versions of OpenBot made an organization named "Personal" for each new account. Those organizations stay. They are normal organizations, so you can rename them, invite people, or leave them.
-See [SSO and domains](/docs/sso) to verify a domain, and [Platform](/docs/platform#organization-creation) for `organizationCreation`.
+Older versions of OpenBot made an organization named "Personal" for each new
+account. Those organizations stay. They are normal organizations, so you can
+rename them, invite people, or leave them. See [SSO and domains](/docs/sso) to
+verify a domain, and [Platform](/docs/platform#organization-creation) for
+`organizationCreation`.
 
 ---
 
 ## Your organizations
 
-`GET /v1/organizations` lists the organizations where you are a member. A user token sees only its own organization.
+`GET /v1/organizations` lists the organizations where you are a member. A user
+token sees only its own organization.
 
 ```sh
 curl -b cookies.txt https://api.example.com/v1/organizations
@@ -49,11 +61,14 @@ curl -b cookies.txt https://api.example.com/v1/organizations
 }
 ```
 
-`status` is `active` or `suspended`. A platform admin can suspend an organization. Then nobody can use it, and its tokens stop working. See [Platform](/docs/platform#organizations).
+`status` is `active` or `suspended`. A platform admin can suspend an
+organization. Then nobody can use it, and its tokens stop working. See
+[Platform](/docs/platform#organizations).
 
 ### Create an organization
 
-`POST /v1/organizations` creates an organization. You become its Super Administrator.
+`POST /v1/organizations` creates an organization. You become its Super
+Administrator.
 
 ```sh
 curl -b cookies.txt \
@@ -63,11 +78,14 @@ curl -b cookies.txt \
   https://api.example.com/v1/organizations
 ```
 
-When `organizationCreation` in the platform settings is `platform_admins`, only platform admins can do this. Other callers get `403` with `OrganizationCreationDisabled`.
+When `organizationCreation` in the platform settings is `platform_admins`, only
+platform admins can do this. Other callers get `403` with
+`OrganizationCreationDisabled`.
 
 ### Leave an organization
 
-`DELETE /v1/organizations/:organizationId/membership` takes you out of an organization. Your tokens for it stop working at once.
+`DELETE /v1/organizations/:organizationId/membership` takes you out of an
+organization. Your tokens for it stop working at once.
 
 ```sh
 curl -X DELETE -b cookies.txt \
@@ -75,16 +93,19 @@ curl -X DELETE -b cookies.txt \
   https://api.example.com/v1/organizations/org_8f3a/membership
 ```
 
-- The last active Super Administrator cannot leave. OpenBot returns `409` with `LastSuperAdministrator`. Give someone else the role first.
+- The last active Super Administrator cannot leave. OpenBot returns `409` with
+  `LastSuperAdministrator`. Give someone else the role first.
 - A user token can only leave its own organization.
-- If your email domain is still verified and `joinByDomain` is on, you join again the next time you sign in.
+- If your email domain is still verified and `joinByDomain` is on, you join
+  again the next time you sign in.
 
 ---
 
 ## Read and change the organization
 
-`GET /v1/organization` reads the current organization. It returns the same object as above.
-`PATCH /v1/organization` changes its `name`. It needs `organization.write`.
+`GET /v1/organization` reads the current organization. It returns the same
+object as above. `PATCH /v1/organization` changes its `name`. It needs
+`organization.write`.
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -97,8 +118,9 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ## Settings
 
-Each organization has its own settings. They live in the database, so every OpenBot instance uses the same values.
-`GET /v1/organization/settings` reads them. It needs `organization.read`.
+Each organization has its own settings. They live in the database, so every
+OpenBot instance uses the same values. `GET /v1/organization/settings` reads
+them. It needs `organization.read`.
 
 ```json
 {
@@ -143,7 +165,9 @@ Each organization has its own settings. They live in the database, so every Open
 | `joinByDomain`     | `true`                                            | People with a verified email in a verified domain of the organization join when they sign in.                                      |
 | `tokenRate`        | no limit                                          | Token rates of each scope. Where the platform sets a lower rate, the lower rate applies. See [Token rate](/docs/usage#token-rate). |
 
-`PATCH /v1/organization/settings` changes them. It needs `organization.write`. The body needs `expectedVersion`, the `version` that you read. Add only the fields that you want to change.
+`PATCH /v1/organization/settings` changes them. It needs `organization.write`.
+The body needs `expectedVersion`, the `version` that you read. Add only the
+fields that you want to change.
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -152,17 +176,22 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/organization/settings
 ```
 
-- If someone changed the settings after you read them, OpenBot returns `409` with `SettingsConflict` and the current `version`. Read them again, then try again.
+- If someone changed the settings after you read them, OpenBot returns `409`
+  with `SettingsConflict` and the current `version`. Read them again, then try
+  again.
 - A role that does not exist returns `400` with `SettingsInvalid`.
 - Only a Super Administrator can put `super_administrator` in `defaultRoles`.
 
-Every instance uses a change at once. See [Configuration](/docs/configuration#how-a-change-reaches-every-instance).
+Every instance uses a change at once. See
+[Configuration](/docs/configuration#how-a-change-reaches-every-instance).
 
 ---
 
 ## Members
 
-`GET /v1/organization/members` lists members in pages. It needs `members.read`. Use `limit` (1 to 100, default 50) and `after` with the `next` value of the last page.
+`GET /v1/organization/members` lists members in pages. It needs `members.read`.
+Use `limit` (1 to 100, default 50) and `after` with the `next` value of the last
+page.
 
 ```json
 {
@@ -185,10 +214,13 @@ Every instance uses a change at once. See [Configuration](/docs/configuration#ho
 
 ### Change a member
 
-`PATCH /v1/organization/members/:userId` changes `status`, `roles` or `policies`. It needs `members.write`.
+`PATCH /v1/organization/members/:userId` changes `status`, `roles` or
+`policies`. It needs `members.write`.
 
-- `status` is `active` or `suspended`. A suspended member cannot use this organization, and their tokens for it stop working at once.
-- `roles` is a list of role IDs: built-in roles and custom roles. See [Permissions](/docs/permissions#roles).
+- `status` is `active` or `suspended`. A suspended member cannot use this
+  organization, and their tokens for it stop working at once.
+- `roles` is a list of role IDs: built-in roles and custom roles. See
+  [Permissions](/docs/permissions#roles).
 - `policies` are extra policies for the member, on top of their roles.
 
 ```sh
@@ -201,22 +233,31 @@ curl -X PATCH -b cookies.txt \
 
 ### Remove a member
 
-`DELETE /v1/organization/members/:userId` removes the member and revokes their tokens. It needs `members.write`.
-If their email domain is still verified and `joinByDomain` is on, or they sign in through an SSO connection, they join again the next time they sign in. To keep them out, suspend them.
+`DELETE /v1/organization/members/:userId` removes the member and revokes their
+tokens. It needs `members.write`. If their email domain is still verified and
+`joinByDomain` is on, or they sign in through an SSO connection, they join again
+the next time they sign in. To keep them out, suspend them.
 
 ### Rules for Super Administrators
 
-- Only a Super Administrator can change or remove a Super Administrator, or give someone the role.
-- Only a Super Administrator can give a member extra `allow` policies, or put `super_administrator` in the default roles. Other administrators can only add `deny` policies. So nobody can give more than they have.
-- The organization keeps at least one active Super Administrator. A change that breaks this returns `409` with `LastSuperAdministrator`.
+- Only a Super Administrator can change or remove a Super Administrator, or give
+  someone the role.
+- Only a Super Administrator can give a member extra `allow` policies, or put
+  `super_administrator` in the default roles. Other administrators can only add
+  `deny` policies. So nobody can give more than they have.
+- The organization keeps at least one active Super Administrator. A change that
+  breaks this returns `409` with `LastSuperAdministrator`.
 
 ---
 
 ## Invitations
 
-An administrator invites a person by email. The person signs in with that email, and then accepts or declines. OpenBot does not send the email. Tell the person yourself.
+An administrator invites a person by email. The person signs in with that email,
+and then accepts or declines. OpenBot does not send the email. Tell the person
+yourself.
 
-`POST /v1/organization/invitations` makes an invitation. It needs `members.write`.
+`POST /v1/organization/invitations` makes an invitation. It needs
+`members.write`.
 
 ```sh
 curl -b cookies.txt \
@@ -240,24 +281,36 @@ curl -b cookies.txt \
 }
 ```
 
-- Without `roles`, the person gets the `defaultRoles` of the organization. Each role must exist, or OpenBot returns `404` with `RoleNotFound`.
+- Without `roles`, the person gets the `defaultRoles` of the organization. Each
+  role must exist, or OpenBot returns `404` with `RoleNotFound`.
 - Only a Super Administrator can invite with the `super_administrator` role.
 - An invitation lasts 7 days. Then its `status` is `expired`.
-- An email can have only one pending invitation in an organization. OpenBot returns `400` with `InvitationInvalid` when there is one, or when a member already has the email.
+- An email can have only one pending invitation in an organization. OpenBot
+  returns `400` with `InvitationInvalid` when there is one, or when a member
+  already has the email.
 
 You can also invite people to use one Bot. See [Share Bots](/docs/sharing).
 
-`GET /v1/organization/invitations` lists the invitations, newest first. It needs `members.read`. Add `?status=pending` to see only the open ones. `DELETE /v1/organization/invitations/:invitationId` takes back a pending invitation. It needs `members.write`.
+`GET /v1/organization/invitations` lists the invitations, newest first. It needs
+`members.read`. Add `?status=pending` to see only the open ones.
+`DELETE /v1/organization/invitations/:invitationId` takes back a pending
+invitation. It needs `members.write`.
 
 ### Answer an invitation
 
 These routes are for the invited person. They do not need a membership.
 
-- `GET /v1/invitations` lists the pending invitations for your verified email. An invitation to use a Bot has `bot` and no `roles`. Accept it with `POST /v1/bot-invitations/accept`. See [Share Bots](/docs/sharing#accept-an-invitation).
-- `POST /v1/invitations/:invitationId/accept` makes you a member with the roles of the invitation. It returns the organization.
+- `GET /v1/invitations` lists the pending invitations for your verified email.
+  An invitation to use a Bot has `bot` and no `roles`. Accept it with
+  `POST /v1/bot-invitations/accept`. See
+  [Share Bots](/docs/sharing#accept-an-invitation).
+- `POST /v1/invitations/:invitationId/accept` makes you a member with the roles
+  of the invitation. It returns the organization.
 - `POST /v1/invitations/:invitationId/decline` says no.
 
-To answer, use the session cookie, not a user token. Your email must be verified and equal to the email of the invitation. An invitation for another email answers `404` with `InvitationNotFound`.
+To answer, use the session cookie, not a user token. Your email must be verified
+and equal to the email of the invitation. An invitation for another email
+answers `404` with `InvitationNotFound`.
 
 ```sh
 curl -X POST -b cookies.txt \
@@ -270,7 +323,8 @@ curl -X POST -b cookies.txt \
 ## Audit log
 
 The audit log records important changes. Nothing can change or remove an entry.
-`GET /v1/organization/audit_logs` lists entries, newest first. It needs `audit_logs.read`.
+`GET /v1/organization/audit_logs` lists entries, newest first. It needs
+`audit_logs.read`.
 
 | Query    | What it does                                  |
 | -------- | --------------------------------------------- |

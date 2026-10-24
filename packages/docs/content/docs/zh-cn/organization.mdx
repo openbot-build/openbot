@@ -3,16 +3,18 @@ title: 组织
 description: 组织、成员、设置、角色和审计日志。
 ---
 
-本页说明多人如何共用 OpenBot。组织（Organization）是一群人，他们共享 Bots、模型和设置。
-一个平台有很多组织。用户和组织是两种不同的东西。用户可以创建组织，也可以只为自己创建一个，并且可以是多个组织的成员。
+本页说明多人如何共用 OpenBot。组织（Organization）是一群人，他们共享 Bots、模型和设置。一个平台有很多组织。用户和组织是两种不同的东西。用户可以创建组织，也可以只为自己创建一个，并且可以是多个组织的成员。
 
-当前组织的路由都在 `/v1/organization` 下。它们接受用户令牌或 session cookie。使用 cookie 时，如果你属于多个组织，请发送 `OpenBot-Organization` 请求头。见 [身份验证](/zh-cn/docs/authentication#选择组织)。
+当前组织的路由都在 `/v1/organization` 下。它们接受用户令牌或 session
+cookie。使用 cookie 时，如果你属于多个组织，请发送 `OpenBot-Organization`
+请求头。见 [身份验证](/zh-cn/docs/authentication#选择组织)。
 
 ---
 
 ## 谁可以加入
 
-每次账户登录时，OpenBot 都会检查它属于哪里。在每个带 session cookie 的请求上，它也会检查。
+每次账户登录时，OpenBot 都会检查它属于哪里。在每个带 session
+cookie 的请求上，它也会检查。
 
 | 方式         | 得到的角色            | 需要的条件                                                             |
 | ------------ | --------------------- | ---------------------------------------------------------------------- |
@@ -21,10 +23,12 @@ description: 组织、成员、设置、角色和审计日志。
 | SSO 连接     | 组织的 `defaultRoles` | 账户通过该组织的 SSO 连接登录。                                        |
 | 新组织       | `super_administrator` | 账户调用 `POST /v1/organizations`。见 [创建组织](#创建组织)。          |
 
-OpenBot 不会为新账户创建组织。没有任何组织的账户，访问组织路由时会得到 `403` 和 `MembershipRequired`。它仍然可以创建组织和回答邀请。
+OpenBot 不会为新账户创建组织。没有任何组织的账户，访问组织路由时会得到 `403` 和
+`MembershipRequired`。它仍然可以创建组织和回答邀请。
 
-旧版本的 OpenBot 会为每个新账户创建一个名为 "Personal" 的组织。这些组织会保留。它们是普通组织，所以你可以改名、邀请别人或离开它们。
-验证域名见 [SSO 和域名](/zh-cn/docs/sso)，`organizationCreation` 见 [Platform](/zh-cn/docs/platform#组织创建)。
+旧版本的 OpenBot 会为每个新账户创建一个名为 "Personal" 的组织。这些组织会保留。它们是普通组织，所以你可以改名、邀请别人或离开它们。验证域名见
+[SSO 和域名](/zh-cn/docs/sso)，`organizationCreation` 见
+[Platform](/zh-cn/docs/platform#组织创建)。
 
 ---
 
@@ -49,11 +53,14 @@ curl -b cookies.txt https://api.example.com/v1/organizations
 }
 ```
 
-`status` 是 `active` 或 `suspended`。平台管理员可以暂停一个组织。暂停后，没有人能使用它，它的令牌也会失效。见 [Platform](/zh-cn/docs/platform#组织)。
+`status` 是 `active` 或
+`suspended`。平台管理员可以暂停一个组织。暂停后，没有人能使用它，它的令牌也会失效。见
+[Platform](/zh-cn/docs/platform#组织)。
 
 ### 创建组织
 
-`POST /v1/organizations` 创建一个组织。你会成为它的 Super Administrator（超级管理员）。
+`POST /v1/organizations` 创建一个组织。你会成为它的 Super
+Administrator（超级管理员）。
 
 ```sh
 curl -b cookies.txt \
@@ -63,11 +70,14 @@ curl -b cookies.txt \
   https://api.example.com/v1/organizations
 ```
 
-当平台设置中的 `organizationCreation` 为 `platform_admins` 时，只有平台管理员能这样做。其他调用者会得到 `403` 和 `OrganizationCreationDisabled`。
+当平台设置中的 `organizationCreation` 为 `platform_admins`
+时，只有平台管理员能这样做。其他调用者会得到 `403` 和
+`OrganizationCreationDisabled`。
 
 ### 离开组织
 
-`DELETE /v1/organizations/:organizationId/membership` 让你离开一个组织。你在这个组织中的令牌会立即失效。
+`DELETE /v1/organizations/:organizationId/membership`
+让你离开一个组织。你在这个组织中的令牌会立即失效。
 
 ```sh
 curl -X DELETE -b cookies.txt \
@@ -75,7 +85,8 @@ curl -X DELETE -b cookies.txt \
   https://api.example.com/v1/organizations/org_8f3a/membership
 ```
 
-- 最后一个活跃的 Super Administrator 不能离开。OpenBot 返回 `409` 和 `LastSuperAdministrator`。请先把这个角色给别人。
+- 最后一个活跃的 Super Administrator 不能离开。OpenBot 返回 `409` 和
+  `LastSuperAdministrator`。请先把这个角色给别人。
 - 用户令牌只能离开它自己的组织。
 - 如果你的邮箱域名仍然已验证，并且 `joinByDomain` 开着，你下次登录时会再次加入。
 
@@ -143,7 +154,9 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `joinByDomain`     | `true`                            | 拥有组织已验证域名下已验证邮箱的人，在登录时加入组织。                                                              |
 | `tokenRate`        | 不限制                            | 每个范围的 token 速率。平台设置了更低的速率时，较低的速率生效。见 [token 速率](/zh-cn/docs/usage#token-速率)。      |
 
-`PATCH /v1/organization/settings` 修改设置。它需要 `organization.write`。请求体需要 `expectedVersion`，也就是你读到的 `version`。只添加你想修改的字段。
+`PATCH /v1/organization/settings` 修改设置。它需要
+`organization.write`。请求体需要 `expectedVersion`，也就是你读到的
+`version`。只添加你想修改的字段。
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -152,17 +165,20 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/organization/settings
 ```
 
-- 如果在你读取之后有人修改了设置，OpenBot 返回 `409` 和 `SettingsConflict`，以及当前的 `version`。请重新读取，然后再试一次。
+- 如果在你读取之后有人修改了设置，OpenBot 返回 `409` 和
+  `SettingsConflict`，以及当前的 `version`。请重新读取，然后再试一次。
 - 不存在的角色会返回 `400` 和 `SettingsInvalid`。
 - 只有 Super Administrator 能把 `super_administrator` 放进 `defaultRoles`。
 
-每个实例都会立即使用修改后的值。见 [配置](/zh-cn/docs/configuration#修改如何到达每个实例)。
+每个实例都会立即使用修改后的值。见
+[配置](/zh-cn/docs/configuration#修改如何到达每个实例)。
 
 ---
 
 ## 成员
 
-`GET /v1/organization/members` 分页列出成员。它需要 `members.read`。使用 `limit`（1 到 100，默认 50），并用上一页的 `next` 值作为 `after`。
+`GET /v1/organization/members` 分页列出成员。它需要 `members.read`。使用
+`limit`（1 到 100，默认 50），并用上一页的 `next` 值作为 `after`。
 
 ```json
 {
@@ -185,10 +201,13 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ### 修改成员
 
-`PATCH /v1/organization/members/:userId` 修改 `status`、`roles` 或 `policies`。它需要 `members.write`。
+`PATCH /v1/organization/members/:userId` 修改 `status`、`roles` 或
+`policies`。它需要 `members.write`。
 
-- `status` 是 `active` 或 `suspended`。被暂停的成员不能使用这个组织，他们在这个组织的令牌会立即失效。
-- `roles` 是角色 ID 的列表：包括内置角色和自定义角色。见 [权限](/zh-cn/docs/permissions#角色)。
+- `status` 是 `active` 或
+  `suspended`。被暂停的成员不能使用这个组织，他们在这个组织的令牌会立即失效。
+- `roles` 是角色 ID 的列表：包括内置角色和自定义角色。见
+  [权限](/zh-cn/docs/permissions#角色)。
 - `policies` 是成员的额外策略，在角色之外另外生效。
 
 ```sh
@@ -201,14 +220,19 @@ curl -X PATCH -b cookies.txt \
 
 ### 移除成员
 
-`DELETE /v1/organization/members/:userId` 移除成员，并撤销他们的令牌。它需要 `members.write`。
-如果他们的邮箱域名仍然是已验证的，并且 `joinByDomain` 是开启的，或者他们通过 SSO 连接登录，那么他们下次登录时会再次加入。要让他们无法进入，请暂停他们。
+`DELETE /v1/organization/members/:userId` 移除成员，并撤销他们的令牌。它需要
+`members.write`。如果他们的邮箱域名仍然是已验证的，并且 `joinByDomain`
+是开启的，或者他们通过 SSO 连接登录，那么他们下次登录时会再次加入。要让他们无法进入，请暂停他们。
 
 ### Super Administrator 的规则
 
-- 只有 Super Administrator 能修改或移除 Super Administrator，或者把这个角色给别人。
-- 只有 Super Administrator 能给成员额外的 `allow` 策略，或者把 `super_administrator` 放进默认角色。其他管理员只能添加 `deny` 策略。所以，没有人能给出比自己更多的权限。
-- 组织至少保留一个活跃的 Super Administrator。破坏这一点的修改会返回 `409` 和 `LastSuperAdministrator`。
+- 只有 Super Administrator 能修改或移除 Super
+  Administrator，或者把这个角色给别人。
+- 只有 Super Administrator 能给成员额外的 `allow` 策略，或者把
+  `super_administrator` 放进默认角色。其他管理员只能添加 `deny`
+  策略。所以，没有人能给出比自己更多的权限。
+- 组织至少保留一个活跃的 Super Administrator。破坏这一点的修改会返回 `409` 和
+  `LastSuperAdministrator`。
 
 ---
 
@@ -240,24 +264,35 @@ curl -b cookies.txt \
 }
 ```
 
-- 不填 `roles` 时，这个人得到组织的 `defaultRoles`。每个角色都必须存在，否则 OpenBot 返回 `404` 和 `RoleNotFound`。
+- 不填 `roles` 时，这个人得到组织的
+  `defaultRoles`。每个角色都必须存在，否则 OpenBot 返回 `404` 和
+  `RoleNotFound`。
 - 只有 Super Administrator 能用 `super_administrator` 角色邀请别人。
 - 邀请的有效期是 7 天。之后它的 `status` 是 `expired`。
-- 在一个组织中，一个邮箱只能有一个待处理的邀请。如果已经有一个，或者已有成员使用这个邮箱，OpenBot 返回 `400` 和 `InvitationInvalid`。
+- 在一个组织中，一个邮箱只能有一个待处理的邀请。如果已经有一个，或者已有成员使用这个邮箱，OpenBot 返回
+  `400` 和 `InvitationInvalid`。
 
 你也可以邀请别人使用一个 Bot。见 [分享 Bots](/zh-cn/docs/sharing)。
 
-`GET /v1/organization/invitations` 按从新到旧列出邀请。它需要 `members.read`。加上 `?status=pending` 只看未处理的邀请。`DELETE /v1/organization/invitations/:invitationId` 收回一个待处理的邀请。它需要 `members.write`。
+`GET /v1/organization/invitations` 按从新到旧列出邀请。它需要
+`members.read`。加上 `?status=pending`
+只看未处理的邀请。`DELETE /v1/organization/invitations/:invitationId`
+收回一个待处理的邀请。它需要 `members.write`。
 
 ### 回答邀请
 
 这些路由给被邀请的人使用。它们不需要成员资格。
 
-- `GET /v1/invitations` 列出发给你已验证邮箱的待处理邀请。使用 Bot 的邀请带有 `bot`，没有 `roles`。用 `POST /v1/bot-invitations/accept` 接受它。见 [分享 Bots](/zh-cn/docs/sharing#接受邀请)。
-- `POST /v1/invitations/:invitationId/accept` 让你成为成员，并得到邀请中的角色。它返回这个组织。
+- `GET /v1/invitations` 列出发给你已验证邮箱的待处理邀请。使用 Bot 的邀请带有
+  `bot`，没有 `roles`。用 `POST /v1/bot-invitations/accept` 接受它。见
+  [分享 Bots](/zh-cn/docs/sharing#接受邀请)。
+- `POST /v1/invitations/:invitationId/accept`
+  让你成为成员，并得到邀请中的角色。它返回这个组织。
 - `POST /v1/invitations/:invitationId/decline` 拒绝邀请。
 
-回答邀请时，请使用 session cookie，不要用用户令牌。你的邮箱必须已验证，并且和邀请的邮箱相同。发给其他邮箱的邀请会返回 `404` 和 `InvitationNotFound`。
+回答邀请时，请使用 session
+cookie，不要用用户令牌。你的邮箱必须已验证，并且和邀请的邮箱相同。发给其他邮箱的邀请会返回
+`404` 和 `InvitationNotFound`。
 
 ```sh
 curl -X POST -b cookies.txt \
@@ -270,7 +305,8 @@ curl -X POST -b cookies.txt \
 ## 审计日志
 
 审计日志记录重要的修改。任何操作都不能修改或删除日志条目。
-`GET /v1/organization/audit_logs` 列出条目，最新的排在前面。它需要 `audit_logs.read`。
+`GET /v1/organization/audit_logs` 列出条目，最新的排在前面。它需要
+`audit_logs.read`。
 
 | 查询参数 | 作用                                 |
 | -------- | ------------------------------------ |

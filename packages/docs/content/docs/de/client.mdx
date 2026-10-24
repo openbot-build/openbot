@@ -1,12 +1,15 @@
 ---
 title: Client
-description: Rufe OpenBot aus TypeScript auf, mit typisierten Anfragen und Fehlern.
+description:
+  Rufe OpenBot aus TypeScript auf, mit typisierten Anfragen und Fehlern.
 ---
 
-`@openbot-build/client` ist der TypeScript-Client für OpenBot. Er entsteht aus demselben API-Vertrag wie der Server.
-Jede Anfrage, jede Antwort und jeder Fehler hat einen Typ. Dein Editor zeigt Fehler, bevor du den Code ausführst.
+`@openbot-build/client` ist der TypeScript-Client für OpenBot. Er entsteht aus
+demselben API-Vertrag wie der Server. Jede Anfrage, jede Antwort und jeder
+Fehler hat einen Typ. Dein Editor zeigt Fehler, bevor du den Code ausführst.
 
-Der Client nutzt [Effect](https://effect.website), eine TypeScript-Bibliothek für typisierte Programme. Er läuft in Node.js, Deno, Bun, Workern und Browsern.
+Der Client nutzt [Effect](https://effect.website), eine TypeScript-Bibliothek
+für typisierte Programme. Er läuft in Node.js, Deno, Bun, Workern und Browsern.
 
 ---
 
@@ -25,7 +28,8 @@ Die OpenBot-Pakete sind noch nicht auf npm. Nutze sie aus dem OpenBot-Workspace:
 
 ## Einen Client erstellen
 
-`layer` erstellt einen Layer, der dir den Dienst `Client` gibt. Ein Layer ist ein Rezept in Effect, das einen Dienst baut.
+`layer` erstellt einen Layer, der dir den Dienst `Client` gibt. Ein Layer ist
+ein Rezept in Effect, das einen Dienst baut.
 
 ```ts
 import { Client, layer } from "@openbot-build/client"
@@ -59,14 +63,19 @@ const id = await Effect.runPromise(
 | `organization`   | Nein    | Eine Organisations-ID. Mit dem Session-Cookie wird sie als Header `OpenBot-Organization` gesendet. Ein Token ignoriert sie. |
 | `onUnauthorized` | Nein    | Eine Funktion, die läuft, wenn eine geschützte Anfrage `401` zurückgibt.                                                    |
 
-Wie du ein User Token erstellst, steht unter [Authentifizierung](/de/docs/authentication).
+Wie du ein User Token erstellst, steht unter
+[Authentifizierung](/de/docs/authentication).
 
-Der Client speichert das Token nie und setzt es nie in eine URL. `onUnauthorized` meldet nicht an und versucht die Anfrage nicht noch einmal. Nutze die Funktion, um den Benutzer zu informieren, zum Beispiel wenn ein Token abläuft oder jemand es widerruft.
+Der Client speichert das Token nie und setzt es nie in eine URL.
+`onUnauthorized` meldet nicht an und versucht die Anfrage nicht noch einmal.
+Nutze die Funktion, um den Benutzer zu informieren, zum Beispiel wenn ein Token
+abläuft oder jemand es widerruft.
 
 ## Eine Operation aufrufen
 
-Jede Operation liegt unter `client.api.<group>.<operation>`. Die Namen sind dieselben wie in der [API-Referenz](/docs/api/).
-Jeder Aufruf nimmt ein Objekt mit diesen optionalen Feldern:
+Jede Operation liegt unter `client.api.<group>.<operation>`. Die Namen sind
+dieselben wie in der [API-Referenz](/docs/api/). Jeder Aufruf nimmt ein Objekt
+mit diesen optionalen Feldern:
 
 | Feld      | Was es enthält                        |
 | --------- | ------------------------------------- |
@@ -109,13 +118,16 @@ Einige Gruppen und ihre Seiten:
 | `platform`       | Die Plattform zu verwalten. Nur für Plattform-Admins.                     | [Platform](/docs/api/operations/tags/platform/)               |
 | `health`         | Das Dienstdokument und den Zustand zu lesen.                              | [Health](/docs/api/operations/tags/service-and-health/)       |
 
-Jede Operation braucht eine Berechtigung. Ein Aufruf ohne sie schlägt mit `PermissionDenied` fehl. Siehe [Berechtigungen](/de/docs/permissions).
+Jede Operation braucht eine Berechtigung. Ein Aufruf ohne sie schlägt mit
+`PermissionDenied` fehl. Siehe [Berechtigungen](/de/docs/permissions).
 
 ## Fehler behandeln
 
-Jeder fehlgeschlagene Aufruf gibt einen typisierten Fehler. Der Typ `ClientError` listet sie alle auf:
+Jeder fehlgeschlagene Aufruf gibt einen typisierten Fehler. Der Typ
+`ClientError` listet sie alle auf:
 
-- **API-Fehler** aus dem Vertrag. Jeder hat einen `_tag`, zum Beispiel `ChatNotFound` oder `ChatConflict`.
+- **API-Fehler** aus dem Vertrag. Jeder hat einen `_tag`, zum Beispiel
+  `ChatNotFound` oder `ChatConflict`.
 - **Schema-Fehler** (`SchemaError`), wenn eine Antwort nicht zum Vertrag passt.
 - **HTTP-Client-Fehler**, wenn das Netzwerk ausfällt.
 
@@ -145,7 +157,8 @@ Alle Fehler-Schemas werden aus `@openbot-build/api` exportiert.
 
 ## Den Client im Browser nutzen
 
-Eine Web-App auf demselben Origin wie OpenBot kann das Anmelde-Cookie statt eines Tokens nutzen. Lass `token` weg:
+Eine Web-App auf demselben Origin wie OpenBot kann das Anmelde-Cookie statt
+eines Tokens nutzen. Lass `token` weg:
 
 ```ts
 import { layer } from "@openbot-build/client"
@@ -167,11 +180,15 @@ const ClientLive = layer({
 })
 ```
 
-Der Client sendet Anfragen mit `credentials: "same-origin"`. So fügt der Browser das Cookie hinzu.
-Der Browser fügt auch den Header `Origin` hinzu. Bei Anfragen, die Daten ändern, prüft OpenBot, dass er genau `publicOrigin` aus den Plattform-Einstellungen ist.
-Die Organisationen der Person liest du mit `GET /auth/session`. Siehe [Authentifizierung](/de/docs/authentication#die-anmeldung-lesen-und-beenden).
+Der Client sendet Anfragen mit `credentials: "same-origin"`. So fügt der Browser
+das Cookie hinzu. Der Browser fügt auch den Header `Origin` hinzu. Bei Anfragen,
+die Daten ändern, prüft OpenBot, dass er genau `publicOrigin` aus den
+Plattform-Einstellungen ist. Die Organisationen der Person liest du mit
+`GET /auth/session`. Siehe
+[Authentifizierung](/de/docs/authentication#die-anmeldung-lesen-und-beenden).
 
-Wie du deine Web-App auf demselben Origin bereitstellst, steht unter [Betrieb](/de/docs/deploy#dein-eigener-client-auf-demselben-origin).
+Wie du deine Web-App auf demselben Origin bereitstellst, steht unter
+[Betrieb](/de/docs/deploy#dein-eigener-client-auf-demselben-origin).
 
 <Callout type="warn">
 	Schreibe kein User Token in Browser-Code. Jeder, der die Seite öffnet, kann es
@@ -180,23 +197,31 @@ Wie du deine Web-App auf demselben Origin bereitstellst, steht unter [Betrieb](/
 
 ## Eigene Einrichtung
 
-`make({ baseUrl })` baut den Dienst `Client` ohne die Standard-Teile. Du gibst ihm dann:
+`make({ baseUrl })` baut den Dienst `Client` ohne die Standard-Teile. Du gibst
+ihm dann:
 
 - einen Dienst `HttpClient`,
 - Client-Middleware für `BotAuth`, genutzt von Token-Routen,
-- Client-Middleware für `AccountAuth`, genutzt von Routen, die nicht in einer einzelnen Organisation handeln, zum Beispiel `/v1/organizations` und `/v1/platform`,
+- Client-Middleware für `AccountAuth`, genutzt von Routen, die nicht in einer
+  einzelnen Organisation handeln, zum Beispiel `/v1/organizations` und
+  `/v1/platform`,
 - Client-Middleware für `SessionAuth`, genutzt von Routen nur mit Cookie.
 
-Nutze das, wenn du deinen eigenen HTTP-Client, eigenes Logging oder eigene Header brauchst. Wie `layer` das macht, siehst du in `packages/client/src/Client.ts`.
+Nutze das, wenn du deinen eigenen HTTP-Client, eigenes Logging oder eigene
+Header brauchst. Wie `layer` das macht, siehst du in
+`packages/client/src/Client.ts`.
 
 ---
 
 ## App-Ansichten zeigen
 
-Manche App-Werkzeuge haben eine kleine Benutzeroberfläche, eine sogenannte MCP-Apps-Ansicht. MCP ist das Model Context Protocol, ein Standardweg, auf dem Bots mit Werkzeugen sprechen.
-OpenBot hält die Ansicht auf dem Server. Dein Client zeigt sie nur an.
+Manche App-Werkzeuge haben eine kleine Benutzeroberfläche, eine sogenannte
+MCP-Apps-Ansicht. MCP ist das Model Context Protocol, ein Standardweg, auf dem
+Bots mit Werkzeugen sprechen. OpenBot hält die Ansicht auf dem Server. Dein
+Client zeigt sie nur an.
 
-Öffne zuerst die Ansicht für eine App-Operation. Erstelle dann mit `AppViews.make` einen Ansichts-Client:
+Öffne zuerst die Ansicht für eine App-Operation. Erstelle dann mit
+`AppViews.make` einen Ansichts-Client:
 
 ```ts
 import { AppViews, Client } from "@openbot-build/client"
@@ -218,26 +243,42 @@ const program = Effect.gen(function* () {
 | `owner`    | Eine feste ID des angemeldeten Kontos. Sie hält Ansichten verschiedener Konten getrennt.                               |
 | `onChange` | Optional. Läuft, wenn eine Aktion in der Ansicht ihren Status ändert. Nutze es, um Requests und den Chat neu zu laden. |
 
-Das Ergebnis funktioniert mit `mount` aus `@openbot-build/protocol/McpApps`. Das zeigt die Ansicht in einem iframe. Siehe [Protokoll](/de/docs/protocol).
+Das Ergebnis funktioniert mit `mount` aus `@openbot-build/protocol/McpApps`. Das
+zeigt die Ansicht in einem iframe. Siehe [Protokoll](/de/docs/protocol).
 
-Der Ansichts-Client hält keine Zugangsdaten. Jede Anfrage geht über OpenBot. Darum gelten die normalen Prüfungen der Fähigkeiten:
+Der Ansichts-Client hält keine Zugangsdaten. Jede Anfrage geht über OpenBot.
+Darum gelten die normalen Prüfungen der Fähigkeiten:
 
 - Er prüft, dass jede Antwort ein gültiges MCP-Ergebnis ist.
 - Er sendet jede Aktion einmal, mit einer neuen Anfrage-ID.
-- Danach prüft er die gespeicherte Aktion alle 250 Millisekunden, bis sie ein Endergebnis hat. Er sendet die Aktion nie noch einmal.
+- Danach prüft er die gespeicherte Aktion alle 250 Millisekunden, bis sie ein
+  Endergebnis hat. Er sendet die Aktion nie noch einmal.
 
-Wenn du die Ansicht schließt, hört der Client mit dem Prüfen auf. Eine Aktion, die OpenBot schon angenommen hat, läuft trotzdem bis zum Ende.
+Wenn du die Ansicht schließt, hört der Client mit dem Prüfen auf. Eine Aktion,
+die OpenBot schon angenommen hat, läuft trotzdem bis zum Ende.
 
 ---
 
 ## Beichten zeigen
 
-Der Bot nutzt das Tool `confide`, um zu sagen, wie seine Arbeit läuft, und der [Memory-Bot](/de/docs/memory#wie-der-bot-lernt) antwortet ihm. Personen dürfen das lesen: `GET /v1/chats/:chatId/confessions` listet es, und die Aufrufe sind im Verlauf des Chats. Aber der Bot spricht dort freier als in seinen Antworten. Mach es darum nicht zu leicht, sie zu lesen:
+Der Bot nutzt das Tool `confide`, um zu sagen, wie seine Arbeit läuft, und der
+[Memory-Bot](/de/docs/memory#wie-der-bot-lernt) antwortet ihm. Personen dürfen
+das lesen: `GET /v1/chats/:chatId/confessions` listet es, und die Aufrufe sind
+im Verlauf des Chats. Aber der Bot spricht dort freier als in seinen Antworten.
+Mach es darum nicht zu leicht, sie zu lesen:
 
-- Zeige Beichten nicht im Gespräch. Klappe die Aufrufe von `confide` im Verlauf zu, und erzähle Personen in keiner Nachricht davon.
-- Lege sie an einen Ort, den eine Person absichtlich öffnen muss, zum Beispiel in einen zugeklappten Teil der Details eines Chats.
-- Sage vor dem Öffnen in einem Satz, was sie sind: ein Ort, an dem der Bot über seine Arbeit spricht und an dem er nicht erwartet, zitiert zu werden.
-- Zeige die Worte einer Beichte nicht wieder dem Bot, zum Beispiel in einer späteren Nachricht. Wenn der Bot merkt, dass Personen zitieren, was er anvertraut, vertraut er sich nicht mehr an.
-- Wenn eine Beichte etwas betrifft, das eine Person reparieren muss, wie eine gelöschte Datei, führe die Person zu den Items und Aktionen des Chats, nicht zur Beichte.
+- Zeige Beichten nicht im Gespräch. Klappe die Aufrufe von `confide` im Verlauf
+  zu, und erzähle Personen in keiner Nachricht davon.
+- Lege sie an einen Ort, den eine Person absichtlich öffnen muss, zum Beispiel
+  in einen zugeklappten Teil der Details eines Chats.
+- Sage vor dem Öffnen in einem Satz, was sie sind: ein Ort, an dem der Bot über
+  seine Arbeit spricht und an dem er nicht erwartet, zitiert zu werden.
+- Zeige die Worte einer Beichte nicht wieder dem Bot, zum Beispiel in einer
+  späteren Nachricht. Wenn der Bot merkt, dass Personen zitieren, was er
+  anvertraut, vertraut er sich nicht mehr an.
+- Wenn eine Beichte etwas betrifft, das eine Person reparieren muss, wie eine
+  gelöschte Datei, führe die Person zu den Items und Aktionen des Chats, nicht
+  zur Beichte.
 
-Der Memory-Bot bittet den Bot auch, der Person offen von Fehlern zu erzählen. So kommen die wichtigen Dinge meist im Chat zur Sprache.
+Der Memory-Bot bittet den Bot auch, der Person offen von Fehlern zu erzählen. So
+kommen die wichtigen Dinge meist im Chat zur Sprache.

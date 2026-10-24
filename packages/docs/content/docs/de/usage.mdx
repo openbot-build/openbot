@@ -1,9 +1,16 @@
 ---
 title: Nutzung und Budgets
-description: Sieh die Nutzung der Models und ihre Kosten, setze Budgets und bezahle Models der Platform mit Credits.
+description:
+  Sieh die Nutzung der Models und ihre Kosten, setze Budgets und bezahle Models
+  der Platform mit Credits.
 ---
 
-OpenBot zeichnet jeden Aufruf eines Model auf. Du siehst, wie viele Tokens jedes Member, jeder Bot und jedes User-Token verbraucht hat und was sie gekostet haben. Ein Token ist ein kleines Stück Text, das ein Model liest oder schreibt. Du kannst auch **Budgets** setzen. Ein Budget stoppt Aufrufe von Models, wenn zu viel Geld ausgegeben ist. Eine Platform kann Organisationen **Credits** (Guthaben) geben. Damit bezahlen sie die Models, die die Platform teilt.
+OpenBot zeichnet jeden Aufruf eines Model auf. Du siehst, wie viele Tokens jedes
+Member, jeder Bot und jedes User-Token verbraucht hat und was sie gekostet
+haben. Ein Token ist ein kleines Stück Text, das ein Model liest oder schreibt.
+Du kannst auch **Budgets** setzen. Ein Budget stoppt Aufrufe von Models, wenn zu
+viel Geld ausgegeben ist. Eine Platform kann Organisationen **Credits**
+(Guthaben) geben. Damit bezahlen sie die Models, die die Platform teilt.
 
 | Wort               | Bedeutung                                                                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------- |
@@ -19,7 +26,8 @@ OpenBot zeichnet jeden Aufruf eines Model auf. Du siehst, wie viele Tokens jedes
 
 ## Was OpenBot aufzeichnet
 
-OpenBot zeichnet jeden Aufruf eines Model auf, der eine Antwort bekommt. Jedes Usage event hat eine `source` (Quelle):
+OpenBot zeichnet jeden Aufruf eines Model auf, der eine Antwort bekommt. Jedes
+Usage event hat eine `source` (Quelle):
 
 | `source`     | Was den Aufruf gemacht hat                                                             |
 | ------------ | -------------------------------------------------------------------------------------- |
@@ -29,21 +37,30 @@ OpenBot zeichnet jeden Aufruf eines Model auf, der eine Antwort bekommt. Jedes U
 | `bot_memory` | Der [Memory-Bot](/de/docs/memory#der-memory-bot): was er lernt, ergänzt und antwortet. |
 | `other`      | Jeder andere Aufruf.                                                                   |
 
-Ein Usage event hat auch den Chat (`chatId`), den Turn, den Bot, das Member und das User-Token, wenn der Aufruf sie hat. In einem [Channel](/de/docs/channels) ist das Member die Person, die die Nachricht geschrieben hat.
+Ein Usage event hat auch den Chat (`chatId`), den Turn, den Bot, das Member und
+das User-Token, wenn der Aufruf sie hat. In einem [Channel](/de/docs/channels)
+ist das Member die Person, die die Nachricht geschrieben hat.
 
 Manche Aufrufe zeichnet OpenBot nicht auf:
 
 - Ein Aufruf, der fehlschlägt, bevor das Model antwortet.
-- Ein Stream, der vor seinem Ende stoppt, zum Beispiel wenn du einen Turn unterbrichst. Das Model zählt diese Tokens vielleicht trotzdem.
-- Ein Schritt, der eine Aktion des Host noch einmal ausführt. Er ruft kein Model auf.
+- Ein Stream, der vor seinem Ende stoppt, zum Beispiel wenn du einen Turn
+  unterbrichst. Das Model zählt diese Tokens vielleicht trotzdem.
+- Ein Schritt, der eine Aktion des Host noch einmal ausführt. Er ruft kein Model
+  auf.
 
 ---
 
 ## Preise
 
-Ein Preis gehört zu einem Model bei einem Anbieter. Dasselbe Model kann nämlich bei einem anderen Anbieter anders viel kosten. Viele Models kosten mehr, wenn eine Anfrage lang ist. Manche Anbieter kosten in der Nacht weniger. Ein Preis hat also **Stufen** (`tiers`) nach der Größe der Eingabe und **Perioden** (`periods`) nach der Tageszeit.
+Ein Preis gehört zu einem Model bei einem Anbieter. Dasselbe Model kann nämlich
+bei einem anderen Anbieter anders viel kosten. Viele Models kosten mehr, wenn
+eine Anfrage lang ist. Manche Anbieter kosten in der Nacht weniger. Ein Preis
+hat also **Stufen** (`tiers`) nach der Größe der Eingabe und **Perioden**
+(`periods`) nach der Tageszeit.
 
-Jede Stufe hat Werte. Jeder Wert ist der Preis für eine Million Tokens, in Mikro-USD:
+Jede Stufe hat Werte. Jeder Wert ist der Preis für eine Million Tokens, in
+Mikro-USD:
 
 | Feld              | Welche Tokens                                                            |
 | ----------------- | ------------------------------------------------------------------------ |
@@ -53,7 +70,11 @@ Jede Stufe hat Werte. Jeder Wert ist der Preis für eine Million Tokens, in Mikr
 | `output`          | Ausgabe-Text und Aufrufe von Tools.                                      |
 | `outputReasoning` | Tokens zum Nachdenken. Sende `null`, um den Wert von `output` zu nutzen. |
 
-Ein Administrator der Organisation setzt die Preise der eigenen Anbieter der Organisation. Diese Preise schätzen, was die Firma des Model verlangt. Ein Platform-Admin setzt die Preise der geteilten Anbieter. In diesem Beispiel kostet die Eingabe 2,50 US-Dollar und die Ausgabe 10 US-Dollar für eine Million Tokens, für jede Größe der Eingabe und zu jeder Zeit:
+Ein Administrator der Organisation setzt die Preise der eigenen Anbieter der
+Organisation. Diese Preise schätzen, was die Firma des Model verlangt. Ein
+Platform-Admin setzt die Preise der geteilten Anbieter. In diesem Beispiel
+kostet die Eingabe 2,50 US-Dollar und die Ausgabe 10 US-Dollar für eine Million
+Tokens, für jede Größe der Eingabe und zu jeder Zeit:
 
 ```sh
 curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -69,19 +90,32 @@ curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `GET /v1/platform/model_providers/:providerId/prices`     | Listet den aktuellen Preis jedes Model eines geteilten Anbieters auf. |
 | `PUT /v1/platform/model_providers/:providerId/prices`     | Setzt einen neuen Preis für ein Model eines geteilten Anbieters.      |
 
-Ein Anbieter kann nur die Models mit einem Preis versehen, die er verknüpft. Ein anderes Model ergibt `400` mit `ModelProviderInvalid`. Der [Katalog der Models](/de/docs/models#ein-model-auswählen) zeigt den aktuellen `price` jedes Model.
+Ein Anbieter kann nur die Models mit einem Preis versehen, die er verknüpft. Ein
+anderes Model ergibt `400` mit `ModelProviderInvalid`. Der
+[Katalog der Models](/de/docs/models#ein-model-auswählen) zeigt den aktuellen
+`price` jedes Model.
 
-Ein neuer Preis gilt für Aufrufe, die ab jetzt beginnen. Jedes Usage event behält die Kosten aus der Zeit des Aufrufs. Alte Kosten ändern sich also nie. OpenBot rundet die Kosten jedes Aufrufs auf ganze Mikro-USD auf.
+Ein neuer Preis gilt für Aufrufe, die ab jetzt beginnen. Jedes Usage event
+behält die Kosten aus der Zeit des Aufrufs. Alte Kosten ändern sich also nie.
+OpenBot rundet die Kosten jedes Aufrufs auf ganze Mikro-USD auf.
 
-Ein Model ohne Preis kostet 0. OpenBot zeichnet seine Aufrufe trotzdem auf. Sie zählen aber nicht für Budgets und nehmen keine Credits.
+Ein Model ohne Preis kostet 0. OpenBot zeichnet seine Aufrufe trotzdem auf. Sie
+zählen aber nicht für Budgets und nehmen keine Credits.
 
 ### Stufen nach Größe der Eingabe
 
-`tiers` ist eine Liste, von klein nach groß. Jede Stufe hat `upToInputTokens`: die höchste Zahl an Eingabe-Tokens, die ein Aufruf in dieser Stufe haben kann. Dabei zählen alle Eingabe-Tokens des Aufrufs, aus dem Cache oder nicht. Die letzte Stufe hat `upToInputTokens: null`, denn sie hat keine obere Grenze. Du kannst bis zu 20 Stufen haben.
+`tiers` ist eine Liste, von klein nach groß. Jede Stufe hat `upToInputTokens`:
+die höchste Zahl an Eingabe-Tokens, die ein Aufruf in dieser Stufe haben kann.
+Dabei zählen alle Eingabe-Tokens des Aufrufs, aus dem Cache oder nicht. Die
+letzte Stufe hat `upToInputTokens: null`, denn sie hat keine obere Grenze. Du
+kannst bis zu 20 Stufen haben.
 
-Ein Aufruf nutzt die erste Stufe, in die seine Eingabe passt. Dann kosten alle Tokens des Aufrufs die Werte dieser Stufe, nicht nur die Tokens über der Grenze. Die meisten Anbieter berechnen lange Anfragen so.
+Ein Aufruf nutzt die erste Stufe, in die seine Eingabe passt. Dann kosten alle
+Tokens des Aufrufs die Werte dieser Stufe, nicht nur die Tokens über der Grenze.
+Die meisten Anbieter berechnen lange Anfragen so.
 
-Zum Beispiel kostet ein Model bis 32.000 Eingabe-Tokens weniger, bis 128.000 mehr und darüber am meisten:
+Zum Beispiel kostet ein Model bis 32.000 Eingabe-Tokens weniger, bis 128.000
+mehr und darüber am meisten:
 
 ```json
 {
@@ -119,7 +153,11 @@ Ein Aufruf mit 50.000 Eingabe-Tokens nutzt die zweite Stufe.
 
 ### Perioden nach Tageszeit
 
-`periods` gibt andere Stufen für manche Zeiten, zum Beispiel einen niedrigeren Preis in der Nacht. Jede Periode hat einen `name`, ein oder mehr `windows` (Zeitfenster) und ihre eigenen `tiers`. `timeZone` sagt, in welcher Zeitzone die Zeitfenster sind. Es ist ein IANA-Name, zum Beispiel `UTC` oder `Asia/Shanghai`. Lass es weg für `UTC`.
+`periods` gibt andere Stufen für manche Zeiten, zum Beispiel einen niedrigeren
+Preis in der Nacht. Jede Periode hat einen `name`, ein oder mehr `windows`
+(Zeitfenster) und ihre eigenen `tiers`. `timeZone` sagt, in welcher Zeitzone die
+Zeitfenster sind. Es ist ein IANA-Name, zum Beispiel `UTC` oder `Asia/Shanghai`.
+Lass es weg für `UTC`.
 
 | Feld des Zeitfensters | Was es ist                                                                                                              |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
@@ -127,9 +165,15 @@ Ein Aufruf mit 50.000 Eingabe-Tokens nutzt die zweite Stufe.
 | `end`                 | Das Ende, als `HH:MM`, bis `24:00`. Das Zeitfenster endet vor dieser Minute.                                            |
 | `days`                | Die Tage, an denen das Zeitfenster beginnt: `mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun`. Lass es weg für jeden Tag. |
 
-Wenn `end` vor `start` liegt, geht das Zeitfenster über Mitternacht. Es gehört zu dem Tag, an dem es beginnt. Zum Beispiel enthält `{"start":"22:00","end":"02:00","days":["fri"]}` Freitag 23:00 und Samstag 01:00, aber nicht Freitag 01:00.
+Wenn `end` vor `start` liegt, geht das Zeitfenster über Mitternacht. Es gehört
+zu dem Tag, an dem es beginnt. Zum Beispiel enthält
+`{"start":"22:00","end":"02:00","days":["fri"]}` Freitag 23:00 und Samstag
+01:00, aber nicht Freitag 01:00.
 
-OpenBot nimmt die Zeit, zu der der Aufruf beginnt. Es nutzt die erste Periode mit einem Zeitfenster, das diese Zeit enthält. Wenn keine Periode sie enthält, nutzt der Aufruf die `tiers` des Preises. In jedem Fall wählt der Aufruf dann seine Stufe nach der Größe der Eingabe.
+OpenBot nimmt die Zeit, zu der der Aufruf beginnt. Es nutzt die erste Periode
+mit einem Zeitfenster, das diese Zeit enthält. Wenn keine Periode sie enthält,
+nutzt der Aufruf die `tiers` des Preises. In jedem Fall wählt der Aufruf dann
+seine Stufe nach der Größe der Eingabe.
 
 Zum Beispiel kostet ein Anbieter von 00:30 bis 08:30 Pekinger Zeit die Hälfte:
 
@@ -172,7 +216,8 @@ Lass `periods` weg, wenn der Preis zu jeder Zeit gleich ist.
 
 ## Die Nutzung ansehen
 
-`GET /v1/organization/usage` zählt die Tokens und die Kosten in einem Zeitraum zusammen. Es braucht `usage.read`.
+`GET /v1/organization/usage` zählt die Tokens und die Kosten in einem Zeitraum
+zusammen. Es braucht `usage.read`.
 
 | Query     | Was es tut                                                                               |
 | --------- | ---------------------------------------------------------------------------------------- |
@@ -214,15 +259,21 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 }
 ```
 
-`key` ist der Wert der Gruppe, zum Beispiel eine User-ID oder ein Tag. Er ist `null` für Aufrufe ohne diesen Wert, zum Beispiel Aufrufe ohne Bot.
+`key` ist der Wert der Gruppe, zum Beispiel eine User-ID oder ein Tag. Er ist
+`null` für Aufrufe ohne diesen Wert, zum Beispiel Aufrufe ohne Bot.
 
-`GET /v1/organization/usage/events` listet die einzelnen Usage events auf, die neuesten zuerst. Es nimmt `from`, `to`, `limit` (1 bis 200, Standard ist 50) und `after`. Sende den Wert `next` einer Seite als `after`, um die nächste Seite zu bekommen. Jedes Event hat `priced` und `charged`. `charged` ist `true`, wenn die Kosten von den Credits kamen.
+`GET /v1/organization/usage/events` listet die einzelnen Usage events auf, die
+neuesten zuerst. Es nimmt `from`, `to`, `limit` (1 bis 200, Standard ist 50) und
+`after`. Sende den Wert `next` einer Seite als `after`, um die nächste Seite zu
+bekommen. Jedes Event hat `priced` und `charged`. `charged` ist `true`, wenn die
+Kosten von den Credits kamen.
 
 ---
 
 ## Budgets
 
-Ein Budget stoppt Ausgaben an einer Grenze. Du kannst ein Budget für vier Bereiche setzen:
+Ein Budget stoppt Ausgaben an einer Grenze. Du kannst ein Budget für vier
+Bereiche setzen:
 
 | `scope`        | `scopeId`                                    | Was zählt                                               |
 | -------------- | -------------------------------------------- | ------------------------------------------------------- |
@@ -231,14 +282,21 @@ Ein Budget stoppt Ausgaben an einer Grenze. Du kannst ein Budget für vier Berei
 | `bot`          | Die ID eines Bot.                            | Die Aufrufe dieses Bot.                                 |
 | `token`        | Die ID eines User-Token.                     | Die Aufrufe der Arbeit, die dieses Token gestartet hat. |
 
-Jedes Budget hat eine `period` (Zeitraum): `day` oder `month`. Beide beginnen um Mitternacht UTC. Jeder Bereich kann ein Budget für jeden Zeitraum haben.
+Jedes Budget hat eine `period` (Zeitraum): `day` oder `month`. Beide beginnen um
+Mitternacht UTC. Jeder Bereich kann ein Budget für jeden Zeitraum haben.
 
 Jedes Budget hat auch einen `mode`:
 
-- Ein `hard`-Budget stoppt Aufrufe von Models, wenn die Ausgaben im Zeitraum `limitMicros` erreichen. Der Aufruf schlägt fehl, also schlägt der Turn mit einem Fehler des Model fehl. Der nächste Zeitraum beginnt wieder bei 0.
+- Ein `hard`-Budget stoppt Aufrufe von Models, wenn die Ausgaben im Zeitraum
+  `limitMicros` erreichen. Der Aufruf schlägt fehl, also schlägt der Turn mit
+  einem Fehler des Model fehl. Der nächste Zeitraum beginnt wieder bei 0.
 - Ein `soft`-Budget stoppt nie einen Aufruf. Es zeigt nur `exceeded: true`.
 
-Ein Budget zählt jeden Aufruf mit Preis, auch die Aufrufe mit dem eigenen Schlüssel der Organisation. OpenBot prüft die Budgets vor jedem Aufruf eines Model, nicht nur am Anfang eines Turn. Ein langer Turn stoppt bei seinem nächsten Aufruf eines Model. Die Ausgaben können die Grenze also um die Kosten eines Aufrufs überschreiten.
+Ein Budget zählt jeden Aufruf mit Preis, auch die Aufrufe mit dem eigenen
+Schlüssel der Organisation. OpenBot prüft die Budgets vor jedem Aufruf eines
+Model, nicht nur am Anfang eines Turn. Ein langer Turn stoppt bei seinem
+nächsten Aufruf eines Model. Die Ausgaben können die Grenze also um die Kosten
+eines Aufrufs überschreiten.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -272,13 +330,16 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `PATCH /v1/organization/budgets/:budgetId`  | Ändert `limitMicros` oder `mode`. Sende die `version` als `expectedVersion`. |
 | `DELETE /v1/organization/budgets/:budgetId` | Entfernt ein Budget.                                                         |
 
-Budgets lesen braucht `budgets.read`. Budgets ändern braucht `budgets.write`. Jede Änderung kommt ins [Audit-Log](/de/docs/organization#audit-log).
+Budgets lesen braucht `budgets.read`. Budgets ändern braucht `budgets.write`.
+Jede Änderung kommt ins [Audit-Log](/de/docs/organization#audit-log).
 
 ---
 
 ## Credits
 
-Mit Credits kann eine Platform die Nutzung ihrer geteilten Models verkaufen oder verschenken. Standardmäßig sind sie aus. Dann kann eine Organisation die geteilten Models ohne Grenze nutzen, außer ein Budget stoppt sie.
+Mit Credits kann eine Platform die Nutzung ihrer geteilten Models verkaufen oder
+verschenken. Standardmäßig sind sie aus. Dann kann eine Organisation die
+geteilten Models ohne Grenze nutzen, außer ein Budget stoppt sie.
 
 Ein Platform-Admin schaltet Credits für eine Organisation ein und gibt Credits:
 
@@ -294,33 +355,49 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/platform/organizations/org_8f3a/credits/grants
 ```
 
-Ein negativer `amountMicros` nimmt Credits zurück. Jede Vergabe kommt ins Audit-Log der Platform.
+Ein negativer `amountMicros` nimmt Credits zurück. Jede Vergabe kommt ins
+Audit-Log der Platform.
 
 Solange Credits an sind:
 
 - Jeder Aufruf eines Model der Platform nimmt seine Kosten vom Guthaben.
-- Wenn das Guthaben 0 oder weniger ist, schlagen Aufrufe der Models der Platform fehl. Aufrufe mit dem eigenen Schlüssel der Organisation funktionieren weiter.
-- Das Guthaben kann um die Kosten eines Aufrufs unter 0 fallen. OpenBot prüft das Guthaben nämlich vor einem Aufruf und nimmt die Kosten danach.
+- Wenn das Guthaben 0 oder weniger ist, schlagen Aufrufe der Models der Platform
+  fehl. Aufrufe mit dem eigenen Schlüssel der Organisation funktionieren weiter.
+- Das Guthaben kann um die Kosten eines Aufrufs unter 0 fallen. OpenBot prüft
+  das Guthaben nämlich vor einem Aufruf und nimmt die Kosten danach.
 
-Aufrufe mit dem eigenen Schlüssel der Organisation nehmen nie Credits, auch wenn Credits an sind.
+Aufrufe mit dem eigenen Schlüssel der Organisation nehmen nie Credits, auch wenn
+Credits an sind.
 
-`GET /v1/organization/credits` zeigt `enabled`, `balanceMicros` und die neuesten 50 Vergaben. Es braucht `usage.read`. Ein Platform-Admin liest dasselbe mit `GET /v1/platform/organizations/:organizationId/credits`.
+`GET /v1/organization/credits` zeigt `enabled`, `balanceMicros` und die neuesten
+50 Vergaben. Es braucht `usage.read`. Ein Platform-Admin liest dasselbe mit
+`GET /v1/platform/organizations/:organizationId/credits`.
 
-OpenBot hat noch keine Zahlungen. Eine Platform, die Credits verkauft, speichert die Zahlung in ihrem eigenen System. Dann gibt sie die Credits über die API.
+OpenBot hat noch keine Zahlungen. Eine Platform, die Credits verkauft, speichert
+die Zahlung in ihrem eigenen System. Dann gibt sie die Credits über die API.
 
 ---
 
 ## Wenn ein Aufruf gestoppt wird
 
-Wenn ein Budget oder die Credits einen Aufruf stoppen, schlägt der Aufruf des Model mit einem `AiError` fehl. Sein Grund ist `QuotaExhaustedError`. Der Turn endet mit dem Status `Failed` und dem Code `model_error`. Die Metadaten des Fehlers sagen in `openbot.reason`, warum: `budget` oder `credits`. Bei einem Budget nennt `openbot.budgetId` das Budget.
+Wenn ein Budget oder die Credits einen Aufruf stoppen, schlägt der Aufruf des
+Model mit einem `AiError` fehl. Sein Grund ist `QuotaExhaustedError`. Der Turn
+endet mit dem Status `Failed` und dem Code `model_error`. Die Metadaten des
+Fehlers sagen in `openbot.reason`, warum: `budget` oder `credits`. Bei einem
+Budget nennt `openbot.budgetId` das Budget.
 
-Wenn OpenBot die Budgets nicht lesen kann, zum Beispiel weil die Datenbank nicht läuft, stoppt es den Aufruf auch.
+Wenn OpenBot die Budgets nicht lesen kann, zum Beispiel weil die Datenbank nicht
+läuft, stoppt es den Aufruf auch.
 
 ---
 
 ## Rate Limit
 
-Ein Platform-Admin kann begrenzen, wie viele API-Anfragen jeder Aufrufer in einer Minute sendet. Diese Grenze heißt Rate Limit. Jedes User-Token zählt für sich. Eine angemeldete Person ohne Token zählt als ein Aufrufer. Alle Instanzen von OpenBot teilen die Zählung. Setze `rateLimit` in den [Einstellungen der Platform](/de/docs/platform#einstellungen-der-platform):
+Ein Platform-Admin kann begrenzen, wie viele API-Anfragen jeder Aufrufer in
+einer Minute sendet. Diese Grenze heißt Rate Limit. Jedes User-Token zählt für
+sich. Eine angemeldete Person ohne Token zählt als ein Aufrufer. Alle Instanzen
+von OpenBot teilen die Zählung. Setze `rateLimit` in den
+[Einstellungen der Platform](/de/docs/platform#einstellungen-der-platform):
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -329,15 +406,23 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/platform/settings
 ```
 
-`null` heißt: keine Grenze. Das ist der Standard. Ein Aufrufer über der Grenze bekommt `429` mit `RateLimited`. `retryAfterSeconds` sagt, wann die nächste Minute beginnt. Die Grenze gilt für die API der Organisationen. Sie gilt nicht für `/v1/platform`, die Anmeldung und Webhooks.
+`null` heißt: keine Grenze. Das ist der Standard. Ein Aufrufer über der Grenze
+bekommt `429` mit `RateLimited`. `retryAfterSeconds` sagt, wann die nächste
+Minute beginnt. Die Grenze gilt für die API der Organisationen. Sie gilt nicht
+für `/v1/platform`, die Anmeldung und Webhooks.
 
 ---
 
 ## Token Rate
 
-Eine Token Rate begrenzt, wie schnell die Arbeit der Models eines Bereichs Tokens verbraucht. Sie zählt Eingabe-Tokens und Ausgabe-Tokens zusammen. Wenn Arbeit über der Rate liegt, macht OpenBot sie langsamer. Es lehnt die Arbeit nie ab.
+Eine Token Rate begrenzt, wie schnell die Arbeit der Models eines Bereichs
+Tokens verbraucht. Sie zählt Eingabe-Tokens und Ausgabe-Tokens zusammen. Wenn
+Arbeit über der Rate liegt, macht OpenBot sie langsamer. Es lehnt die Arbeit nie
+ab.
 
-Jeder Bereich hat einen **Token Bucket** (Eimer für Tokens). Der Bucket hält bis zu `burstTokens` und füllt sich mit `tokensPerSecond` wieder auf. Ein voller Bucket lässt einen kurzen Schub Arbeit mit voller Geschwindigkeit durch.
+Jeder Bereich hat einen **Token Bucket** (Eimer für Tokens). Der Bucket hält bis
+zu `burstTokens` und füllt sich mit `tokensPerSecond` wieder auf. Ein voller
+Bucket lässt einen kurzen Schub Arbeit mit voller Geschwindigkeit durch.
 
 | Bereich        | Ein Bucket für                                                       |
 | -------------- | -------------------------------------------------------------------- |
@@ -348,11 +433,23 @@ Jeder Bereich hat einen **Token Bucket** (Eimer für Tokens). Der Bucket hält b
 
 Ein Aufruf eines Model nimmt aus jedem Bucket seiner Bereiche:
 
-- **Vor dem Aufruf** wartet er, bis kein Bucket Schulden hat. Er schlägt nicht fehl.
-- **Während das Model streamt**, liest OpenBot die Ausgabe vom Anbieter in einen Puffer. Es schickt jedes Stück erst weiter, wenn die Buckets Platz dafür haben. Ein Token sind etwa vier Zeichen. So kommt die Ausgabe mit gleichmäßiger Geschwindigkeit.
-- **Wenn der Aufruf endet**, legt OpenBot die echten Eingabe-Tokens und Ausgabe-Tokens in die Buckets. Wenn ein Bucket dadurch Schulden hat, wartet der nächste Aufruf, bis sich der Bucket wieder füllt.
+- **Vor dem Aufruf** wartet er, bis kein Bucket Schulden hat. Er schlägt nicht
+  fehl.
+- **Während das Model streamt**, liest OpenBot die Ausgabe vom Anbieter in einen
+  Puffer. Es schickt jedes Stück erst weiter, wenn die Buckets Platz dafür
+  haben. Ein Token sind etwa vier Zeichen. So kommt die Ausgabe mit
+  gleichmäßiger Geschwindigkeit.
+- **Wenn der Aufruf endet**, legt OpenBot die echten Eingabe-Tokens und
+  Ausgabe-Tokens in die Buckets. Wenn ein Bucket dadurch Schulden hat, wartet
+  der nächste Aufruf, bis sich der Bucket wieder füllt.
 
-Der Platform-Admin setzt die höchsten Raten in den [Einstellungen der Platform](/de/docs/platform#einstellungen-der-platform). Eine Organisation kann ihre eigenen Raten in ihren [Einstellungen](/de/docs/organization#einstellungen) setzen. Für jeden Bereich gilt die kleinere der beiden Raten. Eine Organisation kann eine Rate also nur kleiner machen. `null` heißt: keine Grenze für diesen Bereich. Das ist der Standard.
+Der Platform-Admin setzt die höchsten Raten in den
+[Einstellungen der Platform](/de/docs/platform#einstellungen-der-platform). Eine
+Organisation kann ihre eigenen Raten in ihren
+[Einstellungen](/de/docs/organization#einstellungen) setzen. Für jeden Bereich
+gilt die kleinere der beiden Raten. Eine Organisation kann eine Rate also nur
+kleiner machen. `null` heißt: keine Grenze für diesen Bereich. Das ist der
+Standard.
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -361,7 +458,10 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/platform/settings
 ```
 
-Jede Instanz von OpenBot hält ihre eigenen Buckets im Speicher. Mit mehr als einer Instanz kann ein Bereich auf jeder Instanz bis zur Rate verbrauchen. Ein Turn läuft auf einer Instanz, aber die Turns eines Chats und die Arbeit, die er abgibt, können auf vielen Instanzen laufen.
+Jede Instanz von OpenBot hält ihre eigenen Buckets im Speicher. Mit mehr als
+einer Instanz kann ein Bereich auf jeder Instanz bis zur Rate verbrauchen. Ein
+Turn läuft auf einer Instanz, aber die Turns eines Chats und die Arbeit, die er
+abgibt, können auf vielen Instanzen laufen.
 
 ---
 
@@ -378,4 +478,6 @@ Jede Instanz von OpenBot hält ihre eigenen Buckets im Speicher. Mit mehr als ei
 | `429`  | `RateLimited`          | Der Aufrufer hat in dieser Minute zu viele Anfragen gesendet.                            |
 | `503`  | `BillingUnavailable`   | OpenBot erreicht seine Datenbank nicht.                                                  |
 
-Die vollständigen Formen findest du in der [Usage-Referenz](/docs/api/operations/tags/usage/) und der [Budgets-Referenz](/docs/api/operations/tags/budgets/).
+Die vollständigen Formen findest du in der
+[Usage-Referenz](/docs/api/operations/tags/usage/) und der
+[Budgets-Referenz](/docs/api/operations/tags/budgets/).

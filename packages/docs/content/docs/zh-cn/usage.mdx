@@ -29,7 +29,8 @@ OpenBot 会记录每一次得到回答的模型调用。每个用量事件都有
 | `bot_memory` | [记忆 Bot](/zh-cn/docs/memory#记忆-bot)：它学习、补充和回答时的用量。 |
 | `other`      | 其他任何调用。                                                        |
 
-当调用有这些信息时，用量事件还会带有 Chat（`chatId`）、Turn、Bot、成员和用户令牌。在 [Channel](/zh-cn/docs/channels) 中，成员是写这条消息的人。
+当调用有这些信息时，用量事件还会带有 Chat（`chatId`）、Turn、Bot、成员和用户令牌。在
+[Channel](/zh-cn/docs/channels) 中，成员是写这条消息的人。
 
 有些调用不会被记录：
 
@@ -69,7 +70,9 @@ curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `GET /v1/platform/model_providers/:providerId/prices`     | 列出一个共享的提供方中每个模型的当前价格。 |
 | `PUT /v1/platform/model_providers/:providerId/prices`     | 为一个共享的提供方中的一个模型设置新价格。 |
 
-提供方只能为它关联的模型设置价格。其他模型会返回 `400` 和 `ModelProviderInvalid`。[模型目录](/zh-cn/docs/models#选择模型)会显示每个模型当前的 `price`。
+提供方只能为它关联的模型设置价格。其他模型会返回 `400` 和
+`ModelProviderInvalid`。[模型目录](/zh-cn/docs/models#选择模型)会显示每个模型当前的
+`price`。
 
 新价格只对从现在起开始的调用生效。每个用量事件都保存调用时的费用，所以旧的费用永远不会改变。OpenBot 会把每次调用的费用向上取整到整数微美元。
 
@@ -77,7 +80,9 @@ curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ### 按输入大小划分的档位
 
-`tiers` 是一个列表，从小到大排列。每个档位都有 `upToInputTokens`：这个档位中一次调用最多可以有多少个输入 token。一次调用的输入 token 是它全部的输入 token，不管是否来自缓存。最后一个档位的 `upToInputTokens` 为 `null`，因为它没有上限。你最多可以有 20 个档位。
+`tiers` 是一个列表，从小到大排列。每个档位都有
+`upToInputTokens`：这个档位中一次调用最多可以有多少个输入 token。一次调用的输入 token 是它全部的输入 token，不管是否来自缓存。最后一个档位的
+`upToInputTokens` 为 `null`，因为它没有上限。你最多可以有 20 个档位。
 
 一次调用使用它的输入能放进的第一个档位。然后这次调用的所有 token 都按这个档位的费率计费，而不只是超出上限的那部分 token。大多数提供方都这样对长请求收费。
 
@@ -119,7 +124,10 @@ curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ### 按一天中的时间划分的时段
 
-`periods` 为某些时间给出另外的档位，比如夜间的较低价格。每个时段都有一个 `name`、一个或多个 `windows`（时间窗口），以及它自己的 `tiers`。`timeZone` 说明时间窗口使用哪个时区。它是一个 IANA 名称，比如 `UTC` 或 `Asia/Shanghai`。不写它时，使用 `UTC`。
+`periods` 为某些时间给出另外的档位，比如夜间的较低价格。每个时段都有一个
+`name`、一个或多个 `windows`（时间窗口），以及它自己的 `tiers`。`timeZone`
+说明时间窗口使用哪个时区。它是一个 IANA 名称，比如 `UTC` 或
+`Asia/Shanghai`。不写它时，使用 `UTC`。
 
 | 窗口字段 | 是什么                                                                                    |
 | -------- | ----------------------------------------------------------------------------------------- |
@@ -127,9 +135,12 @@ curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `end`    | 结束时间，格式为 `HH:MM`，最大为 `24:00`。窗口在这一分钟之前结束。                        |
 | `days`   | 窗口在哪些天开始：`mon`、`tue`、`wed`、`thu`、`fri`、`sat`、`sun`。不写它时，表示每一天。 |
 
-当 `end` 早于 `start` 时，窗口会跨过午夜。它属于它开始的那一天。例如，`{"start":"22:00","end":"02:00","days":["fri"]}` 包含周五 23:00 和周六 01:00，但不包含周五 01:00。
+当 `end` 早于 `start`
+时，窗口会跨过午夜。它属于它开始的那一天。例如，`{"start":"22:00","end":"02:00","days":["fri"]}`
+包含周五 23:00 和周六 01:00，但不包含周五 01:00。
 
-OpenBot 使用调用开始的时间。它使用第一个有窗口包含这个时间的时段。没有时段包含这个时间时，调用使用价格本身的 `tiers`。在两种情况下，调用都再按输入大小选择档位。
+OpenBot 使用调用开始的时间。它使用第一个有窗口包含这个时间的时段。没有时段包含这个时间时，调用使用价格本身的
+`tiers`。在两种情况下，调用都再按输入大小选择档位。
 
 在下面的例子中，一个提供方在北京时间 00:30 到 08:30 收半价：
 
@@ -172,7 +183,8 @@ OpenBot 使用调用开始的时间。它使用第一个有窗口包含这个时
 
 ## 查看用量
 
-`GET /v1/organization/usage` 把一段时间内的 token 和费用加起来。它需要 `usage.read`。
+`GET /v1/organization/usage` 把一段时间内的 token 和费用加起来。它需要
+`usage.read`。
 
 | 查询参数  | 作用                                                                       |
 | --------- | -------------------------------------------------------------------------- |
@@ -214,9 +226,14 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 }
 ```
 
-`key` 是分组的值，比如一个用户 ID 或一天。对于没有这个值的调用，比如没有 Bot 的调用，它为 `null`。
+`key`
+是分组的值，比如一个用户 ID 或一天。对于没有这个值的调用，比如没有 Bot 的调用，它为
+`null`。
 
-`GET /v1/organization/usage/events` 列出单个用量事件，最新的在前。它接受 `from`、`to`、`limit`（1 到 200，默认 50）和 `after`。把一页的 `next` 值作为 `after` 发送，就能得到下一页。每个事件都有 `priced` 和 `charged`。当费用从额度中扣除时，`charged` 为 `true`。
+`GET /v1/organization/usage/events` 列出单个用量事件，最新的在前。它接受
+`from`、`to`、`limit`（1 到 200，默认 50）和 `after`。把一页的 `next` 值作为
+`after` 发送，就能得到下一页。每个事件都有 `priced` 和
+`charged`。当费用从额度中扣除时，`charged` 为 `true`。
 
 ---
 
@@ -231,11 +248,13 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `bot`          | 一个 Bot 的 ID。        | 这个 Bot 的调用。            |
 | `token`        | 一个用户令牌的 ID。     | 这个令牌启动的工作中的调用。 |
 
-每个预算都有一个 `period`（周期）：`day` 或 `month`。两者都从 UTC 午夜开始。每个范围在每种周期上只能有一个预算。
+每个预算都有一个 `period`（周期）：`day` 或
+`month`。两者都从 UTC 午夜开始。每个范围在每种周期上只能有一个预算。
 
 每个预算还有一个 `mode`：
 
-- `hard` 预算：当周期内的花费达到 `limitMicros` 时，停止模型调用。调用会失败，所以 Turn 会因为模型错误而失败。下一个周期再从 0 开始。
+- `hard` 预算：当周期内的花费达到 `limitMicros`
+  时，停止模型调用。调用会失败，所以 Turn 会因为模型错误而失败。下一个周期再从 0 开始。
 - `soft` 预算：从不停止调用。它只显示 `exceeded: true`。
 
 预算计入每一次有价格的调用，也包括使用组织自己密钥的调用。OpenBot 在每次模型调用之前检查预算，而不只是在 Turn 开始时检查。很长的 Turn 会在下一次模型调用时停止。所以花费可能超出上限，最多超出一次调用的费用。
@@ -272,7 +291,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `PATCH /v1/organization/budgets/:budgetId`  | 修改 `limitMicros` 或 `mode`。把 `version` 作为 `expectedVersion` 发送。 |
 | `DELETE /v1/organization/budgets/:budgetId` | 移除一个预算。                                                           |
 
-读取预算需要 `budgets.read`。修改预算需要 `budgets.write`。每次修改都会写入[审计日志](/zh-cn/docs/organization#审计日志)。
+读取预算需要 `budgets.read`。修改预算需要
+`budgets.write`。每次修改都会写入[审计日志](/zh-cn/docs/organization#审计日志)。
 
 ---
 
@@ -304,7 +324,9 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 使用组织自己密钥的调用永远不会扣除额度，即使额度是打开的。
 
-`GET /v1/organization/credits` 显示 `enabled`、`balanceMicros` 和最新的 50 次给出记录。它需要 `usage.read`。平台管理员用 `GET /v1/platform/organizations/:organizationId/credits` 读取同样的内容。
+`GET /v1/organization/credits` 显示 `enabled`、`balanceMicros`
+和最新的 50 次给出记录。它需要 `usage.read`。平台管理员用
+`GET /v1/platform/organizations/:organizationId/credits` 读取同样的内容。
 
 OpenBot 还没有支付功能。出售额度的平台在自己的系统中记录付款，然后用 API 给出额度。
 
@@ -312,7 +334,10 @@ OpenBot 还没有支付功能。出售额度的平台在自己的系统中记录
 
 ## 调用被停止时
 
-当预算或额度停止一次调用时，模型调用会失败，返回原因为 `QuotaExhaustedError` 的 `AiError`。Turn 以状态 `Failed` 和代码 `model_error` 结束。错误的元数据在 `openbot.reason` 中说明原因：`budget` 或 `credits`。对于预算，`openbot.budgetId` 指明是哪个预算。
+当预算或额度停止一次调用时，模型调用会失败，返回原因为 `QuotaExhaustedError` 的
+`AiError`。Turn 以状态 `Failed` 和代码 `model_error` 结束。错误的元数据在
+`openbot.reason` 中说明原因：`budget` 或 `credits`。对于预算，`openbot.budgetId`
+指明是哪个预算。
 
 当 OpenBot 无法读取预算时，比如数据库宕机，它也会停止调用。
 
@@ -320,7 +345,8 @@ OpenBot 还没有支付功能。出售额度的平台在自己的系统中记录
 
 ## 速率限制
 
-平台管理员可以限制每个调用方在一分钟内发送多少个 API 请求。这就是速率限制。每个用户令牌单独计数。没有令牌的已登录用户算作一个调用方。所有 OpenBot 实例共享这个计数。在[平台设置](/zh-cn/docs/platform#平台设置)中设置 `rateLimit`：
+平台管理员可以限制每个调用方在一分钟内发送多少个 API 请求。这就是速率限制。每个用户令牌单独计数。没有令牌的已登录用户算作一个调用方。所有 OpenBot 实例共享这个计数。在[平台设置](/zh-cn/docs/platform#平台设置)中设置
+`rateLimit`：
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -329,7 +355,10 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/platform/settings
 ```
 
-`null` 表示没有限制。这是默认值。超过限制的调用方会得到 `429` 和 `RateLimited`。`retryAfterSeconds` 说明下一分钟什么时候开始。这个限制涵盖组织的 API。它不涵盖 `/v1/platform`、登录和 webhook。
+`null` 表示没有限制。这是默认值。超过限制的调用方会得到 `429` 和
+`RateLimited`。`retryAfterSeconds`
+说明下一分钟什么时候开始。这个限制涵盖组织的 API。它不涵盖
+`/v1/platform`、登录和 webhook。
 
 ---
 
@@ -337,7 +366,9 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 token 速率限制一个范围内的模型工作使用 token 的速度。它把输入 token 和输出 token 一起计数。工作超过这个速率时，OpenBot 会让它变慢。OpenBot 从不拒绝这些工作。
 
-每个范围都有一个**令牌桶**（token bucket）。桶最多装 `burstTokens` 个 token，并按 `tokensPerSecond` 的速度重新装满。满的桶让一小段突发的工作以全速通过。
+每个范围都有一个**令牌桶**（token bucket）。桶最多装 `burstTokens`
+个 token，并按 `tokensPerSecond`
+的速度重新装满。满的桶让一小段突发的工作以全速通过。
 
 | 范围           | 一个桶对应                           |
 | -------------- | ------------------------------------ |
@@ -352,7 +383,8 @@ token 速率限制一个范围内的模型工作使用 token 的速度。它把�
 - **模型流式输出时**，OpenBot 把提供方的输出读进一个缓冲区。只有当桶里有足够的空间时，它才把每一段发出去，大约每四个字符算一个 token。所以输出以均匀的速度到来。
 - **调用结束时**，OpenBot 把真实的输入和输出 token 计入桶中。如果这让一个桶欠账，下一次调用会等到这个桶重新装满。
 
-平台管理员在[平台设置](/zh-cn/docs/platform#平台设置)中设置最高的速率。组织可以在自己的[设置](/zh-cn/docs/organization#设置)中设置自己的速率。对每个范围，两个速率中较低的那个生效，所以组织只能把速率调低。`null` 表示这个范围没有限制。默认没有限制。
+平台管理员在[平台设置](/zh-cn/docs/platform#平台设置)中设置最高的速率。组织可以在自己的[设置](/zh-cn/docs/organization#设置)中设置自己的速率。对每个范围，两个速率中较低的那个生效，所以组织只能把速率调低。`null`
+表示这个范围没有限制。默认没有限制。
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -378,4 +410,5 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `429` | `RateLimited`          | 调用方在这一分钟内发送了太多请求。                              |
 | `503` | `BillingUnavailable`   | OpenBot 无法连接它的数据库。                                    |
 
-在 [Usage 参考](/docs/api/operations/tags/usage/)和 [Budgets 参考](/docs/api/operations/tags/budgets/)中查看完整的结构。
+在 [Usage 参考](/docs/api/operations/tags/usage/)和
+[Budgets 参考](/docs/api/operations/tags/budgets/)中查看完整的结构。

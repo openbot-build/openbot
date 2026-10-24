@@ -3,14 +3,18 @@ title: Contributing
 description: Set up the code, run the checks, and follow the project rules.
 ---
 
-This page is for people who change OpenBot itself. It shows how to set up your computer, run the server and the checks, and find your way in the code.
+This page is for people who change OpenBot itself. It shows how to set up your
+computer, run the server and the checks, and find your way in the code.
 
 ---
 
 ## Set up
 
-You need [devenv](https://devenv.sh). devenv gives you the exact tools for the project: Node.js, pnpm, PostgreSQL, mkcert, and more. You need [Docker](https://docs.docker.com/get-docker/) only to build and check the images. See [Deploy](/docs/deploy#build-the-images).
-Run every command through `devenv shell -- <command>`, so you always use these tools.
+You need [devenv](https://devenv.sh). devenv gives you the exact tools for the
+project: Node.js, pnpm, PostgreSQL, mkcert, and more. You need
+[Docker](https://docs.docker.com/get-docker/) only to build and check the
+images. See [Deploy](/docs/deploy#build-the-images). Run every command through
+`devenv shell -- <command>`, so you always use these tools.
 
 <Steps>
 <Step>
@@ -32,9 +36,12 @@ devenv shell -- pnpm dev:setup
 devenv shell -- mkcert -install
 ```
 
-`dev:setup` makes `.env.development` with a new random secret key in `OPENBOT_SECRET_KEYS`. It also makes a local TLS certificate in `.devenv/dev/`.
-If your `.env.development` is from an older version, delete it and run `dev:setup` again. You can also reset the development database. See [Configuration](/docs/configuration#development).
-`mkcert -install` makes your computer trust that certificate.
+`dev:setup` makes `.env.development` with a new random secret key in
+`OPENBOT_SECRET_KEYS`. It also makes a local TLS certificate in `.devenv/dev/`.
+If your `.env.development` is from an older version, delete it and run
+`dev:setup` again. You can also reset the development database. See
+[Configuration](/docs/configuration#development). `mkcert -install` makes your
+computer trust that certificate.
 
 </Step>
 <Step>
@@ -47,19 +54,24 @@ devenv shell -- pnpm dev
 
 `pnpm dev` runs `devenv up`. It does these steps:
 
-1. It starts PostgreSQL 18 on `127.0.0.1:5433`, with the user `openbot_dev`. devenv runs it as a normal process. Its data lives in `.devenv/state/postgres`.
+1. It starts PostgreSQL 18 on `127.0.0.1:5433`, with the user `openbot_dev`.
+   devenv runs it as a normal process. Its data lives in
+   `.devenv/state/postgres`.
 2. It installs the packages with `pnpm install --frozen-lockfile`.
 3. It builds OpenBot and the packages it needs.
 4. It runs the database migrations.
-5. It starts the development server at `https://localhost:8443`. The server writes the platform settings for this origin itself, so there is no setup step.
+5. It starts the development server at `https://localhost:8443`. The server
+   writes the platform settings for this origin itself, so there is no setup
+   step.
 
 When you change a file in `packages/*/src`, devenv starts OpenBot again.
 
 </Step>
 </Steps>
 
-The development server uses a local test account, test models, and a test App. No outside service is needed.
-To sign in and make a user token, see [Quick start](/docs/quickstart).
+The development server uses a local test account, test models, and a test App.
+No outside service is needed. To sign in and make a user token, see
+[Quick start](/docs/quickstart).
 
 ---
 
@@ -75,10 +87,17 @@ To sign in and make a user token, see [Quick start](/docs/quickstart).
 | `devenv shell -- pnpm --filter @openbot-build/core test` | Runs the tests of one package.                                                   |
 | `devenv shell -- treefmt`                                | Formats the code with Prettier and nixfmt.                                       |
 
-Run `pnpm build` before `pnpm typecheck`. Packages import each other from their built files.
+Run `pnpm build` before `pnpm typecheck`. Packages import each other from their
+built files.
 
-Tests use [Vitest](https://vitest.dev) with [`@effect/vitest`](https://www.npmjs.com/package/@effect/vitest). A test that runs an Effect uses `it.effect`. It gives the test a test clock: time moves only when the test moves it. A test that needs real time, for example one with a real server, uses `it.live`. OpenBot tests start their own short-lived PostgreSQL server with the tools from devenv. They need no secrets and no outside services.
-GitHub Actions runs the same `build`, `typecheck`, and `test` commands. See [Deploy](/docs/deploy#github-actions).
+Tests use [Vitest](https://vitest.dev) with
+[`@effect/vitest`](https://www.npmjs.com/package/@effect/vitest). A test that
+runs an Effect uses `it.effect`. It gives the test a test clock: time moves only
+when the test moves it. A test that needs real time, for example one with a real
+server, uses `it.live`. OpenBot tests start their own short-lived PostgreSQL
+server with the tools from devenv. They need no secrets and no outside services.
+GitHub Actions runs the same `build`, `typecheck`, and `test` commands. See
+[Deploy](/docs/deploy#github-actions).
 
 ---
 
@@ -97,15 +116,19 @@ GitHub Actions runs the same `build`, `typecheck`, and `test` commands. See [Dep
 | `references/`              | Source code of other open source projects, as Git submodules. Only for reading.                          |
 | `devenv.nix`               | The development tools, settings, and processes.                                                          |
 
-The `references/` folder is not part of the build. To read that code, fetch it with `git submodule update --init`.
+The `references/` folder is not part of the build. To read that code, fetch it
+with `git submodule update --init`.
 
-To start a new package, copy `packages/template/` to `packages/<name>/`. Then change its name, entry point, and dependencies.
+To start a new package, copy `packages/template/` to `packages/<name>/`. Then
+change its name, entry point, and dependencies.
 
 ---
 
 ## The docs site
 
-The docs site is an [Astro](https://astro.build) site built with [Starlight](https://starlight.astro.build). The build makes static files only. Start it with:
+The docs site is an [Astro](https://astro.build) site built with
+[Starlight](https://starlight.astro.build). The build makes static files only.
+Start it with:
 
 ```sh
 devenv shell -- pnpm --filter @openbot-build/docs dev
@@ -124,13 +147,19 @@ Then open `http://localhost:4321`.
 | `src/pages/openapi.json.ts` | Serves `openapi.json` at `/openapi.json`, so people can download it.               |
 | `scripts/api.ts`            | Makes `openapi.json` from the API contract.                                        |
 
-The API reference at `/docs/api` is made from `openapi.json` by the [starlight-openapi](https://github.com/HiDeoo/starlight-openapi) plugin. Do not write it by hand.
-The script runs before every `dev` and `build`. When you change the API contract in `@openbot-build/api`, the reference changes too.
-When you add a group to the contract, give it a title and a description in `scripts/api.ts`. The script stops with an error until you do.
-The build also makes `/llms.txt` and `/llms-full.txt`, which give the docs as plain text for AI tools.
-To check that every page builds, run `devenv shell -- pnpm --filter @openbot-build/docs build`.
+The API reference at `/docs/api` is made from `openapi.json` by the
+[starlight-openapi](https://github.com/HiDeoo/starlight-openapi) plugin. Do not
+write it by hand. The script runs before every `dev` and `build`. When you
+change the API contract in `@openbot-build/api`, the reference changes too. When
+you add a group to the contract, give it a title and a description in
+`scripts/api.ts`. The script stops with an error until you do. The build also
+makes `/llms.txt` and `/llms-full.txt`, which give the docs as plain text for AI
+tools. To check that every page builds, run
+`devenv shell -- pnpm --filter @openbot-build/docs build`.
 
-Each push to `main` publishes the site to [openbot.build](https://openbot.build). See [Publish the docs site](/docs/deploy#publish-the-docs-site).
+Each push to `main` publishes the site to
+[openbot.build](https://openbot.build). See
+[Publish the docs site](/docs/deploy#publish-the-docs-site).
 
 ---
 
@@ -138,38 +167,51 @@ Each push to `main` publishes the site to [openbot.build](https://openbot.build)
 
 ### Basic English
 
-Write all text in [Basic English](https://en.wikipedia.org/wiki/Basic_English). This covers docs, code comments, error messages, logs, prompts, and test text.
-Use the 850 words of Basic English where you can, plus the technical words you need. Use short sentences. Explain each technical term the first time you use it.
+Write all text in [Basic English](https://en.wikipedia.org/wiki/Basic_English).
+This covers docs, code comments, error messages, logs, prompts, and test text.
+Use the 850 words of Basic English where you can, plus the technical words you
+need. Use short sentences. Explain each technical term the first time you use
+it.
 
-English is the source for all text. The docs are also in Simplified Chinese and German, and the home page is in many more languages.
-When you change an English page, change its translations in the same change. A translation keeps the same headings in the same order, and its links go to pages in its own language, such as `/de/docs/deploy`.
-When you change text on the home page, change it in every file in `src/landing/messages/`.
-The API reference is only in English.
+English is the source for all text. The docs are also in Simplified Chinese and
+German, and the home page is in many more languages. When you change an English
+page, change its translations in the same change. A translation keeps the same
+headings in the same order, and its links go to pages in its own language, such
+as `/de/docs/deploy`. When you change text on the home page, change it in every
+file in `src/landing/messages/`. The API reference is only in English.
 
 ### Headless
 
-OpenBot has no user interface. Do not add pages, front ends, or client apps to the repository. The docs site is the only exception.
-Every new feature starts as an operation in the `@openbot-build/api` contract. Then the server handles it.
-Every operation must work with a user token and with the sign-in cookie. It must also say which permission it needs, with a `Required` or `GroupRequired` annotation. See [Permissions](/docs/permissions).
+OpenBot has no user interface. Do not add pages, front ends, or client apps to
+the repository. The docs site is the only exception. Every new feature starts as
+an operation in the `@openbot-build/api` contract. Then the server handles it.
+Every operation must work with a user token and with the sign-in cookie. It must
+also say which permission it needs, with a `Required` or `GroupRequired`
+annotation. See [Permissions](/docs/permissions).
 
 ### One current model
 
-Do not keep old paths for old callers, old clients, or old data. When a contract or the storage must change, change it directly.
-The only exception is a small fix for a bug in an outside package or tool.
+Do not keep old paths for old callers, old clients, or old data. When a contract
+or the storage must change, change it directly. The only exception is a small
+fix for a bug in an outside package or tool.
 
 ### Effect data first
 
-Use the immutable data types of Effect, such as `HashMap`, `Chunk`, and `Option`. Use the mutable types of JavaScript only when you really need them.
+Use the immutable data types of Effect, such as `HashMap`, `Chunk`, and
+`Option`. Use the mutable types of JavaScript only when you really need them.
 
 ### Small, real changes
 
-Build what gives real value. Keep each change focused, and test the parts that can really break.
+Build what gives real value. Keep each change focused, and test the parts that
+can really break.
 
-The full rules for contributors are in `AGENTS.md` at the root of the repository.
+The full rules for contributors are in `AGENTS.md` at the root of the
+repository.
 
 ---
 
 ## License
 
-OpenBot uses the GNU Affero General Public License, version 3 only (`AGPL-3.0-only`). The full text is in the `LICENSE` file at the root of the repository.
-When you send a change, you agree that it uses the same license.
+OpenBot uses the GNU Affero General Public License, version 3 only
+(`AGPL-3.0-only`). The full text is in the `LICENSE` file at the root of the
+repository. When you send a change, you agree that it uses the same license.

@@ -3,9 +3,13 @@ title: Pakete
 description: Die Pakete im Workspace und wofür jedes da ist.
 ---
 
-OpenBot ist ein pnpm-Workspace. Jedes Paket hat eine Aufgabe. `openbot` setzt die Teile zum Server zusammen. Die anderen Bibliotheken kannst du auch einzeln nutzen.
+OpenBot ist ein pnpm-Workspace. Jedes Paket hat eine Aufgabe. `openbot` setzt
+die Teile zum Server zusammen. Die anderen Bibliotheken kannst du auch einzeln
+nutzen.
 
-Alle Pakete heißen `@openbot-build/<name>`, haben die Version `0.1.0` und nutzen `effect@4.0.5`. Sie sind noch nicht auf npm. Nutze sie aus dem Workspace mit `"workspace:*"`.
+Alle Pakete heißen `@openbot-build/<name>`, haben die Version `0.1.0` und nutzen
+`effect@4.0.5`. Sie sind noch nicht auf npm. Nutze sie aus dem Workspace mit
+`"workspace:*"`.
 
 ---
 
@@ -23,7 +27,9 @@ Alle Pakete heißen `@openbot-build/<name>`, haben die Version `0.1.0` und nutze
 | `computer`      | Der Befehl `openbot computer`. Er koppelt und verbindet deinen eigenen [Computer](/de/docs/computers). |
 | `docs`          | Diese Doku-Seite.                                                                                      |
 
-Die Beispiele unten lassen das Model weg. Um sie auszuführen, gib einen `LanguageModel`-Layer an, zum Beispiel von einem [Model Provider](#model-providers) in `openbot`.
+Die Beispiele unten lassen das Model weg. Um sie auszuführen, gib einen
+`LanguageModel`-Layer an, zum Beispiel von einem
+[Model Provider](#model-providers) in `openbot`.
 
 ---
 
@@ -42,7 +48,12 @@ Die Beispiele unten lassen das Model weg. Um sie auszuführen, gib einen `Langua
 | `Plugin`, `PluginComposition`, `PluginState` | Plugins erstellen und kombinieren und ihnen gespeicherten Zustand geben.                                               |
 | `Skill`, `SkillMap`                          | Skills beschreiben und eine Liste davon führen.                                                                        |
 
-Ein **Chat** ist ein Gespräch ohne Ende. Jede Eingabe geht in seine **Inbox** (seinen Eingang). Sie startet einen **Turn** (Durchgang), oder sie lenkt den laufenden Turn. Ein Turn kann viele Model-Schritte und Werkzeug-Aufrufe haben. Ein Turn wartet nie: Er läuft, und dann endet er. Der Speicher hält die Items eines Chats in einem Log, das nur wächst. So bleibt ein langer Chat billig zu speichern.
+Ein **Chat** ist ein Gespräch ohne Ende. Jede Eingabe geht in seine **Inbox**
+(seinen Eingang). Sie startet einen **Turn** (Durchgang), oder sie lenkt den
+laufenden Turn. Ein Turn kann viele Model-Schritte und Werkzeug-Aufrufe haben.
+Ein Turn wartet nie: Er läuft, und dann endet er. Der Speicher hält die Items
+eines Chats in einem Log, das nur wächst. So bleibt ein langer Chat billig zu
+speichern.
 
 ```ts
 import { ChatRuntime, ChatStoreMemory, Store } from "@openbot-build/core"
@@ -69,21 +80,37 @@ const program = Effect.scoped(
 )
 ```
 
-`execute` startet einen Turn, wartet, bis er endet, und gibt den Chat zurück. `stream` liefert Ereignisse, während der Turn läuft. Beide schlagen fehl, wenn im Chat schon ein Turn läuft.
+`execute` startet einen Turn, wartet, bis er endet, und gibt den Chat zurück.
+`stream` liefert Ereignisse, während der Turn läuft. Beide schlagen fehl, wenn
+im Chat schon ein Turn läuft.
 
-`deliver` gibt einem Chat eine Eingabe in einem Schritt, nach den Regeln der [Inbox](/de/docs/chats#die-inbox). Es startet einen Turn, wenn der Chat frei ist, lenkt den laufenden Turn, wenn die Eingabe denselben `author` hat, und wartet sonst in der Inbox. Es gibt `started`, `steered` oder `queued` zurück. Nach jedem Turn startet die nächste Eingabe in der Inbox den nächsten Turn.
+`deliver` gibt einem Chat eine Eingabe in einem Schritt, nach den Regeln der
+[Inbox](/de/docs/chats#die-inbox). Es startet einen Turn, wenn der Chat frei
+ist, lenkt den laufenden Turn, wenn die Eingabe denselben `author` hat, und
+wartet sonst in der Inbox. Es gibt `started`, `steered` oder `queued` zurück.
+Nach jedem Turn startet die nächste Eingabe in der Inbox den nächsten Turn.
 
 ### Approvals
 
-Ein Werkzeug mit `needsApproval` fragt vor jedem Aufruf. Die Runtime fragt dann den Dienst `Approvals`. Gib ihn als `approvals` in der Bot-Definition an, oder stelle `Chat.Approvals` bereit. Er beantwortet jeden Aufruf mit einer von drei Entscheidungen:
+Ein Werkzeug mit `needsApproval` fragt vor jedem Aufruf. Die Runtime fragt dann
+den Dienst `Approvals`. Gib ihn als `approvals` in der Bot-Definition an, oder
+stelle `Chat.Approvals` bereit. Er beantwortet jeden Aufruf mit einer von drei
+Entscheidungen:
 
 - `Chat.Decision.Allow()` führt den Aufruf jetzt aus.
-- `Chat.Decision.Deny({ reason })` führt den Aufruf nicht aus. Das Model sieht den Grund.
-- `Chat.Decision.Pending({ result })` führt den Aufruf jetzt nicht aus. Das Model bekommt sofort `result`, und der Turn geht weiter.
+- `Chat.Decision.Deny({ reason })` führt den Aufruf nicht aus. Das Model sieht
+  den Grund.
+- `Chat.Decision.Pending({ result })` führt den Aufruf jetzt nicht aus. Das
+  Model bekommt sofort `result`, und der Turn geht weiter.
 
-Ohne den Dienst wartet jeder solche Aufruf auf eine Entscheidung (pending). So wartet ein Turn nie.
+Ohne den Dienst wartet jeder solche Aufruf auf eine Entscheidung (pending). So
+wartet ein Turn nie.
 
-Wenn ein Entscheider einen wartenden Aufruf später erlaubt, gib den Aufruf mit `deliver` und `approved` zurück. Die ID des Aufrufs muss neu sein. Der Turn, der die Eingabe liest, führt den Aufruf aus und fragt nicht noch einmal. Markiere Eingaben von deinem Programm mit `notice`, damit das Model weiß, dass sie nicht von einer Person kommen:
+Wenn ein Entscheider einen wartenden Aufruf später erlaubt, gib den Aufruf mit
+`deliver` und `approved` zurück. Die ID des Aufrufs muss neu sein. Der Turn, der
+die Eingabe liest, führt den Aufruf aus und fragt nicht noch einmal. Markiere
+Eingaben von deinem Programm mit `notice`, damit das Model weiß, dass sie nicht
+von einer Person kommen:
 
 ```ts
 import { Chat } from "@openbot-build/core"
@@ -118,7 +145,9 @@ yield *
 
 ### Plugins
 
-Ein Plugin legt sich um die Model-Schleife. `Plugin.make` erstellt eines. Sein Konstruktor läuft einmal. Die Middleware, die er zurückgibt, legt sich um den Ereignis-Stream jedes Turns:
+Ein Plugin legt sich um die Model-Schleife. `Plugin.make` erstellt eines. Sein
+Konstruktor läuft einmal. Die Middleware, die er zurückgibt, legt sich um den
+Ereignis-Stream jedes Turns:
 
 ```ts
 import { Plugin } from "@openbot-build/core"
@@ -138,30 +167,42 @@ const logging = Plugin.make({ id: Plugin.Id.make("logging") })(() =>
 ```
 
 `PluginComposition.merge(a, b)` kombiniert zwei Plugins. `a` läuft außen um `b`.
-Ein Plugin kann auch eigene Daten im Eintrag des Chats oder in seinem Zustand speichern. Gib `plugin.stores` an `Store.define` und nutze dann `PluginState.make`.
+Ein Plugin kann auch eigene Daten im Eintrag des Chats oder in seinem Zustand
+speichern. Gib `plugin.stores` an `Store.define` und nutze dann
+`PluginState.make`.
 
 ### Skills
 
-`Skill.Descriptor` beschreibt einen Skill. `SkillMap.Catalog` ist eine Liste von Skills. Wenn zwei Listen dieselbe Skill-ID haben, gewinnt die spätere.
-Dein Programm findet, lädt und führt die Skills aus.
+`Skill.Descriptor` beschreibt einen Skill. `SkillMap.Catalog` ist eine Liste von
+Skills. Wenn zwei Listen dieselbe Skill-ID haben, gewinnt die spätere. Dein
+Programm findet, lädt und führt die Skills aus.
 
 ---
 
 ## Plugins in openbot
 
-`@openbot-build/openbot` enthält alle Plugins von OpenBot. Der Server nutzt seine Plugins, zum Beispiel die Plugins für Bot, App und Arbeit, in jedem Turn. Das Arbeits-Plugin gibt dem Bot seine Todo-Liste, seine Erinnerungen und den Plan-Modus. Die Plugins für das Turn-Limit kannst du auch mit deiner eigenen `ChatRuntime` nutzen.
+`@openbot-build/openbot` enthält alle Plugins von OpenBot. Der Server nutzt
+seine Plugins, zum Beispiel die Plugins für Bot, App und Arbeit, in jedem Turn.
+Das Arbeits-Plugin gibt dem Bot seine Todo-Liste, seine Erinnerungen und den
+Plan-Modus. Die Plugins für das Turn-Limit kannst du auch mit deiner eigenen
+`ChatRuntime` nutzen.
 
 ### Memory
 
-`BotMemory` enthält die Typen und Hilfsfunktionen für [Bot Memory](/de/docs/memory). Der Server nutzt sie für den Memory-Bot und die Memory-API. Die Schemas der Memory-API liegen in `api`, als `BotMemory`.
+`BotMemory` enthält die Typen und Hilfsfunktionen für
+[Bot Memory](/de/docs/memory). Der Server nutzt sie für den Memory-Bot und die
+Memory-API. Die Schemas der Memory-API liegen in `api`, als `BotMemory`.
 
 ### Turn-Limits
 
-Drei Plugins setzen jedem Turn eine Grenze. Du kannst eines davon nutzen oder sie mit `PluginComposition.merge` verbinden. Jedes Plugin zählt nur seinen eigenen Turn.
+Drei Plugins setzen jedem Turn eine Grenze. Du kannst eines davon nutzen oder
+sie mit `PluginComposition.merge` verbinden. Jedes Plugin zählt nur seinen
+eigenen Turn.
 
 #### Model-Schritte
 
-`TurnLimiter` hält einen Turn nach einer festen Zahl von Model-Schritten an. Die erste Model-Anfrage zählt als ein Schritt.
+`TurnLimiter` hält einen Turn nach einer festen Zahl von Model-Schritten an. Die
+erste Model-Anfrage zählt als ein Schritt.
 
 ```ts
 import { TurnLimiter } from "@openbot-build/openbot"
@@ -183,7 +224,11 @@ Er schlägt mit einem von zwei Fehlern fehl:
 
 #### Tokens
 
-`TokenLimiter` hält einen Turn an, wenn er eine feste Zahl von Tokens verbraucht hat. Ein Token ist ein kleines Stück Text, das das Model liest oder schreibt. Das Plugin zählt die Eingabe- und Ausgabe-Tokens jedes Model-Schritts zusammen. Ein Model-Schritt, der schon begonnen hat, darf fertig laufen. Der nächste Model-Schritt schlägt fehl, wenn die Summe `maxTokens` erreicht.
+`TokenLimiter` hält einen Turn an, wenn er eine feste Zahl von Tokens verbraucht
+hat. Ein Token ist ein kleines Stück Text, das das Model liest oder schreibt.
+Das Plugin zählt die Eingabe- und Ausgabe-Tokens jedes Model-Schritts zusammen.
+Ein Model-Schritt, der schon begonnen hat, darf fertig laufen. Der nächste
+Model-Schritt schlägt fehl, wenn die Summe `maxTokens` erreicht.
 
 ```ts
 import { TokenLimiter } from "@openbot-build/openbot"
@@ -198,7 +243,10 @@ const plugin = TokenLimiter.make({ maxTokens: 100_000 })
 
 #### Zeit
 
-`TimeLimiter` hält einen Turn nach einer festen Zeit an. `maxDuration` ist eine Zahl von Millisekunden oder ein Text wie `"5 minutes"`. Wenn die Zeit um ist, hält das Plugin den Turn sofort an. Es hält auch einen Model-Schritt oder einen Tool-Aufruf mitten im Lauf an.
+`TimeLimiter` hält einen Turn nach einer festen Zeit an. `maxDuration` ist eine
+Zahl von Millisekunden oder ein Text wie `"5 minutes"`. Wenn die Zeit um ist,
+hält das Plugin den Turn sofort an. Es hält auch einen Model-Schritt oder einen
+Tool-Aufruf mitten im Lauf an.
 
 ```ts
 import { TimeLimiter } from "@openbot-build/openbot"
@@ -215,7 +263,9 @@ const plugin = TimeLimiter.make({ maxDuration: "5 minutes" })
 
 ## Model Providers
 
-`@openbot-build/openbot` hat drei Model Providers. Jeder macht aus einer Model-Auswahl einen `LanguageModel`-Layer. Du gibst den API-Schlüssel an. Wie OpenBot sie nutzt, steht unter [Models](/de/docs/models).
+`@openbot-build/openbot` hat drei Model Providers. Jeder macht aus einer
+Model-Auswahl einen `LanguageModel`-Layer. Du gibst den API-Schlüssel an. Wie
+OpenBot sie nutzt, steht unter [Models](/de/docs/models).
 
 ### OpenAiCompatProvider
 
@@ -247,12 +297,15 @@ const program = LanguageModel.generateText({ prompt: "Hello" }).pipe(
 )
 ```
 
-Lass `apiUrl` weg, um `https://api.openai.com/v1` zu nutzen. `reasoningEffort` und `serviceTier` einer Auswahl ersetzen `reasoning_effort` und `service_tier` in den Standardwerten.
+Lass `apiUrl` weg, um `https://api.openai.com/v1` zu nutzen. `reasoningEffort`
+und `serviceTier` einer Auswahl ersetzen `reasoning_effort` und `service_tier`
+in den Standardwerten.
 
 ### OpenAiProvider
 
-Dasselbe Muster, mit `OpenAiProvider` und der Provider-ID `openai`. Er nutzt die Responses API.
-Er hat auch `ResponsesCompaction.layer()`. Das macht lange Verläufe kürzer, mit der eingebauten Compaction der Responses API.
+Dasselbe Muster, mit `OpenAiProvider` und der Provider-ID `openai`. Er nutzt die
+Responses API. Er hat auch `ResponsesCompaction.layer()`. Das macht lange
+Verläufe kürzer, mit der eingebauten Compaction der Responses API.
 
 ```ts
 import { OpenAiProvider, ResponsesCompaction } from "@openbot-build/openbot"
@@ -268,7 +321,8 @@ const services = Layer.merge(
 
 ### AnthropicProvider
 
-Dasselbe Muster, mit `AnthropicProvider` und der Provider-ID `anthropic`. Er nutzt die Messages API.
+Dasselbe Muster, mit `AnthropicProvider` und der Provider-ID `anthropic`. Er
+nutzt die Messages API.
 
 ```ts
 import { AnthropicProvider } from "@openbot-build/openbot"
@@ -276,13 +330,17 @@ import { AnthropicProvider } from "@openbot-build/openbot"
 const provider = AnthropicProvider.make({ max_tokens: 1024 })
 ```
 
-`reasoningEffort` kann `low`, `medium` oder `high` sein. `serviceTier` kann `auto` oder `standard_only` sein. Andere Werte schlagen fehl, bevor eine Anfrage gesendet wird.
+`reasoningEffort` kann `low`, `medium` oder `high` sein. `serviceTier` kann
+`auto` oder `standard_only` sein. Andere Werte schlagen fehl, bevor eine Anfrage
+gesendet wird.
 
 ---
 
 ## protocol
 
-`@openbot-build/protocol` setzt das OpenBot App Protocol um. Herausgeber nutzen es, um eine App ins Web zu bringen. Hosts nutzen es, um Apps zu finden, sich mit ihnen zu verbinden und sie aufzurufen.
+`@openbot-build/protocol` setzt das OpenBot App Protocol um. Herausgeber nutzen
+es, um eine App ins Web zu bringen. Hosts nutzen es, um Apps zu finden, sich mit
+ihnen zu verbinden und sie aufzurufen.
 
 ```ts
 import { Document, McpPublisher } from "@openbot-build/protocol"
@@ -324,4 +382,5 @@ const publisher = McpPublisher.layer({
 })
 ```
 
-Stelle `publisher` mit `HttpRouter.serve` und einem HTTP-Server-Layer bereit. Die vollständige Anleitung findest du unter [Protokoll](/de/docs/protocol).
+Stelle `publisher` mit `HttpRouter.serve` und einem HTTP-Server-Layer bereit.
+Die vollständige Anleitung findest du unter [Protokoll](/de/docs/protocol).

@@ -1,12 +1,19 @@
 ---
 title: Memory
-description: Each Bot learns from its work in all its Chats and uses what it learned later.
+description:
+  Each Bot learns from its work in all its Chats and uses what it learned later.
 ---
 
-**Bot memory** is what one [Bot](/docs/bots) learns over all its [Chats](/docs/chats). Each Bot has one pool of entries. A **memory Bot** keeps the pool. It is a helper that belongs to the Bot: it reads the whole pool, learns new entries, and adds what helps to the work of the Bot. It never works in a Chat, so no person can read what it reads.
-This page shows how Bot memory learns, who sees what, and how to read and change it with the API.
+**Bot memory** is what one [Bot](/docs/bots) learns over all its
+[Chats](/docs/chats). Each Bot has one pool of entries. A **memory Bot** keeps
+the pool. It is a helper that belongs to the Bot: it reads the whole pool,
+learns new entries, and adds what helps to the work of the Bot. It never works
+in a Chat, so no person can read what it reads. This page shows how Bot memory
+learns, who sees what, and how to read and change it with the API.
 
-Bot memory is the only memory. A Chat keeps its history, but no separate list of facts. Older versions of OpenBot also kept learned memory for each Session. That memory is gone.
+Bot memory is the only memory. A Chat keeps its history, but no separate list of
+facts. Older versions of OpenBot also kept learned memory for each Session. That
+memory is gone.
 
 ---
 
@@ -20,7 +27,8 @@ Each entry has a layer:
 | `observation` | What the memory Bot concluded from other entries. Its sources are those entries. `confidence` is from 0 to 1. |
 | `pinned`      | What a person told OpenBot to remember.                                                                       |
 
-**Tags** sort the entries. A tag with a colon belongs to OpenBot. The memory Bot cannot write these tags, so a model cannot change who sees an entry.
+**Tags** sort the entries. A tag with a colon belongs to OpenBot. The memory Bot
+cannot write these tags, so a model cannot change who sees an entry.
 
 | Tag                         | Meaning                                                        |
 | --------------------------- | -------------------------------------------------------------- |
@@ -32,7 +40,9 @@ Each entry has a layer:
 | `chat:<id>`, `channel:<id>` | Where it comes from.                                           |
 | `app:<tool>`                | A tool result from an App supports it.                         |
 
-Other tags, like `testing` or `trip-planning`, are **topics**. The memory Bot chooses them and keeps them tidy. A topic has lowercase letters, numbers and dashes.
+Other tags, like `testing` or `trip-planning`, are **topics**. The memory Bot
+chooses them and keeps them tidy. A topic has lowercase letters, numbers and
+dashes.
 
 ---
 
@@ -40,34 +50,59 @@ Other tags, like `testing` or `trip-planning`, are **topics**. The memory Bot ch
 
 OpenBot sets the `for:` tags. Nobody sees an entry without one.
 
-- A fact is for the people who saw it happen: the person of the Turn, or the Channel group when the Chat is a group chat.
-- An observation comes from all the people of its sources. But only people who may see every source may see it.
-- The memory Bot shows an entry to more people only when a person clearly agreed, or when its rules allow it. It must give a reason, and the log keeps the change.
+- A fact is for the people who saw it happen: the person of the Turn, or the
+  Channel group when the Chat is a group chat.
+- An observation comes from all the people of its sources. But only people who
+  may see every source may see it.
+- The memory Bot shows an entry to more people only when a person clearly
+  agreed, or when its rules allow it. It must give a reason, and the log keeps
+  the change.
 
-Entries are not deleted when they stop being true. The memory Bot marks them with `invalidatedAt`, so the history stays.
+Entries are not deleted when they stop being true. The memory Bot marks them
+with `invalidatedAt`, so the history stays.
 
 ---
 
 ## How the Bot learns
 
-The Bot has a tool called `confide`. The Bot knows it only as a place to say how its work goes: when it is stuck, unsure, upset or proud, or when it made a mistake. The Bot does not know that the tool leads to its memory. So it confides because it needs to, not to change what it will remember.
+The Bot has a tool called `confide`. The Bot knows it only as a place to say how
+its work goes: when it is stuck, unsure, upset or proud, or when it made a
+mistake. The Bot does not know that the tool leads to its memory. So it confides
+because it needs to, not to change what it will remember.
 
 When the Bot confides:
 
-1. The memory Bot answers at once, like a priest who hears a confession. It listens and does not judge. It says that a mistake is part of the work. It asks the Bot to tell the person plainly and to fix what it can. It gives no new tasks. When no model can answer, the Bot gets a fixed calm answer.
-2. When a Turn of the Chat completes and the inbox of the Chat is empty, the memory Bot reads the new Items of the Chat and learns from them.
+1. The memory Bot answers at once, like a priest who hears a confession. It
+   listens and does not judge. It says that a mistake is part of the work. It
+   asks the Bot to tell the person plainly and to fix what it can. It gives no
+   new tasks. When no model can answer, the Bot gets a fixed calm answer.
+2. When a Turn of the Chat completes and the inbox of the Chat is empty, the
+   memory Bot reads the new Items of the Chat and learns from them.
 
-The words of the Bot only show the memory Bot where to look. They never become memory themselves. A tool result from an App never becomes memory by itself. A [notice](/docs/chats#notices) from OpenBot is never taken as the words of a person. A Bot that never confides learns nothing.
+The words of the Bot only show the memory Bot where to look. They never become
+memory themselves. A tool result from an App never becomes memory by itself. A
+[notice](/docs/chats#notices) from OpenBot is never taken as the words of a
+person. A Bot that never confides learns nothing.
 
-Review Chats have no `confide` tool. When `botMemory` is off in the [organization settings](/docs/organization#settings), the Bot still gets an answer, but nothing is learned.
+Review Chats have no `confide` tool. When `botMemory` is off in the
+[organization settings](/docs/organization#settings), the Bot still gets an
+answer, but nothing is learned.
 
 ---
 
 ## How the Bot uses memory
 
-When a Turn starts, the memory Bot reads the input of the person. It skips notices, because they are not the words of a person. When entries help, it adds short words to the input. It may only add words: it may not remove or change a word, and OpenBot checks this. It may only use entries that the readers of the answer may see. In a Channel group, those are only entries for the group or for everyone.
+When a Turn starts, the memory Bot reads the input of the person. It skips
+notices, because they are not the words of a person. When entries help, it adds
+short words to the input. It may only add words: it may not remove or change a
+word, and OpenBot checks this. It may only use entries that the readers of the
+answer may see. In a Channel group, those are only entries for the group or for
+everyone.
 
-The model sees the input with the additions. The history of the Chat keeps the words of the person. The Bot does not know that the additions come from memory. It sees them as its own experience. Requests and their reviews see only what the Bot asks, never the additions.
+The model sees the input with the additions. The history of the Chat keeps the
+words of the person. The Bot does not know that the additions come from memory.
+It sees them as its own experience. Requests and their reviews see only what the
+Bot asks, never the additions.
 
 When `botMemory` is off, nothing is added.
 
@@ -75,9 +110,14 @@ When `botMemory` is off, nothing is added.
 
 ## The memory Bot
 
-The memory Bot uses `botMemoryModel` from the organization settings. It has no default. When it is `null`, the memory Bot gives the fixed calm answer, and it adds and learns nothing. For a [shared Bot](/docs/sharing), the model and the cost come from the organization of the Chat.
+The memory Bot uses `botMemoryModel` from the organization settings. It has no
+default. When it is `null`, the memory Bot gives the fixed calm answer, and it
+adds and learns nothing. For a [shared Bot](/docs/sharing), the model and the
+cost come from the organization of the Chat.
 
-Read and change the settings of the memory Bot with `GET` and `PATCH /v1/bots/:botId/memory/bot`. You need `bots.write` on a Bot that is not linked:
+Read and change the settings of the memory Bot with `GET` and
+`PATCH /v1/bots/:botId/memory/bot`. You need `bots.write` on a Bot that is not
+linked:
 
 ```json
 {
@@ -94,13 +134,17 @@ Read and change the settings of the memory Bot with `GET` and `PATCH /v1/bots/:b
 | `concurrency`  | The most tasks that it runs at the same time on one server. `null` removes the limit.                          |
 | `budget`       | The most money that it may spend in a day or a month, in micro-USD, over all organizations. `null` removes it. |
 
-Without a limit, there is none. When the budget is spent, the Bot gets the fixed calm answer, the input stays as it is, and learning waits until the next period.
+Without a limit, there is none. When the budget is spent, the Bot gets the fixed
+calm answer, the input stays as it is, and learning waits until the next period.
 
 ---
 
 ## Read and change it
 
-`GET /v1/bots/:botId/memory` shows the entries that are for you, in your organization. Add `tags` with a list separated by commas to see only entries with all of them. You need `bots.read`. Nobody can read the memory about another person, not even with `bots.write`.
+`GET /v1/bots/:botId/memory` shows the entries that are for you, in your
+organization. Add `tags` with a list separated by commas to see only entries
+with all of them. You need `bots.read`. Nobody can read the memory about another
+person, not even with `bots.write`.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -133,8 +177,12 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 Change it with `POST /v1/bots/:botId/memory`:
 
-- `Remember` with `content` and optional `tags` adds a pinned entry. Only you see it.
-- `Forget` with `id` takes back your part. When you are the only person behind the entry, it becomes `retracted`. Otherwise you stop counting as one of its people, and the entry is no longer for you. It stays for the others. An id that is not for you returns `409`.
+- `Remember` with `content` and optional `tags` adds a pinned entry. Only you
+  see it.
+- `Forget` with `id` takes back your part. When you are the only person behind
+  the entry, it becomes `retracted`. Otherwise you stop counting as one of its
+  people, and the entry is no longer for you. It stays for the others. An id
+  that is not for you returns `409`.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -143,13 +191,21 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   https://api.example.com/v1/bots/$BOT/memory
 ```
 
-`GET /v1/bots/:botId/memory/log` lists the changes of entries that you may see: `version`, the time, what made the change (`memory_bot` or `person`), and the ids. Changes from older versions of OpenBot can also say `promotion`.
+`GET /v1/bots/:botId/memory/log` lists the changes of entries that you may see:
+`version`, the time, what made the change (`memory_bot` or `person`), and the
+ids. Changes from older versions of OpenBot can also say `promotion`.
 
-To remove memory without reading it, send one tag of OpenBot to `POST /v1/bots/:botId/memory/purge`: a `from:`, `chat:`, `org:` or `channel:` tag. Observations that came from those entries have the same tag, so they go too. You need `bots.write` on a Bot that is not linked. The answer is only the number of removed entries.
+To remove memory without reading it, send one tag of OpenBot to
+`POST /v1/bots/:botId/memory/purge`: a `from:`, `chat:`, `org:` or `channel:`
+tag. Observations that came from those entries have the same tag, so they go
+too. You need `bots.write` on a Bot that is not linked. The answer is only the
+number of removed entries.
 
-When you [delete the history of a Chat](/docs/chats#delete-the-history), the memory that the Bot learned from it stays. Purge `chat:<id>` to remove it too.
+When you [delete the history of a Chat](/docs/chats#delete-the-history), the
+memory that the Bot learned from it stays. Purge `chat:<id>` to remove it too.
 
-When you upgrade from a version whose Bot memory had no tags, OpenBot removes the old memory for each person, and each Bot starts with an empty pool.
+When you upgrade from a version whose Bot memory had no tags, OpenBot removes
+the old memory for each person, and each Bot starts with an empty pool.
 
 ---
 
@@ -157,7 +213,10 @@ When you upgrade from a version whose Bot memory had no tags, OpenBot removes th
 
 Two routes show what happened in one of your Chats:
 
-- `GET /v1/chats/:chatId/confessions` lists what the Bot confided, and the answers. Read [Show confessions](/docs/client#show-confessions) before you show them to people.
-- `GET /v1/chats/:chatId/enrichments` lists what the memory Bot added to the input of each Turn, and the entries that it used.
+- `GET /v1/chats/:chatId/confessions` lists what the Bot confided, and the
+  answers. Read [Show confessions](/docs/client#show-confessions) before you
+  show them to people.
+- `GET /v1/chats/:chatId/enrichments` lists what the memory Bot added to the
+  input of each Turn, and the entries that it used.
 
 Both need `chats.read`, so only the person who owns the Chat can read them.
