@@ -11,35 +11,16 @@ import * as Hash from "effect/Hash"
 import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
 import type * as Authorizer from "../Authorizer.ts"
+// The error classes are in the public module, so that the types of other
+// packages can name them. This file uses them only inside functions, so the
+// import cycle with "../Authorizer.ts" is safe.
+import { Forbidden, PolicyUnavailable } from "../Authorizer.ts"
 import type * as Condition from "../Condition.ts"
 import * as Decision from "../Decision.ts"
 import type * as Domain from "../Domain.ts"
 import type * as Policy from "../Policy.ts"
 import { kindOf } from "./domain.ts"
 import * as policy from "./policy.ts"
-
-/** @internal */
-export class Forbidden extends Schema.TaggedError<Forbidden>(
-	"@nmnmcc/ability/Authorizer/Forbidden",
-)("Forbidden", {
-	action: Schema.String,
-	kind: Schema.String,
-	field: Schema.optionalKey(Schema.String),
-	reason: Schema.optionalKey(Schema.String),
-}) {}
-
-/** @internal */
-export class PolicyUnavailable extends Schema.TaggedError<PolicyUnavailable>(
-	"@nmnmcc/ability/Authorizer/PolicyUnavailable",
-)("PolicyUnavailable", { cause: Schema.Defect() }) {}
-
-/** @internal */
-export class Pending extends Schema.TaggedError<Pending>(
-	"@nmnmcc/ability/Authorizer/Pending",
-)("Pending", {
-	ticket: Schema.String,
-	reason: Schema.optionalKey(Schema.String),
-}) {}
 
 type AnyTarget = {
 	readonly action: string
