@@ -1097,8 +1097,8 @@ export const make: Effect.Effect<typeof BotPlugin.Service, never, Services> =
 										},
 									]),
 								)
-								// The memory Bot adds what helps to the input of the Turn, once for
-								// all its steps. The stored history keeps the words of the person.
+								// The memory Bot writes the input of the Turn again with what helps,
+								// once for all its steps. The stored history keeps the words of the person.
 								// Messages from OpenBot are not the words of a person.
 								const original =
 									record === undefined

@@ -146,7 +146,9 @@ const model = Effect.runSync(
 								id === undefined
 									? { text: input.message, entries: [] }
 									: {
-											text: input.message + " (Alice likes green tea.)",
+											text:
+												input.message.replace("I", "Alice") +
+												" (Alice likes green tea.)",
 											entries: [id],
 										},
 							),
@@ -643,15 +645,17 @@ it(
 			const second = await aliceChat.turn("What should I drink?")
 			assert.ok(
 				JSON.stringify(second.response).includes(
-					"Remembered: What should I drink? (Alice likes green tea.)",
+					"Remembered: What should Alice drink? (Alice likes green tea.)",
 				),
 				JSON.stringify(second.response),
 			)
 			const history = await aliceChat.history()
-			// The input Item holds exactly her words. Only the answer quotes the added part.
+			// The input Item holds exactly her words. Only the answer quotes the new text.
 			assert.ok(history.includes('"What should I drink?"'))
 			assert.ok(
-				!history.includes('"What should I drink? (Alice likes green tea.)"'),
+				!history.includes(
+					'"What should Alice drink? (Alice likes green tea.)"',
+				),
 			)
 			const enrichments = await json(
 				Schema.Array(BotMemory.Enrichment),
@@ -659,10 +663,17 @@ it(
 			)
 			assert.deepStrictEqual(
 				enrichments.map((enrichment) => [
-					enrichment.inserted,
+					enrichment.original,
+					enrichment.text,
 					enrichment.entries,
 				]),
-				[[["(Alice likes green tea.)"], [fact!.id]]],
+				[
+					[
+						"What should I drink?",
+						"What should Alice drink? (Alice likes green tea.)",
+						[fact!.id],
+					],
+				],
 			)
 
 			// Bob asks the same in his own Chat, and nothing about Alice reaches his input.

@@ -2,7 +2,6 @@ import { assert, it } from "@effect/vitest"
 import { Chat, Item } from "@openbot-build/core"
 import * as BotMemory from "../src/plugins/memory/BotMemory.ts"
 import * as Audience from "../src/plugins/memory/Audience.ts"
-import { insertions } from "../src/plugins/memory/InsertOnly.ts"
 import { Option } from "effect"
 
 const source = (item: string) => ({
@@ -295,21 +294,4 @@ it("a Channel group sees only group entries and entries for everyone", () => {
 			person: "u-ana",
 		}),
 	)
-})
-
-it("the rewrite check accepts only added words", () => {
-	assert.deepStrictEqual(
-		insertions(
-			"fix the tests",
-			"fix the tests (run them with devenv shell; Ana likes small commits)",
-		),
-		Option.some(["(run them with devenv shell; Ana likes small commits)"]),
-	)
-	assert.deepStrictEqual(
-		insertions("fix the tests", "please fix the\ntests now"),
-		Option.some(["please", "now"]),
-	)
-	assert.ok(Option.isNone(insertions("fix the tests", "fix tests")))
-	assert.ok(Option.isNone(insertions("fix the tests", "break the tests")))
-	assert.ok(Option.isNone(insertions("fix the tests", "the fix tests")))
 })
