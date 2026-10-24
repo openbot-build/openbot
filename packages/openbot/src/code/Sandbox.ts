@@ -107,7 +107,8 @@ export const make: Effect.Effect<typeof Sandbox.Service> = Effect.sync(() => {
 						})
 						return worker
 					}),
-					(worker) => Effect.promise(() => worker.terminate()),
+					(worker) =>
+						Effect.tryPromise(() => worker.terminate()).pipe(Effect.ignore),
 				)
 				const post = (message: ToWorker) =>
 					Effect.sync(() => worker.postMessage(message))

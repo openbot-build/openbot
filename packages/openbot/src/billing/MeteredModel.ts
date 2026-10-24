@@ -9,6 +9,7 @@ import {
 	type BillingStorageError,
 } from "./Billing.ts"
 import type { TokenThrottle } from "./TokenThrottle.ts"
+import { type Methods, methodsOf, withMethods } from "../models/ModelMethods.ts"
 
 /**
  * Finds who makes a model call, at the time of the call. The code that gives a
@@ -69,18 +70,6 @@ const blocked = (
 						description: "OpenBot cannot check the budgets right now.",
 					}),
 	})
-
-interface Methods {
-	readonly generateText: (
-		options: unknown,
-	) => Effect.Effect<{ readonly usage: Response.Usage }, AiError.AiError>
-	readonly generateObject: (
-		options: unknown,
-	) => Effect.Effect<{ readonly usage: Response.Usage }, AiError.AiError>
-	readonly streamText: (
-		options: unknown,
-	) => Stream.Stream<Response.StreamPart<{}>, AiError.AiError>
-}
 
 /** A rough count of the tokens in a piece of streamed text: about four characters each. */
 const estimate = (part: Response.StreamPart<{}>) =>
@@ -146,9 +135,7 @@ export const meter = (
 						),
 					)
 		})
-	// The methods are generic and overloaded. The wrapper only passes the options
-	// through and returns the same result, so it uses this plain form of them.
-	const plain = model as unknown as Methods
+	const plain = methodsOf(model)
 	const methods: Methods = {
 		generateText: (options) =>
 			Effect.gen(function* () {
@@ -199,10 +186,7 @@ export const meter = (
 				}),
 			),
 	}
-	return {
-		...model,
-		...(methods as unknown as Pick<LanguageModel.LanguageModel, keyof Methods>),
-	}
+	return withMethods(model, methods)
 }
 
 /**
@@ -213,7 +197,7 @@ export const withAttribution = (
 	model: LanguageModel.LanguageModel,
 	attribution: Effect.Effect<Attribution>,
 ): LanguageModel.LanguageModel => {
-	const plain = model as unknown as Methods
+	const plain = methodsOf(model)
 	const methods: Methods = {
 		generateText: (options) =>
 			Effect.provideService(
@@ -234,8 +218,5 @@ export const withAttribution = (
 				attribution,
 			),
 	}
-	return {
-		...model,
-		...(methods as unknown as Pick<LanguageModel.LanguageModel, keyof Methods>),
-	}
+	return withMethods(model, methods)
 }

@@ -50,6 +50,7 @@ import {
 	type Stored as StoredDelegation,
 } from "./Delegations.ts"
 import { Signals, type Signal } from "./Signals.ts"
+import { toolJson } from "../plugins/ToolJson.ts"
 
 interface Member {
 	readonly organizationId: string
@@ -840,7 +841,7 @@ export const layer = Layer.effect(
 						details: {
 							bot: stored.request.bot,
 							chain: [...stored.request.chain],
-							capability: JSON.parse(JSON.stringify(stored.request.capability)),
+							capability: toolJson(stored.request.capability),
 							status: stored.request.status,
 						},
 					})

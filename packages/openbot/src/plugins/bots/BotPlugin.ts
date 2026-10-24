@@ -36,6 +36,7 @@ import { Bots } from "../../bots/Bots.ts"
 import { Delegations, isOpen } from "../../bots/Delegations.ts"
 import { Signal, Signals } from "../../bots/Signals.ts"
 import { Reminders } from "../work/Reminders.ts"
+import { toolJson } from "../ToolJson.ts"
 
 export const pluginId = Plugin.Id.make("@openbot-build/openbot/bots")
 
@@ -250,8 +251,7 @@ export class BotPlugin extends Context.Service<
 	}
 >()("@openbot-build/openbot/plugins/bots/BotPlugin") {}
 
-const json = (value: unknown): Schema.Json =>
-	JSON.parse(JSON.stringify(value)) as Schema.Json
+const json = toolJson
 
 /** The first line of a text, short enough for a list. */
 const headline = (value: string) => {

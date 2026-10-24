@@ -1,5 +1,5 @@
 import {
-	type BotsApi,
+	BotsApi,
 	type AuthApi,
 	OrganizationApi,
 	Permissions,
@@ -103,7 +103,7 @@ const botInvitationView = (
 	now: number,
 ): BotsApi.BotInvitation => ({
 	id: row.id,
-	bot: (row.botId ?? "") as BotsApi.BotId,
+	bot: BotsApi.BotId.make(row.botId ?? ""),
 	email: row.email,
 	prefix: row.prefix,
 	path: row.path,

@@ -1,4 +1,4 @@
-import { type BotsApi, ComputersApi } from "@openbot-build/api"
+import { BotsApi, ComputersApi } from "@openbot-build/api"
 import { Plugin } from "@openbot-build/core"
 import {
 	Context,
@@ -19,6 +19,7 @@ import type { Machine } from "../../computers/Computer.ts"
 import { ComputerProviders } from "../../computers/ComputerProviders.ts"
 import { Computers } from "../../computers/Computers.ts"
 import { imageKey, imageOf } from "../../providers/ToolImages.ts"
+import { toolJson } from "../ToolJson.ts"
 
 export const pluginId = Plugin.Id.make("@openbot-build/openbot/computers")
 
@@ -61,8 +62,7 @@ export class ToolFailure extends Data.TaggedError("ToolFailure")<{
 /** Any tagged error can be shown to the model. */
 type Shown = { readonly _tag: string }
 
-const json = (value: unknown): Schema.Json =>
-	JSON.parse(JSON.stringify(value)) as Schema.Json
+const json = toolJson
 
 /** What the model sees of an error. */
 const failed = (error: Shown | Schema.SchemaError): Schema.Json => {
@@ -240,7 +240,7 @@ export const make = Effect.gen(function* () {
 	const parents = (current: typeof Work.Service) => {
 		const above = new Set<string>([...current.deciders, ...current.chain.bots])
 		above.delete(current.bot.id)
-		return [...above] as unknown as ReadonlyArray<BotsApi.BotId>
+		return Array.from(above, (id) => BotsApi.BotId.make(id))
 	}
 	/** Asks the gate. A failed check never lets the action run. */
 	const ask = (

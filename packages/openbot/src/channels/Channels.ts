@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto"
-import { type BotsApi, ChannelsApi } from "@openbot-build/api"
+import { BotsApi, ChannelsApi } from "@openbot-build/api"
 import { and, eq, isNull } from "drizzle-orm"
-import { Clock, Context, Effect, Layer, Option } from "effect"
+import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import {
 	channelConversations,
 	channelIdentities,
@@ -11,31 +11,41 @@ import {
 import { hint, Secrets } from "../secrets/Secrets.ts"
 import * as Db from "../database/Database.ts"
 
-/** The secrets of a Channel, opened. Only the server sees them. */
-export type Credentials =
-	| {
-			readonly kind: "slack"
-			readonly botToken: string
-			readonly signingSecret: string
-	  }
-	| {
-			readonly kind: "lark"
-			readonly domain: ChannelsApi.LarkDomain
-			readonly appId: string
-			readonly appSecret: string
-			readonly verificationToken: string
-			readonly encryptKey: string
-	  }
-	| {
-			readonly kind: "telegram"
-			readonly botToken: string
-			readonly webhookSecret: string
-	  }
-	| {
-			readonly kind: "custom"
-			readonly endpoint: string
-			readonly secret: string | null
-	  }
+/**
+ * The secrets of a Channel, opened. Only the server sees them. They are stored as
+ * sealed JSON, and this schema reads them back. The fields are plain strings: the
+ * API checked them when they came in.
+ */
+export const Credentials = Schema.Union([
+	Schema.Struct({
+		kind: Schema.Literal("slack"),
+		botToken: Schema.String,
+		signingSecret: Schema.String,
+	}),
+	Schema.Struct({
+		kind: Schema.Literal("lark"),
+		domain: ChannelsApi.LarkDomain,
+		appId: Schema.String,
+		appSecret: Schema.String,
+		verificationToken: Schema.String,
+		encryptKey: Schema.String,
+	}),
+	Schema.Struct({
+		kind: Schema.Literal("telegram"),
+		botToken: Schema.String,
+		webhookSecret: Schema.String,
+	}),
+	Schema.Struct({
+		kind: Schema.Literal("custom"),
+		endpoint: Schema.String,
+		secret: Schema.NullOr(Schema.String),
+	}),
+])
+export type Credentials = typeof Credentials.Type
+
+const decodeCredentials = Schema.decodeUnknownEffect(
+	Schema.fromJsonString(Credentials),
+)
 
 /** A stored Channel. The API view adds the webhook address of the public origin. */
 export type StoredChannel = Omit<ChannelsApi.Channel, "webhookUrl">
@@ -144,17 +154,26 @@ const split = (credentials: Credentials) => {
 
 type Row = typeof channels.$inferSelect
 
+const decodeKind = Schema.decodeUnknownSync(ChannelsApi.ChannelKind)
+
+/** The hints column holds JSON that only `split` writes. */
+const decodeHints = Schema.decodeUnknownSync(
+	Schema.fromJsonString(
+		Schema.Struct({
+			hints: Schema.Record(Schema.String, Schema.NullOr(Schema.String)),
+			plain: Schema.Record(Schema.String, Schema.String),
+		}),
+	),
+)
+
 const fromRow = (row: Row): StoredChannel => {
-	const stored = JSON.parse(row.hints) as {
-		readonly hints: Record<string, string | null>
-		readonly plain: Record<string, string>
-	}
-	const kind = row.kind as ChannelsApi.ChannelKind
+	const stored = decodeHints(row.hints)
+	const kind = decodeKind(row.kind)
 	return {
 		id: ChannelsApi.ChannelId.make(row.id),
 		kind,
 		name: row.name,
-		bot: row.bot as BotsApi.BotId,
+		bot: BotsApi.BotId.make(row.bot),
 		actor: row.actor,
 		enabled: row.enabled,
 		linkPath: row.linkPath,
@@ -315,7 +334,9 @@ export const make = Effect.gen(function* () {
 		})
 	const open = (row: Row) =>
 		stored(secrets.open(row.credentials, binding(row.id))).pipe(
-			Effect.map((json) => JSON.parse(json) as Credentials),
+			Effect.flatMap((json) =>
+				decodeCredentials(json).pipe(Effect.mapError(unavailable)),
+			),
 		)
 	const linkInvalid = () => ChannelsApi.ChannelLinkInvalid.make({})
 	/** An open code of the organization, with its Channel. */
@@ -544,7 +565,7 @@ export const make = Effect.gen(function* () {
 				Effect.map(({ link, channel }) => ({
 					channel: ChannelsApi.ChannelId.make(channel.id),
 					channelName: channel.name,
-					kind: channel.kind as ChannelsApi.ChannelKind,
+					kind: decodeKind(channel.kind),
 					externalUserId: link.externalUserId,
 					displayName: link.displayName,
 					expiresAt: link.expiresAt,

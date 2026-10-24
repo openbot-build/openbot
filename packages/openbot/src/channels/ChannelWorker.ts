@@ -2,6 +2,7 @@ import type { Caller, RequestsApi } from "@openbot-build/api"
 import { Chat, Turn } from "@openbot-build/core"
 import type { ChatResponseSseEvent } from "@openbot-build/api"
 import {
+	Cause,
 	Clock,
 	Deferred,
 	Duration,
@@ -731,11 +732,14 @@ export const layer = (options: { readonly publicOrigin: string } & Options) =>
 						(entry) =>
 							handleEvent(entry).pipe(
 								Effect.andThen(queue.finishEvent(entry)),
+								// An event that was stopped, such as at shut down, is tried again with no warning.
 								Effect.catchCause((cause) =>
-									Effect.logWarning(
-										"A Channel event failed. It is tried again later.",
-										cause,
-									).pipe(Effect.andThen(queue.retryEvent(entry))),
+									Cause.hasInterruptsOnly(cause)
+										? queue.retryEvent(entry)
+										: Effect.logWarning(
+												"A Channel event failed. It is tried again later.",
+												cause,
+											).pipe(Effect.andThen(queue.retryEvent(entry))),
 								),
 							),
 						{ concurrency: 4, discard: true },

@@ -14,6 +14,7 @@ import {
 	number,
 	ok,
 	outputLimit,
+	parseJson,
 	type Reply,
 	send,
 	string,
@@ -268,13 +269,7 @@ const onChunk = (output: Output, chunk: Uint8Array): Output => {
 		const body = new TextDecoder().decode(
 			joined.subarray(offset + 5, offset + 5 + length),
 		)
-		let message: unknown
-		try {
-			message = JSON.parse(body)
-		} catch {
-			message = undefined
-		}
-		next = onMessage(next, flags, message)
+		next = onMessage(next, flags, parseJson(body))
 		offset += 5 + length
 	}
 	return { ...next, pending: joined.slice(offset) }

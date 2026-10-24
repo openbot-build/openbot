@@ -1,7 +1,8 @@
 import { Network } from "@openbot-build/protocol/Network"
-import { Effect, Layer, Stream } from "effect"
+import { type Context, Effect, Stream } from "effect"
 import { type HttpClient, type HttpClientRequest } from "effect/http"
 import { ChannelDeliveryFailed } from "./Channel.ts"
+import { parse } from "./Json.ts"
 
 export interface Reply {
 	readonly status: number
@@ -16,14 +17,6 @@ export type Call = (
 ) => Effect.Effect<Reply, ChannelDeliveryFailed>
 
 const timeoutMs = 15_000
-
-const parse = (text: string): unknown => {
-	try {
-		return JSON.parse(text)
-	} catch {
-		return undefined
-	}
-}
 
 const unreachable = (cause: unknown) =>
 	new ChannelDeliveryFailed({
@@ -63,7 +56,7 @@ export const fromClient =
  * own network.
  */
 export const fromNetwork =
-	(network: Layer.Layer<Network>): Call =>
+	(network: Context.Context<Network>): Call =>
 	(request) =>
 		Effect.scoped(
 			Effect.gen(function* () {
@@ -81,8 +74,7 @@ export const fromNetwork =
 			}),
 		).pipe(
 			// Each custom Channel has its own guarded network, made for its endpoint.
-			// @effect-diagnostics-next-line strictEffectProvide:off
-			Effect.provide(network),
+			Effect.provideContext(network),
 			Effect.mapError(unreachable),
 			Effect.timeoutOrElse({ duration: timeoutMs, orElse: timedOut }),
 		)

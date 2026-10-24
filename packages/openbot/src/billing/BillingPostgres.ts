@@ -13,7 +13,16 @@ import {
 	sql,
 } from "drizzle-orm"
 import type { AnyPgColumn } from "drizzle-orm/pg-core"
-import { Clock, DateTime, Effect, HashMap, Layer, Option, Ref } from "effect"
+import {
+	Clock,
+	DateTime,
+	Effect,
+	HashMap,
+	Layer,
+	Option,
+	Ref,
+	Schema,
+} from "effect"
 import {
 	budgets,
 	creditGrants,
@@ -48,9 +57,21 @@ type PriceRow = typeof modelPrices.$inferSelect
 type BudgetRow = typeof budgets.$inferSelect
 type EventRow = typeof usageEvents.$inferSelect
 
+/** The text columns hold the values of the API, so these read them back. */
+const decodeSource = Schema.decodeUnknownSync(BillingApi.UsageSource)
+const decodeProviderOwner = Schema.decodeUnknownSync(
+	BillingApi.UsageEvent.fields.providerOwner,
+)
+const decodePeriod = Schema.decodeUnknownSync(BillingApi.BudgetPeriod)
+const decodeScope = Schema.decodeUnknownSync(BillingApi.BudgetScope)
+const decodeMode = Schema.decodeUnknownSync(BillingApi.BudgetMode)
+
 /** The schedule column holds JSON that only this file writes, from a checked request. */
+const decodeSchedule = Schema.decodeUnknownSync(
+	Schema.fromJsonString(BillingApi.PriceSchedule),
+)
 const scheduleOf = (row: PriceRow): BillingApi.PriceSchedule =>
-	JSON.parse(row.schedule) as BillingApi.PriceSchedule
+	decodeSchedule(row.schedule)
 
 const priceView = (row: PriceRow): BillingApi.ModelPrice => ({
 	model: row.modelId,
@@ -61,14 +82,14 @@ const priceView = (row: PriceRow): BillingApi.ModelPrice => ({
 const eventView = (row: EventRow): BillingApi.UsageEvent => ({
 	id: row.id,
 	occurredAt: iso(row.occurredAt),
-	source: row.source as BillingApi.UsageSource,
+	source: decodeSource(row.source),
 	chatId: row.chatId,
 	turnId: row.turnId,
 	botId: row.botId,
 	userId: row.userId,
 	tokenId: row.tokenId,
 	provider: row.providerId,
-	providerOwner: row.providerOwner as BillingApi.UsageEvent["providerOwner"],
+	providerOwner: decodeProviderOwner(row.providerOwner),
 	model: row.modelId,
 	inputUncached: row.inputUncached,
 	inputCacheRead: row.inputCacheRead,
@@ -235,9 +256,9 @@ export const make = Effect.gen(function* () {
 
 	const budgetView = (row: BudgetRow, now: number) =>
 		Effect.gen(function* () {
-			const period = row.period as BillingApi.BudgetPeriod
+			const period = decodePeriod(row.period)
 			const start = periodStart(period, now)
-			const scope = row.scopeKind as BillingApi.BudgetScope
+			const scope = decodeScope(row.scopeKind)
 			const spent = yield* spentSince(
 				row.organizationId,
 				scope,
@@ -250,7 +271,7 @@ export const make = Effect.gen(function* () {
 				scopeId: row.scopeId,
 				period,
 				limitMicros: row.limitMicros,
-				mode: row.mode as BillingApi.BudgetMode,
+				mode: decodeMode(row.mode),
 				periodStart: iso(start),
 				spentMicros: spent,
 				exceeded: spent >= row.limitMicros,
@@ -381,22 +402,17 @@ export const make = Effect.gen(function* () {
 							),
 						)).filter(
 						(budget) =>
-							scopeIdOf(
-								budget.scopeKind as BillingApi.BudgetScope,
-								call,
-								attribution,
-							) === budget.scopeId,
+							scopeIdOf(decodeScope(budget.scopeKind), call, attribution) ===
+							budget.scopeId,
 					)
 					if (hard.length > 0) {
 						const starts = hard.map((budget) =>
-							periodStart(budget.period as BillingApi.BudgetPeriod, now),
+							periodStart(decodePeriod(budget.period), now),
 						)
 						// One pass over the rows of this month gives the spend of every budget.
 						const columns = Object.fromEntries(
 							hard.map((budget, index) => {
-								const column = scopeColumn(
-									budget.scopeKind as BillingApi.BudgetScope,
-								)
+								const column = scopeColumn(decodeScope(budget.scopeKind))
 								const filter =
 									column === undefined
 										? sql`${usageEvents.occurredAt} >= ${starts[index]}`

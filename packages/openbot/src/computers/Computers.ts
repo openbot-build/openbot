@@ -1,12 +1,12 @@
 import { createHash, randomBytes } from "node:crypto"
 import {
-	type BotsApi,
+	BotsApi,
 	type Caller,
 	ComputersApi,
 	Permissions,
 } from "@openbot-build/api"
 import { and, desc, eq, inArray, isNull, or } from "drizzle-orm"
-import { Clock, Context, Effect, Layer, Option } from "effect"
+import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { Bots } from "../bots/Bots.ts"
 import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
 import { can } from "../authorization/Check.ts"
@@ -18,6 +18,14 @@ import { ComputerProviders, unavailable } from "./ComputerProviders.ts"
 import * as ConnectorMachine from "./connector/ConnectorMachine.ts"
 import { Connectors } from "./connector/Connectors.ts"
 import { Drivers } from "./Drivers.ts"
+
+/** The state column holds one of the states of the API. */
+const decodeState = Schema.decodeUnknownSync(ComputersApi.ComputerState)
+
+/** The features column holds JSON that only this file writes. */
+const decodeFeatures = Schema.decodeUnknownSync(
+	Schema.fromJsonString(ComputersApi.ComputerFeatures),
+)
 
 type Computer = ComputersApi.Computer
 type Row = typeof computers.$inferSelect
@@ -62,8 +70,8 @@ const fromRow = (row: Row): Computer => ({
 					provider: ComputersApi.ComputerProviderId.make(row.providerId ?? ""),
 					template: row.template,
 				},
-	state: row.state as ComputersApi.ComputerState,
-	features: JSON.parse(row.features) as ComputersApi.ComputerFeatures,
+	state: decodeState(row.state),
+	features: decodeFeatures(row.features),
 	pauseAfter: row.pauseAfter,
 	createdBy: row.createdBy,
 	version: row.version,
@@ -327,9 +335,7 @@ export const make = Effect.gen(function* () {
 	const machineOf = (current: Row) =>
 		Effect.gen(function* () {
 			if (current.source === "connector") {
-				const features = JSON.parse(
-					current.features,
-				) as ComputersApi.ComputerFeatures
+				const features = decodeFeatures(current.features)
 				return ConnectorMachine.make({
 					computerId: current.id,
 					desktop: features.desktop,
@@ -675,9 +681,7 @@ export const make = Effect.gen(function* () {
 				const current = yield* row(organizationId, id)
 				if (Option.isNone(current)) return
 				if (Option.isSome(hello)) {
-					const features = JSON.parse(
-						current.value.features,
-					) as ComputersApi.ComputerFeatures
+					const features = decodeFeatures(current.value.features)
 					yield* stored(
 						db
 							.update(computers)
@@ -770,7 +774,7 @@ export const make = Effect.gen(function* () {
 				)
 				return rows.map((entry) => ({
 					computer: ComputersApi.ComputerId.make(entry.computerId),
-					bot: entry.bot as BotsApi.BotId,
+					bot: BotsApi.BotId.make(entry.bot),
 					grantedBy: entry.grantedBy,
 					grantedAt: entry.grantedAt,
 				}))

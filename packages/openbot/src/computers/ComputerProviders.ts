@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto"
 import { type Caller, ComputersApi, Permissions } from "@openbot-build/api"
 import { and, eq, isNull, or } from "drizzle-orm"
-import { Clock, Context, Effect, Layer, Option } from "effect"
+import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import type { Services as AuthorizationServices } from "../authorization/Authorize.ts"
 import { can } from "../authorization/Check.ts"
 import { computerKey, computerPlace } from "../authorization/Policy.ts"
@@ -11,6 +11,37 @@ import { hint, Secrets } from "../secrets/Secrets.ts"
 
 type ComputerProvider = ComputersApi.ComputerProvider
 type Credentials = ComputersApi.ComputerProviderCredentials
+
+/** The opened secret holds JSON that only this file writes, from a checked request. */
+const decodeCredentials = Schema.decodeUnknownEffect(
+	Schema.fromJsonString(ComputersApi.ComputerProviderCredentials),
+)
+
+/** The fields of the credentials that are not secret. The key is always empty here. */
+const Plain = Schema.Union([
+	Schema.Struct({
+		kind: Schema.Literal("e2b"),
+		apiKey: Schema.String,
+		apiUrl: Schema.optionalKey(Schema.String),
+		sandboxDomain: Schema.optionalKey(Schema.String),
+	}),
+	Schema.Struct({
+		kind: Schema.Literal("daytona"),
+		apiKey: Schema.String,
+		apiUrl: Schema.optionalKey(Schema.String),
+		target: Schema.optionalKey(Schema.String),
+	}),
+])
+type Plain = typeof Plain.Type
+
+const decodeKind = Schema.decodeUnknownSync(ComputersApi.ComputerProviderKind)
+
+/** The hints column holds JSON that only this file writes. */
+const decodeHints = Schema.decodeUnknownSync(
+	Schema.fromJsonString(
+		Schema.Struct({ apiKey: Schema.NullOr(Schema.String), plain: Plain }),
+	),
+)
 type Row = typeof computerProviders.$inferSelect
 
 export const unavailable = () => ComputersApi.ComputersUnavailable.make({})
@@ -33,7 +64,7 @@ const hintsOf = (credentials: Credentials) => ({
 })
 
 const viewOf = (
-	credentials: Credentials,
+	credentials: Plain,
 	apiKey: string | null,
 ): ComputersApi.ComputerProviderCredentialsView => {
 	const key = { set: true, hint: apiKey }
@@ -62,13 +93,10 @@ const plainOf = (credentials: Credentials): Credentials => ({
 })
 
 const fromRow = (row: Row): ComputerProvider => {
-	const stored = JSON.parse(row.hints) as {
-		readonly apiKey: string | null
-		readonly plain: Credentials
-	}
+	const stored = decodeHints(row.hints)
 	return {
 		id: ComputersApi.ComputerProviderId.make(row.id),
-		kind: row.kind as ComputersApi.ComputerProviderKind,
+		kind: decodeKind(row.kind),
 		name: row.name,
 		owner:
 			row.ownerUserId === null
@@ -346,7 +374,7 @@ export const make = Effect.gen(function* () {
 					secrets.open(found.value.credentials, binding(id)),
 				)
 				return {
-					credentials: JSON.parse(json) as Credentials,
+					credentials: yield* stored(decodeCredentials(json)),
 					version: found.value.version,
 				}
 			}),

@@ -106,13 +106,13 @@ export const make = (secret: Redacted.Redacted<string>) =>
 					},
 					catch: () => SecretStorageError.make({}),
 				}),
-			open: (value, binding) =>
-				Effect.try({
+			open: (value, binding) => {
+				const dot = value.indexOf(".")
+				const key = dot < 0 ? undefined : keys.get(value.slice(0, dot))
+				// The key of this secret is not configured.
+				if (key === undefined) return Effect.fail(SecretStorageError.make({}))
+				return Effect.try({
 					try: () => {
-						const dot = value.indexOf(".")
-						const key = keys.get(value.slice(0, dot))
-						if (dot < 0 || key === undefined)
-							throw new Error("The key of this secret is not configured")
 						const bytes = Buffer.from(value.slice(dot + 1), "base64")
 						const cipher = createDecipheriv(
 							"aes-256-gcm",
@@ -127,7 +127,8 @@ export const make = (secret: Redacted.Redacted<string>) =>
 						]).toString("utf8")
 					},
 					catch: () => SecretStorageError.make({}),
-				}),
+				})
+			},
 		}),
 	)
 

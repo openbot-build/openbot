@@ -101,6 +101,7 @@ export const layer = (publicOrigin: string) =>
 					Effect.flatMap((channel) =>
 						channel.register(`${publicOrigin}/v1/hooks/channels/${id}`),
 					),
+					Effect.scoped,
 					Effect.mapError((failure) =>
 						invalid(
 							`The platform did not take the webhook: ${failure.message}`,

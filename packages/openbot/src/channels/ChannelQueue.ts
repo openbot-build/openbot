@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto"
 import { ChannelsApi } from "@openbot-build/api"
 import { and, asc, eq, lt, lte, sql } from "drizzle-orm"
-import { Clock, Context, Effect, Layer } from "effect"
+import { Clock, Context, Effect, Layer, Schema } from "effect"
 import { channelDeliveries, channelInbox } from "../database/Schema.ts"
-import type {
-	ChannelEvent,
+import {
+	type ChannelEvent,
+	ChannelEventSchema,
 	MessageRef,
 	OutboundMessage,
-	Target,
+	type Target,
+	TargetSchema,
 } from "./Channel.ts"
 import * as Db from "../database/Database.ts"
 
@@ -28,7 +30,21 @@ export interface ClaimedEvent {
 	readonly claim: string
 }
 
-export type DeliveryKind = "reply" | "request" | "notice"
+export const DeliveryKind = Schema.Literals(["reply", "request", "notice"])
+export type DeliveryKind = typeof DeliveryKind.Type
+
+/** The queue writes these columns as JSON, so it reads them back with the same schemas. */
+const decodeKind = Schema.decodeUnknownSync(DeliveryKind)
+const decodeTarget = Schema.decodeUnknownSync(
+	Schema.fromJsonString(TargetSchema),
+)
+const decodeMessage = Schema.decodeUnknownSync(
+	Schema.fromJsonString(OutboundMessage),
+)
+const decodeRef = Schema.decodeUnknownSync(Schema.fromJsonString(MessageRef))
+const decodeEvent = Schema.decodeUnknownSync(
+	Schema.fromJsonString(ChannelEventSchema),
+)
 
 export interface Delivery {
 	readonly id: string
@@ -140,13 +156,13 @@ const deliveryOf = (
 	id: row.id,
 	organizationId: row.organizationId,
 	channelId: row.channelId,
-	kind: row.kind as DeliveryKind,
-	target: JSON.parse(row.target) as Target,
+	kind: decodeKind(row.kind),
+	target: decodeTarget(row.target),
 	chat: row.chat,
 	turn: row.turn,
 	request: row.request,
-	message: JSON.parse(row.body) as OutboundMessage,
-	ref: row.ref === null ? null : (JSON.parse(row.ref) as MessageRef),
+	message: decodeMessage(row.body),
+	ref: row.ref === null ? null : decodeRef(row.ref),
 	attempts: row.attempts,
 	claim,
 	claimedAt,
@@ -223,7 +239,7 @@ export const make = Effect.gen(function* () {
 					return rows.map((row): ClaimedEvent => ({
 						organizationId: row.organizationId,
 						channelId: row.channelId,
-						event: JSON.parse(row.event) as ChannelEvent,
+						event: decodeEvent(row.event),
 						attempts: row.attempts,
 						claim,
 					}))
@@ -373,9 +389,7 @@ export const make = Effect.gen(function* () {
 			).pipe(
 				Effect.map((rows) => {
 					const ref = rows[0]?.ref
-					return ref === undefined || ref === null
-						? null
-						: (JSON.parse(ref) as MessageRef)
+					return ref === undefined || ref === null ? null : decodeRef(ref)
 				}),
 			),
 		claimDeliveries: stored(
@@ -454,7 +468,7 @@ export const make = Effect.gen(function* () {
 								{
 									organizationId: row.organizationId,
 									channelId: row.channelId,
-									target: JSON.parse(row.target) as Target,
+									target: decodeTarget(row.target),
 									chat: row.chat,
 									turn: row.turn,
 								},

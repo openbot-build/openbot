@@ -1,16 +1,16 @@
-import { Predicate } from "effect"
+import { Option, Predicate, Schema } from "effect"
 
 /**
  * Small readers for the JSON of platforms. Each platform sends many event shapes, and a
  * Channel only reads a few fields of each, so these are lighter than a full schema.
  */
-export const parse = (value: string): unknown => {
-	try {
-		return JSON.parse(value)
-	} catch {
-		return undefined
-	}
-}
+const decodeJson = Schema.decodeUnknownOption(
+	Schema.fromJsonString(Schema.Unknown),
+)
+
+/** The JSON value of the text, or `undefined` when the text is not JSON. */
+export const parse = (value: string): unknown =>
+	Option.getOrUndefined(decodeJson(value))
 
 export const field = (value: unknown, key: string): unknown =>
 	Predicate.isObject(value)

@@ -74,6 +74,7 @@ import {
 import { BotPlugin } from "../plugins/bots/BotPlugin.ts"
 import { Signal, publish } from "../bots/Signals.ts"
 import * as Db from "../database/Database.ts"
+import { type Methods, methodsOf, withMethods } from "../models/ModelMethods.ts"
 
 /** New Chats get IDs like the other resources of OpenBot. */
 const newId = () => Chat.Id.make("chat_" + randomUUID().replaceAll("-", ""))
@@ -81,17 +82,6 @@ const newId = () => Chat.Id.make("chat_" + randomUUID().replaceAll("-", ""))
 const heartbeatEvery = Duration.seconds(30)
 
 /** The parts of a model that a router passes on. */
-interface Methods {
-	readonly generateText: (
-		options: unknown,
-	) => Effect.Effect<unknown, AiError.AiError>
-	readonly generateObject: (
-		options: unknown,
-	) => Effect.Effect<unknown, AiError.AiError>
-	readonly streamText: (
-		options: unknown,
-	) => Stream.Stream<Response.StreamPart<{}>, AiError.AiError>
-}
 const unavailable = (method: string) =>
 	AiError.make({
 		module: "OpenBot",
@@ -111,7 +101,7 @@ const route = (
 	const plain = (method: string) =>
 		select.pipe(
 			Effect.mapError(() => unavailable(method)),
-			Effect.map((model) => model as unknown as Methods),
+			Effect.map(methodsOf),
 		)
 	const methods: Methods = {
 		generateText: (options) =>
@@ -127,10 +117,7 @@ const route = (
 				Effect.map(plain("streamText"), (model) => model.streamText(options)),
 			),
 	}
-	return {
-		...template,
-		...(methods as unknown as Pick<LanguageModel.LanguageModel, keyof Methods>),
-	}
+	return withMethods(template, methods)
 }
 
 export const make = <

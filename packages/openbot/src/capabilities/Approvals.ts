@@ -3,6 +3,7 @@ import { Effect, HashMap, Layer, Option, Ref } from "effect"
 import { Gate } from "./Gate.ts"
 import { Requests } from "./Requests.ts"
 import { Work } from "./Work.ts"
+import { toolJson } from "../plugins/ToolJson.ts"
 
 /** What the Bot reads when a call waits for a decider. */
 export const pendingNote =
@@ -79,7 +80,7 @@ export const make = Effect.gen(function* () {
 							)
 							yield* requests.setCall(organizationId, answer.request, {
 								name: input.toolCall.name,
-								params: JSON.parse(JSON.stringify(input.toolCall.params ?? {})),
+								params: toolJson(input.toolCall.params ?? {}),
 								...(Option.isSome(source) ? { source: source.value } : {}),
 							})
 						}

@@ -16,6 +16,7 @@ import { Target } from "../../channels/Channel.ts"
 import { ChannelQueue } from "../../channels/ChannelQueue.ts"
 import { Channels } from "../../channels/Channels.ts"
 import * as ChatHost from "../../chats/ChatHost.ts"
+import { toolJson } from "../ToolJson.ts"
 
 export const pluginId = Plugin.Id.make("@openbot-build/openbot/channels")
 
@@ -41,8 +42,7 @@ const SendInput = Schema.Struct({
 	reason: Schema.optionalKey(Schema.String),
 })
 
-const json = (value: unknown): Schema.Json =>
-	JSON.parse(JSON.stringify(value)) as Schema.Json
+const json = toolJson
 
 /** What the Chats of one member give to the Channel plugin. */
 interface ForOwnerInput {

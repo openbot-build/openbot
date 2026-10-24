@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
 import {
-	type BotsApi,
+	BotsApi,
 	type Caller,
 	Permissions,
 	TriggersApi,
@@ -126,7 +126,7 @@ const fromRow = (row: Row): Trigger => ({
 		row.ownerUserId === null
 			? { _tag: "Organization" }
 			: { _tag: "Member", userId: row.ownerUserId },
-	bot: row.bot as BotsApi.BotId,
+	bot: BotsApi.BotId.make(row.bot),
 	prompt: row.prompt,
 	schedule:
 		row.scheduleCron === null

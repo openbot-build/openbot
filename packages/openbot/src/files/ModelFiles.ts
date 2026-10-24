@@ -1,20 +1,9 @@
 import type { FilesApi } from "@openbot-build/api"
 import { Effect, Option, Predicate, Stream } from "effect"
-import { AiError, type LanguageModel, Prompt, type Response } from "effect/ai"
+import { AiError, type LanguageModel, Prompt } from "effect/ai"
 import type { Files } from "./Files.ts"
 import { fileIdOf } from "./Refs.ts"
-
-interface Methods {
-	readonly generateText: (
-		options: unknown,
-	) => Effect.Effect<unknown, AiError.AiError>
-	readonly generateObject: (
-		options: unknown,
-	) => Effect.Effect<unknown, AiError.AiError>
-	readonly streamText: (
-		options: unknown,
-	) => Stream.Stream<Response.StreamPart<{}>, AiError.AiError>
-}
+import { type Methods, methodsOf, withMethods } from "../models/ModelMethods.ts"
 
 const failed = (method: string) =>
 	AiError.make({
@@ -77,7 +66,7 @@ export const withFiles = (
 	model: LanguageModel.LanguageModel,
 	load: Files["Service"]["load"],
 ): LanguageModel.LanguageModel => {
-	const plain = model as unknown as Methods
+	const plain = methodsOf(model)
 	const prepare = (method: string, options: unknown) => {
 		const raw = (options as { readonly prompt: Prompt.RawInput }).prompt
 		const prompt = Prompt.make(raw)
@@ -97,8 +86,5 @@ export const withFiles = (
 				Effect.map(prepare("streamText", options), plain.streamText),
 			),
 	}
-	return {
-		...model,
-		...(methods as unknown as Pick<LanguageModel.LanguageModel, keyof Methods>),
-	}
+	return withMethods(model, methods)
 }

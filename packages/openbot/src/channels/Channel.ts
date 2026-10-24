@@ -1,70 +1,83 @@
 import type { ChannelsApi } from "@openbot-build/api"
-import { Data, type Effect } from "effect"
+import { Data, type Effect, Schema } from "effect"
 
 /** One chat on a platform. Each chat of a Channel is one Chat. */
-export interface Conversation {
+export const Conversation = Schema.Struct({
 	/** The ID of the chat on the platform, such as a Slack channel ID. */
-	readonly key: string
-	readonly kind: "direct" | "group"
-	readonly title?: string
-}
+	key: Schema.String,
+	kind: Schema.Literals(["direct", "group"]),
+	title: Schema.optionalKey(Schema.String),
+})
+export type Conversation = typeof Conversation.Type
 
 /** The person on the platform who sent an event. */
-export interface Sender {
-	readonly externalId: string
-	readonly displayName: string
-}
+export const Sender = Schema.Struct({
+	externalId: Schema.String,
+	displayName: Schema.String,
+})
+export type Sender = typeof Sender.Type
 
-/** Something that happened on the platform, in the form that every Channel shares. */
-export type ChannelEvent = Data.TaggedEnum<{
+/**
+ * Something that happened on the platform, in the form that every Channel shares.
+ * The queue keeps events as JSON, so this schema reads them back.
+ */
+export const ChannelEventSchema = Schema.Union([
 	/** A person wrote to the bot. In a group chat, `mentioned` tells if they named the bot. */
-	Message: {
-		readonly eventId: string
-		readonly conversation: Conversation
-		readonly sender: Sender
-		readonly text: string
-		readonly mentioned: boolean
-	}
+	Schema.TaggedStruct("Message", {
+		eventId: Schema.String,
+		conversation: Conversation,
+		sender: Sender,
+		text: Schema.String,
+		mentioned: Schema.Boolean,
+	}),
 	/** A person pressed a button of the bot. `value` is the value of the button. */
-	Action: {
-		readonly eventId: string
-		readonly conversation: Conversation
-		readonly sender: Sender
-		readonly value: string
+	Schema.TaggedStruct("Action", {
+		eventId: Schema.String,
+		conversation: Conversation,
+		sender: Sender,
+		value: Schema.String,
 		/** What the platform needs to stop showing that the press is in progress. */
-		readonly receipt?: string
-	}
-}>
+		receipt: Schema.optionalKey(Schema.String),
+	}),
+])
+export type ChannelEvent = typeof ChannelEventSchema.Type
 export const ChannelEvent = Data.taggedEnum<ChannelEvent>()
 
-export interface Button {
-	readonly label: string
-	readonly value: string
-	readonly style?: "primary" | "danger"
-}
+export const Button = Schema.Struct({
+	label: Schema.String,
+	value: Schema.String,
+	style: Schema.optionalKey(Schema.Literals(["primary", "danger"])),
+})
+export type Button = typeof Button.Type
 
 /** A message from the bot. The text is Markdown. Each Channel turns it into its own format. */
-export interface OutboundMessage {
-	readonly markdown: string
-	readonly buttons?: ReadonlyArray<Button>
-}
+export const OutboundMessage = Schema.Struct({
+	markdown: Schema.String,
+	buttons: Schema.optionalKey(Schema.Array(Button)),
+})
+export type OutboundMessage = typeof OutboundMessage.Type
 
 /**
  * Where the bot sends a message: to a chat, to one person inside a chat (only when the
  * Channel has the `private` feature), or to a direct chat with one person.
  */
-export type Target = Data.TaggedEnum<{
-	Conversation: { readonly conversation: string }
-	Private: { readonly conversation: string; readonly person: string }
-	Person: { readonly person: string }
-}>
+export const TargetSchema = Schema.Union([
+	Schema.TaggedStruct("Conversation", { conversation: Schema.String }),
+	Schema.TaggedStruct("Private", {
+		conversation: Schema.String,
+		person: Schema.String,
+	}),
+	Schema.TaggedStruct("Person", { person: Schema.String }),
+])
+export type Target = typeof TargetSchema.Type
 export const Target = Data.taggedEnum<Target>()
 
 /** A message that the bot sent. The Channel can change it later with this ref. */
-export interface MessageRef {
-	readonly conversation: string
-	readonly id: string
-}
+export const MessageRef = Schema.Struct({
+	conversation: Schema.String,
+	id: Schema.String,
+})
+export type MessageRef = typeof MessageRef.Type
 
 export interface Features {
 	/** The bot can change a message that it sent. */

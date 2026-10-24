@@ -1,3 +1,4 @@
+import { Option, Predicate, Schema } from "effect"
 import { HttpBody, HttpClient, HttpClientRequest } from "effect/http"
 
 /**
@@ -23,18 +24,18 @@ export const imageOf = (result: unknown): ToolImage | undefined => {
 		: undefined
 }
 
+const decodeJson = Schema.decodeUnknownOption(
+	Schema.fromJsonString(Schema.Unknown),
+)
+
 const parsed = (text: unknown) => {
 	if (typeof text !== "string" || !text.includes(imageKey)) return undefined
-	try {
-		const value: unknown = JSON.parse(text)
-		const image = imageOf(value)
-		if (image === undefined) return undefined
-		const rest = { ...(value as Record<string, unknown>) }
-		delete rest[imageKey]
-		return { image, rest: JSON.stringify(rest) }
-	} catch {
-		return undefined
-	}
+	const value = Option.getOrUndefined(decodeJson(text))
+	const image = imageOf(value)
+	if (image === undefined) return undefined
+	const rest = { ...(value as Record<string, unknown>) }
+	delete rest[imageKey]
+	return { image, rest: JSON.stringify(rest) }
 }
 
 /** Anthropic: a `tool_result` can hold text and image blocks. */
@@ -106,7 +107,9 @@ export const transformClient =
 				return request
 			const text = body.text ?? decoder.decode(body.body)
 			if (!text.includes(imageKey)) return request
-			const json = JSON.parse(text) as Record<string, unknown>
+			const parsedBody = Option.getOrUndefined(decodeJson(text))
+			if (!Predicate.isObject(parsedBody)) return request
+			const json = parsedBody as Record<string, unknown>
 			const changed = api === "anthropic" ? anthropic(json) : openai(json)
 			return changed
 				? HttpClientRequest.setBody(request, HttpBody.jsonUnsafe(json))

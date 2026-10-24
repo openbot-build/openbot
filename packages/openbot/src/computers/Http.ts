@@ -1,6 +1,6 @@
 // These helpers send one request and read its answer. A pipeable form does not help here.
 // @effect-diagnostics missingPipeableSignature:off
-import { Effect, Predicate } from "effect"
+import { Effect, Option, Predicate, Schema } from "effect"
 import type { HttpClient, HttpClientRequest } from "effect/http"
 import { ComputerCallFailed } from "./Computer.ts"
 
@@ -46,14 +46,16 @@ export const ok = (reply: Reply) => reply.status >= 200 && reply.status < 300
 
 export const text = (reply: Reply) => decoder.decode(reply.body)
 
+const decodeJson = Schema.decodeUnknownOption(
+	Schema.fromJsonString(Schema.Unknown),
+)
+
+/** The JSON value of the text, or `undefined` when the text is not JSON. */
+export const parseJson = (value: string): unknown =>
+	Option.getOrUndefined(decodeJson(value))
+
 /** The JSON body, or `undefined` when the body is not JSON. */
-export const json = (reply: Reply): unknown => {
-	try {
-		return JSON.parse(text(reply))
-	} catch {
-		return undefined
-	}
-}
+export const json = (reply: Reply): unknown => parseJson(text(reply))
 
 export const field = (value: unknown, key: string): unknown =>
 	Predicate.isObject(value)

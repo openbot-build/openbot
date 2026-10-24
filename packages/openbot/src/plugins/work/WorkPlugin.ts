@@ -29,6 +29,7 @@ import { OpenWork } from "../../chats/OpenWork.ts"
 import * as Plans from "./Plans.ts"
 import * as Todos from "./Todos.ts"
 import { Reminders } from "./Reminders.ts"
+import { toolJson } from "../ToolJson.ts"
 
 export const pluginId = Plugin.Id.make("@openbot-build/openbot/work")
 
@@ -91,8 +92,7 @@ interface Entry {
 }
 
 const text = { type: "string" } as const
-const json = (value: unknown): Schema.Json =>
-	JSON.parse(JSON.stringify(value)) as Schema.Json
+const json = toolJson
 
 const remindInstructions = `To come back to something later, call ${names.remind} with seconds, or with until and a date and time, and a note. Your Turn does not wait. At that time, OpenBot sends you the note as a message.`
 

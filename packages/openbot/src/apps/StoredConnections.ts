@@ -4,7 +4,7 @@ import {
 	ExperienceStorageUnavailable,
 } from "@openbot-build/api"
 import { Store } from "@openbot-build/protocol"
-import { Clock, Effect, Schema } from "effect"
+import { Clock, Effect, Option, Schema } from "effect"
 import { and, eq, sql } from "drizzle-orm"
 import {
 	appConnections,
@@ -37,10 +37,14 @@ export const ownerKey = (owner: {
 }) => JSON.stringify([owner.organizationId, owner.userId])
 
 /** The organization of an owner key. */
-export const organizationOf = (owner: string): string => {
-	const parsed: unknown = JSON.parse(owner)
-	return Array.isArray(parsed) && typeof parsed[0] === "string" ? parsed[0] : ""
-}
+const decodeOwner = Schema.decodeUnknownOption(
+	Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
+)
+export const organizationOf = (owner: string): string =>
+	Option.match(decodeOwner(owner), {
+		onNone: () => "",
+		onSome: ([organizationId]) => organizationId,
+	})
 
 /** The owner keys of a signed-in account: one for each active membership. */
 export const ownersOf = (session: {

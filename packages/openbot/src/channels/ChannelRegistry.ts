@@ -1,5 +1,13 @@
 import type { ChannelsApi } from "@openbot-build/api"
-import { Context, Effect, HashMap, Layer, SynchronizedRef } from "effect"
+import {
+	Context,
+	Effect,
+	Exit,
+	HashMap,
+	Layer,
+	Scope,
+	SynchronizedRef,
+} from "effect"
 import { HttpClient } from "effect/http"
 import { AppNetwork } from "../apps/AppHost.ts"
 import type { Channel } from "./Channel.ts"
@@ -21,11 +29,14 @@ export class ChannelRegistry extends Context.Service<
 			Channel,
 			ChannelsApi.ChannelsUnavailable | ChannelsApi.ChannelNotFound
 		>
-		/** Builds an integration from secrets that are not stored yet, such as on create. */
+		/**
+		 * Builds an integration from secrets that are not stored yet, such as on create.
+		 * The integration works until the scope closes.
+		 */
 		readonly build: (
 			id: string,
 			credentials: Credentials,
-		) => Effect.Effect<Channel>
+		) => Effect.Effect<Channel, never, Scope.Scope>
 	}
 >()("@openbot-build/openbot/channels/ChannelRegistry") {}
 
@@ -37,7 +48,7 @@ export const make = Effect.gen(function* () {
 	const build = (
 		id: string,
 		credentials: Credentials,
-	): Effect.Effect<Channel> => {
+	): Effect.Effect<Channel, never, Scope.Scope> => {
 		switch (credentials.kind) {
 			case "slack":
 				return Effect.succeed(SlackChannel.make(credentials, platform))
@@ -46,24 +57,30 @@ export const make = Effect.gen(function* () {
 			case "telegram":
 				return Effect.succeed(TelegramChannel.make(credentials, platform))
 			case "custom":
-				return Effect.succeed(
-					CustomChannel.make(
-						credentials,
-						// The endpoint is the only place that the Channel may call.
-						Http.fromNetwork(
-							network.layer("channel:" + id, [
-								new URL(credentials.endpoint).origin,
-							]),
-						),
+				// The endpoint is the only place that the Channel may call. The network is
+				// made once, so its connections stay open for the next message.
+				return Effect.map(
+					Layer.build(
+						network.layer("channel:" + id, [
+							new URL(credentials.endpoint).origin,
+						]),
 					),
+					(context) =>
+						CustomChannel.make(credentials, Http.fromNetwork(context)),
 				)
 		}
 	}
-	// One integration for each Channel version. A change of the Channel builds a new one.
+	// One integration for each Channel version. A change of the Channel builds a new one,
+	// and closes the scope of the old one. All scopes close when the registry stops.
+	const registryScope = yield* Effect.scope
 	const cache = yield* SynchronizedRef.make(
 		HashMap.empty<
 			string,
-			{ readonly version: number; readonly channel: Channel }
+			{
+				readonly version: number
+				readonly channel: Channel
+				readonly scope: Scope.Closeable
+			}
 		>(),
 	)
 	return ChannelRegistry.of({
@@ -78,12 +95,18 @@ export const make = Effect.gen(function* () {
 						organizationId,
 						target.id,
 					)
-					const channel = yield* build(target.id, credentials)
+					const scope = yield* Scope.fork(registryScope)
+					const channel = yield* build(target.id, credentials).pipe(
+						Scope.provide(scope),
+					)
+					if (found._tag === "Some")
+						yield* Scope.close(found.value.scope, Exit.void)
 					return [
 						channel,
 						HashMap.set(current, target.id, {
 							version: target.version,
 							channel,
+							scope,
 						}),
 					] as const
 				}),

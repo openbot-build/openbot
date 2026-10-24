@@ -89,7 +89,10 @@ export const layer = (allow: Allow) => {
 				}),
 				({ previous, guarded }) =>
 					Effect.sync(() => setGlobalDispatcher(previous)).pipe(
-						Effect.andThen(Effect.promise(() => guarded.close())),
+						// A dispatcher that cannot close must not stop the shut down.
+						Effect.andThen(
+							Effect.tryPromise(() => guarded.close()).pipe(Effect.ignore),
+						),
 					),
 			)
 		}),
