@@ -1469,8 +1469,11 @@ export const make = <
 			)
 		const drainQuietly = (chat: Chat.Id) =>
 			drain(chat).pipe(
+				// A Turn that was stopped on purpose is not a problem. Other failures are.
 				Effect.catchCause((cause) =>
-					Effect.logDebug("The next Turn could not start", cause),
+					Cause.hasInterruptsOnly(cause)
+						? Effect.void
+						: Effect.logWarning("The next Turn could not start", cause),
 				),
 				Effect.asVoid,
 			)

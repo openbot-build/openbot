@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { DateTime, Option, Schema } from "effect"
 import {
 	HttpApi,
 	HttpApiEndpoint,
@@ -124,14 +124,11 @@ export type PricePeriod = typeof PricePeriod.Type
 /** An IANA time zone, such as `UTC` or `Asia/Shanghai`. */
 export const TimeZone = Schema.String.check(
 	Schema.isMaxLength(64),
-	Schema.makeFilter((value: string) => {
-		try {
-			new Intl.DateTimeFormat("en-US", { timeZone: value })
-			return undefined
-		} catch {
-			return "Expected an IANA time zone, such as UTC or Asia/Shanghai"
-		}
-	}),
+	Schema.makeFilter((value: string) =>
+		Option.isSome(DateTime.zoneMakeNamed(value))
+			? undefined
+			: "Expected an IANA time zone, such as UTC or Asia/Shanghai",
+	),
 )
 
 /**

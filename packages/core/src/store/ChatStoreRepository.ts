@@ -70,9 +70,7 @@ export const make = <S extends Plugin.Stores>(
 		const bus = yield* PubSub.unbounded<ChatStore.Change<P>>()
 		yield* Effect.addFinalizer(() => PubSub.shutdown(bus))
 		const publish = (change: ChatStore.Change<P>) =>
-			Effect.sync(() => {
-				PubSub.publishUnsafe(bus, change)
-			})
+			PubSub.publish(bus, change).pipe(Effect.asVoid)
 		const generator = Option.getOrElse(
 			yield* Effect.serviceOption(IdGenerator.IdGenerator),
 			() => IdGenerator.defaultIdGenerator,
