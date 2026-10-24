@@ -348,7 +348,10 @@ export const DefaultRoles = Schema.Array(RoleId).check(Schema.isMinLength(1))
 
 export const OrganizationSettings = Schema.Struct({
 	version: Version,
-	/** The model that judges Rules. Null means that no model judges Rules. */
+	/**
+	 * The model that judges Rules. It can be a language model or a decision
+	 * model. Null means that no model judges Rules.
+	 */
 	rulesModel: Schema.NullOr(Config.Selection),
 	/** The model of the memory Bot of each Bot. Null means that Bots learn no memory. */
 	botMemoryModel: Schema.NullOr(Config.Selection),
