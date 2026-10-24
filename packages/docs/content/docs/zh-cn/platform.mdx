@@ -122,7 +122,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		"clientSecret": { "set": true, "hint": "…k9Qz" }
 	},
 	"organizationCreation": "anyone",
-	"policyCeiling": [],
+	"ceiling": { "_tag": "Rules", "algorithm": "denyOverrides", "rules": [] },
 	"appRestrictions": [],
 	"codeMode": {
 		"enabled": false,
@@ -162,7 +162,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `publicOrigin`         | OpenBot 的公开 HTTPS 源。                                                                            |
 | `identityProvider`     | 平台的 OpenID Connect 提供方；当大家只通过 SSO 连接登录时为 `null`。                                 |
 | `organizationCreation` | 谁可以创建组织：`anyone` 或 `platform_admins`。参见[组织创建](#组织创建)。                           |
-| `policyCeiling`        | 对每个组织生效的拒绝策略。参见[策略上限](#策略上限)。                                                |
+| `ceiling`              | 一个带拒绝规则、对每个组织生效的策略。参见[策略上限](#策略上限)。                                    |
 | `appRestrictions`      | App Index 隐藏的 App。参见 [App Index](/zh-cn/docs/app-index#宿主限制)。                             |
 | `codeMode`             | Bot 能否使用 Code Mode，以及它的限制。参见 [Code Mode](/zh-cn/docs/code-mode#打开-code-mode)。       |
 | `rateLimit`            | 每个调用方在一分钟内最多可以发送多少个 API 请求。参见[速率限制](/zh-cn/docs/usage#速率限制)。        |
@@ -214,26 +214,31 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ## 策略上限
 
-`policyCeiling` 是一组在每个组织中都生效的策略。它们只能是
-`deny`。OpenBot 在组织的策略之前检查它们，所以任何角色、任何令牌都不能做它们拒绝的事。资源中可以用
-`{org}` 表示请求所在的组织。参见[权限](/zh-cn/docs/permissions#策略)。
+`ceiling`
+是一个在每个组织中都生效的策略。它只能有拒绝规则。来自上限的拒绝总是胜出，所以任何角色、任何令牌都不能做它拒绝的事。条件中可以使用调用者的
+`organizationId`。参见[权限](/zh-cn/docs/permissions#策略)。上限对平台 API 不生效，所以它永远不会把平台管理员锁在外面。
 
 下面这个上限禁止每个组织添加自己的模型提供方：
 
 ```json
 {
 	"expectedVersion": 4,
-	"policyCeiling": [
-		{
-			"effect": "deny",
-			"permissionGroups": ["model_providers.write"],
-			"resources": ["openbot.org.{org}"]
-		}
-	]
+	"ceiling": {
+		"_tag": "Rules",
+		"algorithm": "denyOverrides",
+		"rules": [
+			{
+				"_tag": "Deny",
+				"actions": ["write"],
+				"resources": ["ModelProvider"],
+				"reason": "The platform gives the model providers."
+			}
+		]
+	}
 }
 ```
 
-列表最多包含 50 条策略。
+带有允许规则的上限会返回 `400`。请求中的上限最多可以有 100 条规则。
 
 ---
 
@@ -337,23 +342,22 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 `/v1/platform` 接受两种调用者：
 
 - 平台管理员的 **session cookie**。
-- 平台管理员的**用户令牌**。令牌自身的策略必须在资源 `openbot.platform` 上允许
-  `platform.read`（用于 `GET`）或 `platform.write`（用于其他所有方法）。
+- 平台管理员的**用户令牌**。令牌自身的策略必须允许 `Platform` 上的 `read`（用于
+  `GET`）或 `write`（用于其他所有方法）。
 
-权限组 `platform.read` 和 `platform.write` 只对 `openbot.platform`
-有效。组织中的任何角色都不会授予它们。没有指定 `policies`
+组织中的任何角色都不会授予 `Platform` 上的操作。没有指定 `policy`
 创建的令牌永远得不到它们。所以，用于平台的令牌必须在创建时写明它们：
 
 ```sh
 curl -b cookies.txt \
   -H "Origin: https://api.example.com" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Platform admin","expiresInDays":30,"policies":[{"effect":"allow","permissionGroups":["platform.read","platform.write"],"resources":["openbot.platform"]}]}' \
+  -d '{"name":"Platform admin","expiresInDays":30,"policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Allow","actions":["read","write"],"resources":["Platform"]}]}}' \
   https://api.example.com/v1/user/tokens
 ```
 
 只有在它的账号仍是平台管理员时，令牌才有效。其他调用者会得到 `403` 和
-`PermissionDenied`。
+`Forbidden`。
 
 OpenBot 把每次平台修改写入审计日志，组织 ID 为
 `platform`。API 目前还不能读取这些条目。
@@ -367,7 +371,7 @@ OpenBot 把每次平台修改写入审计日志，组织 ID 为
 | 状态  | 错误                    | 何时                                   |
 | ----- | ----------------------- | -------------------------------------- |
 | `400` | `SettingsInvalid`       | 修改中的某个值无效。                   |
-| `403` | `PermissionDenied`      | 调用者不是平台管理员，或者令牌不允许。 |
+| `403` | `Forbidden`             | 调用者不是平台管理员，或者令牌不允许。 |
 | `404` | `OrganizationNotFound`  | 没有这个 ID 的组织。                   |
 | `404` | `PlatformAdminNotFound` | 没有使用这个邮箱的平台管理员。         |
 | `409` | `SettingsConflict`      | 有人在你读取之后修改了设置。           |

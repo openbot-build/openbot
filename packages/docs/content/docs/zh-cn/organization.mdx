@@ -95,7 +95,7 @@ curl -X DELETE -b cookies.txt \
 ## 读取和修改组织
 
 `GET /v1/organization` 读取当前组织。它返回和上面相同的对象。
-`PATCH /v1/organization` 修改组织的 `name`。它需要 `organization.write`。
+`PATCH /v1/organization` 修改组织的 `name`。它需要 `Organization` 上的 `write`。
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -109,7 +109,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ## 设置
 
 每个组织都有自己的设置。设置保存在数据库中，所以每个 OpenBot 实例使用相同的值。
-`GET /v1/organization/settings` 读取设置。它需要 `organization.read`。
+`GET /v1/organization/settings` 读取设置。它需要 `Organization` 上的 `read`。
 
 ```json
 {
@@ -154,8 +154,8 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `joinByDomain`     | `true`                            | 拥有组织已验证域名下已验证邮箱的人，在登录时加入组织。                                                              |
 | `tokenRate`        | 不限制                            | 每个范围的 token 速率。平台设置了更低的速率时，较低的速率生效。见 [token 速率](/zh-cn/docs/usage#token-速率)。      |
 
-`PATCH /v1/organization/settings` 修改设置。它需要
-`organization.write`。请求体需要 `expectedVersion`，也就是你读到的
+`PATCH /v1/organization/settings` 修改设置。它需要 `Organization` 上的
+`write`。请求体需要 `expectedVersion`，也就是你读到的
 `version`。只添加你想修改的字段。
 
 ```sh
@@ -177,7 +177,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ## 成员
 
-`GET /v1/organization/members` 分页列出成员。它需要 `members.read`。使用
+`GET /v1/organization/members` 分页列出成员。它需要 `Member` 上的 `read`。使用
 `limit`（1 到 100，默认 50），并用上一页的 `next` 值作为 `after`。
 
 ```json
@@ -189,7 +189,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 			"name": "Ada",
 			"status": "active",
 			"roles": ["super_administrator"],
-			"policies": [],
+			"policy": { "_tag": "Rules", "algorithm": "denyOverrides", "rules": [] },
 			"joinedAt": "2026-10-21T09:00:00.000Z"
 		}
 	],
@@ -202,13 +202,14 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ### 修改成员
 
 `PATCH /v1/organization/members/:userId` 修改 `status`、`roles` 或
-`policies`。它需要 `members.write`。
+`policy`。它需要 `Member` 上的 `write`。
 
 - `status` 是 `active` 或
   `suspended`。被暂停的成员不能使用这个组织，他们在这个组织的令牌会立即失效。
 - `roles` 是角色 ID 的列表：包括内置角色和自定义角色。见
   [权限](/zh-cn/docs/permissions#角色)。
-- `policies` 是成员的额外策略，在角色之外另外生效。
+- `policy` 是成员的一个额外策略，在角色之外另外生效。其中的拒绝规则胜过角色。见
+  [权限](/zh-cn/docs/permissions#策略)。
 
 ```sh
 curl -X PATCH -b cookies.txt \
@@ -221,16 +222,16 @@ curl -X PATCH -b cookies.txt \
 ### 移除成员
 
 `DELETE /v1/organization/members/:userId` 移除成员，并撤销他们的令牌。它需要
-`members.write`。如果他们的邮箱域名仍然是已验证的，并且 `joinByDomain`
+`Member` 上的 `write`。如果他们的邮箱域名仍然是已验证的，并且 `joinByDomain`
 是开启的，或者他们通过 SSO 连接登录，那么他们下次登录时会再次加入。要让他们无法进入，请暂停他们。
 
 ### Super Administrator 的规则
 
 - 只有 Super Administrator 能修改或移除 Super
   Administrator，或者把这个角色给别人。
-- 只有 Super Administrator 能给成员额外的 `allow` 策略，或者把
-  `super_administrator` 放进默认角色。其他管理员只能添加 `deny`
-  策略。所以，没有人能给出比自己更多的权限。
+- 只有 Super Administrator 能给成员带允许规则的策略，或者把
+  `super_administrator`
+  放进默认角色。其他管理员只能给出带拒绝规则的策略。所以，没有人能给出比自己更多的权限。
 - 组织至少保留一个活跃的 Super Administrator。破坏这一点的修改会返回 `409` 和
   `LastSuperAdministrator`。
 
@@ -240,7 +241,7 @@ curl -X PATCH -b cookies.txt \
 
 管理员按邮箱邀请一个人。这个人用这个邮箱登录，然后接受或拒绝。OpenBot 不会发送邮件，请你自己告诉这个人。
 
-`POST /v1/organization/invitations` 创建邀请。它需要 `members.write`。
+`POST /v1/organization/invitations` 创建邀请。它需要 `Member` 上的 `write`。
 
 ```sh
 curl -b cookies.txt \
@@ -274,10 +275,10 @@ curl -b cookies.txt \
 
 你也可以邀请别人使用一个 Bot。见 [分享 Bots](/zh-cn/docs/sharing)。
 
-`GET /v1/organization/invitations` 按从新到旧列出邀请。它需要
-`members.read`。加上 `?status=pending`
+`GET /v1/organization/invitations` 按从新到旧列出邀请。它需要 `Member` 上的
+`read`。加上 `?status=pending`
 只看未处理的邀请。`DELETE /v1/organization/invitations/:invitationId`
-收回一个待处理的邀请。它需要 `members.write`。
+收回一个待处理的邀请。它需要 `Member` 上的 `write`。
 
 ### 回答邀请
 
@@ -305,8 +306,8 @@ curl -X POST -b cookies.txt \
 ## 审计日志
 
 审计日志记录重要的修改。任何操作都不能修改或删除日志条目。
-`GET /v1/organization/audit_logs` 列出条目，最新的排在前面。它需要
-`audit_logs.read`。
+`GET /v1/organization/audit_logs` 列出条目，最新的排在前面。它需要 `AuditLog`
+上的 `read`。
 
 | 查询参数 | 作用                                 |
 | -------- | ------------------------------------ |
@@ -329,11 +330,11 @@ curl -X POST -b cookies.txt \
 			},
 			"resource": "openbot.org.org_8f3a.user.u_456",
 			"details": {
-				"before": { "status": "active", "roles": ["member"], "policies": 0 },
+				"before": { "status": "active", "roles": ["member"], "policyRules": 0 },
 				"after": {
 					"status": "active",
 					"roles": ["administrator"],
-					"policies": 0
+					"policyRules": 0
 				}
 			}
 		}
@@ -392,11 +393,10 @@ curl -X POST -b cookies.txt \
 
 | 状态码 | 错误                             | 何时出现                                                          |
 | ------ | -------------------------------- | ----------------------------------------------------------------- |
-| `400`  | `PolicyInvalid`                  | 某个策略指定了组织之外的资源。                                    |
 | `400`  | `InvitationInvalid`              | 现在不能创建或回答这个邀请，例如它已经过期。                      |
 | `404`  | `InvitationNotFound`             | 没有发给你的、使用这个 ID 的邀请。                                |
 | `404`  | `RoleNotFound`                   | 邀请中有一个不存在的角色。                                        |
-| `403`  | `PermissionDenied`               | 调用者没有该权限。见 [权限](/zh-cn/docs/permissions)。            |
+| `403`  | `Forbidden`                      | 调用者的策略不允许这样做。见 [权限](/zh-cn/docs/permissions)。    |
 | `400`  | `OrganizationRequired`           | 使用 cookie 的请求没有 `OpenBot-Organization`，而你属于多个组织。 |
 | `400`  | `SettingsInvalid`                | 设置中的某个值无效，例如角色不存在。                              |
 | `403`  | `MembershipRequired`             | 你不是这个组织的活跃成员。                                        |

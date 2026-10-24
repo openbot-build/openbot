@@ -211,8 +211,8 @@ curl -b cookies.txt \
 用户令牌让程序代表你执行操作。令牌能做的事永远不会超过你能做的事。它还可以有自己的策略，从而做得更少。见
 [权限](/zh-cn/docs/permissions)。
 
-你可以用 session cookie 管理令牌，也可以用带有 `tokens.write`
-权限的令牌管理。没有策略的令牌不能管理令牌。
+你可以用 session cookie 管理令牌，也可以用可以对 `Token` 做 `write`
+的令牌管理。没有策略的令牌不能管理令牌。
 
 令牌属于一个组织：也就是创建它的那个请求所在的组织。使用 cookie 时，发送
 `OpenBot-Organization` 请求头来选择组织。见 [选择组织](#选择组织)。
@@ -229,11 +229,11 @@ curl -b cookies.txt \
   https://api.example.com/v1/user/tokens
 ```
 
-| 字段            | 规则                                                                                            |
-| --------------- | ----------------------------------------------------------------------------------------------- |
-| `name`          | 必填。去掉首尾空格后，长度为 1 到 80 个字符。                                                   |
-| `expiresInDays` | 可选。1 到 365 之间的整数。不填时，令牌一直有效，直到你撤销它。                                 |
-| `policies`      | 可选。用来限制令牌的策略。不填时，允许你能做的所有事，但 `tokens.read` 和 `tokens.write` 除外。 |
+| 字段            | 规则                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------- |
+| `name`          | 必填。去掉首尾空格后，长度为 1 到 80 个字符。                                                     |
+| `expiresInDays` | 可选。1 到 365 之间的整数。不填时，令牌一直有效，直到你撤销它。                                   |
+| `policy`        | 可选。用来限制令牌的一个策略。不填时，允许你能做的所有事，但对 `Token` 和 `Platform` 的操作除外。 |
 
 OpenBot 返回 `201`：
 
@@ -243,13 +243,17 @@ OpenBot 返回 `201`：
 		"id": "5f0c2a8e-7d1b-4c3e-9a55-2b6f1e8d4c10",
 		"name": "CI bot",
 		"prefix": "obut_Xr4pQ2aL",
-		"policies": [
-			{
-				"effect": "allow",
-				"permissionGroups": ["responses.run", "chats.read", "chats.write"],
-				"resources": ["openbot.org.{org}"]
-			}
-		],
+		"policy": {
+			"_tag": "Rules",
+			"algorithm": "denyOverrides",
+			"rules": [
+				{
+					"_tag": "Allow",
+					"actions": ["*"],
+					"resources": ["Chat", "File", "Request", "...", "Budget"]
+				}
+			]
+		},
 		"createdAt": "2026-10-20T09:00:00.000Z",
 		"expiresAt": "2027-01-18T09:00:00.000Z",
 		"lastUsedAt": null
@@ -306,15 +310,14 @@ OpenBot 返回 `204` 并删除这个令牌。令牌会立即失效。
 
 ### 限制和错误
 
-| 状态码 | 错误                      | 何时出现                                                 |
-| ------ | ------------------------- | -------------------------------------------------------- |
-| `400`  | `TokenPolicyInvalid`      | 某个策略指定了你的组织或 `openbot.platform` 之外的资源。 |
-| `401`  | `AuthenticationRequired`  | 没有有效的 cookie 或令牌。                               |
-| `403`  | `PermissionDenied`        | 调用者没有 `tokens.read` 或 `tokens.write`。             |
-| `403`  | `ForbiddenOrigin`         | 使用 cookie 写入，但没有完全相同的 `Origin` 请求头。     |
-| `404`  | `TokenNotFound`           | 你没有这个 ID 的令牌。                                   |
-| `409`  | `TokenLimitReached`       | 你已经有 25 个令牌。请求体中有 `"limit": 25`。           |
-| `503`  | `TokenStorageUnavailable` | OpenBot 无法连接到它的数据库。                           |
+| 状态码 | 错误                      | 何时出现                                             |
+| ------ | ------------------------- | ---------------------------------------------------- |
+| `401`  | `AuthenticationRequired`  | 没有有效的 cookie 或令牌。                           |
+| `403`  | `Forbidden`               | 调用者不能对 `Token` 做 `read` 或 `write`。          |
+| `403`  | `ForbiddenOrigin`         | 使用 cookie 写入，但没有完全相同的 `Origin` 请求头。 |
+| `404`  | `TokenNotFound`           | 你没有这个 ID 的令牌。                               |
+| `409`  | `TokenLimitReached`       | 你已经有 25 个令牌。请求体中有 `"limit": 25`。       |
+| `503`  | `TokenStorageUnavailable` | OpenBot 无法连接到它的数据库。                       |
 
 一个成员同时最多持有 25 个令牌。过期的令牌也计算在内，所以请撤销旧令牌来腾出空间。
 

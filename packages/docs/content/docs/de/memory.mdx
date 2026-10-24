@@ -123,8 +123,8 @@ ruhige Antwort, und er fügt nichts hinzu und lernt nichts. Bei einem
 des Chats.
 
 Lies und ändere die Einstellungen des Memory-Bots mit `GET` und
-`PATCH /v1/bots/:botId/memory/bot`. Du brauchst `bots.write` auf einem Bot, der
-nicht verknüpft ist:
+`PATCH /v1/bots/:botId/memory/bot`. Du brauchst `write` auf einem Bot, der nicht
+verknüpft ist:
 
 ```json
 {
@@ -151,8 +151,9 @@ bis zur nächsten Periode.
 
 `GET /v1/bots/:botId/memory` zeigt die Einträge, die für dich sind, in deiner
 Organisation. Füge `tags` mit einer Liste hinzu, die Kommas trennen, um nur
-Einträge mit allen diesen Tags zu sehen. Du brauchst `bots.read`. Niemand kann
-das Memory über eine andere Person lesen, auch nicht mit `bots.write`.
+Einträge mit allen diesen Tags zu sehen. Du brauchst `read` auf dem Bot. Niemand
+kann das Memory über eine andere Person lesen, auch nicht mit `write` auf dem
+Bot.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -207,8 +208,8 @@ auch `promotion` sagen.
 Um Memory zu entfernen, ohne es zu lesen, sende einen Tag von OpenBot an
 `POST /v1/bots/:botId/memory/purge`: einen Tag mit `from:`, `chat:`, `org:` oder
 `channel:`. Beobachtungen, die aus diesen Einträgen kommen, haben denselben Tag.
-Darum gehen sie auch. Du brauchst `bots.write` auf einem Bot, der nicht
-verknüpft ist. Die Antwort ist nur die Zahl der entfernten Einträge.
+Darum gehen sie auch. Du brauchst `write` auf einem Bot, der nicht verknüpft
+ist. Die Antwort ist nur die Zahl der entfernten Einträge.
 
 Wenn du [den Verlauf eines Chats löschst](/de/docs/chats#den-verlauf-löschen),
 bleibt das Memory, das der Bot daraus gelernt hat. Entferne `chat:<id>` mit
@@ -230,5 +231,5 @@ Zwei Routen zeigen, was in einem deiner Chats passiert ist:
 - `GET /v1/chats/:chatId/enrichments` listet, was der Memory-Bot der Eingabe
   jedes Turns hinzugefügt hat, und die Einträge, die er genutzt hat.
 
-Beide brauchen `chats.read`. So kann nur die Person sie lesen, der der Chat
-gehört.
+Beide brauchen `read` auf dem Chat. So kann nur die Person sie lesen, der der
+Chat gehört.

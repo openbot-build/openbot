@@ -20,7 +20,7 @@ description: 在 Slack、Lark、Telegram 或你自己的聊天系统中与 Bot �
 
 ## 添加 Channel
 
-由管理员添加 Channel。这需要 `channels.write`。
+由管理员添加 Channel。这需要 `Channel` 上的 `write`。
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -123,7 +123,7 @@ code）。它把关联码发到只有这个人能看到的地方：私聊中，�
 - [requests](/zh-cn/docs/requests) 发给 author，
 - Bot 知道它在和 author 一起工作，并会了解这个人。
 
-一个人需要这个 Channel 上的 `channels.use`
+一个人需要这个 Channel 上的 `use`
 才能和它的 Bot 交谈。不再处于活跃状态的成员不能使用它。
 
 ---
@@ -184,16 +184,16 @@ OpenBot 把消息发到 `endpoint`。一个 `send` 包含 `markdown`、可选的
 
 ## 权限
 
-| 权限组                     | 允许做什么                                                  |
-| -------------------------- | ----------------------------------------------------------- |
-| `channels.read`            | 读取组织的 Channels，以及与它们关联的人。                   |
-| `channels.write`           | 创建、修改和删除 Channels，设置它们的密钥，并解除人的关联。 |
-| `channels.use`             | 与 Channel 的 Bot 交谈，并让你的 Bots 向它发消息。          |
-| `channel_identities.read`  | 读取你关联的账户。                                          |
-| `channel_identities.write` | 关联和解除关联你的账户。                                    |
+| 资源              | 操作    | 允许做什么                                                  |
+| ----------------- | ------- | ----------------------------------------------------------- |
+| `Channel`         | `read`  | 读取组织的 Channels，以及与它们关联的人。                   |
+| `Channel`         | `write` | 创建、修改和删除 Channels，设置它们的密钥，并解除人的关联。 |
+| `Channel`         | `use`   | 与 Channel 的 Bot 交谈，并让你的 Bots 向它发消息。          |
+| `ChannelIdentity` | `read`  | 读取你关联的账户。                                          |
+| `ChannelIdentity` | `write` | 关联和解除关联你的账户。                                    |
 
-Channels 位于 `openbot.org.<org>.channel`
-之下。管理员管理它们。每个成员都可以使用它们，并关联自己的账户。见
+Channel 的路径是
+`org / <org> / channel / <id>`。管理员管理它们。每个成员都可以使用它们，并关联自己的账户。见
 [权限](/zh-cn/docs/permissions)。
 
 ---

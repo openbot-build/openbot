@@ -26,7 +26,7 @@ und macht die Arbeit später.
 
 ## Einen Channel hinzufügen
 
-Ein Administrator fügt einen Channel hinzu. Er braucht `channels.write`.
+Ein Administrator fügt einen Channel hinzu. Er braucht `write` auf `Channel`.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -153,8 +153,8 @@ Sein Feld `author` ist ihre User-ID. Also:
 - [Requests](/de/docs/requests) gehen an den Author,
 - der Bot weiß, dass er mit dem Author arbeitet, und lernt über ihn.
 
-Eine Person braucht `channels.use` auf dem Channel, um mit seinem Bot zu
-sprechen. Ein Member, das nicht mehr aktiv ist, kann ihn nicht nutzen.
+Eine Person braucht `use` auf dem Channel, um mit seinem Bot zu sprechen. Ein
+Member, das nicht mehr aktiv ist, kann ihn nicht nutzen.
 
 ---
 
@@ -223,17 +223,17 @@ und das neue `markdown`. OpenBot ruft nur öffentliche Adressen auf.
 
 ## Berechtigungen
 
-| Permission Group           | Was sie erlaubt                                                                             |
-| -------------------------- | ------------------------------------------------------------------------------------------- |
-| `channels.read`            | Die Channels der Organisation lesen und die Personen, die mit ihnen verknüpft sind.         |
-| `channels.write`           | Channels erstellen, ändern und löschen, ihre Geheimnisse festlegen und Verknüpfungen lösen. |
-| `channels.use`             | Mit dem Bot eines Channel sprechen und deine Bots dorthin schreiben lassen.                 |
-| `channel_identities.read`  | Deine verknüpften Konten lesen.                                                             |
-| `channel_identities.write` | Deine Konten verknüpfen und die Verknüpfung lösen.                                          |
+| Ressource         | Aktion  | Was sie erlaubt                                                                             |
+| ----------------- | ------- | ------------------------------------------------------------------------------------------- |
+| `Channel`         | `read`  | Die Channels der Organisation lesen und die Personen, die mit ihnen verknüpft sind.         |
+| `Channel`         | `write` | Channels erstellen, ändern und löschen, ihre Geheimnisse festlegen und Verknüpfungen lösen. |
+| `Channel`         | `use`   | Mit dem Bot eines Channel sprechen und deine Bots dorthin schreiben lassen.                 |
+| `ChannelIdentity` | `read`  | Deine verknüpften Konten lesen.                                                             |
+| `ChannelIdentity` | `write` | Deine Konten verknüpfen und die Verknüpfung lösen.                                          |
 
-Channels liegen unter `openbot.org.<org>.channel`. Administratoren verwalten
-sie. Jedes Member darf sie nutzen und seine eigenen Konten verknüpfen. Siehe
-[Berechtigungen](/de/docs/permissions).
+Der Pfad eines Channel ist `org / <org> / channel / <id>`. Administratoren
+verwalten sie. Jedes Member darf sie nutzen und seine eigenen Konten verknüpfen.
+Siehe [Berechtigungen](/de/docs/permissions).
 
 ---
 

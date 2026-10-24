@@ -32,6 +32,12 @@ sees its Grants. It only sees that some calls run and some are denied.
 | `chat`       | The Chat of a Grant with the scope `chat`.                                |
 | `status`     | `active`, `used` or `revoked`.                                            |
 
+OpenBot puts the active Grants of a Bot into one policy, with one rule for each
+Grant. A deny Grant wins over every allow Grant, in any order. When more than
+one allow Grant covers a call, the first one gives the answer. A `once` Grant
+that gives the answer is then used up. See
+[Permissions](/docs/permissions#rules).
+
 OpenBot makes Grants when a decider answers a request. You can also make one
 yourself:
 

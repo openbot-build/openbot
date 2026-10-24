@@ -157,9 +157,9 @@ sieht das Model an ihrer Stelle eine kurze Notiz.
 | `GET /v1/files/:fileId/content` | Gibt die Bytes einer fertigen Datei.                              |
 | `DELETE /v1/files/:fileId`      | Löscht eine Datei sofort. Antwortet mit `204`.                    |
 
-Zum Lesen brauchst du die Permission `files.read`, zum Hochladen und Löschen
-`files.write`. Jeder Member hat beide für seine eigenen Dateien. Siehe
-[Permissions](/de/docs/permissions).
+Zum Lesen brauchst du `read` auf `File`, zum Hochladen und Löschen `write` auf
+`File`. Jeder Member hat beide für seine eigenen Dateien. Siehe
+[Berechtigungen](/de/docs/permissions).
 
 ---
 

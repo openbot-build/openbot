@@ -34,6 +34,12 @@ manche abgelehnt werden.
 | `chat`       | Der Chat eines Grant mit dem Umfang `chat`.                                     |
 | `status`     | `active`, `used` oder `revoked`.                                                |
 
+OpenBot setzt die aktiven Grants eines Bots in eine Policy, mit einer Regel für
+jeden Grant. Ein Deny-Grant gewinnt gegen jeden Allow-Grant, in jeder
+Reihenfolge. Wenn mehr als ein Allow-Grant einen Aufruf abdeckt, gibt der erste
+die Antwort. Ein `once`-Grant, der die Antwort gibt, ist danach verbraucht.
+Siehe [Berechtigungen](/de/docs/permissions#regeln).
+
 OpenBot erstellt Grants, wenn ein Entscheider einen Request beantwortet. Du
 kannst auch selbst einen erstellen:
 

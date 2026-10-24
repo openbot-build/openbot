@@ -193,9 +193,16 @@ OpenBot hat keine Benutzeroberfläche. Füge dem Repository keine Seiten,
 Frontends oder Client-Apps hinzu. Die Doku-Seite ist die einzige Ausnahme. Jede
 neue Funktion beginnt als Operation im Vertrag `@openbot-build/api`. Danach
 behandelt der Server sie. Jede Operation muss mit einem User Token und mit dem
-Anmelde-Cookie funktionieren. Sie muss auch sagen, welche Berechtigung sie
-braucht, mit einer Annotation `Required` oder `GroupRequired`. Siehe
+Anmelde-Cookie funktionieren. Sie muss auch sagen, welche Aktion auf welcher
+Ressource sie braucht, mit einer Annotation `Required` oder `GroupRequired`. Die
+Helfer `own`, `organization` und `channel` in
+`packages/api/src/Authorization.ts` erstellen die Annotationen. Siehe
 [Berechtigungen](/de/docs/permissions).
+
+Der Code für die Autorisierung kommt aus der Bibliothek
+[ability](https://github.com/nmnmcc/ability). Sie ist ein Git-Subtree in
+`packages/ability`. Ändere sie in einem eigenen Commit, und behalte ihre Regeln
+und ihre Lizenz `Apache-2.0`.
 
 ### Ein aktuelles Modell
 

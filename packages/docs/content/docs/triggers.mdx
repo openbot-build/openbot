@@ -115,11 +115,12 @@ new capabilities with [requests](/docs/requests). The requests go to the actor.
 
 ## Permissions
 
-| Permission group | What it allows                                                     |
-| ---------------- | ------------------------------------------------------------------ |
-| `triggers.read`  | Read triggers: their schedules and webhooks.                       |
-| `triggers.write` | Create, change and delete triggers, and set their webhook secrets. |
+| Action on `Trigger` | What it allows                                                     |
+| ------------------- | ------------------------------------------------------------------ |
+| `read`              | Read triggers: their schedules and webhooks.                       |
+| `write`             | Create, change and delete triggers, and set their webhook secrets. |
 
-Your own triggers are below `openbot.org.<org>.user.<user>.trigger`. Shared
-triggers are below `openbot.org.<org>.trigger`. Every member can read the shared
-triggers. Administrators can change them. See [Permissions](/docs/permissions).
+The path of your own triggers is `org / <org> / user / <you> / trigger / <id>`.
+A shared trigger has no owner: its `ownerUserId` is `null`. Every member can
+read the shared triggers. Administrators can change them. The list only has the
+triggers that you may read. See [Permissions](/docs/permissions).

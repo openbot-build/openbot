@@ -137,7 +137,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		"clientSecret": { "set": true, "hint": "…k9Qz" }
 	},
 	"organizationCreation": "anyone",
-	"policyCeiling": [],
+	"ceiling": { "_tag": "Rules", "algorithm": "denyOverrides", "rules": [] },
 	"appRestrictions": [],
 	"codeMode": {
 		"enabled": false,
@@ -177,7 +177,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `publicOrigin`         | Der öffentliche HTTPS-Ursprung von OpenBot.                                                                                        |
 | `identityProvider`     | Der OpenID-Connect-Anbieter der Platform, oder `null`, wenn sich Menschen nur über SSO-Verbindungen anmelden.                      |
 | `organizationCreation` | Wer eine Organization erstellen kann: `anyone` oder `platform_admins`. Siehe [Organizations erstellen](#organizations-erstellen).  |
-| `policyCeiling`        | Policies zum Ablehnen für jede Organization. Siehe [Obergrenze für Policies](#obergrenze-für-policies).                            |
+| `ceiling`              | Eine Policy mit Deny-Regeln für jede Organization. Siehe [Obergrenze für Policies](#obergrenze-für-policies).                      |
 | `appRestrictions`      | Apps, die der App Index versteckt. Siehe [App Index](/de/docs/app-index#sperren-durch-den-host).                                   |
 | `codeMode`             | Ob Bots Code Mode nutzen können, und seine Grenzen. Siehe [Code Mode](/de/docs/code-mode#code-mode-einschalten).                   |
 | `rateLimit`            | Wie viele API-Anfragen jeder Aufrufer in einer Minute senden darf. Siehe [Rate Limit](/de/docs/usage#rate-limit).                  |
@@ -232,11 +232,12 @@ Jede Instanz nutzt eine Änderung sofort. Siehe
 
 ## Obergrenze für Policies
 
-`policyCeiling` ist eine Liste von Policies, die in jeder Organization gelten.
-Sie können nur `deny` sagen. OpenBot prüft sie vor den Policies der
-Organization. So kann keine Role und kein Token tun, was sie ablehnen. Eine
-Ressource kann `{org}` für die Organization des Request nutzen. Siehe
-[Berechtigungen](/de/docs/permissions#policies).
+`ceiling` ist eine Policy, die in jeder Organization gilt. Sie darf nur
+Deny-Regeln haben. Ein Verbot aus der Obergrenze gewinnt immer. So kann keine
+Role und kein Token tun, was sie verbietet. Eine Bedingung kann die
+`organizationId` des Aufrufers nutzen. Siehe
+[Berechtigungen](/de/docs/permissions#policies). Die Obergrenze gilt nicht für
+die API der Platform. So sperrt sie die Admins der Platform nie aus.
 
 Diese Obergrenze hindert jede Organization daran, eigene Model Providers
 hinzuzufügen:
@@ -244,17 +245,23 @@ hinzuzufügen:
 ```json
 {
 	"expectedVersion": 4,
-	"policyCeiling": [
-		{
-			"effect": "deny",
-			"permissionGroups": ["model_providers.write"],
-			"resources": ["openbot.org.{org}"]
-		}
-	]
+	"ceiling": {
+		"_tag": "Rules",
+		"algorithm": "denyOverrides",
+		"rules": [
+			{
+				"_tag": "Deny",
+				"actions": ["write"],
+				"resources": ["ModelProvider"],
+				"reason": "The platform gives the model providers."
+			}
+		]
+	}
 }
 ```
 
-Die Liste enthält bis zu 50 Policies.
+Eine Obergrenze mit einer Allow-Regel ergibt `400`. Eine Obergrenze in einem
+Request darf höchstens 100 Regeln haben.
 
 ---
 
@@ -364,25 +371,24 @@ OpenBot auch die Verknüpfungen, die Anbieter von Organizations zu ihm haben.
 `/v1/platform` nimmt zwei Arten von Aufrufern an:
 
 - Das **Session-Cookie** eines Admin der Platform.
-- Ein **Nutzer-Token** eines Admin der Platform. Die eigenen Policies des Tokens
-  müssen `platform.read` (für `GET`) oder `platform.write` (für alle anderen
-  Methoden) auf der Ressource `openbot.platform` erlauben.
+- Ein **Nutzer-Token** eines Admin der Platform. Die eigene Policy des Tokens
+  muss `read` (für `GET`) oder `write` (für alle anderen Methoden) auf
+  `Platform` erlauben.
 
-Die Berechtigungsgruppen `platform.read` und `platform.write` funktionieren nur
-auf `openbot.platform`. Keine Role in einer Organization gibt sie. Ein Token,
-das ohne `policies` erstellt wurde, bekommt sie nie. Darum muss ein Token für
-die Platform sie nennen, wenn du es erstellst:
+Keine Role in einer Organization gibt die Aktionen auf `Platform`. Ein Token,
+das ohne `policy` erstellt wurde, bekommt sie nie. Darum muss ein Token für die
+Platform sie nennen, wenn du es erstellst:
 
 ```sh
 curl -b cookies.txt \
   -H "Origin: https://api.example.com" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Platform admin","expiresInDays":30,"policies":[{"effect":"allow","permissionGroups":["platform.read","platform.write"],"resources":["openbot.platform"]}]}' \
+  -d '{"name":"Platform admin","expiresInDays":30,"policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Allow","actions":["read","write"],"resources":["Platform"]}]}}' \
   https://api.example.com/v1/user/tokens
 ```
 
 Das Token funktioniert trotzdem nur, solange sein Konto Admin der Platform ist.
-Andere Aufrufer bekommen `403` mit `PermissionDenied`.
+Andere Aufrufer bekommen `403` mit `Forbidden`.
 
 OpenBot schreibt jede Änderung an der Platform ins Audit-Log, mit der
 Organization-ID `platform`. Die API kann diese Einträge noch nicht lesen.
@@ -397,7 +403,7 @@ Die vollständigen Formen findest du in der
 | Status | Fehler                  | Wann                                                                       |
 | ------ | ----------------------- | -------------------------------------------------------------------------- |
 | `400`  | `SettingsInvalid`       | Ein Wert in der Änderung ist nicht gültig.                                 |
-| `403`  | `PermissionDenied`      | Der Aufrufer ist kein Admin der Platform, oder das Token erlaubt es nicht. |
+| `403`  | `Forbidden`             | Der Aufrufer ist kein Admin der Platform, oder das Token erlaubt es nicht. |
 | `404`  | `OrganizationNotFound`  | Keine Organization hat diese ID.                                           |
 | `404`  | `PlatformAdminNotFound` | Kein Admin der Platform hat diese E-Mail.                                  |
 | `409`  | `SettingsConflict`      | Jemand hat die Einstellungen geändert, nachdem du sie gelesen hast.        |

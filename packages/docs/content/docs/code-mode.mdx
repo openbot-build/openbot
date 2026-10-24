@@ -126,8 +126,8 @@ changed while the program waited. Nothing is sent by mistake.
 ## Read code runs
 
 `GET /v1/chats/:chatId/code-runs` lists the programs of a Chat.
-`GET /v1/code-runs/:id` reads one. Both need `apps.use`. The list also needs
-`chats.read` on the Chat. You only see the programs of your own Chats.
+`GET /v1/code-runs/:id` reads one. Both need `use` on `App`. The list also needs
+`read` on the Chat. You only see the programs of your own Chats.
 
 ```json
 {

@@ -29,6 +29,9 @@ Grant 快速而精确。Rule 能覆盖一整类请求。
 | `chat`       | 范围为 `chat` 的 Grant 所属的 Chat。                                 |
 | `status`     | `active`、`used` 或 `revoked`。                                      |
 
+OpenBot 把一个 Bot 的有效 Grants 放进一个策略，每个 Grant 对应一条规则。拒绝的 Grant 胜过每个允许的 Grant，与顺序无关。当多个允许的 Grant 都涵盖一次调用时，由第一个给出答案。给出答案的
+`once` Grant 随后就用完了。见[权限](/zh-cn/docs/permissions#规则)。
+
 决策者回答请求时，OpenBot 会创建 Grant。你也可以自己创建：
 
 ```sh

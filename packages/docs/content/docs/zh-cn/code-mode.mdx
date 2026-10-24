@@ -112,8 +112,8 @@ return busy.filter((event) => event.attendees > 10).map((event) => event.title)
 ## 读取 code run
 
 `GET /v1/chats/:chatId/code-runs` 列出一个 Chat 的程序。`GET /v1/code-runs/:id`
-读取一个程序。两者都需要 `apps.use`。列表还需要对该 Chat 的
-`chats.read`。你只能看到你自己的 Chat 中的程序。
+读取一个程序。两者都需要 `App` 上的 `use`。列表还需要对该 Chat 的
+`read`。你只能看到你自己的 Chat 中的程序。
 
 ```json
 {

@@ -183,8 +183,8 @@ OpenBot 使用调用开始的时间。它使用第一个有窗口包含这个时
 
 ## 查看用量
 
-`GET /v1/organization/usage` 把一段时间内的 token 和费用加起来。它需要
-`usage.read`。
+`GET /v1/organization/usage` 把一段时间内的 token 和费用加起来。它需要 `Usage`
+上的 `read`。
 
 | 查询参数  | 作用                                                                       |
 | --------- | -------------------------------------------------------------------------- |
@@ -291,8 +291,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `PATCH /v1/organization/budgets/:budgetId`  | 修改 `limitMicros` 或 `mode`。把 `version` 作为 `expectedVersion` 发送。 |
 | `DELETE /v1/organization/budgets/:budgetId` | 移除一个预算。                                                           |
 
-读取预算需要 `budgets.read`。修改预算需要
-`budgets.write`。每次修改都会写入[审计日志](/zh-cn/docs/organization#审计日志)。
+读取预算需要 `Budget` 上的 `read`。修改预算需要 `Budget` 上的
+`write`。每次修改都会写入[审计日志](/zh-cn/docs/organization#审计日志)。
 
 ---
 
@@ -325,7 +325,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 使用组织自己密钥的调用永远不会扣除额度，即使额度是打开的。
 
 `GET /v1/organization/credits` 显示 `enabled`、`balanceMicros`
-和最新的 50 次给出记录。它需要 `usage.read`。平台管理员用
+和最新的 50 次给出记录。它需要 `Usage` 上的 `read`。平台管理员用
 `GET /v1/platform/organizations/:organizationId/credits` 读取同样的内容。
 
 OpenBot 还没有支付功能。出售额度的平台在自己的系统中记录付款，然后用 API 给出额度。
@@ -404,7 +404,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `400` | `UsageQueryInvalid`    | `from` 或 `to` 不是 ISO 8601 时间，或者 `from` 不在 `to` 之前。 |
 | `400` | `BudgetInvalid`        | 缺少范围 ID，或者组织中没有成员或令牌有这个 ID。                |
 | `400` | `ModelProviderInvalid` | 提供方没有关联你要设置价格的模型。                              |
-| `403` | `PermissionDenied`     | 调用方没有 `usage.read`、`budgets.read` 或 `budgets.write`。    |
+| `403` | `Forbidden`            | 调用方不能对 `Usage` 或 `Budget` 做这件事。                     |
 | `404` | `BudgetNotFound`       | 组织中没有预算有这个 ID。                                       |
 | `409` | `BudgetConflict`       | 这个范围在这个周期上已经有预算，或者预算已经被修改。            |
 | `429` | `RateLimited`          | 调用方在这一分钟内发送了太多请求。                              |

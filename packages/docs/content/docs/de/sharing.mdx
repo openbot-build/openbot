@@ -22,7 +22,7 @@ Bot in ihrer eigenen Organisation.
 
 ## Personen einladen
 
-Du brauchst `bots.share` für den Bot. Members können ihre eigenen Bots teilen.
+Du brauchst `share` für den Bot. Members können ihre eigenen Bots teilen.
 Administratoren können auch die gemeinsamen Bots der Organisation teilen. Du
 kannst nur einen obersten Bot teilen: einen, der einem Member oder der
 Organisation gehört und der nicht archiviert ist.
@@ -165,8 +165,8 @@ Memory-Bot.
 | `GET /v1/bots/:botId/members`            | Listet die Bot-Mitglieder auf: ihre User-ID und Organisation und ihren verknüpften Bot. |
 | `DELETE /v1/bots/:botId/members/:userId` | Entfernt eine Person. Ihr verknüpfter Bot hört sofort auf zu arbeiten.                  |
 
-Beide brauchen `bots.share`. Ein verknüpfter Bot hört auch auf, wenn du deinen
-Bot archivierst.
+Beide brauchen `share` auf dem Bot. Ein verknüpfter Bot hört auch auf, wenn du
+deinen Bot archivierst.
 
 Ein Bot-Mitglied geht, wenn es seinen verknüpften Bot archiviert.
 
@@ -174,9 +174,9 @@ Ein Bot-Mitglied geht, wenn es seinen verknüpften Bot archiviert.
 
 ## Berechtigungen
 
-| Berechtigung | Damit kannst du                                                             |
-| ------------ | --------------------------------------------------------------------------- |
-| `bots.share` | Personen einladen, einen Bot zu nutzen, und seine Bot-Mitglieder verwalten. |
+| Aktion auf `Bot` | Damit kannst du                                                             |
+| ---------------- | --------------------------------------------------------------------------- |
+| `share`          | Personen einladen, einen Bot zu nutzen, und seine Bot-Mitglieder verwalten. |
 
 Siehe [Berechtigungen](/de/docs/permissions).
 

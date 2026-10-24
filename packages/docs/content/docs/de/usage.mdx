@@ -217,7 +217,7 @@ Lass `periods` weg, wenn der Preis zu jeder Zeit gleich ist.
 ## Die Nutzung ansehen
 
 `GET /v1/organization/usage` zählt die Tokens und die Kosten in einem Zeitraum
-zusammen. Es braucht `usage.read`.
+zusammen. Es braucht `read` auf `Usage`.
 
 | Query     | Was es tut                                                                               |
 | --------- | ---------------------------------------------------------------------------------------- |
@@ -330,8 +330,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `PATCH /v1/organization/budgets/:budgetId`  | Ändert `limitMicros` oder `mode`. Sende die `version` als `expectedVersion`. |
 | `DELETE /v1/organization/budgets/:budgetId` | Entfernt ein Budget.                                                         |
 
-Budgets lesen braucht `budgets.read`. Budgets ändern braucht `budgets.write`.
-Jede Änderung kommt ins [Audit-Log](/de/docs/organization#audit-log).
+Budgets lesen braucht `read` auf `Budget`. Budgets ändern braucht `write` auf
+`Budget`. Jede Änderung kommt ins [Audit-Log](/de/docs/organization#audit-log).
 
 ---
 
@@ -370,8 +370,8 @@ Aufrufe mit dem eigenen Schlüssel der Organisation nehmen nie Credits, auch wen
 Credits an sind.
 
 `GET /v1/organization/credits` zeigt `enabled`, `balanceMicros` und die neuesten
-50 Vergaben. Es braucht `usage.read`. Ein Platform-Admin liest dasselbe mit
-`GET /v1/platform/organizations/:organizationId/credits`.
+50 Vergaben. Es braucht `read` auf `Usage`. Ein Platform-Admin liest dasselbe
+mit `GET /v1/platform/organizations/:organizationId/credits`.
 
 OpenBot hat noch keine Zahlungen. Eine Platform, die Credits verkauft, speichert
 die Zahlung in ihrem eigenen System. Dann gibt sie die Credits über die API.
@@ -472,7 +472,7 @@ abgibt, können auf vielen Instanzen laufen.
 | `400`  | `UsageQueryInvalid`    | `from` oder `to` ist keine Zeit nach ISO 8601, oder `from` liegt nicht vor `to`.         |
 | `400`  | `BudgetInvalid`        | Die ID des Bereichs fehlt, oder kein Member und kein Token der Organisation hat sie.     |
 | `400`  | `ModelProviderInvalid` | Der Anbieter verknüpft das Model nicht, für das du einen Preis setzen willst.            |
-| `403`  | `PermissionDenied`     | Der Aufrufer hat nicht `usage.read`, `budgets.read` oder `budgets.write`.                |
+| `403`  | `Forbidden`            | Der Aufrufer darf das auf `Usage` oder `Budget` nicht tun.                               |
 | `404`  | `BudgetNotFound`       | Kein Budget der Organisation hat diese ID.                                               |
 | `409`  | `BudgetConflict`       | Der Bereich hat schon ein Budget für diesen Zeitraum, oder das Budget hat sich geändert. |
 | `429`  | `RateLimited`          | Der Aufrufer hat in dieser Minute zu viele Anfragen gesendet.                            |

@@ -138,8 +138,8 @@ Chat 只保存文件的 ID，不保存它的字节。每次调用模型之前，
 | `GET /v1/files/:fileId/content` | 给出一个已就绪文件的字节。                     |
 | `DELETE /v1/files/:fileId`      | 立刻删除一个文件。返回 `204`。                 |
 
-读取文件需要权限 `files.read`，上传和删除需要
-`files.write`。每个成员对自己的文件都有这两个权限。见[权限](/zh-cn/docs/permissions)。
+读取文件需要 `File` 上的 `read`，上传和删除需要 `File` 上的
+`write`。每个成员对自己的文件都有这两个权限。见[权限](/zh-cn/docs/permissions)。
 
 ---
 

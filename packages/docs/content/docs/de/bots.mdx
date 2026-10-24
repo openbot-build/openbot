@@ -61,7 +61,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 `expectedVersion` ist die `version` aus `GET /v1/me/settings`. Der Bot muss
 einer deiner eigenen obersten Bots oder ein gemeinsamer Bot sein, und du
-brauchst `bots.delegate` für ihn. Sonst gibt OpenBot `400` mit `SettingsInvalid`
+brauchst `delegate` für ihn. Sonst gibt OpenBot `400` mit `SettingsInvalid`
 zurück. Sende `null`, um deinen Standard-Bot zu entfernen.
 
 Du kannst deinen Standard-Bot trotzdem archivieren. Danach schlägt ein Trigger
@@ -218,24 +218,24 @@ deinen Bot nutzt.
 
 ## Berechtigungen
 
-| Berechtigung    | Damit kannst du                                                                               |
-| --------------- | --------------------------------------------------------------------------------------------- |
-| `bots.read`     | Bots lesen, mit ihrem Memory, ihren Rules und Grants.                                         |
-| `bots.write`    | Bots erstellen und ändern, mit ihrem Memory, ihren Rules und Grants.                          |
-| `bots.delegate` | Mit einem Bot sprechen und ihm Arbeit geben, von einem Client oder von einem anderen Bot aus. |
-| `bots.share`    | Personen einladen, einen [Bot zu nutzen](/de/docs/sharing).                                   |
+| Aktion auf `Bot` | Damit kannst du                                                                               |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| `read`           | Bots lesen, mit ihrem Memory, ihren Rules und Grants.                                         |
+| `write`          | Bots erstellen und ändern, mit ihrem Memory, ihren Rules und Grants.                          |
+| `delegate`       | Mit einem Bot sprechen und ihm Arbeit geben, von einem Client oder von einem anderen Bot aus. |
+| `share`          | Personen einladen, einen [Bot zu nutzen](/de/docs/sharing).                                   |
 
-Deine eigenen Bots liegen unter deinem Member-Schlüssel. Gemeinsame Bots liegen
-unter `openbot.org.<org>.bot`. Members dürfen gemeinsame Bots lesen und nutzen.
-Administratoren dürfen sie auch ändern und teilen. Siehe
-[Berechtigungen](/de/docs/permissions).
+Der Pfad deiner eigenen Bots ist `org / <org> / user / <you> / bot / <id>`. Ein
+gemeinsamer Bot hat keinen Besitzer: sein `ownerUserId` ist `null`. Members
+dürfen gemeinsame Bots lesen und nutzen. Administratoren dürfen sie auch ändern
+und teilen. Siehe [Berechtigungen](/de/docs/permissions).
 
 ## Fehler
 
 | Status | Fehler                  | Wann                                                                   |
 | ------ | ----------------------- | ---------------------------------------------------------------------- |
 | `400`  | `BotInvalid`            | Die Änderung ist nicht erlaubt, oder du hast keinen Standard-Bot.      |
-| `403`  | `PermissionDenied`      | Du darfst den Bot lesen, aber nicht ändern oder nutzen.                |
+| `403`  | `Forbidden`             | Du darfst den Bot lesen, aber nicht ändern oder nutzen.                |
 | `404`  | `BotNotFound`           | Es gibt keinen Bot mit dieser ID, den du lesen darfst.                 |
 | `409`  | `BotConflict`           | `expected` ist veraltet. Lies den Bot neu und versuche es noch einmal. |
 | `503`  | `BotStorageUnavailable` | OpenBot erreicht seine Datenbank nicht.                                |

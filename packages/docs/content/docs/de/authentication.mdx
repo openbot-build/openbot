@@ -233,12 +233,11 @@ Anfragen mit einem User-Token brauchen den Header `Origin` nicht.
 ## User-Tokens
 
 Mit einem User-Token kann ein Programm für dich handeln. Ein Token kann nie mehr
-tun als du. Es kann auch eigene Policies haben, damit es weniger tut. Siehe
+tun als du. Es kann auch eine eigene Policy haben, damit es weniger tut. Siehe
 [Berechtigungen](/de/docs/permissions).
 
-Du kannst Tokens mit dem Session-Cookie verwalten oder mit einem Token, das die
-Berechtigung `tokens.write` hat. Ein Token ohne Policies kann keine Tokens
-verwalten.
+Du kannst Tokens mit dem Session-Cookie verwalten oder mit einem Token, das
+`write` auf `Token` tun darf. Ein Token ohne Policy kann keine Tokens verwalten.
 
 Ein Token gehört zu einer Organisation: zu der Organisation der Anfrage, die es
 erstellt hat. Mit dem Cookie sendest du den Header `OpenBot-Organization`, um
@@ -257,11 +256,11 @@ curl -b cookies.txt \
   https://api.example.com/v1/user/tokens
 ```
 
-| Feld            | Regeln                                                                                                                                     |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `name`          | Pflicht. 1 bis 80 Zeichen, nachdem Leerzeichen am Anfang und Ende entfernt sind.                                                           |
-| `expiresInDays` | Optional. Eine ganze Zahl von 1 bis 365. Lass es weg, wenn das Token funktionieren soll, bis du es widerrufst.                             |
-| `policies`      | Optional. Policies, die das Token begrenzen. Lass es weg, um alles zu erlauben, was du tun kannst, außer `tokens.read` und `tokens.write`. |
+| Feld            | Regeln                                                                                                                                          |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`          | Pflicht. 1 bis 80 Zeichen, nachdem Leerzeichen am Anfang und Ende entfernt sind.                                                                |
+| `expiresInDays` | Optional. Eine ganze Zahl von 1 bis 365. Lass es weg, wenn das Token funktionieren soll, bis du es widerrufst.                                  |
+| `policy`        | Optional. Eine Policy, die das Token begrenzt. Lass es weg, um alles zu erlauben, was du tun kannst, außer Aktionen auf `Token` und `Platform`. |
 
 OpenBot antwortet mit `201`:
 
@@ -271,13 +270,17 @@ OpenBot antwortet mit `201`:
 		"id": "5f0c2a8e-7d1b-4c3e-9a55-2b6f1e8d4c10",
 		"name": "CI bot",
 		"prefix": "obut_Xr4pQ2aL",
-		"policies": [
-			{
-				"effect": "allow",
-				"permissionGroups": ["responses.run", "chats.read", "chats.write"],
-				"resources": ["openbot.org.{org}"]
-			}
-		],
+		"policy": {
+			"_tag": "Rules",
+			"algorithm": "denyOverrides",
+			"rules": [
+				{
+					"_tag": "Allow",
+					"actions": ["*"],
+					"resources": ["Chat", "File", "Request", "...", "Budget"]
+				}
+			]
+		},
 		"createdAt": "2026-10-20T09:00:00.000Z",
 		"expiresAt": "2027-01-18T09:00:00.000Z",
 		"lastUsedAt": null
@@ -318,7 +321,7 @@ nicht mehr.
 ### Ein Token prüfen
 
 `GET /v1/tokens/verify` zeigt, wer der Aufrufer ist. Bei einem Token zeigt es
-auch das Token und seine Policies. Jeder Aufrufer kann es nutzen.
+auch das Token und seine Policy. Jeder Aufrufer kann es nutzen.
 
 ```json
 {
@@ -336,15 +339,14 @@ Mit dem Session-Cookie ist `caller.kind` gleich `member` und `token` ist `null`.
 
 ### Grenzen und Fehler
 
-| Status | Fehler                    | Wann                                                                                    |
-| ------ | ------------------------- | --------------------------------------------------------------------------------------- |
-| `400`  | `TokenPolicyInvalid`      | Eine Policy nennt eine Ressource außerhalb deiner Organisation oder `openbot.platform`. |
-| `401`  | `AuthenticationRequired`  | Kein gültiges Cookie oder Token.                                                        |
-| `403`  | `PermissionDenied`        | Der Aufrufer hat `tokens.read` oder `tokens.write` nicht.                               |
-| `403`  | `ForbiddenOrigin`         | Ein Schreibzugriff mit Cookie ohne den genauen Header `Origin`.                         |
-| `404`  | `TokenNotFound`           | Du hast kein Token mit dieser ID.                                                       |
-| `409`  | `TokenLimitReached`       | Du hast schon 25 Tokens. Der Body enthält `"limit": 25`.                                |
-| `503`  | `TokenStorageUnavailable` | OpenBot erreicht seine Datenbank nicht.                                                 |
+| Status | Fehler                    | Wann                                                            |
+| ------ | ------------------------- | --------------------------------------------------------------- |
+| `401`  | `AuthenticationRequired`  | Kein gültiges Cookie oder Token.                                |
+| `403`  | `Forbidden`               | Der Aufrufer darf `read` oder `write` auf `Token` nicht tun.    |
+| `403`  | `ForbiddenOrigin`         | Ein Schreibzugriff mit Cookie ohne den genauen Header `Origin`. |
+| `404`  | `TokenNotFound`           | Du hast kein Token mit dieser ID.                               |
+| `409`  | `TokenLimitReached`       | Du hast schon 25 Tokens. Der Body enthält `"limit": 25`.        |
+| `503`  | `TokenStorageUnavailable` | OpenBot erreicht seine Datenbank nicht.                         |
 
 Ein Member kann 25 Tokens gleichzeitig haben. Abgelaufene Tokens zählen mit.
 Widerrufe also alte Tokens, um Platz zu schaffen.

@@ -21,10 +21,9 @@ invitation and then uses the Bot in their own organization.
 
 ## Invite people
 
-You need `bots.share` on the Bot. Members can share their own Bots.
-Administrators can also share the shared Bots of the organization. Only a top
-Bot can be shared: one that a member or the organization owns, and that is not
-archived.
+You need `share` on the Bot. Members can share their own Bots. Administrators
+can also share the shared Bots of the organization. Only a top Bot can be
+shared: one that a member or the organization owns, and that is not archived.
 
 To invite one person, send their email. The invitation lasts 7 days, like an
 [invitation to the organization](/docs/organization#invitations):
@@ -157,7 +156,7 @@ manage the memory Bot.
 | `GET /v1/bots/:botId/members`            | Lists the members: their user ID and organization, and their linked Bot. |
 | `DELETE /v1/bots/:botId/members/:userId` | Takes a person off. Their linked Bot stops working at once.              |
 
-Both need `bots.share`. A linked Bot also stops when you archive your Bot.
+Both need `share` on the Bot. A linked Bot also stops when you archive your Bot.
 
 A member leaves when they archive their linked Bot.
 
@@ -165,9 +164,9 @@ A member leaves when they archive their linked Bot.
 
 ## Permissions
 
-| Permission   | Lets you                                            |
-| ------------ | --------------------------------------------------- |
-| `bots.share` | Invite people to use a Bot, and manage its members. |
+| Action on `Bot` | Lets you                                            |
+| --------------- | --------------------------------------------------- |
+| `share`         | Invite people to use a Bot, and manage its members. |
 
 See [Permissions](/docs/permissions).
 

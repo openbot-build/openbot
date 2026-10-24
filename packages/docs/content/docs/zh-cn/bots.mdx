@@ -51,7 +51,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 `expectedVersion` 是 `GET /v1/me/settings` 返回的
 `version`。这个 Bot 必须是你自己的顶层 Bot 或共享 Bot，而且你需要它的
-`bots.delegate`。否则 OpenBot 返回 `400` 和 `SettingsInvalid`。发送 `null`
+`delegate`。否则 OpenBot 返回 `400` 和 `SettingsInvalid`。发送 `null`
 可以移除默认 Bot。
 
 你仍然可以归档默认 Bot。归档之后，没有指定 Bot 的 trigger 会失败，直到你选另一个默认 Bot。
@@ -183,15 +183,17 @@ OpenBot 会在每个 Turn 的指令中加入以下内容：
 
 ## 权限
 
-| 权限            | 允许你                                                |
-| --------------- | ----------------------------------------------------- |
-| `bots.read`     | 读取 Bots，以及它们的记忆、Rules 和 Grants。          |
-| `bots.write`    | 创建和修改 Bots，以及它们的记忆、Rules 和 Grants。    |
-| `bots.delegate` | 从客户端或另一个 Bot，和某个 Bot 说话并把工作交给它。 |
-| `bots.share`    | 邀请别人[使用某个 Bot](/zh-cn/docs/sharing)。         |
+| `Bot` 上的操作 | 允许你                                                |
+| -------------- | ----------------------------------------------------- |
+| `read`         | 读取 Bots，以及它们的记忆、Rules 和 Grants。          |
+| `write`        | 创建和修改 Bots，以及它们的记忆、Rules 和 Grants。    |
+| `delegate`     | 从客户端或另一个 Bot，和某个 Bot 说话并把工作交给它。 |
+| `share`        | 邀请别人[使用某个 Bot](/zh-cn/docs/sharing)。         |
 
-你自己的 Bots 位于你的成员键之下。共享的 Bots 位于 `openbot.org.<org>.bot`
-之下。成员可以读取和使用共享的 Bots。管理员还可以修改和分享它们。见
+你自己的 Bots 的路径是
+`org / <org> / user / <you> / bot / <id>`。共享的 Bot 没有所有者：它的
+`ownerUserId` 是
+`null`。成员可以读取和使用共享的 Bots。管理员还可以修改和分享它们。见
 [权限](/zh-cn/docs/permissions)。
 
 ## 错误
@@ -199,7 +201,7 @@ OpenBot 会在每个 Turn 的指令中加入以下内容：
 | 状态码 | 错误                    | 何时出现                                      |
 | ------ | ----------------------- | --------------------------------------------- |
 | `400`  | `BotInvalid`            | 不允许这个修改，或者你没有默认 Bot。          |
-| `403`  | `PermissionDenied`      | 你可以读取这个 Bot，但不能修改或使用它。      |
+| `403`  | `Forbidden`             | 你可以读取这个 Bot，但不能修改或使用它。      |
 | `404`  | `BotNotFound`           | 没有你可以读取的、使用这个 ID 的 Bot。        |
 | `409`  | `BotConflict`           | `expected` 已过时。请重新读取 Bot，然后再试。 |
 | `503`  | `BotStorageUnavailable` | OpenBot 无法连接到它的数据库。                |

@@ -210,7 +210,7 @@ Leave `periods` out when the price is the same at all times.
 ## See the usage
 
 `GET /v1/organization/usage` adds up the tokens and the cost in a time range. It
-needs `usage.read`.
+needs `read` on `Usage`.
 
 | Query     | What it does                                                                          |
 | --------- | ------------------------------------------------------------------------------------- |
@@ -320,8 +320,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `PATCH /v1/organization/budgets/:budgetId`  | Changes `limitMicros` or `mode`. Send the `version` as `expectedVersion`. |
 | `DELETE /v1/organization/budgets/:budgetId` | Removes a budget.                                                         |
 
-Reading budgets needs `budgets.read`. Changing them needs `budgets.write`. Each
-change goes to the [audit log](/docs/organization#audit-log).
+Reading budgets needs `read` on `Budget`. Changing them needs `write` on
+`Budget`. Each change goes to the [audit log](/docs/organization#audit-log).
 
 ---
 
@@ -360,7 +360,7 @@ Calls with the organization's own key never take credits, also when credits are
 on.
 
 `GET /v1/organization/credits` shows `enabled`, `balanceMicros` and the newest
-50 grants. It needs `usage.read`. A platform admin reads the same with
+50 grants. It needs `read` on `Usage`. A platform admin reads the same with
 `GET /v1/platform/organizations/:organizationId/credits`.
 
 OpenBot has no payments yet. A platform that sells credits records the payment
@@ -455,7 +455,7 @@ many instances.
 | `400`  | `UsageQueryInvalid`    | `from` or `to` is not an ISO 8601 time, or `from` is not before `to`.      |
 | `400`  | `BudgetInvalid`        | The scope ID is missing, or no member or token of the organization has it. |
 | `400`  | `ModelProviderInvalid` | The provider does not link the model that you want to price.               |
-| `403`  | `PermissionDenied`     | The caller does not have `usage.read`, `budgets.read` or `budgets.write`.  |
+| `403`  | `Forbidden`            | The caller may not do this on `Usage` or `Budget`.                         |
 | `404`  | `BudgetNotFound`       | No budget of the organization has this ID.                                 |
 | `409`  | `BudgetConflict`       | The scope already has a budget for this period, or the budget changed.     |
 | `429`  | `RateLimited`          | The caller sent too many requests in this minute.                          |

@@ -18,7 +18,7 @@ description:
 ## 邀请别人
 
 你需要这个 Bot 上的
-`bots.share`。成员可以分享自己的 Bots。管理员还可以分享组织的共享 Bots。只有顶层 Bot 才能被分享：它由一个成员或组织拥有，并且没有被归档。
+`share`。成员可以分享自己的 Bots。管理员还可以分享组织的共享 Bots。只有顶层 Bot 才能被分享：它由一个成员或组织拥有，并且没有被归档。
 
 要邀请一个人，请发送这个人的邮箱。这个邀请的有效期是 7 天，和[组织邀请](/zh-cn/docs/organization#邀请)一样：
 
@@ -137,7 +137,8 @@ curl -X POST -H "Authorization: Bearer $THEIR_TOKEN" \
 | `GET /v1/bots/:botId/members`            | 列出成员：他们的用户 ID 和组织，以及他们的关联 Bot。 |
 | `DELETE /v1/bots/:botId/members/:userId` | 移除一个人。他们的关联 Bot 会立即停止工作。          |
 
-这两个请求都需要 `bots.share`。当你归档你的 Bot 时，关联 Bot 也会停止工作。
+这两个请求都需要这个 Bot 上的
+`share`。当你归档你的 Bot 时，关联 Bot 也会停止工作。
 
 成员归档自己的关联 Bot 时，就会离开。
 
@@ -145,9 +146,9 @@ curl -X POST -H "Authorization: Bearer $THEIR_TOKEN" \
 
 ## 权限
 
-| 权限         | 允许你                                 |
-| ------------ | -------------------------------------- |
-| `bots.share` | 邀请别人使用某个 Bot，并管理它的成员。 |
+| `Bot` 上的操作 | 允许你                                 |
+| -------------- | -------------------------------------- |
+| `share`        | 邀请别人使用某个 Bot，并管理它的成员。 |
 
 见 [权限](/zh-cn/docs/permissions)。
 

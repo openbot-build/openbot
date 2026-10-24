@@ -13,8 +13,8 @@ Person ist.
 
 Diese Seite zeigt, wie du eine Domain bestätigst, wie du eine SSO-Verbindung
 hinzufügst und wie die Anmeldung einen Anbieter wählt. Alle Routen liegen unter
-`/v1/organization`. Lesen braucht `sso.read`. Änderungen brauchen `sso.write`.
-Siehe [Berechtigungen](/de/docs/permissions).
+`/v1/organization`. Lesen braucht `read` auf `Sso`. Änderungen brauchen `write`
+auf `Sso`. Siehe [Berechtigungen](/de/docs/permissions).
 
 ---
 
@@ -223,7 +223,7 @@ Anmeldung geht der Browser zu `returnTo`. Siehe
 | Status | Fehler                  | Wann                                                                                        |
 | ------ | ----------------------- | ------------------------------------------------------------------------------------------- |
 | `400`  | `SsoConnectionInvalid`  | Ein Wert ist ungültig, zum Beispiel eine Domain, die nicht bestätigt oder schon belegt ist. |
-| `403`  | `PermissionDenied`      | Der Aufrufer hat `sso.read` oder `sso.write` nicht.                                         |
+| `403`  | `Forbidden`             | Der Aufrufer darf `read` oder `write` auf `Sso` nicht tun.                                  |
 | `404`  | `DomainNotFound`        | Die Organisation hat keine solche Domain.                                                   |
 | `404`  | `SsoConnectionNotFound` | Die Organisation hat keine Verbindung mit dieser ID.                                        |
 | `409`  | `DomainNotVerified`     | OpenBot hat den TXT-Eintrag nicht gefunden.                                                 |

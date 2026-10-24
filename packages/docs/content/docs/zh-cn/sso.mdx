@@ -8,8 +8,8 @@ Connect 提供方。OpenID
 Connect（OIDC）是一种标准方式，让另一个服务来确认一个人的身份。
 
 本页说明如何验证域名，如何添加 SSO 连接，以及登录时如何选择提供方。所有路由都在
-`/v1/organization` 下。读取需要 `sso.read`。修改需要 `sso.write`。见
-[权限](/zh-cn/docs/permissions)。
+`/v1/organization` 下。读取需要 `Sso` 上的 `read`。修改需要 `Sso` 上的
+`write`。见 [权限](/zh-cn/docs/permissions)。
 
 ---
 
@@ -201,16 +201,16 @@ Auth 需要它来完成登录。登录后，浏览器会跳转到 `returnTo`。�
 
 ## 错误
 
-| 状态码 | 错误                    | 何时出现                               |
-| ------ | ----------------------- | -------------------------------------- |
-| `400`  | `SsoConnectionInvalid`  | 某个值无效，例如域名未验证或已被使用。 |
-| `403`  | `PermissionDenied`      | 调用者没有 `sso.read` 或 `sso.write`。 |
-| `404`  | `DomainNotFound`        | 组织没有这个域名。                     |
-| `404`  | `SsoConnectionNotFound` | 组织没有这个 ID 的连接。               |
-| `409`  | `DomainNotVerified`     | OpenBot 没有找到 TXT 记录。            |
-| `409`  | `DomainTaken`           | 另一个组织先验证了这个域名。           |
-| `409`  | `DomainInUse`           | 某个 SSO 连接仍在使用这个域名。        |
-| `409`  | `SsoConnectionConflict` | 在你读取之后，有人修改了这个连接。     |
-| `503`  | `SsoUnavailable`        | OpenBot 无法连接到它的数据库。         |
+| 状态码 | 错误                    | 何时出现                                  |
+| ------ | ----------------------- | ----------------------------------------- |
+| `400`  | `SsoConnectionInvalid`  | 某个值无效，例如域名未验证或已被使用。    |
+| `403`  | `Forbidden`             | 调用者不能对 `Sso` 做 `read` 或 `write`。 |
+| `404`  | `DomainNotFound`        | 组织没有这个域名。                        |
+| `404`  | `SsoConnectionNotFound` | 组织没有这个 ID 的连接。                  |
+| `409`  | `DomainNotVerified`     | OpenBot 没有找到 TXT 记录。               |
+| `409`  | `DomainTaken`           | 另一个组织先验证了这个域名。              |
+| `409`  | `DomainInUse`           | 某个 SSO 连接仍在使用这个域名。           |
+| `409`  | `SsoConnectionConflict` | 在你读取之后，有人修改了这个连接。        |
+| `503`  | `SsoUnavailable`        | OpenBot 无法连接到它的数据库。            |
 
 完整的数据结构见 [SSO 参考](/docs/api/operations/tags/sso/)。

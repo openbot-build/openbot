@@ -172,7 +172,13 @@ OpenBot 没有用户界面。不要向仓库添加页面、前端或客户端应
 `@openbot-build/api`
 契约中的一个操作开始。然后由服务器处理它。每个操作都必须既能用用户令牌，也能用登录 cookie。它还必须用
 `Required` 或 `GroupRequired`
-注解说明自己需要哪项权限。请看[权限](/zh-cn/docs/permissions)。
+注解说明自己需要对哪个资源的哪个操作。`packages/api/src/Authorization.ts`
+中的辅助函数 `own`、`organization` 和 `channel`
+用来生成这些注解。请看[权限](/zh-cn/docs/permissions)。
+
+授权代码来自 [ability](https://github.com/nmnmcc/ability) 库。它是
+`packages/ability` 中的一个 git
+subtree。请在单独的提交中修改它，并保留它的规则和它的 `Apache-2.0` 许可证。
 
 ### 只有一个当前模型
 

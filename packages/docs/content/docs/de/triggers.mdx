@@ -120,12 +120,14 @@ gehen an den Actor.
 
 ## Berechtigungen
 
-| Permission Group | Was sie erlaubt                                                               |
-| ---------------- | ----------------------------------------------------------------------------- |
-| `triggers.read`  | Trigger lesen: ihre Zeitpläne und Webhooks.                                   |
-| `triggers.write` | Trigger erstellen, ändern und löschen und ihre Webhook-Geheimnisse festlegen. |
+| Aktion auf `Trigger` | Was sie erlaubt                                                               |
+| -------------------- | ----------------------------------------------------------------------------- |
+| `read`               | Trigger lesen: ihre Zeitpläne und Webhooks.                                   |
+| `write`              | Trigger erstellen, ändern und löschen und ihre Webhook-Geheimnisse festlegen. |
 
-Deine eigenen Trigger liegen unter `openbot.org.<org>.user.<user>.trigger`.
-Gemeinsame Trigger liegen unter `openbot.org.<org>.trigger`. Jedes Member kann
-die gemeinsamen Trigger lesen. Administratoren können sie ändern. Siehe
+Der Pfad deiner eigenen Trigger ist
+`org / <org> / user / <you> / trigger / <id>`. Ein gemeinsamer Trigger hat
+keinen Besitzer: sein `ownerUserId` ist `null`. Jedes Member kann die
+gemeinsamen Trigger lesen. Administratoren können sie ändern. Die Liste enthält
+nur die Trigger, die du lesen darfst. Siehe
 [Berechtigungen](/de/docs/permissions).

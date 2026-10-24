@@ -51,8 +51,8 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ```
 
 The message goes to your direct Chat with this Bot. The first message makes the
-Chat. You need `bots.delegate` on the Bot. To know which Bot to talk to first,
-read `defaultBot` from `GET /v1/me/settings`. See
+Chat. You need `delegate` on the Bot. To know which Bot to talk to first, read
+`defaultBot` from `GET /v1/me/settings`. See
 [Your default Bot](/docs/bots#your-default-bot).
 
 | Field        | Meaning                                                                                                         |
@@ -166,7 +166,7 @@ Turn goes on.
 | ------ | -------------------------- | ------------------------------------------------------------------------------------------ |
 | `400`  | `ChatModelInvalid`         | The Chat has no model. The Bot needs a `model`. See [Models](/docs/models#choose-a-model). |
 | `400`  | `FileInvalid`              | A file part names a file that is not one of your ready files, or is not an image.          |
-| `403`  | `PermissionDenied`         | You may not give work to this Bot.                                                         |
+| `403`  | `Forbidden`                | You may not give work to this Bot.                                                         |
 | `404`  | `BotNotFound`              | There is no Bot with this ID that you may use.                                             |
 | `404`  | `ChatNotFound`             | You have no Chat with this ID.                                                             |
 | `409`  | `ChatConflict`             | This kind of Chat takes no messages from people.                                           |
@@ -514,12 +514,12 @@ Change the settings of a Chat with `PATCH /v1/chats/:chatId`:
 }
 ```
 
-| Field          | Meaning                                                                                                             |
-| -------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `expected`     | Required. The current `chat.revision`. An old revision returns `409` with `ChatConflict`.                           |
-| `mode`         | Optional. `build` or `plan`.                                                                                        |
-| `model`        | Optional. The model of this Chat. It also needs `models.use`. `null` makes the Chat use the model of its Bot again. |
-| `planApproval` | Optional. See [Plan mode](#plan-mode). `null` removes it.                                                           |
+| Field          | Meaning                                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `expected`     | Required. The current `chat.revision`. An old revision returns `409` with `ChatConflict`.                                   |
+| `mode`         | Optional. `build` or `plan`.                                                                                                |
+| `model`        | Optional. The model of this Chat. It also needs `use` on the `Model`. `null` makes the Chat use the model of its Bot again. |
+| `planApproval` | Optional. See [Plan mode](#plan-mode). `null` removes it.                                                                   |
 
 A wrong model returns `400` with `ChatModelInvalid`. The `reason` is
 `provider-not-found`, `model-not-found` or `unsupported-option`. See

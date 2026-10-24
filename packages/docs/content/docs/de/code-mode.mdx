@@ -130,9 +130,9 @@ hat. Nichts wird aus Versehen geschickt.
 ## Code runs lesen
 
 `GET /v1/chats/:chatId/code-runs` listet die Programme eines Chats.
-`GET /v1/code-runs/:id` liest eines. Beide brauchen `apps.use`. Die Liste
-braucht auch `chats.read` für den Chat. Du siehst nur die Programme deiner
-eigenen Chats.
+`GET /v1/code-runs/:id` liest eines. Beide brauchen `use` auf `App`. Die Liste
+braucht auch `read` auf dem Chat. Du siehst nur die Programme deiner eigenen
+Chats.
 
 ```json
 {

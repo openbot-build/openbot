@@ -115,8 +115,8 @@ Some groups and their pages:
 | `platform`       | Manage the platform. Only for platform admins.            | [Platform](/docs/api/operations/tags/platform/)               |
 | `health`         | Read the service document and health.                     | [Health](/docs/api/operations/tags/service-and-health/)       |
 
-Every operation needs a permission. A call without it fails with
-`PermissionDenied`. See [Permissions](/docs/permissions).
+Every operation needs an action on a resource. A call without it fails with
+`Forbidden`. See [Permissions](/docs/permissions).
 
 ## Handle errors
 

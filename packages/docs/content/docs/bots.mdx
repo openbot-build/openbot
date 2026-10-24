@@ -56,9 +56,9 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ```
 
 `expectedVersion` is the `version` from `GET /v1/me/settings`. The Bot must be
-one of your own top Bots or a shared Bot, and you need `bots.delegate` on it. If
-not, OpenBot returns `400` with `SettingsInvalid`. Send `null` to remove your
-default Bot.
+one of your own top Bots or a shared Bot, and you need `delegate` on it. If not,
+OpenBot returns `400` with `SettingsInvalid`. Send `null` to remove your default
+Bot.
 
 You can still archive your default Bot. After that, a trigger without a Bot
 fails until you pick another default Bot.
@@ -201,23 +201,24 @@ They get a linked Bot with `source`, which uses your Bot.
 
 ## Permissions
 
-| Permission      | Lets you                                                           |
+| Action on `Bot` | Lets you                                                           |
 | --------------- | ------------------------------------------------------------------ |
-| `bots.read`     | Read Bots, their memory, Rules and Grants.                         |
-| `bots.write`    | Make and change Bots, their memory, Rules and Grants.              |
-| `bots.delegate` | Talk to a Bot and give it work, from a client or from another Bot. |
-| `bots.share`    | Invite people to [use a Bot](/docs/sharing).                       |
+| `read`          | Read Bots, their memory, Rules and Grants.                         |
+| `write`         | Make and change Bots, their memory, Rules and Grants.              |
+| `delegate`      | Talk to a Bot and give it work, from a client or from another Bot. |
+| `share`         | Invite people to [use a Bot](/docs/sharing).                       |
 
-Your own Bots are below your member key. Shared Bots are below
-`openbot.org.<org>.bot`. Members may read and use shared Bots. Administrators
-may also change and share them. See [Permissions](/docs/permissions).
+The path of your own Bots is `org / <org> / user / <you> / bot / <id>`. A shared
+Bot has no owner: its `ownerUserId` is `null`. Members may read and use shared
+Bots. Administrators may also change and share them. See
+[Permissions](/docs/permissions).
 
 ## Errors
 
 | Status | Error                   | When                                                   |
 | ------ | ----------------------- | ------------------------------------------------------ |
 | `400`  | `BotInvalid`            | The change is not allowed, or you have no default Bot. |
-| `403`  | `PermissionDenied`      | You may read the Bot, but not change or use it.        |
+| `403`  | `Forbidden`             | You may read the Bot, but not change or use it.        |
 | `404`  | `BotNotFound`           | There is no Bot with this ID that you may read.        |
 | `409`  | `BotConflict`           | `expected` is old. Read the Bot again and retry.       |
 | `503`  | `BotStorageUnavailable` | OpenBot cannot reach its database.                     |

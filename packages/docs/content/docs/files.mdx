@@ -151,8 +151,8 @@ short note in its place.
 | `GET /v1/files/:fileId/content` | Gives the bytes of a ready file.                     |
 | `DELETE /v1/files/:fileId`      | Deletes a file at once. Returns `204`.               |
 
-You need the permission `files.read` to read files, and `files.write` to upload
-and delete them. Every member has both for their own files. See
+You need `read` on `File` to read files, and `write` on `File` to upload and
+delete them. Every member has both for their own files. See
 [Permissions](/docs/permissions).
 
 ---

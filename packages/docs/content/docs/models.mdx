@@ -40,7 +40,7 @@ When you run OpenBot from code, you can also give built-in models. See
 ## Add a model
 
 `POST /v1/organization/models` adds a model to your organization. It needs
-`model_providers.write`.
+`write` on `ModelProvider`.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -69,14 +69,14 @@ with `ModelConflict`.
 | `PATCH /v1/organization/models/:modelId`  | Changes a model. The body needs `expectedVersion`. Send `null` for a limit to remove it. |
 | `DELETE /v1/organization/models/:modelId` | Removes a model.                                                                         |
 
-Reading needs `model_providers.read`. Changes need `model_providers.write`. You
-cannot remove a model while one of your providers links it. OpenBot returns
-`409` with `ModelInUse`. Remove the link first.
+Reading needs `read` on `ModelProvider`. Changes need `write` on
+`ModelProvider`. You cannot remove a model while one of your providers links it.
+OpenBot returns `409` with `ModelInUse`. Remove the link first.
 
 ## Add a provider
 
 `POST /v1/organization/model_providers` adds a provider to your organization. It
-needs `model_providers.write`.
+needs `write` on `ModelProvider`.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -149,7 +149,8 @@ API key never comes back. The answer shows `apiKey: { set, hint }` instead. See
 | `PATCH /v1/organization/model_providers/:providerId`  | Changes a provider.  |
 | `DELETE /v1/organization/model_providers/:providerId` | Removes a provider.  |
 
-Reading needs `model_providers.read`. Changes need `model_providers.write`.
+Reading needs `read` on `ModelProvider`. Changes need `write` on
+`ModelProvider`.
 
 The body of `PATCH` needs `expectedVersion`, the `version` that you read. If
 someone changed the provider after you read it, OpenBot returns `409` with
@@ -175,10 +176,10 @@ first.
 
 ## Choose a model
 
-`GET /v1/organization/model_catalog` lists the models that your organization can
-use now. It needs `models.use`. Each item is one model of one provider, with the
-values of the link already applied. A model that two providers link shows two
-times.
+`GET /v1/organization/model_catalog` lists the models that you may use now: the
+models of your organization where your policy allows `use` on `Model`. Each item
+is one model of one provider, with the values of the link already applied. A
+model that two providers link shows two times.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -279,8 +280,8 @@ Send `"model": null` to use the model of the Bot again.
 `GET /v1/chats/:id/models` shows the same models for one Chat. See the
 [Chats API reference](/docs/api/operations/tags/chats/) for all fields.
 
-To limit which providers a member may choose, use `models.use` on
-`openbot.org.<org>.model.<providerId>`. See
+To limit which providers a member may choose, give the member a deny rule for
+`use` on `Model` with the `provider` field. See
 [Permissions](/docs/permissions#limit-models).
 
 ## Decision model

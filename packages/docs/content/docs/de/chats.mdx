@@ -54,9 +54,9 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 ```
 
 Die Nachricht geht in deinen direkten Chat mit diesem Bot. Die erste Nachricht
-erstellt den Chat. Du brauchst `bots.delegate` für den Bot. Um zu wissen, mit
-welchem Bot du zuerst sprichst, lies `defaultBot` aus `GET /v1/me/settings`.
-Siehe [Dein Standard-Bot](/de/docs/bots#dein-standard-bot).
+erstellt den Chat. Du brauchst `delegate` für den Bot. Um zu wissen, mit welchem
+Bot du zuerst sprichst, lies `defaultBot` aus `GET /v1/me/settings`. Siehe
+[Dein Standard-Bot](/de/docs/bots#dein-standard-bot).
 
 | Feld         | Bedeutung                                                                                                                            |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -173,7 +173,7 @@ läuft der Turn weiter.
 | ------ | -------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `400`  | `ChatModelInvalid`         | Der Chat hat kein Model. Der Bot braucht ein `model`. Siehe [Models](/de/docs/models#ein-model-auswählen). |
 | `400`  | `FileInvalid`              | Ein Dateiteil nennt keine deiner fertigen Dateien, oder die Datei ist kein Bild.                           |
-| `403`  | `PermissionDenied`         | Du darfst diesem Bot keine Arbeit geben.                                                                   |
+| `403`  | `Forbidden`                | Du darfst diesem Bot keine Arbeit geben.                                                                   |
 | `404`  | `BotNotFound`              | Es gibt keinen Bot mit dieser ID, den du nutzen darfst.                                                    |
 | `404`  | `ChatNotFound`             | Du hast keinen Chat mit dieser ID.                                                                         |
 | `409`  | `ChatConflict`             | Diese Art von Chat nimmt keine Nachrichten von Personen an.                                                |
@@ -535,12 +535,12 @@ zeigt die Models, die du wählen kannst:
 }
 ```
 
-| Feld           | Bedeutung                                                                                                                  |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `expected`     | Pflicht. Die aktuelle `chat.revision`. Eine alte Revision ergibt `409` mit `ChatConflict`.                                 |
-| `mode`         | Optional. `build` oder `plan`.                                                                                             |
-| `model`        | Optional. Das Model dieses Chats. Es braucht auch `models.use`. `null` lässt den Chat wieder das Model seines Bots nutzen. |
-| `planApproval` | Optional. Siehe [Plan-Modus](#plan-modus). `null` entfernt es.                                                             |
+| Feld           | Bedeutung                                                                                                                           |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `expected`     | Pflicht. Die aktuelle `chat.revision`. Eine alte Revision ergibt `409` mit `ChatConflict`.                                          |
+| `mode`         | Optional. `build` oder `plan`.                                                                                                      |
+| `model`        | Optional. Das Model dieses Chats. Es braucht auch `use` auf dem `Model`. `null` lässt den Chat wieder das Model seines Bots nutzen. |
+| `planApproval` | Optional. Siehe [Plan-Modus](#plan-modus). `null` entfernt es.                                                                      |
 
 Ein falsches Model ergibt `400` mit `ChatModelInvalid`. Der `reason` ist
 `provider-not-found`, `model-not-found` oder `unsupported-option`. Wie OpenBot

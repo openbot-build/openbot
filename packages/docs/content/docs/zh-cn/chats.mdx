@@ -47,7 +47,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 消息会进入你和这个 Bot 的 direct
 Chat。第一条消息会创建这个 Chat。你需要在这个 Bot 上拥有
-`bots.delegate`。要知道先和哪个 Bot 说话，请从 `GET /v1/me/settings` 读取
+`delegate`。要知道先和哪个 Bot 说话，请从 `GET /v1/me/settings` 读取
 `defaultBot`。见 [你的默认 Bot](/zh-cn/docs/bots#你的默认-bot)。
 
 | 字段         | 含义                                                                                          |
@@ -157,7 +157,7 @@ data: {"type":"response.output_text.delta","chat":"chat_7d21…","turn":"t-19aa"
 | ------ | -------------------------- | ------------------------------------------------------------------------------------ |
 | `400`  | `ChatModelInvalid`         | 这个 Chat 没有模型。Bot 需要一个 `model`。见 [Models](/zh-cn/docs/models#选择模型)。 |
 | `400`  | `FileInvalid`              | 文件部分指向的不是你自己的、已就绪的文件，或者不是图片。                             |
-| `403`  | `PermissionDenied`         | 你不能把工作交给这个 Bot。                                                           |
+| `403`  | `Forbidden`                | 你不能把工作交给这个 Bot。                                                           |
 | `404`  | `BotNotFound`              | 没有你可以使用的、这个 ID 的 Bot。                                                   |
 | `404`  | `ChatNotFound`             | 你没有这个 ID 的 Chat。                                                              |
 | `409`  | `ChatConflict`             | 这种 Chat 不接受人发来的消息。                                                       |
@@ -471,12 +471,12 @@ OpenBot 会保存每一个提醒。重启以后，提醒仍然会按时到来。
 }
 ```
 
-| 字段           | 含义                                                                                    |
-| -------------- | --------------------------------------------------------------------------------------- |
-| `expected`     | 必填。当前的 `chat.revision`。旧的 revision 会返回 `409` 和 `ChatConflict`。            |
-| `mode`         | 可选。`build` 或 `plan`。                                                               |
-| `model`        | 可选。这个 Chat 的模型。它还需要 `models.use`。`null` 让 Chat 重新使用它的 Bot 的模型。 |
-| `planApproval` | 可选。见 [计划模式](#计划模式)。`null` 会移除它。                                       |
+| 字段           | 含义                                                                                          |
+| -------------- | --------------------------------------------------------------------------------------------- |
+| `expected`     | 必填。当前的 `chat.revision`。旧的 revision 会返回 `409` 和 `ChatConflict`。                  |
+| `mode`         | 可选。`build` 或 `plan`。                                                                     |
+| `model`        | 可选。这个 Chat 的模型。它还需要 `Model` 上的 `use`。`null` 让 Chat 重新使用它的 Bot 的模型。 |
+| `planApproval` | 可选。见 [计划模式](#计划模式)。`null` 会移除它。                                             |
 
 错误的模型会返回 `400` 和 `ChatModelInvalid`。`reason` 是
 `provider-not-found`、`model-not-found` 或

@@ -23,7 +23,7 @@ work later.
 
 ## Add a Channel
 
-An administrator adds a Channel. It needs `channels.write`.
+An administrator adds a Channel. It needs `write` on `Channel`.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -145,8 +145,8 @@ their user ID. So:
 - [requests](/docs/requests) go to the author,
 - the Bot knows that it works with the author, and learns about them.
 
-A person needs `channels.use` on the Channel to talk with its Bot. A member who
-is not active any more cannot use it.
+A person needs `use` on the Channel to talk with its Bot. A member who is not
+active any more cannot use it.
 
 ---
 
@@ -210,16 +210,16 @@ only calls public addresses.
 
 ## Permissions
 
-| Permission group           | What it allows                                                            |
-| -------------------------- | ------------------------------------------------------------------------- |
-| `channels.read`            | Read the Channels of the organization and the people linked to them.      |
-| `channels.write`           | Create, change and delete Channels, set their secrets, and unlink people. |
-| `channels.use`             | Talk with the Bot of a Channel, and let your Bots post to it.             |
-| `channel_identities.read`  | Read your linked accounts.                                                |
-| `channel_identities.write` | Link and unlink your accounts.                                            |
+| Resource          | Action  | What it allows                                                            |
+| ----------------- | ------- | ------------------------------------------------------------------------- |
+| `Channel`         | `read`  | Read the Channels of the organization and the people linked to them.      |
+| `Channel`         | `write` | Create, change and delete Channels, set their secrets, and unlink people. |
+| `Channel`         | `use`   | Talk with the Bot of a Channel, and let your Bots post to it.             |
+| `ChannelIdentity` | `read`  | Read your linked accounts.                                                |
+| `ChannelIdentity` | `write` | Link and unlink your accounts.                                            |
 
-Channels are below `openbot.org.<org>.channel`. Administrators manage them.
-Every member may use them and link their own accounts. See
+The path of a Channel is `org / <org> / channel / <id>`. Administrators manage
+them. Every member may use them and link their own accounts. See
 [Permissions](/docs/permissions).
 
 ---

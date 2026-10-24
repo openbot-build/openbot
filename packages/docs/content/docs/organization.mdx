@@ -104,8 +104,8 @@ curl -X DELETE -b cookies.txt \
 ## Read and change the organization
 
 `GET /v1/organization` reads the current organization. It returns the same
-object as above. `PATCH /v1/organization` changes its `name`. It needs
-`organization.write`.
+object as above. `PATCH /v1/organization` changes its `name`. It needs `write`
+on `Organization`.
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -120,7 +120,7 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 Each organization has its own settings. They live in the database, so every
 OpenBot instance uses the same values. `GET /v1/organization/settings` reads
-them. It needs `organization.read`.
+them. It needs `read` on `Organization`.
 
 ```json
 {
@@ -165,9 +165,9 @@ them. It needs `organization.read`.
 | `joinByDomain`     | `true`                                            | People with a verified email in a verified domain of the organization join when they sign in.                                      |
 | `tokenRate`        | no limit                                          | Token rates of each scope. Where the platform sets a lower rate, the lower rate applies. See [Token rate](/docs/usage#token-rate). |
 
-`PATCH /v1/organization/settings` changes them. It needs `organization.write`.
-The body needs `expectedVersion`, the `version` that you read. Add only the
-fields that you want to change.
+`PATCH /v1/organization/settings` changes them. It needs `write` on
+`Organization`. The body needs `expectedVersion`, the `version` that you read.
+Add only the fields that you want to change.
 
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -189,9 +189,9 @@ Every instance uses a change at once. See
 
 ## Members
 
-`GET /v1/organization/members` lists members in pages. It needs `members.read`.
-Use `limit` (1 to 100, default 50) and `after` with the `next` value of the last
-page.
+`GET /v1/organization/members` lists members in pages. It needs `read` on
+`Member`. Use `limit` (1 to 100, default 50) and `after` with the `next` value
+of the last page.
 
 ```json
 {
@@ -202,7 +202,7 @@ page.
 			"name": "Ada",
 			"status": "active",
 			"roles": ["super_administrator"],
-			"policies": [],
+			"policy": { "_tag": "Rules", "algorithm": "denyOverrides", "rules": [] },
 			"joinedAt": "2026-10-21T09:00:00.000Z"
 		}
 	],
@@ -214,14 +214,15 @@ page.
 
 ### Change a member
 
-`PATCH /v1/organization/members/:userId` changes `status`, `roles` or
-`policies`. It needs `members.write`.
+`PATCH /v1/organization/members/:userId` changes `status`, `roles` or `policy`.
+It needs `write` on `Member`.
 
 - `status` is `active` or `suspended`. A suspended member cannot use this
   organization, and their tokens for it stop working at once.
 - `roles` is a list of role IDs: built-in roles and custom roles. See
   [Permissions](/docs/permissions#roles).
-- `policies` are extra policies for the member, on top of their roles.
+- `policy` is an extra policy for the member, on top of their roles. A deny rule
+  in it wins over the roles. See [Permissions](/docs/permissions#policies).
 
 ```sh
 curl -X PATCH -b cookies.txt \
@@ -234,17 +235,17 @@ curl -X PATCH -b cookies.txt \
 ### Remove a member
 
 `DELETE /v1/organization/members/:userId` removes the member and revokes their
-tokens. It needs `members.write`. If their email domain is still verified and
-`joinByDomain` is on, or they sign in through an SSO connection, they join again
-the next time they sign in. To keep them out, suspend them.
+tokens. It needs `write` on `Member`. If their email domain is still verified
+and `joinByDomain` is on, or they sign in through an SSO connection, they join
+again the next time they sign in. To keep them out, suspend them.
 
 ### Rules for Super Administrators
 
 - Only a Super Administrator can change or remove a Super Administrator, or give
   someone the role.
-- Only a Super Administrator can give a member extra `allow` policies, or put
-  `super_administrator` in the default roles. Other administrators can only add
-  `deny` policies. So nobody can give more than they have.
+- Only a Super Administrator can give a member a policy with allow rules, or put
+  `super_administrator` in the default roles. Other administrators can only give
+  policies with deny rules. So nobody can give more than they have.
 - The organization keeps at least one active Super Administrator. A change that
   breaks this returns `409` with `LastSuperAdministrator`.
 
@@ -256,8 +257,8 @@ An administrator invites a person by email. The person signs in with that email,
 and then accepts or declines. OpenBot does not send the email. Tell the person
 yourself.
 
-`POST /v1/organization/invitations` makes an invitation. It needs
-`members.write`.
+`POST /v1/organization/invitations` makes an invitation. It needs `write` on
+`Member`.
 
 ```sh
 curl -b cookies.txt \
@@ -292,9 +293,9 @@ curl -b cookies.txt \
 You can also invite people to use one Bot. See [Share Bots](/docs/sharing).
 
 `GET /v1/organization/invitations` lists the invitations, newest first. It needs
-`members.read`. Add `?status=pending` to see only the open ones.
+`read` on `Member`. Add `?status=pending` to see only the open ones.
 `DELETE /v1/organization/invitations/:invitationId` takes back a pending
-invitation. It needs `members.write`.
+invitation. It needs `write` on `Member`.
 
 ### Answer an invitation
 
@@ -323,8 +324,8 @@ curl -X POST -b cookies.txt \
 ## Audit log
 
 The audit log records important changes. Nothing can change or remove an entry.
-`GET /v1/organization/audit_logs` lists entries, newest first. It needs
-`audit_logs.read`.
+`GET /v1/organization/audit_logs` lists entries, newest first. It needs `read`
+on `AuditLog`.
 
 | Query    | What it does                                  |
 | -------- | --------------------------------------------- |
@@ -347,11 +348,11 @@ The audit log records important changes. Nothing can change or remove an entry.
 			},
 			"resource": "openbot.org.org_8f3a.user.u_456",
 			"details": {
-				"before": { "status": "active", "roles": ["member"], "policies": 0 },
+				"before": { "status": "active", "roles": ["member"], "policyRules": 0 },
 				"after": {
 					"status": "active",
 					"roles": ["administrator"],
-					"policies": 0
+					"policyRules": 0
 				}
 			}
 		}
@@ -363,7 +364,7 @@ The audit log records important changes. Nothing can change or remove an entry.
 | Action                   | When                                              |
 | ------------------------ | ------------------------------------------------- |
 | `member.joined`          | An account joins the organization.                |
-| `member.updated`         | A member gets a new status, roles or policies.    |
+| `member.updated`         | A member gets a new status, roles or policy.      |
 | `member.removed`         | A member is removed.                              |
 | `member.left`            | A member leaves the organization.                 |
 | `invitation.created`     | A member invites an email.                        |
@@ -410,11 +411,10 @@ The audit log records important changes. Nothing can change or remove an entry.
 
 | Status | Error                            | When                                                                                      |
 | ------ | -------------------------------- | ----------------------------------------------------------------------------------------- |
-| `400`  | `PolicyInvalid`                  | A policy names a resource outside the organization.                                       |
 | `400`  | `InvitationInvalid`              | The invitation cannot be made or answered now, for example because it expired.            |
 | `404`  | `InvitationNotFound`             | There is no invitation with this ID for you.                                              |
 | `404`  | `RoleNotFound`                   | An invitation names a role that does not exist.                                           |
-| `403`  | `PermissionDenied`               | The caller does not have the permission. See [Permissions](/docs/permissions).            |
+| `403`  | `Forbidden`                      | The policy of the caller does not allow it. See [Permissions](/docs/permissions).         |
 | `400`  | `OrganizationRequired`           | A cookie request without `OpenBot-Organization`, and you have more than one organization. |
 | `400`  | `SettingsInvalid`                | A value in the settings is not valid, such as a role that does not exist.                 |
 | `403`  | `MembershipRequired`             | You are not an active member of the organization.                                         |

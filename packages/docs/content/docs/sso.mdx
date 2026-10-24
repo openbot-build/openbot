@@ -12,7 +12,8 @@ service check who a person is.
 
 This page shows how to verify a domain, how to add an SSO connection, and how
 sign-in picks a provider. All routes are under `/v1/organization`. Reading needs
-`sso.read`. Changes need `sso.write`. See [Permissions](/docs/permissions).
+`read` on `Sso`. Changes need `write` on `Sso`. See
+[Permissions](/docs/permissions).
 
 ---
 
@@ -210,7 +211,7 @@ Better Auth needs to finish the sign-in. After the sign-in, the browser goes to
 | Status | Error                   | When                                                                         |
 | ------ | ----------------------- | ---------------------------------------------------------------------------- |
 | `400`  | `SsoConnectionInvalid`  | A value is not valid, such as a domain that is not verified or already used. |
-| `403`  | `PermissionDenied`      | The caller does not have `sso.read` or `sso.write`.                          |
+| `403`  | `Forbidden`             | The caller may not do `read` or `write` on `Sso`.                            |
 | `404`  | `DomainNotFound`        | The organization has no such domain.                                         |
 | `404`  | `SsoConnectionNotFound` | The organization has no connection with this ID.                             |
 | `409`  | `DomainNotVerified`     | OpenBot did not find the TXT record.                                         |

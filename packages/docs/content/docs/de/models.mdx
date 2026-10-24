@@ -42,7 +42,7 @@ Siehe [Eingebaute Models](#eingebaute-models).
 ## Ein Model hinzufügen
 
 `POST /v1/organization/models` fügt deiner Organization ein Model hinzu. Es
-braucht `model_providers.write`.
+braucht `write` auf `ModelProvider`.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -70,15 +70,15 @@ mit `ModelConflict` zurück.
 | `PATCH /v1/organization/models/:modelId`  | Ändert ein Model. Der Body braucht `expectedVersion`. Schicke `null` für eine Grenze, um sie zu entfernen. |
 | `DELETE /v1/organization/models/:modelId` | Entfernt ein Model.                                                                                        |
 
-Lesen braucht `model_providers.read`. Änderungen brauchen
-`model_providers.write`. Du kannst ein Model nicht entfernen, solange einer
-deiner Anbieter es verknüpft. OpenBot gibt `409` mit `ModelInUse` zurück.
-Entferne zuerst die Verknüpfung.
+Lesen braucht `read` auf `ModelProvider`. Änderungen brauchen `write` auf
+`ModelProvider`. Du kannst ein Model nicht entfernen, solange einer deiner
+Anbieter es verknüpft. OpenBot gibt `409` mit `ModelInUse` zurück. Entferne
+zuerst die Verknüpfung.
 
 ## Einen Anbieter hinzufügen
 
 `POST /v1/organization/model_providers` fügt deiner Organization einen Anbieter
-hinzu. Es braucht `model_providers.write`.
+hinzu. Es braucht `write` auf `ModelProvider`.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -145,8 +145,8 @@ stattdessen `apiKey: { set, hint }`. Siehe
 | `PATCH /v1/organization/model_providers/:providerId`  | Ändert einen Anbieter.   |
 | `DELETE /v1/organization/model_providers/:providerId` | Entfernt einen Anbieter. |
 
-Lesen braucht `model_providers.read`. Änderungen brauchen
-`model_providers.write`.
+Lesen braucht `read` auf `ModelProvider`. Änderungen brauchen `write` auf
+`ModelProvider`.
 
 Der Body von `PATCH` braucht `expectedVersion`, also die `version`, die du
 gelesen hast. Wenn jemand den Anbieter geändert hat, nachdem du ihn gelesen
@@ -175,10 +175,11 @@ Einstellung.
 
 ## Ein Model auswählen
 
-`GET /v1/organization/model_catalog` listet die Models, die deine Organization
-jetzt nutzen kann. Es braucht `models.use`. Jeder Eintrag ist ein Model eines
-Anbieters, mit den Werten der Verknüpfung schon angewendet. Ein Model, das zwei
-Anbieter verknüpfen, erscheint zweimal.
+`GET /v1/organization/model_catalog` listet die Models, die du jetzt nutzen
+darfst: die Models deiner Organization, bei denen deine Policy `use` auf `Model`
+erlaubt. Jeder Eintrag ist ein Model eines Anbieters, mit den Werten der
+Verknüpfung schon angewendet. Ein Model, das zwei Anbieter verknüpfen, erscheint
+zweimal.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -281,8 +282,8 @@ Sende `"model": null`, um wieder das Model des Bots zu nutzen.
 `GET /v1/chats/:id/models` zeigt dieselben Models für einen Chat. Alle Felder
 findest du in der [API-Referenz für Chats](/docs/api/operations/tags/chats/).
 
-Um festzulegen, welche Anbieter ein Member auswählen darf, nutze `models.use`
-auf `openbot.org.<org>.model.<providerId>`. Siehe
+Um festzulegen, welche Anbieter ein Member auswählen darf, gib dem Member eine
+Deny-Regel für `use` auf `Model` mit dem Feld `provider`. Siehe
 [Berechtigungen](/de/docs/permissions#models-begrenzen).
 
 ## Decision-Model

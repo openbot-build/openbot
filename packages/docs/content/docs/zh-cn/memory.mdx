@@ -85,7 +85,7 @@ Bot 的话只是告诉记忆 Bot 该看哪里。它们本身永远不会成为�
 时，记忆 Bot 给出固定的平静回答，不添加也不学习任何东西。对于[共享的 Bot](/zh-cn/docs/sharing)，模型和费用来自 Chat 所在的组织。
 
 用 `GET` 和 `PATCH /v1/bots/:botId/memory/bot`
-读取和修改记忆 Bot 的设置。你需要在一个不是关联 Bot 的 Bot 上拥有 `bots.write`：
+读取和修改记忆 Bot 的设置。你需要在一个不是关联 Bot 的 Bot 上拥有 `write`：
 
 ```json
 {
@@ -109,8 +109,8 @@ Bot 的话只是告诉记忆 Bot 该看哪里。它们本身永远不会成为�
 ## 读取和修改
 
 `GET /v1/bots/:botId/memory` 显示在你的组织中属于你的条目。加上用逗号分隔的
-`tags`，只看带有所有这些 Tag 的条目。你需要
-`bots.read`。没有人能读取关于另一个人的记忆，即使有 `bots.write` 也不行。
+`tags`，只看带有所有这些 Tag 的条目。你需要这个 Bot 上的
+`read`。没有人能读取关于另一个人的记忆，即使有这个 Bot 上的 `write` 也不行。
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -164,7 +164,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 `POST /v1/bots/:botId/memory/purge`：可以是 `from:`、`chat:`、`org:` 或
 `channel:`
 Tag。从这些条目得出的观察带有同样的 Tag，所以也会一起删除。你需要在一个不是关联 Bot 的 Bot 上拥有
-`bots.write`。回答只包含删除的条目数量。
+`write`。回答只包含删除的条目数量。
 
 当你[删除一个 Chat 的历史](/zh-cn/docs/chats#删除历史)时，Bot 从它学到的记忆仍然保留。要把这些也删除，请清除
 `chat:<id>`。
@@ -182,4 +182,4 @@ Tag。从这些条目得出的观察带有同样的 Tag，所以也会一起删�
 - `GET /v1/chats/:chatId/enrichments`
   列出记忆 Bot 在每个 Turn 的输入中添加了什么，以及它用了哪些条目。
 
-两者都需要 `chats.read`，所以只有拥有这个 Chat 的人才能读取。
+两者都需要这个 Chat 上的 `read`，所以只有拥有这个 Chat 的人才能读取。

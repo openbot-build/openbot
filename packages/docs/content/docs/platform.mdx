@@ -133,7 +133,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 		"clientSecret": { "set": true, "hint": "…k9Qz" }
 	},
 	"organizationCreation": "anyone",
-	"policyCeiling": [],
+	"ceiling": { "_tag": "Rules", "algorithm": "denyOverrides", "rules": [] },
 	"appRestrictions": [],
 	"codeMode": {
 		"enabled": false,
@@ -173,7 +173,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `publicOrigin`         | The public HTTPS origin of OpenBot.                                                                                     |
 | `identityProvider`     | The platform OpenID Connect provider, or `null` when people sign in only through SSO connections.                       |
 | `organizationCreation` | Who can create an organization: `anyone` or `platform_admins`. See [Organization creation](#organization-creation).     |
-| `policyCeiling`        | Deny policies for every organization. See [Policy ceiling](#policy-ceiling).                                            |
+| `ceiling`              | A policy with deny rules for every organization. See [Policy ceiling](#policy-ceiling).                                 |
 | `appRestrictions`      | Apps that the App Index hides. See [App Index](/docs/app-index#host-restrictions).                                      |
 | `codeMode`             | Whether Bots can use Code Mode, and its limits. See [Code Mode](/docs/code-mode#turn-on-code-mode).                     |
 | `rateLimit`            | How many API requests each caller may send in one minute. See [Rate limit](/docs/usage#rate-limit).                     |
@@ -228,27 +228,34 @@ Every instance uses a change at once. See
 
 ## Policy ceiling
 
-`policyCeiling` is a list of policies that apply in every organization. They can
-only say `deny`. OpenBot checks them before the policies of the organization, so
-no role and no token can do what they deny. A resource can use `{org}` for the
-organization of the request. See [Permissions](/docs/permissions#policies).
+`ceiling` is a policy that applies in every organization. It may only have deny
+rules. A deny from the ceiling always wins, so no role and no token can do what
+it denies. A condition can use the `organizationId` of the caller. See
+[Permissions](/docs/permissions#policies). The ceiling does not apply to the
+platform API, so it never locks out the platform admins.
 
 This ceiling stops every organization from adding its own model providers:
 
 ```json
 {
 	"expectedVersion": 4,
-	"policyCeiling": [
-		{
-			"effect": "deny",
-			"permissionGroups": ["model_providers.write"],
-			"resources": ["openbot.org.{org}"]
-		}
-	]
+	"ceiling": {
+		"_tag": "Rules",
+		"algorithm": "denyOverrides",
+		"rules": [
+			{
+				"_tag": "Deny",
+				"actions": ["write"],
+				"resources": ["ModelProvider"],
+				"reason": "The platform gives the model providers."
+			}
+		]
+	}
 }
 ```
 
-The list holds up to 50 policies.
+A ceiling with an allow rule returns `400`. A ceiling in a request may have at
+most 100 rules.
 
 ---
 
@@ -356,25 +363,23 @@ organizations have to it.
 `/v1/platform` accepts two kinds of callers:
 
 - The **session cookie** of a platform admin.
-- A **user token** of a platform admin. The token's own policies must allow
-  `platform.read` (for `GET`) or `platform.write` (for all other methods) on the
-  resource `openbot.platform`.
+- A **user token** of a platform admin. The token's own policy must allow `read`
+  (for `GET`) or `write` (for all other methods) on `Platform`.
 
-The permission groups `platform.read` and `platform.write` only work on
-`openbot.platform`. No role in an organization gives them. A token made without
-`policies` never gets them. So a token for the platform must name them when you
+No role in an organization gives the actions on `Platform`. A token made without
+`policy` never gets them. So a token for the platform must name them when you
 create it:
 
 ```sh
 curl -b cookies.txt \
   -H "Origin: https://api.example.com" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Platform admin","expiresInDays":30,"policies":[{"effect":"allow","permissionGroups":["platform.read","platform.write"],"resources":["openbot.platform"]}]}' \
+  -d '{"name":"Platform admin","expiresInDays":30,"policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Allow","actions":["read","write"],"resources":["Platform"]}]}}' \
   https://api.example.com/v1/user/tokens
 ```
 
 The token still works only while its account is a platform admin. Other callers
-get `403` with `PermissionDenied`.
+get `403` with `Forbidden`.
 
 OpenBot writes each platform change to the audit log, with the organization ID
 `platform`. The API cannot read these entries yet.
@@ -389,7 +394,7 @@ See the full shapes in the
 | Status | Error                   | When                                                                |
 | ------ | ----------------------- | ------------------------------------------------------------------- |
 | `400`  | `SettingsInvalid`       | A value in the change is not valid.                                 |
-| `403`  | `PermissionDenied`      | The caller is not a platform admin, or the token does not allow it. |
+| `403`  | `Forbidden`             | The caller is not a platform admin, or the token does not allow it. |
 | `404`  | `OrganizationNotFound`  | No organization has this ID.                                        |
 | `404`  | `PlatformAdminNotFound` | No platform admin has this email.                                   |
 | `409`  | `SettingsConflict`      | Someone changed the settings after you read them.                   |

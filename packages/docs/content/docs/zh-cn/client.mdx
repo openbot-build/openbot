@@ -112,7 +112,7 @@ const tasks =
 | `platform`       | 管理平台。仅限平台管理员。       | [Platform](/docs/api/operations/tags/platform/)               |
 | `health`         | 读取服务文档和健康状态。         | [Health](/docs/api/operations/tags/service-and-health/)       |
 
-每个操作都需要一项权限。没有权限的调用会以 `PermissionDenied`
+每个操作都需要对某个资源的一个操作权限。没有它的调用会以 `Forbidden`
 失败。请看[权限](/zh-cn/docs/permissions)。
 
 ## 处理错误

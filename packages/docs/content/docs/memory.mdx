@@ -116,7 +116,7 @@ adds and learns nothing. For a [shared Bot](/docs/sharing), the model and the
 cost come from the organization of the Chat.
 
 Read and change the settings of the memory Bot with `GET` and
-`PATCH /v1/bots/:botId/memory/bot`. You need `bots.write` on a Bot that is not
+`PATCH /v1/bots/:botId/memory/bot`. You need `write` on a Bot that is not
 linked:
 
 ```json
@@ -143,8 +143,8 @@ calm answer, the input stays as it is, and learning waits until the next period.
 
 `GET /v1/bots/:botId/memory` shows the entries that are for you, in your
 organization. Add `tags` with a list separated by commas to see only entries
-with all of them. You need `bots.read`. Nobody can read the memory about another
-person, not even with `bots.write`.
+with all of them. You need `read` on the Bot. Nobody can read the memory about
+another person, not even with `write` on the Bot.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -198,8 +198,8 @@ ids. Changes from older versions of OpenBot can also say `promotion`.
 To remove memory without reading it, send one tag of OpenBot to
 `POST /v1/bots/:botId/memory/purge`: a `from:`, `chat:`, `org:` or `channel:`
 tag. Observations that came from those entries have the same tag, so they go
-too. You need `bots.write` on a Bot that is not linked. The answer is only the
-number of removed entries.
+too. You need `write` on a Bot that is not linked. The answer is only the number
+of removed entries.
 
 When you [delete the history of a Chat](/docs/chats#delete-the-history), the
 memory that the Bot learned from it stays. Purge `chat:<id>` to remove it too.
@@ -219,4 +219,5 @@ Two routes show what happened in one of your Chats:
 - `GET /v1/chats/:chatId/enrichments` lists what the memory Bot added to the
   input of each Turn, and the entries that it used.
 
-Both need `chats.read`, so only the person who owns the Chat can read them.
+Both need `read` on the Chat, so only the person who owns the Chat can read
+them.

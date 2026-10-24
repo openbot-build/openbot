@@ -1,195 +1,266 @@
 ---
 title: Permissions
-description: Permission groups, policies, roles and resource keys.
+description: Resources, actions, policies and roles.
 ---
 
 This page shows how OpenBot decides if a caller may do something. Every call to
-`/v1` needs one or more permissions. OpenBot checks them before the call runs.
+`/v1` names what it needs: an action on a resource. OpenBot checks it before the
+call runs.
 
-The model has four parts:
+OpenBot uses the [ability](https://github.com/nmnmcc/ability) library for this
+work. The model has four parts:
 
-| Part             | What it is                                                                                 |
-| ---------------- | ------------------------------------------------------------------------------------------ |
-| Permission group | A named set of actions on one kind of resource, such as `chats.read`.                      |
-| Resource key     | The name of one resource, such as one Chat.                                                |
-| Policy           | Says `allow` or `deny` for some permission groups on some resources.                       |
-| Role             | A named set of policies, such as Member or Administrator. Organizations can add their own. |
+| Part     | What it is                                                                                     |
+| -------- | ---------------------------------------------------------------------------------------------- |
+| Resource | A kind of thing to act on, such as a Chat or a Bot. Each one has a list of actions and a path. |
+| Rule     | Says `Allow` or `Deny` for some actions on some resources, when its condition is true.         |
+| Policy   | A tree of rules. It gives one answer for a request: allow, deny, or no answer.                 |
+| Role     | A named policy, such as Member or Administrator. Organizations can add their own.              |
 
-A member gets the policies of their roles, plus their own extra policies. A user
-token gets the policies of its member, and also its own policies. The platform
-can add deny policies for every organization. See
+A member gets the policies of their roles, plus their own member policy. A user
+token also has its own policy, and both must allow the call. The platform can
+add a ceiling with deny rules for every organization. See
 [The order of checks](#the-order-of-checks).
 
 ---
 
-## Permission groups
+## Resources and actions
 
-List them with `GET /v1/organization/permission_groups`.
+List them with `GET /v1/organization/resources`. Each item has the kind, the
+actions, the fields and the path of one resource.
 
-| ID                         | Resource          | What it allows                                                                             |
-| -------------------------- | ----------------- | ------------------------------------------------------------------------------------------ |
-| `responses.run`            | Chat              | Send messages to Bots, so that they work in a Chat.                                        |
-| `chats.read`               | Chat              | Read Chats, their history and the work that they gave away.                                |
-| `chats.write`              | Chat              | Change, interrupt and delete Chats, and cancel the work that they gave away.               |
-| `files.read`               | File              | Read your [files](/docs/files) and their bytes.                                            |
-| `files.write`              | File              | Upload and delete your files.                                                              |
-| `requests.resolve`         | Request           | Answer the requests of your Bots for new capabilities.                                     |
-| `bots.read`                | Bot               | Read Bots, their memory, Rules and Grants.                                                 |
-| `bots.write`               | Bot               | Create and change Bots, their memory, Rules and Grants.                                    |
-| `bots.delegate`            | Bot               | Give work to a Bot, from a client or from another Bot.                                     |
-| `bots.share`               | Bot               | Invite people to [use a Bot](/docs/sharing), and manage its members.                       |
-| `triggers.read`            | Trigger           | Read [triggers](/docs/triggers): their schedules and webhooks.                             |
-| `triggers.write`           | Trigger           | Create, change and delete triggers, and set their webhook secrets.                         |
-| `channels.read`            | Channel           | Read the [Channels](/docs/channels) of the organization and the people linked to them.     |
-| `channels.write`           | Channel           | Create, change and delete Channels, set their secrets, and unlink people.                  |
-| `channels.use`             | Channel           | Talk with the Bot of a Channel, and let your Bots post to it.                              |
-| `channel_identities.read`  | User              | Read your linked accounts on the platforms of Channels.                                    |
-| `channel_identities.write` | User              | Link and unlink your accounts on the platforms of Channels.                                |
-| `computers.read`           | Computer          | Read [Computers](/docs/computers), the Bots that may use them, and their usage.            |
-| `computers.write`          | Computer          | Create, change and delete Computers, pair machines, and make connector tokens.             |
-| `computers.use`            | Computer          | Run commands, change files, open ports and use the desktop, and let your Bots use them.    |
-| `computer_providers.read`  | Computer provider | Read the accounts at Computer providers.                                                   |
-| `computer_providers.write` | Computer provider | Add, change and delete accounts at Computer providers, and their keys.                     |
-| `computer_providers.use`   | Computer provider | Create Computers with an account at a Computer provider.                                   |
-| `connections.read`         | Connection        | Read App connections and App accounts.                                                     |
-| `connections.write`        | Connection        | Create, change and delete App connections, and sign in to App accounts.                    |
-| `apps.use`                 | Apps              | Find Apps, and use App operations and App views.                                           |
-| `apps.publish`             | Apps              | Use the developer tools for Apps that you publish.                                         |
-| `models.use`               | Model             | Choose a model for a Chat.                                                                 |
-| `tokens.read`              | User              | List API tokens.                                                                           |
-| `tokens.write`             | User              | Create and revoke API tokens.                                                              |
-| `organization.read`        | Organization      | Read the organization settings.                                                            |
-| `organization.write`       | Organization      | Change the organization settings.                                                          |
-| `members.read`             | Organization      | List members, their roles and their policies.                                              |
-| `members.write`            | Organization      | Change the roles, policies and status of members, and remove members.                      |
-| `roles.write`              | Organization      | Create, change and delete the custom roles of the organization.                            |
-| `model_providers.read`     | Organization      | Read the models and model providers of the organization. Keys are never shown.             |
-| `model_providers.write`    | Organization      | Add, change and remove the models, model providers and keys of the organization.           |
-| `sso.read`                 | Organization      | Read the email domains and SSO connections.                                                |
-| `sso.write`                | Organization      | Add and verify email domains, and change SSO connections.                                  |
-| `audit_logs.read`          | Organization      | Read the audit log.                                                                        |
-| `usage.read`               | Organization      | Read the [model usage](/docs/usage) and its cost, and the credits of the organization.     |
-| `budgets.read`             | Organization      | Read the [budgets](/docs/usage#budgets) and how much of them is spent.                     |
-| `budgets.write`            | Organization      | Create, change and delete budgets.                                                         |
-| `platform.read`            | Platform          | Read the platform settings, organizations, admins and shared models and model providers.   |
-| `platform.write`           | Platform          | Change the platform settings, organizations, admins and shared models and model providers. |
+| Resource           | Action     | What it allows                                                                             |
+| ------------------ | ---------- | ------------------------------------------------------------------------------------------ |
+| `Chat`             | `read`     | Read Chats, their history and the work that they gave away.                                |
+| `Chat`             | `write`    | Change, interrupt and delete Chats, and cancel the work that they gave away.               |
+| `Chat`             | `run`      | Send messages to Bots, so that they work in a Chat.                                        |
+| `File`             | `read`     | Read your [files](/docs/files) and their bytes.                                            |
+| `File`             | `write`    | Upload and delete your files.                                                              |
+| `Request`          | `resolve`  | Answer the requests of your Bots for new capabilities.                                     |
+| `Bot`              | `read`     | Read Bots, their memory, Rules and Grants.                                                 |
+| `Bot`              | `write`    | Create and change Bots, their memory, Rules and Grants.                                    |
+| `Bot`              | `delegate` | Give work to a Bot, from a client or from another Bot.                                     |
+| `Bot`              | `share`    | Invite people to [use a Bot](/docs/sharing), and manage its members.                       |
+| `Trigger`          | `read`     | Read [triggers](/docs/triggers): their schedules and webhooks.                             |
+| `Trigger`          | `write`    | Create, change and delete triggers, and set their webhook secrets.                         |
+| `Channel`          | `read`     | Read the [Channels](/docs/channels) of the organization and the people linked to them.     |
+| `Channel`          | `write`    | Create, change and delete Channels, set their secrets, and unlink people.                  |
+| `Channel`          | `use`      | Talk with the Bot of a Channel, and let your Bots post to it.                              |
+| `ChannelIdentity`  | `read`     | Read your linked accounts on the platforms of Channels.                                    |
+| `ChannelIdentity`  | `write`    | Link and unlink your accounts on the platforms of Channels.                                |
+| `Computer`         | `read`     | Read [Computers](/docs/computers), the Bots that may use them, and their usage.            |
+| `Computer`         | `write`    | Create, change and delete Computers, pair machines, and make connector tokens.             |
+| `Computer`         | `use`      | Run commands, change files, open ports and use the desktop, and let your Bots use them.    |
+| `ComputerProvider` | `read`     | Read the accounts at Computer providers.                                                   |
+| `ComputerProvider` | `write`    | Add, change and delete accounts at Computer providers, and their keys.                     |
+| `ComputerProvider` | `use`      | Create Computers with an account at a Computer provider.                                   |
+| `Connection`       | `read`     | Read App connections and App accounts.                                                     |
+| `Connection`       | `write`    | Create, change and delete App connections, and sign in to App accounts.                    |
+| `App`              | `use`      | Find Apps, and use App operations and App views.                                           |
+| `App`              | `publish`  | Use the developer tools for Apps that you publish.                                         |
+| `Model`            | `use`      | Choose a model for a Chat, and see it in the model catalog.                                |
+| `Token`            | `read`     | List API tokens.                                                                           |
+| `Token`            | `write`    | Create and revoke API tokens.                                                              |
+| `Organization`     | `read`     | Read the organization and its settings.                                                    |
+| `Organization`     | `write`    | Change the organization and its settings.                                                  |
+| `Member`           | `read`     | List members, their roles and their policies.                                              |
+| `Member`           | `write`    | Change the roles, policies and status of members, and remove members.                      |
+| `Role`             | `write`    | Create, change and delete the custom roles of the organization.                            |
+| `ModelProvider`    | `read`     | Read the models and model providers of the organization. Keys are never shown.             |
+| `ModelProvider`    | `write`    | Add, change and remove the models, model providers and keys of the organization.           |
+| `Sso`              | `read`     | Read the email domains and SSO connections.                                                |
+| `Sso`              | `write`    | Add and verify email domains, and change SSO connections.                                  |
+| `AuditLog`         | `read`     | Read the audit log.                                                                        |
+| `Usage`            | `read`     | Read the [model usage](/docs/usage) and its cost, and the credits of the organization.     |
+| `Budget`           | `read`     | Read the [budgets](/docs/usage#budgets) and how much of them is spent.                     |
+| `Budget`           | `write`    | Create, change and delete budgets.                                                         |
+| `Platform`         | `read`     | Read the platform settings, organizations, admins and shared models and model providers.   |
+| `Platform`         | `write`    | Change the platform settings, organizations, admins and shared models and model providers. |
 
-`organization.read` and `organization.write` also cover the
-[organization settings](/docs/organization#settings). `platform.read` and
-`platform.write` only work on the resource `openbot.platform`, and only for
-platform admins. See [Platform groups](#platform-groups).
+`Platform` is only for platform admins. See [The platform](#the-platform).
 
 The [API reference](/docs/api) lists the routes. The contract in
-`@openbot-build/api` says which permission each route needs.
+`@openbot-build/api` says which action each route needs.
 
 ---
 
-## Resource keys
+## Paths
 
-A resource key is a name with parts that dots separate:
+A path puts each resource in a tree. A rule can cover a part of the tree.
 
-| Resource                 | Key                                                     |
-| ------------------------ | ------------------------------------------------------- |
-| The organization         | `openbot.org.<org>`                                     |
-| One member               | `openbot.org.<org>.user.<user>`                         |
-| One Chat                 | `openbot.org.<org>.user.<user>.chat.<chat>`             |
-| One file                 | `openbot.org.<org>.user.<user>.file.<file>`             |
-| One Bot of a member      | `openbot.org.<org>.user.<user>.bot.<bot>`               |
-| One shared Bot           | `openbot.org.<org>.bot.<bot>`                           |
-| One trigger of a member  | `openbot.org.<org>.user.<user>.trigger.<trigger>`       |
-| One shared trigger       | `openbot.org.<org>.trigger.<trigger>`                   |
-| One Channel              | `openbot.org.<org>.channel.<channel>`                   |
-| The requests of a member | `openbot.org.<org>.user.<user>.request`                 |
-| One connection           | `openbot.org.<org>.user.<user>.connection.<connection>` |
-| The Apps of a member     | `openbot.org.<org>.user.<user>.apps`                    |
-| One model provider       | `openbot.org.<org>.model.<provider>`                    |
-| The whole platform       | `openbot.platform`                                      |
+| Resource                                                                                | Path                                           |
+| --------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `Chat`, `File`, `Request`, `Connection`                                                 | `org / <org> / user / <user> / <kind> / <id>`  |
+| `Bot`, `Trigger`, `Computer`, `ComputerProvider`                                        | `org / <org> / user / <owner> / <kind> / <id>` |
+| `App`, `Token`, `ChannelIdentity`                                                       | `org / <org> / user / <user> / <kind>`         |
+| `Channel`                                                                               | `org / <org> / channel / <id>`                 |
+| `Model`                                                                                 | `org / <org> / model / <provider> / <id>`      |
+| `Organization`, `Member`, `Role`, `ModelProvider`, `Sso`, `AuditLog`, `Usage`, `Budget` | `org / <org>`                                  |
+| `Platform`                                                                              | `platform`                                     |
 
-A Bot that another Bot owns has the key of the member or the organization at the
-top of its owner tree. So `openbot.org.<org>.user.<user>.bot.<bot>` is also the
-key of a Bot that a top Bot of that member owns. When a Bot makes a Bot, the
-member it works for needs `bots.write` on that place.
+The kind part is the kind in small letters, with `_` between words, such as
+`computer_provider`. `App` uses `apps`.
 
-A key covers itself and every key below it. So `openbot.org.<org>` covers
-everything in the organization, and `openbot.org.<org>.user.<user>` covers
-everything of one member.
-
-In a policy, you can write two placeholders:
-
-- `{org}` is the ID of the organization.
-- `{self}` is the user ID of the caller. For a token, it is the member of the
-  token.
-
-A dot inside an ID is written as `%2E`, so it never looks like a new part.
+A shared Bot, trigger, Computer or Computer provider has no owner. Its
+`ownerUserId` field is `null`. A Bot that another Bot owns has the owner at the
+top of its owner tree. When a Bot makes a Bot, the member it works for needs
+`write` on Bots of that owner.
 
 ---
 
 ## Policies
 
-A policy looks like this:
+A policy is JSON. This policy lets the caller read and change their own Chats:
 
 ```json
 {
-	"effect": "allow",
-	"permissionGroups": ["chats.read", "chats.write"],
-	"resources": ["openbot.org.{org}.user.{self}"]
+	"_tag": "Rules",
+	"algorithm": "denyOverrides",
+	"rules": [
+		{
+			"_tag": "Allow",
+			"actions": ["read", "write"],
+			"resources": ["Chat"],
+			"when": {
+				"_tag": "Under",
+				"prefix": [
+					{ "_tag": "Literal", "value": "org" },
+					{ "_tag": "Principal", "path": "organizationId" },
+					{ "_tag": "Literal", "value": "user" },
+					{ "_tag": "Principal", "path": "userId" }
+				]
+			}
+		}
+	]
 }
 ```
 
-OpenBot decides in this order:
+OpenBot checks every policy when it reads it. A kind, an action or a field that
+does not exist gives `400`. A policy in a request may have at most 100 rules,
+and may be at most 8 levels deep.
 
-1. If a matching policy says `deny`, the answer is no.
-2. If a matching policy says `allow`, the answer is yes.
-3. If no policy matches, the answer is no.
+### Rules
 
-A policy matches when it names the permission group, and one of its resources
-covers the key of the request.
+A rule has these fields:
 
-A policy can only name resources in its own organization. Otherwise OpenBot
-returns `400`. Only the policies of a token can also name `openbot.platform`.
+| Field       | What it is                                                                     |
+| ----------- | ------------------------------------------------------------------------------ |
+| `_tag`      | `Allow` or `Deny`.                                                             |
+| `actions`   | The actions. `*` is every action.                                              |
+| `resources` | The kinds, such as `Chat`. `*` is every kind.                                  |
+| `when`      | Optional. The condition. Without it, the rule covers every value of the kinds. |
+| `reason`    | Optional. A reason. A `Forbidden` error from a deny rule shows it.             |
+
+A list of rules has an `algorithm`. It decides which rule gives the answer when
+more than one rule applies:
+
+| Algorithm         | Winner                                   |
+| ----------------- | ---------------------------------------- |
+| `denyOverrides`   | A deny rule wins over every allow rule.  |
+| `permitOverrides` | An allow rule wins over every deny rule. |
+| `firstApplicable` | The first rule that applies.             |
+| `lastApplicable`  | The last rule that applies.              |
+
+A policy can also put policies together:
+
+| Node                                | Answer                                                           |
+| ----------------------------------- | ---------------------------------------------------------------- |
+| `{"_tag":"All","policies"}`         | Every policy must allow. One deny is enough to deny.             |
+| `{"_tag":"Any","policies"}`         | One allow is enough.                                             |
+| `{"_tag":"FirstOf","policies"}`     | The first policy that allows or denies.                          |
+| `{"_tag":"Ceiling","cap","policy"}` | A deny from `cap` always wins. An allow from `cap` does nothing. |
+
+### Conditions
+
+A condition tests the fields and the path of a resource:
+
+| Node                                      | True when                                                                        |
+| ----------------------------------------- | -------------------------------------------------------------------------------- |
+| `{"_tag":"Compare","op","field","value"}` | The field compares to the value. `op` is `eq`, `ne`, `lt`, `lte`, `gt` or `gte`. |
+| `{"_tag":"In","field","values"}`          | The field is equal to one of the values.                                         |
+| `{"_tag":"Exists","field"}`               | The field is not `null`.                                                         |
+| `{"_tag":"Under","prefix"}`               | The path of the resource starts with the prefix.                                 |
+| `{"_tag":"And"/"Or","conditions"}`        | Logic.                                                                           |
+| `{"_tag":"Not","condition"}`              | Logic.                                                                           |
+| `{"_tag":"True"}`, `{"_tag":"False"}`     | Always, or never.                                                                |
+
+A value is `{"_tag":"Literal","value":...}`, or a field of the caller:
+`{"_tag":"Principal","path":"userId"}` or `"organizationId"`. A field of the
+caller with no value never matches, also with `ne`.
+
+These conditions are the ones you need most:
+
+| Condition                                              | Covers                                  |
+| ------------------------------------------------------ | --------------------------------------- |
+| `Under` with `org`, the `organizationId` of the caller | Everything in the organization.         |
+| `Under` with `org`, `organizationId`, `user`, `userId` | Everything of the caller.               |
+| `Compare` `eq` on `ownerUserId` with `null`            | The shared Bots, triggers or Computers. |
+| `Compare` `eq` on `id`                                 | One resource.                           |
+
+Every policy of a member only works in the organization of the member. A rule
+that names another organization gives nothing.
 
 ### Limit models
 
-`models.use` on `openbot.org.<org>.model.<provider>` covers the models of one
-[model provider](/docs/models). Use it to limit which providers a member may
-choose. This policy stops a member from using one provider:
+`use` on `Model` covers the models that a member may choose for a Chat.
+`GET /v1/organization/model_catalog` only shows these models. This rule stops a
+member from using one [model provider](/docs/models):
 
 ```json
 {
-	"effect": "deny",
-	"permissionGroups": ["models.use"],
-	"resources": ["openbot.org.{org}.model.prov_4c1e..."]
+	"_tag": "Deny",
+	"actions": ["use"],
+	"resources": ["Model"],
+	"when": {
+		"_tag": "Compare",
+		"op": "eq",
+		"field": "provider",
+		"value": { "_tag": "Literal", "value": "prov_4c1e..." }
+	}
 }
 ```
 
 ### The order of checks
 
-OpenBot checks three sets of policies, in this order:
+OpenBot checks three policies:
 
-1. The **policy ceiling** of the platform. It only has `deny` policies, and they
-   apply in every organization. See [Platform](/docs/platform#policy-ceiling).
-2. The **member policies**: the policies of the member's roles, plus their extra
-   policies.
-3. The **token policies**, when the caller uses a user token.
+1. The **ceiling** of the platform. It only has deny rules, and they apply in
+   every organization. See [Platform](/docs/platform#policy-ceiling).
+2. The **member policy**: the policies of the member's roles, plus their own
+   member policy. A deny rule in any of them wins.
+3. The **token policy**, when the caller uses a user token.
 
-A `deny` anywhere means no. Each set after the ceiling must also allow the call.
+A deny anywhere means no. The member policy, and the token policy when there is
+one, must also allow the call. With no answer, the answer is no.
+
+OpenBot reads these policies again for each check. So a change to a role, a
+member or a token works at once.
+
+A list, such as `GET /v1/triggers`, only has the resources that the caller may
+read. OpenBot changes the policy into a condition on the list, for most lists in
+the database query itself. So a deny rule on one resource hides it from the list
+too.
 
 ### Tokens never do more than their member
 
-A user token has two sets of policies: the policies of its member and its own
-policies. Both sets must say yes. So a token can do less than its member, but
-never more. If an administrator takes a role away from the member, every token
-of that member loses it too.
+A user token must pass its own policy and the policy of its member. So a token
+can do less than its member, but never more. If an administrator takes a role
+away from the member, every token of that member loses it too.
 
-A token made without `policies` gets this policy. It allows everything in the
-organization except managing tokens. It never includes `platform.read` or
-`platform.write`:
+A token made without `policy` gets this policy. It allows every act of its
+member, except acts on tokens and on the platform:
 
 ```json
 {
-	"effect": "allow",
-	"permissionGroups": ["responses.run", "chats.read", "...", "audit_logs.read"],
-	"resources": ["openbot.org.{org}"]
+	"_tag": "Rules",
+	"algorithm": "denyOverrides",
+	"rules": [
+		{
+			"_tag": "Allow",
+			"actions": ["*"],
+			"resources": ["Chat", "File", "Request", "...", "Budget"]
+		}
+	]
 }
 ```
 
@@ -199,9 +270,12 @@ This example makes a token that can only read your Chats:
 curl -b cookies.txt \
   -H "Origin: https://api.example.com" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Dashboard","policies":[{"effect":"allow","permissionGroups":["chats.read"],"resources":["openbot.org.{org}.user.{self}"]}]}' \
+  -d '{"name":"Dashboard","policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Allow","actions":["read"],"resources":["Chat"]}]}}' \
   https://api.example.com/v1/user/tokens
 ```
+
+The rule has no condition, but the policy of the member still limits the token
+to what you may read.
 
 ---
 
@@ -209,7 +283,7 @@ curl -b cookies.txt \
 
 List them with `GET /v1/organization/roles`. The list has the built-in roles and
 the custom roles of the organization. Each role has `builtin: true` or
-`builtin: false`.
+`builtin: false`, and its `policy`.
 
 ### Built-in roles
 
@@ -224,37 +298,37 @@ with `RoleReadOnly`.
 | `member`                  | Work with your own Bots, Chats, triggers, Computers, connections and tokens, use the shared Bots, triggers, Computers, Channels and models of the organization, and read its settings.    |
 | `auditor`                 | Read the organization, its members, usage, budgets and the audit log. Nothing else.                                                                                                       |
 
-Some built-in roles also hold the groups for roles, model providers, SSO,
-Channels, usage and budgets:
+Some built-in roles also act on roles, model providers, SSO, Channels, usage and
+budgets:
 
-| Role                      | Extra groups for organization features                                                                                                                                     |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `super_administrator`     | Every permission group, except `platform.read` and `platform.write`.                                                                                                       |
-| `administrator`           | `roles.write`, `model_providers.read`, `model_providers.write`, `sso.read`, `sso.write`, `channels.read`, `channels.write`, `usage.read`, `budgets.read`, `budgets.write`. |
-| `administrator_read_only` | `model_providers.read`, `sso.read`, `channels.read`, `usage.read`, `budgets.read`.                                                                                         |
-| `auditor`                 | `usage.read`, `budgets.read`.                                                                                                                                              |
+| Role                      | Extra resources for organization features                                        |
+| ------------------------- | -------------------------------------------------------------------------------- |
+| `super_administrator`     | Every action on every resource, except `Platform`.                               |
+| `administrator`           | Every action on `Role`, `ModelProvider`, `Sso`, `Channel`, `Usage` and `Budget`. |
+| `administrator_read_only` | `read` on `ModelProvider`, `Sso`, `Channel`, `Usage` and `Budget`.               |
+| `auditor`                 | `read` on `Usage` and `Budget`.                                                  |
 
-To give a member less than a role, add a `deny` policy to the member. This
-example stops a member from running work, but lets them read their Chats:
+To give a member less than a role, give the member a policy with deny rules.
+This example stops a member from running work, but lets them read their Chats:
 
 ```sh
 curl -X PATCH -b cookies.txt \
   -H "Origin: https://api.example.com" \
   -H "Content-Type: application/json" \
-  -d '{"policies":[{"effect":"deny","permissionGroups":["responses.run"],"resources":["openbot.org.{org}"]}]}' \
+  -d '{"policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Deny","actions":["run"],"resources":["Chat"]}]}}' \
   https://api.example.com/v1/organization/members/u_456
 ```
 
 ### Custom roles
 
 An organization can add its own roles. A custom role has a name, a description
-and policies. Its ID starts with `role_`. Creating, changing and deleting custom
-roles needs `roles.write`.
+and a policy. Its ID starts with `role_`. Creating, changing and deleting custom
+roles needs `write` on `Role`.
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Reviewer","description":"Reads Chats and answers requests.","policies":[{"effect":"allow","permissionGroups":["chats.read","requests.resolve"],"resources":["openbot.org.{org}.user.{self}"]}]}' \
+  -d '{"name":"Reviewer","description":"Reads Chats and answers requests.","policy":{"_tag":"Rules","algorithm":"denyOverrides","rules":[{"_tag":"Allow","actions":["read","resolve"],"resources":["Chat","Request"],"when":{"_tag":"Under","prefix":[{"_tag":"Literal","value":"org"},{"_tag":"Principal","path":"organizationId"},{"_tag":"Literal","value":"user"},{"_tag":"Principal","path":"userId"}]}}]}}' \
   https://api.example.com/v1/organization/roles
 ```
 
@@ -265,8 +339,11 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `PATCH /v1/organization/roles/:roleId`  | Changes a custom role. |
 | `DELETE /v1/organization/roles/:roleId` | Deletes a custom role. |
 
-- The `allow` policies of a role cannot give anything that you cannot do
-  yourself. Otherwise OpenBot returns `403` with `PermissionDenied`.
+- The allow rules of a role cannot give anything that you cannot do yourself.
+  OpenBot tests each allow rule with you as the caller. You must be able to do
+  its actions on every resource with the fields that the rule fixes, such as its
+  owner. A rule that fixes no field needs the actions on the whole organization.
+  Otherwise OpenBot returns `403` with `Forbidden`.
 - A change applies to every member with the role at once.
 - You cannot delete a role while a member or the `defaultRoles` of the
   organization use it. OpenBot returns `409` with `RoleInUse`.
@@ -276,15 +353,16 @@ See [Organization](/docs/organization#change-a-member).
 
 ---
 
-## Platform groups
+## The platform
 
-`platform.read` and `platform.write` are for platform admins. They only work on
-the resource `openbot.platform`.
+The actions on `Platform` are for platform admins. Its path is `platform`, so no
+rule about an organization covers it.
 
 - No role in an organization gives them, not even `super_administrator`.
-- A policy ceiling or a member policy cannot give them.
-- A user token of a platform admin gets them only when its own policies name
-  them on `openbot.platform`.
+- The ceiling does not apply to them, so a ceiling never locks out the platform
+  admins.
+- A user token of a platform admin gets them only when its own policy allows
+  them.
 
 See [Platform](/docs/platform#call-the-platform-api) for an example token.
 
@@ -292,23 +370,26 @@ See [Platform](/docs/platform#call-the-platform-api) for an example token.
 
 ## Errors
 
-| Status | Error                      | When                                                                  |
-| ------ | -------------------------- | --------------------------------------------------------------------- |
-| `403`  | `PermissionDenied`         | No policy allows the call, or a policy denies it. See the body below. |
-| `404`  | `RoleNotFound`             | The organization has no role with this ID.                            |
-| `409`  | `RoleReadOnly`             | You tried to change or delete a built-in role.                        |
-| `409`  | `RoleInUse`                | A member or the default roles still use the role.                     |
-| `503`  | `AuthorizationUnavailable` | OpenBot cannot read the roles and policies of the caller right now.   |
+| Status | Error               | When                                                                |
+| ------ | ------------------- | ------------------------------------------------------------------- |
+| `400`  | Schema error        | A policy names a kind, an action or a field that does not exist.    |
+| `403`  | `Forbidden`         | No rule allows the call, or a rule denies it. See the body below.   |
+| `404`  | `RoleNotFound`      | The organization has no role with this ID.                          |
+| `409`  | `RoleReadOnly`      | You tried to change or delete a built-in role.                      |
+| `409`  | `RoleInUse`         | A member or the default roles still use the role.                   |
+| `503`  | `PolicyUnavailable` | OpenBot cannot read the roles and policies of the caller right now. |
 
-The body of `PermissionDenied` names the permission and the resource key:
+The body of `Forbidden` names the action and the kind. It has the `reason` of a
+deny rule when one gave the answer:
 
 ```json
 {
-	"_tag": "PermissionDenied",
-	"permission": "chats.write",
-	"resource": "openbot.org.org_8f3a.user.u_123.chat"
+	"_tag": "Forbidden",
+	"action": "write",
+	"kind": "Chat"
 }
 ```
 
 You can only reach your own Chats and connections. A Chat of another member
-answers `404`, as if it does not exist.
+answers `404`, as if it does not exist. A Bot, trigger or Computer that you may
+not read answers `404` in the same way.

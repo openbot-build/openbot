@@ -14,17 +14,18 @@ All packages are named `@openbot-build/<name>`, have version `0.1.0`, and use
 
 ## Overview
 
-| Package         | What it is for                                                                                 |
-| --------------- | ---------------------------------------------------------------------------------------------- |
-| `openbot`       | The server, its plugins, and its model providers. See [Run from code](/docs/server).           |
-| `api`           | The typed HTTP contract. The server, the client, and the API reference use it.                 |
-| `client`        | The TypeScript client. See [Client](/docs/client).                                             |
-| `core`          | The Bot core: Bots, Chats, Turns, storage, plugins, and skills.                                |
-| `protocol`      | The OpenBot App Protocol: publish, find, connect, and index Apps.                              |
-| `protocol-test` | A public test service for the App Protocol. See [Protocol test](/docs/protocol-test).          |
-| `cli`           | The `openbot` command. It runs `openbot-<name>` for `openbot <name>`.                          |
-| `computer`      | The `openbot computer` command, which pairs and connects your own [Computer](/docs/computers). |
-| `docs`          | This docs site.                                                                                |
+| Package         | What it is for                                                                                                                                |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `openbot`       | The server, its plugins, and its model providers. See [Run from code](/docs/server).                                                          |
+| `api`           | The typed HTTP contract. The server, the client, and the API reference use it.                                                                |
+| `client`        | The TypeScript client. See [Client](/docs/client).                                                                                            |
+| `core`          | The Bot core: Bots, Chats, Turns, storage, plugins, and skills.                                                                               |
+| `protocol`      | The OpenBot App Protocol: publish, find, connect, and index Apps.                                                                             |
+| `protocol-test` | A public test service for the App Protocol. See [Protocol test](/docs/protocol-test).                                                         |
+| `cli`           | The `openbot` command. It runs `openbot-<name>` for `openbot <name>`.                                                                         |
+| `computer`      | The `openbot computer` command, which pairs and connects your own [Computer](/docs/computers).                                                |
+| `docs`          | This docs site.                                                                                                                               |
+| `ability`       | Typed authorization policies for Effect. A git subtree of [ability](https://github.com/nmnmcc/ability). See [Permissions](/docs/permissions). |
 
 The examples below leave out the model. To run them, provide a `LanguageModel`
 Layer, for example from a [model provider](#model-providers) in `openbot`.

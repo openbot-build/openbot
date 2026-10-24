@@ -33,8 +33,8 @@ Bot 需要一个语言模型才能工作。OpenBot 不自带模型。你需要�
 
 ## 添加模型
 
-`POST /v1/organization/models` 向你的组织添加一个模型。它需要
-`model_providers.write`。
+`POST /v1/organization/models` 向你的组织添加一个模型。它需要 `ModelProvider`
+上的 `write`。
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -62,14 +62,14 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | `PATCH /v1/organization/models/:modelId`  | 修改一个模型。请求体需要 `expectedVersion`。某个限制传 `null` 即可删除它。 |
 | `DELETE /v1/organization/models/:modelId` | 移除一个模型。                                                             |
 
-读取需要 `model_providers.read`。修改需要
-`model_providers.write`。当你的某个提供方关联着一个模型时，你不能移除它。OpenBot 会返回
-`409` 和 `ModelInUse`。请先移除关联。
+读取需要 `ModelProvider` 上的 `read`。修改需要 `ModelProvider` 上的
+`write`。当你的某个提供方关联着一个模型时，你不能移除它。OpenBot 会返回 `409` 和
+`ModelInUse`。请先移除关联。
 
 ## 添加提供方
 
 `POST /v1/organization/model_providers` 向你的组织添加一个提供方。它需要
-`model_providers.write`。
+`ModelProvider` 上的 `write`。
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -132,7 +132,7 @@ OpenBot 会返回这个提供方。它的 `id` 以 `prov_`
 | `PATCH /v1/organization/model_providers/:providerId`  | 修改一个提供方。 |
 | `DELETE /v1/organization/model_providers/:providerId` | 移除一个提供方。 |
 
-读取需要 `model_providers.read`。修改需要 `model_providers.write`。
+读取需要 `ModelProvider` 上的 `read`。修改需要 `ModelProvider` 上的 `write`。
 
 `PATCH` 的请求体需要 `expectedVersion`，也就是你读到的
 `version`。如果有人在你读取之后修改了提供方，OpenBot 会返回 `409` 和
@@ -156,8 +156,9 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 ## 选择模型
 
-`GET /v1/organization/model_catalog` 列出你的组织现在可以使用的模型。它需要
-`models.use`。每一项都是某个提供方的一个模型，关联中的值已经应用。被两个提供方关联的模型会显示两次。
+`GET /v1/organization/model_catalog`
+列出你现在可以使用的模型：也就是你的组织中，你的策略允许对 `Model` 做 `use`
+的那些模型。每一项都是某个提供方的一个模型，关联中的值已经应用。被两个提供方关联的模型会显示两次。
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
@@ -255,8 +256,8 @@ curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: applic
 为一个 Chat 显示同样的模型。所有字段参见
 [Chats API 参考](/docs/api/operations/tags/chats/)。
 
-要限制成员可以选择哪些提供方，请在 `openbot.org.<org>.model.<providerId>` 上使用
-`models.use`。参见[权限](/zh-cn/docs/permissions#限制模型)。
+要限制成员可以选择哪些提供方，请给成员一条拒绝规则，针对 `Model` 上的
+`use`，并用 `provider` 字段。参见[权限](/zh-cn/docs/permissions#限制模型)。
 
 ## 决策模型
 
