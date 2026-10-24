@@ -1,2 +1,4 @@
 .agents/
 references/
+# The ability subtree keeps the lockfile as upstream writes it.
+packages/ability/pnpm-lock.yaml

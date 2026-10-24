@@ -38,6 +38,7 @@
 		"@effect/platform-node": "4.0.6",
 		"@effect/sql-pg": "4.0.6",
 		"@jitl/quickjs-singlefile-mjs-release-sync": "0.32.0",
+		"@nmnmcc/ability": "workspace:*",
 		"@openbot-build/api": "workspace:*",
 		"@openbot-build/core": "workspace:*",
 		"@openbot-build/protocol": "workspace:*",

@@ -5,7 +5,7 @@
 	"packageManager": "pnpm@9.15.9",
 	"type": "module",
 	"devDependencies": {
-		"@effect/tsgo": "0.48.1",
+		"@effect/tsgo": "0.56.0",
 		"@types/node": "26.6.0",
 		"acorn": "8.19.0",
 		"drizzle-kit": "1.0.0-rc.5",
