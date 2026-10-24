@@ -146,14 +146,14 @@ export const Confession = Schema.Struct({
 })
 export type Confession = typeof Confession.Type
 
-/** What the memory Bot added to the input of one Turn, and the entries it used. */
+/** How the memory Bot wrote the input of one Turn again, and the entries it used. */
 export const Enrichment = Schema.Struct({
 	chat: Chat.Id,
 	turn: Turn.Id,
-	/** The input as the model saw it. */
+	/** The input as the model saw it, written again by the memory Bot. */
 	text: Schema.String,
-	/** The parts that the memory Bot added, in order. */
-	inserted: Schema.Array(Schema.String),
+	/** The words of the person. Older records do not have it. */
+	original: Schema.optional(Schema.String),
 	entries: Schema.Array(Schema.String),
 	at: Schema.Finite,
 })
