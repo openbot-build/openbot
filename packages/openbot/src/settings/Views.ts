@@ -6,6 +6,7 @@ import {
 	quotaOf,
 	rateLimitOf,
 	tokenRateOf,
+	delegationTimeLimitOf,
 	type FilesDocument,
 	type MemberDocument,
 	type OrganizationDocument,
@@ -63,6 +64,7 @@ export const organization = (
 	snapshot: Snapshot<OrganizationDocument>,
 ): Api.OrganizationSettings => ({
 	...snapshot.document,
+	delegationTimeLimitMs: delegationTimeLimitOf(snapshot.document),
 	tokenRate: tokenRateOf(snapshot.document),
 	version: snapshot.version,
 	updatedAt: iso(snapshot.updatedAt),

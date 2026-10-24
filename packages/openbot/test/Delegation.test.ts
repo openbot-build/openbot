@@ -70,14 +70,24 @@ const model = Effect.runSync(
 					.slice(last + 1)
 					.some((message) => message.role === "tool")
 				const result = JSON.stringify(prompt.content.slice(last + 1).at(-1))
+				// Paused work that its decider lets go on.
+				if (input.startsWith("[OpenBot] Your work reached"))
+					return answer("Finished after the pause. " + input)
 				// Work that the Bot gave to itself or to another Bot.
 				if (input.includes("gives you this task:")) {
+					if (input.includes("stepping task"))
+						return answered
+							? answer("This step must not run.")
+							: call(names.list, {})
 					if (input.includes("slow research")) return later(3, "Research done.")
 					if (input.includes("deeper task")) return later(60, "Too late.")
 					if (input.includes("deep task"))
 						return answered
 							? answer("I wait for the deeper task.")
-							: call(names.delegate, { task: "deeper task" })
+							: call(names.delegate, {
+									task: "deeper task",
+									timeLimitMinutes: 60,
+								})
 					if (input.includes("One more thing"))
 						return answer("One more thing done.")
 					return answer("Other work done.")
@@ -91,21 +101,46 @@ const model = Effect.runSync(
 					return answer("Noted: " + input)
 				if (answered) return answer("Started: " + result)
 				if (input.includes("research slowly"))
-					return call(names.delegate, { task: "slow research" })
+					return call(names.delegate, {
+						task: "slow research",
+						timeLimitMinutes: 60,
+					})
 				if (input.includes("add to the research"))
 					return call(names.delegate, {
+						timeLimitMinutes: 60,
 						delegation: known.research,
 						task: "Also look at the tests.",
 					})
 				if (input.includes("continue the research"))
 					return call(names.delegate, {
+						timeLimitMinutes: 60,
 						delegation: known.research,
 						task: "One more thing.",
 					})
+				if (input.includes("step carefully"))
+					return call(names.delegate, {
+						task: "stepping task",
+						timeLimitMinutes: 60,
+						maxSteps: 1,
+					})
+				if (input.includes("research with a short time"))
+					return call(names.delegate, {
+						task: "slow research",
+						timeLimitMinutes: 0.02,
+					})
+				if (input.includes("go deep with a short time"))
+					return call(names.delegate, {
+						task: "deep task",
+						timeLimitMinutes: 0.05,
+					})
 				if (input.includes("go deep"))
-					return call(names.delegate, { task: "deep task" })
+					return call(names.delegate, {
+						task: "deep task",
+						timeLimitMinutes: 60,
+					})
 				if (input.includes("ask the other Bot"))
 					return call(names.delegate, {
+						timeLimitMinutes: 60,
 						bot: known.other,
 						reason: "The other Bot knows this.",
 						task: "Other work.",
@@ -397,6 +432,125 @@ it(
 			assert.match(failed.result ?? "", /Not this week/)
 			await chat.says("Noted: [OpenBot] The work " + asked.id)
 			assert.match(await chat.history(), /Not this week/)
+		} finally {
+			await host.close()
+		}
+	},
+)
+
+it(
+	"work pauses at a limit and asks its decider, who lets it go on with words or stops it, and work below waits with it",
+	{ timeout: 120000 },
+	async () => {
+		const host = await BrowserHost.start({ publicOrigin, model })
+		try {
+			const { send, json, until } = client(host)
+			const alice = await host.login("limits-alice")
+			const main = await host.defaultBot(alice.session)
+			const chat = direct(host, alice.session, main)
+			const pending = (limit: string) =>
+				until("a request to go on after the " + limit + " limit", async () =>
+					(
+						await json(
+							Schema.Array(RequestsApi.CapabilityRequest),
+							send(alice.session, "/v1/requests?status=pending"),
+						)
+					).find(
+						(entry) =>
+							entry.capability.action === "delegations.continue" &&
+							entry.capability.arguments?.["limit"] === limit,
+					),
+				)
+			const decide = async (
+				request: RequestsApi.CapabilityRequest,
+				decision: "allow" | "deny",
+				reason: string,
+			) => {
+				const decided = await send(
+					alice.session,
+					"/v1/requests/" + request.id,
+					"POST",
+					{
+						expected: request.revision,
+						decision,
+						reason,
+						...(decision === "allow" ? { scope: "once" } : {}),
+					},
+				)
+				assert.strictEqual(decided.status, 200, await decided.clone().text())
+			}
+
+			// The work may use one model step. Before its second step it pauses, and the
+			// person above the Bot decides. The words of the decision go to the work.
+			await chat.turn("step carefully")
+			const [stepping] = await chat.delegations()
+			assert.ok(stepping !== undefined)
+			assert.deepStrictEqual(stepping.limits, { timeMs: 3600000, steps: 1 })
+			const steps = await pending("steps")
+			assert.strictEqual(steps.capability.target, stepping.id)
+			const waiting = await chat.ended(stepping.id, "paused")
+			assert.strictEqual(waiting.pause?.limit, "steps")
+			assert.strictEqual(waiting.pause?.request, steps.id)
+			assert.strictEqual(waiting.usage?.steps, 1)
+			assert.ok(!(await chat.history(waiting.chat!)).includes("must not run"))
+			await decide(steps, "allow", "Use the short way.")
+			const finished = await chat.ended(stepping.id, "completed")
+			assert.match(finished.result ?? "", /Finished after the pause/)
+			assert.match(finished.result ?? "", /Use the short way\./)
+			await chat.says("Noted: [OpenBot] The work " + stepping.id)
+			await chat.rested()
+
+			// The time is over while the model still thinks. The decider stops the work.
+			await chat.turn("research with a short time")
+			const slow = (await chat.delegations()).find(
+				(entry) => entry.id !== stepping.id,
+			)
+			assert.ok(slow !== undefined)
+			const time = await pending("time")
+			assert.strictEqual(time.capability.target, slow.id)
+			assert.strictEqual((await chat.delegation(slow.id)).status, "paused")
+			await decide(time, "deny", "Too slow.")
+			const stopped = await chat.ended(slow.id, "cancelled")
+			assert.match(stopped.result ?? "", /Too slow/)
+			assert.ok(!(await chat.history(stopped.chat!)).includes("Research done."))
+			await chat.says("Noted: [OpenBot] The work " + slow.id)
+			await chat.rested()
+
+			// Work that pauses pauses the work that it gave away. Only the work at the
+			// limit asks. When it goes on, the work below goes on too.
+			await chat.turn("go deep with a short time")
+			const deep = (await chat.delegations()).find(
+				(entry) => entry.id !== stepping.id && entry.id !== slow.id,
+			)
+			assert.ok(deep !== undefined)
+			const deeper = await until("the deeper work", async () => {
+				const current = await chat.delegation(deep.id)
+				if (current.chat === null) return undefined
+				return (
+					await json(
+						Schema.Array(DelegationsApi.Delegation),
+						send(alice.session, "/v1/chats/" + current.chat + "/delegations"),
+					)
+				).find((entry) => entry.chat !== null)
+			})
+			const over = await pending("time")
+			assert.strictEqual(over.capability.target, deep.id)
+			const below = await chat.ended(deeper.id, "paused")
+			assert.strictEqual(below.pause?.delegation, deep.id)
+			assert.strictEqual(below.pause?.request, null)
+			const asks = (
+				await json(
+					Schema.Array(RequestsApi.CapabilityRequest),
+					send(alice.session, "/v1/requests?status=pending"),
+				)
+			).filter((entry) => entry.capability.action === "delegations.continue")
+			assert.deepStrictEqual(
+				asks.map((entry) => entry.capability.target),
+				[deep.id],
+			)
+			await decide(over, "allow", "Take more time.")
+			await chat.ended(deeper.id, "completed")
+			await chat.ended(deep.id, "completed")
 		} finally {
 			await host.close()
 		}

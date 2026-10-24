@@ -1,8 +1,8 @@
 import { DelegationsApi, Identity, OpenBotApi } from "@openbot-build/api"
-import { Effect, Option } from "effect"
+import { Clock, Effect, Option } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { Coordinator } from "./Coordinator.ts"
-import { Delegations } from "./Delegations.ts"
+import { Delegations, view } from "./Delegations.ts"
 
 const unavailable = () => DelegationsApi.DelegationStorageUnavailable.make({})
 
@@ -27,7 +27,9 @@ const implementations = Effect.gen(function* () {
 			readonly params: { readonly delegationId: string }
 		}) =>
 			own(params.delegationId).pipe(
-				Effect.map(({ stored }) => stored.delegation),
+				Effect.flatMap(({ stored }) =>
+					Effect.map(Clock.currentTimeMillis, (now) => view(stored, now)),
+				),
 			),
 		cancelDelegation: ({
 			params,
@@ -43,7 +45,10 @@ const implementations = Effect.gen(function* () {
 						"A person stopped the work.",
 					)
 					.pipe(Effect.mapError(unavailable))
-				return (yield* own(params.delegationId)).stored.delegation
+				return view(
+					(yield* own(params.delegationId)).stored,
+					yield* Clock.currentTimeMillis,
+				)
 			}),
 	}
 })

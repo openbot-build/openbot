@@ -7,8 +7,14 @@ import {
 	type Item,
 	Plugin,
 } from "@openbot-build/core"
-import { BotsApi, type Identity, type MessageReceipt } from "@openbot-build/api"
 import {
+	BotsApi,
+	type DelegationsApi,
+	type Identity,
+	type MessageReceipt,
+} from "@openbot-build/api"
+import {
+	Clock,
 	Context,
 	Effect,
 	HashMap,
@@ -33,7 +39,13 @@ import type * as Chats from "../../chats/Chats.ts"
 import { homeOf } from "../../bots/BotMemories.ts"
 import { MemoryBot, confideTool } from "../../bots/MemoryBot.ts"
 import { Bots } from "../../bots/Bots.ts"
-import { Delegations, isOpen } from "../../bots/Delegations.ts"
+import {
+	Delegations,
+	isOpen,
+	noUsage,
+	type Stored as StoredDelegation,
+} from "../../bots/Delegations.ts"
+import { Limits, paused } from "../../bots/Limits.ts"
 import { Signal, Signals } from "../../bots/Signals.ts"
 import { Reminders } from "../work/Reminders.ts"
 import { toolJson } from "../ToolJson.ts"
@@ -95,11 +107,31 @@ const scope = {
 		"How long the decision lasts: this call only, this Chat, or until it is revoked.",
 } as const
 
+/** The longest time limit that a Bot can give: 30 days. */
+const maxMinutes = 30 * 24 * 60
 const DelegateInput = Schema.Struct({
 	bot: Schema.optionalKey(Schema.String),
 	task: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20000)),
 	reason: Schema.optionalKey(Schema.String),
 	delegation: Schema.optionalKey(Schema.String),
+	timeLimitMinutes: Schema.Finite.check(
+		Schema.isGreaterThan(0),
+		Schema.isLessThanOrEqualTo(maxMinutes),
+	),
+	maxSteps: Schema.optionalKey(
+		Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+	),
+	budgetUsd: Schema.optionalKey(Schema.Finite.check(Schema.isGreaterThan(0))),
+})
+/** The limits of new work, from the words of the Bot. */
+const limitsOf = (
+	input: typeof DelegateInput.Type,
+): DelegationsApi.DelegationLimits => ({
+	timeMs: Math.max(1000, Math.round(input.timeLimitMinutes * 60 * 1000)),
+	...(input.maxSteps === undefined ? {} : { steps: input.maxSteps }),
+	...(input.budgetUsd === undefined
+		? {}
+		: { budgetMicros: Math.max(1, Math.round(input.budgetUsd * 1_000_000)) }),
 })
 const CancelInput = Schema.Struct({
 	delegation: Schema.String,
@@ -205,6 +237,7 @@ type Services =
 	| Bots
 	| MemoryBot
 	| Delegations
+	| Limits
 	| Gate
 	| Requests
 	| Rules
@@ -268,6 +301,7 @@ export const make: Effect.Effect<typeof BotPlugin.Service, never, Services> =
 		const memoryBot = yield* MemoryBot
 		const settings = yield* Settings
 		const delegations = yield* Delegations
+		const limits = yield* Limits
 		const gate = yield* Gate
 		const requests = yield* Requests
 		const rules = yield* Rules
@@ -338,7 +372,7 @@ export const make: Effect.Effect<typeof BotPlugin.Service, never, Services> =
 				const lines = [
 					...given.map(
 						(stored) =>
-							`- Delegation ${stored.delegation.id} to ${stored.delegation.bot} (${stored.delegation.status}): ${headline(stored.delegation.task)}`,
+							`- Delegation ${stored.delegation.id} to ${stored.delegation.bot} (${stored.delegation.status}${stored.delegation.pause === undefined ? "" : ` at its ${stored.delegation.pause.limit} limit, until a decider lets it go on`}): ${headline(stored.delegation.task)}`,
 					),
 					...waiting.map(
 						(stored) =>
@@ -354,10 +388,127 @@ export const make: Effect.Effect<typeof BotPlugin.Service, never, Services> =
 					: "Work of this Chat that has not ended yet. Its results come back here as messages:\n" +
 							lines.join("\n")
 			}).pipe(Effect.orElseSucceed(() => ""))
+		/** The open round of the work of a task Chat, when it has one. */
+		const roundOf = (organizationId: string, owner: string, chat: Chat.Id) =>
+			delegations
+				.forChild(organizationId, owner, chat)
+				.pipe(Effect.map((rounds) => rounds.filter(isOpen).at(-1)))
+		/** The open work above some work, nearest first. */
+		const above = (
+			organizationId: string,
+			owner: string,
+			stored: StoredDelegation,
+			depth = 0,
+		): Effect.Effect<
+			ReadonlyArray<StoredDelegation>,
+			BotsApi.BotStorageUnavailable
+		> =>
+			depth >= 64
+				? Effect.succeed([])
+				: roundOf(organizationId, owner, stored.delegation.parent.chat).pipe(
+						Effect.flatMap((parent) =>
+							parent === undefined
+								? Effect.succeed([])
+								: above(organizationId, owner, parent, depth + 1).pipe(
+										Effect.map((rest) => [parent, ...rest]),
+									),
+						),
+					)
+		/**
+		 * Checks the limits of the work of a task Chat before each model step. False stops
+		 * the Turn: the work is paused, or work above it is. Time, steps and budget count
+		 * for the work itself. The budget also counts all the work that it gave away, so
+		 * the step of a Chat below can reach it.
+		 */
+		const guard = (organizationId: string, owner: string, chat: Chat.Id) =>
+			Effect.gen(function* () {
+				const round = yield* roundOf(organizationId, owner, chat)
+				if (round === undefined) return true
+				if (round.delegation.status === "paused") return false
+				if (round.delegation.status !== "running") return true
+				const id = round.delegation.id
+				const now = yield* Clock.currentTimeMillis
+				for (const parent of yield* above(organizationId, owner, round)) {
+					const pause = parent.delegation.pause
+					const reached =
+						parent.delegation.status === "running"
+							? (yield* limits.check(organizationId, parent, now)).reached
+							: Option.none()
+					const limit =
+						parent.delegation.status === "paused" && pause !== undefined
+							? Option.some(pause.limit)
+							: reached
+					if (Option.isNone(limit)) continue
+					yield* delegations.change(organizationId, id, ["running"], (stored) =>
+						paused(stored, {
+							limit: limit.value,
+							now,
+							delegation: pause?.delegation ?? parent.delegation.id,
+						}),
+					)
+					if (Option.isSome(reached))
+						yield* signals.publish(
+							Signal.DelegationLimitReached({
+								organizationId,
+								delegation: parent.delegation.id,
+								limit: reached.value,
+							}),
+						)
+					yield* signals.publish(
+						Signal.DelegationPaused({ organizationId, delegation: id }),
+					)
+					return false
+				}
+				const check = yield* limits.check(organizationId, round, now)
+				if (Option.isSome(check.reached)) {
+					const answer = yield* limits.pause(
+						organizationId,
+						id,
+						check.reached.value,
+					)
+					if (Option.isNone(answer)) return false
+					if (answer.value._tag !== "Allow") {
+						yield* signals.publish(
+							Signal.DelegationPaused({
+								organizationId,
+								delegation: id,
+								...(answer.value._tag === "Deny" &&
+								answer.value.request === undefined
+									? { denied: answer.value.reason }
+									: {}),
+							}),
+						)
+						return false
+					}
+				}
+				yield* delegations.change(organizationId, id, ["running"], (stored) => {
+					const usage = stored.delegation.usage ?? noUsage
+					return {
+						...stored,
+						delegation: {
+							...stored.delegation,
+							usage: {
+								...usage,
+								steps: usage.steps + 1,
+								costMicros: check.usage.costMicros,
+							},
+						},
+					}
+				})
+				return true
+			}).pipe(
+				// Without its records the work goes on. Its time limit still holds.
+				Effect.catchCause((cause) =>
+					Effect.logWarning(
+						"The limits of work could not be checked",
+						cause,
+					).pipe(Effect.as(true)),
+				),
+			)
 		const workEntries = (input: ForOwnerInput): ReadonlyArray<Entry> => [
 			entry(
 				names.delegate,
-				`Give a task to a Bot. Leave out \`bot\` to give it to yourself: a new helper with your role and no history does it. The call returns at once, and the work runs on its own. Its result comes back to this Chat as a message. Use a Bot id from ${names.list}. To add to earlier work, give its \`delegation\` id. Write everything that the task needs in \`task\`, because the other Bot does not see this Chat.`,
+				`Give a task to a Bot. Leave out \`bot\` to give it to yourself: a new helper with your role and no history does it. The call returns at once, and the work runs on its own. Its result comes back to this Chat as a message. Use a Bot id from ${names.list}. To add to earlier work, give its \`delegation\` id. Write everything that the task needs in \`task\`, because the other Bot does not see this Chat. Give each task a time limit. You can also limit its model steps and its cost. At a limit the work pauses, and the decider above that Bot says whether it goes on.`,
 				{
 					type: "object",
 					properties: {
@@ -365,13 +516,34 @@ export const make: Effect.Effect<typeof BotPlugin.Service, never, Services> =
 						task: text,
 						reason,
 						delegation: text,
+						timeLimitMinutes: {
+							type: "number",
+							description: `Required. How many minutes the work may run, more than 0 and up to ${maxMinutes}.`,
+						},
+						maxSteps: {
+							type: "integer",
+							description:
+								"Optional. How many model steps the work may use. A step is one call to the model.",
+						},
+						budgetUsd: {
+							type: "number",
+							description:
+								"Optional. How much the model calls of the work, and of the work that it gives away, may cost, in US dollars.",
+						},
 					},
-					required: ["task"],
+					required: ["task", "timeLimitMinutes"],
 				},
 				(raw, context) =>
 					Effect.gen(function* () {
 						const current = yield* work
-						const brief = yield* decode(DelegateInput)(raw)
+						const decoded = yield* decode(DelegateInput)(raw).pipe(
+							Effect.option,
+						)
+						if (Option.isNone(decoded))
+							return json({
+								error: `Give \`task\` and \`timeLimitMinutes\`. \`timeLimitMinutes\` is a number more than 0 and up to ${maxMinutes}. \`maxSteps\` is a whole number from 1. \`budgetUsd\` is a number more than 0.`,
+							})
+						const brief = decoded.value
 						const organizationId = current.caller.organizationId
 						const author = ChatHost.chainAuthor(current.chain)
 						const started = (stored: {
@@ -421,6 +593,7 @@ export const make: Effect.Effect<typeof BotPlugin.Service, never, Services> =
 								},
 								bot: stored.delegation.bot,
 								task: brief.task,
+								limits: limitsOf(brief),
 								...(stored.delegation.chat === null
 									? {}
 									: { chat: stored.delegation.chat }),
@@ -475,6 +648,7 @@ export const make: Effect.Effect<typeof BotPlugin.Service, never, Services> =
 							},
 							bot: target.value.id,
 							task: brief.task,
+							limits: limitsOf(brief),
 							...(brief.reason === undefined ? {} : { reason: brief.reason }),
 							status: answer._tag === "Allow" ? "queued" : "authorizing",
 							...(answer._tag === "Pending" ? { request: answer.request } : {}),
@@ -976,6 +1150,16 @@ export const make: Effect.Effect<typeof BotPlugin.Service, never, Services> =
 											: Toolkit.merge(incoming, own),
 									),
 								}).pipe(
+									// Work in a task Chat stops before a model step when it reaches a limit.
+									Stream.takeWhileEffect((event) =>
+										event._tag === "ModelStepStarted" && state.kind === "task"
+											? guard(
+													organizationId,
+													ChatHost.ownerOf(state.chain),
+													at.chat,
+												)
+											: Effect.succeed(true),
+									),
 									Stream.provideContext(handlers),
 									Stream.provideService(Work, current),
 								)

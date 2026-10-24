@@ -14,10 +14,11 @@ import * as OpenWorkCount from "./OpenWorkCount.ts"
 import * as BotRecords from "./BotRecords.ts"
 import * as Bots from "./Bots.ts"
 import * as Delegations from "./Delegations.ts"
+import * as Limits from "./Limits.ts"
 import * as Signals from "./Signals.ts"
 
 /**
- * The Bot services: records, Bots, memory, delegations, Grants, Rules, the judge,
+ * The Bot services: records, Bots, memory, delegations and their limits, Grants, Rules, the judge,
  * requests, the capability gate, the approvals of tool calls, the Bot plugin and the work
  * plugin. The coordinator is separate, because it needs the Chat runtimes.
  */
@@ -27,6 +28,7 @@ export const layer = <R>(options: {
 	Layer.mergeAll(BotPlugin.layer, WorkPlugin.layer, Approvals.layer).pipe(
 		Layer.provideMerge(OpenWorkCount.layer),
 		Layer.provideMerge(Reminders.layer),
+		Layer.provideMerge(Limits.layer),
 		Layer.provideMerge(Gate.layer),
 		Layer.provideMerge(Requests.layer),
 		Layer.provideMerge(MemoryBot.layer),

@@ -256,6 +256,12 @@ export class Billing extends Context.Service<
 			botId: string,
 			since: number,
 		) => Effect.Effect<number, BillingStorageError>
+		/** What the model calls of some Chats of an organization cost since a time. */
+		readonly chatSpend: (
+			organizationId: string,
+			chats: ReadonlyArray<string>,
+			since: number,
+		) => Effect.Effect<number, BillingStorageError>
 		readonly grantCredits: (
 			organizationId: string,
 			input: { readonly amountMicros: number; readonly note: string },

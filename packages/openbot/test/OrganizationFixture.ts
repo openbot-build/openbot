@@ -171,6 +171,7 @@ export const layerUnusedPlatform = Layer.mergeAll(
 		setCreditsEnabled: () => Effect.die("unused"),
 		grantCredits: () => Effect.die("unused"),
 		botSpend: () => Effect.succeed(0),
+		chatSpend: () => Effect.succeed(0),
 		budgets: () => Effect.die("unused"),
 		budget: () => Effect.die("unused"),
 		createBudget: () => Effect.die("unused"),

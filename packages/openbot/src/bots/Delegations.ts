@@ -13,6 +13,10 @@ type Delegation = DelegationsApi.Delegation
  * `author` is who the work is for, so its result goes back to them. `chain` is the
  * work that gave it, and the work of the child goes on from there. `request` is the
  * request that decides whether the work may start.
+ *
+ * `delegation.usage.timeMs` is the running time before `runningSince`. `window` is the
+ * usage when the limits last started, at the start or when a decider let the work go on.
+ * A limit is reached when the usage since `window` reaches it.
  */
 export const Stored = Schema.Struct({
 	delegation: DelegationsApi.Delegation,
@@ -20,6 +24,8 @@ export const Stored = Schema.Struct({
 	author: Turn.Author,
 	chain: Chain,
 	request: Schema.optionalKey(Schema.String),
+	window: Schema.optionalKey(DelegationsApi.DelegationUsage),
+	runningSince: Schema.optionalKey(Schema.Finite),
 })
 export type Stored = typeof Stored.Type
 
@@ -32,6 +38,7 @@ export interface CreateInput {
 	readonly bot: BotsApi.BotId
 	readonly task: string
 	readonly reason?: string
+	readonly limits?: DelegationsApi.DelegationLimits
 	/** The task Chat of earlier work that this work goes on with. */
 	readonly chat?: Chat.Id
 	readonly status: "authorizing" | "queued" | "running" | "failed"
@@ -81,17 +88,45 @@ export class Delegations extends Context.Service<
 			BotsApi.BotStorageUnavailable
 		>
 		/**
-		 * Changes a delegation when it still has one of the expected statuses.
-		 * Returns None when it does not, so two workers never do the same step.
+		 * Changes a delegation when it still has one of the expected statuses, and `when`
+		 * holds for it. Returns None when it does not, so two workers never do the same step.
 		 */
 		readonly change: (
 			organizationId: string,
 			id: string,
 			expected: ReadonlyArray<Delegation["status"]>,
 			update: (stored: Stored) => Stored,
+			when?: (stored: Stored) => boolean,
 		) => Effect.Effect<Option.Option<Stored>, BotsApi.BotStorageUnavailable>
 	}
 >()("@openbot-build/openbot/bots/Delegations") {}
+
+/** Nothing used yet. */
+export const noUsage: DelegationsApi.DelegationUsage = {
+	timeMs: 0,
+	steps: 0,
+	costMicros: 0,
+}
+
+/** What the work used, with the running time up to now. */
+export const usageOf = (
+	stored: Stored,
+	now: number,
+): DelegationsApi.DelegationUsage => {
+	const usage = stored.delegation.usage ?? noUsage
+	return stored.runningSince === undefined
+		? usage
+		: {
+				...usage,
+				timeMs: usage.timeMs + Math.max(0, now - stored.runningSince),
+			}
+}
+
+/** The delegation as people see it, with the running time up to now. */
+export const view = (stored: Stored, now: number): Delegation =>
+	stored.delegation.usage === undefined
+		? stored.delegation
+		: { ...stored.delegation, usage: usageOf(stored, now) }
 
 /** True when the work has not ended yet. */
 export const isOpen = (stored: Stored) =>
@@ -153,6 +188,9 @@ export const make: Effect.Effect<
 							task: input.task,
 							...(input.reason === undefined ? {} : { reason: input.reason }),
 							result: input.result ?? null,
+							...(input.limits === undefined
+								? {}
+								: { limits: input.limits, usage: noUsage }),
 							createdAt: now,
 							updatedAt: now,
 						},
@@ -189,14 +227,15 @@ export const make: Effect.Effect<
 			)
 			return all.flat()
 		}),
-		change: (organizationId, id, expected, update) =>
+		change: (organizationId, id, expected, update, when) =>
 			records.transaction(
 				"delegation-item:" + organizationId + ":" + id,
 				Effect.gen(function* () {
 					const found = yield* delegations.find(organizationId, id)
 					if (
 						Option.isNone(found) ||
-						!expected.includes(found.value.delegation.status)
+						!expected.includes(found.value.delegation.status) ||
+						(when !== undefined && !when(found.value))
 					)
 						return Option.none()
 					const now = yield* Clock.currentTimeMillis

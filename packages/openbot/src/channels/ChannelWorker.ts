@@ -110,6 +110,8 @@ const describe = (request: RequestsApi.CapabilityRequest) => {
 			return `call the App \`${target}\``
 		case "channels.send":
 			return "post to another chat of this Channel"
+		case "delegations.continue":
+			return `go on with its work \`${target}\` after it reached a limit`
 		default:
 			return `do \`${action}\` on \`${target}\``
 	}

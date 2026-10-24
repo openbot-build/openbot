@@ -12,12 +12,12 @@ import {
 	type SendMessageRequest,
 } from "@openbot-build/api"
 import type { Chat } from "@openbot-build/core"
-import { Effect, Option } from "effect"
+import { Clock, Effect, Option } from "effect"
 import { HttpApiBuilder, type HttpApiEndpoint } from "effect/http-api"
 import { Backend } from "../app/Backend.ts"
 import { Bots } from "../bots/Bots.ts"
 import { Coordinator } from "../bots/Coordinator.ts"
-import { Delegations } from "../bots/Delegations.ts"
+import { Delegations, view } from "../bots/Delegations.ts"
 import { MemoryBot } from "../bots/MemoryBot.ts"
 import { Files } from "../files/Files.ts"
 import { check } from "../authorization/Check.ts"
@@ -208,7 +208,8 @@ const implementations = Effect.gen(function* () {
 				const list = yield* delegations
 					.forChat(caller.organizationId, params.chatId)
 					.pipe(Effect.mapError(unavailable))
-				return list.map((stored) => stored.delegation)
+				const now = yield* Clock.currentTimeMillis
+				return list.map((stored) => view(stored, now))
 			}),
 		// Reading the Chat first checks that the caller may see it.
 		chatConfessions: ({ params }: Request<"chatConfessions">) =>

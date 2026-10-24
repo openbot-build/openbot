@@ -80,12 +80,19 @@ export const filesDefaults: FilesDocument = {
 export const rateLimitOf = (document: PlatformDocument): Api.RateLimit =>
 	document.rateLimit ?? Api.rateLimitDefaults
 
+/** The time limit of delegated work that sets none itself. */
+export const delegationTimeLimitOf = (document: {
+	readonly delegationTimeLimitMs?: number
+}): number => document.delegationTimeLimitMs ?? Api.delegationTimeLimitDefault
+
 export const OrganizationDocument = Schema.Struct({
 	rulesModel: Api.OrganizationSettings.fields.rulesModel,
 	botMemoryModel: Api.OrganizationSettings.fields.botMemoryModel,
 	decisionModel: Api.OrganizationSettings.fields.decisionModel,
 	botMemory: Schema.Boolean,
 	requestTimeoutMs: Api.RequestTimeout,
+	/** Missing in documents from before delegation limits. Then it is one hour. */
+	delegationTimeLimitMs: Schema.optionalKey(Api.DelegationTimeLimit),
 	planApproval: PlanApproval.PlanApproval,
 	appReadRules: Api.AppReadRules,
 	defaultRoles: Api.DefaultRoles,

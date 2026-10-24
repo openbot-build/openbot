@@ -48,7 +48,9 @@ import {
 	Delegations,
 	isOpen,
 	type Stored as StoredDelegation,
+	usageOf,
 } from "./Delegations.ts"
+import { Limits, paused, resumed, windowOf } from "./Limits.ts"
 import { Signals, type Signal } from "./Signals.ts"
 import { toolJson } from "../plugins/ToolJson.ts"
 
@@ -141,6 +143,7 @@ export const layer = Layer.effect(
 		const bots = yield* Bots
 		const memoryBot = yield* MemoryBot
 		const delegations = yield* Delegations
+		const limits = yield* Limits
 		const requests = yield* Requests
 		const reminders = yield* Reminders
 		const signals = yield* Signals
@@ -242,12 +245,14 @@ export const layer = Layer.effect(
 		/** Starts the work of a queued delegation in a task Chat of the other Bot. */
 		const dispatch = (member: Member, stored: StoredDelegation) =>
 			Effect.gen(function* () {
+				const now = yield* Clock.currentTimeMillis
 				const claimed = yield* delegations.change(
 					member.organizationId,
 					stored.delegation.id,
 					["queued"],
 					(current) => ({
 						...current,
+						runningSince: now,
 						delegation: { ...current.delegation, status: "running" },
 					}),
 				)
@@ -313,6 +318,7 @@ export const layer = Layer.effect(
 						details: { chain: [...chain.bots], chat: child },
 					})
 					.pipe(Effect.ignore)
+				yield* watch(member.organizationId, delegation.id)
 			}).pipe(
 				Effect.catchCause((cause) =>
 					Effect.logWarning("Delegated work could not start", cause).pipe(
@@ -376,7 +382,9 @@ export const layer = Layer.effect(
 									status: "running",
 								})
 							: undefined
-				if (current === undefined) return
+				// Paused work goes on when its decider lets it, so it has not ended.
+				if (current === undefined || current.delegation.status === "paused")
+					return
 				yield* Match.value(turn.status).pipe(
 					Match.tag("Completed", ({ result }) =>
 						finish(member, current, "completed", result.text),
@@ -650,6 +658,8 @@ export const layer = Layer.effect(
 				}
 				// Cancelled work does not need the answer.
 				if (request.status === "cancelled") return
+				if (request.capability.action === "delegations.continue")
+					return yield* continued(stored)
 				if (request.capability.action === "plans.run") {
 					if (!allowed)
 						return yield* notify(member, request.chat, {
@@ -916,6 +926,295 @@ export const layer = Layer.effect(
 					yield* remind(signal.organizationId, current.value)
 			})
 
+		/** Running work whose time limit is over. */
+		const overTime = (organizationId: string, stored: StoredDelegation) =>
+			Effect.gen(function* () {
+				if (
+					stored.delegation.status !== "running" ||
+					stored.runningSince === undefined
+				)
+					return false
+				const limit = yield* limits.of(organizationId, stored)
+				const now = yield* Clock.currentTimeMillis
+				return (
+					usageOf(stored, now).timeMs - windowOf(stored).timeMs >= limit.timeMs
+				)
+			})
+
+		/** Sleeps until running work reaches its time limit, and pauses it then. */
+		const watch = (organizationId: string, id: string): Effect.Effect<void> =>
+			Effect.gen(function* () {
+				const found = yield* delegations.find(organizationId, id)
+				if (Option.isNone(found)) return
+				const stored = found.value
+				if (
+					stored.delegation.status !== "running" ||
+					stored.runningSince === undefined
+				)
+					return
+				const limit = yield* limits.of(organizationId, stored)
+				const now = yield* Clock.currentTimeMillis
+				const used = usageOf(stored, now).timeMs - windowOf(stored).timeMs
+				yield* Effect.sleep(Duration.millis(Math.max(0, limit.timeMs - used)))
+				const current = yield* delegations.find(organizationId, id)
+				if (
+					Option.isSome(current) &&
+					(yield* overTime(organizationId, current.value))
+				)
+					yield* pauseAt(organizationId, current.value, "time")
+			}).pipe(
+				Effect.catchCause((cause) =>
+					Cause.hasInterruptsOnly(cause)
+						? Effect.void
+						: Effect.logWarning("The time of work could not be watched", cause),
+				),
+				Effect.forkIn(scope),
+				Effect.asVoid,
+			)
+
+		/**
+		 * Pauses running work at a limit from outside its Turns, for example when its time
+		 * is over. The request is made for the Bot of the task Chat.
+		 */
+		const pauseAt = (
+			organizationId: string,
+			stored: StoredDelegation,
+			limit: DelegationsApi.DelegationLimit,
+		): Effect.Effect<void> =>
+			Effect.gen(function* () {
+				const chat = stored.delegation.chat
+				if (chat === null) return
+				const member = { organizationId, userId: stored.userId }
+				const chats = yield* chatsFor(member)
+				const view = yield* chats.read(chat)
+				const turn = Chat.currentTurn(view.chat)
+				if (turn === undefined) return
+				const work = yield* workOf(
+					member,
+					chat,
+					turn.id,
+					turn.author ?? stored.author,
+				)
+				if (Option.isNone(work)) return
+				const answer = yield* limits
+					.pause(organizationId, stored.delegation.id, limit)
+					.pipe(Effect.provideService(Work, work.value))
+				if (Option.isSome(answer))
+					yield* afterPause(organizationId, stored.delegation.id, answer.value)
+			}).pipe(
+				Effect.catchCause((cause) =>
+					Cause.hasInterruptsOnly(cause)
+						? Effect.void
+						: Effect.logWarning("Work could not pause at its limit", cause),
+				),
+			)
+
+		/** Lets paused work go on, or stops it, after the answer of the Gate. */
+		const afterPause = (organizationId: string, id: string, answer: Answer) =>
+			Match.value(answer).pipe(
+				Match.tag("Allow", () =>
+					release(organizationId, id).pipe(
+						Effect.andThen(watch(organizationId, id)),
+					),
+				),
+				Match.tag("Pending", () => stopBelow(organizationId, id)),
+				Match.tag("Deny", ({ reason }) =>
+					cancel(organizationId, id, "It may not go on: " + reason),
+				),
+				Match.exhaustive,
+			)
+
+		/** Runs a step on each open delegation below a task Chat, layer by layer. */
+		const eachBelow = <E>(
+			organizationId: string,
+			chat: Chat.Id | null,
+			step: (stored: StoredDelegation) => Effect.Effect<void, E>,
+		): Effect.Effect<void, E | BotsApi.BotStorageUnavailable> =>
+			chat === null
+				? Effect.void
+				: delegations.forChat(organizationId, chat).pipe(
+						Effect.flatMap((given) =>
+							Effect.forEach(given.filter(isOpen), (stored) =>
+								step(stored).pipe(
+									Effect.andThen(
+										eachBelow(organizationId, stored.delegation.chat, step),
+									),
+								),
+							),
+						),
+						Effect.asVoid,
+					)
+
+		/**
+		 * Stops the running Turn of paused work, and pauses the running work below it.
+		 * The work below waits for the same decision.
+		 */
+		const stopBelow = (organizationId: string, id: string) =>
+			Effect.gen(function* () {
+				const found = yield* delegations.find(organizationId, id)
+				if (Option.isNone(found)) return
+				const stored = found.value
+				const pause = stored.delegation.pause
+				if (stored.delegation.status !== "paused" || pause === undefined) return
+				const root = pause.delegation ?? id
+				const chats = yield* chatsFor({ organizationId, userId: stored.userId })
+				if (stored.delegation.chat !== null)
+					yield* chats.interrupt(stored.delegation.chat).pipe(Effect.ignore)
+				const now = yield* Clock.currentTimeMillis
+				yield* eachBelow(organizationId, stored.delegation.chat, (child) =>
+					Effect.gen(function* () {
+						const stopped = yield* delegations.change(
+							organizationId,
+							child.delegation.id,
+							["running"],
+							(current) =>
+								paused(current, { limit: pause.limit, now, delegation: root }),
+						)
+						if (Option.isSome(stopped) && child.delegation.chat !== null)
+							yield* chats.interrupt(child.delegation.chat).pipe(Effect.ignore)
+					}),
+				)
+			})
+
+		/** Lets the work below go on, when it waited for the work `root` above it. */
+		const release = (
+			organizationId: string,
+			root: string,
+		): Effect.Effect<void> =>
+			Effect.gen(function* () {
+				const found = yield* delegations.find(organizationId, root)
+				if (Option.isNone(found)) return
+				const now = yield* Clock.currentTimeMillis
+				yield* eachBelow(organizationId, found.value.delegation.chat, (child) =>
+					Effect.gen(function* () {
+						const going = yield* delegations.change(
+							organizationId,
+							child.delegation.id,
+							["paused"],
+							(current) =>
+								resumed(current, {
+									now,
+									renew: false,
+									costMicros: current.delegation.usage?.costMicros ?? 0,
+								}),
+							(current) => current.delegation.pause?.delegation === root,
+						)
+						if (Option.isNone(going) || child.delegation.chat === null) return
+						yield* notify(
+							{ organizationId, userId: child.userId },
+							child.delegation.chat,
+							{
+								text: notice(
+									"The work above yours was paused at a limit. Now it goes on again, so go on with your task.",
+								),
+								author: child.author,
+								notice: { kind: "task", ref: child.delegation.id },
+							},
+						)
+						yield* watch(organizationId, child.delegation.id)
+					}),
+				)
+			}).pipe(
+				Effect.catchCause((cause) =>
+					Cause.hasInterruptsOnly(cause)
+						? Effect.void
+						: Effect.logWarning("The work below could not go on", cause),
+				),
+			)
+
+		/** Gives the decision about paused work back: it goes on with new limits, or it stops. */
+		const continued = (stored: StoredRequest) =>
+			Effect.gen(function* () {
+				const request = stored.request
+				const organizationId = stored.chain.organizationId
+				const id = request.capability.target
+				const found = yield* delegations.find(organizationId, id)
+				if (Option.isNone(found)) return
+				const pause = found.value.delegation.pause
+				if (
+					found.value.delegation.status !== "paused" ||
+					pause === undefined ||
+					pause.delegation !== undefined
+				)
+					return
+				if (request.status !== "allowed")
+					return yield* cancel(
+						organizationId,
+						id,
+						"The decider did not let it go on after its " +
+							pause.limit +
+							" limit: " +
+							reasonOf(stored),
+					)
+				const costMicros = yield* limits.cost(organizationId, found.value)
+				const now = yield* Clock.currentTimeMillis
+				const going = yield* delegations.change(
+					organizationId,
+					id,
+					["paused"],
+					(current) => resumed(current, { now, renew: true, costMicros }),
+					(current) => current.delegation.pause?.delegation === undefined,
+				)
+				if (Option.isNone(going) || going.value.delegation.chat === null) return
+				const reason = request.decision?.reason
+				yield* notify(
+					{ organizationId, userId: going.value.userId },
+					going.value.delegation.chat,
+					{
+						text: notice(
+							`Your work reached its ${pause.limit} limit, and the decider lets it go on. Your limits start again from now.`,
+							reason === undefined ? "" : "The decider says:\n" + reason,
+						),
+						author: going.value.author,
+						notice: { kind: "request", ref: request.id },
+					},
+				)
+				yield* release(organizationId, id)
+				yield* watch(organizationId, id)
+			})
+
+		/**
+		 * Pauses work whose time is over when its sleep got lost, and lets work go on that
+		 * still waits for work above it that runs again.
+		 */
+		const sweepLimits = Effect.gen(function* () {
+			const now = yield* Clock.currentTimeMillis
+			for (const entry of yield* delegations.open) {
+				const stored = entry.value
+				const organizationId = entry.organizationId
+				const delegation = stored.delegation
+				// Work from before limits starts its time now.
+				if (
+					delegation.status === "running" &&
+					stored.runningSince === undefined
+				)
+					yield* delegations.change(
+						organizationId,
+						delegation.id,
+						["running"],
+						(current) => ({ ...current, runningSince: now }),
+						(current) => current.runningSince === undefined,
+					)
+				else if (yield* overTime(organizationId, stored))
+					yield* pauseAt(organizationId, stored, "time")
+				else if (
+					delegation.status === "paused" &&
+					delegation.pause?.delegation !== undefined
+				) {
+					const root = yield* delegations.find(
+						organizationId,
+						delegation.pause.delegation,
+					)
+					if (Option.isSome(root) && root.value.delegation.status === "running")
+						yield* release(organizationId, root.value.delegation.id)
+				}
+			}
+		}).pipe(
+			Effect.catchCause((cause) =>
+				Effect.logWarning("The limits of work could not be checked", cause),
+			),
+		)
+
 		const cancel: typeof Coordinator.Service.cancel = (
 			organizationId,
 			id,
@@ -976,6 +1275,25 @@ export const layer = Layer.effect(
 					cancel(signal.organizationId, signal.delegation, signal.reason, true),
 				),
 				Match.tag("ReminderStarted", onReminder),
+				Match.tag("DelegationPaused", (signal) =>
+					signal.denied === undefined
+						? stopBelow(signal.organizationId, signal.delegation)
+						: cancel(
+								signal.organizationId,
+								signal.delegation,
+								"It may not go on: " + signal.denied,
+							),
+				),
+				Match.tag("DelegationLimitReached", (signal) =>
+					Effect.gen(function* () {
+						const found = yield* delegations.find(
+							signal.organizationId,
+							signal.delegation,
+						)
+						if (Option.isSome(found))
+							yield* pauseAt(signal.organizationId, found.value, signal.limit)
+					}),
+				),
 				Match.exhaustive,
 				Effect.catchCause((cause) =>
 					Cause.hasInterruptsOnly(cause)
@@ -1001,8 +1319,10 @@ export const layer = Layer.effect(
 						organizationId: entry.organizationId,
 						delegation: delegation.id,
 					})
-				else if (delegation.chat !== null)
+				else if (delegation.chat !== null) {
 					yield* settleTask(member, delegation.chat).pipe(Effect.ignore)
+					yield* watch(entry.organizationId, delegation.id)
+				}
 			}
 			for (const entry of yield* requests.pending)
 				yield* review(entry.organizationId, entry.value).pipe(Effect.ignore)
@@ -1055,6 +1375,7 @@ export const layer = Layer.effect(
 		)
 		yield* Effect.forkScoped(recover)
 		yield* sweep.pipe(
+			Effect.andThen(sweepLimits),
 			Effect.repeat(Schedule.spaced(Duration.minutes(1))),
 			Effect.forkScoped,
 		)

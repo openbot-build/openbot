@@ -217,6 +217,7 @@ const model = Effect.runSync(
 					return answer("Assistant got: " + JSON.stringify(done.result))
 				if (input.includes("delegate to programmer"))
 					return call(names.delegate, {
+						timeLimitMinutes: 60,
 						bot: known.programmer,
 						reason: "Code work needs the Programmer.",
 						task: "Write the change.",
@@ -230,11 +231,13 @@ const model = Effect.runSync(
 					})
 				if (input.includes("delegate to worker"))
 					return call(names.delegate, {
+						timeLimitMinutes: 60,
 						bot: known.worker,
 						task: "Do the work.",
 					})
 				if (input.includes("confirm via helper"))
 					return call(names.delegate, {
+						timeLimitMinutes: 60,
 						bot: known.helper,
 						reason: "The Helper confirms changes.",
 						task: "Confirm the change.",

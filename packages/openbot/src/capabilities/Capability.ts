@@ -82,8 +82,9 @@ export const memberTarget = (input: {
 						action: "delegate",
 						resource: botResource({ ...input.bot, organizationId }),
 					}
-		// Carrying out a plan is work in the Chat, like a tool call.
+		// Carrying out a plan, or going on after a limit, is work in the Chat, like a tool call.
 		case "plans.run":
+		case "delegations.continue":
 		case "tools.call":
 			return {
 				action: "run",

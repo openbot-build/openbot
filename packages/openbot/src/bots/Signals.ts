@@ -1,4 +1,5 @@
 import type { Chat, Turn } from "@openbot-build/core"
+import type { DelegationsApi } from "@openbot-build/api"
 import { Context, Data, Effect, Layer, PubSub } from "effect"
 
 /** News that the coordinator acts on. Recovery and the sweep cover news that got lost. */
@@ -21,6 +22,21 @@ export type Signal = Data.TaggedEnum<{
 		readonly organizationId: string
 		readonly delegation: string
 		readonly reason: string
+	}
+	/**
+	 * Delegated work paused at a limit. The work below it pauses too. `denied` says why,
+	 * when it may not go on and no request says so.
+	 */
+	DelegationPaused: {
+		readonly organizationId: string
+		readonly delegation: string
+		readonly denied?: string
+	}
+	/** Delegated work reached a limit while work below it ran, so it must pause. */
+	DelegationLimitReached: {
+		readonly organizationId: string
+		readonly delegation: string
+		readonly limit: DelegationsApi.DelegationLimit
 	}
 	/** A reminder was set for a time. */
 	ReminderStarted: {
