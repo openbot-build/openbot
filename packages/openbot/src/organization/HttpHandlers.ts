@@ -60,7 +60,10 @@ const organizationGroup = HttpApiBuilder.group(
 						details,
 					})
 					.pipe(Effect.mapError(unavailable))
-			/** The Rules and Bot memory models must not be `decision` models. */
+			/**
+			 * The Bot memory model must not be a `decision` model, because the
+			 * memory Bot writes text. The Rules model can be either type.
+			 */
 			const checkModels = (
 				caller: Caller,
 				changes: Omit<
@@ -69,31 +72,22 @@ const organizationGroup = HttpApiBuilder.group(
 				>,
 			) =>
 				Effect.gen(function* () {
-					const { rulesModel, botMemoryModel } = changes
-					if ((rulesModel ?? botMemoryModel ?? null) === null) return
+					const { botMemoryModel } = changes
+					if (botMemoryModel === undefined || botMemoryModel === null) return
 					const catalog = yield* registry
 						.view(caller.organizationId)
 						.pipe(
 							Effect.mapError(() => SettingsApi.SettingsUnavailable.make({})),
 						)
-					const typeOf = (selection: { provider: string; model: string }) =>
-						catalog.models.find(
-							(model) =>
-								model.provider === selection.provider &&
-								model.id === selection.model,
-						)?.type
-					for (const [name, selection] of [
-						["rulesModel", rulesModel],
-						["botMemoryModel", botMemoryModel],
-					] as const)
-						if (
-							selection !== undefined &&
-							selection !== null &&
-							typeOf(selection) === "decision"
-						)
-							return yield* SettingsApi.SettingsInvalid.make({
-								message: `${name} cannot be a decision model.`,
-							})
+					const type = catalog.models.find(
+						(model) =>
+							model.provider === botMemoryModel.provider &&
+							model.id === botMemoryModel.model,
+					)?.type
+					if (type === "decision")
+						return yield* SettingsApi.SettingsInvalid.make({
+							message: "botMemoryModel cannot be a decision model.",
+						})
 				})
 			/** Fails unless the caller is a Super Administrator. */
 			const requireSuperAdministrator = (

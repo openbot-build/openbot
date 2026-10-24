@@ -6,6 +6,7 @@ import {
 import type { ModelProvidersApi } from "@openbot-build/api"
 import {
 	Context,
+	Data,
 	Effect,
 	Exit,
 	HashMap,
@@ -50,6 +51,13 @@ export interface Catalog {
 }
 
 /** The models that each organization can use now, built from the stored providers, links and models. */
+/** A model of either type, for a use that can take both. */
+export type AnyModel = Data.TaggedEnum<{
+	Language: { readonly model: LanguageModel.LanguageModel }
+	Decision: { readonly model: DecisionModel.DecisionModel }
+}>
+export const AnyModel = Data.taggedEnum<AnyModel>()
+
 export class ModelRegistry extends Context.Service<
 	ModelRegistry,
 	{
@@ -70,13 +78,13 @@ export class ModelRegistry extends Context.Service<
 			LanguageModel.LanguageModel,
 			Config.ModelConfigurationError
 		>
-		/** The model that judges Rules. It fails when the organization has none. */
+		/**
+		 * The model that judges Rules. It can be a language model or a decision
+		 * model. It fails when the organization has none.
+		 */
 		readonly rulesModel: (
 			organizationId: string,
-		) => Effect.Effect<
-			LanguageModel.LanguageModel,
-			Config.ModelConfigurationError
-		>
+		) => Effect.Effect<AnyModel, Config.ModelConfigurationError>
 		/** The model that learns Bot memory. It fails when the organization has none. */
 		readonly botMemoryModel: (
 			organizationId: string,
@@ -496,7 +504,7 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				})(yield* build(offer, selection))
 			})
 
-		/** The model that one setting of the organization names. */
+		/** The selection that one setting of the organization names. */
 		const setting = (
 			organizationId: string,
 			name: "rulesModel" | "botMemoryModel",
@@ -509,7 +517,24 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 						reason: "missing",
 						message: `The organization has no ${name}.`,
 					})
-				return yield* resolve(organizationId, selection)
+				return selection
+			})
+
+		/** The model that a selection names, as the type that its offer has. */
+		const resolveAny = (organizationId: string, selection: Config.Selection) =>
+			Effect.gen(function* () {
+				const offer = (yield* stored(organizationId)).offers.find(
+					(offer) =>
+						offer.provider.id === selection.provider &&
+						offer.model.id === selection.model,
+				)
+				return offer?.model.type === "decision"
+					? AnyModel.Decision({
+							model: yield* decision(organizationId, selection),
+						})
+					: AnyModel.Language({
+							model: yield* resolve(organizationId, selection),
+						})
 			})
 
 		return ModelRegistry.of({
@@ -581,9 +606,14 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				}),
 			resolve,
 			decision,
-			rulesModel: (organizationId) => setting(organizationId, "rulesModel"),
+			rulesModel: (organizationId) =>
+				setting(organizationId, "rulesModel").pipe(
+					Effect.flatMap((selection) => resolveAny(organizationId, selection)),
+				),
 			botMemoryModel: (organizationId) =>
-				setting(organizationId, "botMemoryModel"),
+				setting(organizationId, "botMemoryModel").pipe(
+					Effect.flatMap((selection) => resolve(organizationId, selection)),
+				),
 		})
 	})
 

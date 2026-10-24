@@ -199,40 +199,52 @@ export const layer = <
 			const registry = yield* ModelRegistry.ModelRegistry
 			const settings = yield* Settings
 			const resolve = options.chats?.resolveModel
-			const model = (
+			// A host with its own `resolveModel` resolves only language models.
+			const hosted = (
 				organizationId: string,
 				name: "rulesModel" | "botMemoryModel",
 			) =>
-				Effect.mapError(
-					resolve === undefined
-						? name === "rulesModel"
-							? registry.rulesModel(organizationId)
-							: registry.botMemoryModel(organizationId)
-						: settings.organization(organizationId).pipe(
-								Effect.mapError(
-									() =>
-										new Config.ModelConfigurationError({
-											reason: "unavailable",
-											message: "OpenBot cannot read the settings right now.",
-										}),
-								),
-								Effect.flatMap((current) =>
-									current.document[name] === null
-										? Effect.fail(
-												new Config.ModelConfigurationError({
-													reason: "missing",
-													message: `The organization has no ${name}.`,
-												}),
-											)
-										: resolve(current.document[name]),
-								),
-							),
-					(error) =>
-						new Judge.HelperModelUnavailable({ message: error.message }),
+				settings.organization(organizationId).pipe(
+					Effect.mapError(
+						() =>
+							new Config.ModelConfigurationError({
+								reason: "unavailable",
+								message: "OpenBot cannot read the settings right now.",
+							}),
+					),
+					Effect.flatMap((current) => {
+						const selection = current.document[name]
+						return selection === null || resolve === undefined
+							? Effect.fail(
+									new Config.ModelConfigurationError({
+										reason: "missing",
+										message: `The organization has no ${name}.`,
+									}),
+								)
+							: resolve(selection)
+					}),
 				)
+			const unavailable = (error: Config.ModelConfigurationError) =>
+				new Judge.HelperModelUnavailable({ message: error.message })
 			return Judge.HelperModel.of({
-				rules: (organizationId) => model(organizationId, "rulesModel"),
-				botMemory: (organizationId) => model(organizationId, "botMemoryModel"),
+				rules: (organizationId) =>
+					Effect.mapError(
+						resolve === undefined
+							? registry.rulesModel(organizationId)
+							: hosted(organizationId, "rulesModel").pipe(
+									Effect.map((model) =>
+										ModelRegistry.AnyModel.Language({ model }),
+									),
+								),
+						unavailable,
+					),
+				botMemory: (organizationId) =>
+					Effect.mapError(
+						resolve === undefined
+							? registry.botMemoryModel(organizationId)
+							: hosted(organizationId, "botMemoryModel"),
+						unavailable,
+					),
 			})
 		}),
 	)

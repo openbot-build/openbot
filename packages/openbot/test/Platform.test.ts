@@ -500,7 +500,7 @@ it(
 				],
 			)
 
-			// The Rules and Bot memory settings take only language models.
+			// The Bot memory setting takes only language models. The Rules setting takes both types.
 			const selection = (providerId: string, model: string) => ({
 				_tag: "Config.Selection",
 				provider: providerId,
@@ -515,13 +515,18 @@ it(
 					...changes,
 				})
 			}
-			for (const changes of [
-				{ rulesModel: selection(both.id, "jev-latest") },
-				{ botMemoryModel: selection(decisions.id, "jev-latest") },
+			const refused = await update({
+				botMemoryModel: selection(decisions.id, "jev-latest"),
+			})
+			assert.strictEqual(refused.status, 400)
+			assert.strictEqual((await refused.json())._tag, "SettingsInvalid")
+			for (const rulesModel of [
+				selection(decisions.id, "jev-latest"),
+				selection(both.id, "chat"),
 			]) {
-				const refused = await update(changes)
-				assert.strictEqual(refused.status, 400, JSON.stringify(changes))
-				assert.strictEqual((await refused.json())._tag, "SettingsInvalid")
+				const saved = await update({ rulesModel })
+				assert.strictEqual(saved.status, 200, await saved.clone().text())
+				assert.deepStrictEqual((await saved.json()).rulesModel, rulesModel)
 			}
 		} finally {
 			await host.close()
