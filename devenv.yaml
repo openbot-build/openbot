@@ -1,0 +1,12 @@
+nixpkgs:
+  allow_unfree: true
+inputs:
+  nixpkgs:
+    url: github:cachix/devenv-nixpkgs/rolling
+  nixpkgs-multiverse:
+    url: github:fzakaria/nixpkgs-multiverse
+  treefmt-nix:
+    url: github:numtide/treefmt-nix
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
