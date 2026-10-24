@@ -1,10 +1,17 @@
 // These functions take all their inputs at once. A pipeable form does not help here.
 // @effect-diagnostics missingPipeableSignature:off
 import { randomBytes } from "node:crypto"
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
-import { Data, Effect, Option, Schema } from "effect"
+import {
+	Data,
+	Effect,
+	Config as EffectConfig,
+	FileSystem,
+	Option,
+	type PlatformError,
+	Schema,
+} from "effect"
 
 /** A failure that the person can read and act on. */
 export class ComputerError extends Data.TaggedError("ComputerError")<{
@@ -40,46 +47,71 @@ export type ComputerConfig = typeof ComputerConfig.Type
 const ConfigJson = Schema.fromJsonString(ComputerConfig)
 
 /** `$XDG_CONFIG_HOME/openbot/computer.json`, or `~/.config/openbot/computer.json`. */
-export const path = (
-	env: Readonly<Record<string, string | undefined>> = process.env,
-): string => {
-	const base = env["XDG_CONFIG_HOME"]
-	return join(
-		base !== undefined && base !== "" ? base : join(homedir(), ".config"),
+export const pathIn = (
+	configHome: Option.Option<string>,
+	home: string,
+): string =>
+	join(
+		Option.getOrElse(
+			Option.filter(configHome, (base) => base !== ""),
+			() => join(home, ".config"),
+		),
 		"openbot",
 		"computer.json",
 	)
-}
+
+/** The path of the config file, from the `XDG_CONFIG_HOME` variable. */
+export const path: Effect.Effect<string, ComputerError> = Effect.gen(
+	function* () {
+		const configHome = yield* EffectConfig.option(
+			EffectConfig.String("XDG_CONFIG_HOME"),
+		)
+		return pathIn(configHome, homedir())
+	},
+).pipe(
+	Effect.mapError(
+		(error) =>
+			new ComputerError({
+				message: `XDG_CONFIG_HOME cannot be read: ${error.message}`,
+			}),
+	),
+)
+
+const cannot =
+	(action: string, file: string) => (error: PlatformError.PlatformError) =>
+		new ComputerError({
+			message: `Could not ${action} ${file}: ${error.message}`,
+		})
 
 /** The saved config, or none when the file does not exist. */
 export const read = (
 	file: string,
-): Effect.Effect<Option.Option<ComputerConfig>, ComputerError> =>
-	Effect.tryPromise({
-		try: () =>
-			readFile(file, "utf8").catch((error: NodeJS.ErrnoException) => {
-				if (error.code === "ENOENT") return undefined
-				throw error
-			}),
-		catch: (error) =>
-			new ComputerError({
-				message: `Could not read ${file}: ${String(error)}`,
-			}),
-	}).pipe(
-		Effect.flatMap((text) =>
-			text === undefined
-				? Effect.succeedNone
-				: Schema.decodeEffect(ConfigJson)(text).pipe(
-						Effect.asSome,
-						Effect.mapError(
-							() =>
-								new ComputerError({
-									message: `${file} is not a valid config. Run 'openbot computer pair' again.`,
-								}),
-						),
-					),
-		),
-	)
+): Effect.Effect<
+	Option.Option<ComputerConfig>,
+	ComputerError,
+	FileSystem.FileSystem
+> =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem
+		const text = yield* fs.readFileString(file).pipe(
+			Effect.asSome,
+			Effect.catchIf(
+				(error) => error.reason._tag === "NotFound",
+				() => Effect.succeedNone,
+			),
+			Effect.mapError(cannot("read", file)),
+		)
+		if (Option.isNone(text)) return Option.none()
+		return yield* Schema.decodeEffect(ConfigJson)(text.value).pipe(
+			Effect.asSome,
+			Effect.mapError(
+				() =>
+					new ComputerError({
+						message: `${file} is not a valid config. Run 'openbot computer pair' again.`,
+					}),
+			),
+		)
+	})
 
 /**
  * Saves the config so that only the owner can read and write it (mode 0600).
@@ -88,23 +120,18 @@ export const read = (
 export const write = (
 	file: string,
 	config: ComputerConfig,
-): Effect.Effect<void, ComputerError> =>
-	Effect.tryPromise({
-		try: async () => {
-			await mkdir(dirname(file), { recursive: true, mode: 0o700 })
-			const next = `${file}.${process.pid}.tmp`
-			await writeFile(next, `${JSON.stringify(config, null, "\t")}\n`, {
-				mode: 0o600,
-			})
-			// The mode of writeFile is changed by the umask, so set it again.
-			await chmod(next, 0o600)
-			await rename(next, file)
-		},
-		catch: (error) =>
-			new ComputerError({
-				message: `Could not write ${file}: ${String(error)}`,
-			}),
-	})
+): Effect.Effect<void, ComputerError, FileSystem.FileSystem> =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem
+		const next = `${file}.${process.pid}.tmp`
+		yield* fs.makeDirectory(dirname(file), { recursive: true, mode: 0o700 })
+		yield* fs.writeFileString(next, `${JSON.stringify(config, null, "\t")}\n`, {
+			mode: 0o600,
+		})
+		// The mode of a new file is changed by the umask, so set it again.
+		yield* fs.chmod(next, 0o600)
+		yield* fs.rename(next, file)
+	}).pipe(Effect.mapError(cannot("write", file)))
 
 /** A new random machine ID: 32 hex characters. */
 export const makeMachineId = (): string => randomBytes(16).toString("hex")

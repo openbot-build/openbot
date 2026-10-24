@@ -1,5 +1,5 @@
 import { ComputersApi } from "@openbot-build/api"
-import { Effect, FiberSet, Ref, Schema } from "effect"
+import { Effect, FiberSet, type FileSystem, Ref, Schema } from "effect"
 import { Socket } from "effect/socket"
 import * as Calls from "./Calls.ts"
 import * as Config from "./Config.ts"
@@ -67,7 +67,11 @@ export const connect = (options: {
 	readonly calls?: Calls.Options
 	readonly backoff?: Backoff
 	readonly events?: Events
-}): Effect.Effect<never, Config.ComputerError, Socket.WebSocketConstructor> =>
+}): Effect.Effect<
+	never,
+	Config.ComputerError,
+	Socket.WebSocketConstructor | FileSystem.FileSystem
+> =>
 	Effect.gen(function* () {
 		const calls = options.calls ?? Calls.defaultOptions()
 		const backoff = options.backoff ?? defaultBackoff
@@ -81,6 +85,8 @@ export const connect = (options: {
 			})
 			const reader = yield* socket.reader
 			const writer = yield* socket.writer
+			// The connector makes each message itself from the same schema, so a message
+			// that cannot be encoded is a bug here, not a failure of the connection.
 			const send = (message: ComputersApi.FromConnector) =>
 				encodeMessage(message).pipe(Effect.orDie, Effect.flatMap(writer.write))
 			yield* send({ _tag: "Hello", hello: Machine.hello() })
@@ -113,6 +119,8 @@ export const connect = (options: {
 			}
 		}).pipe(Effect.scoped)
 
+		// This loop is not `Effect.retry`, because the count of failures goes back to zero
+		// after each good connection, and the person sees each wait before it starts.
 		while (true) {
 			const error = yield* Effect.flip(session)
 			if (isDenied(error))

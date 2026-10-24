@@ -2,9 +2,9 @@
 // @effect-diagnostics strictEffectProvide:off
 import type { AddressInfo } from "node:net"
 import { tmpdir } from "node:os"
-import { NodeSocket } from "@effect/platform-node"
+import { NodeFileSystem, NodeSocket } from "@effect/platform-node"
 import { assert, it } from "@effect/vitest"
-import { Cause, Effect, Exit, Fiber } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import { type WebSocket, WebSocketServer } from "ws"
 import * as Connect from "../src/Connect.ts"
 
@@ -64,7 +64,14 @@ const start = (url: string, token: string) =>
 			config: { url, token, machineId: "machine-0123456789" },
 			calls: { maxOutput: 1024 * 1024, home: tmpdir() },
 			backoff: { firstMs: 10, maxMs: 50 },
-		}).pipe(Effect.provide(NodeSocket.layerWebSocketConstructorWS)),
+		}).pipe(
+			Effect.provide(
+				Layer.merge(
+					NodeSocket.layerWebSocketConstructorWS,
+					NodeFileSystem.layer,
+				),
+			),
+		),
 	)
 
 it("the WebSocket address comes from the OpenBot address", () => {

@@ -1,19 +1,18 @@
 // These functions take all their inputs at once. A pipeable form does not help here.
 // @effect-diagnostics missingPipeableSignature:off
 import { spawn } from "node:child_process"
-import {
-	lstat,
-	mkdir,
-	readdir,
-	readFile,
-	rm,
-	stat,
-	writeFile,
-} from "node:fs/promises"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import type { ComputersApi } from "@openbot-build/api"
-import { Data, Effect, type Schema } from "effect"
+import {
+	Clock,
+	Data,
+	Effect,
+	FileSystem,
+	Option,
+	type PlatformError,
+	type Schema,
+} from "effect"
 
 /** A call that did not work. The message goes back to OpenBot in a `Failed` reply. */
 export class CallFailed extends Data.TaggedError("CallFailed")<{
@@ -76,8 +75,24 @@ export const run = (
 	request: ComputersApi.RunCommandRequest,
 	options: Options,
 ): Effect.Effect<ComputersApi.CommandResult, CallFailed> =>
-	Effect.callback<ComputersApi.CommandResult, CallFailed>((resume) => {
-		const started = Date.now()
+	Effect.gen(function* () {
+		const started = yield* Clock.currentTimeMillis
+		const result = yield* spawnCommand(request, options)
+		const ended = yield* Clock.currentTimeMillis
+		return { ...result, durationMs: ended - started }
+	})
+
+type Spawned = Omit<ComputersApi.CommandResult, "durationMs">
+
+/**
+ * The Node.js process API works with callbacks, so this one adapter speaks to it.
+ * The finalizer kills the process group when the fiber is interrupted.
+ */
+const spawnCommand = (
+	request: ComputersApi.RunCommandRequest,
+	options: Options,
+): Effect.Effect<Spawned, CallFailed> =>
+	Effect.callback<Spawned, CallFailed>((resume) => {
 		const stdout = tail(options.maxOutput)
 		const stderr = tail(options.maxOutput)
 		let timedOut = false
@@ -122,7 +137,6 @@ export const run = (
 					stdout: out.text,
 					stderr: err.text,
 					truncated: out.truncated || err.truncated,
-					durationMs: Date.now() - started,
 				}),
 			)
 		})
@@ -132,91 +146,105 @@ export const run = (
 		})
 	})
 
-const list = async (folder: string) => {
-	const names = await readdir(folder)
-	return Promise.all(
-		names.map(async (name) => {
-			const info = await lstat(join(folder, name))
-			return {
-				name,
-				kind: info.isSymbolicLink()
-					? ("link" as const)
-					: info.isDirectory()
-						? ("directory" as const)
-						: ("file" as const),
-				size: info.size,
-				modifiedAt: info.mtimeMs,
-			}
-		}),
-	)
-}
+const kindOf = (type: FileSystem.File.Type) =>
+	type === "SymbolicLink"
+		? ("link" as const)
+		: type === "Directory"
+			? ("directory" as const)
+			: ("file" as const)
 
-const operate = (
+const failed = (error: PlatformError.PlatformError) =>
+	new CallFailed({ message: error.message })
+
+const list = (fs: FileSystem.FileSystem, folder: string) =>
+	fs.readDirectory(folder).pipe(
+		Effect.flatMap((names) =>
+			Effect.forEach(
+				names,
+				(name) =>
+					fs.lstat(join(folder, name)).pipe(
+						Effect.map((info) => ({
+							name,
+							kind: kindOf(info.type),
+							size: Number(info.size),
+							modifiedAt: Option.match(info.mtime, {
+								onNone: () => 0,
+								onSome: (date) => date.getTime(),
+							}),
+						})),
+					),
+				{ concurrency: "unbounded" },
+			),
+		),
+	)
+
+const operate = Effect.fnUntraced(function* (
 	operation: Operation,
 	options: Options,
-): Effect.Effect<Schema.Json, CallFailed> => {
+): Effect.fn.Return<Schema.Json, CallFailed, FileSystem.FileSystem> {
+	const fs = yield* FileSystem.FileSystem
 	const at = (path: string) => resolve(options.home, path)
-	const attempt = <A>(work: () => Promise<A>) =>
-		Effect.tryPromise({
-			try: work,
-			catch: (error) =>
-				new CallFailed({
-					message: error instanceof Error ? error.message : String(error),
-				}),
-		})
 	switch (operation._tag) {
 		case "Run": {
 			// Node says "spawn bash ENOENT" when the folder is missing, so check the folder first.
 			const folder = at(operation.request.cwd ?? ".")
-			return attempt(() => stat(folder)).pipe(
-				Effect.mapError(
-					() =>
-						new CallFailed({ message: `The folder ${folder} does not exist.` }),
-				),
-				Effect.flatMap((info) =>
-					info.isDirectory()
-						? run(operation.request, options)
-						: Effect.fail(
-								new CallFailed({ message: `${folder} is not a folder.` }),
-							),
-				),
-			)
+			const info = yield* fs
+				.stat(folder)
+				.pipe(
+					Effect.mapError(
+						() =>
+							new CallFailed({
+								message: `The folder ${folder} does not exist.`,
+							}),
+					),
+				)
+			if (info.type !== "Directory")
+				return yield* new CallFailed({ message: `${folder} is not a folder.` })
+			return yield* run(operation.request, options)
 		}
-		case "Read":
-			return attempt(async () => ({
+		case "Read": {
+			const bytes = yield* fs
+				.readFile(at(operation.path))
+				.pipe(Effect.mapError(failed))
+			return {
 				path: operation.path,
 				encoding: operation.encoding,
-				content: (await readFile(at(operation.path))).toString(
-					operation.encoding,
-				),
-			}))
-		case "Write":
-			return attempt(async () => {
-				const file = at(operation.file.path)
-				await mkdir(dirname(file), { recursive: true })
-				await writeFile(
-					file,
-					Buffer.from(operation.file.content, operation.file.encoding),
+				content: Buffer.from(bytes).toString(operation.encoding),
+			}
+		}
+		case "Write": {
+			const file = at(operation.file.path)
+			yield* fs
+				.makeDirectory(dirname(file), { recursive: true })
+				.pipe(
+					Effect.andThen(
+						fs.writeFile(
+							file,
+							Buffer.from(operation.file.content, operation.file.encoding),
+						),
+					),
+					Effect.mapError(failed),
 				)
-				return null
-			})
+			return null
+		}
 		case "List":
-			return attempt(() => list(at(operation.path)))
+			return yield* list(fs, at(operation.path)).pipe(Effect.mapError(failed))
 		case "Remove":
-			return attempt(async () => {
-				await rm(at(operation.path), { recursive: true })
-				return null
-			})
+			yield* fs
+				.remove(at(operation.path), { recursive: true })
+				.pipe(Effect.mapError(failed))
+			return null
 		case "Screenshot":
 		case "Desktop":
-			return Effect.fail(
-				new CallFailed({ message: "This machine has no desktop." }),
-			)
+			return yield* new CallFailed({ message: "This machine has no desktop." })
 	}
-}
+})
 
 /** Does one call and answers with the same `id`. It never fails: a failure becomes a `Failed` reply. */
-export const execute = (call: Call, options: Options): Effect.Effect<Reply> =>
+export const execute = (
+	call: Call,
+	options: Options,
+): Effect.Effect<Reply, never, FileSystem.FileSystem> =>
 	operate(call.operation, options).pipe(
 		Effect.map((value): Reply => ({
 			id: call.id,

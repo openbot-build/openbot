@@ -35,7 +35,7 @@ const pair = Command.make("pair", {
 	),
 	Command.withHandler(({ url }) =>
 		Effect.gen(function* () {
-			const file = Config.path()
+			const file = yield* Config.path
 			const { computer } = yield* Pair.pair({
 				url,
 				file,
@@ -69,7 +69,7 @@ const connect = Command.make("connect").pipe(
 	),
 	Command.withHandler(() =>
 		Effect.gen(function* () {
-			const config = yield* readSaved(Config.path())
+			const config = yield* readSaved(yield* Config.path)
 			yield* Console.log(`Connecting to ${config.url}...`)
 			return yield* Connect.connect({
 				config,
@@ -91,7 +91,7 @@ const status = Command.make("status").pipe(
 	),
 	Command.withHandler(() =>
 		Effect.gen(function* () {
-			const file = Config.path()
+			const file = yield* Config.path
 			const config = yield* readSaved(file)
 			yield* Console.log(
 				[

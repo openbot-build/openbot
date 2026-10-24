@@ -1,3 +1,5 @@
+// The tests give each program its services at the edge.
+// @effect-diagnostics strictEffectProvide:off
 import {
 	existsSync,
 	mkdtempSync,
@@ -8,6 +10,7 @@ import {
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { ComputersApi } from "@openbot-build/api"
+import { NodeFileSystem } from "@effect/platform-node"
 import { afterAll, assert, it } from "@effect/vitest"
 import { Effect } from "effect"
 import * as Calls from "../src/Calls.ts"
@@ -19,7 +22,10 @@ const options: Calls.Options = { maxOutput: 1024 * 1024, home }
 const call = (
 	operation: ComputersApi.ConnectorCall["operation"],
 	callOptions: Calls.Options = options,
-) => Calls.execute({ id: "call-1", operation }, callOptions)
+) =>
+	Calls.execute({ id: "call-1", operation }, callOptions).pipe(
+		Effect.provide(NodeFileSystem.layer),
+	)
 
 const done = Effect.fnUntraced(function* (
 	operation: ComputersApi.ConnectorCall["operation"],

@@ -1,6 +1,6 @@
 import { ComputersApi } from "@openbot-build/api"
-import { Effect, Option } from "effect"
-import { HttpClient } from "effect/http"
+import { Clock, Effect, type FileSystem, Option, type Schema } from "effect"
+import { HttpClient, type HttpClientError } from "effect/http"
 import { HttpApi, HttpApiClient } from "effect/http-api"
 import * as Config from "./Config.ts"
 import * as Machine from "./Machine.ts"
@@ -18,30 +18,35 @@ export interface Output {
 	) => Effect.Effect<void>
 }
 
-const tagOf = (value: unknown): unknown =>
-	typeof value === "object" && value !== null && "_tag" in value
-		? value._tag
-		: undefined
-
-const reasonOf = (value: unknown): unknown =>
-	typeof value === "object" && value !== null && "reason" in value
-		? value.reason
-		: undefined
+/** The ways a pairing call can fail. */
+type PairingFailure =
+	| ComputersApi.PairingInvalid
+	| ComputersApi.ComputersUnavailable
+	| HttpClientError.HttpClientError
+	| Schema.SchemaError
 
 const explain =
 	(url: string) =>
-	(error: unknown): Config.ComputerError => {
-		const tag = tagOf(error)
-		const message =
-			tag === "PairingInvalid"
-				? "OpenBot ended this pairing. Someone denied it, or it is too old. Run 'openbot computer pair' again."
-				: tag === "ComputersUnavailable"
-					? "This OpenBot does not have Computers turned on."
-					: tag === "HttpClientError" &&
-						  tagOf(reasonOf(error)) === "TransportError"
-						? `Could not reach OpenBot at ${url}.`
-						: `OpenBot did not answer as expected: ${error instanceof Error ? error.message : String(error)}`
-		return new Config.ComputerError({ message })
+	(error: PairingFailure): Config.ComputerError => {
+		switch (error._tag) {
+			case "PairingInvalid":
+				return new Config.ComputerError({
+					message:
+						"OpenBot ended this pairing. Someone denied it, or it is too old. Run 'openbot computer pair' again.",
+				})
+			case "ComputersUnavailable":
+				return new Config.ComputerError({
+					message: "This OpenBot does not have Computers turned on.",
+				})
+			case "HttpClientError":
+				if (error.reason._tag === "TransportError")
+					return new Config.ComputerError({
+						message: `Could not reach OpenBot at ${url}.`,
+					})
+		}
+		return new Config.ComputerError({
+			message: `OpenBot did not answer as expected: ${error.message}`,
+		})
 	}
 
 /**
@@ -59,7 +64,7 @@ export const pair = (options: {
 		readonly config: Config.ComputerConfig
 	},
 	Config.ComputerError,
-	HttpClient.HttpClient
+	HttpClient.HttpClient | FileSystem.FileSystem
 > =>
 	Effect.gen(function* () {
 		const url = yield* Config.parseOrigin(options.url)
@@ -88,7 +93,7 @@ export const pair = (options: {
 		})
 		const intervalMs = Math.max(1, pairing.interval) * 1000
 		while (true) {
-			if (Date.now() >= pairing.expiresAt)
+			if ((yield* Clock.currentTimeMillis) >= pairing.expiresAt)
 				return yield* new Config.ComputerError({
 					message:
 						"Nobody approved the code in time. Run 'openbot computer pair' again.",
@@ -97,8 +102,8 @@ export const pair = (options: {
 			const status = yield* poll.pipe(
 				Effect.asSome,
 				Effect.catch((error) =>
-					tagOf(error) === "PairingInvalid" ||
-					tagOf(error) === "ComputersUnavailable"
+					error._tag === "PairingInvalid" ||
+					error._tag === "ComputersUnavailable"
 						? Effect.fail(explain(url)(error))
 						: // The network can fail for a moment. Ask again at the next interval.
 							Effect.succeedNone,

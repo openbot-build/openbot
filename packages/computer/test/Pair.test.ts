@@ -9,8 +9,9 @@ import { mkdtempSync, rmSync, statSync } from "node:fs"
 import type { AddressInfo } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { NodeFileSystem } from "@effect/platform-node"
 import { afterAll, assert, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { FetchHttpClient } from "effect/http"
 import * as Config from "../src/Config.ts"
 import * as Pair from "../src/Pair.ts"
@@ -75,7 +76,7 @@ const pair = (url: string, file: string) => {
 		},
 	}).pipe(
 		Effect.map((result) => ({ ...result, shown })),
-		Effect.provide(FetchHttpClient.layer),
+		Effect.provide(Layer.merge(FetchHttpClient.layer, NodeFileSystem.layer)),
 	)
 }
 
@@ -147,7 +148,9 @@ it.live("pair shows the code, polls until approval, and saves the token", () =>
 		const second = yield* pair(`${openbot.url}/`, file)
 		assert.strictEqual(starts[1].machineId, start.machineId)
 		assert.strictEqual(second.config.token, "token-2")
-		const saved = yield* Config.read(file)
+		const saved = yield* Config.read(file).pipe(
+			Effect.provide(NodeFileSystem.layer),
+		)
 		assert.strictEqual(
 			saved._tag === "Some" ? saved.value.token : undefined,
 			"token-2",
