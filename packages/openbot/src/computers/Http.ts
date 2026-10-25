@@ -13,7 +13,7 @@ export interface Reply {
 const decoder = new TextDecoder()
 
 export const timedOut = Effect.fail(
-	new ComputerCallFailed({
+	ComputerCallFailed.make({
 		message: "The Computer provider did not answer in time",
 		retry: true,
 	}),
@@ -32,12 +32,11 @@ export const send = (
 				body: new Uint8Array(buffer),
 			})),
 		),
-		Effect.mapError(
-			(cause) =>
-				new ComputerCallFailed({
-					message: `The Computer provider could not be reached: ${String(cause)}`,
-					retry: true,
-				}),
+		Effect.mapError((cause) =>
+			ComputerCallFailed.make({
+				message: `The Computer provider could not be reached: ${String(cause)}`,
+				retry: true,
+			}),
 		),
 		Effect.timeoutOrElse({ duration: timeoutMs, orElse: () => timedOut }),
 	)
@@ -88,7 +87,7 @@ const detail = (reply: Reply) => {
 
 /** Turns a failed answer into a call failure. A wrong key does not get better with a retry. */
 export const failed = (reply: Reply, what: string) =>
-	new ComputerCallFailed({
+	ComputerCallFailed.make({
 		message:
 			reply.status === 401 || reply.status === 403
 				? `The Computer provider did not accept the API key (HTTP ${reply.status})${detail(reply)}`

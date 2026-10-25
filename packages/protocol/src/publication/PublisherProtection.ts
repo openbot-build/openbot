@@ -43,7 +43,7 @@ export const currentIdentity = Effect.gen(function* () {
 		Option.flatMap(request, (request) =>
 			Option.fromUndefinedOr(identities.get(request)),
 		),
-	).pipe(Effect.mapError(() => new TokenRejected({ reason: "Missing" })))
+	).pipe(Effect.mapError(() => TokenRejected.make({ reason: "Missing" })))
 })
 
 const Request = Schema.Struct({
@@ -140,12 +140,11 @@ const filterResponse = (
 			Match.tag("Uint8Array", (body) => Stream.succeed(body.body)),
 			Match.tag("Stream", (body) =>
 				body.stream.pipe(
-					Stream.mapError(
-						() =>
-							new Document.InvalidDocument({
-								kind: "Publication",
-								issue: "Could not read the protected list response",
-							}),
+					Stream.mapError(() =>
+						Document.InvalidDocument.make({
+							kind: "Publication",
+							issue: "Could not read the protected list response",
+						}),
 					),
 				),
 			),
@@ -326,7 +325,7 @@ export const validate = Effect.fn("Protection.validate")(function* (
 		new URL(options.resource).origin !== new URL(options.metadataUrl).origin ||
 		new URL(options.resource).pathname === new URL(options.metadataUrl).pathname
 	)
-		return yield* new Document.InvalidDocument({
+		return yield* Document.InvalidDocument.make({
 			kind: "Publication",
 			issue:
 				"PRM must use a separate path on the protected resource origin and declare an issuer",

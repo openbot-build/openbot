@@ -102,7 +102,7 @@ export const guardedLookup =
 					addresses.some((a) => !allow(a.address, hostname))
 				) {
 					callback(
-						new Network.NetworkError({
+						Network.NetworkError.make({
 							reason: "BlockedTarget",
 							message: "DNS resolved to a forbidden connection address",
 						}),
@@ -152,7 +152,7 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 						(origins) => !origins.includes(url.origin),
 					)
 				) {
-					return yield* new Network.NetworkError({
+					return yield* Network.NetworkError.make({
 						reason: "BlockedTarget",
 						message: "Origin is not permitted in this user network",
 					})
@@ -163,7 +163,7 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 						allow(host, host)
 							? Effect.void
 							: Effect.fail(
-									new Network.NetworkError({
+									Network.NetworkError.make({
 										reason: "BlockedTarget",
 										message: "IP literal is a forbidden connection address",
 									}),
@@ -202,7 +202,7 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 								Effect.mapError((e) =>
 									e.reason.cause instanceof Network.NetworkError
 										? e.reason.cause
-										: new Network.NetworkError({
+										: Network.NetworkError.make({
 												reason: "Transport",
 												message: e.reason._tag,
 											}),
@@ -216,14 +216,14 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 						) {
 							yield* Scope.close(hopScope, Exit.void)
 							if (hop >= maxRedirects)
-								return yield* new Network.NetworkError({
+								return yield* Network.NetworkError.make({
 									reason: "Redirect",
 									message: "Redirect limit exceeded",
 								})
 							const target = yield* Effect.try({
 								try: () => new URL(location, url).href,
 								catch: () =>
-									new Network.NetworkError({
+									Network.NetworkError.make({
 										reason: "Redirect",
 										message: "Invalid redirect target",
 									}),
@@ -235,7 +235,7 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 								([301, 302, 303].includes(response.status) ||
 									new URL(checked).origin !== new URL(url).origin)
 							) {
-								return yield* new Network.NetworkError({
+								return yield* Network.NetworkError.make({
 									reason: "Redirect",
 									message:
 										"Redirect would change a business request target or method",
@@ -263,12 +263,11 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 							return yield* follow(next, hop + 1)
 						}
 						let body = response.stream.pipe(
-							Stream.mapError(
-								(e) =>
-									new Network.NetworkError({
-										reason: "Transport",
-										message: e.reason._tag,
-									}),
+							Stream.mapError((e) =>
+								Network.NetworkError.make({
+									reason: "Transport",
+									message: e.reason._tag,
+								}),
 							),
 						)
 						const encoding = response.headers["content-encoding"]
@@ -276,7 +275,7 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 							.trim()
 						if (encoding !== undefined && encoding !== "identity") {
 							if (!["gzip", "deflate", "br"].includes(encoding))
-								return yield* new Network.NetworkError({
+								return yield* Network.NetworkError.make({
 									reason: "Encoding",
 									message: "Unsupported content encoding",
 								})
@@ -289,7 +288,7 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 												? createBrotliDecompress()
 												: createInflate(),
 									onError: () =>
-										new Network.NetworkError({
+										Network.NetworkError.make({
 											reason: "Encoding",
 											message: "Could not decode the HTTP body",
 										}),
@@ -336,7 +335,7 @@ const layerNetwork = (options: PublicOptions, guard: Guard) => {
 					duration: timeoutMs,
 					orElse: () =>
 						Effect.fail(
-							new Network.NetworkError({
+							Network.NetworkError.make({
 								reason: "Timeout",
 								message: "Document fetch timed out",
 							}),

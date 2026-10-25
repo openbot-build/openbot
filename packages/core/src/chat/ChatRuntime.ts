@@ -302,7 +302,7 @@ export const make = <
 			return current?.id === turn
 				? Effect.succeed(current)
 				: Effect.fail(
-						new Turn.Conflict({
+						Turn.Conflict.make({
 							chat: view.chat.id,
 							turn,
 							message: "The target Turn is no longer current",
@@ -431,13 +431,13 @@ export const make = <
 					update: (view) =>
 						Effect.gen(function* () {
 							if (HashMap.has(yield* SynchronizedRef.get(active), view.chat.id))
-								return yield* new Chat.Conflict({
+								return yield* Chat.Conflict.make({
 									chat: view.chat.id,
 									message: "The previous Turn is still releasing its resources",
 								})
 							const previous = Chat.currentTurn(view.chat)
 							if (previous !== undefined && !Turn.isTerminal(previous.status))
-								return yield* new Chat.Conflict({
+								return yield* Chat.Conflict.make({
 									chat: view.chat.id,
 									message: "The Chat already has an unfinished Turn",
 								})
@@ -445,7 +445,7 @@ export const make = <
 								options.canStart !== undefined &&
 								!(yield* options.canStart(view))
 							)
-								return yield* new Chat.Conflict({
+								return yield* Chat.Conflict.make({
 									chat: view.chat.id,
 									message: "Another process runs the Turns of this Chat",
 								})
@@ -602,7 +602,7 @@ export const make = <
 					!Number.isSafeInteger(input.targetTokens) ||
 					input.targetTokens <= 0
 				)
-					return yield* new ContextCompaction.ContextCompactionError({
+					return yield* ContextCompaction.ContextCompactionError.make({
 						reason: "invalid-target",
 						message: "The target must be a positive safe integer",
 					})
@@ -611,14 +611,14 @@ export const make = <
 					input.expected !== undefined &&
 					view.chat.revision !== input.expected
 				)
-					return yield* new ContextCompaction.ContextCompactionError({
+					return yield* ContextCompaction.ContextCompactionError.make({
 						reason: "head-conflict",
 						message: "The Chat changed since it was read",
 					})
 				const selection = input.selection ?? view.chat.settings.model
 				const service = yield* compactionService
 				if (selection === undefined || Option.isNone(service))
-					return yield* new ContextCompaction.ContextCompactionError({
+					return yield* ContextCompaction.ContextCompactionError.make({
 						reason: "unsupported",
 						message: "The current model has no compaction service or selection",
 					})
@@ -639,7 +639,7 @@ export const make = <
 						(ConfigurationOperations.contextLimits(model).inputTokens ??
 							Infinity)
 				)
-					return yield* new ContextCompaction.ContextCompactionError({
+					return yield* ContextCompaction.ContextCompactionError.make({
 						reason: "input-too-large",
 						message: "The full input is larger than the model context window",
 					})
@@ -675,7 +675,7 @@ export const make = <
 									? yield* Effect.serviceOption(LanguageModel.LanguageModel)
 									: Option.none()
 							if (Option.isNone(languageModel))
-								return yield* new ContextCompaction.ContextCompactionError({
+								return yield* ContextCompaction.ContextCompactionError.make({
 									reason: "unsupported",
 									message:
 										"No provider or LanguageModel is available for non-native compaction",
@@ -692,7 +692,7 @@ export const make = <
 				)
 				const afterTokens = yield* compaction.count({ ...request, window })
 				if (afterTokens > input.targetTokens)
-					return yield* new ContextCompaction.ContextCompactionError({
+					return yield* ContextCompaction.ContextCompactionError.make({
 						reason: "target-not-reached",
 						message: `The compacted context has ${afterTokens} tokens, which is more than the target of ${input.targetTokens}`,
 					})
@@ -723,7 +723,7 @@ export const make = <
 					SynchronizedRef.modifyEffect(active, (entries) =>
 						Effect.gen(function* () {
 							if (HashMap.has(entries, chat))
-								return yield* new Turn.Conflict({
+								return yield* Turn.Conflict.make({
 									chat,
 									turn,
 									message: "The Chat already has an active runner",
@@ -933,7 +933,7 @@ export const make = <
 													limits = ConfigurationOperations.contextLimits(model),
 													autoCompactTokens = limits.autoCompactTokens
 												if (tokens > (limits.inputTokens ?? Infinity))
-													return yield* new ContextCompaction.ContextCompactionError(
+													return yield* ContextCompaction.ContextCompactionError.make(
 														{
 															reason: "input-too-large",
 															message:
@@ -1708,7 +1708,7 @@ export const make = <
 					...(action === undefined ? {} : { action }),
 				})
 				if (accepted === undefined)
-					return yield* new Chat.Conflict({
+					return yield* Chat.Conflict.make({
 						chat: input.chat,
 						message: "The Turn could not start",
 					})
@@ -1729,7 +1729,7 @@ export const make = <
 				const view = yield* store.read(input.chat),
 					turn = yield* requireTurn(view, input.turn)
 				if (Turn.isTerminal(turn.status))
-					return yield* new Turn.Conflict({
+					return yield* Turn.Conflict.make({
 						chat: input.chat,
 						turn: input.turn,
 						message: "The Turn has already ended",
@@ -1874,7 +1874,7 @@ export const make = <
 								!Option.exists(running, (entry) => entry.turn === turn) ||
 								Turn.isTerminal(record.status)
 							)
-								return yield* new Turn.Conflict({
+								return yield* Turn.Conflict.make({
 									chat: view.chat.id,
 									turn,
 									message:

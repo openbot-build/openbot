@@ -68,12 +68,11 @@ export const compact: ContextCompaction.NonNativeCompact = (input) =>
 		if (boundary === 0) return ContextWindow.fromPrompt(input.prompt)
 		const source = Prompt.fromMessages(messages.slice(0, boundary))
 		const encoded = yield* Schema.encodeEffect(PromptJson)(source).pipe(
-			Effect.mapError(
-				(error) =>
-					new ContextCompaction.ContextCompactionError({
-						reason: "request-failed",
-						message: `Failed to encode the summary input: ${error.message}`,
-					}),
+			Effect.mapError((error) =>
+				ContextCompaction.ContextCompactionError.make({
+					reason: "request-failed",
+					message: `Failed to encode the summary input: ${error.message}`,
+				}),
 			),
 		)
 		const response = yield* LanguageModel.generateText({
@@ -86,16 +85,15 @@ export const compact: ContextCompaction.NonNativeCompact = (input) =>
 			]),
 			toolChoice: "none",
 		}).pipe(
-			Effect.mapError(
-				(error) =>
-					new ContextCompaction.ContextCompactionError({
-						reason: "request-failed",
-						message: `Failed to generate the summary: ${error.message}`,
-					}),
+			Effect.mapError((error) =>
+				ContextCompaction.ContextCompactionError.make({
+					reason: "request-failed",
+					message: `Failed to generate the summary: ${error.message}`,
+				}),
 			),
 		)
 		if (response.text.trim().length === 0 || response.finishReason === "length")
-			return yield* new ContextCompaction.ContextCompactionError({
+			return yield* ContextCompaction.ContextCompactionError.make({
 				reason: "request-failed",
 				message: "The summary is empty, or the output token limit cut it short",
 			})

@@ -211,7 +211,7 @@ const stored = <A, E, R>(
 ): Effect.Effect<A, Exclude<E, DatabaseError> | BillingStorageError, R> =>
 	Effect.mapError(effect, (error) =>
 		isDatabaseError(error)
-			? new BillingStorageError({ cause: error })
+			? BillingStorageError.make({ cause: error })
 			: // The guard above removed every database error.
 				(error as Exclude<E, DatabaseError>),
 	)
@@ -307,7 +307,7 @@ export const make = Effect.gen(function* () {
 				.from(organizations)
 				.where(eq(organizations.id, organizationId))
 			if (row === undefined)
-				return yield* new OrganizationMissing({ organizationId })
+				return yield* OrganizationMissing.make({ organizationId })
 		})
 
 	const creditsView = (organizationId: string) =>
@@ -475,7 +475,7 @@ export const make = Effect.gen(function* () {
 							)
 						for (const [index, budget] of hard.entries()) {
 							if (Number(spent?.["b" + index] ?? 0) >= budget.limitMicros)
-								return yield* new SpendingBlocked({
+								return yield* SpendingBlocked.make({
 									reason: "budget",
 									budgetId: budget.id,
 									message: `The ${budget.period} budget of this ${budget.scopeKind} is spent.`,
@@ -490,7 +490,7 @@ export const make = Effect.gen(function* () {
 								eq(organizationCredits.organizationId, call.organizationId),
 							)
 						if (credits?.enabled === true && credits.balanceMicros <= 0)
-							return yield* new SpendingBlocked({
+							return yield* SpendingBlocked.make({
 								reason: "credits",
 								message: "The organization has no credits left.",
 							})

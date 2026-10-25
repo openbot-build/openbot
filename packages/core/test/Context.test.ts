@@ -178,7 +178,7 @@ it.effect(
 				options: {
 					compact: () =>
 						Effect.fail(
-							new ContextCompaction.ContextCompactionError({
+							ContextCompaction.ContextCompactionError.make({
 								reason: "request-failed",
 								message: "failed",
 							}),

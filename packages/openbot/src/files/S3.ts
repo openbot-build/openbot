@@ -1,6 +1,6 @@
 // These helpers send one request and read its answer. A pipeable form does not help here.
 // @effect-diagnostics missingPipeableSignature:off
-import { Crypto, Data, Effect, Option } from "effect"
+import { Crypto, Effect, Option, Schema } from "effect"
 import { Hex } from "effect/encoding"
 import { HttpClientRequest, type HttpClient } from "effect/http"
 
@@ -18,9 +18,12 @@ export interface Target {
 	readonly forcePathStyle: boolean
 }
 
-export class StorageError extends Data.TaggedError("StorageError")<{
-	readonly message: string
-}> {}
+export class StorageError extends Schema.TaggedError<StorageError>()(
+	"StorageError",
+	{
+		message: Schema.String,
+	},
+) {}
 
 /** What a HEAD request says about an object. */
 export interface Head {
@@ -39,11 +42,10 @@ const digest = (value: string | Uint8Array) =>
 	Effect.gen(function* () {
 		const crypto = yield* Crypto.Crypto
 		return yield* crypto.digest("SHA-256", bytes(value)).pipe(
-			Effect.mapError(
-				(cause) =>
-					new StorageError({
-						message: `The object storage could not sign the request: ${cause.message}`,
-					}),
+			Effect.mapError((cause) =>
+				StorageError.make({
+					message: `The object storage could not sign the request: ${cause.message}`,
+				}),
 			),
 		)
 	})
@@ -273,7 +275,7 @@ const send = (
 		Effect.mapError((cause) =>
 			cause instanceof StorageError
 				? cause
-				: new StorageError({
+				: StorageError.make({
 						message: `The object storage could not ${what}: ${String(cause)}`,
 					}),
 		),
@@ -281,7 +283,7 @@ const send = (
 			duration: timeoutMs,
 			orElse: () =>
 				Effect.fail(
-					new StorageError({
+					StorageError.make({
 						message: `The object storage could not ${what}: no answer in time`,
 					}),
 				),
@@ -307,7 +309,7 @@ export const put = (
 			ok(reply.status)
 				? Effect.void
 				: Effect.fail(
-						new StorageError({
+						StorageError.make({
 							message: `The object storage could not store the file: status ${reply.status}`,
 						}),
 					),
@@ -332,7 +334,7 @@ export const get = (
 				: ok(reply.status)
 					? Effect.succeedSome(reply.body)
 					: Effect.fail(
-							new StorageError({
+							StorageError.make({
 								message: `The object storage could not read the file: status ${reply.status}`,
 							}),
 						),
@@ -355,7 +357,7 @@ export const head = (
 			if (reply.status === 404) return Effect.succeedNone
 			if (!ok(reply.status))
 				return Effect.fail(
-					new StorageError({
+					StorageError.make({
 						message: `The object storage could not check the file: status ${reply.status}`,
 					}),
 				)
@@ -366,7 +368,7 @@ export const head = (
 						contentType: reply.headers["content-type"],
 					})
 				: Effect.fail(
-						new StorageError({
+						StorageError.make({
 							message: `The object storage could not check the file: no content-length`,
 						}),
 					)
@@ -390,7 +392,7 @@ export const remove = (
 			ok(reply.status) || reply.status === 404
 				? Effect.void
 				: Effect.fail(
-						new StorageError({
+						StorageError.make({
 							message: `The object storage could not delete the file: status ${reply.status}`,
 						}),
 					),
@@ -412,7 +414,7 @@ export const createBucket = (
 			ok(reply.status) || reply.status === 409
 				? Effect.void
 				: Effect.fail(
-						new StorageError({
+						StorageError.make({
 							message: `The object storage could not make the bucket: status ${reply.status}`,
 						}),
 					),

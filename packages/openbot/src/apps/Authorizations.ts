@@ -144,7 +144,7 @@ const sdkFailure = (
 const policy = Client.InvocationPolicy.of({
 	check: (invocation) =>
 		Effect.fail(
-			new Client.PermissionDenied({
+			Client.PermissionDenied.make({
 				action: invocation.action,
 				target: invocation.target,
 			}),
@@ -532,18 +532,17 @@ export const make = (
 										returnTo: input.returnTo ?? "/",
 										resource,
 									}).pipe(
-										Effect.mapError(
-											(error) =>
-												new Store.StoreError({
-													reason:
-														error._tag === "ConnectionConflict"
-															? "Invalid"
-															: "Unavailable",
-													operation:
-														error._tag === "ConnectionConflict"
-															? "AuthorizationRevisionChanged"
-															: "Save App authorization",
-												}),
+										Effect.mapError((error) =>
+											Store.StoreError.make({
+												reason:
+													error._tag === "ConnectionConflict"
+														? "Invalid"
+														: "Unavailable",
+												operation:
+													error._tag === "ConnectionConflict"
+														? "AuthorizationRevisionChanged"
+														: "Save App authorization",
+											}),
 										),
 									),
 							}

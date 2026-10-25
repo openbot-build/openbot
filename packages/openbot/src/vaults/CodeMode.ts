@@ -168,7 +168,7 @@ const redactError = (
 	secrets: ReadonlyArray<Secret>,
 ): Client.Error => {
 	if (Schema.isSchemaError(error))
-		return new Client.ClientError({
+		return Client.ClientError.make({
 			reason: "Schema",
 			issue: "The App call does not match the schema of the tool.",
 		})
@@ -178,7 +178,7 @@ const redactError = (
 				result: redact(error.result, secrets) as typeof error.result,
 			})
 		case "ClientError":
-			return new Client.ClientError({
+			return Client.ClientError.make({
 				reason: error.reason,
 				issue: redactText(error.issue, secrets),
 			})
@@ -240,12 +240,11 @@ export const guard = (
 				const read = yield* vaults
 					.reveal(organizationId, entry.usable.item.id, fields)
 					.pipe(
-						Effect.mapError(
-							(error) =>
-								new Client.ClientError({
-									reason: "InputUnavailable",
-									issue: `OpenBot could not read the Vault item ${entry.alias}: ${error.message}`,
-								}),
+						Effect.mapError((error) =>
+							Client.ClientError.make({
+								reason: "InputUnavailable",
+								issue: `OpenBot could not read the Vault item ${entry.alias}: ${error.message}`,
+							}),
 						),
 					)
 				values = [
@@ -261,7 +260,7 @@ export const guard = (
 				.pipe(Effect.mapError((error) => redactError(error, secrets)))
 			// The answers to more input would come back on another path, where nothing takes the values out.
 			if (result._tag === "InputRequired")
-				return yield* new Client.ClientError({
+				return yield* Client.ClientError.make({
 					reason: "InputUnavailable",
 					issue:
 						"The App asked for more input. A call with Vault values cannot do that.",

@@ -2,7 +2,6 @@ import { BotsApi, ComputersApi } from "@openbot-build/api"
 import { type Chat, Operation, Plugin, type Turn } from "@openbot-build/core"
 import {
 	Context,
-	Data,
 	Effect,
 	type JsonSchema,
 	Layer,
@@ -58,9 +57,12 @@ export const names = {
 } as const
 
 /** Why a Computer tool did not do its work. The model reads the message. */
-export class ToolFailure extends Data.TaggedError("ToolFailure")<{
-	readonly message: string
-}> {}
+export class ToolFailure extends Schema.TaggedError<ToolFailure>()(
+	"ToolFailure",
+	{
+		message: Schema.String,
+	},
+) {}
 
 /** Any tagged error can be shown to the model. */
 type Shown = { readonly _tag: string }
@@ -270,7 +272,7 @@ export const make = Effect.gen(function* () {
 				id,
 			)
 			if (!may)
-				return yield* new ToolFailure({
+				return yield* ToolFailure.make({
 					message: `You may not use the Computer ${id}. Get it first with ${names.acquire}.`,
 				})
 			return current
@@ -722,7 +724,7 @@ export const make = Effect.gen(function* () {
 					const current = yield* work
 					const owner = { key: current.namespace, chat: current.chat }
 					const gone = () =>
-						new ToolFailure({
+						ToolFailure.make({
 							message: `There is no session ${session}. It ended, or it is not one of this Chat.`,
 						})
 					if (rows !== undefined && cols !== undefined)
@@ -843,7 +845,7 @@ export const make = Effect.gen(function* () {
 				onMachine(request.computer, (machine) =>
 					Effect.gen(function* () {
 						if (machine.ports === undefined)
-							return yield* new ToolFailure({
+							return yield* ToolFailure.make({
 								message: "This Computer has no public ports.",
 							})
 						const url = yield* computers.work(machine.ports.open(request.port))
@@ -880,7 +882,7 @@ export const make = Effect.gen(function* () {
 				onMachine(request.computer, (machine) =>
 					Effect.gen(function* () {
 						if (machine.desktop === undefined)
-							return yield* new ToolFailure({
+							return yield* ToolFailure.make({
 								message: "This Computer has no desktop.",
 							})
 						return withImage(yield* computers.work(machine.desktop.screenshot))
@@ -913,7 +915,7 @@ export const make = Effect.gen(function* () {
 					Effect.gen(function* () {
 						const desktop = machine.desktop
 						if (desktop === undefined)
-							return yield* new ToolFailure({
+							return yield* ToolFailure.make({
 								message: "This Computer has no desktop.",
 							})
 						yield* computers.work(desktop.act(request.actions))

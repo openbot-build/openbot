@@ -1,4 +1,4 @@
-import { Context, Data, Effect, Schema } from "effect"
+import { Context, Effect, Schema } from "effect"
 import * as Document from "../Document.ts"
 import * as Network from "../network/Network.ts"
 
@@ -18,12 +18,11 @@ export class Source extends Schema.Opaque<Source>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Source)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new DiscoveryError({
-						reason: "Document",
-						issues: [{ url: "", reason: error.message }],
-					}),
+			Effect.mapError((error) =>
+				DiscoveryError.make({
+					reason: "Document",
+					issues: [{ url: "", reason: error.message }],
+				}),
 			),
 		)
 }
@@ -39,12 +38,11 @@ export class ConfigurationRequirement extends Schema.Opaque<ConfigurationRequire
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(ConfigurationRequirement)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new DiscoveryError({
-						reason: "Document",
-						issues: [{ url: "", reason: error.message }],
-					}),
+			Effect.mapError((error) =>
+				DiscoveryError.make({
+					reason: "Document",
+					issues: [{ url: "", reason: error.message }],
+				}),
 			),
 		)
 }
@@ -58,12 +56,11 @@ export class Endpoint extends Schema.Opaque<Endpoint>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Endpoint)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new DiscoveryError({
-						reason: "Document",
-						issues: [{ url: "", reason: error.message }],
-					}),
+			Effect.mapError((error) =>
+				DiscoveryError.make({
+					reason: "Document",
+					issues: [{ url: "", reason: error.message }],
+				}),
 			),
 		)
 }
@@ -78,12 +75,11 @@ export class Candidate extends Schema.Opaque<Candidate>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Candidate)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new DiscoveryError({
-						reason: "Document",
-						issues: [{ url: "", reason: error.message }],
-					}),
+			Effect.mapError((error) =>
+				DiscoveryError.make({
+					reason: "Document",
+					issues: [{ url: "", reason: error.message }],
+				}),
 			),
 		)
 }
@@ -97,12 +93,11 @@ export class Issue extends Schema.Opaque<Issue>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Issue)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new DiscoveryError({
-						reason: "Document",
-						issues: [{ url: "", reason: error.message }],
-					}),
+			Effect.mapError((error) =>
+				DiscoveryError.make({
+					reason: "Document",
+					issues: [{ url: "", reason: error.message }],
+				}),
 			),
 		)
 }
@@ -139,10 +134,13 @@ export const DiscoveryErrorReason = Schema.Literals([
 ])
 export type DiscoveryErrorReason = typeof DiscoveryErrorReason.Type
 
-export class DiscoveryError extends Data.TaggedError("DiscoveryError")<{
-	readonly reason: DiscoveryErrorReason
-	readonly issues: ReadonlyArray<Issue>
-}> {}
+export class DiscoveryError extends Schema.TaggedError<DiscoveryError>()(
+	"DiscoveryError",
+	{
+		reason: DiscoveryErrorReason,
+		issues: Schema.Array(Issue),
+	},
+) {}
 
 export type Error =
 	| DiscoveryError

@@ -1,4 +1,4 @@
-import { Context, Data, type Effect } from "effect"
+import { Context, Schema, type Effect } from "effect"
 import { type LanguageModel, type Prompt, type Toolkit } from "effect/ai"
 import type * as Config from "../models/Config.ts"
 import type * as ContextWindow from "./ContextWindow.ts"
@@ -25,18 +25,20 @@ export type NonNativeCompact = (
 	LanguageModel.LanguageModel
 >
 
-export class ContextCompactionError extends Data.TaggedError(
+export class ContextCompactionError extends Schema.TaggedError<ContextCompactionError>()(
 	"ContextCompactionError",
-)<{
-	readonly reason:
-		| "unsupported"
-		| "request-failed"
-		| "input-too-large"
-		| "target-not-reached"
-		| "invalid-target"
-		| "head-conflict"
-	readonly message: string
-}> {}
+	{
+		reason: Schema.Literals([
+			"unsupported",
+			"request-failed",
+			"input-too-large",
+			"target-not-reached",
+			"invalid-target",
+			"head-conflict",
+		]),
+		message: Schema.String,
+	},
+) {}
 
 export class ContextCompaction extends Context.Service<
 	ContextCompaction,

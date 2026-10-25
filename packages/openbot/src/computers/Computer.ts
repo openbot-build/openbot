@@ -1,17 +1,23 @@
 import type { ComputersApi } from "@openbot-build/api"
-import { Data, type Effect, type Scope, type Stream } from "effect"
+import { Data, type Effect, Schema, type Scope, type Stream } from "effect"
 
 /** The provider or the connector did not do the call. */
-export class ComputerCallFailed extends Data.TaggedError("ComputerCallFailed")<{
-	readonly message: string
-	/** False when trying again cannot help, such as a wrong key. */
-	readonly retry: boolean
-}> {}
+export class ComputerCallFailed extends Schema.TaggedError<ComputerCallFailed>()(
+	"ComputerCallFailed",
+	{
+		message: Schema.String,
+		/** False when trying again cannot help, such as a wrong key. */
+		retry: Schema.Boolean,
+	},
+) {}
 
 /** The sandbox is gone at the provider, or the connector is not connected. */
-export class ComputerGone extends Data.TaggedError("ComputerGone")<{
-	readonly reason: string
-}> {}
+export class ComputerGone extends Schema.TaggedError<ComputerGone>()(
+	"ComputerGone",
+	{
+		reason: Schema.String,
+	},
+) {}
 
 export type ComputerError = ComputerCallFailed | ComputerGone
 

@@ -77,17 +77,18 @@ export const position = (chat: Ref): Position => ({
 	chat: chat.id,
 	revision: chat.revision,
 })
-export class ChatNotFound extends Data.TaggedError("ChatNotFound")<{
-	readonly chat: Id
-}> {}
-export class ChatError extends Data.TaggedError("ChatError")<{
-	readonly reason: "state-conflict" | "unavailable"
-	readonly message: string
-}> {}
-export class Conflict extends Data.TaggedError("ChatConflict")<{
-	readonly chat: Id
-	readonly message: string
-}> {}
+export class ChatNotFound extends Schema.TaggedError<ChatNotFound>()(
+	"ChatNotFound",
+	{ chat: Id },
+) {}
+export class ChatError extends Schema.TaggedError<ChatError>()("ChatError", {
+	reason: Schema.Literals(["state-conflict", "unavailable"]),
+	message: Schema.String,
+}) {}
+export class Conflict extends Schema.TaggedError<Conflict>()("ChatConflict", {
+	chat: Id,
+	message: Schema.String,
+}) {}
 export type RuntimeError =
 	| ChatNotFound
 	| ChatError

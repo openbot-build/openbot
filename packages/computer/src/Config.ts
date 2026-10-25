@@ -4,7 +4,6 @@ import { randomBytes } from "node:crypto"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import {
-	Data,
 	Effect,
 	Config as EffectConfig,
 	FileSystem,
@@ -14,9 +13,10 @@ import {
 } from "effect"
 
 /** A failure that the person can read and act on. */
-export class ComputerError extends Data.TaggedError("ComputerError")<{
-	readonly message: string
-}> {}
+export class ComputerError extends Schema.TaggedError<ComputerError>()(
+	"ComputerError",
+	{ message: Schema.String },
+) {}
 
 /** Makes an origin from what the person typed, or fails with a clear message. */
 export const parseOrigin = (
@@ -30,7 +30,7 @@ export const parseOrigin = (
 			url.password === ""
 			? Effect.succeed(url.origin)
 			: Effect.fail(
-					new ComputerError({
+					ComputerError.make({
 						message: `'${value}' is not an OpenBot address. Use an address such as https://openbot.example.com.`,
 					}),
 				)
@@ -69,17 +69,16 @@ export const path: Effect.Effect<string, ComputerError> = Effect.gen(
 		return pathIn(configHome, homedir())
 	},
 ).pipe(
-	Effect.mapError(
-		(error) =>
-			new ComputerError({
-				message: `XDG_CONFIG_HOME cannot be read: ${error.message}`,
-			}),
+	Effect.mapError((error) =>
+		ComputerError.make({
+			message: `XDG_CONFIG_HOME cannot be read: ${error.message}`,
+		}),
 	),
 )
 
 const cannot =
 	(action: string, file: string) => (error: PlatformError.PlatformError) =>
-		new ComputerError({
+		ComputerError.make({
 			message: `Could not ${action} ${file}: ${error.message}`,
 		})
 
@@ -104,11 +103,10 @@ export const read = (
 		if (Option.isNone(text)) return Option.none()
 		return yield* Schema.decodeEffect(ConfigJson)(text.value).pipe(
 			Effect.asSome,
-			Effect.mapError(
-				() =>
-					new ComputerError({
-						message: `${file} is not a valid config. Run 'openbot computer pair' again.`,
-					}),
+			Effect.mapError(() =>
+				ComputerError.make({
+					message: `${file} is not a valid config. Run 'openbot computer pair' again.`,
+				}),
 			),
 		)
 	})

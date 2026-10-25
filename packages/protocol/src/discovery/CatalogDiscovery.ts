@@ -76,7 +76,7 @@ export const inputLink = (
 		)
 	) {
 		return Effect.fail(
-			new Document.InvalidLink({
+			Document.InvalidLink.make({
 				reason: "Expected a domain or an absolute HTTPS Link",
 			}),
 		)
@@ -97,7 +97,7 @@ export const configureEndpoint = Effect.fn("Discovery.configureEndpoint")(
 			(e) => e.index === options.index,
 		)
 		if (endpoint === undefined)
-			return yield* new DiscoveryError({
+			return yield* DiscoveryError.make({
 				reason: "Configuration",
 				issues: [
 					{
@@ -174,7 +174,7 @@ export const configureEndpoint = Effect.fn("Discovery.configureEndpoint")(
 			} else headers[header.name] = rendered
 		}
 		if (issues.length > 0)
-			return yield* new DiscoveryError({
+			return yield* DiscoveryError.make({
 				reason: "Configuration",
 				issues,
 			})
@@ -317,7 +317,7 @@ export const layer = (options: Options = {}) =>
 						? yield* Option.match(cached, {
 								onNone: () =>
 									Effect.fail(
-										new DiscoveryError({
+										DiscoveryError.make({
 											reason: "Http",
 											issues: [
 												{
@@ -338,7 +338,7 @@ export const layer = (options: Options = {}) =>
 							})
 						: received
 				if (response.status !== 200)
-					return yield* new DiscoveryError({
+					return yield* DiscoveryError.make({
 						reason: "Http",
 						issues: [
 							{
@@ -368,7 +368,7 @@ export const layer = (options: Options = {}) =>
 				) {
 					const links = pageLinks
 					if (links.length === 0)
-						return yield* new DiscoveryError({
+						return yield* DiscoveryError.make({
 							reason: "NoDeclaration",
 							issues: [
 								{
@@ -382,17 +382,16 @@ export const layer = (options: Options = {}) =>
 					const value = yield* Schema.decodeEffect(
 						Schema.fromJsonString(Schema.Unknown),
 					)(response.text).pipe(
-						Effect.mapError(
-							(e) =>
-								new DiscoveryError({
-									reason: "Document",
-									issues: [
-										{
-											url,
-											reason: e.message,
-										},
-									],
-								}),
+						Effect.mapError((e) =>
+							DiscoveryError.make({
+								reason: "Document",
+								issues: [
+									{
+										url,
+										reason: e.message,
+									},
+								],
+							}),
 						),
 					)
 					if (
@@ -476,7 +475,7 @@ export const layer = (options: Options = {}) =>
 					Match.tag("Card", ({ card }) => Effect.succeed(card)),
 					Match.orElse(() =>
 						Effect.fail(
-							new DiscoveryError({
+							DiscoveryError.make({
 								reason: "Document",
 								issues: [{ url: input, reason: "Expected Server Card" }],
 							}),
@@ -603,7 +602,7 @@ export const layer = (options: Options = {}) =>
 				const first = values[0]
 				const second = values[1]
 				if (first === undefined)
-					return yield* new DiscoveryError({
+					return yield* DiscoveryError.make({
 						reason: "NoUsableServices",
 						issues,
 					})

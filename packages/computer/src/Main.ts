@@ -8,7 +8,7 @@ import * as Connect from "./Connect.ts"
 import * as Machine from "./Machine.ts"
 import * as Pair from "./Pair.ts"
 
-const notPaired = new Config.ComputerError({
+const notPaired = Config.ComputerError.make({
 	message:
 		"This machine is not paired. Run 'openbot computer pair --url <address of OpenBot>' first.",
 })

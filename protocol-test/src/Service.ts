@@ -27,7 +27,7 @@ const policy = Layer.succeed(Protection.AccessPolicy, {
 		const scope = requiredScope(operation)
 		return identity.scopes.includes(scope)
 			? Effect.void
-			: Effect.fail(new Protection.AccessDenied({ scopes: [scope] }))
+			: Effect.fail(Protection.AccessDenied.make({ scopes: [scope] }))
 	},
 	visible: (identity, operation) =>
 		Effect.succeed(identity.scopes.includes(requiredScope(operation))),

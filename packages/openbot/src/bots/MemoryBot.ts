@@ -5,7 +5,6 @@ import {
 	Array as Arr,
 	Clock,
 	Context,
-	Data,
 	Duration,
 	Effect,
 	HashMap,
@@ -48,9 +47,12 @@ export const defaultInstructions =
 const timeout = Duration.seconds(15)
 
 /** The memory Bot may not spend more now: its budget is used up. */
-export class MemoryBudgetSpent extends Data.TaggedError("MemoryBudgetSpent")<{
-	readonly home: Home
-}> {}
+export class MemoryBudgetSpent extends Schema.TaggedError<MemoryBudgetSpent>()(
+	"MemoryBudgetSpent",
+	{
+		home: Schema.Struct({ organizationId: Schema.String, bot: BotsApi.BotId }),
+	},
+) {}
 
 const Stored = Schema.Struct({
 	instructions: Schema.String,
@@ -324,7 +326,7 @@ export const make: Effect.Effect<
 					.botSpend(memoryBotId(home), periodStart(settings.budget.period, now))
 					.pipe(Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})))
 				if (spent >= settings.budget.limitMicros)
-					return yield* new MemoryBudgetSpent({ home })
+					return yield* MemoryBudgetSpent.make({ home })
 			}
 			const model = yield* helper.botMemory(work.organizationId)
 			const limited = task(settings).pipe(

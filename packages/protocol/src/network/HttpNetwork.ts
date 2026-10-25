@@ -9,7 +9,7 @@ export const readBounded = Effect.fn("HttpNetwork.readBounded")(
 				length += chunk.byteLength
 				return length > options.maxBytes
 					? Effect.fail(
-							new NetworkError({
+							NetworkError.make({
 								reason: "TooLarge",
 								message:
 									"Decoded document is larger than the configured byte limit",

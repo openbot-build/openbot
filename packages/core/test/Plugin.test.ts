@@ -58,7 +58,7 @@ it.effect(
 			idB = pluginId("b")
 		const unusedWrite = () =>
 			Effect.fail(
-				new Chat.ChatError({
+				Chat.ChatError.make({
 					reason: "state-conflict",
 					message: "Unused write",
 				}),
@@ -100,7 +100,7 @@ it.effect(
 			updateSomeAndGetEffect: unusedWrite,
 			setAt: () =>
 				Effect.fail(
-					new Chat.ChatError({
+					Chat.ChatError.make({
 						reason: "state-conflict",
 						message: "unused",
 					}),

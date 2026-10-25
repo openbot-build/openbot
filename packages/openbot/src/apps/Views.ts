@@ -331,7 +331,7 @@ export const make = Effect.gen(function* () {
 							invocation.action === "resources/read")
 							? Effect.void
 							: Effect.fail(
-									new Client.PermissionDenied({
+									Client.PermissionDenied.make({
 										action: invocation.action,
 										target: invocation.target,
 									}),

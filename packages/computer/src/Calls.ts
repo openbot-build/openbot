@@ -3,12 +3,12 @@
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import type { ComputersApi } from "@openbot-build/api"
-import { Data, Effect, FileSystem, Option, type Schema } from "effect"
+import { Effect, FileSystem, Option, Schema } from "effect"
 
 /** A call that did not work. The message goes back to OpenBot in a `Failed` reply. */
-export class CallFailed extends Data.TaggedError("CallFailed")<{
-	readonly message: string
-}> {}
+export class CallFailed extends Schema.TaggedError<CallFailed>()("CallFailed", {
+	message: Schema.String,
+}) {}
 
 type Call = ComputersApi.ConnectorCall
 type Reply = ComputersApi.ConnectorReply
@@ -61,8 +61,8 @@ const operate = Effect.fnUntraced(function* (
 			const bytes = yield* fs
 				.readFile(at(operation.path))
 				.pipe(
-					Effect.mapError(
-						(error) => new CallFailed({ message: error.message }),
+					Effect.mapError((error) =>
+						CallFailed.make({ message: error.message }),
 					),
 				)
 			return {
@@ -80,26 +80,26 @@ const operate = Effect.fnUntraced(function* (
 						Buffer.from(operation.file.content, operation.file.encoding),
 					),
 				),
-				Effect.mapError((error) => new CallFailed({ message: error.message })),
+				Effect.mapError((error) => CallFailed.make({ message: error.message })),
 			)
 			return null
 		}
 		case "List":
 			return yield* list(fs, at(operation.path)).pipe(
-				Effect.mapError((error) => new CallFailed({ message: error.message })),
+				Effect.mapError((error) => CallFailed.make({ message: error.message })),
 			)
 		case "Remove":
 			yield* fs
 				.remove(at(operation.path), { recursive: true })
 				.pipe(
-					Effect.mapError(
-						(error) => new CallFailed({ message: error.message }),
+					Effect.mapError((error) =>
+						CallFailed.make({ message: error.message }),
 					),
 				)
 			return null
 		case "Screenshot":
 		case "Desktop":
-			return yield* new CallFailed({ message: "This machine has no desktop." })
+			return yield* CallFailed.make({ message: "This machine has no desktop." })
 	}
 })
 

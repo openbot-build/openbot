@@ -318,7 +318,7 @@ export const run = (input: {
 			yield* PubSub.publish(
 				events,
 				Live.Event.Failure({
-					error: new Live.LiveError({
+					error: Live.LiveError.make({
 						reason: "closed",
 						message: "The Live session closed.",
 					}),

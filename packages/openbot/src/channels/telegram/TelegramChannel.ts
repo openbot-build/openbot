@@ -68,10 +68,10 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 	Effect.gen(function* () {
 		const secret = request.headers["x-telegram-bot-api-secret-token"]
 		if (secret === undefined || !sameSecret(secret, secrets.webhookSecret))
-			return yield* new ChannelDenied({ reason: "wrong secret token" })
+			return yield* ChannelDenied.make({ reason: "wrong secret token" })
 		const update = parse(request.body)
 		if (update === undefined)
-			return yield* new ChannelDenied({ reason: "the body is not JSON" })
+			return yield* ChannelDenied.make({ reason: "the body is not JSON" })
 		const updateId = id(update, "update_id")
 		const callback = field(update, "callback_query")
 		if (callback !== undefined) {
@@ -133,7 +133,7 @@ export const make = (secrets: Secrets, call: Call): Channel => {
 				return field(reply.json, "result")
 			const after = field(field(reply.json, "parameters"), "retry_after")
 			if (reply.status === 429 && Predicate.isNumber(after))
-				return yield* new ChannelDeliveryFailed({
+				return yield* ChannelDeliveryFailed.make({
 					message: `Telegram asked to wait before ${name}`,
 					retry: true,
 					retryAfterMs: after * 1000,

@@ -410,7 +410,7 @@ it.effect(
 				withdraw: () => Effect.void,
 				upsert: () =>
 					Effect.fail(
-						new Index.IndexError({
+						Index.IndexError.make({
 							reason: "Unavailable",
 							operation: "upsert",
 						}),

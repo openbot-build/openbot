@@ -32,18 +32,17 @@ export const fromClient =
 					})),
 				),
 			),
-			Effect.mapError(
-				(cause) =>
-					new ChannelDeliveryFailed({
-						message: `The platform could not be reached: ${String(cause)}`,
-						retry: true,
-					}),
+			Effect.mapError((cause) =>
+				ChannelDeliveryFailed.make({
+					message: `The platform could not be reached: ${String(cause)}`,
+					retry: true,
+				}),
 			),
 			Effect.timeoutOrElse({
 				duration: timeoutMs,
 				orElse: () =>
 					Effect.fail(
-						new ChannelDeliveryFailed({
+						ChannelDeliveryFailed.make({
 							message: "The platform did not answer in time",
 							retry: true,
 						}),
@@ -76,18 +75,17 @@ export const fromNetwork =
 		).pipe(
 			// Each custom Channel has its own guarded network, made for its endpoint.
 			Effect.provideContext(network),
-			Effect.mapError(
-				(cause) =>
-					new ChannelDeliveryFailed({
-						message: `The platform could not be reached: ${String(cause)}`,
-						retry: true,
-					}),
+			Effect.mapError((cause) =>
+				ChannelDeliveryFailed.make({
+					message: `The platform could not be reached: ${String(cause)}`,
+					retry: true,
+				}),
 			),
 			Effect.timeoutOrElse({
 				duration: timeoutMs,
 				orElse: () =>
 					Effect.fail(
-						new ChannelDeliveryFailed({
+						ChannelDeliveryFailed.make({
 							message: "The platform did not answer in time",
 							retry: true,
 						}),
@@ -98,7 +96,7 @@ export const fromNetwork =
 /** Turns a failed HTTP answer into a delivery failure, with the wait that the platform asked for. */
 export const failed = (reply: Reply, message: string) => {
 	const after = Number(reply.headers["retry-after"])
-	return new ChannelDeliveryFailed({
+	return ChannelDeliveryFailed.make({
 		message,
 		retry: reply.status === 429 || reply.status >= 500,
 		...(reply.status === 429 && Number.isFinite(after)

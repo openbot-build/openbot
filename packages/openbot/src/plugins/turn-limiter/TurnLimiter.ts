@@ -1,5 +1,5 @@
-import { Data, Effect, Match, Stream } from "effect"
-import { type Prompt } from "effect/ai"
+import { Effect, Match, Schema, Stream } from "effect"
+import { Prompt } from "effect/ai"
 import { Bot, Plugin } from "@openbot-build/core"
 
 export interface Options {
@@ -7,16 +7,19 @@ export interface Options {
 	readonly maxSteps: number
 }
 
-export class InvalidMaxSteps extends Data.TaggedError("InvalidMaxSteps")<{
-	readonly maxSteps: number
-}> {}
+export class InvalidMaxSteps extends Schema.TaggedError<InvalidMaxSteps>()(
+	"InvalidMaxSteps",
+	{
+		// The value is the bad input, so it can be NaN or Infinity.
+		// @effect-diagnostics-next-line schemaNumber:off
+		maxSteps: Schema.Number,
+	},
+) {}
 
-export class ModelStepLimitExceeded extends Data.TaggedError(
+export class ModelStepLimitExceeded extends Schema.TaggedError<ModelStepLimitExceeded>()(
 	"ModelStepLimitExceeded",
-)<{
-	readonly maxSteps: number
-	readonly history: Prompt.Prompt
-}> {}
+	{ maxSteps: Schema.Int, history: Prompt.Prompt },
+) {}
 
 /** Limits each execution on its own, through the ReAct middleware chain. */
 export const make = ({
@@ -29,7 +32,7 @@ export const make = ({
 	> = (next, options) =>
 		Stream.unwrap(
 			Effect.gen(function* () {
-				if (!valid) return yield* new InvalidMaxSteps({ maxSteps })
+				if (!valid) return yield* InvalidMaxSteps.make({ maxSteps })
 
 				const context = yield* Bot.Context
 				return next(options).pipe(
@@ -40,7 +43,7 @@ export const make = ({
 									const step = yield* context.step
 									if (step > maxSteps) {
 										const history = yield* context.history
-										return yield* new ModelStepLimitExceeded({
+										return yield* ModelStepLimitExceeded.make({
 											maxSteps,
 											history,
 										})

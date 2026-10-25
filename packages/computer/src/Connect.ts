@@ -131,7 +131,7 @@ export const connect = (options: {
 		while (true) {
 			const error = yield* Effect.flip(session)
 			if (isDenied(error))
-				return yield* new Config.ComputerError({
+				return yield* Config.ComputerError.make({
 					message:
 						"OpenBot refused the token of this machine. Run 'openbot computer pair' to pair it again.",
 				})

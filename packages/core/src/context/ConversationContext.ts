@@ -1,5 +1,5 @@
 import type * as Chat from "../chat/Chat.ts"
-import { Context, Data, type Effect, type Option } from "effect"
+import { Context, Data, type Effect, type Option, Schema } from "effect"
 import type * as ContextWindow from "./ContextWindow.ts"
 import {
 	type AiError,
@@ -31,21 +31,23 @@ export class Compaction extends Data.TaggedClass(
 	readonly afterTokens: number
 }> {}
 
-export class ConversationContextError extends Data.TaggedError(
+export class ConversationContextError extends Schema.TaggedError<ConversationContextError>()(
 	"ConversationContextError",
-)<{
-	readonly reason:
-		| "chat-not-found"
-		| "read-failed"
-		| "summary-failed"
-		| "invalid-target"
-		| "unsupported"
-		| "input-too-large"
-		| "target-not-reached"
-		| "request-failed"
-		| "head-conflict"
-	readonly message: string
-}> {}
+	{
+		reason: Schema.Literals([
+			"chat-not-found",
+			"read-failed",
+			"summary-failed",
+			"invalid-target",
+			"unsupported",
+			"input-too-large",
+			"target-not-reached",
+			"request-failed",
+			"head-conflict",
+		]),
+		message: Schema.String,
+	},
+) {}
 
 export interface Operations<
 	LoadError = ConversationContextError,

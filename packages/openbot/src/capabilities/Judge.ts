@@ -1,5 +1,5 @@
 import { Authorization, BotsApi } from "@openbot-build/api"
-import { Context, Data, Duration, Effect, Layer, Option, Schema } from "effect"
+import { Context, Duration, Effect, Layer, Option, Schema } from "effect"
 import { Decision, LanguageModel, Prompt } from "effect/ai"
 import { BotRecords } from "../bots/BotRecords.ts"
 import { type Capability, describe, hash } from "./Capability.ts"
@@ -31,9 +31,10 @@ export type RulesModel = AnyModel
 export const RulesModel = AnyModel
 
 /** OpenBot has no model for its own work right now. */
-export class HelperModelUnavailable extends Data.TaggedError(
+export class HelperModelUnavailable extends Schema.TaggedError<HelperModelUnavailable>()(
 	"HelperModelUnavailable",
-)<{ readonly message: string }> {}
+	{ message: Schema.String },
+) {}
 
 /**
  * The models for work that OpenBot does itself. Each kind of work has its own

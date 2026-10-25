@@ -58,7 +58,7 @@ export const layer = <
 							(existing.owner === undefined ||
 								ownerKey(owner) !== ownerKey(existing.owner))
 								? Effect.fail(
-										new Chat.ChatError({
+										Chat.ChatError.make({
 											reason: "unavailable",
 											message: "This Chat runtime belongs to another account.",
 										}),
@@ -81,7 +81,7 @@ export const layer = <
 										error instanceof Chat.ChatError ||
 										error instanceof ChatStore.ChatStoreError
 											? error
-											: new Chat.ChatError({
+											: Chat.ChatError.make({
 													reason: "unavailable",
 													message: String(error),
 												}),

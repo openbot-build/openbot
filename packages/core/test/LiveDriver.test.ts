@@ -134,7 +134,7 @@ it.effect("a failure of the connection fails the Turn", () =>
 		const { driver } = yield* scripted([
 			[
 				Live.Event.Failure({
-					error: new Live.LiveError({
+					error: Live.LiveError.make({
 						reason: "closed",
 						message: "The connection closed.",
 					}),

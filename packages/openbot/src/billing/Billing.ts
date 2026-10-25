@@ -1,5 +1,5 @@
 import type { BillingApi } from "@openbot-build/api"
-import { Context, Data, DateTime, type Effect } from "effect"
+import { Context, DateTime, type Effect, Schema } from "effect"
 import type { Response } from "effect/ai"
 
 /** The provider and model of one model call, and who pays for the key. */
@@ -162,22 +162,27 @@ export const periodStart = (
 }
 
 /** A hard budget, or the credits, do not allow another model call now. */
-export class SpendingBlocked extends Data.TaggedError("SpendingBlocked")<{
-	readonly reason: "budget" | "credits"
-	/** The budget that is spent. Missing for credits. */
-	readonly budgetId?: string
-	readonly message: string
-}> {}
+export class SpendingBlocked extends Schema.TaggedError<SpendingBlocked>()(
+	"SpendingBlocked",
+	{
+		reason: Schema.Literals(["budget", "credits"]),
+		/** The budget that is spent. Missing for credits. */
+		budgetId: Schema.optional(Schema.String),
+		message: Schema.String,
+	},
+) {}
 
 /** OpenBot cannot read or write the billing tables now. */
-export class BillingStorageError extends Data.TaggedError(
+export class BillingStorageError extends Schema.TaggedError<BillingStorageError>()(
 	"BillingStorageError",
-)<{ readonly cause: unknown }> {}
+	{ cause: Schema.Defect() },
+) {}
 
 /** The organization does not exist. */
-export class OrganizationMissing extends Data.TaggedError(
+export class OrganizationMissing extends Schema.TaggedError<OrganizationMissing>()(
 	"OrganizationMissing",
-)<{ readonly organizationId: string }> {}
+	{ organizationId: Schema.String },
+) {}
 
 export interface Range {
 	readonly from: number

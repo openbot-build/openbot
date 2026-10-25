@@ -3,12 +3,12 @@
 import type { ComputersApi } from "@openbot-build/api"
 import {
 	Clock,
-	Data,
 	Deferred,
 	Effect,
 	Option,
 	Ref,
 	Result,
+	Schema,
 	type Scope,
 	Stream,
 } from "effect"
@@ -57,7 +57,10 @@ export const envdPort = 49983
  * The sandbox proxy answers 502 when the sandbox is not running, such as when it is
  * paused or gone. The caller then asks the platform API to resume it.
  */
-export class SandboxAway extends Data.TaggedError("SandboxAway")<{}> {}
+export class SandboxAway extends Schema.TaggedError<SandboxAway>()(
+	"SandboxAway",
+	{},
+) {}
 
 /** The user of the E2B templates. Old envd versions need it, and new ones accept it. */
 const user = "user"
@@ -76,7 +79,7 @@ const checked = (
 	what: string,
 ): Effect.Effect<Reply, ComputerCallFailed | SandboxAway> =>
 	reply.status === 502
-		? Effect.fail(new SandboxAway())
+		? Effect.fail(SandboxAway.make())
 		: ok(reply)
 			? Effect.succeed(reply)
 			: Effect.fail(failed(reply, what))
@@ -328,35 +331,31 @@ export const run = (
 			),
 		)
 		const finished = yield* client.execute(http).pipe(
-			Effect.mapError(
-				(cause) =>
-					new ComputerCallFailed({
-						message: `The Computer provider could not be reached: ${String(cause)}`,
-						retry: true,
-					}),
+			Effect.mapError((cause) =>
+				ComputerCallFailed.make({
+					message: `The Computer provider could not be reached: ${String(cause)}`,
+					retry: true,
+				}),
 			),
 			Effect.flatMap((response) =>
 				response.status === 200
 					? response.stream.pipe(
-							Stream.mapError(
-								(cause) =>
-									new ComputerCallFailed({
-										message: `The Computer provider could not be reached: ${String(cause)}`,
-										retry: true,
-									}),
+							Stream.mapError((cause) =>
+								ComputerCallFailed.make({
+									message: `The Computer provider could not be reached: ${String(cause)}`,
+									retry: true,
+								}),
 							),
 							Stream.runForEach((chunk) =>
 								Ref.update(state, (output) => onChunk(output, chunk)),
 							),
 						)
 					: Effect.flatMap(
-							Effect.mapError(
-								response.arrayBuffer,
-								(cause) =>
-									new ComputerCallFailed({
-										message: `The Computer provider could not be reached: ${String(cause)}`,
-										retry: true,
-									}),
+							Effect.mapError(response.arrayBuffer, (cause) =>
+								ComputerCallFailed.make({
+									message: `The Computer provider could not be reached: ${String(cause)}`,
+									retry: true,
+								}),
 							),
 							(buffer) =>
 								checked(
@@ -375,7 +374,7 @@ export const run = (
 				signal: "SIGNAL_SIGKILL",
 			}).pipe(Effect.ignore)
 		if (Option.isSome(finished) && output.exitCode === undefined)
-			return yield* new ComputerCallFailed({
+			return yield* ComputerCallFailed.make({
 				message: `The command did not finish: ${output.error ?? "the stream ended early"}`,
 				retry: true,
 			})
@@ -437,7 +436,7 @@ export const start = (
 		const sink = yield* ProcessSink.make
 		const pid = yield* Deferred.make<number>()
 		const unreachable = (cause: unknown) =>
-			new ComputerCallFailed({
+			ComputerCallFailed.make({
 				message: `The Computer provider could not be reached: ${String(cause)}`,
 				retry: true,
 			})
@@ -480,7 +479,7 @@ export const start = (
 			).pipe(
 				Effect.andThen(
 					Effect.fail(
-						new ComputerCallFailed({
+						ComputerCallFailed.make({
 							message: "The command did not start.",
 							retry: true,
 						}),
@@ -571,7 +570,7 @@ export const start = (
 				Effect.flatMap((value) =>
 					Option.isNone(value)
 						? Effect.fail(
-								new ComputerCallFailed({
+								ComputerCallFailed.make({
 									message: "The command did not start in time.",
 									retry: true,
 								}),
@@ -640,7 +639,7 @@ export const start = (
 		return process
 	})
 
-const away = new ComputerCallFailed({
+const away = ComputerCallFailed.make({
 	message: "The E2B sandbox does not answer.",
 	retry: true,
 })

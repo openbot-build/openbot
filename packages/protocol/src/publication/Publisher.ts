@@ -17,12 +17,11 @@ export class Publication extends Schema.Opaque<Publication>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Publication)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new Document.InvalidDocument({
-						kind: "Publication",
-						issue: error.message,
-					}),
+			Effect.mapError((error) =>
+				Document.InvalidDocument.make({
+					kind: "Publication",
+					issue: error.message,
+				}),
 			),
 		)
 }
@@ -37,12 +36,11 @@ export class UiResource extends Schema.Opaque<UiResource>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(UiResource)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new Document.InvalidDocument({
-						kind: "Publication",
-						issue: error.message,
-					}),
+			Effect.mapError((error) =>
+				Document.InvalidDocument.make({
+					kind: "Publication",
+					issue: error.message,
+				}),
 			),
 		)
 }

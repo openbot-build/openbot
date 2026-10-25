@@ -489,7 +489,7 @@ export const make = Effect.gen(function* () {
 		Effect.gen(function* () {
 			const current = requested ?? selection
 			if (current.provider !== provider)
-				return yield* new Config.ModelConfigurationError({
+				return yield* Config.ModelConfigurationError.make({
 					reason: "provider-not-found",
 					message: "The development provider is unavailable",
 				})
@@ -497,7 +497,7 @@ export const make = Effect.gen(function* () {
 				current.reasoningEffort !== undefined ||
 				current.serviceTier !== undefined
 			)
-				return yield* new Config.ModelConfigurationError({
+				return yield* Config.ModelConfigurationError.make({
 					reason: "unsupported-option",
 					message:
 						"Development scenarios do not support reasoning effort or service tiers",
@@ -505,12 +505,11 @@ export const make = Effect.gen(function* () {
 			const scenario = yield* Schema.decodeUnknownEffect(Scenario)(
 				current.model,
 			).pipe(
-				Effect.mapError(
-					() =>
-						new Config.ModelConfigurationError({
-							reason: "model-not-found",
-							message: "The development scenario is unavailable",
-						}),
+				Effect.mapError(() =>
+					Config.ModelConfigurationError.make({
+						reason: "model-not-found",
+						message: "The development scenario is unavailable",
+					}),
 				),
 			)
 			return models[scenario]

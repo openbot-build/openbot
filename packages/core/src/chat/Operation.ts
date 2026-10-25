@@ -62,9 +62,12 @@ export class Budget extends Context.Service<
 	Duration.Input | "foreground"
 >()("@openbot-build/core/chat/Operation/Budget") {}
 
-export class NotFound extends Data.TaggedError("OperationNotFound")<{
-	readonly id: Id
-}> {}
+export class NotFound extends Schema.TaggedError<NotFound>()(
+	"OperationNotFound",
+	{
+		id: Id,
+	},
+) {}
 
 /** Where Operations are kept. Hosts keep them in a database. */
 export interface Store {

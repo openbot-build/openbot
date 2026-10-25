@@ -137,7 +137,7 @@ it.effect(
 			const reveal = vaults((_organization, item, fields) =>
 				item === "vli_a" && fields.join() === "token"
 					? Effect.succeed(new Map([["token", secret]]))
-					: Effect.fail(new VaultReadFailed({ message: "No such item" })),
+					: Effect.fail(VaultReadFailed.make({ message: "No such item" })),
 			)
 			const ref = VaultCode.reference("github", "token")
 			const args = { authorization: "Bearer " + ref, id: 1 }

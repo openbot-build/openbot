@@ -268,7 +268,7 @@ export const make = (
 				Effect.filterOrFail(
 					(record): record is Operation.Record =>
 						record !== undefined && record.chat === chat,
-					() => new Operation.NotFound({ id }),
+					() => Operation.NotFound.make({ id }),
 				),
 			)
 

@@ -309,7 +309,7 @@ const bindingsFor = (
 								(name) => !args.some((argument) => argument.name === name),
 							)
 						)
-							return yield* new Client.ClientError({
+							return yield* Client.ClientError.make({
 								reason: "Schema",
 								issue: "Prompt arguments do not match the current declaration",
 							})
@@ -369,12 +369,11 @@ export const prepare = (
 							owner,
 							stored.connection.connectionId,
 						).pipe(
-							Effect.mapError(
-								() =>
-									new Client.PermissionDenied({
-										action: invocation.action,
-										target: invocation.target,
-									}),
+							Effect.mapError(() =>
+								Client.PermissionDenied.make({
+									action: invocation.action,
+									target: invocation.target,
+								}),
 							),
 						)
 						if (
@@ -383,7 +382,7 @@ export const prepare = (
 							invocation.connection.connectionId !==
 								stored.connection.connectionId
 						)
-							return yield* new Client.PermissionDenied({
+							return yield* Client.PermissionDenied.make({
 								action: invocation.action,
 								target: invocation.target,
 							})
@@ -401,7 +400,7 @@ export const prepare = (
 								invocation.arguments,
 							))
 						)
-							return yield* new Client.PermissionDenied({
+							return yield* Client.PermissionDenied.make({
 								action: invocation.action,
 								target: invocation.target,
 							})
@@ -522,16 +521,15 @@ export const execute = (
 			position.owner,
 			origin.connectionId,
 		).pipe(
-			Effect.mapError(
-				() =>
-					new Client.PermissionDenied({
-						action: "invoke",
-						target: origin.name,
-					}),
+			Effect.mapError(() =>
+				Client.PermissionDenied.make({
+					action: "invoke",
+					target: origin.name,
+				}),
 			),
 		)
 		if (current.revision !== origin.revision)
-			return yield* new Client.PermissionDenied({
+			return yield* Client.PermissionDenied.make({
 				action: "invoke",
 				target: origin.name,
 			})

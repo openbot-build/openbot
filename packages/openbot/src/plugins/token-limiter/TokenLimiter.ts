@@ -1,5 +1,5 @@
-import { Data, Effect, Match, Ref, Stream } from "effect"
-import { type Prompt } from "effect/ai"
+import { Effect, Match, Ref, Schema, Stream } from "effect"
+import { Prompt } from "effect/ai"
 import { Bot, Plugin } from "@openbot-build/core"
 
 export interface Options {
@@ -7,15 +7,23 @@ export interface Options {
 	readonly maxTokens: number
 }
 
-export class InvalidMaxTokens extends Data.TaggedError("InvalidMaxTokens")<{
-	readonly maxTokens: number
-}> {}
+export class InvalidMaxTokens extends Schema.TaggedError<InvalidMaxTokens>()(
+	"InvalidMaxTokens",
+	{
+		// The value is the bad input, so it can be NaN or Infinity.
+		// @effect-diagnostics-next-line schemaNumber:off
+		maxTokens: Schema.Number,
+	},
+) {}
 
-export class TokenLimitExceeded extends Data.TaggedError("TokenLimitExceeded")<{
-	readonly maxTokens: number
-	readonly usedTokens: number
-	readonly history: Prompt.Prompt
-}> {}
+export class TokenLimitExceeded extends Schema.TaggedError<TokenLimitExceeded>()(
+	"TokenLimitExceeded",
+	{
+		maxTokens: Schema.Int,
+		usedTokens: Schema.Int,
+		history: Prompt.Prompt,
+	},
+) {}
 
 /**
  * Limits each execution on its own, through the ReAct middleware chain.
@@ -32,7 +40,7 @@ export const make = ({
 	> = (next, options) =>
 		Stream.unwrap(
 			Effect.gen(function* () {
-				if (!valid) return yield* new InvalidMaxTokens({ maxTokens })
+				if (!valid) return yield* InvalidMaxTokens.make({ maxTokens })
 
 				const context = yield* Bot.Context
 				const used = yield* Ref.make(0)
@@ -55,7 +63,7 @@ export const make = ({
 									const usedTokens = yield* Ref.get(used)
 									if (usedTokens >= maxTokens) {
 										const history = yield* context.history
-										return yield* new TokenLimitExceeded({
+										return yield* TokenLimitExceeded.make({
 											maxTokens,
 											usedTokens,
 											history,

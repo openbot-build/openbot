@@ -114,7 +114,7 @@ export const makeInspection: Effect.Effect<
 			}),
 		})
 		if (reply.url !== url)
-			return yield* new IndexingError({
+			return yield* IndexingError.make({
 				url,
 				reason: "Redirect",
 				issue:
@@ -125,7 +125,7 @@ export const makeInspection: Effect.Effect<
 		return yield* Option.match(cached, {
 			onNone: () =>
 				Effect.fail(
-					new IndexingError({
+					IndexingError.make({
 						url,
 						reason: "InvalidDocument",
 						issue: "304 has no validated anonymous cached copy",
@@ -168,14 +168,14 @@ export const makeInspection: Effect.Effect<
 				const response = yield* readHop(url, true)
 				if ([301, 302, 303, 307, 308].includes(response.status)) {
 					if (hop >= 5 || response.headers["location"] === undefined)
-						return yield* new IndexingError({
+						return yield* IndexingError.make({
 							url: original,
 							reason: "RobotsUnavailable",
 							issue: "Could not reach robots.txt within five redirects",
 						})
 					const location = response.headers["location"]
 					if (!URL.canParse(location, url))
-						return yield* new IndexingError({
+						return yield* IndexingError.make({
 							url: original,
 							reason: "RobotsUnavailable",
 							issue: "robots.txt has an invalid redirect",
@@ -190,7 +190,7 @@ export const makeInspection: Effect.Effect<
 					return
 				}
 				if (response.status < 200 || response.status >= 300)
-					return yield* new IndexingError({
+					return yield* IndexingError.make({
 						url: original,
 						reason: "RobotsUnavailable",
 						issue: "robots.txt is unreachable",
@@ -201,7 +201,7 @@ export const makeInspection: Effect.Effect<
 						?.trim()
 						.toLowerCase() !== "text/plain"
 				)
-					return yield* new IndexingError({
+					return yield* IndexingError.make({
 						url: original,
 						reason: "RobotsUnavailable",
 						issue: "robots.txt is not text/plain",
@@ -215,7 +215,7 @@ export const makeInspection: Effect.Effect<
 						url: target,
 					})
 				)
-					return yield* new IndexingError({
+					return yield* IndexingError.make({
 						url: target,
 						reason: "RobotsDenied",
 						issue: "robots.txt disallows this document",
@@ -240,7 +240,7 @@ export const makeInspection: Effect.Effect<
 				const location = response.headers["location"]
 				// A bad Location header is a typed failure, not a defect from `new URL`.
 				if (hop >= 5 || location === undefined || !URL.canParse(location, url))
-					return yield* new IndexingError({
+					return yield* IndexingError.make({
 						url,
 						reason: "Redirect",
 						issue: "Invalid document redirect",
@@ -260,7 +260,7 @@ export const makeInspection: Effect.Effect<
 		if (response.status === 404 || response.status === 410)
 			return { found: false, declared: false }
 		if (response.status !== 200)
-			return yield* new IndexingError({
+			return yield* IndexingError.make({
 				url: probe.catalogUrl,
 				reason: "Unavailable",
 				issue: "Publisher Catalog is not anonymously available",
@@ -349,7 +349,7 @@ export const makeInspection: Effect.Effect<
 					yield* stage("CardRead", "Unconfirmed")
 					const response = yield* read(input.cardUrl)
 					if (response.status !== 200)
-						return yield* new IndexingError({
+						return yield* IndexingError.make({
 							url: input.cardUrl,
 							reason: "Unavailable",
 							issue: "Card is not anonymously available",
@@ -401,7 +401,7 @@ export const makeInspection: Effect.Effect<
 								)
 								const page = yield* read(url)
 								if (page.status !== 200)
-									return yield* new IndexingError({
+									return yield* IndexingError.make({
 										url,
 										reason: "Unavailable",
 										issue: "Publisher website is not anonymously available",
@@ -477,7 +477,7 @@ export const makeInspection: Effect.Effect<
 											else
 												failures = EffectArray.append(
 													failures,
-													new IndexingError({
+													IndexingError.make({
 														url: probe.catalogUrl,
 														reason: "Unavailable",
 														issue:

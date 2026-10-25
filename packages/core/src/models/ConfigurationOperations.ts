@@ -95,7 +95,7 @@ export const modelConfiguration = <P>(
 		Effect.flatMap((view) =>
 			view.chat.settings.model === undefined
 				? Effect.fail(
-						new Config.ModelConfigurationError({
+						Config.ModelConfigurationError.make({
 							reason: "unavailable",
 							message: "No model is selected for the current Chat",
 						}),
@@ -107,7 +107,7 @@ export const modelConfiguration = <P>(
 		Effect.gen(function* () {
 			const problem = selectionProblem(input, selection)
 			if (Option.isSome(problem))
-				return yield* new Config.ModelConfigurationError(problem.value)
+				return yield* Config.ModelConfigurationError.make(problem.value)
 			yield* input.store.modifyEffect({
 				chat: input.chat,
 				update: (current) =>
@@ -176,22 +176,20 @@ export const layerExecutionMode = <P>(
 	const operations = executionMode(input)
 	return Layer.succeed(Config.ExecutionMode, {
 		get: operations.get.pipe(
-			Effect.mapError(
-				(error) =>
-					new Config.ExecutionModeError({
-						reason: "chat-not-found",
-						message: error.toString(),
-					}),
+			Effect.mapError((error) =>
+				Config.ExecutionModeError.make({
+					reason: "chat-not-found",
+					message: error.toString(),
+				}),
 			),
 		),
 		set: (mode) =>
 			operations.set(mode).pipe(
-				Effect.mapError(
-					(error) =>
-						new Config.ExecutionModeError({
-							reason: "unavailable",
-							message: error.toString(),
-						}),
+				Effect.mapError((error) =>
+					Config.ExecutionModeError.make({
+						reason: "unavailable",
+						message: error.toString(),
+					}),
 				),
 			),
 	})

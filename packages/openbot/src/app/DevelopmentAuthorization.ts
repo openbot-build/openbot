@@ -63,7 +63,7 @@ export const layer = (publicOrigin: string) =>
 									: undefined
 					return value === undefined
 						? Effect.fail(
-								new Network.NetworkError({
+								Network.NetworkError.make({
 									reason: "Transport",
 									message: "Invalid simulated authorization request",
 								}),
@@ -90,7 +90,7 @@ export const layer = (publicOrigin: string) =>
 							(params.get("state") ?? "") === "" ||
 							(params.get("code_challenge") ?? "") === ""
 						)
-							return yield* new Network.NetworkError({
+							return yield* Network.NetworkError.make({
 								reason: "Transport",
 								message: "Invalid simulated authorization request",
 							})
@@ -118,13 +118,13 @@ export const layer = (publicOrigin: string) =>
 								mode === "authorization-expired" &&
 								new URLSearchParams(body).get("grant_type") === "refresh_token")
 						)
-							return yield* new Network.NetworkError({
+							return yield* Network.NetworkError.make({
 								reason: "Transport",
 								message: "Invalid simulated authorization request",
 							})
 						const form = new URLSearchParams(body)
 						if (form.get("client_id") !== metadata.client_id)
-							return yield* new Network.NetworkError({
+							return yield* Network.NetworkError.make({
 								reason: "Transport",
 								message: "Invalid simulated authorization request",
 							})
@@ -136,7 +136,7 @@ export const layer = (publicOrigin: string) =>
 							return "{}"
 						}
 						if (form.get("resource") !== resource)
-							return yield* new Network.NetworkError({
+							return yield* Network.NetworkError.make({
 								reason: "Transport",
 								message: "Invalid simulated authorization request",
 							})
@@ -159,7 +159,7 @@ export const layer = (publicOrigin: string) =>
 										.digest("base64url") === params.get("code_challenge"),
 							)
 							if (!matches)
-								return yield* new Network.NetworkError({
+								return yield* Network.NetworkError.make({
 									reason: "Transport",
 									message: "Invalid simulated authorization request",
 								})
@@ -171,7 +171,7 @@ export const layer = (publicOrigin: string) =>
 								),
 							))
 						)
-							return yield* new Network.NetworkError({
+							return yield* Network.NetworkError.make({
 								reason: "Transport",
 								message: "Invalid simulated authorization request",
 							})

@@ -95,7 +95,7 @@ export const layerPublicNetwork = Layer.effect(
 			}) {
 				const target = new URL(url)
 				if (target.origin !== "https://app.development.test")
-					return yield* new Network.NetworkError({
+					return yield* Network.NetworkError.make({
 						reason: "Transport",
 						message: "No simulated App is configured for this request.",
 					})
@@ -213,7 +213,7 @@ const network = (
 					request.url === "https://app.development.test/configured" &&
 					request.headers["x-development-key"] !== "development-test-key"
 				)
-					return yield* new Network.NetworkError({
+					return yield* Network.NetworkError.make({
 						reason: "Transport",
 						message: "No simulated App is configured for this request.",
 					})
@@ -228,7 +228,7 @@ const network = (
 						"https://app.development.test/revoke",
 					].includes(request.url)
 				)
-					return yield* new Network.NetworkError({
+					return yield* Network.NetworkError.make({
 						reason: "Transport",
 						message: "No simulated App is configured for this request.",
 					})
@@ -238,7 +238,7 @@ const network = (
 					),
 					Match.orElse(() =>
 						Effect.fail(
-							new Network.NetworkError({
+							Network.NetworkError.make({
 								reason: "Transport",
 								message: "No simulated App is configured for this request.",
 							}),
@@ -344,7 +344,7 @@ const network = (
 											Effect.flatMap((result) =>
 												mode === "result-unknown"
 													? Effect.fail(
-															new Network.NetworkError({
+															Network.NetworkError.make({
 																reason: "Transport",
 																message:
 																	"No simulated App is configured for this request.",
@@ -366,7 +366,7 @@ const network = (
 											),
 										)
 								: Effect.fail(
-										new Network.NetworkError({
+										Network.NetworkError.make({
 											reason: "Transport",
 											message:
 												"No simulated App is configured for this request.",
@@ -407,7 +407,7 @@ const network = (
 					),
 					Match.orElse(() =>
 						Effect.fail(
-							new Network.NetworkError({
+							Network.NetworkError.make({
 								reason: "Transport",
 								message: "No simulated App is configured for this request.",
 							}),

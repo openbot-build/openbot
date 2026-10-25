@@ -25,9 +25,8 @@ const found = <A>(
 	value: Option.Option<A>,
 	operation: string,
 ): Effect.Effect<A, StoreError> =>
-	Effect.fromOption(
-		value,
-		() => new StoreError({ reason: "Missing", operation }),
+	Effect.fromOption(value, () =>
+		StoreError.make({ reason: "Missing", operation }),
 	)
 
 /** Storage inside this process only. save writes the App record and owned user connection in one atomic step. */
@@ -43,7 +42,7 @@ export const layer = Layer.effect(
 				const app = yield* AppRecord.decode(input.app)
 				const connection = yield* UserConnection.decode(input.connection)
 				if (app.cardUrl !== connection.cardUrl)
-					return yield* new StoreError({
+					return yield* StoreError.make({
 						reason: "Invalid",
 						operation: "save",
 					})
@@ -65,7 +64,7 @@ export const layer = Layer.effect(
 					] as const
 				})
 				if (!saved)
-					return yield* new StoreError({
+					return yield* StoreError.make({
 						reason: "AlreadyExists",
 						operation: "save",
 					})

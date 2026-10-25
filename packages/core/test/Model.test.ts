@@ -263,7 +263,7 @@ it("a provider uses selection options and returns a model that a Chat can use", 
 
 it.effect("provider model creation keeps host failures unchanged", () =>
 	Effect.gen(function* () {
-		const failure = new Config.ModelConfigurationError({
+		const failure = Config.ModelConfigurationError.make({
 			reason: "unsupported-option",
 			message: "unsupported reasoning effort",
 		})

@@ -1,18 +1,13 @@
 import { Config, ContextCompaction } from "@openbot-build/core"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import { Tool } from "effect/ai"
 
 /** About four characters of JSON make one token. It is a guess, not a count. */
 const charactersPerToken = 4
 
 /** The parameters of a tool. A tool whose schema cannot be made counts without it. */
-const schemaOf = (tool: Tool.Any): unknown => {
-	try {
-		return Tool.getJsonSchema(tool)
-	} catch {
-		return null
-	}
-}
+const schemaOf = (tool: Tool.Any): unknown =>
+	Option.getOrNull(Option.liftThrowable(Tool.getJsonSchema)(tool))
 
 /**
  * A guess of the input tokens of one model step: the context window, the instructions
@@ -44,7 +39,7 @@ export const service = ContextCompaction.ContextCompaction.of({
 	count: (request) => Effect.succeed(estimate(request)),
 	compact: () =>
 		Effect.fail(
-			new ContextCompaction.ContextCompactionError({
+			ContextCompaction.ContextCompactionError.make({
 				reason: "unsupported",
 				message: "OpenBot compacts the context of a Chat with a summary.",
 			}),

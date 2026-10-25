@@ -39,7 +39,7 @@ export const validate = Effect.fn("Publisher.validate")(function* (
 	const mcpUrl = yield* Schema.decodeEffect(Document.Link)(config.mcpUrl)
 	const remotes = yield* Document.compatibleRemotes(config.card)
 	if (!remotes.some((r) => r.url === mcpUrl)) {
-		return yield* new Document.IncompatibleCard({
+		return yield* Document.IncompatibleCard.make({
 			reason: "Publication MCP URL must match a compatible Card remote",
 		})
 	}
@@ -47,7 +47,7 @@ export const validate = Effect.fn("Publisher.validate")(function* (
 		new URL(cardUrl).origin !== new URL(catalogUrl).origin ||
 		new URL(cardUrl).origin !== new URL(mcpUrl).origin
 	) {
-		return yield* new Document.InvalidDocument({
+		return yield* Document.InvalidDocument.make({
 			kind: "Publication",
 			issue:
 				"One Publisher serves one public origin. Mount a separate Publisher for each other origin",
@@ -55,7 +55,7 @@ export const validate = Effect.fn("Publisher.validate")(function* (
 	}
 	const paths = [cardUrl, catalogUrl, mcpUrl].map((s) => new URL(s).pathname)
 	if (HashSet.size(HashSet.fromIterable(paths)) !== 3) {
-		return yield* new Document.InvalidDocument({
+		return yield* Document.InvalidDocument.make({
 			kind: "Publication",
 			issue: "Card, Catalog and MCP routes must have distinct paths",
 		})
@@ -63,7 +63,7 @@ export const validate = Effect.fn("Publisher.validate")(function* (
 	for (const origin of config.allowedOrigins ?? []) {
 		const url = yield* Schema.decodeEffect(Document.Link)(origin)
 		if (new URL(url).origin !== origin) {
-			return yield* new Document.InvalidDocument({
+			return yield* Document.InvalidDocument.make({
 				kind: "Publication",
 				issue: "allowedOrigins entries must be exact HTTPS origins",
 			})
@@ -77,13 +77,13 @@ export const validate = Effect.fn("Publisher.validate")(function* (
 			(e) => e.type === Document.cardMediaType && e.url === cardUrl,
 		)
 	) {
-		return yield* new Document.InvalidDocument({
+		return yield* Document.InvalidDocument.make({
 			kind: "Publication",
 			issue: "Published Catalog must reference the stable Card URL",
 		})
 	}
 	if (config.etag !== undefined && !/^(W\/)?"[^"\r\n]*"$/.test(config.etag)) {
-		return yield* new Document.InvalidDocument({
+		return yield* Document.InvalidDocument.make({
 			kind: "Publication",
 			issue: "ETag must be a quoted HTTP entity tag",
 		})
@@ -92,7 +92,7 @@ export const validate = Effect.fn("Publisher.validate")(function* (
 		config.lastModified !== undefined &&
 		!Number.isFinite(Date.parse(config.lastModified))
 	) {
-		return yield* new Document.InvalidDocument({
+		return yield* Document.InvalidDocument.make({
 			kind: "Publication",
 			issue: "Last-Modified must be an HTTP date",
 		})
@@ -179,7 +179,7 @@ export const layerProtected = <E, R>(options: {
 						new URL(url).pathname === new URL(protection.metadataUrl).pathname,
 				)
 			)
-				return yield* new Document.InvalidDocument({
+				return yield* Document.InvalidDocument.make({
 					kind: "Publication",
 					issue: "PRM (Protected Resource Metadata) must use its own route",
 				})

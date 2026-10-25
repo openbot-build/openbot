@@ -40,12 +40,11 @@ export const make = (
 					return (yield* Schema.decodeUnknownEffect(Tokens)(response))
 						.input_tokens
 				}).pipe(
-					Effect.mapError(
-						(error) =>
-							new ContextCompaction.ContextCompactionError({
-								reason: "request-failed",
-								message: String(error),
-							}),
+					Effect.mapError((error) =>
+						ContextCompaction.ContextCompactionError.make({
+							reason: "request-failed",
+							message: String(error),
+						}),
 					),
 				),
 			compact: (request) =>
@@ -68,12 +67,11 @@ export const make = (
 						prompt: Prompt.empty,
 					}
 				}).pipe(
-					Effect.mapError(
-						(error) =>
-							new ContextCompaction.ContextCompactionError({
-								reason: "request-failed",
-								message: String(error),
-							}),
+					Effect.mapError((error) =>
+						ContextCompaction.ContextCompactionError.make({
+							reason: "request-failed",
+							message: String(error),
+						}),
 					),
 				),
 		})

@@ -101,7 +101,7 @@ it.effect(
 						}
 					},
 					catch: () =>
-						new Network.NetworkError({
+						Network.NetworkError.make({
 							reason: "Transport",
 							message: "Publisher fixture request failed",
 						}),

@@ -79,7 +79,7 @@ export const make = <P, D extends Plugin.StateDeclaration>(input: {
 					const context = yield* Bot.Context,
 						at = yield* context.at
 					if (at.chat !== request.base.chat)
-						return yield* new Chat.ChatError({
+						return yield* Chat.ChatError.make({
 							reason: "state-conflict",
 							message: "The plugin store is bound to a different Chat",
 						})

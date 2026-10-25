@@ -103,19 +103,23 @@ export interface Received {
 }
 
 /** The request did not come from the platform: the signature or token is wrong or too old. */
-export class ChannelDenied extends Data.TaggedError("ChannelDenied")<{
-	readonly reason: string
-}> {}
+export class ChannelDenied extends Schema.TaggedError<ChannelDenied>()(
+	"ChannelDenied",
+	{
+		reason: Schema.String,
+	},
+) {}
 
 /** The platform did not take a message. `retryAfterMs` is set when it asked to wait. */
-export class ChannelDeliveryFailed extends Data.TaggedError(
+export class ChannelDeliveryFailed extends Schema.TaggedError<ChannelDeliveryFailed>()(
 	"ChannelDeliveryFailed",
-)<{
-	readonly message: string
-	readonly retryAfterMs?: number
-	/** False when trying again cannot help, such as a wrong token. */
-	readonly retry: boolean
-}> {}
+	{
+		message: Schema.String,
+		retryAfterMs: Schema.optional(Schema.Finite),
+		/** False when trying again cannot help, such as a wrong token. */
+		retry: Schema.Boolean,
+	},
+) {}
 
 /**
  * The integration of one platform. Each kind has its own folder, like the model providers.

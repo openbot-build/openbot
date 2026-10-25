@@ -614,9 +614,9 @@ export const layer = (origin: string) =>
 						token.refresh ||
 						Option.isNone(yield* families.get(token.grant.family))
 					)
-						return yield* new Protection.TokenRejected({ reason: "Invalid" })
+						return yield* Protection.TokenRejected.make({ reason: "Invalid" })
 					if (token.expiresAt <= now)
-						return yield* new Protection.TokenRejected({ reason: "Expired" })
+						return yield* Protection.TokenRejected.make({ reason: "Expired" })
 					return {
 						subject: token.grant.subject,
 						issuer: issuer(origin)(token.grant.mode),

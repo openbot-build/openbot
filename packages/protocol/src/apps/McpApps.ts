@@ -45,7 +45,7 @@ const sdk = <A>(call: () => Promise<A>) =>
 	Effect.tryPromise({
 		try: call,
 		catch: () =>
-			new Ui.UiError({
+			Ui.UiError.make({
 				reason: "Protocol",
 				issue: "Apps bridge operation failed",
 			}),
@@ -167,7 +167,7 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 				yield* Match.value(current).pipe(
 					Match.tag("Ready", () => Effect.void),
 					Match.orElse(() =>
-						Effect.fail(new HostActionDenied({ action: "UI is not ready" })),
+						Effect.fail(HostActionDenied.make({ action: "UI is not ready" })),
 					),
 				)
 				const fiber = yield* Effect.forkIn(effect, currentScope)
@@ -202,7 +202,7 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 	}
 	const start = Effect.fn("Apps.load")(function* () {
 		if (disposed)
-			return yield* new Ui.UiError({
+			return yield* Ui.UiError.make({
 				reason: "Closed",
 				issue: "UI has been closed",
 			})
@@ -226,14 +226,14 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 			tool = page.tools.find((entry) => entry.name === options.tool)
 			cursor = page.nextCursor
 			if (cursor !== undefined && HashSet.has(seen, cursor))
-				return yield* new Ui.UiError({
+				return yield* Ui.UiError.make({
 					reason: "Protocol",
 					issue: "The App repeated a tool cursor",
 				})
 			if (cursor !== undefined) seen = HashSet.add(seen, cursor)
 		} while (tool === undefined && cursor !== undefined)
 		if (tool === undefined)
-			return yield* new Ui.UiError({
+			return yield* Ui.UiError.make({
 				reason: "Declaration",
 				issue: "Tool is missing from the bound service",
 			})
@@ -243,7 +243,7 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 			Match.tag("Completed", (read) => ui.readResource(uri, read.result)),
 			Match.orElse(() =>
 				Effect.fail(
-					new Ui.UiError({
+					Ui.UiError.make({
 						reason: "Resource",
 						issue: "UI resource needs more input",
 					}),
@@ -264,7 +264,7 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 		options.container.append(frame)
 		const peer = frame.contentWindow
 		if (peer === null)
-			return yield* new Ui.UiError({
+			return yield* Ui.UiError.make({
 				reason: "Initialization",
 				issue: "UI Window is unavailable",
 			})
@@ -294,7 +294,7 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 				Match.tag("Completed", (operation) => Effect.succeed(operation.result)),
 				Match.orElse(() =>
 					Effect.fail(
-						new HostActionDenied({
+						HostActionDenied.make({
 							action: "More input needs an explicit host action",
 						}),
 					),
@@ -352,7 +352,7 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 			}
 		}
 		current.onrequestteardown = () => {
-			const error = new Ui.UiError({
+			const error = Ui.UiError.make({
 				reason: "Closed",
 				issue: "App requested teardown",
 			})
@@ -379,7 +379,7 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 		let loaded = false
 		const navigated = () => {
 			if (loaded && id === generation) {
-				const error = new Ui.UiError({
+				const error = Ui.UiError.make({
 					reason: "Initialization",
 					issue: "UI navigated away from its bound document",
 				})
@@ -414,7 +414,7 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 					)
 				yield* Deferred.fail(
 					ready,
-					new Ui.UiError({
+					Ui.UiError.make({
 						reason: "Closed",
 						issue: "UI document was released",
 					}),
@@ -428,7 +428,7 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 					duration: options.timeoutMs ?? 10_000,
 					orElse: () =>
 						Effect.fail(
-							new Ui.UiError({
+							Ui.UiError.make({
 								reason: "Initialization",
 								issue: "UI did not finish initialization",
 							}),
@@ -448,12 +448,11 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 			fail(
 				Match.value(error).pipe(
 					Match.tag("UiError", (error) => error),
-					Match.orElse(
-						() =>
-							new Ui.UiError({
-								reason: "Resource",
-								issue: "Could not load UI from the bound service",
-							}),
+					Match.orElse(() =>
+						Ui.UiError.make({
+							reason: "Resource",
+							issue: "Could not load UI from the bound service",
+						}),
 					),
 				),
 			),
@@ -466,7 +465,7 @@ export const mount = Effect.fn("Apps.mount")(function* (options: {
 		yield* Ref.set(state, { _tag: "Closed" })
 		yield* Deferred.fail(
 			ready,
-			new Ui.UiError({
+			Ui.UiError.make({
 				reason: "Closed",
 				issue: "UI has been closed",
 			}),

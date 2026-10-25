@@ -84,7 +84,7 @@ const policy = Client.InvocationPolicy.of({
 		Schema.is(Client.ListAction)(invocation.action)
 			? Effect.void
 			: Effect.fail(
-					new Client.PermissionDenied({
+					Client.PermissionDenied.make({
 						action: invocation.action,
 						target: invocation.target,
 					}),
@@ -188,12 +188,11 @@ export const make = (
 											yield* access.authorize(owner, test.value.cardUrl, true)
 											yield* policy.check(invocation)
 										}).pipe(
-											Effect.mapError(
-												() =>
-													new Client.PermissionDenied({
-														action: invocation.action,
-														target: invocation.target,
-													}),
+											Effect.mapError(() =>
+												Client.PermissionDenied.make({
+													action: invocation.action,
+													target: invocation.target,
+												}),
 											),
 										),
 								}),

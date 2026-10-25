@@ -1,22 +1,26 @@
-import { Context, Data, Effect, Schema } from "effect"
+import { Context, Effect, Schema } from "effect"
 import * as Store from "./Store.ts"
 
-export class AuthorizationError extends Data.TaggedError("AuthorizationError")<{
-	readonly reason:
-		| "Metadata"
-		| "CimdUnsupported"
-		| "ClientMetadata"
-		| "CallbackMismatch"
-		| "FlowExpired"
-		| "AlreadyConsumed"
-		| "GrantRejected"
-		| "RefreshUnavailable"
-		| "RefreshFailed"
-		| "ScopeRequired"
-		| "Crypto"
-		| "RevocationFailed"
-	readonly issue: string
-}> {}
+export class AuthorizationError extends Schema.TaggedError<AuthorizationError>()(
+	"AuthorizationError",
+	{
+		reason: Schema.Literals([
+			"Metadata",
+			"CimdUnsupported",
+			"ClientMetadata",
+			"CallbackMismatch",
+			"FlowExpired",
+			"AlreadyConsumed",
+			"GrantRejected",
+			"RefreshUnavailable",
+			"RefreshFailed",
+			"ScopeRequired",
+			"Crypto",
+			"RevocationFailed",
+		]),
+		issue: Schema.String,
+	},
+) {}
 
 export class ClientMetadata extends Schema.Opaque<ClientMetadata>()(
 	Schema.StructWithRest(
@@ -33,12 +37,11 @@ export class ClientMetadata extends Schema.Opaque<ClientMetadata>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(ClientMetadata)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new AuthorizationError({
-						reason: "ClientMetadata",
-						issue: error.message,
-					}),
+			Effect.mapError((error) =>
+				AuthorizationError.make({
+					reason: "ClientMetadata",
+					issue: error.message,
+				}),
 			),
 		)
 }
@@ -56,12 +59,11 @@ export class ResourceMetadata extends Schema.Opaque<ResourceMetadata>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(ResourceMetadata)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new AuthorizationError({
-						reason: "Metadata",
-						issue: error.message,
-					}),
+			Effect.mapError((error) =>
+				AuthorizationError.make({
+					reason: "Metadata",
+					issue: error.message,
+				}),
 			),
 		)
 }
@@ -88,12 +90,11 @@ export class ServerMetadata extends Schema.Opaque<ServerMetadata>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(ServerMetadata)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new AuthorizationError({
-						reason: "Metadata",
-						issue: error.message,
-					}),
+			Effect.mapError((error) =>
+				AuthorizationError.make({
+					reason: "Metadata",
+					issue: error.message,
+				}),
 			),
 		)
 }
@@ -113,12 +114,11 @@ export class Flow extends Schema.Opaque<Flow>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Flow)(value).pipe(
-			Effect.mapError(
-				() =>
-					new AuthorizationError({
-						reason: "CallbackMismatch",
-						issue: "Invalid saved authorization flow",
-					}),
+			Effect.mapError(() =>
+				AuthorizationError.make({
+					reason: "CallbackMismatch",
+					issue: "Invalid saved authorization flow",
+				}),
 			),
 		)
 }

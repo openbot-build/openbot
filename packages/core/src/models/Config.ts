@@ -118,12 +118,10 @@ export const SelectionReason = ModelConfigurationReason.pick([
 ])
 export type SelectionReason = typeof SelectionReason.Type
 
-export class ModelConfigurationError extends Data.TaggedError(
+export class ModelConfigurationError extends Schema.TaggedError<ModelConfigurationError>()(
 	"ModelConfigurationError",
-)<{
-	readonly reason: ModelConfigurationReason
-	readonly message: string
-}> {}
+	{ reason: ModelConfigurationReason, message: Schema.String },
+) {}
 
 export interface ModelConfigurationOperations<
 	ReadError = ModelConfigurationError,
@@ -165,10 +163,13 @@ export class ModelConfiguration extends Context.Service<
 	ModelConfigurationOperations
 >()("@openbot-build/core/models/Config/ModelConfiguration") {}
 
-export class ExecutionModeError extends Data.TaggedError("ExecutionModeError")<{
-	readonly reason: "chat-not-found" | "unavailable"
-	readonly message: string
-}> {}
+export class ExecutionModeError extends Schema.TaggedError<ExecutionModeError>()(
+	"ExecutionModeError",
+	{
+		reason: Schema.Literals(["chat-not-found", "unavailable"]),
+		message: Schema.String,
+	},
+) {}
 
 export interface ExecutionModeOperations<
 	ReadError = ExecutionModeError,

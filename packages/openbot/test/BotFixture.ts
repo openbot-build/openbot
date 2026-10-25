@@ -32,7 +32,7 @@ export const direct = (
 
 const noHelper = () =>
 	Effect.fail(
-		new Judge.HelperModelUnavailable({
+		Judge.HelperModelUnavailable.make({
 			message: "No helper model in this test.",
 		}),
 	)

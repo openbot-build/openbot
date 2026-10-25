@@ -14,7 +14,7 @@ const decode = <A>(schema: StandardSchemaV1<unknown, A>, input: unknown) =>
 		() => schema,
 		input,
 		() =>
-			new ProtocolClient.ClientError({
+			ProtocolClient.ClientError.make({
 				reason: "Protocol",
 				issue:
 					"The App view request failed. Check its saved operation before you continue.",
@@ -39,13 +39,12 @@ export const make = Effect.fn("AppViews.make")(function* (
 				payload: { method, params: cursor === undefined ? {} : { cursor } },
 			})
 			.pipe(
-				Effect.mapError(
-					() =>
-						new ProtocolClient.ClientError({
-							reason: "Protocol",
-							issue:
-								"The App view request failed. Check its saved operation before you continue.",
-						}),
+				Effect.mapError(() =>
+					ProtocolClient.ClientError.make({
+						reason: "Protocol",
+						issue:
+							"The App view request failed. Check its saved operation before you continue.",
+					}),
 				),
 			)
 	const invoke = (payload: Api.ActionRequest) =>
@@ -57,13 +56,12 @@ export const make = Effect.fn("AppViews.make")(function* (
 					? api.appViews.act({ params, payload })
 					: api.appViews.act({ params, payload })
 			).pipe(
-				Effect.mapError(
-					() =>
-						new ProtocolClient.ClientError({
-							reason: "Protocol",
-							issue:
-								"The App view request failed. Check its saved operation before you continue.",
-						}),
+				Effect.mapError(() =>
+					ProtocolClient.ClientError.make({
+						reason: "Protocol",
+						issue:
+							"The App view request failed. Check its saved operation before you continue.",
+					}),
 				),
 			)
 			let previous: string | undefined
@@ -71,13 +69,12 @@ export const make = Effect.fn("AppViews.make")(function* (
 				const observed = yield* api.appViews
 					.operation({ params: { ...params, requestId: payload.requestId } })
 					.pipe(
-						Effect.mapError(
-							() =>
-								new ProtocolClient.ClientError({
-									reason: "Protocol",
-									issue:
-										"The App view request failed. Check its saved operation before you continue.",
-								}),
+						Effect.mapError(() =>
+							ProtocolClient.ClientError.make({
+								reason: "Protocol",
+								issue:
+									"The App view request failed. Check its saved operation before you continue.",
+							}),
 						),
 					)
 				if (previous !== observed.status) {
@@ -98,7 +95,7 @@ export const make = Effect.fn("AppViews.make")(function* (
 					observed.status === "OutcomeUnknown" ||
 					observed.status === "Rejected"
 				)
-					return yield* new ProtocolClient.ClientError({
+					return yield* ProtocolClient.ClientError.make({
 						reason: "Protocol",
 						issue:
 							"The App view request failed. Check its saved operation before you continue.",
@@ -130,13 +127,12 @@ export const make = Effect.fn("AppViews.make")(function* (
 			),
 		callTool: (input) =>
 			Schema.decodeUnknownEffect(Schema.JsonObject)(input.arguments ?? {}).pipe(
-				Effect.mapError(
-					() =>
-						new ProtocolClient.ClientError({
-							reason: "Protocol",
-							issue:
-								"The App view request failed. Check its saved operation before you continue.",
-						}),
+				Effect.mapError(() =>
+					ProtocolClient.ClientError.make({
+						reason: "Protocol",
+						issue:
+							"The App view request failed. Check its saved operation before you continue.",
+					}),
 				),
 				Effect.flatMap((args) =>
 					Effect.flatMap(newRequestId, (requestId) =>

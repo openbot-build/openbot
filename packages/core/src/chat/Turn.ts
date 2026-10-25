@@ -71,9 +71,9 @@ export const Record = Schema.Struct({
 	completedAt: Schema.optionalKey(Schema.Finite),
 })
 export type Record = typeof Record.Type
-export class Conflict extends Data.TaggedError("TurnConflict")<{
-	readonly chat: ChatIdentity.Id
-	readonly turn: Id
-	readonly message: string
-}> {}
+export class Conflict extends Schema.TaggedError<Conflict>()("TurnConflict", {
+	chat: ChatIdentity.Id,
+	turn: Id,
+	message: Schema.String,
+}) {}
 export const isTerminal = (status: Status) => status._tag !== "Running"

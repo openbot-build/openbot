@@ -3,7 +3,6 @@ import { App, Client, Discovery, Document, Ui } from "@openbot-build/protocol"
 import {
 	Array as Arr,
 	Context,
-	Data,
 	Effect,
 	HashSet,
 	Layer,
@@ -21,9 +20,10 @@ import type {
 } from "./StoredConnections.ts"
 import * as Db from "../database/Database.ts"
 
-export class Unavailable extends Data.TaggedError(
+export class Unavailable extends Schema.TaggedError<Unavailable>()(
 	"AppCapabilitiesUnavailable",
-)<{ readonly reason: "Disabled" | "NeedsRevalidation" }> {}
+	{ reason: Schema.Literals(["Disabled", "NeedsRevalidation"]) },
+) {}
 export type Error =
 	| Client.Error
 	| StorageError
@@ -79,7 +79,7 @@ export const pages = <A>(
 				if (next === undefined) return Effect.succeed(page.values)
 				if (HashSet.has(seen, next))
 					return Effect.fail(
-						new Client.ClientError({
+						Client.ClientError.make({
 							reason: "Protocol",
 							issue: "The App repeated a capability cursor.",
 						}),
@@ -118,7 +118,7 @@ export const make: Effect.Effect<
 			)
 			yield* governance.check(stored.connection.cardUrl)
 			if (stored.connection.state !== "Enabled")
-				return yield* new Unavailable({
+				return yield* Unavailable.make({
 					reason:
 						stored.connection.state === "NeedsRevalidation"
 							? "NeedsRevalidation"
@@ -155,7 +155,7 @@ export const make: Effect.Effect<
 						card: declared.card,
 						sources: declared.sources,
 					})
-					return yield* new Unavailable({ reason: "NeedsRevalidation" })
+					return yield* Unavailable.make({ reason: "NeedsRevalidation" })
 				}
 				yield* StoredConnections.updateApp(db, input.owner, {
 					cardUrl: declared.cardUrl,

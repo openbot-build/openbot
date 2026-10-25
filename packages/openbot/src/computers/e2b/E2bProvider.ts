@@ -125,7 +125,7 @@ export const make = (credentials: Credentials) =>
 					> =>
 						reply.status === 404
 							? Effect.fail(
-									new ComputerGone({
+									ComputerGone.make({
 										reason: `The E2B sandbox ${id} does not exist`,
 									}),
 								)
@@ -150,7 +150,7 @@ export const make = (credentials: Credentials) =>
 					): Effect.Effect<void, ComputerCallFailed | ComputerGone> =>
 						reply.status === 404
 							? Effect.fail(
-									new ComputerGone({
+									ComputerGone.make({
 										reason: `The E2B sandbox ${id} does not exist`,
 									}),
 								)
@@ -211,7 +211,7 @@ export const make = (credentials: Credentials) =>
 			Effect.gen(function* () {
 				const found = yield* detail(id)
 				if (Option.isNone(found))
-					return yield* new ComputerGone({
+					return yield* ComputerGone.make({
 						reason: `The E2B sandbox ${id} does not exist`,
 					})
 				const body = found.value
@@ -249,7 +249,7 @@ export const make = (credentials: Credentials) =>
 						),
 						Effect.catchTag("SandboxAway", () =>
 							Effect.fail(
-								new ComputerCallFailed({
+								ComputerCallFailed.make({
 									message: "The E2B sandbox does not answer after a resume",
 									retry: true,
 								}),
@@ -280,12 +280,11 @@ export const make = (credentials: Credentials) =>
 								file.encoding === "base64"
 									? yield* Base64.decode(file.content).pipe(
 											Effect.fromResult,
-											Effect.mapError(
-												() =>
-													new ComputerCallFailed({
-														message: "The file content is not valid base64",
-														retry: false,
-													}),
+											Effect.mapError(() =>
+												ComputerCallFailed.make({
+													message: "The file content is not valid base64",
+													retry: false,
+												}),
 											),
 										)
 									: new TextEncoder().encode(file.content)
@@ -307,7 +306,7 @@ export const make = (credentials: Credentials) =>
 							result.exitCode === 0
 								? Effect.succeed(result.stdout)
 								: Effect.fail(
-										new ComputerCallFailed({
+										ComputerCallFailed.make({
 											message: `The desktop command failed: ${(result.stderr || result.stdout).slice(-300) || "it did not finish in time"}`,
 											retry: false,
 										}),

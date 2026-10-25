@@ -198,10 +198,16 @@ export const Event = Data.taggedEnum<Event>()
 export type LiveErrorReason =
 	"unsupported" | "connect" | "protocol" | "closed" | "provider"
 
-export class LiveError extends Data.TaggedError("LiveError")<{
-	readonly reason: LiveErrorReason
-	readonly message: string
-}> {}
+export class LiveError extends Schema.TaggedError<LiveError>()("LiveError", {
+	reason: Schema.Literals([
+		"unsupported",
+		"connect",
+		"protocol",
+		"closed",
+		"provider",
+	]),
+	message: Schema.String,
+}) {}
 
 /** One open connection to a backend. It ends when its Scope closes. */
 export interface Connection {
@@ -243,7 +249,7 @@ export const unsupported = (capabilities: Capabilities, input: Input) => {
 		History: () => false,
 	})
 	return missing
-		? new LiveError({
+		? LiveError.make({
 				reason: "unsupported",
 				message: `This Live model does not support the input ${input._tag}.`,
 			})

@@ -8,12 +8,11 @@ const as =
 	<S extends Schema.Top>(schema: S) =>
 	(value: unknown) =>
 		Schema.decodeUnknownEffect(schema)(value).pipe(
-			Effect.mapError(
-				() =>
-					new ComputerCallFailed({
-						message: "The machine sent an answer of the wrong form.",
-						retry: false,
-					}),
+			Effect.mapError(() =>
+				ComputerCallFailed.make({
+					message: "The machine sent an answer of the wrong form.",
+					retry: false,
+				}),
 			),
 		)
 
@@ -54,7 +53,7 @@ export const make = (input: {
 						act: (actions) =>
 							call({ _tag: "Desktop", actions }).pipe(Effect.asVoid),
 						stream: Effect.fail(
-							new ComputerCallFailed({
+							ComputerCallFailed.make({
 								message: "A connected machine cannot stream its desktop.",
 								retry: false,
 							}),

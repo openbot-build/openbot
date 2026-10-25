@@ -188,7 +188,7 @@ export const make = (credentials: Credentials) =>
 			Effect.gen(function* () {
 				const found = yield* detail(id)
 				if (Option.isNone(found))
-					return yield* new ComputerGone({
+					return yield* ComputerGone.make({
 						reason: `The Daytona sandbox ${id} does not exist`,
 					})
 				const body = found.value
@@ -230,12 +230,12 @@ export const make = (credentials: Credentials) =>
 						while ((yield* Clock.currentTimeMillis) - now < startTimeoutMs) {
 							const current = yield* detail(id)
 							if (Option.isNone(current))
-								return yield* new ComputerGone({
+								return yield* ComputerGone.make({
 									reason: `The Daytona sandbox ${id} does not exist`,
 								})
 							const state = stateOf(string(current.value, "state"))
 							if (state === "gone")
-								return yield* new ComputerGone({
+								return yield* ComputerGone.make({
 									reason: `The Daytona sandbox ${id} does not exist`,
 								})
 							if (state === "running") {
@@ -255,7 +255,7 @@ export const make = (credentials: Credentials) =>
 							}
 							yield* Effect.sleep(1000)
 						}
-						return yield* new ComputerCallFailed({
+						return yield* ComputerCallFailed.make({
 							message: "The Daytona sandbox did not start in time",
 							retry: true,
 						})
@@ -283,7 +283,7 @@ export const make = (credentials: Credentials) =>
 				const startCommand = (request: StartRequest) =>
 					Effect.gen(function* () {
 						if (request.tty)
-							return yield* new ComputerCallFailed({
+							return yield* ComputerCallFailed.make({
 								message:
 									"A Daytona Computer gives no terminal to a command in OpenBot. Run it without tty.",
 								retry: false,
@@ -325,7 +325,7 @@ export const make = (credentials: Credentials) =>
 							string(json(started), "cmdId") ??
 							string(json(started), "commandId")
 						if (commandId === undefined)
-							return yield* new ComputerCallFailed({
+							return yield* ComputerCallFailed.make({
 								message: "Daytona did not give the command an ID.",
 								retry: true,
 							})
@@ -398,7 +398,7 @@ export const make = (credentials: Credentials) =>
 											),
 										)
 									: Effect.fail(
-											new ComputerCallFailed({
+											ComputerCallFailed.make({
 												message: `A Daytona Computer cannot send ${signal} to a command. Close the session to stop it.`,
 												retry: false,
 											}),
@@ -430,12 +430,11 @@ export const make = (credentials: Credentials) =>
 								file.encoding === "base64"
 									? yield* Base64.decode(file.content).pipe(
 											Effect.fromResult,
-											Effect.mapError(
-												() =>
-													new ComputerCallFailed({
-														message: "The file content is not valid base64",
-														retry: false,
-													}),
+											Effect.mapError(() =>
+												ComputerCallFailed.make({
+													message: "The file content is not valid base64",
+													retry: false,
+												}),
 											),
 										)
 									: new TextEncoder().encode(file.content)
@@ -606,7 +605,7 @@ export const make = (credentials: Credentials) =>
 										),
 									)
 									if (size === undefined)
-										return yield* new ComputerCallFailed({
+										return yield* ComputerCallFailed.make({
 											message: "The screenshot of Daytona is not a PNG image",
 											retry: true,
 										})
@@ -641,7 +640,7 @@ export const make = (credentials: Credentials) =>
 						(reply): Effect.Effect<void, ComputerCallFailed | ComputerGone> =>
 							reply.status === 404
 								? Effect.fail(
-										new ComputerGone({
+										ComputerGone.make({
 											reason: `The Daytona sandbox ${id} does not exist`,
 										}),
 									)

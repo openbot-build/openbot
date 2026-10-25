@@ -28,12 +28,11 @@ export const checks = (db: Db.Database, namespace: string) =>
 				),
 			),
 			Effect.map(HashMap.fromIterable),
-			Effect.mapError(
-				() =>
-					new Index.IndexError({
-						reason: "Unavailable",
-						operation: "Public Index storage",
-					}),
+			Effect.mapError(() =>
+				Index.IndexError.make({
+					reason: "Unavailable",
+					operation: "Public Index storage",
+				}),
 			),
 		)
 
@@ -59,12 +58,11 @@ export const layer = Layer.effect(
 								? Effect.succeedNone
 								: decode(rows[0].body).pipe(Effect.asSome),
 						),
-						Effect.mapError(
-							() =>
-								new Index.IndexError({
-									reason: "Unavailable",
-									operation: "Public Index storage",
-								}),
+						Effect.mapError(() =>
+							Index.IndexError.make({
+								reason: "Unavailable",
+								operation: "Public Index storage",
+							}),
 						),
 					),
 			upsert: (entry) =>
@@ -81,12 +79,11 @@ export const layer = Layer.effect(
 					})
 					.pipe(
 						Effect.as(entry),
-						Effect.mapError(
-							() =>
-								new Index.IndexError({
-									reason: "Unavailable",
-									operation: "Public Index storage",
-								}),
+						Effect.mapError(() =>
+							Index.IndexError.make({
+								reason: "Unavailable",
+								operation: "Public Index storage",
+							}),
 						),
 					),
 			withdraw: (cardUrl) =>
@@ -95,12 +92,11 @@ export const layer = Layer.effect(
 					.where(where(cardUrl))
 					.pipe(
 						Effect.asVoid,
-						Effect.mapError(
-							() =>
-								new Index.IndexError({
-									reason: "Unavailable",
-									operation: "Public Index storage",
-								}),
+						Effect.mapError(() =>
+							Index.IndexError.make({
+								reason: "Unavailable",
+								operation: "Public Index storage",
+							}),
 						),
 					),
 		})

@@ -21,14 +21,14 @@ const readers = Layer.succeed(
 		make: (credentials) => ({
 			verify:
 				credentials.kind !== "bitwarden" && credentials.token === "bad"
-					? Effect.fail(new VaultReadFailed({ message: "Wrong token" }))
+					? Effect.fail(VaultReadFailed.make({ message: "Wrong token" }))
 					: Effect.void,
 			read: (_source, fields) =>
 				fields.every((field) => field === "password")
 					? Effect.succeed(
 							new Map(fields.map((field) => [field, remoteSecret])),
 						)
-					: Effect.fail(new VaultReadFailed({ message: "No such field" })),
+					: Effect.fail(VaultReadFailed.make({ message: "No such field" })),
 		}),
 	}),
 )

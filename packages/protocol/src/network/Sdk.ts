@@ -65,7 +65,7 @@ export const fetch = Effect.fn("Sdk.fetch")(function* (
 				)
 				return yield* Effect.gen(function* () {
 					if (!["GET", "HEAD", "POST", "DELETE"].includes(request.method))
-						return yield* new Network.NetworkError({
+						return yield* Network.NetworkError.make({
 							reason: "Transport",
 							message: "Unsupported SDK HTTP method",
 						})
@@ -85,7 +85,7 @@ export const fetch = Effect.fn("Sdk.fetch")(function* (
 						const bytes = yield* Effect.tryPromise({
 							try: () => request.arrayBuffer(),
 							catch: () =>
-								new Network.NetworkError({
+								Network.NetworkError.make({
 									reason: "Transport",
 									message: "Could not read SDK request body",
 								}),
@@ -149,7 +149,7 @@ export const fetch = Effect.fn("Sdk.fetch")(function* (
 										duration: 10_000,
 										orElse: () =>
 											Effect.fail(
-												new Network.NetworkError({
+												Network.NetworkError.make({
 													reason: "Timeout",
 													message: "OAuth response timed out",
 												}),

@@ -20,7 +20,7 @@ export const make = <P, Tools extends Record<string, Tool.Any>, E, R>(
 							additional.additional,
 						)
 			if (view.chat.settings.model === undefined)
-				return yield* new ConversationContext.ConversationContextError({
+				return yield* ConversationContext.ConversationContextError.make({
 					reason: "read-failed",
 					message: "No model is selected for the current Chat",
 				})

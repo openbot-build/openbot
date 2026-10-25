@@ -142,12 +142,11 @@ export const make: Effect.Effect<
 				Context.add(Client.InvocationPolicy, {
 					check: (invocation) =>
 						governance.check(invocation.connection.cardUrl).pipe(
-							Effect.mapError(
-								() =>
-									new Client.PermissionDenied({
-										action: invocation.action,
-										target: invocation.target,
-									}),
+							Effect.mapError(() =>
+								Client.PermissionDenied.make({
+									action: invocation.action,
+									target: invocation.target,
+								}),
 							),
 							Effect.andThen(policy.check(invocation)),
 						),
@@ -158,7 +157,7 @@ export const make: Effect.Effect<
 				key.owner === owner
 					? Effect.void
 					: Effect.fail(
-							new Store.StoreError({
+							Store.StoreError.make({
 								reason: "Missing",
 								operation: "Owned App connection",
 							}),
@@ -179,12 +178,11 @@ export const make: Effect.Effect<
 					const links = yield* Schema.decodeEffect(Schema.Array(Document.Link))(
 						[connection.endpoint, ...additional],
 					).pipe(
-						Effect.mapError(
-							() =>
-								new Store.StoreError({
-									reason: "Invalid",
-									operation: "App network targets",
-								}),
+						Effect.mapError(() =>
+							Store.StoreError.make({
+								reason: "Invalid",
+								operation: "App network targets",
+							}),
 						),
 					)
 					const context = yield* Layer.buildWithScope(
@@ -197,7 +195,7 @@ export const make: Effect.Effect<
 					return yield* program.pipe(Effect.provideContext(context))
 				})
 			const appError = () =>
-				new HostApp.AppError({
+				HostApp.AppError.make({
 					reason: "storage-failed",
 					message: "The account's App connections could not be read.",
 				})
@@ -254,14 +252,13 @@ export const make: Effect.Effect<
 						verification: { _tag: "CleanupPending", stage },
 					}),
 				).pipe(
-					Effect.mapError(
-						() =>
-							new Store.StoreError({
-								reason: "Unavailable",
-								operation: "Record App cleanup progress",
-							}),
+					Effect.mapError(() =>
+						Store.StoreError.make({
+							reason: "Unavailable",
+							operation: "Record App cleanup progress",
+						}),
 					),
-					Effect.andThen(Effect.fail(new App.CleanupPending({ key, stage }))),
+					Effect.andThen(Effect.fail(App.CleanupPending.make({ key, stage }))),
 				)
 			const revoke = (key: Store.ConnectionKey) =>
 				Effect.scoped(
@@ -309,18 +306,18 @@ export const make: Effect.Effect<
 					yield* governance
 						.check(input.candidate.cardUrl)
 						.pipe(
-							Effect.mapError(
-								() => new App.AppError({ reason: "Unavailable" }),
+							Effect.mapError(() =>
+								App.AppError.make({ reason: "Unavailable" }),
 							),
 						)
 					if (!input.confirmed)
-						return yield* new App.AppError({ reason: "ConfirmationRequired" })
+						return yield* App.AppError.make({ reason: "ConfirmationRequired" })
 					const current = yield* discovery.refreshCard(input.candidate.cardUrl)
 					yield* Match.value(
 						rules.compare({ previous: input.candidate, current }),
 					).pipe(
 						Match.tag("NeedsRevalidation", () =>
-							Effect.fail(new App.AppError({ reason: "CandidateChanged" })),
+							Effect.fail(App.AppError.make({ reason: "CandidateChanged" })),
 						),
 						Match.orElse(() => Effect.void),
 					)
@@ -349,8 +346,8 @@ export const make: Effect.Effect<
 							connection,
 						})
 						.pipe(
-							Effect.mapError(
-								() => new App.AppError({ reason: "Unavailable" }),
+							Effect.mapError(() =>
+								App.AppError.make({ reason: "Unavailable" }),
 							),
 						)
 					return yield* AppConnections.add({
@@ -392,12 +389,11 @@ export const make: Effect.Effect<
 					Effect.gen(function* () {
 						const connection = yield* stores.apps.get(input.key)
 						yield* governance.check(connection.cardUrl).pipe(
-							Effect.mapError(
-								() =>
-									new Client.PermissionDenied({
-										action: "connect",
-										target: connection.cardUrl,
-									}),
+							Effect.mapError(() =>
+								Client.PermissionDenied.make({
+									action: "connect",
+									target: connection.cardUrl,
+								}),
 							),
 						)
 						return yield* withNetwork(
@@ -432,12 +428,11 @@ export const make: Effect.Effect<
 						),
 						Effect.tap(() => active.close(key)),
 						Effect.map((row) => row.connection),
-						Effect.mapError(
-							() =>
-								new Store.StoreError({
-									reason: "Unavailable",
-									operation: "Update owned App state",
-								}),
+						Effect.mapError(() =>
+							Store.StoreError.make({
+								reason: "Unavailable",
+								operation: "Update owned App state",
+							}),
 						),
 					),
 				remove: (key) =>

@@ -1,6 +1,6 @@
 import { createDecipheriv, createHash } from "node:crypto"
 import type { ChannelsApi } from "@openbot-build/api"
-import { Clock, Effect, Predicate, Ref } from "effect"
+import { Clock, Effect, Option, Predicate, Ref } from "effect"
 import { HttpClientRequest } from "effect/http"
 import {
 	Channel,
@@ -30,19 +30,15 @@ const origins: Record<ChannelsApi.LarkDomain, string> = {
  * Lark encrypts each event with AES-256-CBC. The key is the SHA-256 of the encrypt key,
  * and the first 16 bytes of the data are the IV.
  */
-const decrypt = (encryptKey: string, data: string) => {
-	try {
-		const bytes = Buffer.from(data, "base64")
-		const key = createHash("sha256").update(encryptKey).digest()
-		const decipher = createDecipheriv("aes-256-cbc", key, bytes.subarray(0, 16))
-		return Buffer.concat([
-			decipher.update(bytes.subarray(16)),
-			decipher.final(),
-		]).toString("utf8")
-	} catch {
-		return undefined
-	}
-}
+const decrypt = Option.liftThrowable((encryptKey: string, data: string) => {
+	const bytes = Buffer.from(data, "base64")
+	const key = createHash("sha256").update(encryptKey).digest()
+	const decipher = createDecipheriv("aes-256-cbc", key, bytes.subarray(0, 16))
+	return Buffer.concat([
+		decipher.update(bytes.subarray(16)),
+		decipher.final(),
+	]).toString("utf8")
+})
 
 /** Lark puts `@_user_1` in the text for each mention. The Bot does not need them. */
 
@@ -77,15 +73,17 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 		const outer = parse(request.body)
 		const encrypted = text(outer, "encrypt")
 		if (encrypted === undefined)
-			return yield* new ChannelDenied({ reason: "the event is not encrypted" })
-		const body = parse(decrypt(secrets.encryptKey, encrypted) ?? "")
+			return yield* ChannelDenied.make({ reason: "the event is not encrypted" })
+		const body = parse(
+			Option.getOrElse(decrypt(secrets.encryptKey, encrypted), () => ""),
+		)
 		if (body === undefined)
-			return yield* new ChannelDenied({ reason: "the event does not decrypt" })
+			return yield* ChannelDenied.make({ reason: "the event does not decrypt" })
 		// The check of the request URL has the token, but no signature.
 		if (text(body, "type") === "url_verification") {
 			const token = text(body, "token")
 			if (token === undefined || !sameSecret(token, secrets.verificationToken))
-				return yield* new ChannelDenied({ reason: "wrong verification token" })
+				return yield* ChannelDenied.make({ reason: "wrong verification token" })
 			return { events: [], reply: { challenge: text(body, "challenge") } }
 		}
 		const timestamp = request.headers["x-lark-request-timestamp"]
@@ -96,16 +94,16 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 			nonce === undefined ||
 			signature === undefined
 		)
-			return yield* new ChannelDenied({ reason: "missing or old signature" })
+			return yield* ChannelDenied.make({ reason: "missing or old signature" })
 		const expected = createHash("sha256")
 			.update(timestamp + nonce + secrets.encryptKey + request.body)
 			.digest("hex")
 		if (!sameSecret(signature, expected))
-			return yield* new ChannelDenied({ reason: "wrong signature" })
+			return yield* ChannelDenied.make({ reason: "wrong signature" })
 		const header = field(body, "header")
 		const token = text(header, "token")
 		if (token === undefined || !sameSecret(token, secrets.verificationToken))
-			return yield* new ChannelDenied({ reason: "wrong verification token" })
+			return yield* ChannelDenied.make({ reason: "wrong verification token" })
 		const eventId = text(header, "event_id") ?? ""
 		const event = field(body, "event")
 		switch (text(header, "event_type")) {
@@ -209,7 +207,7 @@ export const make = (secrets: Secrets, call: Call): Effect.Effect<Channel> =>
 						reply,
 						`Lark answered ${reply.status} to ${what}`,
 					)
-				return yield* new ChannelDeliveryFailed({
+				return yield* ChannelDeliveryFailed.make({
 					message: `Lark refused ${what}: ${text(reply.json, "msg") ?? "unknown error"}`,
 					retry: false,
 				})

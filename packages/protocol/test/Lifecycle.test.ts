@@ -242,7 +242,7 @@ it.live(
 						...credentials,
 						deleteConnection: () =>
 							Effect.fail(
-								new Store.StoreError({
+								Store.StoreError.make({
 									reason: "Unavailable",
 									operation: "deleteConnection",
 								}),

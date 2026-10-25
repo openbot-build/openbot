@@ -41,12 +41,12 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 			timestamp === undefined ||
 			!recentSeconds(timestamp, request.now)
 		)
-			return yield* new ChannelDenied({ reason: "missing or old signature" })
+			return yield* ChannelDenied.make({ reason: "missing or old signature" })
 		if (!sameSecret(given, signature(secrets.secret, timestamp, request.body)))
-			return yield* new ChannelDenied({ reason: "wrong signature" })
+			return yield* ChannelDenied.make({ reason: "wrong signature" })
 		const event = decodeEvent(request.body)
 		if (Option.isNone(event))
-			return yield* new ChannelDenied({
+			return yield* ChannelDenied.make({
 				reason: "the body is not a CustomEvent",
 			})
 		const value = event.value
@@ -91,7 +91,7 @@ export const make = (secrets: Secrets, call: Call): Channel => {
 	const deliver = (delivery: ChannelsApi.CustomDelivery) =>
 		Effect.gen(function* () {
 			if (secrets.secret === null)
-				return yield* new ChannelDeliveryFailed({
+				return yield* ChannelDeliveryFailed.make({
 					message: "The custom Channel has no signing secret yet",
 					retry: false,
 				})
@@ -133,7 +133,7 @@ export const make = (secrets: Secrets, call: Call): Channel => {
 					Option.match(decodeResult(json), {
 						onNone: () =>
 							Effect.fail(
-								new ChannelDeliveryFailed({
+								ChannelDeliveryFailed.make({
 									message: "The custom Channel did not answer with a ref",
 									retry: false,
 								}),

@@ -1,5 +1,5 @@
-import { Data, Duration, Effect, Option, Stream } from "effect"
-import { type Prompt } from "effect/ai"
+import { Data, Duration, Effect, Option, Schema, Stream } from "effect"
+import { Prompt } from "effect/ai"
 import { Bot, Plugin } from "@openbot-build/core"
 
 export interface Options {
@@ -11,10 +11,10 @@ export class InvalidMaxDuration extends Data.TaggedError("InvalidMaxDuration")<{
 	readonly maxDuration: Duration.Input
 }> {}
 
-export class TimeLimitExceeded extends Data.TaggedError("TimeLimitExceeded")<{
-	readonly maxDuration: Duration.Duration
-	readonly history: Prompt.Prompt
-}> {}
+export class TimeLimitExceeded extends Schema.TaggedError<TimeLimitExceeded>()(
+	"TimeLimitExceeded",
+	{ maxDuration: Schema.Duration, history: Prompt.Prompt },
+) {}
 
 /**
  * Limits each execution on its own, through the ReAct middleware chain.
@@ -42,12 +42,11 @@ export const make = ({
 					Stream.interruptWhen(
 						Effect.sleep(duration.value).pipe(
 							Effect.andThen(context.history),
-							Effect.flatMap(
-								(history) =>
-									new TimeLimitExceeded({
-										maxDuration: duration.value,
-										history,
-									}),
+							Effect.flatMap((history) =>
+								TimeLimitExceeded.make({
+									maxDuration: duration.value,
+									history,
+								}),
 							),
 						),
 					),

@@ -49,18 +49,18 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 		const timestamp = request.headers["x-slack-request-timestamp"]
 		const signature = request.headers["x-slack-signature"]
 		if (!recentSeconds(timestamp, request.now) || signature === undefined)
-			return yield* new ChannelDenied({ reason: "missing or old signature" })
+			return yield* ChannelDenied.make({ reason: "missing or old signature" })
 		const expected =
 			"v0=" + hmacHex(secrets.signingSecret, `v0:${timestamp}:${request.body}`)
 		if (!sameSecret(signature, expected))
-			return yield* new ChannelDenied({ reason: "wrong signature" })
+			return yield* ChannelDenied.make({ reason: "wrong signature" })
 		// Button presses come as a form with one `payload` field.
 		const form = request.body.startsWith("payload=")
 			? new URLSearchParams(request.body).get("payload")
 			: null
 		const body = parse(form ?? request.body)
 		if (body === undefined)
-			return yield* new ChannelDenied({ reason: "the body is not JSON" })
+			return yield* ChannelDenied.make({ reason: "the body is not JSON" })
 		const type = text(body, "type")
 		if (type === "url_verification")
 			return { events: [], reply: { challenge: text(body, "challenge") } }
@@ -144,7 +144,7 @@ export const make = (secrets: Secrets, call: Call): Channel => {
 					`Slack answered ${reply.status} to ${method}`,
 				)
 			if (field(reply.json, "ok") !== true)
-				return yield* new ChannelDeliveryFailed({
+				return yield* ChannelDeliveryFailed.make({
 					message: `Slack refused ${method}: ${text(reply.json, "error") ?? "unknown error"}`,
 					retry: text(reply.json, "error") === "ratelimited",
 				})

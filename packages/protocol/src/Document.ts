@@ -1,4 +1,4 @@
-import { Data, Effect, HashSet, Schema, SchemaTransformation } from "effect"
+import { Effect, HashSet, Schema, SchemaTransformation } from "effect"
 
 export const protocolVersion = "2026-07-28"
 export const appsVersion = "2026-01-26"
@@ -8,20 +8,29 @@ export const uiMediaType = "text/html;profile=mcp-app"
 export const cardSchemaUrl =
 	"https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json"
 
-export class InvalidLink extends Data.TaggedError("InvalidLink")<{
-	readonly reason: string
-}> {}
-export class InvalidDocument extends Data.TaggedError("InvalidDocument")<{
-	readonly kind: "Card" | "Catalog" | "Publication"
-	readonly issue: string
-}> {}
+export class InvalidLink extends Schema.TaggedError<InvalidLink>()(
+	"InvalidLink",
+	{
+		reason: Schema.String,
+	},
+) {}
+export class InvalidDocument extends Schema.TaggedError<InvalidDocument>()(
+	"InvalidDocument",
+	{
+		kind: Schema.Literals(["Card", "Catalog", "Publication"]),
+		issue: Schema.String,
+	},
+) {}
 const invalid =
 	(kind: InvalidDocument["kind"]) => (error: Schema.SchemaError) =>
-		new InvalidDocument({ kind, issue: error.message })
+		InvalidDocument.make({ kind, issue: error.message })
 
-export class IncompatibleCard extends Data.TaggedError("IncompatibleCard")<{
-	readonly reason: string
-}> {}
+export class IncompatibleCard extends Schema.TaggedError<IncompatibleCard>()(
+	"IncompatibleCard",
+	{
+		reason: Schema.String,
+	},
+) {}
 
 /** The canonical identity keeps the path and query, including the query order. */
 export const Link = Schema.URLFromString.check(
@@ -113,12 +122,11 @@ export class Presentation extends Schema.Opaque<Presentation>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Presentation)(value).pipe(
-			Effect.mapError(
-				(error) =>
-					new InvalidDocument({
-						kind: "Card",
-						issue: "Invalid App presentation: " + error.message,
-					}),
+			Effect.mapError((error) =>
+				InvalidDocument.make({
+					kind: "Card",
+					issue: "Invalid App presentation: " + error.message,
+				}),
 			),
 		)
 }
@@ -302,7 +310,7 @@ export const compatibleRemotes = (
 	return remotes.length > 0
 		? Effect.succeed(remotes)
 		: Effect.fail(
-				new IncompatibleCard({
+				IncompatibleCard.make({
 					reason:
 						"No HTTPS Streamable HTTP endpoint supports " + protocolVersion,
 				}),

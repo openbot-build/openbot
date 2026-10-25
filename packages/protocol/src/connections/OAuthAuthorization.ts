@@ -49,12 +49,11 @@ export const layerMemoryFlows = Layer.effect(
 		return FlowStore.of({
 			save: Effect.fn("FlowStore.save")(function* (input) {
 				const flow = yield* Flow.decode(input).pipe(
-					Effect.mapError(
-						() =>
-							new Store.StoreError({
-								reason: "Invalid",
-								operation: "FlowStore.save",
-							}),
+					Effect.mapError(() =>
+						Store.StoreError.make({
+							reason: "Invalid",
+							operation: "FlowStore.save",
+						}),
 					),
 				)
 				const saved = yield* Ref.modify(state, (old) =>
@@ -69,7 +68,7 @@ export const layerMemoryFlows = Layer.effect(
 							] as const),
 				)
 				if (!saved)
-					return yield* new Store.StoreError({
+					return yield* Store.StoreError.make({
 						reason: "AlreadyExists",
 						operation: "FlowStore.save",
 					})
@@ -80,7 +79,7 @@ export const layerMemoryFlows = Layer.effect(
 					Option.match({
 						onNone: () =>
 							Effect.fail(
-								new AuthorizationError({
+								AuthorizationError.make({
 									reason: "CallbackMismatch",
 									issue: "Flow does not belong to this connection",
 								}),
@@ -88,7 +87,7 @@ export const layerMemoryFlows = Layer.effect(
 						onSome: (stored) =>
 							stored.consumed
 								? Effect.fail(
-										new AuthorizationError({
+										AuthorizationError.make({
 											reason: "AlreadyConsumed",
 											issue: "Callback has already been consumed",
 										}),
@@ -117,7 +116,7 @@ export const layerMemoryFlows = Layer.effect(
 					),
 				)
 				if (!claimed)
-					return yield* new AuthorizationError({
+					return yield* AuthorizationError.make({
 						reason: "AlreadyConsumed",
 						issue: "Callback has already been consumed",
 					})
@@ -128,17 +127,16 @@ export const layerMemoryFlows = Layer.effect(
 
 const https = (url: string) =>
 	Schema.decodeEffect(Document.Link)(url).pipe(
-		Effect.mapError(
-			() =>
-				new AuthorizationError({
-					reason: "Metadata",
-					issue: "Expected an absolute HTTPS URL without credentials",
-				}),
+		Effect.mapError(() =>
+			AuthorizationError.make({
+				reason: "Metadata",
+				issue: "Expected an absolute HTTPS URL without credentials",
+			}),
 		),
 		Effect.filterOrFail(
 			() => new URL(url).hash === "",
 			() =>
-				new AuthorizationError({
+				AuthorizationError.make({
 					reason: "Metadata",
 					issue: "OAuth URL must not contain a fragment",
 				}),
@@ -151,7 +149,7 @@ const clientIdUrl = (clientId: string) =>
 			Effect.try({
 				try: () => Mcp.validateClientMetadataUrl(clientId),
 				catch: () =>
-					new AuthorizationError({
+					AuthorizationError.make({
 						reason: "ClientMetadata",
 						issue: "client_id must be a HTTPS metadata document URL",
 					}),
@@ -175,19 +173,18 @@ export const readClientMetadata = Effect.fn("Authorization.readClientMetadata")(
 			headers: { accept: "application/json" },
 		})
 		if (response.status !== 200)
-			return yield* new AuthorizationError({
+			return yield* AuthorizationError.make({
 				reason: "ClientMetadata",
 				issue: "Client metadata document is unavailable",
 			})
 		const metadata = yield* Schema.decodeEffect(
 			Schema.fromJsonString(ClientMetadata),
 		)(response.text).pipe(
-			Effect.mapError(
-				(error) =>
-					new AuthorizationError({
-						reason: "ClientMetadata",
-						issue: error.message,
-					}),
+			Effect.mapError((error) =>
+				AuthorizationError.make({
+					reason: "ClientMetadata",
+					issue: error.message,
+				}),
 			),
 		)
 		if (
@@ -196,7 +193,7 @@ export const readClientMetadata = Effect.fn("Authorization.readClientMetadata")(
 			!metadata.grant_types.includes("authorization_code") ||
 			!metadata.response_types.includes("code")
 		)
-			return yield* new AuthorizationError({
+			return yield* AuthorizationError.make({
 				reason: "ClientMetadata",
 				issue:
 					"client_id and registered redirect must match exactly and support the code grant",
@@ -258,14 +255,14 @@ export const discoverResource = Effect.fn("Authorization.discoverResource")(
 							fetch,
 						),
 					catch: () =>
-						new AuthorizationError({
+						AuthorizationError.make({
 							reason: "Metadata",
 							issue: "Protected Resource Metadata discovery failed",
 						}),
 				})
 				const resource = yield* ResourceMetadata.decode(prm)
 				if (resource.resource !== options.resource)
-					return yield* new AuthorizationError({
+					return yield* AuthorizationError.make({
 						reason: "Metadata",
 						issue: "Protected resource metadata does not match the connection.",
 					})
@@ -285,7 +282,7 @@ export const discover = Effect.fn("Authorization.discover")(
 		// discoverResource checks the resource URLs and the resource match.
 		const resource = yield* discoverResource(options)
 		if (!resource.authorization_servers.includes(options.issuer))
-			return yield* new AuthorizationError({
+			return yield* AuthorizationError.make({
 				reason: "Metadata",
 				issue: "Resource or trusted issuer does not match the connection",
 			})
@@ -307,7 +304,7 @@ export const discover = Effect.fn("Authorization.discover")(
 							protocolVersion: Document.protocolVersion,
 						}),
 					catch: () =>
-						new AuthorizationError({
+						AuthorizationError.make({
 							reason: "Metadata",
 							issue:
 								"Authorization server discovery failed or issuer did not match",
@@ -317,12 +314,12 @@ export const discover = Effect.fn("Authorization.discover")(
 				// Keep the bounded source document only after the SDK has checked its issuer.
 				const metadata = yield* ServerMetadata.decode(metadataDocument)
 				if (metadata.issuer !== options.issuer)
-					return yield* new AuthorizationError({
+					return yield* AuthorizationError.make({
 						reason: "Metadata",
 						issue: "Issuer must match exactly",
 					})
 				if (metadata.client_id_metadata_document_supported !== true)
-					return yield* new AuthorizationError({
+					return yield* AuthorizationError.make({
 						reason: "CimdUnsupported",
 						issue:
 							"Authorization server does not support Client ID Metadata Documents",
@@ -333,7 +330,7 @@ export const discover = Effect.fn("Authorization.discover")(
 					(metadata.token_endpoint_auth_methods_supported !== undefined &&
 						!metadata.token_endpoint_auth_methods_supported.includes("none"))
 				)
-					return yield* new AuthorizationError({
+					return yield* AuthorizationError.make({
 						reason: "Metadata",
 						issue:
 							"Authorization server must support code, S256 and a public client",
@@ -365,7 +362,7 @@ export const begin = Effect.fn("Authorization.begin")(function* (options: {
 		(options.expiresInMs !== undefined &&
 			(!Number.isFinite(options.expiresInMs) || options.expiresInMs <= 0))
 	)
-		return yield* new AuthorizationError({
+		return yield* AuthorizationError.make({
 			reason: "Metadata",
 			issue: "Invalid scopes or flow lifetime",
 		})
@@ -381,34 +378,31 @@ export const begin = Effect.fn("Authorization.begin")(function* (options: {
 	const crypto = yield* Crypto.Crypto
 	const flowId = Base64Url.encode(
 		yield* crypto.randomBytes(32).pipe(
-			Effect.mapError(
-				() =>
-					new AuthorizationError({
-						reason: "Crypto",
-						issue: "Could not generate authorization state",
-					}),
+			Effect.mapError(() =>
+				AuthorizationError.make({
+					reason: "Crypto",
+					issue: "Could not generate authorization state",
+				}),
 			),
 		),
 	)
 	const verifier = Base64Url.encode(
 		yield* crypto.randomBytes(32).pipe(
-			Effect.mapError(
-				() =>
-					new AuthorizationError({
-						reason: "Crypto",
-						issue: "Could not generate PKCE verifier",
-					}),
+			Effect.mapError(() =>
+				AuthorizationError.make({
+					reason: "Crypto",
+					issue: "Could not generate PKCE verifier",
+				}),
 			),
 		),
 	)
 	const challenge = Base64Url.encode(
 		yield* crypto.digest("SHA-256", new TextEncoder().encode(verifier)).pipe(
-			Effect.mapError(
-				() =>
-					new AuthorizationError({
-						reason: "Crypto",
-						issue: "Could not generate PKCE challenge",
-					}),
+			Effect.mapError(() =>
+				AuthorizationError.make({
+					reason: "Crypto",
+					issue: "Could not generate PKCE challenge",
+				}),
 			),
 		),
 	)
@@ -462,14 +456,14 @@ const saveTokens = Effect.fn("Authorization.saveTokens")(function* (options: {
 	readonly resourceMetadataUrl?: string
 }) {
 	if (options.tokens.token_type.toLowerCase() !== "bearer")
-		return yield* new AuthorizationError({
+		return yield* AuthorizationError.make({
 			reason: "GrantRejected",
 			issue: "Expected bearer resource credentials",
 		})
 	const scopes =
 		options.tokens.scope?.split(/\s+/).filter(Boolean) ?? options.scopes
 	if (scopes.some((scope) => !options.scopes.includes(scope)))
-		return yield* new AuthorizationError({
+		return yield* AuthorizationError.make({
 			reason: "ScopeRequired",
 			issue: "Token response grants more than was requested",
 		})
@@ -481,7 +475,7 @@ const saveTokens = Effect.fn("Authorization.saveTokens")(function* (options: {
 		connection.state !== "Enabled" ||
 		connection.endpoint !== options.binding.resource
 	)
-		return yield* new AuthorizationError({
+		return yield* AuthorizationError.make({
 			reason: "CallbackMismatch",
 			issue: "Connection was disabled or changed",
 		})
@@ -535,7 +529,7 @@ const saveTokens = Effect.fn("Authorization.saveTokens")(function* (options: {
 		Match.orElse(() =>
 			Effect.gen(function* () {
 				yield* credentials.deleteConnection(options.binding)
-				return yield* new AuthorizationError({
+				return yield* AuthorizationError.make({
 					reason: "CallbackMismatch",
 					issue: "Connection was disabled during authorization",
 				})
@@ -558,20 +552,20 @@ export const complete = Effect.fn("Authorization.complete")(
 		const flow = yield* store.get(options)
 		const connection = yield* AppConnections.usable(options.key)
 		if (connection.endpoint !== flow.binding.resource)
-			return yield* new AuthorizationError({
+			return yield* AuthorizationError.make({
 				reason: "CallbackMismatch",
 				issue: "Authorization resource changed",
 			})
 		const now = yield* Clock.currentTimeMillis
 		if (now >= flow.expiresAt)
-			return yield* new AuthorizationError({
+			return yield* AuthorizationError.make({
 				reason: "FlowExpired",
 				issue: "Authorization callback expired",
 			})
 		const callback = yield* Effect.try({
 			try: () => new URL(options.callbackUrl),
 			catch: () =>
-				new AuthorizationError({
+				AuthorizationError.make({
 					reason: "CallbackMismatch",
 					issue: "Invalid callback URL",
 				}),
@@ -592,13 +586,13 @@ export const complete = Effect.fn("Authorization.complete")(
 			callback.searchParams.has("error") ||
 			callback.searchParams.getAll("iss").length > 1
 		)
-			return yield* new AuthorizationError({
+			return yield* AuthorizationError.make({
 				reason: "CallbackMismatch",
 				issue: "Callback redirect or flow state did not match",
 			})
 		const code = callback.searchParams.get("code")
 		if (code === null || code === "")
-			return yield* new AuthorizationError({
+			return yield* AuthorizationError.make({
 				reason: "CallbackMismatch",
 				issue: "Callback did not contain a code",
 			})
@@ -613,7 +607,7 @@ export const complete = Effect.fn("Authorization.complete")(
 						true,
 				}),
 			catch: () =>
-				new AuthorizationError({
+				AuthorizationError.make({
 					reason: "CallbackMismatch",
 					issue: "Authorization callback issuer did not match",
 				}),
@@ -639,7 +633,7 @@ export const complete = Effect.fn("Authorization.complete")(
 							fetchFn: fetch,
 						}),
 					catch: () =>
-						new AuthorizationError({
+						AuthorizationError.make({
 							reason: "GrantRejected",
 							issue: "Authorization code exchange failed",
 						}),
@@ -666,7 +660,7 @@ export const refresh = Effect.fn("Authorization.refresh")(function* (
 		Match.tag("Authorized", (auth) => Effect.succeed(auth)),
 		Match.orElse(() =>
 			Effect.fail(
-				new AuthorizationError({
+				AuthorizationError.make({
 					reason: "RefreshUnavailable",
 					issue: "Connection has no bound authorization",
 				}),
@@ -678,7 +672,7 @@ export const refresh = Effect.fn("Authorization.refresh")(function* (
 		key.owner !== auth.binding.owner ||
 		key.connectionId !== auth.binding.connectionId
 	)
-		return yield* new AuthorizationError({
+		return yield* AuthorizationError.make({
 			reason: "RefreshUnavailable",
 			issue: "Authorization binding no longer matches the connection",
 		})
@@ -689,7 +683,7 @@ export const refresh = Effect.fn("Authorization.refresh")(function* (
 	})
 	const { clientId, refreshToken } = credential
 	if (refreshToken === undefined || clientId === undefined)
-		return yield* new AuthorizationError({
+		return yield* AuthorizationError.make({
 			reason: "RefreshUnavailable",
 			issue: "Connection has no usable refresh grant",
 		})
@@ -715,7 +709,7 @@ export const refresh = Effect.fn("Authorization.refresh")(function* (
 						fetchFn: fetch,
 					}),
 				catch: () =>
-					new AuthorizationError({
+					AuthorizationError.make({
 						reason: "RefreshFailed",
 						issue: "Refresh grant was rejected",
 					}),
@@ -778,7 +772,7 @@ export const revokeRemote = Effect.fn("Authorization.revokeRemote")(function* (
 							),
 						)
 						if (response.status !== 200)
-							return yield* new AuthorizationError({
+							return yield* AuthorizationError.make({
 								reason: "RevocationFailed",
 								issue: "Authorization server did not confirm revocation",
 							})
@@ -788,7 +782,7 @@ export const revokeRemote = Effect.fn("Authorization.revokeRemote")(function* (
 						duration: 10_000,
 						orElse: () =>
 							Effect.fail(
-								new AuthorizationError({
+								AuthorizationError.make({
 									reason: "RevocationFailed",
 									issue: "Authorization revocation timed out",
 								}),

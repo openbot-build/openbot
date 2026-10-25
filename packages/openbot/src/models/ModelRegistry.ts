@@ -175,7 +175,7 @@ const decisionLayer = (
 			)
 		case "openai-compat":
 			return Effect.fail(
-				new Config.ModelConfigurationError({
+				Config.ModelConfigurationError.make({
 					reason: "unsupported-option",
 					message:
 						"OpenBot cannot ask a decision model through an openai-compat provider yet. Use a typesafe provider.",
@@ -184,7 +184,7 @@ const decisionLayer = (
 		case "openai":
 		case "anthropic":
 			return Effect.fail(
-				new Config.ModelConfigurationError({
+				Config.ModelConfigurationError.make({
 					reason: "unsupported-option",
 					message: `A ${provider.kind} provider serves only language models.`,
 				}),
@@ -237,7 +237,7 @@ const modelLayer = (
 				)
 			}
 			case "typesafe":
-				return yield* new Config.ModelConfigurationError({
+				return yield* Config.ModelConfigurationError.make({
 					reason: "unsupported-option",
 					message: "A typesafe provider serves only decision models.",
 				})
@@ -318,24 +318,22 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 					if (Option.isSome(existing))
 						yield* Scope.close(existing.value.scope, Exit.void)
 					const apiKey = yield* providers.openKey(provider).pipe(
-						Effect.mapError(
-							() =>
-								new Config.ModelConfigurationError({
-									reason: "unavailable",
-									message: "OpenBot cannot open the provider key right now.",
-								}),
+						Effect.mapError(() =>
+							Config.ModelConfigurationError.make({
+								reason: "unavailable",
+								message: "OpenBot cannot open the provider key right now.",
+							}),
 						),
 					)
 					const layer = yield* layerOf(apiKey)
 					const entryScope = yield* Scope.fork(scope)
 					const context = yield* Layer.buildWithScope(layer, entryScope).pipe(
 						Effect.provideContext(services),
-						Effect.mapError(
-							() =>
-								new Config.ModelConfigurationError({
-									reason: "unavailable",
-									message: "OpenBot cannot start the model right now.",
-								}),
+						Effect.mapError(() =>
+							Config.ModelConfigurationError.make({
+								reason: "unavailable",
+								message: "OpenBot cannot start the model right now.",
+							}),
 						),
 					)
 					const model = Context.get(context, tag)
@@ -374,12 +372,11 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				)
 				return { providers: list, offers }
 			}).pipe(
-				Effect.mapError(
-					() =>
-						new Config.ModelConfigurationError({
-							reason: "unavailable",
-							message: "OpenBot cannot read the model providers right now.",
-						}),
+				Effect.mapError(() =>
+					Config.ModelConfigurationError.make({
+						reason: "unavailable",
+						message: "OpenBot cannot read the model providers right now.",
+					}),
 				),
 			)
 
@@ -405,12 +402,11 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 
 		const organizationSettings = (organizationId: string) =>
 			settings.organization(organizationId).pipe(
-				Effect.mapError(
-					() =>
-						new Config.ModelConfigurationError({
-							reason: "unavailable",
-							message: "OpenBot cannot read the settings right now.",
-						}),
+				Effect.mapError(() =>
+					Config.ModelConfigurationError.make({
+						reason: "unavailable",
+						message: "OpenBot cannot read the settings right now.",
+					}),
 				),
 			)
 
@@ -433,12 +429,11 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 					LanguageModel.LanguageModel,
 					(apiKey) =>
 						modelLayer(provider, apiKey, selection, offered.upstream).pipe(
-							Effect.mapError(
-								(error) =>
-									new Config.ModelConfigurationError({
-										reason: "unsupported-option",
-										message: String(error),
-									}),
+							Effect.mapError((error) =>
+								Config.ModelConfigurationError.make({
+									reason: "unsupported-option",
+									message: String(error),
+								}),
 							),
 						),
 				)
@@ -452,12 +447,12 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 						offer.model.id === selection.model,
 				)
 				if (offer === undefined)
-					return yield* new Config.ModelConfigurationError({
+					return yield* Config.ModelConfigurationError.make({
 						reason: "model-not-found",
 						message: "No provider of the organization offers this model.",
 					})
 				if (offer.model.type !== "decision")
-					return yield* new Config.ModelConfigurationError({
+					return yield* Config.ModelConfigurationError.make({
 						reason: "model-not-found",
 						message: "This is a language model, not a decision model.",
 					})
@@ -496,7 +491,7 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 						(provider) => provider.id === selection.provider,
 					)
 				)
-					return yield* new Config.ModelConfigurationError({
+					return yield* Config.ModelConfigurationError.make({
 						reason: "provider-not-found",
 						message: "The organization cannot use this model provider.",
 					})
@@ -506,12 +501,12 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 						offer.model.id === selection.model,
 				)
 				if (offer === undefined)
-					return yield* new Config.ModelConfigurationError({
+					return yield* Config.ModelConfigurationError.make({
 						reason: "model-not-found",
 						message: "The model provider does not offer this model.",
 					})
 				if (offer.model.type !== "language")
-					return yield* new Config.ModelConfigurationError({
+					return yield* Config.ModelConfigurationError.make({
 						reason: "model-not-found",
 						message: `This is a ${offer.model.type} model. It cannot write text.`,
 					})
@@ -523,7 +518,7 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 					(selection.serviceTier !== undefined &&
 						!offer.model.serviceTiers.includes(selection.serviceTier))
 				)
-					return yield* new Config.ModelConfigurationError({
+					return yield* Config.ModelConfigurationError.make({
 						reason: "unsupported-option",
 						message:
 							"The model does not offer this reasoning effort or service tier.",
@@ -570,23 +565,22 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 						offer.model.id === selection.model,
 				)
 				if (offer === undefined)
-					return yield* new Config.ModelConfigurationError({
+					return yield* Config.ModelConfigurationError.make({
 						reason: "model-not-found",
 						message: "The organization has no Live model with this name.",
 					})
 				const backend = LiveBackends.find(liveBackends, offer.provider.kind)
 				if (Option.isNone(backend))
-					return yield* new Config.ModelConfigurationError({
+					return yield* Config.ModelConfigurationError.make({
 						reason: "unsupported-option",
 						message: `OpenBot has no Live backend for ${offer.provider.kind} providers.`,
 					})
 				const apiKey = yield* providers.openKey(offer.provider).pipe(
-					Effect.mapError(
-						() =>
-							new Config.ModelConfigurationError({
-								reason: "unavailable",
-								message: "OpenBot cannot open the provider key right now.",
-							}),
+					Effect.mapError(() =>
+						Config.ModelConfigurationError.make({
+							reason: "unavailable",
+							message: "OpenBot cannot open the provider key right now.",
+						}),
 					),
 				)
 				const model = yield* backend.value
@@ -598,12 +592,11 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 						modelId: CoreModel.Id.make(offer.model.id),
 					})
 					.pipe(
-						Effect.mapError(
-							(error) =>
-								new Config.ModelConfigurationError({
-									reason: "unsupported-option",
-									message: error.message,
-								}),
+						Effect.mapError((error) =>
+							Config.ModelConfigurationError.make({
+								reason: "unsupported-option",
+								message: error.message,
+							}),
 						),
 					)
 				return {
@@ -626,7 +619,7 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				const selection = (yield* organizationSettings(organizationId))
 					.document[name]
 				if (selection === null)
-					return yield* new Config.ModelConfigurationError({
+					return yield* Config.ModelConfigurationError.make({
 						reason: "missing",
 						message: `The organization has no ${name}.`,
 					})

@@ -291,9 +291,10 @@ export interface StateComposition {
 	>
 }
 
-export class StoreConflict extends Data.TaggedError("Plugin.StoreConflict")<{
-	readonly id: Id
-}> {}
+export class StoreConflict extends Schema.TaggedError<StoreConflict>()(
+	"Plugin.StoreConflict",
+	{ id: Id },
+) {}
 
 /** Parameters that each plugin maps before the final toolkit resolves its handlers. */
 export interface Options<

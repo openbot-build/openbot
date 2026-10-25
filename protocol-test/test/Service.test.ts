@@ -984,7 +984,7 @@ it("protocol discovery and anonymous public indexing read the published fixtures
 				}
 			},
 			catch: () =>
-				new Network.NetworkError({
+				Network.NetworkError.make({
 					reason: "Transport",
 					message: "Fixture document request failed.",
 				}),

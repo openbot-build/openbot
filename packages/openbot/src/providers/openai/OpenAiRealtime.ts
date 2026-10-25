@@ -359,7 +359,7 @@ const eventsOf = (event: ServerEvent): ReadonlyArray<Live.Event> => {
 			if (event.error.code === "response_cancel_not_active") return []
 			return [
 				Live.Event.Failure({
-					error: new Live.LiveError({
+					error: Live.LiveError.make({
 						reason: "provider",
 						message: event.error.message ?? "OpenAI Realtime gave an error.",
 					}),
@@ -400,12 +400,11 @@ export const backend = Effect.gen(function* () {
 							Effect.provideService(Socket.WebSocketConstructor, constructor),
 						)
 						const reader = yield* socket.reader.pipe(
-							Effect.mapError(
-								() =>
-									new Live.LiveError({
-										reason: "connect",
-										message: "OpenBot cannot connect to OpenAI Realtime.",
-									}),
+							Effect.mapError(() =>
+								Live.LiveError.make({
+									reason: "connect",
+									message: "OpenBot cannot connect to OpenAI Realtime.",
+								}),
 							),
 						)
 						const writer = yield* socket.writer
@@ -426,7 +425,7 @@ export const backend = Effect.gen(function* () {
 							Effect.catch(() =>
 								Queue.fail(
 									events,
-									new Live.LiveError({
+									Live.LiveError.make({
 										reason: "closed",
 										message: "OpenAI Realtime closed the connection.",
 									}),
@@ -442,12 +441,11 @@ export const backend = Effect.gen(function* () {
 								(event) => writer.write(JSON.stringify(event)),
 								{ discard: true },
 							).pipe(
-								Effect.mapError(
-									() =>
-										new Live.LiveError({
-											reason: "closed",
-											message: "OpenBot cannot write to OpenAI Realtime.",
-										}),
+								Effect.mapError(() =>
+									Live.LiveError.make({
+										reason: "closed",
+										message: "OpenBot cannot write to OpenAI Realtime.",
+									}),
 								),
 							)
 						}

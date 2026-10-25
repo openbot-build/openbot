@@ -87,7 +87,7 @@ export const add = Effect.fn("App.add")(function* (options: {
 	readonly requiresAuthorization: boolean
 }) {
 	if (!options.confirmed)
-		return yield* new AppError({
+		return yield* AppError.make({
 			reason: "ConfirmationRequired",
 		})
 	const discovery = yield* Discovery.Discovery
@@ -97,7 +97,7 @@ export const add = Effect.fn("App.add")(function* (options: {
 		rules.compare({ previous: options.candidate, current })._tag ===
 		"NeedsRevalidation"
 	)
-		return yield* new AppError({ reason: "CandidateChanged" })
+		return yield* AppError.make({ reason: "CandidateChanged" })
 	const configured = yield* rules.configureEndpoint({
 		candidate: current,
 		index: options.remoteIndex,
@@ -145,7 +145,7 @@ export const usable = Effect.fn("App.usable")(function* (
 ) {
 	const connection = yield* current(key)
 	if (connection.state !== "Enabled")
-		return yield* new AppError({ reason: "Unavailable" })
+		return yield* AppError.make({ reason: "Unavailable" })
 	return connection
 })
 
@@ -171,7 +171,7 @@ export const remove = Effect.fn("App.remove")(function* (
 			.pipe(
 				Effect.andThen(
 					Effect.fail(
-						new CleanupPending({
+						CleanupPending.make({
 							key,
 							stage,
 						}),
@@ -226,9 +226,9 @@ export const revalidate = Effect.fn("App.revalidate")(function* (
 	const store = yield* Store.AppStore
 	const connection = yield* store.get(options.key)
 	if (connection.state === "Disabled" || connection.state === "CleanupPending")
-		return yield* new AppError({ reason: "Unavailable" })
+		return yield* AppError.make({ reason: "Unavailable" })
 	if (connection.cardUrl !== options.candidate.cardUrl)
-		return yield* new AppError({ reason: "CandidateChanged" })
+		return yield* AppError.make({ reason: "CandidateChanged" })
 	const discovery = yield* Discovery.Discovery
 	const rules = yield* Discovery.Rules
 	const candidate = yield* discovery.refreshCard(connection.cardUrl)
@@ -313,7 +313,7 @@ export const revalidate = Effect.fn("App.revalidate")(function* (
 		rules.compare({ previous: options.candidate, current: candidate })._tag ===
 		"NeedsRevalidation"
 	)
-		return yield* new AppError({ reason: "CandidateChanged" })
+		return yield* AppError.make({ reason: "CandidateChanged" })
 	const configured = yield* Effect.fromResult(endpoint)
 	const credentials = yield* Store.CredentialStore
 	yield* credentials.deleteConnection(options.key)
@@ -341,6 +341,6 @@ export const revalidate = Effect.fn("App.revalidate")(function* (
 				: old,
 	})
 	if (updated.state !== "Enabled" || updated.endpoint !== configured.url)
-		return yield* new AppError({ reason: "Unavailable" })
+		return yield* AppError.make({ reason: "Unavailable" })
 	return { _tag: "Revalidated", connection: updated, candidate } as const
 })

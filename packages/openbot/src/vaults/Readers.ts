@@ -1,11 +1,12 @@
 import type { VaultsApi } from "@openbot-build/api"
-import { Context, Data, Effect, Layer, Predicate } from "effect"
+import { Context, Effect, Layer, Predicate, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 
 /** The secret provider did not answer, refused the token, or has no such item or field. */
-export class VaultReadFailed extends Data.TaggedError("VaultReadFailed")<{
-	readonly message: string
-}> {}
+export class VaultReadFailed extends Schema.TaggedError<VaultReadFailed>()(
+	"VaultReadFailed",
+	{ message: Schema.String },
+) {}
 
 /** The credentials of a secret provider. */
 export type Remote = VaultsApi.SecretProviderCredentials
@@ -30,7 +31,7 @@ export class Readers extends Context.Service<
 const timeoutMs = 15_000
 const decoder = new TextDecoder()
 
-const failed = (message: string) => new VaultReadFailed({ message })
+const failed = (message: string) => VaultReadFailed.make({ message })
 
 /** Sends one request and gives back the JSON body of a good answer. */
 const fetchJson = (

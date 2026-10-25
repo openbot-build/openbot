@@ -30,21 +30,21 @@ const explain =
 	(error: PairingFailure): Config.ComputerError => {
 		switch (error._tag) {
 			case "PairingInvalid":
-				return new Config.ComputerError({
+				return Config.ComputerError.make({
 					message:
 						"OpenBot ended this pairing. Someone denied it, or it is too old. Run 'openbot computer pair' again.",
 				})
 			case "ComputersUnavailable":
-				return new Config.ComputerError({
+				return Config.ComputerError.make({
 					message: "This OpenBot does not have Computers turned on.",
 				})
 			case "HttpClientError":
 				if (error.reason._tag === "TransportError")
-					return new Config.ComputerError({
+					return Config.ComputerError.make({
 						message: `Could not reach OpenBot at ${url}.`,
 					})
 		}
-		return new Config.ComputerError({
+		return Config.ComputerError.make({
 			message: `OpenBot did not answer as expected: ${error.message}`,
 		})
 	}
@@ -94,7 +94,7 @@ export const pair = (options: {
 		const intervalMs = Math.max(1, pairing.interval) * 1000
 		while (true) {
 			if ((yield* Clock.currentTimeMillis) >= pairing.expiresAt)
-				return yield* new Config.ComputerError({
+				return yield* Config.ComputerError.make({
 					message:
 						"Nobody approved the code in time. Run 'openbot computer pair' again.",
 				})

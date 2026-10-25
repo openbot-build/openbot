@@ -190,7 +190,7 @@ export const mergeState: {
 		Effect.gen(function* () {
 			for (const key of Object.keys(left.stores))
 				if (Object.hasOwn(right.stores, key))
-					return yield* new StoreConflict({ id: Id.make(key) })
+					return yield* StoreConflict.make({ id: Id.make(key) })
 			const plugin = merge(left, right)
 			return {
 				...plugin,

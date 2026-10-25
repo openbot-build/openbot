@@ -60,7 +60,7 @@ const metadataPolicy = Client.InvocationPolicy.of({
 		Schema.is(Client.ListAction)(invocation.action)
 			? Effect.void
 			: Effect.fail(
-					new Client.PermissionDenied({
+					Client.PermissionDenied.make({
 						action: invocation.action,
 						target: invocation.target,
 					}),

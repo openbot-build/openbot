@@ -699,11 +699,11 @@ export const make = Effect.gen(function* () {
 					)
 				const found = rows[0]
 				if (found === undefined)
-					return yield* new VaultReadFailed({ message: "The item is gone." })
+					return yield* VaultReadFailed.make({ message: "The item is gone." })
 				const item = fromItemRow(found)
 				if (item.source._tag === "Builtin") {
 					if (found.values === null)
-						return yield* new VaultReadFailed({
+						return yield* VaultReadFailed.make({
 							message: "The builtin item has no values.",
 						})
 					const values = yield* decodeValues(
@@ -711,7 +711,7 @@ export const make = Effect.gen(function* () {
 					)
 					const missing = fields.filter((name) => values[name] === undefined)
 					if (missing.length > 0)
-						return yield* new VaultReadFailed({
+						return yield* VaultReadFailed.make({
 							message: `The item has no field with the name ${missing.join(", ")}`,
 						})
 					return new Map(fields.map((name) => [name, values[name]!] as const))
@@ -726,7 +726,7 @@ export const make = Effect.gen(function* () {
 					(error) => !(error instanceof VaultReadFailed),
 					() =>
 						Effect.fail(
-							new VaultReadFailed({
+							VaultReadFailed.make({
 								message: "OpenBot could not open the item.",
 							}),
 						),

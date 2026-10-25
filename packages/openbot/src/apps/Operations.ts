@@ -141,7 +141,7 @@ export const make: Effect.Effect<
 										value.source.kind === "template")))
 								? Effect.void
 								: Effect.fail(
-										new Client.PermissionDenied({
+										Client.PermissionDenied.make({
 											action: invocation.action,
 											target: invocation.target,
 										}),

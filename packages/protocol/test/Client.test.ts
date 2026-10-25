@@ -443,7 +443,7 @@ const service = async () => {
 		McpClient.layerPolicy((invocation) =>
 			denied && invocation.action === "tools/call"
 				? Effect.fail(
-						new Client.PermissionDenied({
+						Client.PermissionDenied.make({
 							action: invocation.action,
 							target: invocation.target,
 						}),

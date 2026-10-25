@@ -154,28 +154,28 @@ it.effect("An unavailable store cannot report a successful add", () =>
 		const failing = Layer.succeed(Store.AppStore, {
 			save: () =>
 				Effect.fail(
-					new Store.StoreError({
+					Store.StoreError.make({
 						reason: "Unavailable",
 						operation: "save",
 					}),
 				),
 			get: () =>
 				Effect.fail(
-					new Store.StoreError({
+					Store.StoreError.make({
 						reason: "Missing",
 						operation: "get",
 					}),
 				),
 			getApp: () =>
 				Effect.fail(
-					new Store.StoreError({
+					Store.StoreError.make({
 						reason: "Missing",
 						operation: "getApp",
 					}),
 				),
 			update: () =>
 				Effect.fail(
-					new Store.StoreError({
+					Store.StoreError.make({
 						reason: "Unavailable",
 						operation: "update",
 					}),

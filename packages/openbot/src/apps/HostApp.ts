@@ -1,5 +1,5 @@
-import { Data } from "effect"
-import type { Effect, Schema, Scope } from "effect"
+import { Schema } from "effect"
+import type { Effect, Scope } from "effect"
 import type {
 	Authorization,
 	Client,
@@ -9,10 +9,14 @@ import type {
 	Store,
 } from "@openbot-build/protocol"
 
-export class AppError extends Data.TaggedError("AppError")<{
-	readonly reason: "unavailable" | "storage-failed" | "configuration-failed"
-	readonly message: string
-}> {}
+export class AppError extends Schema.TaggedError<AppError>()("AppError", {
+	reason: Schema.Literals([
+		"unavailable",
+		"storage-failed",
+		"configuration-failed",
+	]),
+	message: Schema.String,
+}) {}
 
 export interface AddRequest {
 	readonly key: Store.ConnectionKey

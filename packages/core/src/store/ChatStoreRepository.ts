@@ -90,7 +90,8 @@ export const make = <S extends Plugin.Stores>(
 		const read: ChatStore.Store<P>["read"] = (chat) =>
 			Effect.gen(function* () {
 				const stored = yield* storage.get(chat)
-				if (Option.isNone(stored)) return yield* new Chat.ChatNotFound({ chat })
+				if (Option.isNone(stored))
+					return yield* Chat.ChatNotFound.make({ chat })
 				return {
 					chat: yield* decodeRef(stored.value.ref),
 					state: yield* decodeState(stored.value.state),

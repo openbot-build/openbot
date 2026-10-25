@@ -1,4 +1,4 @@
-import { Context, Data, Effect, Schema } from "effect"
+import { Context, Effect, Schema } from "effect"
 import {
 	type Tool,
 	type ReadResourceResult,
@@ -6,17 +6,22 @@ import {
 } from "@modelcontextprotocol/client"
 import * as Document from "../Document.ts"
 
-export class UiError extends Data.TaggedError("UiError")<{
-	readonly reason:
-		"Declaration" | "Resource" | "Initialization" | "Closed" | "Protocol"
-	readonly issue: string
-}> {}
+export class UiError extends Schema.TaggedError<UiError>()("UiError", {
+	reason: Schema.Literals([
+		"Declaration",
+		"Resource",
+		"Initialization",
+		"Closed",
+		"Protocol",
+	]),
+	issue: Schema.String,
+}) {}
 
 export const Uri = Schema.String.check(Schema.isPattern(/^ui:\/\/[^\s]+$/))
 
 export const decodeError =
 	(reason: UiError["reason"]) => (error: Schema.SchemaError) =>
-		new UiError({ reason, issue: error.message })
+		UiError.make({ reason, issue: error.message })
 
 export class Resource extends Schema.Opaque<Resource>()(
 	Schema.Struct({

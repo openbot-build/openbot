@@ -36,7 +36,7 @@ export const readResource = Effect.fn("Ui.readResource")(function* (
 		item.mimeType !== Document.uiMediaType ||
 		Predicate.hasProperty(item, "text") === Predicate.hasProperty(item, "blob")
 	)
-		return yield* new UiError({
+		return yield* UiError.make({
 			reason: "Resource",
 			issue:
 				"Expected one declared MCP Apps HTML resource with text or blob content",
@@ -47,12 +47,11 @@ export const readResource = Effect.fn("Ui.readResource")(function* (
 	const html = Predicate.hasProperty(item, "text")
 		? item.text
 		: yield* Effect.fromResult(Base64.decodeString(item.blob)).pipe(
-				Effect.mapError(
-					() =>
-						new UiError({
-							reason: "Resource",
-							issue: "Invalid base64 UI resource",
-						}),
+				Effect.mapError(() =>
+					UiError.make({
+						reason: "Resource",
+						issue: "Invalid base64 UI resource",
+					}),
 				),
 			)
 	return yield* Resource.decode({

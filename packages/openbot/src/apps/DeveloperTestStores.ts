@@ -43,12 +43,12 @@ export const make: Effect.Effect<
 		Schema.toCodecJson(Authorization.Flow),
 	)
 	const error = () =>
-		new Store.StoreError({
+		Store.StoreError.make({
 			reason: "Unavailable",
 			operation: "Developer test storage",
 		})
 	const missing = () =>
-		new Store.StoreError({
+		Store.StoreError.make({
 			reason: "Missing",
 			operation: "Owned developer test",
 		})
@@ -161,7 +161,7 @@ export const make: Effect.Effect<
 						).pipe(Effect.mapError(error)),
 					updateApp: () =>
 						Effect.fail(
-							new Store.StoreError({
+							Store.StoreError.make({
 								reason: "Invalid",
 								operation: "Immutable developer test target",
 							}),
@@ -266,12 +266,12 @@ export const make: Effect.Effect<
 								yield* keyChecked(input.key)
 								const record = yield* flow(input.flowId)
 								if (record.consumed)
-									return yield* new Authorization.AuthorizationError({
+									return yield* Authorization.AuthorizationError.make({
 										reason: "AlreadyConsumed",
 										issue: "This test authorization was already used.",
 									})
 								if (record.value.expiresAt <= (yield* Clock.currentTimeMillis))
-									return yield* new Authorization.AuthorizationError({
+									return yield* Authorization.AuthorizationError.make({
 										reason: "FlowExpired",
 										issue: "This test authorization expired.",
 									})

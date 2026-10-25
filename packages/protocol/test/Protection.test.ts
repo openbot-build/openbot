@@ -60,7 +60,7 @@ it("Protected publisher checks real identity, scopes and audience before it filt
 			const value = Redacted.value(token)
 			if (!["alice", "bob", "expired", "audience", "scope"].includes(value))
 				return Effect.fail(
-					new Protection.TokenRejected({
+					Protection.TokenRejected.make({
 						reason: "Invalid",
 					}),
 				)
@@ -80,7 +80,7 @@ it("Protected publisher checks real identity, scopes and audience before it filt
 				(identity.subject === "alice" ? "AliceNote" : "BobNote")
 				? Effect.void
 				: Effect.fail(
-						new Protection.AccessDenied({
+						Protection.AccessDenied.make({
 							scopes: ["account:other"],
 						}),
 					),

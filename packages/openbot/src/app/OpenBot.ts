@@ -156,7 +156,7 @@ export const layer = <
 ) => {
 	// A Chat names its model. OpenBot never picks one for it.
 	const noModel = Effect.fail(
-		new Config.ModelConfigurationError({
+		Config.ModelConfigurationError.make({
 			reason: "missing",
 			message: "The Chat has no model.",
 		}),
@@ -233,18 +233,17 @@ export const layer = <
 				name: "rulesModel" | "botMemoryModel",
 			) =>
 				settings.organization(organizationId).pipe(
-					Effect.mapError(
-						() =>
-							new Config.ModelConfigurationError({
-								reason: "unavailable",
-								message: "OpenBot cannot read the settings right now.",
-							}),
+					Effect.mapError(() =>
+						Config.ModelConfigurationError.make({
+							reason: "unavailable",
+							message: "OpenBot cannot read the settings right now.",
+						}),
 					),
 					Effect.flatMap((current) => {
 						const selection = current.document[name]
 						return selection === null || resolve === undefined
 							? Effect.fail(
-									new Config.ModelConfigurationError({
+									Config.ModelConfigurationError.make({
 										reason: "missing",
 										message: `The organization has no ${name}.`,
 									}),
@@ -263,7 +262,7 @@ export const layer = <
 									),
 								),
 						(error) =>
-							new Judge.HelperModelUnavailable({ message: error.message }),
+							Judge.HelperModelUnavailable.make({ message: error.message }),
 					),
 				botMemory: (organizationId) =>
 					Effect.mapError(
@@ -271,7 +270,7 @@ export const layer = <
 							? registry.botMemoryModel(organizationId)
 							: hosted(organizationId, "botMemoryModel"),
 						(error) =>
-							new Judge.HelperModelUnavailable({ message: error.message }),
+							Judge.HelperModelUnavailable.make({ message: error.message }),
 					),
 			})
 		}),

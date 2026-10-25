@@ -1,12 +1,18 @@
-import { Context, Data, Effect, Redacted, Schema } from "effect"
+import { Context, Effect, Redacted, Schema } from "effect"
 
-export class TokenRejected extends Data.TaggedError("TokenRejected")<{
-	readonly reason: "Missing" | "Invalid" | "Expired" | "WrongResource"
-}> {}
+export class TokenRejected extends Schema.TaggedError<TokenRejected>()(
+	"TokenRejected",
+	{
+		reason: Schema.Literals(["Missing", "Invalid", "Expired", "WrongResource"]),
+	},
+) {}
 
-export class AccessDenied extends Data.TaggedError("AccessDenied")<{
-	readonly scopes: ReadonlyArray<string>
-}> {}
+export class AccessDenied extends Schema.TaggedError<AccessDenied>()(
+	"AccessDenied",
+	{
+		scopes: Schema.Array(Schema.String),
+	},
+) {}
 
 /** TokenVerifier must check the real signature or introspection, and the account identity. */
 export class Identity extends Schema.Opaque<Identity>()(
@@ -20,7 +26,7 @@ export class Identity extends Schema.Opaque<Identity>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Identity)(value).pipe(
-			Effect.mapError(() => new TokenRejected({ reason: "Invalid" })),
+			Effect.mapError(() => TokenRejected.make({ reason: "Invalid" })),
 		)
 }
 

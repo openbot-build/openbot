@@ -43,7 +43,7 @@ const candidate = (
 	Effect.gen(function* () {
 		const url = yield* CatalogDiscovery.inputLink(input)
 		if (url !== catalogUrl && url !== cardUrl)
-			return yield* new Discovery.DiscoveryError({
+			return yield* Discovery.DiscoveryError.make({
 				reason: "NoDeclaration",
 				issues: [
 					{ url, reason: "No simulated App is configured for this address" },

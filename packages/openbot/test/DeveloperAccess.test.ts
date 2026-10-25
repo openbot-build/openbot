@@ -116,7 +116,7 @@ it.live(
 					readDocument: (options) =>
 						unavailable
 							? Effect.fail(
-									new Network.NetworkError({
+									Network.NetworkError.make({
 										reason: "Transport",
 										message: "Temporary outage",
 									}),

@@ -226,7 +226,7 @@ const entryOf = (
 	handle: (input, context) =>
 		Effect.gen(function* () {
 			if (context.toolCallId === undefined)
-				return yield* new Client.PermissionDenied({
+				return yield* Client.PermissionDenied.make({
 					action: "invoke",
 					target: binding.source.name,
 				})

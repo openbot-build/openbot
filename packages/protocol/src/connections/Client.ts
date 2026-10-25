@@ -38,36 +38,47 @@ export const CallSource = Schema.Literals([...ToolVisibility.literals, "host"])
 export type CallSource = typeof CallSource.Type
 
 /** The host may deny its own actions too, so `action` is not only an MCP `Action`. */
-export class PermissionDenied extends Data.TaggedError("PermissionDenied")<{
-	readonly action: string
-	readonly target: string
-}> {}
+export class PermissionDenied extends Schema.TaggedError<PermissionDenied>()(
+	"PermissionDenied",
+	{
+		action: Schema.String,
+		target: Schema.String,
+	},
+) {}
 
-export class ClientError extends Data.TaggedError("ClientError")<{
-	readonly reason:
-		| "Protocol"
-		| "Network"
-		| "Schema"
-		| "UnsupportedCapability"
-		| "ConnectionChanged"
-		| "InputUnavailable"
-		| "Closed"
-	readonly issue: string
-}> {}
+export class ClientError extends Schema.TaggedError<ClientError>()(
+	"ClientError",
+	{
+		reason: Schema.Literals([
+			"Protocol",
+			"Network",
+			"Schema",
+			"UnsupportedCapability",
+			"ConnectionChanged",
+			"InputUnavailable",
+			"Closed",
+		]),
+		issue: Schema.String,
+	},
+) {}
 
-export class AuthorizationRequired extends Data.TaggedError(
+export class AuthorizationRequired extends Schema.TaggedError<AuthorizationRequired>()(
 	"AuthorizationRequired",
-)<{
-	readonly reason: "Pending" | "Expired" | "InsufficientScope"
-	readonly resourceMetadataUrl?: string | undefined
-	readonly scopes: ReadonlyArray<string>
-}> {}
+	{
+		reason: Schema.Literals(["Pending", "Expired", "InsufficientScope"]),
+		resourceMetadataUrl: Schema.optional(Schema.String),
+		scopes: Schema.Array(Schema.String),
+	},
+) {}
 
-export class OutcomeUnknown extends Data.TaggedError("OutcomeUnknown")<{
-	readonly key: Store.ConnectionKey
-	readonly target: string
-	readonly cause: "Network" | "Protocol" | "Schema" | "Closed"
-}> {}
+export class OutcomeUnknown extends Schema.TaggedError<OutcomeUnknown>()(
+	"OutcomeUnknown",
+	{
+		key: Store.ConnectionKey,
+		target: Schema.String,
+		cause: Schema.Literals(["Network", "Protocol", "Schema", "Closed"]),
+	},
+) {}
 
 export class ToolFailure extends Data.TaggedError("ToolFailure")<{
 	readonly result: Mcp.CallToolResult

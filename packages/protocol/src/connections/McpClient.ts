@@ -107,23 +107,21 @@ const decodeInputs = (
 			() => Mcp.withInputRequired(Mcp.specTypeSchemas.CallToolResult),
 			continuation.request,
 			() =>
-				new ClientError({
+				ClientError.make({
 					reason: "Schema",
 					issue: "The input response does not match this operation.",
 				}),
 		).pipe(
-			Effect.filterOrFail(
-				Mcp.isInputRequiredResult,
-				() =>
-					new ClientError({
-						reason: "Schema",
-						issue: "The input response does not match this operation.",
-					}),
+			Effect.filterOrFail(Mcp.isInputRequiredResult, () =>
+				ClientError.make({
+					reason: "Schema",
+					issue: "The input response does not match this operation.",
+				}),
 			),
 		)
 		const requests = parsed.inputRequests ?? {}
 		if (Object.keys(responses).some((id) => requests[id] === undefined))
-			return yield* new ClientError({
+			return yield* ClientError.make({
 				reason: "Schema",
 				issue: "The input response does not match this operation.",
 			})
@@ -135,7 +133,7 @@ const decodeInputs = (
 							() => Mcp.specTypeSchemas.ElicitResult,
 							responses[id],
 							() =>
-								new ClientError({
+								ClientError.make({
 									reason: "Schema",
 									issue: "The input response does not match this operation.",
 								}),
@@ -152,7 +150,7 @@ const decodeInputs = (
 												),
 											result.content,
 											() =>
-												new ClientError({
+												ClientError.make({
 													reason: "Schema",
 													issue:
 														"The input response does not match this operation.",
@@ -167,7 +165,7 @@ const decodeInputs = (
 							() => Mcp.specTypeSchemas.CreateMessageResult,
 							responses[id],
 							() =>
-								new ClientError({
+								ClientError.make({
 									reason: "Schema",
 									issue: "The input response does not match this operation.",
 								}),
@@ -178,7 +176,7 @@ const decodeInputs = (
 							() => Mcp.specTypeSchemas.ListRootsResult,
 							responses[id],
 							() =>
-								new ClientError({
+								ClientError.make({
 									reason: "Schema",
 									issue: "The input response does not match this operation.",
 								}),
@@ -220,7 +218,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 		network.identity.scope === "user" &&
 		network.identity.owner !== initial.owner
 	)
-		return yield* new PermissionDenied({
+		return yield* PermissionDenied.make({
 			action: "connect",
 			target: initial.endpoint,
 		})
@@ -230,20 +228,20 @@ export const open = Effect.fn("Client.open")(function* (options: {
 		const closed = yield* Ref.make(false)
 		const guard = Effect.fn("Client.currentConnection")(function* () {
 			if (yield* Ref.get(closed))
-				return yield* new ClientError({
+				return yield* ClientError.make({
 					reason: "Closed",
 					issue: "Connection Scope is closed",
 				})
 			const connection = yield* store.get(options.key)
 			if (connection.state !== "Enabled")
-				return yield* new App.AppError({
+				return yield* App.AppError.make({
 					reason: "Unavailable",
 				})
 			if (
 				connection.endpoint !== initial.endpoint ||
 				connection.cardUrl !== initial.cardUrl
 			)
-				return yield* new ClientError({
+				return yield* ClientError.make({
 					reason: "ConnectionChanged",
 					issue: "Open a client after explicit revalidation",
 				})
@@ -258,7 +256,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 							auth.binding.connectionId !== connection.connectionId ||
 							auth.binding.resource !== connection.endpoint
 						)
-							return yield* new ClientError({
+							return yield* ClientError.make({
 								reason: "ConnectionChanged",
 								issue: "Credential binding no longer matches this connection",
 							})
@@ -271,7 +269,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 							credential.expiresAt !== undefined &&
 							credential.expiresAt <= now
 						)
-							return yield* new AuthorizationRequired({
+							return yield* AuthorizationRequired.make({
 								reason: "Expired",
 								scopes: credential.scopes,
 							})
@@ -283,7 +281,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				),
 				Match.tag("ScopeRequired", (auth) =>
 					Effect.fail(
-						new AuthorizationRequired({
+						AuthorizationRequired.make({
 							reason: "InsufficientScope",
 							scopes: auth.scopes,
 						}),
@@ -291,7 +289,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				),
 				Match.orElse((auth) =>
 					Effect.fail(
-						new AuthorizationRequired({
+						AuthorizationRequired.make({
 							reason: "Pending",
 							scopes: Predicate.hasProperty(auth, "scopes") ? auth.scopes : [],
 						}),
@@ -410,19 +408,19 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			)
 				return error
 			if (error instanceof Mcp.UnauthorizedError)
-				return new AuthorizationRequired({
+				return AuthorizationRequired.make({
 					reason: challenge?.error === "invalid_token" ? "Expired" : "Pending",
 					scopes: challenge?.scope?.split(/\s+/).filter(Boolean) ?? [],
 					resourceMetadataUrl: challenge?.resourceMetadataUrl?.href,
 				})
 			if (error instanceof Mcp.InsufficientScopeError)
-				return new AuthorizationRequired({
+				return AuthorizationRequired.make({
 					reason: "InsufficientScope",
 					scopes: error.requiredScope?.split(/\s+/).filter(Boolean) ?? [],
 					resourceMetadataUrl: error.resourceMetadataUrl?.href,
 				})
 			if (error instanceof Mcp.ProtocolError)
-				return new ClientError({
+				return ClientError.make({
 					reason: "Protocol",
 					issue: error.message,
 				})
@@ -430,14 +428,14 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				error instanceof Mcp.SdkError &&
 				error.code !== Mcp.SdkErrorCode.RequestTimeout
 			)
-				return new ClientError({
+				return ClientError.make({
 					reason:
 						error.code === Mcp.SdkErrorCode.InvalidResult
 							? "Schema"
 							: "Protocol",
 					issue: error.code,
 				})
-			return new ClientError({
+			return ClientError.make({
 				reason: "Network",
 				issue: "MCP request did not return a valid response",
 			})
@@ -447,14 +445,14 @@ export const open = Effect.fn("Client.open")(function* (options: {
 		yield* invoke((signal) => sdk.connect(transport, { signal }))
 		const discovery = sdk.getDiscoverResult()
 		if (discovery === undefined)
-			return yield* new ClientError({
+			return yield* ClientError.make({
 				reason: "Protocol",
 				issue: "Missing real-time server discovery",
 			})
 		const requireCapability = (name: "tools" | "resources" | "prompts") =>
 			sdk.getServerCapabilities()?.[name] === undefined
 				? Effect.fail(
-						new ClientError({
+						ClientError.make({
 							reason: "UnsupportedCapability",
 							issue: `Server does not advertise ${name}`,
 						}),
@@ -464,7 +462,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			meta !== undefined &&
 			Object.keys(meta).some((key) => HashSet.has(reservedMeta, key))
 				? Effect.fail(
-						new ClientError({
+						ClientError.make({
 							reason: "Schema",
 							issue: "Reserved MCP identity metadata cannot be overridden",
 						}),
@@ -478,13 +476,13 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				() => Mcp.fromJsonSchema(schema as Mcp.JsonSchemaType),
 				value,
 				() =>
-					new ClientError({
+					ClientError.make({
 						reason: "Schema",
 						issue: "Value does not match the service JSON Schema",
 					}),
 			)
 		const invalidResult = () =>
-			new ClientError({
+			ClientError.make({
 				reason: "Schema",
 				issue: "Invalid standard result",
 			})
@@ -653,7 +651,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 						if (page.nextCursor === undefined) return Effect.succeed(all)
 						if (HashSet.has(seen, page.nextCursor))
 							return Effect.fail(
-								new ClientError({
+								ClientError.make({
 									reason: "Protocol",
 									issue: "The service repeated a capability cursor",
 								}),
@@ -696,7 +694,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 						HashSet.fromIterable(Object.keys(requests)),
 					)
 				)
-					return yield* new ClientError({
+					return yield* ClientError.make({
 						reason: "Schema",
 						issue:
 							"Input responses must match the request IDs of this operation",
@@ -712,7 +710,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 								capabilities.roots === undefined),
 					)
 				)
-					return yield* new ClientError({
+					return yield* ClientError.make({
 						reason: "InputUnavailable",
 						issue: "Host did not declare this input capability",
 					})
@@ -725,7 +723,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			const handle =
 				inputs === undefined
 					? Effect.fail(
-							new ClientError({
+							ClientError.make({
 								reason: "InputUnavailable",
 								issue: "Host input handler is not installed",
 							}),
@@ -768,7 +766,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			})
 			const tool = (yield* allTools()).find((tool) => tool.name === params.name)
 			if (tool === undefined || !visibility(tool, call.source))
-				return yield* new PermissionDenied({
+				return yield* PermissionDenied.make({
 					action: "tools/call",
 					target: params.name,
 				})
@@ -801,7 +799,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 						call.readOnly !== true,
 					(error) =>
 						Effect.fail(
-							new OutcomeUnknown({
+							OutcomeUnknown.make({
 								key: options.key,
 								target: params.name,
 								cause:
@@ -818,7 +816,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 			const writeOutcome = (error: ClientError) =>
 				call.readOnly === true
 					? error
-					: new OutcomeUnknown({
+					: OutcomeUnknown.make({
 							key: options.key,
 							target: params.name,
 							cause: "Schema",
@@ -827,7 +825,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 				() => Mcp.withInputRequired(Mcp.specTypeSchemas.CallToolResult),
 				raw,
 				() =>
-					new ClientError({
+					ClientError.make({
 						reason: "Schema",
 						issue: "Invalid standard tool result",
 					}),
@@ -949,13 +947,12 @@ export const open = Effect.fn("Client.open")(function* (options: {
 										arguments: Schema.optionalKey(Schema.JsonObject),
 									}),
 								)(continuation.params).pipe(
-									Effect.mapError(
-										() =>
-											new ClientError({
-												reason: "Schema",
-												issue:
-													"The input response does not match this operation.",
-											}),
+									Effect.mapError(() =>
+										ClientError.make({
+											reason: "Schema",
+											issue:
+												"The input response does not match this operation.",
+										}),
 									),
 									Effect.flatMap((params) => callTool(params, call, next)),
 								),
@@ -970,13 +967,12 @@ export const open = Effect.fn("Client.open")(function* (options: {
 										}),
 									]),
 								)(continuation.params).pipe(
-									Effect.mapError(
-										() =>
-											new ClientError({
-												reason: "Schema",
-												issue:
-													"The input response does not match this operation.",
-											}),
+									Effect.mapError(() =>
+										ClientError.make({
+											reason: "Schema",
+											issue:
+												"The input response does not match this operation.",
+										}),
 									),
 									Effect.flatMap((params) =>
 										"uri" in params
@@ -987,7 +983,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 															params.values,
 														),
 													catch: () =>
-														new ClientError({
+														ClientError.make({
 															reason: "Schema",
 															issue:
 																"The input response does not match this operation.",
@@ -1006,13 +1002,12 @@ export const open = Effect.fn("Client.open")(function* (options: {
 										),
 									}),
 								)(continuation.params).pipe(
-									Effect.mapError(
-										() =>
-											new ClientError({
-												reason: "Schema",
-												issue:
-													"The input response does not match this operation.",
-											}),
+									Effect.mapError(() =>
+										ClientError.make({
+											reason: "Schema",
+											issue:
+												"The input response does not match this operation.",
+										}),
 									),
 									Effect.flatMap((params) => getPrompt(params, call, next)),
 								),
@@ -1043,7 +1038,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 					),
 				)).find((template) => template.uriTemplate === input.template)
 				if (template === undefined)
-					return yield* new ClientError({
+					return yield* ClientError.make({
 						reason: "Schema",
 						issue: "Unknown resource template",
 					})
@@ -1051,7 +1046,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 					try: () =>
 						new Mcp.UriTemplate(template.uriTemplate).expand(input.values),
 					catch: () =>
-						new ClientError({
+						ClientError.make({
 							reason: "Schema",
 							issue: "Invalid resource template arguments",
 						}),
@@ -1079,7 +1074,7 @@ export const open = Effect.fn("Client.open")(function* (options: {
 					closed: Effect.tryPromise({
 						try: () => subscription.closed,
 						catch: () =>
-							new ClientError({
+							ClientError.make({
 								reason: "Protocol",
 								issue: "Subscription failed",
 							}),

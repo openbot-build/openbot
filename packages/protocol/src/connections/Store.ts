@@ -1,11 +1,16 @@
-import { Context, Data, Effect, Schema } from "effect"
+import { Context, Effect, Schema } from "effect"
 import * as Discovery from "../discovery/Discovery.ts"
 import * as Document from "../Document.ts"
 
-export class StoreError extends Data.TaggedError("StoreError")<{
-	readonly reason: "Missing" | "AlreadyExists" | "Invalid" | "Unavailable"
-	readonly operation: string
-}> {}
+export class StoreError extends Schema.TaggedError<StoreError>()("StoreError", {
+	reason: Schema.Literals([
+		"Missing",
+		"AlreadyExists",
+		"Invalid",
+		"Unavailable",
+	]),
+	operation: Schema.String,
+}) {}
 
 export class ConnectionKey extends Schema.Opaque<ConnectionKey>()(
 	Schema.Struct({
@@ -15,12 +20,11 @@ export class ConnectionKey extends Schema.Opaque<ConnectionKey>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(ConnectionKey)(value).pipe(
-			Effect.mapError(
-				() =>
-					new StoreError({
-						reason: "Invalid",
-						operation: "ConnectionKey.decode",
-					}),
+			Effect.mapError(() =>
+				StoreError.make({
+					reason: "Invalid",
+					operation: "ConnectionKey.decode",
+				}),
 			),
 		)
 }
@@ -35,12 +39,11 @@ export class CredentialBinding extends Schema.Opaque<CredentialBinding>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(CredentialBinding)(value).pipe(
-			Effect.mapError(
-				() =>
-					new StoreError({
-						reason: "Invalid",
-						operation: "CredentialBinding.decode",
-					}),
+			Effect.mapError(() =>
+				StoreError.make({
+					reason: "Invalid",
+					operation: "CredentialBinding.decode",
+				}),
 			),
 		)
 }
@@ -57,12 +60,11 @@ export class Credential extends Schema.Opaque<Credential>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Credential)(value).pipe(
-			Effect.mapError(
-				() =>
-					new StoreError({
-						reason: "Invalid",
-						operation: "Credential.decode",
-					}),
+			Effect.mapError(() =>
+				StoreError.make({
+					reason: "Invalid",
+					operation: "Credential.decode",
+				}),
 			),
 		)
 }
@@ -97,12 +99,11 @@ export class AppRecord extends Schema.Opaque<AppRecord>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(AppRecord)(value).pipe(
-			Effect.mapError(
-				() =>
-					new StoreError({
-						reason: "Invalid",
-						operation: "AppRecord.decode",
-					}),
+			Effect.mapError(() =>
+				StoreError.make({
+					reason: "Invalid",
+					operation: "AppRecord.decode",
+				}),
 			),
 		)
 }
@@ -127,12 +128,11 @@ export class UserConnection extends Schema.Opaque<UserConnection>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(UserConnection)(value).pipe(
-			Effect.mapError(
-				() =>
-					new StoreError({
-						reason: "Invalid",
-						operation: "UserConnection.decode",
-					}),
+			Effect.mapError(() =>
+				StoreError.make({
+					reason: "Invalid",
+					operation: "UserConnection.decode",
+				}),
 			),
 		)
 }
