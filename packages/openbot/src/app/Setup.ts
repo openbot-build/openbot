@@ -86,7 +86,28 @@ const force = Flag.Boolean("force").pipe(
 	),
 )
 
-const setup = Command.make("setup", {
+const services = Layer.unwrap(
+	Effect.map(EnvironmentConfiguration.load, (instance) =>
+		PlatformAdminsPostgres.layer.pipe(
+			Layer.provideMerge(OpenBot.layerShared(instance)),
+		),
+	),
+)
+
+// Read the settings only when the command runs, so --help works without them.
+const withServices = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+	effect.pipe(
+		// This program owns the whole application Layer scope.
+		// @effect-diagnostics-next-line strictEffectProvide:off
+		Effect.provide(
+			services.pipe(
+				// The database URL and the secret keys may come from secret files.
+				Layer.provide(Layer.merge(NodeServices.layer, SecretFiles.layer())),
+			),
+		),
+	)
+
+const setup = Command.make("openbot setup", {
 	publicOrigin,
 	issuer,
 	clientId,
@@ -167,29 +188,17 @@ const setup = Command.make("setup", {
 					}),
 				),
 			),
+			withServices,
 		),
 	),
 )
 
 const program = Command.run(setup, { version: "0.1.0" })
 
-const services = Layer.unwrap(
-	Effect.map(EnvironmentConfiguration.load, (instance) =>
-		PlatformAdminsPostgres.layer.pipe(
-			Layer.provideMerge(OpenBot.layerShared(instance)),
-		),
-	),
-)
-
 NodeRuntime.runMain(
 	program.pipe(
 		// This program owns the whole application Layer scope.
 		// @effect-diagnostics-next-line strictEffectProvide:off
-		Effect.provide(
-			Layer.merge(services, NodeServices.layer).pipe(
-				// The database URL and the secret keys may come from secret files.
-				Layer.provide(Layer.merge(NodeServices.layer, SecretFiles.layer())),
-			),
-		),
+		Effect.provide(NodeServices.layer),
 	),
 )

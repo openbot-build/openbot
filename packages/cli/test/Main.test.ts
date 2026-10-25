@@ -1,8 +1,12 @@
+// Each test gives its own services.
+// @effect-diagnostics strictEffectProvide:off
 import { spawnSync } from "node:child_process"
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { delimiter, join } from "node:path"
+import { NodeServices } from "@effect/platform-node"
 import { afterAll, assert, it } from "@effect/vitest"
+import { Effect, Option } from "effect"
 import * as Dispatch from "../src/Dispatch.ts"
 
 const main = join(import.meta.dirname, "..", "dist", "Main.js")
@@ -82,21 +86,25 @@ it("openbot help <name> runs the command with --help", () => {
 	assert.strictEqual(result.stdout, "[--help]\n")
 })
 
-it("openbot looks next to itself before PATH", () => {
-	const near = mkdtempSync(join(tmpdir(), "openbot-cli-near-"))
-	try {
+it.effect("openbot looks next to itself before PATH", () =>
+	Effect.gen(function* () {
+		const near = mkdtempSync(join(tmpdir(), "openbot-cli-near-"))
+		yield* Effect.addFinalizer(() =>
+			Effect.sync(() => rmSync(near, { recursive: true, force: true })),
+		)
 		const file = join(near, "openbot-echo")
 		writeFileSync(file, "#!/bin/sh\n")
 		chmodSync(file, 0o755)
-		const folders = Dispatch.searchFolders({
+		const folders = yield* Dispatch.searchFolders({
 			script: join(near, "Main.js"),
 			path: folder,
 		})
 		assert.strictEqual(folders[0], near)
 		assert.strictEqual(folders.at(-1), folder)
 		assert.ok(folders.includes(join(near, "node_modules", ".bin")))
-		assert.strictEqual(Dispatch.find("echo", folders), file)
-	} finally {
-		rmSync(near, { recursive: true, force: true })
-	}
-})
+		assert.deepStrictEqual(
+			yield* Dispatch.find("echo", folders),
+			Option.some(file),
+		)
+	}).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+)

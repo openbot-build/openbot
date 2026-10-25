@@ -23,11 +23,12 @@ import { Launch, Server } from "@openbot-build/openbot"
 Launch.main(Server.layer)
 ```
 
-`Launch.main` reads the variables in [Configuration](/docs/configuration), from
-the environment or from secret files. It blocks outbound connections to private
-addresses, and logs a failed start. Then it runs the Layer that you give it
-until the process stops. `Launch.server` is the same program as an Effect, for
-when you run it yourself.
+`Launch.main` first reads the command line. With `--help` it shows the help and
+stops, and it needs no settings for that. Then it reads the variables in
+[Configuration](/docs/configuration), from the environment or from secret files.
+It blocks outbound connections to private addresses, and logs a failed start.
+Then it runs the Layer that you give it until the process stops. `Launch.server`
+is the same program as an Effect, for when you run it yourself.
 
 `EnvironmentConfiguration.load` gives the same settings: `host`, `port`,
 `databaseUrl`, `secretKeys`, and `outboundAllow`. You can also write these

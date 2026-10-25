@@ -24,6 +24,12 @@ importers:
       "@effect/tsgo":
         specifier: 0.56.0
         version: 0.56.0
+      "@openbot-build/cli":
+        specifier: workspace:*
+        version: link:packages/cli
+      "@openbot-build/openbot":
+        specifier: workspace:*
+        version: link:packages/openbot
       "@types/node":
         specifier: 26.6.5
         version: 26.6.5
@@ -60,6 +66,13 @@ importers:
         version: 4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy)
 
   packages/cli:
+    dependencies:
+      "@effect/platform-node":
+        specifier: 4.0.6
+        version: 4.0.6(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))(redis@6.3.0)
+      effect:
+        specifier: 4.0.6
+        version: 4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy)
     devDependencies:
       "@effect/vitest":
         specifier: 4.0.6

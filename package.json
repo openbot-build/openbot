@@ -5,6 +5,8 @@
 	"packageManager": "pnpm@9.15.9",
 	"type": "module",
 	"devDependencies": {
+		"@openbot-build/cli": "workspace:*",
+		"@openbot-build/openbot": "workspace:*",
 		"@effect/tsgo": "0.56.0",
 		"@types/node": "26.6.5",
 		"acorn": "8.19.0",

@@ -24,11 +24,13 @@ import { Launch, Server } from "@openbot-build/openbot"
 Launch.main(Server.layer)
 ```
 
-`Launch.main` liest die Variablen aus [Konfiguration](/de/docs/configuration),
-aus der Umgebung oder aus geheimen Dateien. Es sperrt ausgehende Verbindungen zu
-privaten Adressen und schreibt einen fehlgeschlagenen Start ins Log. Dann führt
-es den Layer aus, den du ihm gibst, bis der Prozess endet. `Launch.server` ist
-dasselbe Programm als Effect, wenn du es selbst ausführst.
+`Launch.main` liest zuerst die Kommandozeile. Mit `--help` zeigt es die Hilfe
+und endet. Dafür braucht es keine Einstellungen. Dann liest es die Variablen aus
+[Konfiguration](/de/docs/configuration), aus der Umgebung oder aus geheimen
+Dateien. Es sperrt ausgehende Verbindungen zu privaten Adressen und schreibt
+einen fehlgeschlagenen Start ins Log. Dann führt es den Layer aus, den du ihm
+gibst, bis der Prozess endet. `Launch.server` ist dasselbe Programm als Effect,
+wenn du es selbst ausführst.
 
 `EnvironmentConfiguration.load` gibt dieselben Einstellungen zurück: `host`,
 `port`, `databaseUrl`, `secretKeys` und `outboundAllow`. Du kannst diese Werte

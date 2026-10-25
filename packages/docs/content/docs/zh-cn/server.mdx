@@ -22,8 +22,8 @@ import { Launch, Server } from "@openbot-build/openbot"
 Launch.main(Server.layer)
 ```
 
-`Launch.main`
-从环境变量或机密文件中读取[配置](/zh-cn/docs/configuration)中的变量。它会阻止到私有地址的出站连接，并在启动失败时写入日志。然后它运行你给它的 Layer，直到进程停止。`Launch.server`
+`Launch.main` 先读取命令行。带 `--help`
+时它显示帮助后停止，这时不需要任何设置。然后它从环境变量或机密文件中读取[配置](/zh-cn/docs/configuration)中的变量。它会阻止到私有地址的出站连接，并在启动失败时写入日志。然后它运行你给它的 Layer，直到进程停止。`Launch.server`
 是同一个程序的 Effect 形式，供你自己运行。
 
 `EnvironmentConfiguration.load`
