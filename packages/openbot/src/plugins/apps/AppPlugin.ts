@@ -343,6 +343,7 @@ export const make: Effect.Effect<
 												codeRuns: codeRuns.value,
 												position,
 												bindings,
+												vault: yield* codeRuns.value.vault,
 												occupied: [
 													...Record.keys(incoming.tools),
 													...assistance.map((entry) => entry.tool.name),

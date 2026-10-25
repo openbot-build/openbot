@@ -3,7 +3,12 @@
  * `openbot.org.<org>.user.<user>.bot.<id>`. They are only labels. The
  * policies in `../authorization` decide who may do what.
  */
-import type { BotsApi, ComputersApi, TriggersApi } from "@openbot-build/api"
+import type {
+	BotsApi,
+	ComputersApi,
+	TriggersApi,
+	VaultsApi,
+} from "@openbot-build/api"
 import { rootOf } from "../authorization/Resources.ts"
 
 /** IDs go into dotted names, so a dot in an ID must not look like a new part. */
@@ -103,3 +108,33 @@ export const computerKey = (input: {
 	}) +
 	"." +
 	segment(input.id)
+
+/** The key of one Vault. Its items and their rights go under it. */
+export const vaultKey = (vault: {
+	readonly organizationId: string
+	readonly id: string
+	readonly owner: VaultsApi.VaultOwner
+}) =>
+	(vault.owner._tag === "Member"
+		? userKey({
+				organizationId: vault.organizationId,
+				userId: vault.owner.userId,
+			})
+		: organizationKey(vault.organizationId)) +
+	".vault." +
+	segment(vault.id)
+
+/** The key of one secret provider. */
+export const secretProviderKey = (provider: {
+	readonly organizationId: string
+	readonly id: string
+	readonly owner: VaultsApi.VaultOwner
+}) =>
+	(provider.owner._tag === "Member"
+		? userKey({
+				organizationId: provider.organizationId,
+				userId: provider.owner.userId,
+			})
+		: organizationKey(provider.organizationId)) +
+	".secret_provider." +
+	segment(provider.id)

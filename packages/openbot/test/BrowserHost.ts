@@ -27,6 +27,7 @@ import { Settings } from "../src/settings/Settings.ts"
 import * as Db from "../src/database/Database.ts"
 import type { Drivers } from "../src/computers/Drivers.ts"
 import type { LiveBackends } from "../src/models/LiveBackends.ts"
+import type { Readers } from "../src/vaults/Readers.ts"
 
 /** A disposable OpenBot host with real PostgreSQL and signed OIDC test identities. */
 export async function start(options: {
@@ -74,6 +75,7 @@ export async function start(options: {
 	readonly computerDrivers?: Layer.Layer<Drivers>
 	/** The Live backends. */
 	readonly liveBackends?: Layer.Layer<LiveBackends>
+	readonly vaultReaders?: Layer.Layer<Readers>
 	/** Organization settings for the Bots of each new organization. */
 	readonly bots?: {
 		readonly memory?: boolean
@@ -321,6 +323,9 @@ export async function start(options: {
 		...(options.liveBackends === undefined
 			? {}
 			: { liveBackends: options.liveBackends }),
+		...(options.vaultReaders === undefined
+			? {}
+			: { vaultReaders: options.vaultReaders }),
 		...(options.discovery === undefined
 			? {}
 			: { discovery: options.discovery }),

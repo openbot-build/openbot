@@ -9,6 +9,7 @@ import {
 	Layer,
 	Option,
 	Ref,
+	Result,
 	Schema,
 } from "effect"
 import { ActionPolicy } from "../apps/ActionPolicy.ts"
@@ -24,6 +25,8 @@ import type { Call, Settled } from "./Protocol.ts"
 import { Sandbox } from "./Sandbox.ts"
 import * as Stored from "./StoredCodeRuns.ts"
 import * as Db from "../database/Database.ts"
+import * as VaultCode from "../vaults/CodeMode.ts"
+import { Vaults } from "../vaults/Vaults.ts"
 
 /** What the Bot gets back from a program. */
 export const ToolResult = Schema.Struct({
@@ -194,6 +197,8 @@ export class CodeRuns extends Context.Service<
 	{
 		/** The Code Mode settings, when the platform turned Code Mode on. */
 		readonly settings: Effect.Effect<Option.Option<SettingsApi.CodeMode>>
+		/** The Vault items that the Bot of the current work may use, with their names for programs. */
+		readonly vault: Effect.Effect<ReadonlyArray<VaultCode.Entry>>
 		/**
 		 * The first run of a program, in the Turn of the Bot. It ends when the program
 		 * ends or when a call waits for a decision.
@@ -254,9 +259,11 @@ export const make: Effect.Effect<
 	| Invocations
 	| ActionPolicy
 	| Gate
+	| Vaults
 > = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
+	const vaults = yield* Vaults
 	const shared = yield* Settings
 	const sandbox = yield* Sandbox
 	const services: Bindings.Services = {
@@ -276,6 +283,21 @@ export const make: Effect.Effect<
 		),
 		Effect.orElseSucceed(() => Option.none()),
 	)
+	const vault: typeof CodeRuns.Service.vault = Effect.gen(function* () {
+		const work = yield* Effect.serviceOption(Work)
+		if (Option.isNone(work)) return []
+		const usable = yield* vaults
+			.usable(work.value.caller.organizationId, work.value.bot.id)
+			.pipe(
+				Effect.catch((error) =>
+					Effect.logWarning(
+						"Could not read the Vault items of a Bot.",
+						error,
+					).pipe(Effect.as([])),
+				),
+			)
+		return VaultCode.aliases(usable)
+	})
 	const save = (owner: string, run: Stored.Run, leaseUntil: number | null) =>
 		Stored.change(db, secrets, owner, run.id, () =>
 			Option.some({ run, leaseUntil }),
@@ -294,6 +316,7 @@ export const make: Effect.Effect<
 	): Effect.Effect<Stored.Run, Stored.Error> =>
 		Effect.gen(function* () {
 			const named = name(bindings)
+			const items = yield* vault
 			const state = yield* Ref.make(initial)
 			const mismatch = yield* Ref.make(false)
 			// A storage failure stops the program. It must not look like a wait for a decision.
@@ -349,7 +372,8 @@ export const make: Effect.Effect<
 							continue
 						}
 						// The invocation gets the program name, so it is the same in each run.
-						const binding = { ...entry.binding, name: entry.alias }
+						const plain = { ...entry.binding, name: entry.alias }
+						// The arguments keep their Vault references, so the hash never depends on a secret.
 						const argumentsHash = createHash("sha256")
 							.update(JSON.stringify([call.binding, args.value]))
 							.digest("hex")
@@ -368,6 +392,25 @@ export const make: Effect.Effect<
 							ready = [...ready, settledOf(recorded)!]
 							continue
 						}
+						const guarded = VaultCode.guard(
+							vaults,
+							initial.organizationId,
+							items,
+							plain,
+							args.value,
+						)
+						if (Result.isFailure(guarded)) {
+							ready = [
+								...ready,
+								{
+									index: call.index,
+									ok: false,
+									error: errorText("VaultDenied", guarded.failure),
+								},
+							]
+							continue
+						}
+						const binding = guarded.success.binding
 						const callId = callIdOf(call.index)
 						const base = {
 							index: call.index,
@@ -430,6 +473,7 @@ export const make: Effect.Effect<
 									arguments: args.value,
 									reason: initial.reason,
 									toolCallId: initial.callId,
+									explicit: guarded.success.references > 0,
 									code: {
 										run: initial.id,
 										index: call.index,
@@ -512,6 +556,10 @@ export const make: Effect.Effect<
 					{
 						code: initial.code,
 						bindings: named.map((entry) => entry.alias),
+						vault: items.map((entry) => ({
+							alias: entry.alias,
+							fields: entry.usable.item.fields,
+						})),
 						seed: initial.seed,
 						clock: initial.clock,
 						limits: {
@@ -731,6 +779,7 @@ export const make: Effect.Effect<
 
 	return CodeRuns.of({
 		settings,
+		vault,
 		start,
 		resume,
 		forCall: (owner, chat, callId) =>

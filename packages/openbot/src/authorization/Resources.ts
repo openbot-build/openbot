@@ -3,6 +3,7 @@ import {
 	type BotsApi,
 	type ComputersApi,
 	type TriggersApi,
+	type VaultsApi,
 } from "@openbot-build/api"
 
 /**
@@ -35,7 +36,10 @@ export const botResource = (bot: {
 	})
 
 const ownerOf = (
-	owner: TriggersApi.TriggerOwner | ComputersApi.ComputerOwner,
+	owner:
+		| TriggersApi.TriggerOwner
+		| ComputersApi.ComputerOwner
+		| VaultsApi.VaultOwner,
 ): string | null => (owner._tag === "Member" ? owner.userId : null)
 
 export const triggerResource = (trigger: {
@@ -66,6 +70,28 @@ export const computerProviderResource = (provider: {
 	readonly owner: ComputersApi.ComputerOwner
 }) =>
 	Authorization.ComputerProvider.make({
+		organizationId: provider.organizationId,
+		ownerUserId: ownerOf(provider.owner),
+		id: provider.id,
+	})
+
+export const vaultResource = (vault: {
+	readonly organizationId: string
+	readonly id: string
+	readonly owner: VaultsApi.VaultOwner
+}) =>
+	Authorization.Vault.make({
+		organizationId: vault.organizationId,
+		ownerUserId: ownerOf(vault.owner),
+		id: vault.id,
+	})
+
+export const secretProviderResource = (provider: {
+	readonly organizationId: string
+	readonly id: string
+	readonly owner: VaultsApi.VaultOwner
+}) =>
+	Authorization.SecretProvider.make({
 		organizationId: provider.organizationId,
 		ownerUserId: ownerOf(provider.owner),
 		id: provider.id,

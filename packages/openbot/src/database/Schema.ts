@@ -1115,6 +1115,110 @@ export const computerUsage = table(
 )
 
 /**
+ * An account at a secret provider. `owner_user_id` is null when it is shared.
+ * `credentials` is the sealed JSON of its secrets. `hints` is the view of them that the API shows.
+ */
+export const secretProviders = table(
+	"openbot_secret_providers",
+	{
+		organizationId: text("organization_id").notNull(),
+		id: text().notNull(),
+		ownerUserId: text("owner_user_id"),
+		kind: text().notNull(),
+		name: text().notNull(),
+		credentials: text().notNull(),
+		hints: text().notNull(),
+		version: integer().notNull(),
+		createdAt: time("created_at").notNull(),
+		updatedAt: time("updated_at").notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.organizationId, t.id] }),
+		index("openbot_secret_providers_owner").on(t.organizationId, t.ownerUserId),
+	],
+)
+
+/** A collection of secrets. `owner_user_id` is null when it is shared. */
+export const vaults = table(
+	"openbot_vaults",
+	{
+		organizationId: text("organization_id").notNull(),
+		id: text().notNull(),
+		ownerUserId: text("owner_user_id"),
+		name: text().notNull(),
+		version: integer().notNull(),
+		createdAt: time("created_at").notNull(),
+		updatedAt: time("updated_at").notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.organizationId, t.id] }),
+		index("openbot_vaults_owner").on(t.organizationId, t.ownerUserId),
+	],
+)
+
+/**
+ * One secret thing in a Vault. `source`, `fields` and `exits` are JSON text.
+ * `provider_id` is the secret provider of the source. It is null for a builtin item.
+ * `values` is the sealed JSON of the values of a builtin item. It is null for other items.
+ */
+export const vaultItems = table(
+	"openbot_vault_items",
+	{
+		organizationId: text("organization_id").notNull(),
+		id: text().notNull(),
+		vaultId: text("vault_id").notNull(),
+		name: text().notNull(),
+		description: text().notNull(),
+		providerId: text("provider_id"),
+		source: text().notNull(),
+		fields: text().notNull(),
+		exits: text().notNull(),
+		values: text(),
+		version: integer().notNull(),
+		createdAt: time("created_at").notNull(),
+		updatedAt: time("updated_at").notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.organizationId, t.id] }),
+		uniqueIndex("openbot_vault_items_name").on(
+			t.organizationId,
+			t.vaultId,
+			t.name,
+		),
+		index("openbot_vault_items_provider").on(t.organizationId, t.providerId),
+		foreignKey({
+			columns: [t.organizationId, t.vaultId],
+			foreignColumns: [vaults.organizationId, vaults.id],
+		}).onDelete("cascade"),
+		// A provider cannot go while items read from it.
+		foreignKey({
+			columns: [t.organizationId, t.providerId],
+			foreignColumns: [secretProviders.organizationId, secretProviders.id],
+		}),
+	],
+)
+
+/** The right of one Bot to use every item of one Vault. */
+export const vaultAccess = table(
+	"openbot_vault_access",
+	{
+		organizationId: text("organization_id").notNull(),
+		vaultId: text("vault_id").notNull(),
+		bot: text().notNull(),
+		grantedBy: text("granted_by").notNull(),
+		grantedAt: time("granted_at").notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.organizationId, t.vaultId, t.bot] }),
+		foreignKey({
+			columns: [t.organizationId, t.vaultId],
+			foreignColumns: [vaults.organizationId, vaults.id],
+		}).onDelete("cascade"),
+		index("openbot_vault_access_bot").on(t.organizationId, t.bot),
+	],
+)
+
+/**
  * Each chat of a Channel is one Chat that lasts. `owner` is the actor of the Channel when
  * the chat began. The Chat stays with that member when the actor changes.
  */

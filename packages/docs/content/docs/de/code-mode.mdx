@@ -80,11 +80,12 @@ return busy.filter((event) => event.attendees > 10).map((event) => event.title)
 Ein Aufruf eines Tools gibt dem Programm das Ergebnis, das die App geschickt
 hat. Wenn ein Aufruf nicht klappt, bekommt das Programm einen `Error`:
 
-| Name des Fehlers   | Warum                                                                                                     |
-| ------------------ | --------------------------------------------------------------------------------------------------------- |
-| `AppCallDenied`    | Ein Entscheider hat den Aufruf nicht erlaubt.                                                             |
-| `AppCallFailed`    | Der Aufruf der App ist fehlgeschlagen. `details.reason` sagt, warum.                                      |
-| `AppInputRequired` | Die App braucht mehr Eingaben. Beantworte die App operation in `details.operationId` außerhalb des Codes. |
+| Name des Fehlers   | Warum                                                                                                                   |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `AppCallDenied`    | Ein Entscheider hat den Aufruf nicht erlaubt.                                                                           |
+| `AppCallFailed`    | Der Aufruf der App ist fehlgeschlagen. `details.reason` sagt, warum.                                                    |
+| `AppInputRequired` | Die App braucht mehr Eingaben. Beantworte die App operation in `details.operationId` außerhalb des Codes.               |
+| `VaultDenied`      | Der Aufruf hat eine [Vault](/de/docs/vaults)-Referenz, die der Bot hier nicht nutzen darf. OpenBot hat nichts gesendet. |
 
 Das Programm kann diese Fehler abfangen und weitermachen.
 
@@ -124,6 +125,18 @@ Reihenfolge macht. Darum sieht das Programm in `Date.now()` eine feste Zeit, und
 Aufrufe macht als vorher, stoppt OpenBot es mit `ReplayMismatch`. Das kann
 passieren, wenn sich eine Connection geändert hat, während das Programm gewartet
 hat. Nichts wird aus Versehen geschickt.
+
+---
+
+## Geheimnisse nutzen
+
+Ein Programm kann Geheimnisse aus einem [Vault](/de/docs/vaults) nutzen, ohne
+sie zu sehen. Der Bot bekommt `vault` neben `apps`. `vault.github.token` ist
+eine Referenz wie `⟦vault:github/token⟧`, nicht das Geheimnis. OpenBot setzt das
+Geheimnis erst ein, wenn es einen App-Tool-Aufruf sendet, den der Eintrag
+erlaubt. Ein Aufruf mit einer Referenz braucht immer eine Entscheidung. Das
+App-Ergebnis kommt mit `⟦hidden:github/token⟧` an der Stelle des Geheimnisses
+zurück.
 
 ---
 
