@@ -27,18 +27,24 @@ export class ProtocolStores extends Context.Service<
 	}
 >()("@openbot-build/openbot/apps/ProtocolStores") {}
 
-const missing = () =>
-	new Store.StoreError({ reason: "Missing", operation: "Owned App storage" })
-const unavailable = () =>
-	new Store.StoreError({
-		reason: "Unavailable",
-		operation: "Owned App storage",
-	})
 const translate = (error: StoredConnections.Error | Store.StoreError) =>
 	Match.value(error).pipe(
-		Match.tag("ExperienceNotFound", missing),
+		Match.tag(
+			"ExperienceNotFound",
+			() =>
+				new Store.StoreError({
+					reason: "Missing",
+					operation: "Owned App storage",
+				}),
+		),
 		Match.tag("StoreError", (error) => error),
-		Match.orElse(unavailable),
+		Match.orElse(
+			() =>
+				new Store.StoreError({
+					reason: "Unavailable",
+					operation: "Owned App storage",
+				}),
+		),
 	)
 const credentialCodec = Schema.fromJsonString(
 	Schema.toCodecJson(Store.Credential),
@@ -56,7 +62,14 @@ export const make: Effect.Effect<
 	return ProtocolStores.of({
 		bind: (owner) => {
 			const owned = (key: Store.ConnectionKey) =>
-				key.owner === owner ? Effect.void : Effect.fail(missing())
+				key.owner === owner
+					? Effect.void
+					: Effect.fail(
+							new Store.StoreError({
+								reason: "Missing",
+								operation: "Owned App storage",
+							}),
+						)
 			const where = (kind: string, id: string) =>
 				and(
 					eq(appSecrets.owner, owner),
@@ -75,7 +88,16 @@ export const make: Effect.Effect<
 							eq(appSecrets.connectionId, connectionId),
 						),
 					)
-					.pipe(Effect.asVoid, Effect.mapError(unavailable))
+					.pipe(
+						Effect.asVoid,
+						Effect.mapError(
+							() =>
+								new Store.StoreError({
+									reason: "Unavailable",
+									operation: "Owned App storage",
+								}),
+						),
+					)
 			const apps = Store.AppStore.of({
 				save: (input) =>
 					owned(input.connection).pipe(
@@ -140,7 +162,11 @@ export const make: Effect.Effect<
 												),
 											)
 											.returning({ id: appConnections.id })
-										if (rows.length === 0) return yield* missing()
+										if (rows.length === 0)
+											return yield* new Store.StoreError({
+												reason: "Missing",
+												operation: "Owned App storage",
+											})
 										yield* tx
 											.delete(appSecrets)
 											.where(
@@ -153,7 +179,12 @@ export const make: Effect.Effect<
 								)
 								.pipe(
 									Effect.mapError((error) =>
-										error instanceof Store.StoreError ? error : unavailable(),
+										error instanceof Store.StoreError
+											? error
+											: new Store.StoreError({
+													reason: "Unavailable",
+													operation: "Owned App storage",
+												}),
 									),
 								),
 						),
@@ -165,10 +196,26 @@ export const make: Effect.Effect<
 					const id = yield* Effect.sync(() => crypto.randomUUID())
 					const encoded = yield* Schema.encodeEffect(credentialCodec)(
 						credential,
-					).pipe(Effect.mapError(unavailable))
+					).pipe(
+						Effect.mapError(
+							() =>
+								new Store.StoreError({
+									reason: "Unavailable",
+									operation: "Owned App storage",
+								}),
+						),
+					)
 					const body = yield* secrets
 						.seal(encoded, binding("credential", id))
-						.pipe(Effect.mapError(unavailable))
+						.pipe(
+							Effect.mapError(
+								() =>
+									new Store.StoreError({
+										reason: "Unavailable",
+										operation: "Owned App storage",
+									}),
+							),
+						)
 					yield* db
 						.insert(appSecrets)
 						.values({
@@ -178,7 +225,15 @@ export const make: Effect.Effect<
 							connectionId: credential.binding.connectionId,
 							body,
 						})
-						.pipe(Effect.mapError(unavailable))
+						.pipe(
+							Effect.mapError(
+								() =>
+									new Store.StoreError({
+										reason: "Unavailable",
+										operation: "Owned App storage",
+									}),
+							),
+						)
 					return id
 				}),
 				get: Effect.fn("AppCredentials.get")(function* (input) {
@@ -187,21 +242,52 @@ export const make: Effect.Effect<
 						.select()
 						.from(appSecrets)
 						.where(where("credential", input.reference))
-						.pipe(Effect.mapError(unavailable)))[0]
-					if (row === undefined) return yield* missing()
+						.pipe(
+							Effect.mapError(
+								() =>
+									new Store.StoreError({
+										reason: "Unavailable",
+										operation: "Owned App storage",
+									}),
+							),
+						))[0]
+					if (row === undefined)
+						return yield* new Store.StoreError({
+							reason: "Missing",
+							operation: "Owned App storage",
+						})
 					const encoded = yield* secrets
 						.open(row.body, binding("credential", input.reference))
-						.pipe(Effect.mapError(unavailable))
+						.pipe(
+							Effect.mapError(
+								() =>
+									new Store.StoreError({
+										reason: "Unavailable",
+										operation: "Owned App storage",
+									}),
+							),
+						)
 					const credential = yield* Schema.decodeEffect(credentialCodec)(
 						encoded,
-					).pipe(Effect.mapError(unavailable))
+					).pipe(
+						Effect.mapError(
+							() =>
+								new Store.StoreError({
+									reason: "Unavailable",
+									operation: "Owned App storage",
+								}),
+						),
+					)
 					if (
 						credential.binding.owner !== input.binding.owner ||
 						credential.binding.connectionId !== input.binding.connectionId ||
 						credential.binding.resource !== input.binding.resource ||
 						credential.binding.issuer !== input.binding.issuer
 					)
-						return yield* missing()
+						return yield* new Store.StoreError({
+							reason: "Missing",
+							operation: "Owned App storage",
+						})
 					return credential
 				}),
 				deleteConnection: (key) =>
@@ -213,11 +299,25 @@ export const make: Effect.Effect<
 				save: Effect.fn("AppFlows.save")(function* (flow) {
 					yield* owned(flow.binding)
 					const encoded = yield* Schema.encodeEffect(flowCodec)(flow).pipe(
-						Effect.mapError(unavailable),
+						Effect.mapError(
+							() =>
+								new Store.StoreError({
+									reason: "Unavailable",
+									operation: "Owned App storage",
+								}),
+						),
 					)
 					const body = yield* secrets
 						.seal(encoded, binding("flow", flow.flowId))
-						.pipe(Effect.mapError(unavailable))
+						.pipe(
+							Effect.mapError(
+								() =>
+									new Store.StoreError({
+										reason: "Unavailable",
+										operation: "Owned App storage",
+									}),
+							),
+						)
 					yield* db
 						.insert(appSecrets)
 						.values({
@@ -227,7 +327,15 @@ export const make: Effect.Effect<
 							connectionId: flow.binding.connectionId,
 							body,
 						})
-						.pipe(Effect.mapError(unavailable))
+						.pipe(
+							Effect.mapError(
+								() =>
+									new Store.StoreError({
+										reason: "Unavailable",
+										operation: "Owned App storage",
+									}),
+							),
+						)
 				}),
 				get: Effect.fn("AppFlows.get")(function* ({ key, flowId }) {
 					yield* owned(key)
@@ -240,8 +348,20 @@ export const make: Effect.Effect<
 								eq(appSecrets.connectionId, key.connectionId),
 							),
 						)
-						.pipe(Effect.mapError(unavailable)))[0]
-					if (row === undefined) return yield* missing()
+						.pipe(
+							Effect.mapError(
+								() =>
+									new Store.StoreError({
+										reason: "Unavailable",
+										operation: "Owned App storage",
+									}),
+							),
+						))[0]
+					if (row === undefined)
+						return yield* new Store.StoreError({
+							reason: "Missing",
+							operation: "Owned App storage",
+						})
 					if (row.consumed)
 						return yield* new Authorization.AuthorizationError({
 							reason: "AlreadyConsumed",
@@ -249,9 +369,23 @@ export const make: Effect.Effect<
 						})
 					const encoded = yield* secrets
 						.open(row.body, binding("flow", flowId))
-						.pipe(Effect.mapError(unavailable))
+						.pipe(
+							Effect.mapError(
+								() =>
+									new Store.StoreError({
+										reason: "Unavailable",
+										operation: "Owned App storage",
+									}),
+							),
+						)
 					return yield* Schema.decodeEffect(flowCodec)(encoded).pipe(
-						Effect.mapError(unavailable),
+						Effect.mapError(
+							() =>
+								new Store.StoreError({
+									reason: "Unavailable",
+									operation: "Owned App storage",
+								}),
+						),
 					)
 				}),
 				consume: Effect.fn("AppFlows.consume")(function* ({ key, flowId }) {
@@ -267,7 +401,15 @@ export const make: Effect.Effect<
 							),
 						)
 						.returning({ id: appSecrets.id })
-						.pipe(Effect.mapError(unavailable))
+						.pipe(
+							Effect.mapError(
+								() =>
+									new Store.StoreError({
+										reason: "Unavailable",
+										operation: "Owned App storage",
+									}),
+							),
+						)
 					if (rows.length === 0)
 						return yield* new Authorization.AuthorizationError({
 							reason: "AlreadyConsumed",
@@ -303,7 +445,16 @@ export const make: Effect.Effect<
 									)
 							}),
 						)
-						.pipe(Effect.asVoid, Effect.mapError(unavailable)),
+						.pipe(
+							Effect.asVoid,
+							Effect.mapError(
+								() =>
+									new Store.StoreError({
+										reason: "Unavailable",
+										operation: "Owned App storage",
+									}),
+							),
+						),
 			}
 		},
 	})

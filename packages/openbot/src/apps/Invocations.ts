@@ -69,7 +69,7 @@ export const make: Effect.Effect<
 		.update(appInvocations)
 		.set({ status: "OutcomeUnknown" })
 		.where(eq(appInvocations.status, "Sending"))
-		.pipe(Effect.mapError(StoredInvocations.unavailable))
+		.pipe(Effect.mapError(() => ExperienceStorageUnavailable.make({})))
 	const conflict = () =>
 		ChatConflict.make({
 			message:

@@ -24,11 +24,6 @@ export class Operations extends Context.Service<
 	}
 >()("@openbot-build/openbot/apps/Operations") {}
 
-const invalid = () =>
-	ChatConflict.make({
-		message:
-			"This App input request is no longer available or does not match its operation.",
-	})
 export const make: Effect.Effect<
 	typeof Operations.Service,
 	never,
@@ -47,19 +42,38 @@ export const make: Effect.Effect<
 					const request = yield* Match.value(value.result).pipe(
 						Match.when({ _tag: "InputRequired" }, ({ request }) =>
 							Schema.decodeUnknownEffect(Schema.JsonObject)(request).pipe(
-								Effect.mapError(invalid),
+								Effect.mapError(() =>
+									ChatConflict.make({
+										message:
+											"This App input request is no longer available or does not match its operation.",
+									}),
+								),
 							),
 						),
-						Match.orElse(() => Effect.fail(invalid())),
+						Match.orElse(() =>
+							Effect.fail(
+								ChatConflict.make({
+									message:
+										"This App input request is no longer available or does not match its operation.",
+								}),
+							),
+						),
 					)
 					if (value.status !== "InputRequired" || value.round !== round)
-						return yield* invalid()
+						return yield* ChatConflict.make({
+							message:
+								"This App input request is no longer available or does not match its operation.",
+						})
 					// The read rules changed since the call started, so the old decision no longer holds.
 					const readOnly = yield* actions.isRead({
 						organizationId: organizationOf(owner),
 						source: value.source,
 					})
-					if (readOnly !== value.readOnly) return yield* invalid()
+					if (readOnly !== value.readOnly)
+						return yield* ChatConflict.make({
+							message:
+								"This App input request is no longer available or does not match its operation.",
+						})
 					const continuation = Match.value(value.source.kind).pipe(
 						Match.when(
 							"tool",
@@ -109,7 +123,12 @@ export const make: Effect.Effect<
 						Match.exhaustive,
 					)
 					yield* McpClient.validateInputs(continuation, responses).pipe(
-						Effect.mapError(invalid),
+						Effect.mapError(() =>
+							ChatConflict.make({
+								message:
+									"This App input request is no longer available or does not match its operation.",
+							}),
+						),
 					)
 					const policy = Client.InvocationPolicy.of({
 						check: (invocation) =>
@@ -130,9 +149,19 @@ export const make: Effect.Effect<
 					})
 					const opened = yield* capabilities
 						.open({ owner, connectionId: value.source.connectionId, policy })
-						.pipe(Effect.mapError(invalid))
+						.pipe(
+							Effect.mapError(() =>
+								ChatConflict.make({
+									message:
+										"This App input request is no longer available or does not match its operation.",
+								}),
+							),
+						)
 					if (opened.stored.revision !== value.source.revision)
-						return yield* invalid()
+						return yield* ChatConflict.make({
+							message:
+								"This App input request is no longer available or does not match its operation.",
+						})
 					const declaration = Match.value(value.source.kind).pipe(
 						Match.when("tool", () =>
 							opened.tools.find((tool) => tool.name === value.source.name),
@@ -159,10 +188,20 @@ export const make: Effect.Effect<
 						value.source.definition === undefined ||
 						!Schema.toEquivalence(Schema.Json)(
 							value.source.definition,
-							yield* json(declaration).pipe(Effect.mapError(invalid)),
+							yield* json(declaration).pipe(
+								Effect.mapError(() =>
+									ChatConflict.make({
+										message:
+											"This App input request is no longer available or does not match its operation.",
+									}),
+								),
+							),
 						)
 					)
-						return yield* invalid()
+						return yield* ChatConflict.make({
+							message:
+								"This App input request is no longer available or does not match its operation.",
+						})
 					yield* invocations.resume(
 						owner,
 						id,

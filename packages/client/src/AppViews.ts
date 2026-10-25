@@ -9,14 +9,17 @@ import { decodeStandard } from "@openbot-build/protocol/McpClient"
 import { Effect, Schema } from "effect"
 import { Client } from "./Client.ts"
 
-const failure = () =>
-	new ProtocolClient.ClientError({
-		reason: "Protocol",
-		issue:
-			"The App view request failed. Check its saved operation before you continue.",
-	})
 const decode = <A>(schema: StandardSchemaV1<unknown, A>, input: unknown) =>
-	decodeStandard(() => schema, input, failure)
+	decodeStandard(
+		() => schema,
+		input,
+		() =>
+			new ProtocolClient.ClientError({
+				reason: "Protocol",
+				issue:
+					"The App view request failed. Check its saved operation before you continue.",
+			}),
+	)
 /** A new ID for each action, made when the action runs. */
 const newRequestId = Effect.sync(() => crypto.randomUUID())
 export const toolResult = (value: unknown) =>
@@ -35,7 +38,16 @@ export const make = Effect.fn("AppViews.make")(function* (
 				params,
 				payload: { method, params: cursor === undefined ? {} : { cursor } },
 			})
-			.pipe(Effect.mapError(failure))
+			.pipe(
+				Effect.mapError(
+					() =>
+						new ProtocolClient.ClientError({
+							reason: "Protocol",
+							issue:
+								"The App view request failed. Check its saved operation before you continue.",
+						}),
+				),
+			)
 	const invoke = (payload: Api.ActionRequest) =>
 		Effect.gen(function* () {
 			// The generated client takes a union of request objects, not one object with a union
@@ -44,12 +56,30 @@ export const make = Effect.fn("AppViews.make")(function* (
 				payload.kind === "tool"
 					? api.appViews.act({ params, payload })
 					: api.appViews.act({ params, payload })
-			).pipe(Effect.mapError(failure))
+			).pipe(
+				Effect.mapError(
+					() =>
+						new ProtocolClient.ClientError({
+							reason: "Protocol",
+							issue:
+								"The App view request failed. Check its saved operation before you continue.",
+						}),
+				),
+			)
 			let previous: string | undefined
 			while (true) {
 				const observed = yield* api.appViews
 					.operation({ params: { ...params, requestId: payload.requestId } })
-					.pipe(Effect.mapError(failure))
+					.pipe(
+						Effect.mapError(
+							() =>
+								new ProtocolClient.ClientError({
+									reason: "Protocol",
+									issue:
+										"The App view request failed. Check its saved operation before you continue.",
+								}),
+						),
+					)
 				if (previous !== observed.status) {
 					previous = observed.status
 					onChange()
@@ -68,7 +98,11 @@ export const make = Effect.fn("AppViews.make")(function* (
 					observed.status === "OutcomeUnknown" ||
 					observed.status === "Rejected"
 				)
-					return yield* failure()
+					return yield* new ProtocolClient.ClientError({
+						reason: "Protocol",
+						issue:
+							"The App view request failed. Check its saved operation before you continue.",
+					})
 				yield* Effect.sleep("250 millis")
 			}
 		})
@@ -96,7 +130,14 @@ export const make = Effect.fn("AppViews.make")(function* (
 			),
 		callTool: (input) =>
 			Schema.decodeUnknownEffect(Schema.JsonObject)(input.arguments ?? {}).pipe(
-				Effect.mapError(failure),
+				Effect.mapError(
+					() =>
+						new ProtocolClient.ClientError({
+							reason: "Protocol",
+							issue:
+								"The App view request failed. Check its saved operation before you continue.",
+						}),
+				),
 				Effect.flatMap((args) =>
 					Effect.flatMap(newRequestId, (requestId) =>
 						invoke({

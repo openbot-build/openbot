@@ -7,11 +7,6 @@ import { IndexNamespace } from "./IndexNamespace.ts"
 import * as Db from "../database/Database.ts"
 
 /** The public Index entries in Postgres. It holds only entries that were checked independently. */
-const unavailable = () =>
-	new Index.IndexError({
-		reason: "Unavailable",
-		operation: "Public Index storage",
-	})
 export const decode = Schema.decodeUnknownEffect(
 	Schema.fromJsonString(Index.Entry),
 )
@@ -33,7 +28,13 @@ export const checks = (db: Db.Database, namespace: string) =>
 				),
 			),
 			Effect.map(HashMap.fromIterable),
-			Effect.mapError(unavailable),
+			Effect.mapError(
+				() =>
+					new Index.IndexError({
+						reason: "Unavailable",
+						operation: "Public Index storage",
+					}),
+			),
 		)
 
 export const layer = Layer.effect(
@@ -58,7 +59,13 @@ export const layer = Layer.effect(
 								? Effect.succeedNone
 								: decode(rows[0].body).pipe(Effect.asSome),
 						),
-						Effect.mapError(unavailable),
+						Effect.mapError(
+							() =>
+								new Index.IndexError({
+									reason: "Unavailable",
+									operation: "Public Index storage",
+								}),
+						),
 					),
 			upsert: (entry) =>
 				db
@@ -72,12 +79,30 @@ export const layer = Layer.effect(
 						target: [appIndexEntries.namespace, appIndexEntries.cardUrl],
 						set: { body: JSON.stringify(entry) },
 					})
-					.pipe(Effect.as(entry), Effect.mapError(unavailable)),
+					.pipe(
+						Effect.as(entry),
+						Effect.mapError(
+							() =>
+								new Index.IndexError({
+									reason: "Unavailable",
+									operation: "Public Index storage",
+								}),
+						),
+					),
 			withdraw: (cardUrl) =>
 				db
 					.delete(appIndexEntries)
 					.where(where(cardUrl))
-					.pipe(Effect.asVoid, Effect.mapError(unavailable)),
+					.pipe(
+						Effect.asVoid,
+						Effect.mapError(
+							() =>
+								new Index.IndexError({
+									reason: "Unavailable",
+									operation: "Public Index storage",
+								}),
+						),
+					),
 		})
 	}),
 )

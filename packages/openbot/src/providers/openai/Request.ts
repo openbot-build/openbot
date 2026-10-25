@@ -14,12 +14,6 @@ import {
 } from "@openbot-build/core"
 import { type Defaults, type Options } from "./OpenAiProvider.ts"
 
-const invalid = (description: string) =>
-	AiError.AiError.make({
-		module: "OpenAiProvider",
-		method: "encodeRequest",
-		reason: AiError.InvalidRequestError.make({ description }),
-	})
 export const config =
 	({ upstreamModel, ...defaults }: Defaults & Options) =>
 	(selection: Config.Selection) =>
@@ -32,7 +26,17 @@ export const config =
 						)({
 							...defaults.reasoning,
 							effort: selection.reasoningEffort,
-						}).pipe(Effect.mapError((e) => invalid(String(e))))
+						}).pipe(
+							Effect.mapError((e) =>
+								AiError.AiError.make({
+									module: "OpenAiProvider",
+									method: "encodeRequest",
+									reason: AiError.InvalidRequestError.make({
+										description: String(e),
+									}),
+								}),
+							),
+						)
 			return {
 				store: false,
 				...defaults,
@@ -58,13 +62,28 @@ export const nativeInput = (
 						window.provider !== selection.provider ||
 						window.model !== selection.model
 							? Effect.fail(
-									invalid(
-										"The native context window provider or model does not match the request",
-									),
+									AiError.AiError.make({
+										module: "OpenAiProvider",
+										method: "encodeRequest",
+										reason: AiError.InvalidRequestError.make({
+											description:
+												"The native context window provider or model does not match the request",
+										}),
+									}),
 								)
 							: Schema.decodeUnknownEffect(Schema.Array(Schema.JsonObject))(
 									window.items,
-								).pipe(Effect.mapError((e) => invalid(String(e)))),
+								).pipe(
+									Effect.mapError((e) =>
+										AiError.AiError.make({
+											module: "OpenAiProvider",
+											method: "encodeRequest",
+											reason: AiError.InvalidRequestError.make({
+												description: String(e),
+											}),
+										}),
+									),
+								),
 				},
 			),
 		),
@@ -82,7 +101,15 @@ const prependNativeInput = (
 		const native = yield* nativeInput(selection)
 		const input = yield* Schema.decodeUnknownEffect(
 			Schema.Array(Schema.JsonObject),
-		)(payload.input).pipe(Effect.mapError((e) => invalid(String(e))))
+		)(payload.input).pipe(
+			Effect.mapError((e) =>
+				AiError.AiError.make({
+					module: "OpenAiProvider",
+					method: "encodeRequest",
+					reason: AiError.InvalidRequestError.make({ description: String(e) }),
+				}),
+			),
+		)
 		return { ...payload, input: [...native, ...input] }
 	})
 
@@ -161,7 +188,15 @@ export const encode =
 							tool.setParameters(Schema.toEncoded(tool.parametersSchema)),
 						),
 						handle: () =>
-							Effect.fail(invalid("Request encoding cannot run tools")),
+							Effect.fail(
+								AiError.AiError.make({
+									module: "OpenAiProvider",
+									method: "encodeRequest",
+									reason: AiError.InvalidRequestError.make({
+										description: "Request encoding cannot run tools",
+									}),
+								}),
+							),
 					},
 					toolChoice: request.toolChoice ?? "auto",
 					disableToolCallResolution: true,

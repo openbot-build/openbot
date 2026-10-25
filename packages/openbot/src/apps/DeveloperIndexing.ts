@@ -145,7 +145,7 @@ export const make: Effect.Effect<
 							namespace,
 							cardUrl,
 							app.candidate.sources,
-						).pipe(Effect.mapError(Rows.unavailable))
+						).pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
 						const value: Api.IndexRequest = {
 							id: yield* Effect.sync(randomUUID),
 							cardUrl,
@@ -182,7 +182,8 @@ export const make: Effect.Effect<
 									),
 								),
 						))[0]
-						if (previous === undefined) return yield* Rows.unavailable()
+						if (previous === undefined)
+							return yield* Api.DeveloperUnavailable.make({})
 						return yield* read(previous)
 					}),
 				)

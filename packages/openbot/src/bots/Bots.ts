@@ -194,7 +194,6 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 					}),
 				),
 			)
-		const notFound = (id: string) => BotsApi.BotNotFound.make({ bot: id })
 		const resourceOf = (caller: Caller, bot: Bot) =>
 			botResource({ ...bot, organizationId: caller.organizationId })
 		const access: typeof Bots.Service.access = (caller, id, action) =>
@@ -202,7 +201,7 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 				const bot = yield* find(caller.organizationId, id).pipe(
 					Effect.flatMap(
 						Option.match({
-							onNone: () => Effect.fail(notFound(id)),
+							onNone: () => Effect.fail(BotsApi.BotNotFound.make({ bot: id })),
 							onSome: Effect.succeed,
 						}),
 					),
@@ -212,7 +211,7 @@ export const make: Effect.Effect<typeof Bots.Service, never, BotRecords> =
 					caller,
 					{ action, resource: resourceOf(caller, bot) },
 					{
-						hide: () => notFound(id),
+						hide: () => BotsApi.BotNotFound.make({ bot: id }),
 					},
 				)
 				return bot

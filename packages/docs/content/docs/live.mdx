@@ -1,0 +1,209 @@
+---
+title: Live mode
+description:
+  Talk with a Bot in real time. Sound goes in and out over one WebSocket.
+---
+
+In **Live mode**, a person talks with a Bot in real time. The client sends the
+sound of the person, and the Bot answers with sound and text. The person can
+talk while the Bot talks, and the Bot stops.
+
+Live mode uses a **WebSocket**: one connection that stays open and carries
+messages both ways. OpenBot is in the middle. It connects to a **Live model**,
+such as a model of the OpenAI Realtime API, and keeps the key of the provider on
+the server.
+
+Live mode runs in a **live Chat**: a [Chat](/docs/chats) of the kind `live`.
+Each thing that the person says becomes a normal Turn in it. So the Bot has its
+instructions, its tools, its Rules, and its memory, as in a text Chat. The Chat
+keeps the text of what the person said and of what the Bot answered. Sound is
+not stored.
+
+---
+
+## Add a Live model
+
+A Live model is a model with the type `live`. Add it, and link it to a provider
+that has a Live backend. Today, only `openai` providers have one: the OpenAI
+Realtime API. See [Models](/docs/models).
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "id": "gpt-realtime", "type": "live", "name": "GPT Realtime", "reasoningEfforts": [], "serviceTiers": [] }' \
+  https://api.example.com/v1/organization/models
+```
+
+Then link `gpt-realtime` to an `openai` provider. A Live model never runs text
+Turns, and a text Chat cannot choose it.
+
+---
+
+## Make a live Chat
+
+`POST /v1/bots/:botId/live` makes a new live Chat of yours with a Bot. You need
+`bots.delegate` on the Bot and `models.use` on the Live model. Each call makes a
+new Chat, so each talk can have its own history.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}' \
+  https://api.example.com/v1/bots/$BOT_ID/live
+```
+
+| Field   | Rules                                                                                         |
+| ------- | --------------------------------------------------------------------------------------------- |
+| `model` | Optional. A Live model, as `{ "provider": "…", "model": "…" }`. The default is the first one. |
+
+The answer is the new Chat, with `201`. Its `settings.model` is the Live model.
+`PATCH /v1/chats/:chatId` can change it to another Live model, but never to a
+language model. Without a Live model, OpenBot returns `409` with
+`LiveUnavailable`.
+
+A live Chat is in the list of `GET /v1/chats`, and `DELETE /v1/chats/:chatId`
+deletes it.
+
+---
+
+## Connect
+
+Open a WebSocket at `GET /v1/chats/:chatId/live`. You need `run` on the Chat.
+The Chat must be a live Chat. The model is the model of the Chat.
+
+| Query           | Rules                                                                                                    |
+| --------------- | -------------------------------------------------------------------------------------------------------- |
+| `voice`         | Optional. A voice from `capabilities.voices`.                                                            |
+| `inputFormat`   | Optional. The sound that the client sends, such as `pcm16@24000`. The default is the first of the model. |
+| `outputFormat`  | Optional. The sound that the client wants back. The default is the first of the model.                   |
+| `turnDetection` | Optional. `server`: the model hears when the person stops. `client`: push-to-talk.                       |
+
+A program sends `Authorization: Bearer <token>`. A browser sends the session
+cookie. Then the page must be on the public origin of OpenBot. Otherwise OpenBot
+returns `403` with `ForbiddenOrigin`, so a page on another site cannot use your
+cookie.
+
+OpenBot checks the request before it opens the socket. It returns `409` with
+`LiveUnavailable` when the Chat is not a live Chat, or when the model does not
+have the format, the voice, or the turn detection that you asked for.
+
+```ts
+const socket = new WebSocket(
+	"wss://api.example.com/v1/chats/" + chatId + "/live?voice=marin",
+)
+socket.binaryType = "arraybuffer"
+socket.onmessage = (event) => {
+	if (typeof event.data === "string") console.log(JSON.parse(event.data))
+	else play(new Uint8Array(event.data))
+}
+```
+
+---
+
+## Messages
+
+A **text frame** has one JSON message. A **binary frame** has sound. The client
+sends sound in the input format, and OpenBot sends sound in the output format.
+`pcm16` is 16-bit signed little-endian PCM with one channel.
+
+The protocol is the same for every Live model. The first message tells the
+client what the model can do.
+
+### From OpenBot
+
+| `type`                    | Meaning                                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `session.ready`           | The session is open. It has `provider`, `model`, `capabilities`, `audio`, `turnDetection`, and `voice`.      |
+| `input.speech.started`    | The person started to talk.                                                                                  |
+| `input.speech.stopped`    | The person stopped talking.                                                                                  |
+| `input.transcript`        | Text of what the person said. `final` is `true` for the full text.                                           |
+| `output.transcript.delta` | A part of the text of the answer.                                                                            |
+| `output.done`             | The answer item `itemId` has no more sound or text.                                                          |
+| `output.stop`             | The person talks again. Stop playing the answer now.                                                         |
+| `turn.started`            | A Turn started. It has `turnId`.                                                                             |
+| `turn.completed`          | The Turn ended. `status` is `Completed`, `Failed`, or `Interrupted`.                                         |
+| `error`                   | Something went wrong. It has `code` and `message`. The session stays open, unless the model connection ends. |
+
+### From the client
+
+| `type`               | Meaning                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------- |
+| `input.text`         | Typed text. It starts a Turn, like speech.                                                  |
+| `input.image`        | An image, such as a frame of video. `data` is Base64. Only when `inputs.image` is true.     |
+| `input.audio.commit` | The person stopped talking. Only with `client` turn detection.                              |
+| `input.audio.clear`  | Forget the sound that is not committed.                                                     |
+| `response.cancel`    | Stop the answer and its Turn.                                                               |
+| `output.truncate`    | The person heard the answer `itemId` only up to `audioEndMs`. Only when `truncate` is true. |
+
+### Capabilities
+
+`capabilities` in `session.ready` says what the Live model can do:
+
+| Field                | Meaning                                                        |
+| -------------------- | -------------------------------------------------------------- |
+| `audio`              | The `input` and `output` formats.                              |
+| `turnDetection`      | `server`, `client`, or both.                                   |
+| `inputTranscription` | The model gives the text of what the person says.              |
+| `tools`              | The model can call the tools of the Bot.                       |
+| `interruption`       | The model can stop a running answer.                           |
+| `truncate`           | The model can forget the part of an answer that was not heard. |
+| `inputs`             | `text` and `image` say which other inputs the model takes.     |
+| `voices`             | The voices of the model.                                       |
+
+When the client sends a message that the model does not support, OpenBot sends
+an `error` with the code `unsupported`.
+
+---
+
+## Turns and history
+
+When the person stops talking, the model writes the text of what they said.
+OpenBot then gives that text to the Chat. When the Bot is free, it starts a
+Turn. The answer comes as sound, and its text goes into the Turn.
+
+The Turn is a normal Turn of the person: the Bot uses its instructions, tools,
+[approvals](/docs/requests), and [Rules](/docs/rules). You can read it with
+`GET /v1/chats/:chatId/turns`, and other clients see it with
+`GET /v1/chats/:chatId/wait`. The usage of the Live model goes into
+[Usage](/docs/usage), as for other model calls. Sound tokens count in the input
+and output totals.
+
+When the session opens, OpenBot gives the last text messages of the Chat to the
+Live model, so it knows what was said before.
+
+A live Chat can have one Live session at a time. Only the server of that session
+starts the Turns of the Chat. Other input waits in the Chat until a session is
+open. This is true for a message from `POST /v1/chats/:chatId/messages`, the
+result of a [delegation](/docs/delegation), and the answer to a request. When
+the session opens, OpenBot runs the input that waits. The client gets
+`turn.started` and `turn.completed` for every Turn of the Chat, also for Turns
+that it did not start.
+
+When the person talks during an answer, OpenBot sends `output.stop`, stops the
+answer, and stops the Turn.
+
+The answer starts after the text of the speech is ready. This takes a short
+time, but the history of the Chat then has the same words as the person said.
+
+---
+
+## Add a Live backend
+
+A **Live backend** connects OpenBot to one kind of Live service. Everything else
+in Live mode works with any backend. To add one:
+
+1. Write a module that gives a `LiveBackend` from
+   `packages/openbot/src/models/LiveBackends.ts`. Its `make` gives a `LiveModel`
+   from `@openbot-build/core/Live`.
+2. Say in `capabilities` what the service can do. OpenBot never sends an input
+   that the backend does not support.
+3. Map the `Live.Input` values to the messages of the service, and the messages
+   of the service to `Live.Event` values.
+4. Add the backend to `defaultLiveBackends` in
+   `packages/openbot/src/app/OpenBot.ts`.
+
+`packages/openbot/src/providers/openai/OpenAiRealtime.ts` is the backend for the
+OpenAI Realtime API. Use it as an example.
+
+A service that does not give the text of the speech cannot keep the history of
+the Chat. OpenBot does not open a session with such a model yet.

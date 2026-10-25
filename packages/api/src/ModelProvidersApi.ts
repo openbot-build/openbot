@@ -21,9 +21,10 @@ export type ProviderKind = typeof ProviderKind.Type
 
 /**
  * What a model does. A `language` model writes text and calls tools. A
- * `decision` model, such as Jev, only picks an answer from a fixed list.
+ * `decision` model, such as Jev, only picks an answer from a fixed list. A `live`
+ * model talks with a person in real time, with sound, in Live mode.
  */
-export const ModelType = Schema.Literals(["language", "decision"])
+export const ModelType = Schema.Literals(["language", "decision", "live"])
 export type ModelType = typeof ModelType.Type
 
 /** An HTTP address without credentials, query or fragment. */

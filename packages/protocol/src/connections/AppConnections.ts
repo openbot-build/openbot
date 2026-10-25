@@ -24,9 +24,6 @@ import {
 	type RevalidationOptions,
 } from "./App.ts"
 
-const keyOf = (key: Store.ConnectionKey) =>
-	JSON.stringify([key.owner, key.connectionId])
-
 export const layerConnectionScopes = Layer.effect(
 	ConnectionScopes,
 	Effect.gen(function* () {
@@ -38,7 +35,7 @@ export const layerConnectionScopes = Layer.effect(
 				key,
 				scope,
 			}) {
-				const id = keyOf(key)
+				const id = JSON.stringify([key.owner, key.connectionId])
 				yield* Ref.update(
 					state,
 					HashMap.modifyAt(id, (scopes) =>
@@ -66,7 +63,7 @@ export const layerConnectionScopes = Layer.effect(
 				)
 			}),
 			close: Effect.fn("ConnectionScopes.close")(function* (key) {
-				const id = keyOf(key)
+				const id = JSON.stringify([key.owner, key.connectionId])
 				const scopes = yield* Ref.modify(
 					state,
 					(old) => [HashMap.get(old, id), HashMap.remove(old, id)] as const,

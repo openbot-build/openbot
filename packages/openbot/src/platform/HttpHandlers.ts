@@ -39,7 +39,6 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 		const models = yield* Models
 		const audit = yield* AuditLog
 		const billing = yield* Billing
-		const unavailable = () => PlatformApi.PlatformUnavailable.make({})
 		const credits = <A>(
 			effect: Effect.Effect<
 				A,
@@ -51,7 +50,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 				Effect.mapError((error) =>
 					error._tag === "OrganizationMissing"
 						? PlatformApi.OrganizationNotFound.make({ organizationId })
-						: unavailable(),
+						: PlatformApi.PlatformUnavailable.make({}),
 				),
 			)
 		const record = (
@@ -78,7 +77,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 					resource: input.resource,
 					details: input.details,
 				})
-				.pipe(Effect.mapError(unavailable))
+				.pipe(Effect.mapError(() => PlatformApi.PlatformUnavailable.make({})))
 		const current = settings.platform.pipe(
 			Effect.flatMap(
 				Option.match({
@@ -210,7 +209,9 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 						limit: query.limit ?? 50,
 						...(query.after === undefined ? {} : { after: query.after }),
 					})
-					.pipe(Effect.mapError(unavailable)),
+					.pipe(
+						Effect.mapError(() => PlatformApi.PlatformUnavailable.make({})),
+					),
 			)
 			.handle("updatePlatformOrganization", ({ params, payload }) =>
 				Effect.gen(function* () {
@@ -219,7 +220,9 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 						.setStatus(params.organizationId, payload.status)
 						.pipe(
 							Effect.mapError((error) =>
-								error._tag === "OrganizationNotFound" ? error : unavailable(),
+								error._tag === "OrganizationNotFound"
+									? error
+									: PlatformApi.PlatformUnavailable.make({}),
 							),
 						)
 					yield* record(account, {
@@ -234,7 +237,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 			.handle("listPlatformAdmins", () =>
 				admins.list.pipe(
 					Effect.map((items) => ({ items })),
-					Effect.mapError(unavailable),
+					Effect.mapError(() => PlatformApi.PlatformUnavailable.make({})),
 				),
 			)
 			.handle("addPlatformAdmin", ({ payload }) =>
@@ -242,7 +245,9 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 					const account = yield* Account
 					const added = yield* admins
 						.add(payload.email)
-						.pipe(Effect.mapError(unavailable))
+						.pipe(
+							Effect.mapError(() => PlatformApi.PlatformUnavailable.make({})),
+						)
 					yield* record(account, {
 						action: "member.updated",
 						resource: platformKey,
@@ -259,7 +264,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 						.pipe(
 							Effect.mapError((error) =>
 								error._tag === "PlatformAdminsUnavailable"
-									? unavailable()
+									? PlatformApi.PlatformUnavailable.make({})
 									: error,
 							),
 						)
@@ -359,7 +364,9 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 					const provider = yield* findProvider(params.providerId)
 					const items = yield* billing
 						.prices(provider.id)
-						.pipe(Effect.mapError(unavailable))
+						.pipe(
+							Effect.mapError(() => PlatformApi.PlatformUnavailable.make({})),
+						)
 					return { items }
 				}),
 			)
@@ -373,7 +380,9 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 						})
 					const price = yield* billing
 						.setPrice(provider.id, payload, account.userId)
-						.pipe(Effect.mapError(unavailable))
+						.pipe(
+							Effect.mapError(() => PlatformApi.PlatformUnavailable.make({})),
+						)
 					yield* record(account, {
 						action: "model_price.set",
 						resource: platformKey,
@@ -430,7 +439,7 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 					const account = yield* Account
 					const provider = yield* findProvider(params.providerId)
 					const organizationIds = yield* allOrganizations.pipe(
-						Effect.mapError(unavailable),
+						Effect.mapError(() => PlatformApi.PlatformUnavailable.make({})),
 					)
 					yield* checkUnused({ providerId: provider.id, organizationIds }).pipe(
 						Effect.provideService(Settings, settings),

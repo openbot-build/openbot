@@ -9,19 +9,16 @@ import {
 } from "./PlatformAdmins.ts"
 import * as Db from "../database/Database.ts"
 
-const iso = (millis: number) => DateTime.formatIso(DateTime.makeUnsafe(millis))
 const view = (
 	row: typeof platformAdmins.$inferSelect,
 ): PlatformApi.PlatformAdmin => ({
 	email: row.email,
 	userId: row.userId,
-	addedAt: iso(row.addedAt),
+	addedAt: DateTime.formatIso(DateTime.makeUnsafe(row.addedAt)),
 })
 
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
-	const unavailable = () => PlatformAdminsUnavailable.make({})
-	const byEmail = (email: string) => eq(platformAdmins.email, email)
 
 	return PlatformAdmins.of({
 		list: db
@@ -30,7 +27,7 @@ export const make = Effect.gen(function* () {
 			.orderBy(asc(platformAdmins.email))
 			.pipe(
 				Effect.map((rows) => rows.map(view)),
-				Effect.mapError(unavailable),
+				Effect.mapError(() => PlatformAdminsUnavailable.make({})),
 			),
 		add: (input) =>
 			Effect.gen(function* () {
@@ -43,12 +40,14 @@ export const make = Effect.gen(function* () {
 				const [row] = yield* db
 					.select()
 					.from(platformAdmins)
-					.where(byEmail(email))
-				if (row === undefined) return yield* unavailable()
+					.where(eq(platformAdmins.email, email))
+				if (row === undefined) return yield* PlatformAdminsUnavailable.make({})
 				return view(row)
 			}).pipe(
 				Effect.mapError((error) =>
-					error._tag === "PlatformAdminsUnavailable" ? error : unavailable(),
+					error._tag === "PlatformAdminsUnavailable"
+						? error
+						: PlatformAdminsUnavailable.make({}),
 				),
 			),
 		remove: (input) =>
@@ -64,7 +63,9 @@ export const make = Effect.gen(function* () {
 							return yield* PlatformApi.PlatformAdminNotFound.make({ email })
 						if (rows.length === 1)
 							return yield* PlatformApi.LastPlatformAdmin.make({})
-						yield* tx.delete(platformAdmins).where(byEmail(email))
+						yield* tx
+							.delete(platformAdmins)
+							.where(eq(platformAdmins.email, email))
 					}),
 				)
 				.pipe(
@@ -72,7 +73,7 @@ export const make = Effect.gen(function* () {
 						error._tag === "PlatformAdminNotFound" ||
 						error._tag === "LastPlatformAdmin"
 							? error
-							: unavailable(),
+							: PlatformAdminsUnavailable.make({}),
 					),
 				),
 		check: (account) =>
@@ -90,13 +91,13 @@ export const make = Effect.gen(function* () {
 					.set({ userId: account.id })
 					.where(
 						and(
-							byEmail(normalizeEmail(account.email)),
+							eq(platformAdmins.email, normalizeEmail(account.email)),
 							isNull(platformAdmins.userId),
 						),
 					)
 					.returning({ email: platformAdmins.email })
 				return claimed.length > 0
-			}).pipe(Effect.mapError(unavailable)),
+			}).pipe(Effect.mapError(() => PlatformAdminsUnavailable.make({}))),
 	})
 })
 

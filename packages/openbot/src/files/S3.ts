@@ -35,19 +35,17 @@ const blockBytes = 64
 const bytes = (value: string | Uint8Array) =>
 	typeof value === "string" ? new TextEncoder().encode(value) : value
 
-const failed = (what: string, detail: string) =>
-	new StorageError({
-		message: `The object storage could not ${what}: ${detail}`,
-	})
-
 const digest = (value: string | Uint8Array) =>
 	Effect.gen(function* () {
 		const crypto = yield* Crypto.Crypto
-		return yield* crypto
-			.digest("SHA-256", bytes(value))
-			.pipe(
-				Effect.mapError((cause) => failed("sign the request", cause.message)),
-			)
+		return yield* crypto.digest("SHA-256", bytes(value)).pipe(
+			Effect.mapError(
+				(cause) =>
+					new StorageError({
+						message: `The object storage could not sign the request: ${cause.message}`,
+					}),
+			),
+		)
 	})
 
 const sha256 = (value: string | Uint8Array) =>
@@ -273,11 +271,20 @@ const send = (
 			})),
 		),
 		Effect.mapError((cause) =>
-			cause instanceof StorageError ? cause : failed(what, String(cause)),
+			cause instanceof StorageError
+				? cause
+				: new StorageError({
+						message: `The object storage could not ${what}: ${String(cause)}`,
+					}),
 		),
 		Effect.timeoutOrElse({
 			duration: timeoutMs,
-			orElse: () => Effect.fail(failed(what, "no answer in time")),
+			orElse: () =>
+				Effect.fail(
+					new StorageError({
+						message: `The object storage could not ${what}: no answer in time`,
+					}),
+				),
 		}),
 	)
 
@@ -299,7 +306,11 @@ export const put = (
 		(reply) =>
 			ok(reply.status)
 				? Effect.void
-				: Effect.fail(failed("store the file", "status " + reply.status)),
+				: Effect.fail(
+						new StorageError({
+							message: `The object storage could not store the file: status ${reply.status}`,
+						}),
+					),
 	)
 
 /** The bytes of an object, or none when it is not there. */
@@ -320,7 +331,11 @@ export const get = (
 				? Effect.succeedNone
 				: ok(reply.status)
 					? Effect.succeedSome(reply.body)
-					: Effect.fail(failed("read the file", "status " + reply.status)),
+					: Effect.fail(
+							new StorageError({
+								message: `The object storage could not read the file: status ${reply.status}`,
+							}),
+						),
 	)
 
 /** The size and type of an object, or none when it is not there. */
@@ -339,14 +354,22 @@ export const head = (
 		(reply) => {
 			if (reply.status === 404) return Effect.succeedNone
 			if (!ok(reply.status))
-				return Effect.fail(failed("check the file", "status " + reply.status))
+				return Effect.fail(
+					new StorageError({
+						message: `The object storage could not check the file: status ${reply.status}`,
+					}),
+				)
 			const bytes = Number(reply.headers["content-length"])
 			return Number.isFinite(bytes)
 				? Effect.succeedSome({
 						bytes,
 						contentType: reply.headers["content-type"],
 					})
-				: Effect.fail(failed("check the file", "no content-length"))
+				: Effect.fail(
+						new StorageError({
+							message: `The object storage could not check the file: no content-length`,
+						}),
+					)
 		},
 	)
 
@@ -366,7 +389,11 @@ export const remove = (
 		(reply) =>
 			ok(reply.status) || reply.status === 404
 				? Effect.void
-				: Effect.fail(failed("delete the file", "status " + reply.status)),
+				: Effect.fail(
+						new StorageError({
+							message: `The object storage could not delete the file: status ${reply.status}`,
+						}),
+					),
 	)
 
 /** Makes the bucket. A bucket that is already there is fine. Only development uses it. */
@@ -384,5 +411,9 @@ export const createBucket = (
 		(reply) =>
 			ok(reply.status) || reply.status === 409
 				? Effect.void
-				: Effect.fail(failed("make the bucket", "status " + reply.status)),
+				: Effect.fail(
+						new StorageError({
+							message: `The object storage could not make the bucket: status ${reply.status}`,
+						}),
+					),
 	)

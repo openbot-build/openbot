@@ -75,11 +75,6 @@ export const make = <S extends Plugin.Stores>(
 			yield* Effect.serviceOption(IdGenerator.IdGenerator),
 			() => IdGenerator.defaultIdGenerator,
 		)
-		const id = () => generator.generateId()
-		const encodeRef = (ref: Chat.Ref) =>
-			provide(json(options.definition.recordSchema)(ref))
-		const encodeState = (value: ChatStore.Definition<S>["schema"]["Type"]) =>
-			provide(json(options.definition.schema)(value))
 		const decodeRef = (raw: Schema.Json) =>
 			provide(
 				Schema.decodeEffect(options.definition.recordSchema)(raw).pipe(
@@ -157,10 +152,16 @@ export const make = <S extends Plugin.Stores>(
 							: undefined
 					const delta: ChatStore.Delta = {
 						chat: ref.id,
-						ref: yield* encodeRef(ref),
+						ref: yield* provide(json(options.definition.recordSchema)(ref)),
 						revision: ref.revision,
 						expected: before.chat.revision,
-						...(changed ? { state: yield* encodeState(view.state) } : {}),
+						...(changed
+							? {
+									state: yield* provide(
+										json(options.definition.schema)(view.state),
+									),
+								}
+							: {}),
 						items: yield* Effect.forEach(items, (item) =>
 							encodeItem(item).pipe(
 								Effect.map((value) => ({
@@ -184,7 +185,7 @@ export const make = <S extends Plugin.Stores>(
 				Effect.gen(function* () {
 					const value = input.value ?? initial({} as P)
 					const ref: Chat.Ref = {
-						id: input.id ?? Chat.Id.make(yield* id()),
+						id: input.id ?? Chat.Id.make(yield* generator.generateId()),
 						revision: Chat.Revision.make(0),
 						settings: { mode: "build", ...input.settings },
 						inbox: [],
@@ -196,10 +197,10 @@ export const make = <S extends Plugin.Stores>(
 					yield* save(
 						{
 							chat: ref.id,
-							ref: yield* encodeRef(ref),
+							ref: yield* provide(json(options.definition.recordSchema)(ref)),
 							revision: ref.revision,
 							expected: null,
-							state: yield* encodeState(value),
+							state: yield* provide(json(options.definition.schema)(value)),
 							items: [],
 						},
 						null,

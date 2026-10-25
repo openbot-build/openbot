@@ -12,12 +12,6 @@ export interface Reply {
 
 const decoder = new TextDecoder()
 
-export const unreachable = (cause: unknown) =>
-	new ComputerCallFailed({
-		message: `The Computer provider could not be reached: ${String(cause)}`,
-		retry: true,
-	})
-
 export const timedOut = Effect.fail(
 	new ComputerCallFailed({
 		message: "The Computer provider did not answer in time",
@@ -38,7 +32,13 @@ export const send = (
 				body: new Uint8Array(buffer),
 			})),
 		),
-		Effect.mapError(unreachable),
+		Effect.mapError(
+			(cause) =>
+				new ComputerCallFailed({
+					message: `The Computer provider could not be reached: ${String(cause)}`,
+					retry: true,
+				}),
+		),
 		Effect.timeoutOrElse({ duration: timeoutMs, orElse: () => timedOut }),
 	)
 

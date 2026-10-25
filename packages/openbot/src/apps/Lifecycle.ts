@@ -66,17 +66,6 @@ const metadataPolicy = Client.InvocationPolicy.of({
 					}),
 				),
 })
-const conflict = () =>
-	Api.ConnectionConflict.make({
-		reason: "RevisionChanged",
-		message: "This connection changed. Refresh it before continuing.",
-	})
-const configuration = () =>
-	Api.ConnectionConfigurationInvalid.make({
-		keys: [],
-		message:
-			"Review the current App declaration and configuration before continuing.",
-	})
 const hostFailure = (error: { readonly _tag: string }): Error =>
 	Match.value(error).pipe(
 		Match.when(Match.instanceOf(App.CleanupPending), (pending) =>
@@ -87,8 +76,20 @@ const hostFailure = (error: { readonly _tag: string }): Error =>
 					"This connection is stopped. Retry cleanup to finish removing it.",
 			}),
 		),
-		Match.when({ _tag: "AppError" }, configuration),
-		Match.when({ _tag: "DiscoveryError" }, configuration),
+		Match.when({ _tag: "AppError" }, () =>
+			Api.ConnectionConfigurationInvalid.make({
+				keys: [],
+				message:
+					"Review the current App declaration and configuration before continuing.",
+			}),
+		),
+		Match.when({ _tag: "DiscoveryError" }, () =>
+			Api.ConnectionConfigurationInvalid.make({
+				keys: [],
+				message:
+					"Review the current App declaration and configuration before continuing.",
+			}),
+		),
 		Match.orElse(() => ExperienceStorageUnavailable.make({})),
 	)
 const json = (value: unknown) =>
@@ -303,9 +304,17 @@ export const make: Effect.Effect<
 							!app.sources.some((source) => source.role === "manual") ||
 							stored.revision !== valid.revision
 						)
-							return yield* conflict()
+							return yield* Api.ConnectionConflict.make({
+								reason: "RevisionChanged",
+								message:
+									"This connection changed. Refresh it before continuing.",
+							})
 						if (stored.connection.state === "CleanupPending")
-							return yield* configuration()
+							return yield* Api.ConnectionConfigurationInvalid.make({
+								keys: [],
+								message:
+									"Review the current App declaration and configuration before continuing.",
+							})
 						yield* governance.check(valid.url)
 						const oldHeaders = Redacted.value(stored.connection.headers)
 						const headers = yield* Effect.forEach(
@@ -313,7 +322,13 @@ export const make: Effect.Effect<
 							([name, value]) => {
 								const next = value ?? oldHeaders[name]
 								return next === undefined
-									? Effect.fail(configuration())
+									? Effect.fail(
+											Api.ConnectionConfigurationInvalid.make({
+												keys: [],
+												message:
+													"Review the current App declaration and configuration before continuing.",
+											}),
+										)
 									: Effect.succeed([name, next] as const)
 							},
 						).pipe(Effect.map(Record.fromEntries))
@@ -417,7 +432,11 @@ export const make: Effect.Effect<
 						owned.owner,
 						id,
 					)
-					if (stored.revision !== input.revision) return yield* conflict()
+					if (stored.revision !== input.revision)
+						return yield* Api.ConnectionConflict.make({
+							reason: "RevisionChanged",
+							message: "This connection changed. Refresh it before continuing.",
+						})
 					yield* governance.check(stored.connection.cardUrl)
 					const draft = yield* connections.getConnectionDraft(input.draftId)
 					const candidate = Match.value(draft.discovery).pipe(
@@ -433,10 +452,20 @@ export const make: Effect.Effect<
 						candidate === undefined ||
 						candidate.cardUrl !== stored.connection.cardUrl
 					)
-						return yield* configuration()
-					const current = yield* discovery
-						.refreshCard(candidate.cardUrl)
-						.pipe(Effect.mapError(configuration))
+						return yield* Api.ConnectionConfigurationInvalid.make({
+							keys: [],
+							message:
+								"Review the current App declaration and configuration before continuing.",
+						})
+					const current = yield* discovery.refreshCard(candidate.cardUrl).pipe(
+						Effect.mapError(() =>
+							Api.ConnectionConfigurationInvalid.make({
+								keys: [],
+								message:
+									"Review the current App declaration and configuration before continuing.",
+							}),
+						),
+					)
 					if (
 						rules.compare({ previous: candidate, current })._tag ===
 						"NeedsRevalidation"
@@ -452,7 +481,15 @@ export const make: Effect.Effect<
 							index: input.remoteIndex,
 							values: input.values,
 						})
-						.pipe(Effect.mapError(configuration))
+						.pipe(
+							Effect.mapError(() =>
+								Api.ConnectionConfigurationInvalid.make({
+									keys: [],
+									message:
+										"Review the current App declaration and configuration before continuing.",
+								}),
+							),
+						)
 					const protection = yield* probe.check({
 						app: {
 							cardUrl: current.cardUrl,

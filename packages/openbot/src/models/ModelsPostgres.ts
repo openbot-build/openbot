@@ -15,6 +15,8 @@ const Options = Schema.fromJsonString(Schema.Array(Schema.String))
 const AvailabilityJson = Schema.fromJsonString(ModelProvidersApi.Availability)
 const decodeOptions = Schema.decodeUnknownSync(Options)
 const decodeAvailability = Schema.decodeUnknownSync(AvailabilityJson)
+const encodeOptions = Schema.encodeSync(Options)
+const encodeAvailability = Schema.encodeSync(AvailabilityJson)
 const decodeType = Schema.decodeUnknownSync(ModelProvidersApi.ModelType)
 
 const stored = (row: typeof models.$inferSelect): StoredModel => ({
@@ -44,7 +46,6 @@ const isKnown = (error: unknown): error is KnownError =>
 
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
-	const unavailable = () => ModelProvidersApi.ModelProvidersUnavailable.make({})
 	const where = (owner: Owner, id: string) => {
 		const columns = ownerColumns(owner)
 		return and(
@@ -53,12 +54,14 @@ export const make = Effect.gen(function* () {
 			eq(models.id, id),
 		)
 	}
-	const notFound = (id: string) =>
-		ModelProvidersApi.ModelNotFound.make({ modelId: id })
 	/** Keep the errors of the API, and turn database errors into one error. */
 	const known = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 		effect.pipe(
-			Effect.mapError((error) => (isKnown(error) ? error : unavailable())),
+			Effect.mapError((error) =>
+				isKnown(error)
+					? error
+					: ModelProvidersApi.ModelProvidersUnavailable.make({}),
+			),
 		)
 
 	return Models.of({
@@ -76,7 +79,9 @@ export const make = Effect.gen(function* () {
 				.orderBy(asc(models.createdAt), asc(models.id))
 				.pipe(
 					Effect.map((rows) => rows.map(stored)),
-					Effect.mapError(unavailable),
+					Effect.mapError(() =>
+						ModelProvidersApi.ModelProvidersUnavailable.make({}),
+					),
 				)
 		},
 		get: (owner, id) =>
@@ -88,7 +93,9 @@ export const make = Effect.gen(function* () {
 					Effect.map((rows) =>
 						Option.map(Option.fromNullishOr(rows[0]), stored),
 					),
-					Effect.mapError(unavailable),
+					Effect.mapError(() =>
+						ModelProvidersApi.ModelProvidersUnavailable.make({}),
+					),
 				),
 		available: (organizationId) =>
 			db
@@ -110,7 +117,9 @@ export const make = Effect.gen(function* () {
 							.map(stored)
 							.filter((model) => usableBy({ provider: model, organizationId })),
 					),
-					Effect.mapError(unavailable),
+					Effect.mapError(() =>
+						ModelProvidersApi.ModelProvidersUnavailable.make({}),
+					),
 				),
 		create: (owner, input) =>
 			known(
@@ -121,13 +130,13 @@ export const make = Effect.gen(function* () {
 						id: input.id,
 						type: input.type ?? "language",
 						name: input.name.trim(),
-						reasoningEfforts: JSON.stringify(input.reasoningEfforts),
-						serviceTiers: JSON.stringify(input.serviceTiers),
+						reasoningEfforts: encodeOptions(input.reasoningEfforts),
+						serviceTiers: encodeOptions(input.serviceTiers),
 						contextWindow: input.contextWindow ?? null,
 						maxOutputTokens: input.maxOutputTokens ?? null,
 						availability:
 							owner.kind === "platform"
-								? JSON.stringify(input.availability)
+								? encodeAvailability(input.availability)
 								: null,
 						version: 1,
 						createdAt: now,
@@ -157,7 +166,10 @@ export const make = Effect.gen(function* () {
 							.from(models)
 							.where(where(owner, id))
 							.for("update")
-						if (row === undefined) return yield* notFound(id)
+						if (row === undefined)
+							return yield* ModelProvidersApi.ModelNotFound.make({
+								modelId: id,
+							})
 						if (row.version !== patch.expectedVersion)
 							return yield* ModelProvidersApi.ModelConflict.make({
 								version: row.version,
@@ -172,11 +184,11 @@ export const make = Effect.gen(function* () {
 								...(patch.reasoningEfforts === undefined
 									? {}
 									: {
-											reasoningEfforts: JSON.stringify(patch.reasoningEfforts),
+											reasoningEfforts: encodeOptions(patch.reasoningEfforts),
 										}),
 								...(patch.serviceTiers === undefined
 									? {}
-									: { serviceTiers: JSON.stringify(patch.serviceTiers) }),
+									: { serviceTiers: encodeOptions(patch.serviceTiers) }),
 								...(patch.contextWindow === undefined
 									? {}
 									: { contextWindow: patch.contextWindow }),
@@ -186,13 +198,16 @@ export const make = Effect.gen(function* () {
 								...(patch.availability === undefined ||
 								owner.kind !== "platform"
 									? {}
-									: { availability: JSON.stringify(patch.availability) }),
+									: { availability: encodeAvailability(patch.availability) }),
 								version: row.version + 1,
 								updatedAt: now,
 							})
 							.where(where(owner, id))
 							.returning()
-						if (updated === undefined) return yield* notFound(id)
+						if (updated === undefined)
+							return yield* ModelProvidersApi.ModelNotFound.make({
+								modelId: id,
+							})
 						return stored(updated)
 					}),
 				),
@@ -207,7 +222,10 @@ export const make = Effect.gen(function* () {
 							.from(models)
 							.where(where(owner, id))
 							.for("update")
-						if (row === undefined) return yield* notFound(id)
+						if (row === undefined)
+							return yield* ModelProvidersApi.ModelNotFound.make({
+								modelId: id,
+							})
 						const links = yield* tx
 							.select({
 								providerId: providerModels.providerId,

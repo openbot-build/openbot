@@ -19,8 +19,6 @@ export interface Secrets {
 const api = "https://slack.com/api/"
 
 /** Slack puts `<@U123>` in the text for each mention. The Bot does not need them. */
-const withoutMentions = (value: string) =>
-	value.replace(/<@[A-Z0-9]+>/g, "").trim()
 
 const blocks = (message: OutboundMessage) => [
 	{
@@ -123,7 +121,7 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 					eventId: text(body, "event_id") ?? `${channel}:${text(event, "ts")}`,
 					conversation: { key: channel, kind: direct ? "direct" : "group" },
 					sender: { externalId: user, displayName: user },
-					text: withoutMentions(message),
+					text: message.replace(/<@[A-Z0-9]+>/g, "").trim(),
 					mentioned: kind === "app_mention" || direct,
 				}),
 			],

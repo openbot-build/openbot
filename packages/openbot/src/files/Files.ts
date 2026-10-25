@@ -110,18 +110,6 @@ export class Files extends Context.Service<
 	}
 >()("@openbot-build/openbot/files/Files") {}
 
-const unavailable = () => FilesApi.FilesUnavailable.make({})
-const notFound = (id: string) => FilesApi.FileNotFound.make({ id })
-const invalid = (message: string) => FilesApi.FileInvalid.make({ message })
-const tooLarge = (maxBytes: number) =>
-	invalid(`The file is larger than ${maxBytes} bytes.`)
-const overQuota = (quotaBytes: number, usedBytes: number, bytes: number) =>
-	FilesApi.FileQuotaExceeded.make({
-		message: `You may keep ${quotaBytes} bytes of files. Your files take ${usedBytes} bytes now, so a file of ${bytes} bytes does not fit. Delete some files first.`,
-		quotaBytes,
-		usedBytes,
-	})
-
 /** The media types of some file names, for clients that send no type. */
 const extensions: Readonly<Record<string, string>> = {
 	png: "image/png",
@@ -179,11 +167,11 @@ export const make = Effect.gen(function* () {
 	const client = yield* HttpClient.HttpClient
 	const crypto = yield* Crypto.Crypto
 	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-		Effect.mapError(effect, unavailable)
+		Effect.mapError(effect, () => FilesApi.FilesUnavailable.make({}))
 
 	/** The file settings, or the defaults before `openbot setup`. */
 	const config = settings.platform.pipe(
-		Effect.mapError(unavailable),
+		Effect.mapError(() => FilesApi.FilesUnavailable.make({})),
 		Effect.map(
 			Option.match({
 				onNone: () => filesDefaults,
@@ -200,7 +188,7 @@ export const make = Effect.gen(function* () {
 				})
 			const secretAccessKey = yield* secrets
 				.open(storage.secretAccessKey, bindings.fileStorageSecret)
-				.pipe(Effect.mapError(unavailable))
+				.pipe(Effect.mapError(() => FilesApi.FilesUnavailable.make({})))
 			return {
 				target: {
 					endpoint: storage.endpoint,
@@ -219,7 +207,7 @@ export const make = Effect.gen(function* () {
 		effect.pipe(
 			Effect.provideService(Crypto.Crypto, crypto),
 			Effect.tapError((error) => Effect.logWarning(error.message)),
-			Effect.mapError(unavailable),
+			Effect.mapError(() => FilesApi.FilesUnavailable.make({})),
 		)
 
 	type Query = Pick<typeof db, "select">
@@ -250,7 +238,13 @@ export const make = Effect.gen(function* () {
 	) => {
 		const quota = quotaOf(document)
 		return quota !== null && usedBytes + bytes > quota
-			? Effect.fail(overQuota(quota, usedBytes, bytes))
+			? Effect.fail(
+					FilesApi.FileQuotaExceeded.make({
+						message: `You may keep ${quota} bytes of files. Your files take ${usedBytes} bytes now, so a file of ${bytes} bytes does not fit. Delete some files first.`,
+						quotaBytes: quota,
+						usedBytes,
+					}),
+				)
 			: Effect.void
 	}
 
@@ -266,7 +260,7 @@ export const make = Effect.gen(function* () {
 			stored(db.select().from(files).where(owned(caller, id))),
 			(rows) =>
 				rows[0] === undefined
-					? Effect.fail(notFound(id))
+					? Effect.fail(FilesApi.FileNotFound.make({ id }))
 					: Effect.succeed(rows[0]),
 		)
 	/**
@@ -285,7 +279,9 @@ export const make = Effect.gen(function* () {
 			const id =
 				"file_" +
 				Hex.encode(
-					yield* crypto.randomBytes(16).pipe(Effect.mapError(unavailable)),
+					yield* crypto
+						.randomBytes(16)
+						.pipe(Effect.mapError(() => FilesApi.FilesUnavailable.make({}))),
 				)
 			const row: Row = {
 				id,
@@ -313,7 +309,11 @@ export const make = Effect.gen(function* () {
 						yield* stored(tx.insert(files).values(row))
 					}),
 				)
-				.pipe(Effect.catchTag("SqlError", () => Effect.fail(unavailable())))
+				.pipe(
+					Effect.catchTag("SqlError", () =>
+						Effect.fail(FilesApi.FilesUnavailable.make({})),
+					),
+				)
 			return row
 		})
 	const setStatus = (id: string, from: string, to: string) =>
@@ -332,11 +332,17 @@ export const make = Effect.gen(function* () {
 		bytes: number,
 	) =>
 		bytes > document.maxBytes
-			? Effect.fail(tooLarge(document.maxBytes))
+			? Effect.fail(
+					FilesApi.FileInvalid.make({
+						message: `The file is larger than ${document.maxBytes} bytes.`,
+					}),
+				)
 			: accepts(document.mediaTypes, mediaType)
 				? Effect.void
 				: Effect.fail(
-						invalid(`The platform does not take files of type ${mediaType}.`),
+						FilesApi.FileInvalid.make({
+							message: `The platform does not take files of type ${mediaType}.`,
+						}),
 					)
 
 	/**
@@ -356,7 +362,11 @@ export const make = Effect.gen(function* () {
 						Ref.updateAndGet(size, (total) => total + chunk.length),
 						(total): Effect.Effect<void, Failure> =>
 							total > document.maxBytes
-								? Effect.fail(tooLarge(document.maxBytes))
+								? Effect.fail(
+										FilesApi.FileInvalid.make({
+											message: `The file is larger than ${document.maxBytes} bytes.`,
+										}),
+									)
 								: checkRoom(document, usedBytes, total),
 					),
 				),
@@ -376,7 +386,9 @@ export const make = Effect.gen(function* () {
 			if (row === undefined) return Option.none<Content>()
 			const document = yield* config
 			const { target } = yield* targetOf(document).pipe(
-				Effect.catchTag("FilesDisabled", () => Effect.fail(unavailable())),
+				Effect.catchTag("FilesDisabled", () =>
+					Effect.fail(FilesApi.FilesUnavailable.make({})),
+				),
 			)
 			const now = yield* Clock.currentTimeMillis
 			const bytes = yield* logged(S3.get(client, target, row.objectKey, now))
@@ -425,11 +437,15 @@ export const make = Effect.gen(function* () {
 						error instanceof FilesApi.FileInvalid ||
 						error instanceof FilesApi.FileQuotaExceeded
 							? error
-							: invalid("The body is not a valid multipart form."),
+							: FilesApi.FileInvalid.make({
+									message: "The body is not a valid multipart form.",
+								}),
 					),
 				)
 				if (Option.isNone(found))
-					return yield* invalid("The form has no file in the field `file`.")
+					return yield* FilesApi.FileInvalid.make({
+						message: "The form has no file in the field `file`.",
+					})
 				const file = found.value
 				yield* checkFile(document, file.mediaType, file.bytes.length)
 				const now = yield* Clock.currentTimeMillis
@@ -453,7 +469,8 @@ export const make = Effect.gen(function* () {
 					),
 				)
 				const ready = yield* setStatus(row.id, "pending", "ready")
-				if (ready[0] === undefined) return yield* notFound(row.id)
+				if (ready[0] === undefined)
+					return yield* FilesApi.FileNotFound.make({ id: row.id })
 				return view(ready[0])
 			}),
 		createUpload: (caller, input) =>
@@ -507,12 +524,14 @@ export const make = Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
 				const head = yield* logged(S3.head(client, target, row.objectKey, now))
 				if (Option.isNone(head))
-					return yield* invalid("The bytes of the file are not in storage yet.")
+					return yield* FilesApi.FileInvalid.make({
+						message: "The bytes of the file are not in storage yet.",
+					})
 				if (head.value.bytes !== row.bytes) {
 					yield* setStatus(row.id, "pending", "deleting")
-					return yield* invalid(
-						`The file has ${head.value.bytes} bytes, not ${row.bytes}. Make a new upload.`,
-					)
+					return yield* FilesApi.FileInvalid.make({
+						message: `The file has ${head.value.bytes} bytes, not ${row.bytes}. Make a new upload.`,
+					})
 				}
 				const ready = yield* setStatus(row.id, "pending", "ready")
 				return ready[0] === undefined
@@ -562,12 +581,15 @@ export const make = Effect.gen(function* () {
 			Effect.gen(function* () {
 				const row = yield* find(caller, id)
 				if (row.status !== "ready")
-					return yield* invalid("The file is not ready.")
+					return yield* FilesApi.FileInvalid.make({
+						message: "The file is not ready.",
+					})
 				const document = yield* config
 				const { target } = yield* targetOf(document)
 				const now = yield* Clock.currentTimeMillis
 				const bytes = yield* logged(S3.get(client, target, row.objectKey, now))
-				if (Option.isNone(bytes)) return yield* notFound(id)
+				if (Option.isNone(bytes))
+					return yield* FilesApi.FileNotFound.make({ id })
 				return bytes.value
 			}),
 		remove: (caller, id) =>
@@ -630,16 +652,18 @@ export const make = Effect.gen(function* () {
 										const row = byId.get(part.file_id)
 										if (row === undefined)
 											return Effect.fail(
-												invalid(
-													`The file ${part.file_id} is not one of your ready files.`,
-												),
+												FilesApi.FileInvalid.make({
+													message: `The file ${part.file_id} is not one of your ready files.`,
+												}),
 											)
 										if (
 											part.type === "input_image" &&
 											!row.mediaType.startsWith("image/")
 										)
 											return Effect.fail(
-												invalid(`The file ${part.file_id} is not an image.`),
+												FilesApi.FileInvalid.make({
+													message: `The file ${part.file_id} is not an image.`,
+												}),
 											)
 										return Effect.succeed(
 											Prompt.makePart("file", {
@@ -690,7 +714,9 @@ export const make = Effect.gen(function* () {
 			// Without storage, the rows wait until there is storage again.
 			if (document.storage === null) return
 			const { target } = yield* targetOf(document).pipe(
-				Effect.catchTag("FilesDisabled", () => Effect.fail(unavailable())),
+				Effect.catchTag("FilesDisabled", () =>
+					Effect.fail(FilesApi.FilesUnavailable.make({})),
+				),
 			)
 			const doomed = yield* stored(
 				db

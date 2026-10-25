@@ -22,6 +22,7 @@ import {
 	Option,
 	Ref,
 	Schema,
+	SchemaTransformation,
 } from "effect"
 import {
 	budgets,
@@ -50,6 +51,26 @@ import * as Db from "../database/Database.ts"
 
 const iso = (millis: number) => DateTime.formatIso(DateTime.makeUnsafe(millis))
 const newId = (prefix: string) => prefix + randomUUID().replaceAll("-", "")
+/**
+ * The cursor of a page of usage events is `<time>.<id>` of the last event on the page.
+ * A cursor that does not decode starts at the first page.
+ */
+const UsageCursor = Schema.TemplateLiteralParser([
+	Schema.Finite,
+	".",
+	Schema.NonEmptyString,
+]).pipe(
+	Schema.decodeTo(
+		Schema.Struct({ at: Schema.Finite, id: Schema.String }),
+		SchemaTransformation.transform({
+			decode: ([at, , id]) => ({ at, id }),
+			encode: ({ at, id }) => [at, ".", id] as const,
+		}),
+	),
+)
+const decodeCursor = Schema.decodeUnknownOption(UsageCursor)
+const encodeCursor = Schema.encodeSync(UsageCursor)
+
 /** A price change on another instance reaches this instance after at most this time. */
 const priceCacheMs = 30_000
 
@@ -70,12 +91,10 @@ const decodeMode = Schema.decodeUnknownSync(BillingApi.BudgetMode)
 const decodeSchedule = Schema.decodeUnknownSync(
 	Schema.fromJsonString(BillingApi.PriceSchedule),
 )
-const scheduleOf = (row: PriceRow): BillingApi.PriceSchedule =>
-	decodeSchedule(row.schedule)
 
 const priceView = (row: PriceRow): BillingApi.ModelPrice => ({
 	model: row.modelId,
-	...scheduleOf(row),
+	...decodeSchedule(row.schedule),
 	effectiveFrom: iso(row.effectiveFrom),
 })
 
@@ -227,7 +246,7 @@ export const make = Effect.gen(function* () {
 				.limit(1)
 			const price: Option.Option<Price> = Option.map(
 				Option.fromNullishOr(row),
-				(row) => ({ id: row.id, schedule: scheduleOf(row) }),
+				(row) => ({ id: row.id, schedule: decodeSchedule(row.schedule) }),
 			)
 			yield* Ref.update(prices, HashMap.set(key, { price, at: now }))
 			return price
@@ -323,8 +342,6 @@ export const make = Effect.gen(function* () {
 
 	const budgetWhere = (organizationId: string, id: string) =>
 		and(eq(budgets.organizationId, organizationId), eq(budgets.id, id))
-	const budgetNotFound = (id: string) =>
-		BillingApi.BudgetNotFound.make({ budgetId: id })
 
 	/** The scope ID of a new budget. It checks that the member or token is in the organization. */
 	const resolveScope = (
@@ -332,17 +349,17 @@ export const make = Effect.gen(function* () {
 		input: BillingApi.CreateBudgetRequest,
 	) =>
 		Effect.gen(function* () {
-			const invalid = (message: string) =>
-				BillingApi.BudgetInvalid.make({ message })
 			if (input.scope === "organization") {
 				if (input.scopeId !== undefined && input.scopeId !== organizationId)
-					return yield* invalid(
-						"An organization budget can only name this organization.",
-					)
+					return yield* BillingApi.BudgetInvalid.make({
+						message: "An organization budget can only name this organization.",
+					})
 				return organizationId
 			}
 			if (input.scopeId === undefined)
-				return yield* invalid(`A ${input.scope} budget needs a scopeId.`)
+				return yield* BillingApi.BudgetInvalid.make({
+					message: `A ${input.scope} budget needs a scopeId.`,
+				})
 			if (input.scope === "member") {
 				const [row] = yield* db
 					.select({ userId: members.userId })
@@ -354,7 +371,9 @@ export const make = Effect.gen(function* () {
 						),
 					)
 				if (row === undefined)
-					return yield* invalid("No member of the organization has this ID.")
+					return yield* BillingApi.BudgetInvalid.make({
+						message: "No member of the organization has this ID.",
+					})
 			}
 			if (input.scope === "token") {
 				const [row] = yield* db
@@ -367,7 +386,9 @@ export const make = Effect.gen(function* () {
 						),
 					)
 				if (row === undefined)
-					return yield* invalid("No token of the organization has this ID.")
+					return yield* BillingApi.BudgetInvalid.make({
+						message: "No token of the organization has this ID.",
+					})
 			}
 			return input.scopeId
 		})
@@ -652,11 +673,10 @@ export const make = Effect.gen(function* () {
 		events: (organizationId, range, page) =>
 			stored(
 				Effect.gen(function* () {
-					const cursor = page.after?.split(".")
 					const after =
-						cursor?.length === 2 && Number.isFinite(Number(cursor[0]))
-							? { at: Number(cursor[0]), id: cursor[1]! }
-							: undefined
+						page.after === undefined
+							? undefined
+							: Option.getOrUndefined(decodeCursor(page.after))
 					const rows = yield* db
 						.select()
 						.from(usageEvents)
@@ -684,7 +704,7 @@ export const make = Effect.gen(function* () {
 						items: items.map(eventView),
 						next:
 							rows.length > page.limit && last !== undefined
-								? `${last.occurredAt}.${last.id}`
+								? encodeCursor({ at: last.occurredAt, id: last.id })
 								: null,
 					}
 				}),
@@ -767,7 +787,8 @@ export const make = Effect.gen(function* () {
 						.select()
 						.from(budgets)
 						.where(budgetWhere(organizationId, id))
-					if (row === undefined) return yield* budgetNotFound(id)
+					if (row === undefined)
+						return yield* BillingApi.BudgetNotFound.make({ budgetId: id })
 					return yield* budgetView(row, yield* Clock.currentTimeMillis)
 				}),
 			),
@@ -810,7 +831,8 @@ export const make = Effect.gen(function* () {
 								.from(budgets)
 								.where(budgetWhere(organizationId, id))
 								.for("update")
-							if (row === undefined) return yield* budgetNotFound(id)
+							if (row === undefined)
+								return yield* BillingApi.BudgetNotFound.make({ budgetId: id })
 							if (row.version !== input.expectedVersion)
 								return yield* BillingApi.BudgetConflict.make({
 									message: `The budget changed. Its version is now ${row.version}.`,
@@ -840,7 +862,8 @@ export const make = Effect.gen(function* () {
 						.delete(budgets)
 						.where(budgetWhere(organizationId, id))
 						.returning({ id: budgets.id })
-					if (deleted.length === 0) return yield* budgetNotFound(id)
+					if (deleted.length === 0)
+						return yield* BillingApi.BudgetNotFound.make({ budgetId: id })
 				}),
 			),
 	})

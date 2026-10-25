@@ -1,14 +1,20 @@
 import { Caller, OrganizationApi } from "@openbot-build/api"
 import type { PgClient } from "@effect/sql-pg"
-import { Clock, DateTime, Effect, Layer, Schema } from "effect"
+import { Clock, DateTime, Effect, Layer, Option, Schema } from "effect"
 import { and, desc, eq, lt } from "drizzle-orm"
 import { auditLogs } from "../database/Schema.ts"
 import { AuditLog, AuditUnavailable } from "./AuditLog.ts"
 import * as Db from "../database/Database.ts"
 
-const decodeActor = Schema.decodeUnknownSync(Schema.fromJsonString(Caller))
-const decodeDetails = Schema.decodeUnknownSync(
-	Schema.fromJsonString(Schema.JsonObject),
+const ActorJson = Schema.fromJsonString(Caller)
+const DetailsJson = Schema.fromJsonString(Schema.JsonObject)
+const decodeActor = Schema.decodeUnknownSync(ActorJson)
+const encodeActor = Schema.encodeSync(ActorJson)
+const decodeDetails = Schema.decodeUnknownSync(DetailsJson)
+const encodeDetails = Schema.encodeSync(DetailsJson)
+/** The cursor of a page is the sequence of its last entry. Another cursor starts at the first page. */
+const decodeSequence = Schema.decodeUnknownOption(
+	Schema.FiniteFromString.pipe(Schema.decodeTo(Schema.Int)),
 )
 const decodeAction = Schema.decodeUnknownSync(OrganizationApi.AuditAction)
 
@@ -18,7 +24,6 @@ export const make: Effect.Effect<
 	PgClient.PgClient
 > = Effect.gen(function* () {
 	const db = yield* Db.make
-	const unavailable = () => AuditUnavailable.make({})
 	return AuditLog.of({
 		record: (entry) =>
 			Effect.gen(function* () {
@@ -28,23 +33,25 @@ export const make: Effect.Effect<
 					createdAt: now,
 					action: entry.action,
 					actorUserId: entry.actor.userId,
-					actor: JSON.stringify(entry.actor),
+					actor: encodeActor(entry.actor),
 					resource: entry.resource,
-					details: JSON.stringify(entry.details),
+					details: encodeDetails(entry.details),
 				})
-			}).pipe(Effect.mapError(unavailable)),
+			}).pipe(Effect.mapError(() => AuditUnavailable.make({}))),
 		list: (organizationId, options) =>
 			Effect.gen(function* () {
 				const after =
-					options.after === undefined ? Number.NaN : Number(options.after)
+					options.after === undefined
+						? Option.none()
+						: decodeSequence(options.after)
 				const rows = yield* db
 					.select()
 					.from(auditLogs)
 					.where(
 						and(
 							eq(auditLogs.organizationId, organizationId),
-							Number.isSafeInteger(after)
-								? lt(auditLogs.sequence, after)
+							Option.isSome(after)
+								? lt(auditLogs.sequence, after.value)
 								: undefined,
 							options.action === undefined
 								? undefined
@@ -71,7 +78,7 @@ export const make: Effect.Effect<
 							? String(page[page.length - 1]?.sequence)
 							: null,
 				}
-			}).pipe(Effect.mapError(unavailable)),
+			}).pipe(Effect.mapError(() => AuditUnavailable.make({}))),
 	})
 })
 export const layer = Layer.effect(AuditLog, make)

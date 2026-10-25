@@ -291,7 +291,6 @@ export const make: Effect.Effect<
 			{ readonly size: number; readonly semaphore: Semaphore.Semaphore }
 		>(),
 	)
-	const unavailable = () => BotsApi.BotStorageUnavailable.make({})
 
 	const read = (home: Home) =>
 		stored.find(home.organizationId, home.bot).pipe(
@@ -323,7 +322,7 @@ export const make: Effect.Effect<
 				const now = yield* Clock.currentTimeMillis
 				const spent = yield* billing.value
 					.botSpend(memoryBotId(home), periodStart(settings.budget.period, now))
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})))
 				if (spent >= settings.budget.limitMicros)
 					return yield* new MemoryBudgetSpent({ home })
 			}
@@ -616,7 +615,7 @@ export const make: Effect.Effect<
 				})
 				const fresh = yield* input
 					.read(after)
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})))
 				const evidence = evidenceOf({
 					chat: input.chat,
 					items: fresh.items,

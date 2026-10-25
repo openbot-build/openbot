@@ -31,12 +31,6 @@ import {
 	FlowStore,
 } from "./Authorization.ts"
 
-const alreadyConsumed = () =>
-	new AuthorizationError({
-		reason: "AlreadyConsumed",
-		issue: "Callback has already been consumed",
-	})
-
 export const layerMemoryFlows = Layer.effect(
 	FlowStore,
 	Effect.gen(function* () {
@@ -93,7 +87,12 @@ export const layerMemoryFlows = Layer.effect(
 							),
 						onSome: (stored) =>
 							stored.consumed
-								? Effect.fail(alreadyConsumed())
+								? Effect.fail(
+										new AuthorizationError({
+											reason: "AlreadyConsumed",
+											issue: "Callback has already been consumed",
+										}),
+									)
 								: Effect.succeed(stored.flow),
 					}),
 				)
@@ -117,7 +116,11 @@ export const layerMemoryFlows = Layer.effect(
 						}),
 					),
 				)
-				if (!claimed) return yield* alreadyConsumed()
+				if (!claimed)
+					return yield* new AuthorizationError({
+						reason: "AlreadyConsumed",
+						issue: "Callback has already been consumed",
+					})
 			}),
 		})
 	}),

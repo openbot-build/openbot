@@ -15,6 +15,12 @@ import {
 import type { Secrets } from "../secrets/Secrets.ts"
 import * as Db from "../database/Database.ts"
 
+/** An owner key is the JSON of `[organization id, user id]`. */
+const OwnerJson = Schema.fromJsonString(
+	Schema.Tuple([Schema.String, Schema.String]),
+)
+const encodeOwner = Schema.encodeSync(OwnerJson)
+
 /** The App connections of each owner, with their App records and drafts, kept in Postgres. */
 export type Error =
 	ExperienceNotFound | ExperienceStorageUnavailable | Api.ConnectionConflict
@@ -34,12 +40,10 @@ export interface SaveRequest {
 export const ownerKey = (owner: {
 	readonly organizationId: string
 	readonly userId: string
-}) => JSON.stringify([owner.organizationId, owner.userId])
+}) => encodeOwner([owner.organizationId, owner.userId])
 
 /** The organization of an owner key. */
-const decodeOwner = Schema.decodeUnknownOption(
-	Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
-)
+const decodeOwner = Schema.decodeUnknownOption(OwnerJson)
 export const organizationOf = (owner: string): string =>
 	Option.match(decodeOwner(owner), {
 		onNone: () => "",
@@ -63,25 +67,20 @@ export const ownersOf = (session: {
 			}),
 		)
 
-export const unavailable = () => ExperienceStorageUnavailable.make({})
 /** Keep the errors that callers handle. Every other storage failure becomes one error. */
 export const failure = (error: unknown) =>
 	error instanceof ExperienceNotFound || error instanceof Api.ConnectionConflict
 		? error
-		: unavailable()
+		: ExperienceStorageUnavailable.make({})
 const connectionCodec = Schema.fromJsonString(
 	Schema.toCodecJson(StoredConnection),
 )
 export const appCodec = Schema.fromJsonString(Store.AppRecord)
 export const draftCodec = Schema.fromJsonString(Api.ConnectionDraft)
-const conflict = (reason: Api.ConnectionConflict["reason"], message: string) =>
-	Api.ConnectionConflict.make({ reason, message })
 
 type Database = Db.Database
 type Sealer = typeof Secrets.Service
 
-const binding = (owner: string, id: string) =>
-	JSON.stringify(["connection", owner, id])
 /** Open the sealed body of a connection row. */
 export const open = (
 	secrets: Sealer,
@@ -89,12 +88,10 @@ export const open = (
 	id: string,
 	body: string,
 ) =>
-	secrets
-		.open(body, binding(owner, id))
-		.pipe(
-			Effect.flatMap(Schema.decodeEffect(connectionCodec)),
-			Effect.mapError(unavailable),
-		)
+	secrets.open(body, JSON.stringify(["connection", owner, id])).pipe(
+		Effect.flatMap(Schema.decodeEffect(connectionCodec)),
+		Effect.mapError(() => ExperienceStorageUnavailable.make({})),
+	)
 const seal = (
 	secrets: Sealer,
 	owner: string,
@@ -102,13 +99,13 @@ const seal = (
 	value: StoredConnection,
 ) =>
 	Schema.encodeEffect(connectionCodec)(value).pipe(
-		Effect.flatMap((body) => secrets.seal(body, binding(owner, id))),
-		Effect.mapError(unavailable),
+		Effect.flatMap((body) =>
+			secrets.seal(body, JSON.stringify(["connection", owner, id])),
+		),
+		Effect.mapError(() => ExperienceStorageUnavailable.make({})),
 	)
 export const connectionWhere = (owner: string, id: string) =>
 	and(eq(appConnections.owner, owner), eq(appConnections.id, id))
-const appWhere = (owner: string, cardUrl: string) =>
-	and(eq(appRecords.owner, owner), eq(appRecords.cardUrl, cardUrl))
 export const draftWhere = (owner: string, id: string) =>
 	and(eq(appDrafts.owner, owner), eq(appDrafts.id, id))
 
@@ -122,7 +119,7 @@ export const list = (db: Database, secrets: Sealer, owner: string) =>
 			Effect.flatMap((rows) =>
 				Effect.forEach(rows, (row) => open(secrets, owner, row.id, row.body)),
 			),
-			Effect.mapError(unavailable),
+			Effect.mapError(() => ExperienceStorageUnavailable.make({})),
 		)
 
 export const get = Effect.fn("Apps.getStoredConnection")(function* (
@@ -135,7 +132,7 @@ export const get = Effect.fn("Apps.getStoredConnection")(function* (
 		.select()
 		.from(appConnections)
 		.where(connectionWhere(owner, id))
-		.pipe(Effect.mapError(unavailable)))[0]
+		.pipe(Effect.mapError(() => ExperienceStorageUnavailable.make({}))))[0]
 	if (row === undefined) return yield* ExperienceNotFound.make({ id })
 	return yield* open(secrets, owner, id, row.body)
 })
@@ -148,21 +145,26 @@ export const getApp = Effect.fn("Apps.getApp")(function* (
 	const row = (yield* db
 		.select()
 		.from(appRecords)
-		.where(appWhere(owner, cardUrl))
-		.pipe(Effect.mapError(unavailable)))[0]
+		.where(and(eq(appRecords.owner, owner), eq(appRecords.cardUrl, cardUrl)))
+		.pipe(Effect.mapError(() => ExperienceStorageUnavailable.make({}))))[0]
 	if (row === undefined) return yield* ExperienceNotFound.make({ id: cardUrl })
 	return yield* Schema.decodeEffect(appCodec)(row.body).pipe(
-		Effect.mapError(unavailable),
+		Effect.mapError(() => ExperienceStorageUnavailable.make({})),
 	)
 })
 
 export const updateApp = (db: Database, owner: string, app: Store.AppRecord) =>
 	Schema.encodeEffect(appCodec)(app).pipe(
 		Effect.flatMap((body) =>
-			db.update(appRecords).set({ body }).where(appWhere(owner, app.cardUrl)),
+			db
+				.update(appRecords)
+				.set({ body })
+				.where(
+					and(eq(appRecords.owner, owner), eq(appRecords.cardUrl, app.cardUrl)),
+				),
 		),
 		Effect.asVoid,
-		Effect.mapError(unavailable),
+		Effect.mapError(() => ExperienceStorageUnavailable.make({})),
 	)
 
 /**
@@ -188,7 +190,7 @@ export const save = (
 					input.connection.owner !== owner ||
 					input.app.cardUrl !== input.connection.cardUrl
 				)
-					return yield* unavailable()
+					return yield* ExperienceStorageUnavailable.make({})
 				const existing = (yield* tx
 					.select()
 					.from(appConnections)
@@ -203,24 +205,25 @@ export const save = (
 					if (row === undefined) return yield* ExperienceNotFound.make({ id })
 					const draft = yield* Schema.decodeEffect(draftCodec)(row.body)
 					if (draft.revision !== input.draftRevision)
-						return yield* conflict(
-							"RevisionChanged",
-							"The draft changed. Refresh it before confirming.",
-						)
+						return yield* Api.ConnectionConflict.make({
+							reason: "RevisionChanged",
+							message: "The draft changed. Refresh it before confirming.",
+						})
 					if (draft.expiresAt <= (yield* Clock.currentTimeMillis))
-						return yield* conflict(
-							"DraftExpired",
-							"This draft expired. Discover the App again.",
-						)
+						return yield* Api.ConnectionConflict.make({
+							reason: "DraftExpired",
+							message: "This draft expired. Discover the App again.",
+						})
 				}
 				if (
 					(yield* tx.$count(appConnections, eq(appConnections.owner, owner))) >=
 					30
 				)
-					return yield* conflict(
-						"LimitReached",
-						"You can save up to 30 connections. Remove one before adding another.",
-					)
+					return yield* Api.ConnectionConflict.make({
+						reason: "LimitReached",
+						message:
+							"You can save up to 30 connections. Remove one before adding another.",
+					})
 				const stored: StoredConnection = {
 					connection: input.connection,
 					name: input.name.trim(),
@@ -277,10 +280,10 @@ export const update = (
 				if (row === undefined) return yield* ExperienceNotFound.make({ id })
 				const previous = yield* open(secrets, owner, id, row.body)
 				if (revision !== undefined && previous.revision !== revision)
-					return yield* conflict(
-						"RevisionChanged",
-						"This connection changed. Refresh it before updating.",
-					)
+					return yield* Api.ConnectionConflict.make({
+						reason: "RevisionChanged",
+						message: "This connection changed. Refresh it before updating.",
+					})
 				const updated = yield* Schema.decodeEffect(StoredConnection)({
 					...change(previous),
 					revision: previous.revision + 1,
@@ -290,7 +293,7 @@ export const update = (
 					updated.connection.connectionId !== id ||
 					updated.connection.cardUrl !== previous.connection.cardUrl
 				)
-					return yield* unavailable()
+					return yield* ExperienceStorageUnavailable.make({})
 				const body = yield* seal(secrets, owner, id, updated)
 				yield* tx
 					.update(appConnections)
@@ -311,5 +314,5 @@ export const saveDraft = (
 			db.insert(appDrafts).values({ owner, id: draft.id, body }),
 		),
 		Effect.as(draft),
-		Effect.mapError(unavailable),
+		Effect.mapError(() => ExperienceStorageUnavailable.make({})),
 	)

@@ -25,13 +25,15 @@ The platform or an organization owns each model and each provider:
 An organization can use a model of a provider only when it may use both the
 provider and the model.
 
-Each model has one of two types:
+Each model has one of three types:
 
 - A `language` model writes text and calls tools. It runs Turns, judges Rules
   and learns Bot memory.
 - A `decision` model only picks an answer from a fixed list. It does not write
   text. It can judge Rules. Jev from TypeSafe is an example. See
   [Decision model](#decision-model).
+- A `live` model talks with a person in real time, with sound. Only
+  [Live mode](/docs/live) uses it.
 
 When you run OpenBot from code, you can also give built-in models. See
 [Built-in models](#built-in-models).
@@ -53,7 +55,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 | Field              | Rules                                                                                                                                                        |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `id`               | Required. 1 to 200 characters. It is unique for its owner, and you cannot change it. A provider sends it as the model name, unless the link sets `upstream`. |
-| `type`             | Optional. `language` or `decision`. The default is `language`. You cannot change it later.                                                                   |
+| `type`             | Optional. `language`, `decision`, or `live`. The default is `language`. You cannot change it later.                                                          |
 | `name`             | Required. A name for people.                                                                                                                                 |
 | `reasoningEfforts` | Required. The `reasoningEffort` values that the model accepts. Can be empty.                                                                                 |
 | `serviceTiers`     | Required. The `serviceTier` values that the model accepts. Can be empty.                                                                                     |
@@ -104,7 +106,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 
 | `kind`          | API                                                     | Model types it can link   |
 | --------------- | ------------------------------------------------------- | ------------------------- |
-| `openai`        | OpenAI Responses API.                                   | `language`                |
+| `openai`        | OpenAI Responses API, and the Realtime API for `live`.  | `language` and `live`     |
 | `anthropic`     | Anthropic Messages API.                                 | `language`                |
 | `openai-compat` | OpenAI Chat Completions API, and services that copy it. | `language` and `decision` |
 | `typesafe`      | The decision API of TypeSafe.                           | `decision`                |

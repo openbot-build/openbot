@@ -2,12 +2,6 @@ import { Context, Data, Effect, Schema } from "effect"
 import * as Document from "../Document.ts"
 import * as Network from "../network/Network.ts"
 
-const documentError = (error: Schema.SchemaError) =>
-	new DiscoveryError({
-		reason: "Document",
-		issues: [{ url: "", reason: error.message }],
-	})
-
 export class Source extends Schema.Opaque<Source>()(
 	Schema.Struct({
 		role: Schema.Literals([
@@ -24,7 +18,13 @@ export class Source extends Schema.Opaque<Source>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Source)(value).pipe(
-			Effect.mapError(documentError),
+			Effect.mapError(
+				(error) =>
+					new DiscoveryError({
+						reason: "Document",
+						issues: [{ url: "", reason: error.message }],
+					}),
+			),
 		)
 }
 
@@ -39,7 +39,13 @@ export class ConfigurationRequirement extends Schema.Opaque<ConfigurationRequire
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(ConfigurationRequirement)(value).pipe(
-			Effect.mapError(documentError),
+			Effect.mapError(
+				(error) =>
+					new DiscoveryError({
+						reason: "Document",
+						issues: [{ url: "", reason: error.message }],
+					}),
+			),
 		)
 }
 
@@ -52,7 +58,13 @@ export class Endpoint extends Schema.Opaque<Endpoint>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Endpoint)(value).pipe(
-			Effect.mapError(documentError),
+			Effect.mapError(
+				(error) =>
+					new DiscoveryError({
+						reason: "Document",
+						issues: [{ url: "", reason: error.message }],
+					}),
+			),
 		)
 }
 
@@ -66,7 +78,13 @@ export class Candidate extends Schema.Opaque<Candidate>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Candidate)(value).pipe(
-			Effect.mapError(documentError),
+			Effect.mapError(
+				(error) =>
+					new DiscoveryError({
+						reason: "Document",
+						issues: [{ url: "", reason: error.message }],
+					}),
+			),
 		)
 }
 
@@ -79,7 +97,13 @@ export class Issue extends Schema.Opaque<Issue>()(
 ) {
 	public static decode = (value: unknown) =>
 		Schema.decodeUnknownEffect(Issue)(value).pipe(
-			Effect.mapError(documentError),
+			Effect.mapError(
+				(error) =>
+					new DiscoveryError({
+						reason: "Document",
+						issues: [{ url: "", reason: error.message }],
+					}),
+			),
 		)
 }
 

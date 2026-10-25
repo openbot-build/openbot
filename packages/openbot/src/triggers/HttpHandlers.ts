@@ -15,8 +15,6 @@ import { triggerKey } from "../audit/Resources.ts"
 import { fire } from "./Fire.ts"
 import { Triggers } from "./Triggers.ts"
 
-const unavailable = () => TriggersApi.TriggerStorageUnavailable.make({})
-
 export const layer = (publicOrigin: string) =>
 	HttpApiBuilder.group(OpenBotApi, "triggers", (handlers) =>
 		Effect.gen(function* () {
@@ -43,7 +41,11 @@ export const layer = (publicOrigin: string) =>
 						}),
 						details,
 					})
-					.pipe(Effect.mapError(unavailable))
+					.pipe(
+						Effect.mapError(() =>
+							TriggersApi.TriggerStorageUnavailable.make({}),
+						),
+					)
 			/** The tasks of a trigger work for the caller, so the caller must be able to give work to its Bot. */
 			const botFor = (caller: Caller, bot: string | undefined) =>
 				(bot === undefined
@@ -58,12 +60,14 @@ export const layer = (publicOrigin: string) =>
 									message: `There is no Bot ${error.bot}.`,
 								}),
 							),
-						BotConflict: () => Effect.fail(unavailable()),
+						BotConflict: () =>
+							Effect.fail(TriggersApi.TriggerStorageUnavailable.make({})),
 						BotInvalid: (error) =>
 							Effect.fail(
 								TriggersApi.TriggerInvalid.make({ message: error.message }),
 							),
-						BotStorageUnavailable: () => Effect.fail(unavailable()),
+						BotStorageUnavailable: () =>
+							Effect.fail(TriggersApi.TriggerStorageUnavailable.make({})),
 					}),
 				)
 			return handlers
@@ -191,7 +195,11 @@ export const layerHooks = HttpApiBuilder.group(
 							Effect.logWarning(
 								"A webhook could not fire its trigger",
 								cause,
-							).pipe(Effect.andThen(Effect.fail(unavailable()))),
+							).pipe(
+								Effect.andThen(
+									Effect.fail(TriggersApi.TriggerStorageUnavailable.make({})),
+								),
+							),
 						),
 					)
 					return { delegation }

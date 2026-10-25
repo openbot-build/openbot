@@ -74,8 +74,6 @@ interface Permits {
 }
 const hash = (value: unknown) =>
 	createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 40)
-const denied = (action: string, target: string) =>
-	new Client.PermissionDenied({ action, target })
 const argumentStrings = Schema.Record(Schema.String, Schema.String)
 const visible = (tool: Opened["tools"][number]) => {
 	const metadata = Schema.decodeUnknownOption(
@@ -371,8 +369,12 @@ export const prepare = (
 							owner,
 							stored.connection.connectionId,
 						).pipe(
-							Effect.mapError(() =>
-								denied(invocation.action, invocation.target),
+							Effect.mapError(
+								() =>
+									new Client.PermissionDenied({
+										action: invocation.action,
+										target: invocation.target,
+									}),
 							),
 						)
 						if (
@@ -381,7 +383,10 @@ export const prepare = (
 							invocation.connection.connectionId !==
 								stored.connection.connectionId
 						)
-							return yield* denied(invocation.action, invocation.target)
+							return yield* new Client.PermissionDenied({
+								action: invocation.action,
+								target: invocation.target,
+							})
 						if (
 							Schema.is(Client.ListAction)(invocation.action) ||
 							invocation.action === "resources/read" ||
@@ -396,7 +401,10 @@ export const prepare = (
 								invocation.arguments,
 							))
 						)
-							return yield* denied(invocation.action, invocation.target)
+							return yield* new Client.PermissionDenied({
+								action: invocation.action,
+								target: invocation.target,
+							})
 					}),
 			})
 			const result = yield* services.capabilities
@@ -509,9 +517,20 @@ export const execute = (
 			services.secrets,
 			position.owner,
 			origin.connectionId,
-		).pipe(Effect.mapError(() => denied("invoke", origin.name)))
+		).pipe(
+			Effect.mapError(
+				() =>
+					new Client.PermissionDenied({
+						action: "invoke",
+						target: origin.name,
+					}),
+			),
+		)
 		if (current.revision !== origin.revision)
-			return yield* denied("invoke", origin.name)
+			return yield* new Client.PermissionDenied({
+				action: "invoke",
+				target: origin.name,
+			})
 		return yield* Match.value(yield* binding.perform(args)).pipe(
 			Match.tag("Completed", ({ result }) =>
 				json(result).pipe(

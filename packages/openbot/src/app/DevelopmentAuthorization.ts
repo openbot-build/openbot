@@ -7,11 +7,6 @@ import { Scenarios, type Mode } from "./DevelopmentScenarios.ts"
 
 const origin = "https://app.development.test"
 const resource = origin + "/protected"
-const invalid = () =>
-	new Network.NetworkError({
-		reason: "Transport",
-		message: "Invalid simulated authorization request",
-	})
 export class Authorization extends Context.Service<
 	Authorization,
 	{
@@ -67,7 +62,12 @@ export const layer = (publicOrigin: string) =>
 										}
 									: undefined
 					return value === undefined
-						? Effect.fail(invalid())
+						? Effect.fail(
+								new Network.NetworkError({
+									reason: "Transport",
+									message: "Invalid simulated authorization request",
+								}),
+							)
 						: Effect.succeed(JSON.stringify(value))
 				},
 				validToken: (token) =>
@@ -90,7 +90,10 @@ export const layer = (publicOrigin: string) =>
 							(params.get("state") ?? "") === "" ||
 							(params.get("code_challenge") ?? "") === ""
 						)
-							return yield* invalid()
+							return yield* new Network.NetworkError({
+								reason: "Transport",
+								message: "Invalid simulated authorization request",
+							})
 						const callback = new URL(
 							params.get("redirect_uri") ?? metadata.redirect_uris[0],
 						)
@@ -115,10 +118,16 @@ export const layer = (publicOrigin: string) =>
 								mode === "authorization-expired" &&
 								new URLSearchParams(body).get("grant_type") === "refresh_token")
 						)
-							return yield* invalid()
+							return yield* new Network.NetworkError({
+								reason: "Transport",
+								message: "Invalid simulated authorization request",
+							})
 						const form = new URLSearchParams(body)
 						if (form.get("client_id") !== metadata.client_id)
-							return yield* invalid()
+							return yield* new Network.NetworkError({
+								reason: "Transport",
+								message: "Invalid simulated authorization request",
+							})
 						if (revoke) {
 							yield* Ref.update(refreshes, (values) =>
 								HashSet.remove(values, form.get("token") ?? ""),
@@ -126,7 +135,11 @@ export const layer = (publicOrigin: string) =>
 							yield* Ref.set(tokens, HashSet.empty())
 							return "{}"
 						}
-						if (form.get("resource") !== resource) return yield* invalid()
+						if (form.get("resource") !== resource)
+							return yield* new Network.NetworkError({
+								reason: "Transport",
+								message: "Invalid simulated authorization request",
+							})
 						if (form.get("grant_type") === "authorization_code") {
 							const code = form.get("code") ?? ""
 							const params = yield* Ref.modify(
@@ -145,7 +158,11 @@ export const layer = (publicOrigin: string) =>
 										.update(form.get("code_verifier") ?? "")
 										.digest("base64url") === params.get("code_challenge"),
 							)
-							if (!matches) return yield* invalid()
+							if (!matches)
+								return yield* new Network.NetworkError({
+									reason: "Transport",
+									message: "Invalid simulated authorization request",
+								})
 						} else if (
 							form.get("grant_type") !== "refresh_token" ||
 							!(yield* Ref.get(refreshes).pipe(
@@ -154,7 +171,10 @@ export const layer = (publicOrigin: string) =>
 								),
 							))
 						)
-							return yield* invalid()
+							return yield* new Network.NetworkError({
+								reason: "Transport",
+								message: "Invalid simulated authorization request",
+							})
 						const access = yield* Effect.sync(randomUUID)
 						yield* scenarios.set("available")
 						const refresh = yield* Effect.sync(randomUUID)

@@ -212,8 +212,15 @@ export const ChatResponseSseEvent: Schema.Codec<
  * A channel Chat is one chat of a Channel, such as a Slack channel.
  * A task Chat does one piece of work that was given to a Bot.
  * A review Chat decides one request.
+ * A live Chat is a talk with a Bot in real time, with sound. Its model is a Live model.
  */
-export const ChatKind = Schema.Literals(["direct", "channel", "task", "review"])
+export const ChatKind = Schema.Literals([
+	"direct",
+	"channel",
+	"task",
+	"review",
+	"live",
+])
 export type ChatKind = typeof ChatKind.Type
 /** The Chat that gave the work of a task Chat. */
 export const ChatParent = Schema.Struct({
@@ -416,7 +423,7 @@ export class ChatsApi extends HttpApiGroup.make("chats")
 			.annotate(Required, [own("run", "Chat", "chatId")])
 			.annotate(
 				OpenApi.Description,
-				"Sends a message to a direct Chat or a task Chat. In a task Chat, the Bot reads it as a message from you.",
+				"Sends a message to a direct Chat, a task Chat or a live Chat. In a task Chat, the Bot reads it as a message from you. In a live Chat, the message waits until a Live session is open.",
 			),
 		HttpApiEndpoint.get("listChats", "/v1/chats", {
 			query: {
@@ -427,7 +434,7 @@ export class ChatsApi extends HttpApiGroup.make("chats")
 			error: ChatOperationErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Lists your Chats. Without `kind`, it lists direct Chats and channel Chats.",
+			"Lists your Chats. Without `kind`, it lists direct Chats, channel Chats and live Chats.",
 		),
 		HttpApiEndpoint.get("getChat", "/v1/chats/:chatId", {
 			params: chatParams,
@@ -455,7 +462,7 @@ export class ChatsApi extends HttpApiGroup.make("chats")
 			error: ChatOperationErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Deletes the history of a direct Chat or a channel Chat. It stops the running Turn and cancels the work that the Chat gave away first. The next message starts an empty Chat.",
+			"Deletes the history of a direct Chat, a channel Chat or a live Chat. It stops the running Turn and cancels the work that the Chat gave away first. The next message starts an empty Chat.",
 		),
 		HttpApiEndpoint.get("chatModels", "/v1/chats/:chatId/models", {
 			params: chatParams,

@@ -53,7 +53,11 @@ export const Query = Schema.Struct({
 	source: Schema.optionalKey(Schema.NonEmptyString),
 	cursor: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(8192))),
 	limit: Schema.optionalKey(
-		Schema.String.check(Schema.isPattern(/^(?:[1-9]|[1-4][0-9]|50)$/)),
+		Schema.FiniteFromString.pipe(
+			Schema.decodeTo(
+				Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 })),
+			),
+		),
 	),
 })
 export type Query = typeof Query.Type

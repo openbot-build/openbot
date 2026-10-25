@@ -34,21 +34,13 @@ export type Run = typeof Run.Type
 
 export type Error =
 	ExperienceNotFound | ExperienceStorageUnavailable | ChatConflict
-export const unavailable = () => ExperienceStorageUnavailable.make({})
 /** Keep the errors that callers handle. Every other storage failure becomes one error. */
 export const failure = (error: unknown) =>
 	error instanceof ChatConflict || error instanceof ExperienceNotFound
 		? error
-		: unavailable()
+		: ExperienceStorageUnavailable.make({})
 /** Reads only find nothing or fail to reach the database. */
 export type ReadError = ExperienceNotFound | ExperienceStorageUnavailable
-const readFailure = (error: unknown): ReadError =>
-	error instanceof ExperienceNotFound ? error : unavailable()
-const notFound = () => ExperienceNotFound.make({ id: "Code run" })
-const conflict = () =>
-	ChatConflict.make({
-		message: "The code run changed. Read it again before you continue.",
-	})
 const codec = Schema.fromJsonString(Run)
 type Sealer = typeof Secrets.Service
 
@@ -78,17 +70,17 @@ export const view = (run: Run): CodeRunsApi.CodeRun => ({
 	updatedAt: run.updatedAt,
 })
 
-const binding = (owner: string, id: string) =>
-	JSON.stringify(["code-run", owner, id])
 const where = (owner: string, id: string) =>
 	and(eq(codeRuns.owner, owner), eq(codeRuns.id, id))
 const seal = (secrets: Sealer, owner: string, value: Run) =>
 	Schema.encodeEffect(codec)(value).pipe(
-		Effect.flatMap((body) => secrets.seal(body, binding(owner, value.id))),
+		Effect.flatMap((body) =>
+			secrets.seal(body, JSON.stringify(["code-run", owner, value.id])),
+		),
 	)
 const open = (secrets: Sealer, row: typeof codeRuns.$inferSelect) =>
 	secrets
-		.open(row.body, binding(row.owner, row.id))
+		.open(row.body, JSON.stringify(["code-run", row.owner, row.id]))
 		.pipe(Effect.flatMap(Schema.decodeEffect(codec)))
 
 export const get = (
@@ -99,9 +91,16 @@ export const get = (
 ): Effect.Effect<Run, ReadError> =>
 	Effect.gen(function* () {
 		const row = (yield* db.select().from(codeRuns).where(where(owner, id)))[0]
-		if (row === undefined) return yield* notFound()
+		if (row === undefined)
+			return yield* ExperienceNotFound.make({ id: "Code run" })
 		return yield* open(secrets, row)
-	}).pipe(Effect.mapError(readFailure))
+	}).pipe(
+		Effect.mapError((error): ReadError =>
+			error instanceof ExperienceNotFound
+				? error
+				: ExperienceStorageUnavailable.make({}),
+		),
+	)
 
 export const list = (
 	db: Db.Database,
@@ -118,7 +117,7 @@ export const list = (
 				Effect.forEach(rows, (row) => open(secrets, row)),
 			),
 			Effect.map((runs) => runs.toSorted((a, b) => a.createdAt - b.createdAt)),
-			Effect.mapError(unavailable),
+			Effect.mapError(() => ExperienceStorageUnavailable.make({})),
 		)
 
 /** The program of a tool call in a Chat, if the call is a Code Mode call. */
@@ -145,7 +144,7 @@ export const forCall = (
 					? Effect.succeedNone
 					: Effect.asSome(open(secrets, rows[0])),
 			),
-			Effect.mapError(unavailable),
+			Effect.mapError(() => ExperienceStorageUnavailable.make({})),
 		)
 
 /**
@@ -200,7 +199,8 @@ export const change = (
 					.from(codeRuns)
 					.where(where(owner, id))
 					.for("update"))[0]
-				if (row === undefined) return yield* notFound()
+				if (row === undefined)
+					return yield* ExperienceNotFound.make({ id: "Code run" })
 				const next = update(yield* open(secrets, row), row.leaseUntil)
 				if (Option.isNone(next)) return Option.none()
 				const body = yield* seal(secrets, owner, next.value.run)
@@ -213,7 +213,10 @@ export const change = (
 					})
 					.where(where(owner, id))
 					.returning({ id: codeRuns.id })
-				if (changed.length === 0) return yield* conflict()
+				if (changed.length === 0)
+					return yield* ChatConflict.make({
+						message: "The code run changed. Read it again before you continue.",
+					})
 				return Option.some(next.value.run)
 			}),
 		)
@@ -244,4 +247,4 @@ export const stale = (
 				or(isNull(codeRuns.leaseUntil), lt(codeRuns.leaseUntil, now)),
 			),
 		)
-		.pipe(Effect.mapError(unavailable))
+		.pipe(Effect.mapError(() => ExperienceStorageUnavailable.make({})))

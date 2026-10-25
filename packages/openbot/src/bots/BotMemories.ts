@@ -122,7 +122,6 @@ export const make: Effect.Effect<
 		"memory_log",
 		Schema.Struct({ bot: BotsApi.BotId, entry: BotMemory.LogEntry }),
 	)
-	const unavailable = () => BotsApi.BotStorageUnavailable.make({})
 	const pool = (home: Home) =>
 		Effect.gen(function* () {
 			const rows =
@@ -157,7 +156,7 @@ export const make: Effect.Effect<
 					}),
 				),
 			)
-		}).pipe(Effect.mapError(unavailable))
+		}).pipe(Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})))
 	const version = (home: Home) =>
 		versions
 			.find(home.organizationId, home.bot)
@@ -177,7 +176,7 @@ export const make: Effect.Effect<
 						tag,
 					})),
 				)}`
-		}).pipe(Effect.mapError(unavailable))
+		}).pipe(Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})))
 	/** Gives the new version and writes its log entry. */
 	const bump = (
 		home: Home,
@@ -328,7 +327,7 @@ export const make: Effect.Effect<
 					const removed = yield* sql<{
 						id: string
 					}>`DELETE FROM openbot_bot_memories WHERE organization_id = ${home.organizationId} AND home_bot = ${home.bot} AND id IN (SELECT memory_id FROM openbot_bot_memory_tags WHERE organization_id = ${home.organizationId} AND home_bot = ${home.bot} AND tag = ${tag}) RETURNING id`.pipe(
-						Effect.mapError(unavailable),
+						Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})),
 					)
 					if (removed.length > 0)
 						yield* bump(

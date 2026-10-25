@@ -23,10 +23,6 @@ import {
 import { ChannelQueue } from "./ChannelQueue.ts"
 import { ChannelRegistry } from "./ChannelRegistry.ts"
 
-const unavailable = () => ChannelsApi.ChannelsUnavailable.make({})
-const invalid = (message: string) =>
-	ChannelsApi.ChannelInvalid.make({ message })
-
 const channelKey = (organizationId: string, id: string) =>
 	organizationKey(organizationId) + ".channel." + segment(id)
 
@@ -61,7 +57,7 @@ export const layer = (publicOrigin: string) =>
 						resource,
 						details,
 					})
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => ChannelsApi.ChannelsUnavailable.make({})))
 			const found = (caller: Caller, id: string) =>
 				channels.get(caller.organizationId, id).pipe(
 					Effect.flatMap(
@@ -80,18 +76,27 @@ export const layer = (publicOrigin: string) =>
 				bots.access(caller, id, "delegate").pipe(
 					Effect.provideContext(services),
 					Effect.catchTags({
-						BotNotFound: () => Effect.fail(invalid(`There is no Bot ${id}.`)),
-						BotConflict: () => Effect.fail(unavailable()),
-						BotInvalid: () => Effect.fail(unavailable()),
-						BotStorageUnavailable: () => Effect.fail(unavailable()),
+						BotNotFound: () =>
+							Effect.fail(
+								ChannelsApi.ChannelInvalid.make({
+									message: `There is no Bot ${id}.`,
+								}),
+							),
+						BotConflict: () =>
+							Effect.fail(ChannelsApi.ChannelsUnavailable.make({})),
+						BotInvalid: () =>
+							Effect.fail(ChannelsApi.ChannelsUnavailable.make({})),
+						BotStorageUnavailable: () =>
+							Effect.fail(ChannelsApi.ChannelsUnavailable.make({})),
 					}),
 					Effect.flatMap((bot) =>
 						bot.owner._tag === "Organization"
 							? Effect.void
 							: Effect.fail(
-									invalid(
-										"The Bot of a Channel must be a shared Bot of the organization.",
-									),
+									ChannelsApi.ChannelInvalid.make({
+										message:
+											"The Bot of a Channel must be a shared Bot of the organization.",
+									}),
 								),
 					),
 				)
@@ -103,9 +108,9 @@ export const layer = (publicOrigin: string) =>
 					),
 					Effect.scoped,
 					Effect.mapError((failure) =>
-						invalid(
-							`The platform did not take the webhook: ${failure.message}`,
-						),
+						ChannelsApi.ChannelInvalid.make({
+							message: `The platform did not take the webhook: ${failure.message}`,
+						}),
 					),
 				)
 			return handlers
@@ -164,7 +169,9 @@ export const layer = (publicOrigin: string) =>
 							payload.credentials !== undefined &&
 							payload.credentials.kind !== current.kind
 						)
-							return yield* invalid("The kind of a Channel cannot change.")
+							return yield* ChannelsApi.ChannelInvalid.make({
+								message: "The kind of a Channel cannot change.",
+							})
 						yield* checkBot(caller, payload.bot ?? current.bot)
 						const credentials =
 							payload.credentials === undefined
@@ -234,9 +241,9 @@ export const layer = (publicOrigin: string) =>
 							current.id,
 						)
 						if (credentials.kind !== "custom")
-							return yield* invalid(
-								"Only a custom Channel has a signing secret.",
-							)
+							return yield* ChannelsApi.ChannelInvalid.make({
+								message: "Only a custom Channel has a signing secret.",
+							})
 						const secret = "ocs_" + randomBytes(32).toString("base64url")
 						yield* channels.update(
 							caller.organizationId,
@@ -313,7 +320,9 @@ export const layerLinks = HttpApiBuilder.group(
 								resource: channelKey(caller.organizationId, identity.channel),
 								details: { externalUserId: identity.externalUserId },
 							})
-							.pipe(Effect.mapError(unavailable))
+							.pipe(
+								Effect.mapError(() => ChannelsApi.ChannelsUnavailable.make({})),
+							)
 						return identity
 					}),
 				)
@@ -341,7 +350,9 @@ export const layerLinks = HttpApiBuilder.group(
 								resource: channelKey(caller.organizationId, params.channelId),
 								details: { externalUserId: params.externalUserId },
 							})
-							.pipe(Effect.mapError(unavailable))
+							.pipe(
+								Effect.mapError(() => ChannelsApi.ChannelsUnavailable.make({})),
+							)
 					}),
 				)
 		}),
@@ -360,18 +371,21 @@ export const layerHooks = HttpApiBuilder.group(
 			const channels = yield* Channels
 			const registry = yield* ChannelRegistry
 			const queue = yield* ChannelQueue
-			const denied = () => ChannelsApi.ChannelHookDenied.make({})
 			return handlers.handleRaw("receiveChannelEvent", ({ params }) =>
 				Effect.gen(function* () {
 					const request = yield* HttpServerRequest.HttpServerRequest
 					const found = yield* channels.find(params.channelId)
 					if (Option.isNone(found) || !found.value.channel.enabled)
-						return yield* denied()
+						return yield* ChannelsApi.ChannelHookDenied.make({})
 					const { organizationId, channel: stored } = found.value
 					const channel = yield* registry
 						.get(organizationId, stored)
-						.pipe(Effect.mapError(unavailable))
-					const body = yield* request.text.pipe(Effect.mapError(denied))
+						.pipe(
+							Effect.mapError(() => ChannelsApi.ChannelsUnavailable.make({})),
+						)
+					const body = yield* request.text.pipe(
+						Effect.mapError(() => ChannelsApi.ChannelHookDenied.make({})),
+					)
 					const received = yield* channel
 						.receive({
 							headers: request.headers,
@@ -382,7 +396,7 @@ export const layerHooks = HttpApiBuilder.group(
 							Effect.tapError((failure) =>
 								Effect.logInfo("A Channel webhook was denied", failure.reason),
 							),
-							Effect.mapError(denied),
+							Effect.mapError(() => ChannelsApi.ChannelHookDenied.make({})),
 						)
 					yield* queue.receive(organizationId, stored.id, received.events)
 					return HttpServerResponse.jsonUnsafe(received.reply ?? {})

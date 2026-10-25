@@ -21,9 +21,7 @@ import * as Db from "../database/Database.ts"
 
 const Domains = Schema.fromJsonString(Schema.Array(Schema.String))
 const decodeDomains = Schema.decodeUnknownSync(Domains)
-const iso = (millis: number) => DateTime.formatIso(DateTime.makeUnsafe(millis))
-const binding = (id: string) =>
-	"openbot_sso_connections:" + id + ":client_secret"
+const encodeDomains = Schema.encodeSync(Domains)
 
 const domainView = (
 	row: typeof organizationDomains.$inferSelect,
@@ -31,8 +29,11 @@ const domainView = (
 	domain: row.domain,
 	recordName: recordName(row.domain),
 	recordValue: row.token,
-	verifiedAt: row.verifiedAt === null ? null : iso(row.verifiedAt),
-	createdAt: iso(row.createdAt),
+	verifiedAt:
+		row.verifiedAt === null
+			? null
+			: DateTime.formatIso(DateTime.makeUnsafe(row.verifiedAt)),
+	createdAt: DateTime.formatIso(DateTime.makeUnsafe(row.createdAt)),
 })
 const connection = (row: typeof ssoConnections.$inferSelect): Connection => ({
 	id: row.id,
@@ -54,11 +55,10 @@ export const make = Effect.gen(function* () {
 	const secrets = yield* Secrets
 	const control = yield* DomainControl
 	const settings = yield* Settings
-	const unavailable = () => SsoApi.SsoUnavailable.make({})
 	/** Every instance reads the connections again after a change. */
 	const changed = settings
 		.notify(signInScope)
-		.pipe(Effect.mapError(unavailable))
+		.pipe(Effect.mapError(() => SsoApi.SsoUnavailable.make({})))
 
 	const domainWhere = (organizationId: string, domain: string) =>
 		and(
@@ -71,7 +71,7 @@ export const make = Effect.gen(function* () {
 			.from(organizationDomains)
 			.where(domainWhere(organizationId, domain))
 			.pipe(
-				Effect.mapError(unavailable),
+				Effect.mapError(() => SsoApi.SsoUnavailable.make({})),
 				Effect.flatMap(([row]) =>
 					row === undefined
 						? Effect.fail(SsoApi.DomainNotFound.make({ domain }))
@@ -86,7 +86,7 @@ export const make = Effect.gen(function* () {
 			.orderBy(asc(ssoConnections.createdAt))
 			.pipe(
 				Effect.map((rows) => rows.map(connection)),
-				Effect.mapError(unavailable),
+				Effect.mapError(() => SsoApi.SsoUnavailable.make({})),
 			)
 
 	/** Domains of a connection must be verified by its organization, and no other connection may use them. */
@@ -105,7 +105,7 @@ export const make = Effect.gen(function* () {
 						isNotNull(organizationDomains.verifiedAt),
 					),
 				)
-				.pipe(Effect.mapError(unavailable))
+				.pipe(Effect.mapError(() => SsoApi.SsoUnavailable.make({})))
 			for (const domain of domains)
 				if (!verified.some((row) => row.domain === domain))
 					return yield* SsoApi.SsoConnectionInvalid.make({
@@ -121,9 +121,6 @@ export const make = Effect.gen(function* () {
 					})
 		})
 
-	const sealSecret = (id: string, value: string) =>
-		secrets.seal(value, binding(id)).pipe(Effect.mapError(unavailable))
-
 	return Sso.of({
 		listDomains: (organizationId) =>
 			db
@@ -133,7 +130,7 @@ export const make = Effect.gen(function* () {
 				.orderBy(asc(organizationDomains.domain))
 				.pipe(
 					Effect.map((rows) => rows.map(domainView)),
-					Effect.mapError(unavailable),
+					Effect.mapError(() => SsoApi.SsoUnavailable.make({})),
 				),
 		addDomain: (organizationId, domain) =>
 			Effect.gen(function* () {
@@ -150,7 +147,7 @@ export const make = Effect.gen(function* () {
 					.insert(organizationDomains)
 					.values(row)
 					.onConflictDoNothing()
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => SsoApi.SsoUnavailable.make({})))
 				return domainView(yield* findDomain(organizationId, domain))
 			}),
 		verifyDomain: (organizationId, domain) =>
@@ -167,12 +164,12 @@ export const make = Effect.gen(function* () {
 							ne(organizationDomains.organizationId, organizationId),
 						),
 					)
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => SsoApi.SsoUnavailable.make({})))
 				if (taken !== undefined)
 					return yield* SsoApi.DomainTaken.make({ domain })
 				const tokens = yield* control
 					.tokens(domain)
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => SsoApi.SsoUnavailable.make({})))
 				if (!tokens.includes(row.token))
 					return yield* SsoApi.DomainNotVerified.make({ domain })
 				const now = yield* Clock.currentTimeMillis
@@ -198,7 +195,7 @@ export const make = Effect.gen(function* () {
 				yield* db
 					.delete(organizationDomains)
 					.where(domainWhere(organizationId, domain))
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => SsoApi.SsoUnavailable.make({})))
 				yield* changed
 			}),
 		listConnections,
@@ -216,7 +213,7 @@ export const make = Effect.gen(function* () {
 					Effect.map((rows) =>
 						Option.map(Option.fromNullishOr(rows[0]), connection),
 					),
-					Effect.mapError(unavailable),
+					Effect.mapError(() => SsoApi.SsoUnavailable.make({})),
 				),
 		createConnection: (organizationId, input) =>
 			Effect.gen(function* () {
@@ -232,10 +229,15 @@ export const make = Effect.gen(function* () {
 					clientSecret:
 						input.clientSecret === undefined
 							? null
-							: yield* sealSecret(id, input.clientSecret),
+							: yield* secrets
+									.seal(
+										input.clientSecret,
+										"openbot_sso_connections:" + id + ":client_secret",
+									)
+									.pipe(Effect.mapError(() => SsoApi.SsoUnavailable.make({}))),
 					clientSecretHint:
 						input.clientSecret === undefined ? null : hint(input.clientSecret),
-					domains: JSON.stringify(input.domains),
+					domains: encodeDomains(input.domains),
 					enforce: input.enforce,
 					version: 1,
 					createdAt: now,
@@ -244,7 +246,7 @@ export const make = Effect.gen(function* () {
 				yield* db
 					.insert(ssoConnections)
 					.values(row)
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => SsoApi.SsoUnavailable.make({})))
 				yield* changed
 				return connection(row)
 			}),
@@ -258,7 +260,7 @@ export const make = Effect.gen(function* () {
 					.select()
 					.from(ssoConnections)
 					.where(where)
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => SsoApi.SsoUnavailable.make({})))
 				if (row === undefined)
 					return yield* SsoApi.SsoConnectionNotFound.make({ connectionId: id })
 				if (row.version !== patch.expectedVersion)
@@ -274,7 +276,14 @@ export const make = Effect.gen(function* () {
 						: patch.clientSecret === null
 							? { clientSecret: null, clientSecretHint: null }
 							: {
-									clientSecret: yield* sealSecret(id, patch.clientSecret),
+									clientSecret: yield* secrets
+										.seal(
+											patch.clientSecret,
+											"openbot_sso_connections:" + id + ":client_secret",
+										)
+										.pipe(
+											Effect.mapError(() => SsoApi.SsoUnavailable.make({})),
+										),
 									clientSecretHint: hint(patch.clientSecret),
 								}
 				const [updated] = yield* db
@@ -288,7 +297,7 @@ export const make = Effect.gen(function* () {
 						...secret,
 						...(patch.domains === undefined
 							? {}
-							: { domains: JSON.stringify(patch.domains) }),
+							: { domains: encodeDomains(patch.domains) }),
 						...(patch.enforce === undefined ? {} : { enforce: patch.enforce }),
 						version: row.version + 1,
 						updatedAt: now,
@@ -296,7 +305,7 @@ export const make = Effect.gen(function* () {
 					// The version check makes a parallel change fail instead of winning.
 					.where(and(where, eq(ssoConnections.version, row.version)))
 					.returning()
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => SsoApi.SsoUnavailable.make({})))
 				if (updated === undefined)
 					return yield* SsoApi.SsoConnectionConflict.make({
 						version: row.version + 1,
@@ -315,7 +324,7 @@ export const make = Effect.gen(function* () {
 						),
 					)
 					.returning({ id: ssoConnections.id })
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => SsoApi.SsoUnavailable.make({})))
 				if (deleted.length === 0)
 					return yield* SsoApi.SsoConnectionNotFound.make({ connectionId: id })
 				yield* changed
@@ -326,15 +335,20 @@ export const make = Effect.gen(function* () {
 			.orderBy(asc(ssoConnections.createdAt))
 			.pipe(
 				Effect.map((rows) => rows.map(connection)),
-				Effect.mapError(unavailable),
+				Effect.mapError(() => SsoApi.SsoUnavailable.make({})),
 			),
 		openSecret: (value) =>
 			value.clientSecret === null
 				? Effect.succeedNone
-				: secrets.open(value.clientSecret, binding(value.id)).pipe(
-						Effect.map((secret) => Option.some(Redacted.make(secret))),
-						Effect.mapError(unavailable),
-					),
+				: secrets
+						.open(
+							value.clientSecret,
+							"openbot_sso_connections:" + value.id + ":client_secret",
+						)
+						.pipe(
+							Effect.map((secret) => Option.some(Redacted.make(secret))),
+							Effect.mapError(() => SsoApi.SsoUnavailable.make({})),
+						),
 		providerOf: (userId) =>
 			db
 				.select({ providerId: openbot_auth_account.providerId })
@@ -343,7 +357,7 @@ export const make = Effect.gen(function* () {
 				.limit(1)
 				.pipe(
 					Effect.map((rows) => Option.fromNullishOr(rows[0]?.providerId)),
-					Effect.mapError(unavailable),
+					Effect.mapError(() => SsoApi.SsoUnavailable.make({})),
 				),
 	})
 })

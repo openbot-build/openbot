@@ -45,8 +45,6 @@ const decrypt = (encryptKey: string, data: string) => {
 }
 
 /** Lark puts `@_user_1` in the text for each mention. The Bot does not need them. */
-const withoutMentions = (value: string) =>
-	value.replace(/@_user_\d+/g, "").trim()
 
 /** Every message is a card, because Lark can only change a card after it sends it. */
 const card = (message: OutboundMessage) => ({
@@ -133,7 +131,7 @@ const read = (secrets: Secrets, request: Parameters<Channel["receive"]>[0]) =>
 							eventId,
 							conversation: { key: chat, kind: direct ? "direct" : "group" },
 							sender: { externalId: sender, displayName: sender },
-							text: withoutMentions(content),
+							text: content.replace(/@_user_\d+/g, "").trim(),
 							// By default Lark only sends the group messages that mention the bot.
 							mentioned: true,
 						}),

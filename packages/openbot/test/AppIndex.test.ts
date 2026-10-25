@@ -112,12 +112,12 @@ it("the stored public Index searches, merges sources and pages results without l
 				)
 				yield* store.upsert(yield* entry("first"))
 				yield* store.upsert(second)
-				const page = yield* index.search({ limit: "1" })
+				const page = yield* index.search({ limit: 1 })
 				assert.strictEqual(page.apps.length, 1)
 				assert.strictEqual(page.issues[0]?.source, "offline")
 				assert.ok(page.nextCursor)
 				const next = yield* index.search({
-					limit: "1",
+					limit: 1,
 					cursor: page.nextCursor,
 				})
 				assert.strictEqual(next.apps[0]?.entry.cardUrl, second.cardUrl)

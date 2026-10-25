@@ -1,5 +1,6 @@
 import {
 	Config,
+	type Live,
 	Model as CoreModel,
 	Provider as CoreProvider,
 } from "@openbot-build/core"
@@ -29,6 +30,7 @@ import { Settings } from "../settings/Settings.ts"
 import { linkedOwner, ModelProviders, type Stored } from "./ModelProviders.ts"
 import { type Effective, effective, Models, modelKey } from "./Models.ts"
 import * as ToolImages from "../providers/ToolImages.ts"
+import * as LiveBackends from "./LiveBackends.ts"
 
 /**
  * Models that the program itself gives, such as the simulated model of the
@@ -57,6 +59,14 @@ export type AnyModel = Data.TaggedEnum<{
 	Decision: { readonly model: DecisionModel.DecisionModel }
 }>
 export const AnyModel = Data.taggedEnum<AnyModel>()
+
+/** A Live model, and how to meter the model calls of its Turns. */
+export interface ResolvedLive {
+	readonly model: Live.LiveModel
+	readonly meter: (
+		model: LanguageModel.LanguageModel,
+	) => LanguageModel.LanguageModel
+}
 
 export class ModelRegistry extends Context.Service<
 	ModelRegistry,
@@ -93,6 +103,18 @@ export class ModelRegistry extends Context.Service<
 			Config.ModelConfigurationError
 		>
 		/**
+		 * The Live models that the organization can use now, for live Chats. A model is
+		 * in the list only when a Live backend serves the kind of its provider.
+		 */
+		readonly liveCatalog: (
+			organizationId: string,
+		) => Effect.Effect<Catalog, Config.ModelConfigurationError>
+		/** The Live model that a selection names. It fails when it is not a usable Live model. */
+		readonly resolveLive: (
+			organizationId: string,
+			selection: Config.Selection,
+		) => Effect.Effect<ResolvedLive, Config.ModelConfigurationError>
+		/**
 		 * The decision model that a selection names. It fails when no provider of
 		 * the organization offers it, or when it is not a `decision` model.
 		 */
@@ -105,9 +127,6 @@ export class ModelRegistry extends Context.Service<
 		>
 	}
 >()("@openbot-build/openbot/models/ModelRegistry") {}
-
-const unavailable = (message: string) =>
-	new Config.ModelConfigurationError({ reason: "unavailable", message })
 
 /** One model that one provider offers, with the values of the link applied. */
 interface Offer {
@@ -226,7 +245,6 @@ const modelLayer = (
 	})
 
 /** Only a language model can run a Session or do the work of the helper model. */
-const isLanguage = (offer: Offer) => offer.model.type === "language"
 
 interface Built<A> {
 	readonly version: number
@@ -245,6 +263,7 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 		// A registry without Billing or TokenThrottle, such as in a unit test, does not meter its models.
 		const billing = yield* Effect.serviceOption(Billing)
 		const throttle = yield* Effect.serviceOption(TokenThrottle)
+		const liveBackends = yield* Effect.serviceOption(LiveBackends.LiveBackends)
 		const metered =
 			(call: {
 				readonly organizationId: string
@@ -298,19 +317,25 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 						return [existing.value.model, map] as const
 					if (Option.isSome(existing))
 						yield* Scope.close(existing.value.scope, Exit.void)
-					const apiKey = yield* providers
-						.openKey(provider)
-						.pipe(
-							Effect.mapError(() =>
-								unavailable("OpenBot cannot open the provider key right now."),
-							),
-						)
+					const apiKey = yield* providers.openKey(provider).pipe(
+						Effect.mapError(
+							() =>
+								new Config.ModelConfigurationError({
+									reason: "unavailable",
+									message: "OpenBot cannot open the provider key right now.",
+								}),
+						),
+					)
 					const layer = yield* layerOf(apiKey)
 					const entryScope = yield* Scope.fork(scope)
 					const context = yield* Layer.buildWithScope(layer, entryScope).pipe(
 						Effect.provideContext(services),
-						Effect.mapError(() =>
-							unavailable("OpenBot cannot start the model right now."),
+						Effect.mapError(
+							() =>
+								new Config.ModelConfigurationError({
+									reason: "unavailable",
+									message: "OpenBot cannot start the model right now.",
+								}),
 						),
 					)
 					const model = Context.get(context, tag)
@@ -349,8 +374,12 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				)
 				return { providers: list, offers }
 			}).pipe(
-				Effect.mapError(() =>
-					unavailable("OpenBot cannot read the model providers right now."),
+				Effect.mapError(
+					() =>
+						new Config.ModelConfigurationError({
+							reason: "unavailable",
+							message: "OpenBot cannot read the model providers right now.",
+						}),
 				),
 			)
 
@@ -368,18 +397,22 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 				],
 				models: [
 					...(builtin?.models ?? []),
-					...current.offers.filter(isLanguage).map(catalogModel),
+					...current.offers
+						.filter((offer) => offer.model.type === "language")
+						.map(catalogModel),
 				],
 			}))
 
 		const organizationSettings = (organizationId: string) =>
-			settings
-				.organization(organizationId)
-				.pipe(
-					Effect.mapError(() =>
-						unavailable("OpenBot cannot read the settings right now."),
-					),
-				)
+			settings.organization(organizationId).pipe(
+				Effect.mapError(
+					() =>
+						new Config.ModelConfigurationError({
+							reason: "unavailable",
+							message: "OpenBot cannot read the settings right now.",
+						}),
+				),
+			)
 
 		const build = (
 			{ provider, model: offered }: Offer,
@@ -477,10 +510,10 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 						reason: "model-not-found",
 						message: "The model provider does not offer this model.",
 					})
-				if (!isLanguage(offer))
+				if (offer.model.type !== "language")
 					return yield* new Config.ModelConfigurationError({
 						reason: "model-not-found",
-						message: "This is a decision model. It cannot write text.",
+						message: `This is a ${offer.model.type} model. It cannot write text.`,
 					})
 				if (
 					(selection.reasoningEffort !== undefined &&
@@ -502,6 +535,86 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 					providerOwner: offer.provider.owner.kind,
 					modelId: offer.model.id,
 				})(yield* build(offer, selection))
+			})
+
+		/** Live offers that a Live backend serves. */
+		const isLive = (offer: Offer) =>
+			offer.model.type === "live" &&
+			Option.isSome(LiveBackends.find(liveBackends, offer.provider.kind))
+
+		const liveCatalog = (organizationId: string) =>
+			Effect.map(stored(organizationId), (current) => {
+				const offers = current.offers.filter(isLive)
+				return {
+					providers: current.providers
+						.filter((provider) =>
+							offers.some((offer) => offer.provider.id === provider.id),
+						)
+						.map((provider): Config.Provider => ({
+							id: CoreProvider.Id.make(provider.id),
+							name: provider.name,
+							...(provider.endpoint === null
+								? {}
+								: { endpoint: provider.endpoint }),
+						})),
+					models: offers.map(catalogModel),
+				}
+			})
+
+		const resolveLive = (organizationId: string, selection: Config.Selection) =>
+			Effect.gen(function* () {
+				const offer = (yield* stored(organizationId)).offers.find(
+					(offer) =>
+						offer.model.type === "live" &&
+						offer.provider.id === selection.provider &&
+						offer.model.id === selection.model,
+				)
+				if (offer === undefined)
+					return yield* new Config.ModelConfigurationError({
+						reason: "model-not-found",
+						message: "The organization has no Live model with this name.",
+					})
+				const backend = LiveBackends.find(liveBackends, offer.provider.kind)
+				if (Option.isNone(backend))
+					return yield* new Config.ModelConfigurationError({
+						reason: "unsupported-option",
+						message: `OpenBot has no Live backend for ${offer.provider.kind} providers.`,
+					})
+				const apiKey = yield* providers.openKey(offer.provider).pipe(
+					Effect.mapError(
+						() =>
+							new Config.ModelConfigurationError({
+								reason: "unavailable",
+								message: "OpenBot cannot open the provider key right now.",
+							}),
+					),
+				)
+				const model = yield* backend.value
+					.make({
+						provider: offer.provider,
+						apiKey,
+						upstreamModel: offer.model.upstream,
+						providerId: CoreProvider.Id.make(offer.provider.id),
+						modelId: CoreModel.Id.make(offer.model.id),
+					})
+					.pipe(
+						Effect.mapError(
+							(error) =>
+								new Config.ModelConfigurationError({
+									reason: "unsupported-option",
+									message: error.message,
+								}),
+						),
+					)
+				return {
+					model,
+					meter: metered({
+						organizationId,
+						providerId: offer.provider.id,
+						providerOwner: offer.provider.owner.kind,
+						modelId: offer.model.id,
+					}),
+				}
 			})
 
 		/** The selection that one setting of the organization names. */
@@ -605,6 +718,8 @@ export const make = (options: { readonly builtin?: Builtin } = {}) =>
 					}
 				}),
 			resolve,
+			liveCatalog,
+			resolveLive,
 			decision,
 			rulesModel: (organizationId) =>
 				setting(organizationId, "rulesModel").pipe(

@@ -26,13 +26,15 @@ Die Platform oder eine Organization besitzt jedes Model und jeden Anbieter:
 Eine Organization kann ein Model eines Anbieters nur nutzen, wenn sie sowohl den
 Anbieter als auch das Model nutzen darf.
 
-Jedes Model hat einen von zwei Typen:
+Jedes Model hat einen von drei Typen:
 
 - Ein `language`-Model schreibt Text und ruft Werkzeuge auf. Es führt Turns aus,
   beurteilt Rules und lernt Bot-Memory.
 - Ein `decision`-Model wählt nur eine Antwort aus einer festen Liste. Es
   schreibt keinen Text. Es kann Rules beurteilen. Jev von TypeSafe ist ein
   Beispiel. Siehe [Decision-Model](#decision-model).
+- Ein `live`-Model spricht in Echtzeit mit einer Person, mit Ton. Nur der
+  [Live-Modus](/de/docs/live) nutzt es.
 
 Wenn du OpenBot aus Code startest, kannst du auch eingebaute Models angeben.
 Siehe [Eingebaute Models](#eingebaute-models).

@@ -35,18 +35,11 @@ export const Action = Schema.Struct({
 })
 export type Action = typeof Action.Type
 
-export const unavailable = () => ExperienceStorageUnavailable.make({})
-export const conflict = () =>
-	ChatConflict.make({
-		message:
-			"The App view or confirmed interaction changed. Read its current state before continuing.",
-	})
-export const missing = () => ExperienceNotFound.make({ id: "App view" })
 /** Keep the errors that callers handle. Every other storage failure becomes one error. */
 export const failure = (value: unknown) =>
 	value instanceof ExperienceNotFound || value instanceof ChatConflict
 		? value
-		: unavailable()
+		: ExperienceStorageUnavailable.make({})
 export const initial: Api.Interaction = { revision: 0, context: null }
 export const interactionKey = (chat: string, operationId: string) =>
 	JSON.stringify([chat, operationId])
@@ -60,8 +53,6 @@ export const where = (owner: string, kind: string, id: string) =>
 		eq(appSecrets.kind, kind),
 		eq(appSecrets.id, id),
 	)
-const binding = (owner: string, kind: string, id: string) =>
-	JSON.stringify([kind, owner, id])
 export const seal = <S extends Schema.Top>(
 	secrets: Sealer,
 	schema: S,
@@ -72,14 +63,18 @@ export const seal = <S extends Schema.Top>(
 ) =>
 	Schema.encodeEffect(Schema.fromJsonString(Schema.toCodecJson(schema)))(
 		value,
-	).pipe(Effect.flatMap((body) => secrets.seal(body, binding(owner, kind, id))))
+	).pipe(
+		Effect.flatMap((body) =>
+			secrets.seal(body, JSON.stringify([kind, owner, id])),
+		),
+	)
 export const open = <S extends Schema.Top>(
 	secrets: Sealer,
 	schema: S,
 	row: typeof appSecrets.$inferSelect,
 ) =>
 	secrets
-		.open(row.body, binding(row.owner, row.kind, row.id))
+		.open(row.body, JSON.stringify([row.kind, row.owner, row.id]))
 		.pipe(
 			Effect.flatMap(
 				Schema.decodeEffect(Schema.fromJsonString(Schema.toCodecJson(schema))),

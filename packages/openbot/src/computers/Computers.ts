@@ -15,7 +15,7 @@ import { toWhere } from "../authorization/Sql.ts"
 import * as Db from "../database/Database.ts"
 import { computerAccess, computers, computerUsage } from "../database/Schema.ts"
 import type { ComputerError, Machine } from "./Computer.ts"
-import { ComputerProviders, unavailable } from "./ComputerProviders.ts"
+import { ComputerProviders } from "./ComputerProviders.ts"
 import * as ConnectorMachine from "./connector/ConnectorMachine.ts"
 import { Connectors } from "./connector/Connectors.ts"
 import { Drivers } from "./Drivers.ts"
@@ -24,16 +24,12 @@ import { Drivers } from "./Drivers.ts"
 const decodeState = Schema.decodeUnknownSync(ComputersApi.ComputerState)
 
 /** The features column holds JSON that only this file writes. */
-const decodeFeatures = Schema.decodeUnknownSync(
-	Schema.fromJsonString(ComputersApi.ComputerFeatures),
-)
+const FeaturesJson = Schema.fromJsonString(ComputersApi.ComputerFeatures)
+const decodeFeatures = Schema.decodeUnknownSync(FeaturesJson)
+const encodeFeatures = Schema.encodeSync(FeaturesJson)
 
 type Computer = ComputersApi.Computer
 type Row = typeof computers.$inferSelect
-
-const notFound = (id: string) => ComputersApi.ComputerNotFound.make({ id })
-const invalid = (message: string) =>
-	ComputersApi.ComputerInvalid.make({ message })
 
 export const hashToken = (token: string) =>
 	createHash("sha256").update(token).digest("hex")
@@ -255,7 +251,9 @@ export const make = Effect.gen(function* () {
 	const connectors = yield* Connectors
 	const botsService = yield* Bots
 	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-		effect.pipe(Effect.mapError(unavailable))
+		effect.pipe(
+			Effect.mapError(() => ComputersApi.ComputersUnavailable.make({})),
+		)
 	const where = (organizationId: string, id: string) =>
 		and(eq(computers.organizationId, organizationId), eq(computers.id, id))
 	const row = (organizationId: string, id: string) =>
@@ -266,7 +264,8 @@ export const make = Effect.gen(function* () {
 	const access = (caller: Caller, id: string, need: Need) =>
 		Effect.gen(function* () {
 			const found = yield* row(caller.organizationId, id)
-			if (Option.isNone(found)) return yield* notFound(id)
+			if (Option.isNone(found))
+				return yield* ComputersApi.ComputerNotFound.make({ id })
 			const computer = fromRow(found.value)
 			yield* guard(
 				caller,
@@ -278,7 +277,7 @@ export const make = Effect.gen(function* () {
 					}),
 				},
 				{
-					hide: () => notFound(id),
+					hide: () => ComputersApi.ComputerNotFound.make({ id }),
 				},
 			)
 			return { computer, row: found.value }
@@ -478,7 +477,7 @@ export const make = Effect.gen(function* () {
 						...base,
 						source: "connector",
 						state: "offline",
-						features: JSON.stringify({
+						features: encodeFeatures({
 							pause: false,
 							desktop: false,
 							ports: false,
@@ -516,7 +515,7 @@ export const make = Effect.gen(function* () {
 						template: input.source.template,
 						ref: created.ref,
 						state: "starting",
-						features: JSON.stringify({ pause: true, desktop, ports: true }),
+						features: encodeFeatures({ pause: true, desktop, ports: true }),
 					})
 					const stored_ = Option.getOrThrow(
 						yield* row(caller.organizationId, id),
@@ -539,7 +538,9 @@ export const make = Effect.gen(function* () {
 					input.pauseAfter !== undefined &&
 					input.pauseAfter !== null
 				)
-					return yield* invalid("A connected machine cannot pause.")
+					return yield* ComputersApi.ComputerInvalid.make({
+						message: "A connected machine cannot pause.",
+					})
 				const now = yield* Clock.currentTimeMillis
 				const changed = yield* stored(
 					db
@@ -632,7 +633,9 @@ export const make = Effect.gen(function* () {
 			Effect.gen(function* () {
 				const { computer } = yield* access(caller, id, "write")
 				if (computer.source._tag !== "Connector")
-					return yield* invalid("Only a connector Computer has a token.")
+					return yield* ComputersApi.ComputerInvalid.make({
+						message: "Only a connector Computer has a token.",
+					})
 				const token = newToken()
 				yield* stored(
 					db
@@ -664,7 +667,7 @@ export const make = Effect.gen(function* () {
 						db
 							.update(computers)
 							.set({
-								features: JSON.stringify({
+								features: encodeFeatures({
 									...features,
 									desktop: hello.value.desktop,
 								}),
@@ -716,7 +719,7 @@ export const make = Effect.gen(function* () {
 					machineId: input.machineId,
 					tokenHash: hashToken(token),
 					state: "offline",
-					features: JSON.stringify({
+					features: encodeFeatures({
 						pause: false,
 						desktop: input.desktop,
 						ports: false,
@@ -762,14 +765,24 @@ export const make = Effect.gen(function* () {
 				yield* access(caller, id, "use")
 				const target = yield* botsService.access(caller, bot, "write").pipe(
 					Effect.catchTags({
-						BotNotFound: () => invalid("The Bot does not exist."),
-						BotStorageUnavailable: () => Effect.fail(unavailable()),
-						BotConflict: () => invalid("The Bot changed. Try again."),
-						BotInvalid: (error) => invalid(error.message),
+						BotNotFound: () =>
+							ComputersApi.ComputerInvalid.make({
+								message: "The Bot does not exist.",
+							}),
+						BotStorageUnavailable: () =>
+							Effect.fail(ComputersApi.ComputersUnavailable.make({})),
+						BotConflict: () =>
+							ComputersApi.ComputerInvalid.make({
+								message: "The Bot changed. Try again.",
+							}),
+						BotInvalid: (error) =>
+							ComputersApi.ComputerInvalid.make({ message: error.message }),
 					}),
 				)
 				if (target.archived)
-					return yield* invalid("An archived Bot cannot use a Computer.")
+					return yield* ComputersApi.ComputerInvalid.make({
+						message: "An archived Bot cannot use a Computer.",
+					})
 				return yield* grantRow(caller.organizationId, id, bot, caller.userId)
 			}),
 		revoke: (caller, id, bot) =>
@@ -817,7 +830,9 @@ export const make = Effect.gen(function* () {
 				if (rows.length === 0) return false
 				const found = yield* botsService
 					.find(organizationId, bot)
-					.pipe(Effect.mapError(unavailable))
+					.pipe(
+						Effect.mapError(() => ComputersApi.ComputersUnavailable.make({})),
+					)
 				return Option.isSome(found) && !found.value.archived
 			}),
 		heldBy: (organizationId, bot) =>
@@ -913,7 +928,9 @@ export const make = Effect.gen(function* () {
 			for (const entry of rows) {
 				const found = yield* botsService
 					.find(entry.organizationId, entry.bot)
-					.pipe(Effect.mapError(unavailable))
+					.pipe(
+						Effect.mapError(() => ComputersApi.ComputersUnavailable.make({})),
+					)
 				if (Option.isSome(found) && !found.value.archived) continue
 				yield* stored(
 					db

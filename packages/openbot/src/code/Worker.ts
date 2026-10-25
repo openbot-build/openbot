@@ -77,8 +77,6 @@ const prelude = `(() => {
 	return settle
 })()`
 
-const send = (message: FromWorker) => port.postMessage(message)
-
 const run = async (start: Extract<ToWorker, { type: "start" }>) => {
 	const module = await newQuickJSWASMModuleFromVariant(variant)
 	const runtime = module.newRuntime()
@@ -110,7 +108,13 @@ const run = async (start: Extract<ToWorker, { type: "start" }>) => {
 	const failed = (
 		reason: Extract<FromWorker, { type: "failed" }>["reason"],
 		message: string,
-	) => send({ type: "failed", reason, message, logs })
+	) =>
+		port.postMessage({
+			type: "failed",
+			reason,
+			message,
+			logs,
+		} satisfies FromWorker)
 	const fromError = (handle: QuickJSHandle) => {
 		const error: unknown = context.dump(handle)
 		handle.dispose()
@@ -204,7 +208,11 @@ const run = async (start: Extract<ToWorker, { type: "start" }>) => {
 						"OutputTooLarge",
 						"The program returned more data than the platform allows.",
 					)
-				return send({ type: "done", value: text, logs })
+				return port.postMessage({
+					type: "done",
+					value: text,
+					logs,
+				} satisfies FromWorker)
 			}
 			if (state.type === "rejected") return fromError(state.error)
 			if (calls.length === 0)
@@ -214,7 +222,7 @@ const run = async (start: Extract<ToWorker, { type: "start" }>) => {
 				)
 			const batch = calls
 			calls = []
-			send({ type: "calls", calls: batch })
+			port.postMessage({ type: "calls", calls: batch } satisfies FromWorker)
 			const results = await answers()
 			if (results === undefined) return
 			for (const result of results) {

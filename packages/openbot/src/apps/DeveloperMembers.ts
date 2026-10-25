@@ -115,7 +115,7 @@ export const make: Effect.Effect<
 			const value = yield* Schema.decodeUnknownEffect(InvitationRow)({
 				...row.invitation,
 				scope: row.scope,
-			}).pipe(Effect.mapError(Rows.unavailable))
+			}).pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
 			return { owner: row.invitation.owner, value }
 		},
 	)
@@ -134,7 +134,7 @@ export const make: Effect.Effect<
 	const toMember = (row: typeof developerMembers.$inferSelect) =>
 		Effect.gen(function* () {
 			const member = yield* Schema.decodeUnknownEffect(MemberRow)(row).pipe(
-				Effect.mapError(Rows.unavailable),
+				Effect.mapError(() => Api.DeveloperUnavailable.make({})),
 			)
 			return {
 				...member,
@@ -202,7 +202,7 @@ export const make: Effect.Effect<
 					Schema.decodeUnknownEffect(Api.Invitation)({
 						...row,
 						scope: proof.value.scope,
-					}).pipe(Effect.mapError(Rows.unavailable)),
+					}).pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({}))),
 				),
 			}
 		}),

@@ -18,20 +18,6 @@ export type Call = (
 
 const timeoutMs = 15_000
 
-const unreachable = (cause: unknown) =>
-	new ChannelDeliveryFailed({
-		message: `The platform could not be reached: ${String(cause)}`,
-		retry: true,
-	})
-
-const timedOut = () =>
-	Effect.fail(
-		new ChannelDeliveryFailed({
-			message: "The platform did not answer in time",
-			retry: true,
-		}),
-	)
-
 /** Calls a platform with a fixed address, such as slack.com. */
 export const fromClient =
 	(client: HttpClient.HttpClient): Call =>
@@ -46,8 +32,23 @@ export const fromClient =
 					})),
 				),
 			),
-			Effect.mapError(unreachable),
-			Effect.timeoutOrElse({ duration: timeoutMs, orElse: timedOut }),
+			Effect.mapError(
+				(cause) =>
+					new ChannelDeliveryFailed({
+						message: `The platform could not be reached: ${String(cause)}`,
+						retry: true,
+					}),
+			),
+			Effect.timeoutOrElse({
+				duration: timeoutMs,
+				orElse: () =>
+					Effect.fail(
+						new ChannelDeliveryFailed({
+							message: "The platform did not answer in time",
+							retry: true,
+						}),
+					),
+			}),
 		)
 
 /**
@@ -75,8 +76,23 @@ export const fromNetwork =
 		).pipe(
 			// Each custom Channel has its own guarded network, made for its endpoint.
 			Effect.provideContext(network),
-			Effect.mapError(unreachable),
-			Effect.timeoutOrElse({ duration: timeoutMs, orElse: timedOut }),
+			Effect.mapError(
+				(cause) =>
+					new ChannelDeliveryFailed({
+						message: `The platform could not be reached: ${String(cause)}`,
+						retry: true,
+					}),
+			),
+			Effect.timeoutOrElse({
+				duration: timeoutMs,
+				orElse: () =>
+					Effect.fail(
+						new ChannelDeliveryFailed({
+							message: "The platform did not answer in time",
+							retry: true,
+						}),
+					),
+			}),
 		)
 
 /** Turns a failed HTTP answer into a delivery failure, with the wait that the platform asked for. */

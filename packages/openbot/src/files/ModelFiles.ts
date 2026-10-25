@@ -5,15 +5,6 @@ import type { Files } from "./Files.ts"
 import { fileIdOf } from "./Refs.ts"
 import { type Methods, methodsOf, withMethods } from "../models/ModelMethods.ts"
 
-const failed = (method: string) =>
-	AiError.make({
-		module: "OpenBot",
-		method,
-		reason: AiError.UnknownError.make({
-			description: "OpenBot could not read a file from storage.",
-		}),
-	})
-
 /** Puts the bytes of each named file in the prompt. A file that is gone becomes a short text. */
 const resolve = (
 	load: Files["Service"]["load"],
@@ -73,7 +64,15 @@ export const withFiles = (
 		if (!namesFile(prompt)) return Effect.succeed(options)
 		return resolve(load, prompt).pipe(
 			Effect.map((prompt) => ({ ...(options as object), prompt })),
-			Effect.mapError(() => failed(method)),
+			Effect.mapError(() =>
+				AiError.make({
+					module: "OpenBot",
+					method,
+					reason: AiError.UnknownError.make({
+						description: "OpenBot could not read a file from storage.",
+					}),
+				}),
+			),
 		)
 	}
 	const methods: Methods = {

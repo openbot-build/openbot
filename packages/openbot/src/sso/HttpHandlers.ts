@@ -11,8 +11,6 @@ import { AuditLog } from "../audit/AuditLog.ts"
 import { organizationKey } from "../audit/Resources.ts"
 import { type Connection, Sso } from "./Sso.ts"
 
-const iso = (millis: number) => DateTime.formatIso(DateTime.makeUnsafe(millis))
-
 /** The API form. The client secret only shows whether it is set. */
 export const view = ({
 	connection,
@@ -33,8 +31,8 @@ export const view = ({
 	enforce: connection.enforce,
 	redirectUri: publicOrigin + "/auth/callback/" + connection.id,
 	version: connection.version,
-	createdAt: iso(connection.createdAt),
-	updatedAt: iso(connection.updatedAt),
+	createdAt: DateTime.formatIso(DateTime.makeUnsafe(connection.createdAt)),
+	updatedAt: DateTime.formatIso(DateTime.makeUnsafe(connection.updatedAt)),
 })
 
 export const layer = (config: { readonly publicOrigin: string }) =>
@@ -42,7 +40,6 @@ export const layer = (config: { readonly publicOrigin: string }) =>
 		Effect.gen(function* () {
 			const sso = yield* Sso
 			const audit = yield* AuditLog
-			const unavailable = () => SsoApi.SsoUnavailable.make({})
 			const record = (
 				caller: Caller,
 				action: OrganizationApi.AuditActionOf<"domain" | "sso_connection">,
@@ -56,9 +53,7 @@ export const layer = (config: { readonly publicOrigin: string }) =>
 						resource: organizationKey(caller.organizationId),
 						details,
 					})
-					.pipe(Effect.mapError(unavailable))
-			const toView = (connection: Connection) =>
-				view({ connection, publicOrigin: config.publicOrigin })
+					.pipe(Effect.mapError(() => SsoApi.SsoUnavailable.make({})))
 			return handlers
 				.handle("listDomains", () =>
 					Effect.flatMap(Identity, (caller) =>
@@ -100,7 +95,13 @@ export const layer = (config: { readonly publicOrigin: string }) =>
 				.handle("listSsoConnections", () =>
 					Effect.flatMap(Identity, (caller) =>
 						sso.listConnections(caller.organizationId),
-					).pipe(Effect.map((items) => ({ items: items.map(toView) }))),
+					).pipe(
+						Effect.map((items) => ({
+							items: items.map((connection) =>
+								view({ connection, publicOrigin: config.publicOrigin }),
+							),
+						})),
+					),
 				)
 				.handle("getSsoConnection", ({ params }) =>
 					Effect.gen(function* () {
@@ -113,7 +114,10 @@ export const layer = (config: { readonly publicOrigin: string }) =>
 							return yield* SsoApi.SsoConnectionNotFound.make({
 								connectionId: params.connectionId,
 							})
-						return toView(found.value)
+						return view({
+							connection: found.value,
+							publicOrigin: config.publicOrigin,
+						})
 					}),
 				)
 				.handle("createSsoConnection", ({ payload }) =>
@@ -127,7 +131,10 @@ export const layer = (config: { readonly publicOrigin: string }) =>
 							connectionId: created.id,
 							domains: [...created.domains],
 						})
-						return toView(created)
+						return view({
+							connection: created,
+							publicOrigin: config.publicOrigin,
+						})
 					}),
 				)
 				.handle("updateSsoConnection", ({ params, payload }) =>
@@ -144,7 +151,10 @@ export const layer = (config: { readonly publicOrigin: string }) =>
 								(key) => key !== "expectedVersion",
 							),
 						})
-						return toView(updated)
+						return view({
+							connection: updated,
+							publicOrigin: config.publicOrigin,
+						})
 					}),
 				)
 				.handle("deleteSsoConnection", ({ params }) =>

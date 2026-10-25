@@ -73,7 +73,6 @@ export const make: Effect.Effect<
 	PgClient.PgClient
 > = Effect.gen(function* () {
 	const sql = yield* PgClient.PgClient
-	const unavailable = () => BotsApi.BotStorageUnavailable.make({})
 	const collection = <
 		S extends Schema.Codec<any, any>,
 		Status extends string = string,
@@ -97,7 +96,7 @@ export const make: Effect.Effect<
 					Effect.flatMap((row) =>
 						Effect.transposeOption(Option.map(row, (row) => decode(row.body))),
 					),
-					Effect.mapError(unavailable),
+					Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})),
 				),
 			list: (organizationId, filter = {}) =>
 				sql<{
@@ -106,7 +105,7 @@ export const make: Effect.Effect<
 					Effect.flatMap((rows) =>
 						Effect.forEach(rows, (row) => decode(row.body)),
 					),
-					Effect.mapError(unavailable),
+					Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})),
 				),
 			withStatus: (status) =>
 				sql<{
@@ -123,7 +122,7 @@ export const make: Effect.Effect<
 							),
 						),
 					),
-					Effect.mapError(unavailable),
+					Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})),
 				),
 			put: (keys, value) =>
 				Schema.encodeEffect(codec)(value).pipe(
@@ -132,12 +131,12 @@ export const make: Effect.Effect<
 							sql`INSERT INTO openbot_bot_records (kind, organization_id, id, owner, scope, status, body) VALUES (${kind}, ${keys.organizationId}, ${keys.id}, ${keys.owner}, ${keys.scope}, ${keys.status}, ${body}) ON CONFLICT (kind, organization_id, id) DO UPDATE SET owner = EXCLUDED.owner, scope = EXCLUDED.scope, status = EXCLUDED.status, body = EXCLUDED.body`,
 					),
 					Effect.asVoid,
-					Effect.mapError(unavailable),
+					Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})),
 				),
 			remove: (organizationId, id) =>
 				sql`DELETE FROM openbot_bot_records WHERE kind = ${kind} AND organization_id = ${organizationId} AND id = ${id}`.pipe(
 					Effect.asVoid,
-					Effect.mapError(unavailable),
+					Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})),
 				),
 		}
 	}
@@ -148,12 +147,16 @@ export const make: Effect.Effect<
 				.withTransaction(
 					Effect.gen(function* () {
 						yield* sql`SELECT pg_advisory_xact_lock(hashtextextended(${"bots:" + key}, 0))`.pipe(
-							Effect.mapError(unavailable),
+							Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})),
 						)
 						return yield* operation
 					}),
 				)
-				.pipe(Effect.catchTag("SqlError", unavailable)),
+				.pipe(
+					Effect.catchTag("SqlError", () =>
+						BotsApi.BotStorageUnavailable.make({}),
+					),
+				),
 	})
 })
 export const layer = Layer.effect(BotRecords, make)

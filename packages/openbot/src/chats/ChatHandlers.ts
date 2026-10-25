@@ -82,7 +82,6 @@ const implementations = Effect.gen(function* () {
 	const memoryBot = yield* MemoryBot
 	const files = yield* Files
 	const services = yield* Effect.context<AuthorizationServices>()
-	const unavailable = () => ChatStorageUnavailable.make({})
 	return {
 		sendBotMessage: ({ params, payload }: Request<"sendBotMessage">) =>
 			Effect.gen(function* () {
@@ -106,10 +105,12 @@ const implementations = Effect.gen(function* () {
 				const chats = yield* current
 				const view = yield* chats.read(params.chatId)
 				const kind = ChatHost.hostState(view.chat).kind
-				// A person talks in a direct Chat, or adds to the work of a task Chat.
-				if (kind !== "direct" && kind !== "task")
+				// A person talks in a direct Chat or a live Chat, or adds to the work of a
+				// task Chat. In a live Chat, the message waits for its Live session.
+				if (kind !== "direct" && kind !== "task" && kind !== "live")
 					return yield* ChatConflict.make({
-						message: "Only direct Chats and task Chats take messages.",
+						message:
+							"Only direct Chats, task Chats and live Chats take messages.",
 					})
 				return yield* send(files, chats, params.chatId, payload, caller)
 			}),
@@ -144,9 +145,10 @@ const implementations = Effect.gen(function* () {
 				const chats = yield* current
 				const view = yield* chats.read(params.chatId)
 				const kind = ChatHost.hostState(view.chat).kind
-				if (kind !== "direct" && kind !== "channel")
+				if (kind !== "direct" && kind !== "channel" && kind !== "live")
 					return yield* ChatConflict.make({
-						message: "Only direct Chats and channel Chats can be deleted.",
+						message:
+							"Only direct Chats, channel Chats and live Chats can be deleted.",
 					})
 				// The work that the Chat gave away ends first.
 				yield* coordinator
@@ -155,7 +157,7 @@ const implementations = Effect.gen(function* () {
 						params.chatId,
 						"The Chat was deleted.",
 					)
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => ChatStorageUnavailable.make({})))
 				yield* chats.remove(params.chatId)
 			}),
 		chatModels: ({ params }: Request<"chatModels">) =>
@@ -192,7 +194,7 @@ const implementations = Effect.gen(function* () {
 							params.chatId,
 							"The person stopped the work.",
 						)
-						.pipe(Effect.mapError(unavailable))
+						.pipe(Effect.mapError(() => ChatStorageUnavailable.make({})))
 				return yield* chats.interrupt(params.chatId)
 			}),
 		chatTodos: ({ params }: Request<"chatTodos">) =>
@@ -207,7 +209,7 @@ const implementations = Effect.gen(function* () {
 				yield* (yield* current).get(params.chatId)
 				const list = yield* delegations
 					.forChat(caller.organizationId, params.chatId)
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => ChatStorageUnavailable.make({})))
 				const now = yield* Clock.currentTimeMillis
 				return list.map((stored) => view(stored, now))
 			}),
@@ -218,7 +220,7 @@ const implementations = Effect.gen(function* () {
 				yield* (yield* current).get(params.chatId)
 				return yield* memoryBot
 					.confessions(caller.organizationId, params.chatId)
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => ChatStorageUnavailable.make({})))
 			}),
 		chatEnrichments: ({ params }: Request<"chatEnrichments">) =>
 			Effect.gen(function* () {
@@ -226,7 +228,7 @@ const implementations = Effect.gen(function* () {
 				yield* (yield* current).get(params.chatId)
 				return yield* memoryBot
 					.enrichments(caller.organizationId, params.chatId)
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => ChatStorageUnavailable.make({})))
 			}),
 	}
 })

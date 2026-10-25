@@ -8,11 +8,6 @@ import type * as OpenAiProvider from "./OpenAiProvider.ts"
 
 const Tokens = Schema.Struct({ input_tokens: Schema.Natural })
 const Compacted = Schema.Struct({ output: Schema.Array(Schema.JsonObject) })
-const failed = (error: { readonly _tag: string }) =>
-	new ContextCompaction.ContextCompactionError({
-		reason: "request-failed",
-		message: String(error),
-	})
 
 export const make = (
 	defaults: OpenAiProvider.Defaults = {},
@@ -44,7 +39,15 @@ export const make = (
 					})
 					return (yield* Schema.decodeUnknownEffect(Tokens)(response))
 						.input_tokens
-				}).pipe(Effect.mapError(failed)),
+				}).pipe(
+					Effect.mapError(
+						(error) =>
+							new ContextCompaction.ContextCompactionError({
+								reason: "request-failed",
+								message: String(error),
+							}),
+					),
+				),
 			compact: (request) =>
 				Effect.gen(function* () {
 					const encoded = yield* encode(request)
@@ -64,7 +67,15 @@ export const make = (
 						items: compacted.output,
 						prompt: Prompt.empty,
 					}
-				}).pipe(Effect.mapError(failed)),
+				}).pipe(
+					Effect.mapError(
+						(error) =>
+							new ContextCompaction.ContextCompactionError({
+								reason: "request-failed",
+								message: String(error),
+							}),
+					),
+				),
 		})
 	})
 

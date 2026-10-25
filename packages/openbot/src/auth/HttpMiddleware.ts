@@ -107,7 +107,10 @@ const chooseOrganization = (
 		: Effect.fail(AuthApi.OrganizationRequired.make({}))
 }
 
-/** Resolve the session cookie. A write from the browser must come from the public origin. */
+/**
+ * Resolve the session cookie. A write from the browser must come from the public origin.
+ * So must a WebSocket, because a page on another site can open one with the cookie.
+ */
 const resolveCookie = (
 	auth: typeof Auth.Service,
 	config: { readonly publicOrigin: string },
@@ -116,7 +119,8 @@ const resolveCookie = (
 	Effect.gen(function* () {
 		const request = yield* HttpServerRequest.HttpServerRequest
 		const forbiddenOrigin =
-			HttpMethod.hasBody(request.method) &&
+			(HttpMethod.hasBody(request.method) ||
+				request.headers["upgrade"]?.toLowerCase() === "websocket") &&
 			request.headers["origin"] !== config.publicOrigin
 		const session = yield* auth
 			.resolveSession(credential, { refresh: !forbiddenOrigin })

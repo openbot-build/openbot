@@ -61,13 +61,8 @@ export interface Conversation {
 	readonly owner: string
 }
 
-const unavailable = () => ChannelsApi.ChannelsUnavailable.make({})
-
 /** A link code lasts this long. A person asks the bot again for a new one. */
 export const linkLifetimeMs = 15 * 60 * 1000
-
-const hashCode = (code: string) =>
-	createHash("sha256").update(code).digest("hex")
 
 const binding = (id: string) => `openbot_channels:${id}:credentials`
 
@@ -318,7 +313,7 @@ export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-		effect.pipe(Effect.mapError(unavailable))
+		effect.pipe(Effect.mapError(() => ChannelsApi.ChannelsUnavailable.make({})))
 	const where = (organizationId: string, id: string) =>
 		and(eq(channels.organizationId, organizationId), eq(channels.id, id))
 	const row = (organizationId: string, id: string) =>
@@ -335,10 +330,11 @@ export const make = Effect.gen(function* () {
 	const open = (row: Row) =>
 		stored(secrets.open(row.credentials, binding(row.id))).pipe(
 			Effect.flatMap((json) =>
-				decodeCredentials(json).pipe(Effect.mapError(unavailable)),
+				decodeCredentials(json).pipe(
+					Effect.mapError(() => ChannelsApi.ChannelsUnavailable.make({})),
+				),
 			),
 		)
-	const linkInvalid = () => ChannelsApi.ChannelLinkInvalid.make({})
 	/** An open code of the organization, with its Channel. */
 	const openLink = (organizationId: string, code: string) =>
 		Effect.gen(function* () {
@@ -347,7 +343,12 @@ export const make = Effect.gen(function* () {
 				db
 					.select()
 					.from(channelLinks)
-					.where(eq(channelLinks.codeHash, hashCode(code))),
+					.where(
+						eq(
+							channelLinks.codeHash,
+							createHash("sha256").update(code).digest("hex"),
+						),
+					),
 			))[0]
 			if (
 				link === undefined ||
@@ -355,9 +356,10 @@ export const make = Effect.gen(function* () {
 				link.usedAt !== null ||
 				link.expiresAt <= now
 			)
-				return yield* linkInvalid()
+				return yield* ChannelsApi.ChannelLinkInvalid.make({})
 			const channel = yield* row(organizationId, link.channelId)
-			if (Option.isNone(channel)) return yield* linkInvalid()
+			if (Option.isNone(channel))
+				return yield* ChannelsApi.ChannelLinkInvalid.make({})
 			return { link, channel: channel.value, now }
 		})
 	const conversationOf = (
@@ -549,7 +551,7 @@ export const make = Effect.gen(function* () {
 				const code = "ocl_" + randomBytes(32).toString("base64url")
 				yield* stored(
 					db.insert(channelLinks).values({
-						codeHash: hashCode(code),
+						codeHash: createHash("sha256").update(code).digest("hex"),
 						organizationId: input.organizationId,
 						channelId: input.channelId,
 						externalUserId: input.externalUserId,
@@ -587,7 +589,8 @@ export const make = Effect.gen(function* () {
 						)
 						.returning({ code: channelLinks.codeHash }),
 				)
-				if (used.length === 0) return yield* linkInvalid()
+				if (used.length === 0)
+					return yield* ChannelsApi.ChannelLinkInvalid.make({})
 				const values = {
 					organizationId,
 					channelId: link.channelId,

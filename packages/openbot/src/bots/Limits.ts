@@ -112,12 +112,10 @@ export const resumed = (
 	}
 }
 
-const minutes = (ms: number) => Math.round(ms / 60000)
-
 /** Why the work asks to go on, for the decider. */
 const reasonOf = (limit: Limit, limits: DelegationsApi.DelegationLimits) =>
 	limit === "time"
-		? `The work ran for its time limit of ${minutes(limits.timeMs)} minutes and wants more time.`
+		? `The work ran for its time limit of ${Math.round(limits.timeMs / 60000)} minutes and wants more time.`
 		: limit === "steps"
 			? `The work used its limit of ${limits.steps} model steps and wants more steps.`
 			: `The work used its budget of ${(limits.budgetMicros ?? 0) / 1_000_000} US dollars and wants more money.`

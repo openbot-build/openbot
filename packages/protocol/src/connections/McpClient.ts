@@ -98,12 +98,6 @@ export const decodeStandard = <A>(
 		),
 	)
 
-const invalidInput = () =>
-	new ClientError({
-		reason: "Schema",
-		issue: "The input response does not match this operation.",
-	})
-
 const decodeInputs = (
 	continuation: Continuation,
 	responses: Schema.JsonObject,
@@ -112,11 +106,27 @@ const decodeInputs = (
 		const parsed = yield* decodeStandard(
 			() => Mcp.withInputRequired(Mcp.specTypeSchemas.CallToolResult),
 			continuation.request,
-			invalidInput,
-		).pipe(Effect.filterOrFail(Mcp.isInputRequiredResult, invalidInput))
+			() =>
+				new ClientError({
+					reason: "Schema",
+					issue: "The input response does not match this operation.",
+				}),
+		).pipe(
+			Effect.filterOrFail(
+				Mcp.isInputRequiredResult,
+				() =>
+					new ClientError({
+						reason: "Schema",
+						issue: "The input response does not match this operation.",
+					}),
+			),
+		)
 		const requests = parsed.inputRequests ?? {}
 		if (Object.keys(responses).some((id) => requests[id] === undefined))
-			return yield* invalidInput()
+			return yield* new ClientError({
+				reason: "Schema",
+				issue: "The input response does not match this operation.",
+			})
 		const decoded: Mcp.InputResponses = yield* Effect.all(
 			Record.map(requests, (request, id) =>
 				Match.value(request).pipe(
@@ -124,7 +134,11 @@ const decodeInputs = (
 						decodeStandard(
 							() => Mcp.specTypeSchemas.ElicitResult,
 							responses[id],
-							invalidInput,
+							() =>
+								new ClientError({
+									reason: "Schema",
+									issue: "The input response does not match this operation.",
+								}),
 						).pipe(
 							Effect.tap((result) => {
 								const params = request.params
@@ -137,7 +151,12 @@ const decodeInputs = (
 													params.requestedSchema as Mcp.JsonSchemaType,
 												),
 											result.content,
-											invalidInput,
+											() =>
+												new ClientError({
+													reason: "Schema",
+													issue:
+														"The input response does not match this operation.",
+												}),
 										)
 									: Effect.void
 							}),
@@ -147,14 +166,22 @@ const decodeInputs = (
 						decodeStandard(
 							() => Mcp.specTypeSchemas.CreateMessageResult,
 							responses[id],
-							invalidInput,
+							() =>
+								new ClientError({
+									reason: "Schema",
+									issue: "The input response does not match this operation.",
+								}),
 						),
 					),
 					Match.when({ method: "roots/list" }, () =>
 						decodeStandard(
 							() => Mcp.specTypeSchemas.ListRootsResult,
 							responses[id],
-							invalidInput,
+							() =>
+								new ClientError({
+									reason: "Schema",
+									issue: "The input response does not match this operation.",
+								}),
 						),
 					),
 					Match.exhaustive,
@@ -922,7 +949,14 @@ export const open = Effect.fn("Client.open")(function* (options: {
 										arguments: Schema.optionalKey(Schema.JsonObject),
 									}),
 								)(continuation.params).pipe(
-									Effect.mapError(invalidInput),
+									Effect.mapError(
+										() =>
+											new ClientError({
+												reason: "Schema",
+												issue:
+													"The input response does not match this operation.",
+											}),
+									),
 									Effect.flatMap((params) => callTool(params, call, next)),
 								),
 							),
@@ -936,7 +970,14 @@ export const open = Effect.fn("Client.open")(function* (options: {
 										}),
 									]),
 								)(continuation.params).pipe(
-									Effect.mapError(invalidInput),
+									Effect.mapError(
+										() =>
+											new ClientError({
+												reason: "Schema",
+												issue:
+													"The input response does not match this operation.",
+											}),
+									),
 									Effect.flatMap((params) =>
 										"uri" in params
 											? Effect.succeed(params.uri)
@@ -945,7 +986,12 @@ export const open = Effect.fn("Client.open")(function* (options: {
 														new Mcp.UriTemplate(params.uriTemplate).expand(
 															params.values,
 														),
-													catch: invalidInput,
+													catch: () =>
+														new ClientError({
+															reason: "Schema",
+															issue:
+																"The input response does not match this operation.",
+														}),
 												}),
 									),
 									Effect.flatMap((uri) => readResource({ uri }, call, next)),
@@ -960,7 +1006,14 @@ export const open = Effect.fn("Client.open")(function* (options: {
 										),
 									}),
 								)(continuation.params).pipe(
-									Effect.mapError(invalidInput),
+									Effect.mapError(
+										() =>
+											new ClientError({
+												reason: "Schema",
+												issue:
+													"The input response does not match this operation.",
+											}),
+									),
 									Effect.flatMap((params) => getPrompt(params, call, next)),
 								),
 							),

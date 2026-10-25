@@ -23,17 +23,20 @@ const lastUsedResolution = 60 * 1000
 const PolicyJson = Schema.fromJsonString(Authorization.PolicySchema)
 const decodePolicy = Schema.decodeUnknownSync(PolicyJson)
 const encodePolicy = Schema.encodeSync(PolicyJson)
-const hash = (secret: string) =>
-	createHash("sha256").update(secret).digest("hex")
-const iso = (millis: number) => DateTime.formatIso(DateTime.makeUnsafe(millis))
 const view = (row: typeof tokens.$inferSelect): UserTokensApi.Token => ({
 	id: row.id,
 	name: row.name,
 	prefix: row.prefix,
 	policy: decodePolicy(row.policy),
-	createdAt: iso(row.createdAt),
-	expiresAt: row.expiresAt === null ? null : iso(row.expiresAt),
-	lastUsedAt: row.lastUsedAt === null ? null : iso(row.lastUsedAt),
+	createdAt: DateTime.formatIso(DateTime.makeUnsafe(row.createdAt)),
+	expiresAt:
+		row.expiresAt === null
+			? null
+			: DateTime.formatIso(DateTime.makeUnsafe(row.expiresAt)),
+	lastUsedAt:
+		row.lastUsedAt === null
+			? null
+			: DateTime.formatIso(DateTime.makeUnsafe(row.lastUsedAt)),
 })
 
 export const make: Effect.Effect<
@@ -42,7 +45,6 @@ export const make: Effect.Effect<
 	PgClient.PgClient
 > = Effect.gen(function* () {
 	const db = yield* Db.make
-	const unavailable = () => UserTokensApi.TokenStorageUnavailable.make({})
 	const owned = (owner: {
 		readonly organizationId: string
 		readonly userId: string
@@ -80,7 +82,7 @@ export const make: Effect.Effect<
 							userId: owner.userId,
 							name: input.name.trim(),
 							prefix: secret.slice(0, UserTokensApi.SecretPrefix.length + 8),
-							hash: hash(secret),
+							hash: createHash("sha256").update(secret).digest("hex"),
 							policy: encodePolicy(policy),
 							createdAt: now,
 							expiresAt:
@@ -95,7 +97,9 @@ export const make: Effect.Effect<
 				)
 			}).pipe(
 				Effect.mapError((error) =>
-					error._tag === "TokenLimitReached" ? error : unavailable(),
+					error._tag === "TokenLimitReached"
+						? error
+						: UserTokensApi.TokenStorageUnavailable.make({}),
 				),
 			),
 		list: (owner) =>
@@ -106,7 +110,7 @@ export const make: Effect.Effect<
 				.orderBy(tokens.createdAt, tokens.id)
 				.pipe(
 					Effect.map((rows) => rows.map(view)),
-					Effect.mapError(unavailable),
+					Effect.mapError(() => UserTokensApi.TokenStorageUnavailable.make({})),
 				),
 		revoke: (owner, id) =>
 			db
@@ -114,7 +118,7 @@ export const make: Effect.Effect<
 				.where(and(owned(owner), eq(tokens.id, id)))
 				.returning()
 				.pipe(
-					Effect.mapError(unavailable),
+					Effect.mapError(() => UserTokensApi.TokenStorageUnavailable.make({})),
 					Effect.flatMap(([row]) =>
 						row === undefined
 							? Effect.fail(UserTokensApi.TokenNotFound.make({}))
@@ -128,7 +132,7 @@ export const make: Effect.Effect<
 				.where(and(owned(owner), eq(tokens.id, id)))
 				.pipe(
 					Effect.map((rows) => Option.map(Option.fromNullishOr(rows[0]), view)),
-					Effect.mapError(unavailable),
+					Effect.mapError(() => UserTokensApi.TokenStorageUnavailable.make({})),
 				),
 		authenticate: (credential) =>
 			Effect.gen(function* () {
@@ -138,7 +142,9 @@ export const make: Effect.Effect<
 				const [row] = yield* db
 					.select()
 					.from(tokens)
-					.where(eq(tokens.hash, hash(secret)))
+					.where(
+						eq(tokens.hash, createHash("sha256").update(secret).digest("hex")),
+					)
 					.pipe(
 						Effect.mapError(() =>
 							AuthUnavailable.make({ dependency: "storage" }),

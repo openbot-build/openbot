@@ -180,6 +180,12 @@ export interface RuntimeOptions<
 > {
 	readonly store: ChatStore.Store<P>
 	readonly bot: Bot.Definition<Tools, E, R, BuildE, BuildR, HostTools>
+	/**
+	 * Whether this runtime may start a Turn in the Chat now. The default is yes. When it
+	 * is no, input waits in the inbox, and a runtime that may start it drains it later.
+	 * A host uses it when only one process can run the Turns of a Chat.
+	 */
+	readonly canStart?: (view: View<P>) => Effect.Effect<boolean>
 }
 export interface Runtime<
 	P = {},

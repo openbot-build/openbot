@@ -20,8 +20,6 @@ import { Bots } from "./Bots.ts"
 import * as InvitationLinks from "./InvitationLinks.ts"
 import { shareable } from "./Sharing.ts"
 
-const unavailable = () => BotsApi.BotStorageUnavailable.make({})
-
 export const layer = (publicOrigin: string) =>
 	HttpApiBuilder.group(OpenBotApi, "bots", (handlers) =>
 		Effect.gen(function* () {
@@ -60,7 +58,7 @@ export const layer = (publicOrigin: string) =>
 						}),
 						details,
 					})
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})))
 			/**
 			 * The memory pool of a Bot, as the caller sees it. Each person reads only the
 			 * entries for them, in their own organization. Nobody reads another person's memory.
@@ -328,7 +326,9 @@ export const layer = (publicOrigin: string) =>
 								? Option.some(
 										yield* InvitationLinks.make.pipe(
 											Effect.provideContext(services),
-											Effect.mapError(unavailable),
+											Effect.mapError(() =>
+												BotsApi.BotStorageUnavailable.make({}),
+											),
 										),
 									)
 								: Option.none()
@@ -352,7 +352,7 @@ export const layer = (publicOrigin: string) =>
 							.pipe(
 								Effect.mapError((error) =>
 									error._tag === "OrganizationUnavailable"
-										? unavailable()
+										? BotsApi.BotStorageUnavailable.make({})
 										: error,
 								),
 							)
@@ -378,7 +378,9 @@ export const layer = (publicOrigin: string) =>
 						const bot = yield* access(caller, params.botId, "share")
 						return yield* organization
 							.listBotInvitations(caller.organizationId, bot.id, query.status)
-							.pipe(Effect.mapError(unavailable))
+							.pipe(
+								Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})),
+							)
 					}),
 				)
 				.handle("botInvitationSecret", ({ params }) =>
@@ -390,7 +392,7 @@ export const layer = (publicOrigin: string) =>
 							.pipe(
 								Effect.mapError((error) =>
 									error._tag === "OrganizationUnavailable"
-										? unavailable()
+										? BotsApi.BotStorageUnavailable.make({})
 										: error,
 								),
 							)
@@ -399,7 +401,9 @@ export const layer = (publicOrigin: string) =>
 								? null
 								: yield* InvitationLinks.open(link).pipe(
 										Effect.provideContext(services),
-										Effect.mapError(unavailable),
+										Effect.mapError(() =>
+											BotsApi.BotStorageUnavailable.make({}),
+										),
 									)
 						return {
 							invitation,
@@ -421,7 +425,7 @@ export const layer = (publicOrigin: string) =>
 							.pipe(
 								Effect.mapError((error) =>
 									error._tag === "OrganizationUnavailable"
-										? unavailable()
+										? BotsApi.BotStorageUnavailable.make({})
 										: error,
 								),
 							)
@@ -444,8 +448,6 @@ export const layerInvitations = HttpApiBuilder.group(
 			const organization = yield* Organization
 			const audit = yield* AuditLog
 			const services = yield* Effect.context<AuthorizationServices>()
-			const invalid = (message: string) =>
-				OrganizationApi.InvitationInvalid.make({ message })
 			return handlers.handle("acceptBotInvitation", ({ payload }) =>
 				Effect.gen(function* () {
 					const account = yield* Account
@@ -459,12 +461,14 @@ export const layerInvitations = HttpApiBuilder.group(
 									} as const)
 								: undefined
 					if (by === undefined)
-						return yield* invalid("Send `invitation` or `secret`.")
+						return yield* OrganizationApi.InvitationInvalid.make({
+							message: "Send `invitation` or `secret`.",
+						})
 					// The organization where the person uses the Bot. They name it, a user
 					// token names it, or it is their only organization.
 					const memberships = yield* organization
 						.memberships(account.userId)
-						.pipe(Effect.mapError(unavailable))
+						.pipe(Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})))
 					const chosen =
 						payload.organization ??
 						account.organizationId ??
@@ -472,28 +476,32 @@ export const layerInvitations = HttpApiBuilder.group(
 							? memberships[0]?.organizationId
 							: undefined)
 					if (chosen === undefined)
-						return yield* invalid(
-							"Name the organization where you use the Bot in `organization`.",
-						)
+						return yield* OrganizationApi.InvitationInvalid.make({
+							message:
+								"Name the organization where you use the Bot in `organization`.",
+						})
 					const active = yield* organization
 						.activeMember(chosen, account.userId)
-						.pipe(Effect.mapError(unavailable))
+						.pipe(Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})))
 					if (Option.isNone(active))
-						return yield* invalid(
-							"You must be an active member of the organization where you use the Bot.",
-						)
+						return yield* OrganizationApi.InvitationInvalid.make({
+							message:
+								"You must be an active member of the organization where you use the Bot.",
+						})
 					const taken = yield* organization
 						.takeBotInvitation(account.userId, by)
 						.pipe(
 							Effect.mapError((error) =>
 								error._tag === "OrganizationUnavailable"
-									? unavailable()
+									? BotsApi.BotStorageUnavailable.make({})
 									: error,
 							),
 						)
 					const source = yield* bots.find(taken.organizationId, taken.bot)
 					if (Option.isNone(source) || !shareable(source.value))
-						return yield* invalid("This Bot is not shared any more.")
+						return yield* OrganizationApi.InvitationInvalid.make({
+							message: "This Bot is not shared any more.",
+						})
 					const caller: Caller = {
 						kind: "member",
 						organizationId: chosen,
@@ -524,7 +532,7 @@ export const layerInvitations = HttpApiBuilder.group(
 								organizationId: chosen,
 							},
 						})
-						.pipe(Effect.mapError(unavailable))
+						.pipe(Effect.mapError(() => BotsApi.BotStorageUnavailable.make({})))
 					return linked
 				}),
 			)

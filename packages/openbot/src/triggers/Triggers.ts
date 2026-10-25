@@ -30,14 +30,6 @@ export const nextRun = (input: {
 		),
 	)
 
-const hashSecret = (secret: string) =>
-	createHash("sha256").update(secret).digest("hex")
-
-const unavailable = () => TriggersApi.TriggerStorageUnavailable.make({})
-const notFound = (id: string) => TriggersApi.TriggerNotFound.make({ id })
-const invalid = (message: string) =>
-	TriggersApi.TriggerInvalid.make({ message })
-
 export type Failure =
 	| TriggersApi.TriggerNotFound
 	| TriggersApi.TriggerConflict
@@ -156,7 +148,9 @@ const nextOf = (trigger: Pick<Trigger, "schedule" | "enabled">, now: number) =>
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-		effect.pipe(Effect.mapError(unavailable))
+		effect.pipe(
+			Effect.mapError(() => TriggersApi.TriggerStorageUnavailable.make({})),
+		)
 	const where = (organizationId: string, id: string) =>
 		and(eq(triggers.organizationId, organizationId), eq(triggers.id, id))
 	const find = (organizationId: string, id: string) =>
@@ -167,7 +161,8 @@ export const make = Effect.gen(function* () {
 	const access = (caller: Caller, id: string, action: "read" | "write") =>
 		Effect.gen(function* () {
 			const found = yield* find(caller.organizationId, id)
-			if (Option.isNone(found)) return yield* notFound(id)
+			if (Option.isNone(found))
+				return yield* TriggersApi.TriggerNotFound.make({ id })
 			yield* guard(
 				caller,
 				{
@@ -178,7 +173,7 @@ export const make = Effect.gen(function* () {
 					}),
 				},
 				{
-					hide: () => notFound(id),
+					hide: () => TriggersApi.TriggerNotFound.make({ id }),
 				},
 			)
 			return found.value
@@ -187,7 +182,8 @@ export const make = Effect.gen(function* () {
 		schedule === null
 			? Effect.void
 			: Result.match(nextRun({ schedule, now }), {
-					onFailure: (message) => Effect.fail(invalid(message)),
+					onFailure: (message) =>
+						Effect.fail(TriggersApi.TriggerInvalid.make({ message })),
 					onSuccess: () => Effect.void,
 				})
 	const save = (
@@ -380,7 +376,7 @@ export const make = Effect.gen(function* () {
 				const trigger = yield* change(caller, id, undefined, (current) =>
 					Effect.succeed({
 						trigger: { ...current, webhook: true },
-						hash: hashSecret(secret),
+						hash: createHash("sha256").update(secret).digest("hex"),
 					}),
 				)
 				return { trigger, secret }
@@ -397,7 +393,10 @@ export const make = Effect.gen(function* () {
 				if (row === undefined || row.hookSecretHash === null || !row.enabled)
 					return Option.none()
 				const expected = Buffer.from(row.hookSecretHash, "hex")
-				const given = Buffer.from(hashSecret(secret), "hex")
+				const given = Buffer.from(
+					createHash("sha256").update(secret).digest("hex"),
+					"hex",
+				)
 				if (!timingSafeEqual(expected, given)) return Option.none()
 				return Option.some({
 					organizationId: row.organizationId,

@@ -125,11 +125,6 @@ export const name = (
 	return named
 }
 
-const hashArguments = (binding: string, args: Schema.JsonObject) =>
-	createHash("sha256")
-		.update(JSON.stringify([binding, args]))
-		.digest("hex")
-
 const errorText = (
 	name: string,
 	message: string,
@@ -355,7 +350,9 @@ export const make: Effect.Effect<
 						}
 						// The invocation gets the program name, so it is the same in each run.
 						const binding = { ...entry.binding, name: entry.alias }
-						const argumentsHash = hashArguments(call.binding, args.value)
+						const argumentsHash = createHash("sha256")
+							.update(JSON.stringify([call.binding, args.value]))
+							.digest("hex")
 						const recorded = (yield* Ref.get(state)).calls.find(
 							(stored) => stored.index === call.index,
 						)

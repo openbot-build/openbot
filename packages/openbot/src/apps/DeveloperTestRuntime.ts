@@ -93,7 +93,6 @@ const policy = Client.InvocationPolicy.of({
 const uncheckedLists: ReadonlyArray<Api.TestStage> = (
 	["tools", "resources", "resourceTemplates", "prompts"] as const
 ).map((name) => ({ name, status: "NotChecked", items: [], reason: null }))
-const failure = (reason: string) => Api.DeveloperConflict.make({ reason })
 
 export const make = (
 	publicOrigin: string,
@@ -487,7 +486,9 @@ export const make = (
 						),
 						Option.filter((issuer) => test.value.issuers.includes(issuer)),
 						Effect.fromOption,
-						Effect.mapError(() => failure("SelectDeclaredIssuer")),
+						Effect.mapError(() =>
+							Api.DeveloperConflict.make({ reason: "SelectDeclaredIssuer" }),
+						),
 					)
 					const scopes =
 						input.scopes.length === 0
@@ -515,7 +516,13 @@ export const make = (
 									: { resourceMetadataUrl: test.resourceMetadataUrl }),
 							}),
 						),
-					).pipe(Effect.mapError(() => failure("AuthorizationCouldNotStart")))
+					).pipe(
+						Effect.mapError(() =>
+							Api.DeveloperConflict.make({
+								reason: "AuthorizationCouldNotStart",
+							}),
+						),
+					)
 					const flow = yield* Rows.getFlow(db, namespace, pending.flowId)
 					const value: Api.TestAuthorization = {
 						...flow.value,
@@ -530,7 +537,11 @@ export const make = (
 					const flow = yield* bound.flows
 						.get({ key: { owner, connectionId: id }, flowId })
 						.pipe(
-							Effect.mapError(() => failure("AuthorizationFlowUnavailable")),
+							Effect.mapError(() =>
+								Api.DeveloperConflict.make({
+									reason: "AuthorizationFlowUnavailable",
+								}),
+							),
 						)
 					yield* Effect.scoped(
 						withNetwork(
@@ -544,7 +555,11 @@ export const make = (
 							}),
 						),
 					).pipe(
-						Effect.mapError(() => failure("AuthorizationCouldNotComplete")),
+						Effect.mapError(() =>
+							Api.DeveloperConflict.make({
+								reason: "AuthorizationCouldNotComplete",
+							}),
+						),
 					)
 				}),
 			revoke: (owner, id) =>
@@ -557,7 +572,9 @@ export const make = (
 								? Effect.succeedNone
 								: Effect.fail(error),
 						),
-						Effect.mapError(() => failure("TestCleanupPending")),
+						Effect.mapError(() =>
+							Api.DeveloperConflict.make({ reason: "TestCleanupPending" }),
+						),
 					)
 					if (Option.isNone(found)) return "LocalOnly" as const
 					const connection = found.value
@@ -566,7 +583,11 @@ export const make = (
 							key: connection,
 							change: (current) => ({ ...current, state: "Disabled" }),
 						})
-						.pipe(Effect.mapError(() => failure("TestCleanupPending")))
+						.pipe(
+							Effect.mapError(() =>
+								Api.DeveloperConflict.make({ reason: "TestCleanupPending" }),
+							),
+						)
 					yield* active.close(connection)
 					return yield* Match.value(connection.authorization).pipe(
 						Match.tag("Authorized", (auth) =>
@@ -611,13 +632,19 @@ export const make = (
 							),
 						),
 						Match.orElse(() => Effect.succeed("LocalOnly" as const)),
-						Effect.mapError(() => failure("RemoteRevocationPending")),
+						Effect.mapError(() =>
+							Api.DeveloperConflict.make({ reason: "RemoteRevocationPending" }),
+						),
 					)
 				}),
 			clear: (owner, id) =>
 				stores
 					.bind(owner, id)
-					.clear.pipe(Effect.mapError(() => failure("LocalCleanupPending"))),
+					.clear.pipe(
+						Effect.mapError(() =>
+							Api.DeveloperConflict.make({ reason: "LocalCleanupPending" }),
+						),
+					),
 		})
 	})
 export const layer = (publicOrigin: string) =>

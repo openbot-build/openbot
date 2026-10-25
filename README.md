@@ -27,6 +27,8 @@ app.
   webhook.
 - **Channels.** People talk with a Bot in Slack, Lark, Telegram or their own
   chat system. Each Turn works for the person who wrote the message.
+- **Live mode.** People talk with a Bot in real time, with sound, over one
+  WebSocket. Each thing they say is a normal Turn.
 - **Open Apps.** Bots find and use Apps that publishers put on the open web with
   the OpenBot App Protocol.
 

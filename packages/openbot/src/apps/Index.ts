@@ -292,7 +292,7 @@ export const make = (
 								(app.entry.card.name === cursor.name &&
 									Order.String(app.entry.cardUrl, cursor.cardUrl) > 0)),
 					)
-				const limit = Number(input.limit ?? "20")
+				const limit = input.limit ?? 20
 				const page = filtered.slice(0, limit)
 				return {
 					apps: page,

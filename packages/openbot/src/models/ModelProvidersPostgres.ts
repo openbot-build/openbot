@@ -19,6 +19,8 @@ const Options = Schema.fromJsonString(Schema.Array(Schema.String))
 const AvailabilityJson = Schema.fromJsonString(ModelProvidersApi.Availability)
 const decodeOptions = Schema.decodeUnknownSync(Options)
 const decodeAvailability = Schema.decodeUnknownSync(AvailabilityJson)
+const encodeOptions = Schema.encodeSync(Options)
+const encodeAvailability = Schema.encodeSync(AvailabilityJson)
 const decodeKind = Schema.decodeUnknownSync(ModelProvidersApi.ProviderKind)
 const decodeType = Schema.decodeUnknownSync(ModelProvidersApi.ModelType)
 
@@ -58,11 +60,11 @@ const linkRows = (
 			reasoningEfforts:
 				item.reasoningEfforts === undefined
 					? null
-					: JSON.stringify(item.reasoningEfforts),
+					: encodeOptions(item.reasoningEfforts),
 			serviceTiers:
 				item.serviceTiers === undefined
 					? null
-					: JSON.stringify(item.serviceTiers),
+					: encodeOptions(item.serviceTiers),
 			contextWindow: item.contextWindow ?? null,
 			maxOutputTokens: item.maxOutputTokens ?? null,
 		}
@@ -109,7 +111,9 @@ const servesType = (
 	type: ModelProvidersApi.ModelType,
 ) => {
 	switch (kind) {
+		// OpenAI also serves Live models through its Realtime API.
 		case "openai":
+			return type === "language" || type === "live"
 		case "anthropic":
 			return type === "language"
 		case "typesafe":
@@ -139,7 +143,6 @@ const isKnown = (error: unknown): error is KnownError =>
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
-	const unavailable = () => ModelProvidersApi.ModelProvidersUnavailable.make({})
 	const where = (owner: Owner, id: string) => {
 		const columns = ownerColumns(owner)
 		return and(
@@ -180,10 +183,10 @@ export const make = Effect.gen(function* () {
 			.pipe(
 				Effect.flatMap((rows) => withLinks(rows)),
 				Effect.map((list) => Option.fromNullishOr(list[0])),
-				Effect.mapError(unavailable),
+				Effect.mapError(() =>
+					ModelProvidersApi.ModelProvidersUnavailable.make({}),
+				),
 			)
-	const notFound = (id: string) =>
-		ModelProvidersApi.ModelProviderNotFound.make({ providerId: id })
 	/**
 	 * A provider of the platform links only models of the platform. A provider
 	 * of an organization links its own models and the shared models that the
@@ -243,7 +246,11 @@ export const make = Effect.gen(function* () {
 	/** Keep the errors of the API, and turn database errors into one error. */
 	const known = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 		effect.pipe(
-			Effect.mapError((error) => (isKnown(error) ? error : unavailable())),
+			Effect.mapError((error) =>
+				isKnown(error)
+					? error
+					: ModelProvidersApi.ModelProvidersUnavailable.make({}),
+			),
 		)
 
 	return ModelProviders.of({
@@ -261,7 +268,9 @@ export const make = Effect.gen(function* () {
 				.orderBy(asc(modelProviders.createdAt))
 				.pipe(
 					Effect.flatMap((rows) => withLinks(rows)),
-					Effect.mapError(unavailable),
+					Effect.mapError(() =>
+						ModelProvidersApi.ModelProvidersUnavailable.make({}),
+					),
 				)
 		},
 		get,
@@ -284,7 +293,9 @@ export const make = Effect.gen(function* () {
 					Effect.map((list) =>
 						list.filter((provider) => usableBy({ provider, organizationId })),
 					),
-					Effect.mapError(unavailable),
+					Effect.mapError(() =>
+						ModelProvidersApi.ModelProvidersUnavailable.make({}),
+					),
 				),
 		create: (owner, input) =>
 			known(
@@ -304,7 +315,7 @@ export const make = Effect.gen(function* () {
 						apiKeyHint: hint(input.apiKey),
 						availability:
 							owner.kind === "platform"
-								? JSON.stringify(input.availability)
+								? encodeAvailability(input.availability)
 								: null,
 						version: 1,
 						createdAt: now,
@@ -331,7 +342,10 @@ export const make = Effect.gen(function* () {
 							.from(modelProviders)
 							.where(where(owner, id))
 							.for("update")
-						if (row === undefined) return yield* notFound(id)
+						if (row === undefined)
+							return yield* ModelProvidersApi.ModelProviderNotFound.make({
+								providerId: id,
+							})
 						if (row.version !== patch.expectedVersion)
 							return yield* ModelProvidersApi.ModelProviderConflict.make({
 								version: row.version,
@@ -368,15 +382,21 @@ export const make = Effect.gen(function* () {
 								...(patch.availability === undefined ||
 								owner.kind !== "platform"
 									? {}
-									: { availability: JSON.stringify(patch.availability) }),
+									: { availability: encodeAvailability(patch.availability) }),
 								version: row.version + 1,
 								updatedAt: now,
 							})
 							.where(where(owner, id))
 							.returning()
-						if (updated === undefined) return yield* notFound(id)
+						if (updated === undefined)
+							return yield* ModelProvidersApi.ModelProviderNotFound.make({
+								providerId: id,
+							})
 						const [result] = yield* withLinks([updated], tx)
-						if (result === undefined) return yield* notFound(id)
+						if (result === undefined)
+							return yield* ModelProvidersApi.ModelProviderNotFound.make({
+								providerId: id,
+							})
 						return result
 					}),
 				),
@@ -387,15 +407,26 @@ export const make = Effect.gen(function* () {
 				.where(where(owner, id))
 				.returning({ id: modelProviders.id })
 				.pipe(
-					Effect.mapError(unavailable),
+					Effect.mapError(() =>
+						ModelProvidersApi.ModelProvidersUnavailable.make({}),
+					),
 					Effect.flatMap((rows) =>
-						rows.length === 0 ? Effect.fail(notFound(id)) : Effect.void,
+						rows.length === 0
+							? Effect.fail(
+									ModelProvidersApi.ModelProviderNotFound.make({
+										providerId: id,
+									}),
+								)
+							: Effect.void,
 					),
 				),
 		openKey: (provider) =>
-			secrets
-				.open(provider.apiKey, binding(provider.id))
-				.pipe(Effect.map(Redacted.make), Effect.mapError(unavailable)),
+			secrets.open(provider.apiKey, binding(provider.id)).pipe(
+				Effect.map(Redacted.make),
+				Effect.mapError(() =>
+					ModelProvidersApi.ModelProvidersUnavailable.make({}),
+				),
+			),
 	})
 })
 

@@ -86,11 +86,6 @@ export const makeInspection: Effect.Effect<
 	const rules = yield* Rules
 	const policy = yield* Robots.Robots
 	const cache = yield* Ref.make(HashMap.empty<string, Cached>())
-	const documentError = (
-		url: string,
-		reason: IndexingError["reason"],
-		issue: string,
-	) => new IndexingError({ url, reason, issue })
 	const readHop = Effect.fn("Indexing.readHop")(function* (
 		url: string,
 		robots: boolean,
@@ -119,21 +114,22 @@ export const makeInspection: Effect.Effect<
 			}),
 		})
 		if (reply.url !== url)
-			return yield* documentError(
+			return yield* new IndexingError({
 				url,
-				"Redirect",
-				"Public adapter followed a redirect before robots could be checked",
-			)
+				reason: "Redirect",
+				issue:
+					"Public adapter followed a redirect before robots could be checked",
+			})
 		if (reply.status !== 304) return reply
 		// The consumer below caches only responses that it parsed successfully.
 		return yield* Option.match(cached, {
 			onNone: () =>
 				Effect.fail(
-					documentError(
+					new IndexingError({
 						url,
-						"InvalidDocument",
-						"304 has no validated anonymous cached copy",
-					),
+						reason: "InvalidDocument",
+						issue: "304 has no validated anonymous cached copy",
+					}),
 				),
 			onSome: (entry) =>
 				Effect.succeed<Network.DocumentResponse>({
@@ -172,18 +168,18 @@ export const makeInspection: Effect.Effect<
 				const response = yield* readHop(url, true)
 				if ([301, 302, 303, 307, 308].includes(response.status)) {
 					if (hop >= 5 || response.headers["location"] === undefined)
-						return yield* documentError(
-							original,
-							"RobotsUnavailable",
-							"Could not reach robots.txt within five redirects",
-						)
+						return yield* new IndexingError({
+							url: original,
+							reason: "RobotsUnavailable",
+							issue: "Could not reach robots.txt within five redirects",
+						})
 					const location = response.headers["location"]
 					if (!URL.canParse(location, url))
-						return yield* documentError(
-							original,
-							"RobotsUnavailable",
-							"robots.txt has an invalid redirect",
-						)
+						return yield* new IndexingError({
+							url: original,
+							reason: "RobotsUnavailable",
+							issue: "robots.txt has an invalid redirect",
+						})
 					const next = yield* Schema.decodeEffect(Document.Link)(
 						new URL(location, url).href,
 					)
@@ -194,22 +190,22 @@ export const makeInspection: Effect.Effect<
 					return
 				}
 				if (response.status < 200 || response.status >= 300)
-					return yield* documentError(
-						original,
-						"RobotsUnavailable",
-						"robots.txt is unreachable",
-					)
+					return yield* new IndexingError({
+						url: original,
+						reason: "RobotsUnavailable",
+						issue: "robots.txt is unreachable",
+					})
 				if (
 					response.headers["content-type"]
 						?.split(";", 1)[0]
 						?.trim()
 						.toLowerCase() !== "text/plain"
 				)
-					return yield* documentError(
-						original,
-						"RobotsUnavailable",
-						"robots.txt is not text/plain",
-					)
+					return yield* new IndexingError({
+						url: original,
+						reason: "RobotsUnavailable",
+						issue: "robots.txt is not text/plain",
+					})
 				yield* remember(response, true)
 				// A redirected file applies to the original authority (host and port), never to the final one.
 				if (
@@ -219,11 +215,11 @@ export const makeInspection: Effect.Effect<
 						url: target,
 					})
 				)
-					return yield* documentError(
-						target,
-						"RobotsDenied",
-						"robots.txt disallows this document",
-					)
+					return yield* new IndexingError({
+						url: target,
+						reason: "RobotsDenied",
+						issue: "robots.txt disallows this document",
+					})
 				return
 			})
 		return yield* follow(original, 0)
@@ -244,11 +240,11 @@ export const makeInspection: Effect.Effect<
 				const location = response.headers["location"]
 				// A bad Location header is a typed failure, not a defect from `new URL`.
 				if (hop >= 5 || location === undefined || !URL.canParse(location, url))
-					return yield* documentError(
+					return yield* new IndexingError({
 						url,
-						"Redirect",
-						"Invalid document redirect",
-					)
+						reason: "Redirect",
+						issue: "Invalid document redirect",
+					})
 				const next = yield* Schema.decodeEffect(Document.Link)(
 					new URL(location, url).href,
 				)
@@ -264,11 +260,11 @@ export const makeInspection: Effect.Effect<
 		if (response.status === 404 || response.status === 410)
 			return { found: false, declared: false }
 		if (response.status !== 200)
-			return yield* documentError(
-				probe.catalogUrl,
-				"Unavailable",
-				"Publisher Catalog is not anonymously available",
-			)
+			return yield* new IndexingError({
+				url: probe.catalogUrl,
+				reason: "Unavailable",
+				issue: "Publisher Catalog is not anonymously available",
+			})
 		const catalog = yield* Schema.decodeEffect(
 			Schema.fromJsonString(Document.Catalog),
 		)(response.text)
@@ -353,11 +349,11 @@ export const makeInspection: Effect.Effect<
 					yield* stage("CardRead", "Unconfirmed")
 					const response = yield* read(input.cardUrl)
 					if (response.status !== 200)
-						return yield* documentError(
-							input.cardUrl,
-							"Unavailable",
-							"Card is not anonymously available",
-						)
+						return yield* new IndexingError({
+							url: input.cardUrl,
+							reason: "Unavailable",
+							issue: "Card is not anonymously available",
+						})
 					yield* stage("CardRead", "Passed", response.url)
 					if (noindex(response.headers["x-robots-tag"]))
 						return yield* exclude("NoIndex", true)
@@ -405,11 +401,11 @@ export const makeInspection: Effect.Effect<
 								)
 								const page = yield* read(url)
 								if (page.status !== 200)
-									return yield* documentError(
+									return yield* new IndexingError({
 										url,
-										"Unavailable",
-										"Publisher website is not anonymously available",
-									)
+										reason: "Unavailable",
+										issue: "Publisher website is not anonymously available",
+									})
 								const links = rules.catalogLinks({
 									responseUrl: page.url,
 									link: page.headers["link"],
@@ -481,11 +477,12 @@ export const makeInspection: Effect.Effect<
 											else
 												failures = EffectArray.append(
 													failures,
-													documentError(
-														probe.catalogUrl,
-														"Unavailable",
-														"Previously verified publisher Catalog is no longer available",
-													),
+													new IndexingError({
+														url: probe.catalogUrl,
+														reason: "Unavailable",
+														issue:
+															"Previously verified publisher Catalog is no longer available",
+													}),
 												)
 										}
 									}),

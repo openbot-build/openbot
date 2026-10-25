@@ -16,13 +16,6 @@ export type Provider = CoreProvider.Provider<
 	AnthropicClient.AnthropicClient
 >
 
-const invalid = (description: string) =>
-	AiError.AiError.make({
-		module: "AnthropicProvider",
-		method: "model",
-		reason: AiError.InvalidRequestError.make({ description }),
-	})
-
 // The SDK types own these sets. Each object must name every SDK value and
 // no other value, so the schemas below stay equal to the SDK types.
 const efforts: {
@@ -76,7 +69,17 @@ export const make = ({
 						config,
 					}),
 				})
-			}).pipe(Effect.mapError((error) => invalid(String(error)))),
+			}).pipe(
+				Effect.mapError((error) =>
+					AiError.AiError.make({
+						module: "AnthropicProvider",
+						method: "model",
+						reason: AiError.InvalidRequestError.make({
+							description: String(error),
+						}),
+					}),
+				),
+			),
 	})
 
 export const layer: {

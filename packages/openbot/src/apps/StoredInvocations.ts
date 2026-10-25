@@ -13,17 +13,14 @@ import * as Db from "../database/Database.ts"
 /** The App operations of each owner, kept sealed in Postgres. */
 export type Error =
 	ExperienceNotFound | ExperienceStorageUnavailable | ChatConflict
-export const unavailable = () => ExperienceStorageUnavailable.make({})
 /** Keep the errors that callers handle. Every other storage failure becomes one error. */
 export const failure = (error: unknown) =>
 	error instanceof ChatConflict || error instanceof ExperienceNotFound
 		? error
-		: unavailable()
+		: ExperienceStorageUnavailable.make({})
 const codec = Schema.fromJsonString(AppExecution.Invocation)
 type Sealer = typeof Secrets.Service
 
-const binding = (owner: string, id: string) =>
-	JSON.stringify(["app-invocation", owner, id])
 export const where = (owner: string, id: string) =>
 	and(eq(appInvocations.owner, owner), eq(appInvocations.id, id))
 export const seal = (
@@ -32,7 +29,9 @@ export const seal = (
 	value: AppExecution.Invocation,
 ) =>
 	Schema.encodeEffect(codec)(value).pipe(
-		Effect.flatMap((body) => secrets.seal(body, binding(owner, value.id))),
+		Effect.flatMap((body) =>
+			secrets.seal(body, JSON.stringify(["app-invocation", owner, value.id])),
+		),
 	)
 export const open = (
 	secrets: Sealer,
@@ -40,7 +39,7 @@ export const open = (
 ) =>
 	Effect.gen(function* () {
 		const value = yield* secrets
-			.open(row.body, binding(row.owner, row.id))
+			.open(row.body, JSON.stringify(["app-invocation", row.owner, row.id]))
 			.pipe(Effect.flatMap(Schema.decodeEffect(codec)))
 		return yield* Schema.decodeUnknownEffect(AppExecution.Invocation)({
 			...value,
@@ -89,5 +88,5 @@ export const list = (
 			Effect.flatMap((rows) =>
 				Effect.forEach(rows, (row) => open(secrets, row)),
 			),
-			Effect.mapError(unavailable),
+			Effect.mapError(() => ExperienceStorageUnavailable.make({})),
 		)

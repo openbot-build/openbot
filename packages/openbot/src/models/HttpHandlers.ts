@@ -25,8 +25,6 @@ import {
 import { ModelRegistry } from "./ModelRegistry.ts"
 import { Models, view as modelView } from "./Models.ts"
 
-const unavailable = () => ModelProvidersApi.ModelProvidersUnavailable.make({})
-
 /**
  * A provider cannot go while a setting still names it, or the setting would
  * point at nothing.
@@ -40,7 +38,11 @@ export const checkUnused = (input: {
 		for (const organizationId of input.organizationIds) {
 			const current = yield* settings
 				.organization(organizationId)
-				.pipe(Effect.mapError(unavailable))
+				.pipe(
+					Effect.mapError(() =>
+						ModelProvidersApi.ModelProvidersUnavailable.make({}),
+					),
+				)
 			if (
 				current.document.rulesModel?.provider === input.providerId ||
 				current.document.botMemoryModel?.provider === input.providerId
@@ -82,7 +84,11 @@ export const layer = HttpApiBuilder.group(
 							details.providerId,
 						details,
 					})
-					.pipe(Effect.mapError(unavailable))
+					.pipe(
+						Effect.mapError(() =>
+							ModelProvidersApi.ModelProvidersUnavailable.make({}),
+						),
+					)
 			const recordModel = (
 				caller: Caller,
 				action: "model.created" | "model.updated" | "model.deleted",
@@ -99,7 +105,11 @@ export const layer = HttpApiBuilder.group(
 							details.modelId,
 						details,
 					})
-					.pipe(Effect.mapError(unavailable))
+					.pipe(
+						Effect.mapError(() =>
+							ModelProvidersApi.ModelProvidersUnavailable.make({}),
+						),
+					)
 			const owned = (caller: Caller): Owner =>
 				organizationOwner(caller.organizationId)
 			const find = (caller: Caller, providerId: string) =>
@@ -130,7 +140,11 @@ export const layer = HttpApiBuilder.group(
 						const caller = yield* Identity
 						const catalog = yield* registry
 							.view(caller.organizationId)
-							.pipe(Effect.mapError(unavailable))
+							.pipe(
+								Effect.mapError(() =>
+									ModelProvidersApi.ModelProvidersUnavailable.make({}),
+								),
+							)
 						// The catalog has only the models that the caller may use, and
 						// the providers of those models.
 						const usable = yield* filter(caller, {
@@ -254,7 +268,11 @@ export const layer = HttpApiBuilder.group(
 						const provider = yield* find(caller, params.providerId)
 						const items = yield* billing
 							.prices(provider.id)
-							.pipe(Effect.mapError(unavailable))
+							.pipe(
+								Effect.mapError(() =>
+									ModelProvidersApi.ModelProvidersUnavailable.make({}),
+								),
+							)
 						return { items }
 					}),
 				)
@@ -268,7 +286,11 @@ export const layer = HttpApiBuilder.group(
 							})
 						const price = yield* billing
 							.setPrice(provider.id, payload, caller.userId)
-							.pipe(Effect.mapError(unavailable))
+							.pipe(
+								Effect.mapError(() =>
+									ModelProvidersApi.ModelProvidersUnavailable.make({}),
+								),
+							)
 						yield* audit
 							.record({
 								organizationId: caller.organizationId,
@@ -280,7 +302,11 @@ export const layer = HttpApiBuilder.group(
 									provider.id,
 								details: { providerId: provider.id, ...price },
 							})
-							.pipe(Effect.mapError(unavailable))
+							.pipe(
+								Effect.mapError(() =>
+									ModelProvidersApi.ModelProvidersUnavailable.make({}),
+								),
+							)
 						return price
 					}),
 				)

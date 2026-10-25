@@ -49,11 +49,6 @@ export class IndexWork extends Context.Service<
 	}
 >()("@openbot-build/openbot/apps/IndexWork") {}
 
-const unavailable = () =>
-	new Index.IndexError({
-		reason: "Unavailable",
-		operation: "Public Index work storage",
-	})
 const checkCodec = Schema.fromJsonString(AppIndexApi.Check)
 const sourcesCodec = Schema.fromJsonString(Schema.Array(Discovery.Source))
 const toJob = (
@@ -102,7 +97,11 @@ export const enqueue = (
 					.from(appIndexJobs)
 					.where(jobWhere(namespace, cardUrl))
 					.for("update"))[0]
-				if (row === undefined) return yield* unavailable()
+				if (row === undefined)
+					return yield* new Index.IndexError({
+						reason: "Unavailable",
+						operation: "Public Index work storage",
+					})
 				const previousSources = yield* Schema.decodeEffect(sourcesCodec)(
 					row.sources,
 				)
@@ -132,7 +131,15 @@ export const enqueue = (
 				return yield* toJob(next)
 			}),
 		)
-		.pipe(Effect.mapError(unavailable))
+		.pipe(
+			Effect.mapError(
+				() =>
+					new Index.IndexError({
+						reason: "Unavailable",
+						operation: "Public Index work storage",
+					}),
+			),
+		)
 
 /** Read the job of an App, or the saved result of one of its generations. */
 export const job = (
@@ -170,7 +177,15 @@ export const job = (
 			})
 		}
 		return row === undefined ? Option.none() : Option.some(yield* toJob(row))
-	}).pipe(Effect.mapError(unavailable))
+	}).pipe(
+		Effect.mapError(
+			() =>
+				new Index.IndexError({
+					reason: "Unavailable",
+					operation: "Public Index work storage",
+				}),
+		),
+	)
 
 export const layer = (options: Options = {}) =>
 	Layer.effect(
@@ -233,7 +248,15 @@ export const layer = (options: Options = {}) =>
 							})
 						}),
 					)
-				}).pipe(Effect.mapError(unavailable))
+				}).pipe(
+					Effect.mapError(
+						() =>
+							new Index.IndexError({
+								reason: "Unavailable",
+								operation: "Public Index work storage",
+							}),
+					),
+				)
 			const finish = (
 				claim: Claim,
 				check: AppIndexApi.Check,
@@ -261,7 +284,10 @@ export const layer = (options: Options = {}) =>
 								.returning({ generation: appIndexJobs.generation })
 							const [finished] = rows
 							if (rows.length !== 1 || finished === undefined)
-								return yield* unavailable()
+								return yield* new Index.IndexError({
+									reason: "Unavailable",
+									operation: "Public Index work storage",
+								})
 							yield* tx
 								.insert(appIndexResults)
 								.values({
@@ -274,13 +300,31 @@ export const layer = (options: Options = {}) =>
 								.onConflictDoNothing()
 						}),
 					)
-					.pipe(Effect.asVoid, Effect.mapError(unavailable))
+					.pipe(
+						Effect.asVoid,
+						Effect.mapError(
+							() =>
+								new Index.IndexError({
+									reason: "Unavailable",
+									operation: "Public Index work storage",
+								}),
+						),
+					)
 			const release = (claim: Claim) =>
 				db
 					.update(appIndexJobs)
 					.set({ leaseUntil: 0, claim: null })
 					.where(and(where(claim.cardUrl), eq(appIndexJobs.claim, claim.token)))
-					.pipe(Effect.asVoid, Effect.mapError(unavailable))
+					.pipe(
+						Effect.asVoid,
+						Effect.mapError(
+							() =>
+								new Index.IndexError({
+									reason: "Unavailable",
+									operation: "Public Index work storage",
+								}),
+						),
+					)
 			const verify = (claim: Claim) =>
 				Effect.gen(function* () {
 					const outcome = yield* Option.match(governance.find(claim.cardUrl), {
@@ -366,7 +410,15 @@ export const layerWorker = (options: Options = {}) =>
 				.update(appIndexJobs)
 				.set({ claim: null, leaseUntil: 0 })
 				.where(eq(appIndexJobs.namespace, namespace))
-				.pipe(Effect.mapError(unavailable))
+				.pipe(
+					Effect.mapError(
+						() =>
+							new Index.IndexError({
+								reason: "Unavailable",
+								operation: "Public Index work storage",
+							}),
+					),
+				)
 			const drain: Effect.Effect<void, Index.IndexError> = Effect.suspend(() =>
 				work
 					.runOne()

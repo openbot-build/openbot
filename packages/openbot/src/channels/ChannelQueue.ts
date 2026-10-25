@@ -34,17 +34,19 @@ export const DeliveryKind = Schema.Literals(["reply", "request", "notice"])
 export type DeliveryKind = typeof DeliveryKind.Type
 
 /** The queue writes these columns as JSON, so it reads them back with the same schemas. */
+const TargetJson = Schema.fromJsonString(TargetSchema)
+const MessageJson = Schema.fromJsonString(OutboundMessage)
+const RefJson = Schema.fromJsonString(MessageRef)
+const EventJson = Schema.fromJsonString(ChannelEventSchema)
 const decodeKind = Schema.decodeUnknownSync(DeliveryKind)
-const decodeTarget = Schema.decodeUnknownSync(
-	Schema.fromJsonString(TargetSchema),
-)
-const decodeMessage = Schema.decodeUnknownSync(
-	Schema.fromJsonString(OutboundMessage),
-)
-const decodeRef = Schema.decodeUnknownSync(Schema.fromJsonString(MessageRef))
-const decodeEvent = Schema.decodeUnknownSync(
-	Schema.fromJsonString(ChannelEventSchema),
-)
+const decodeTarget = Schema.decodeUnknownSync(TargetJson)
+const encodeTarget = Schema.encodeSync(TargetJson)
+const decodeMessage = Schema.decodeUnknownSync(MessageJson)
+const encodeMessage = Schema.encodeSync(MessageJson)
+const decodeRef = Schema.decodeUnknownSync(RefJson)
+const encodeRef = Schema.encodeSync(RefJson)
+const decodeEvent = Schema.decodeUnknownSync(EventJson)
+const encodeEvent = Schema.encodeSync(EventJson)
 
 export interface Delivery {
 	readonly id: string
@@ -63,7 +65,6 @@ export interface Delivery {
 	readonly claimedAt: number
 }
 
-const unavailable = () => ChannelsApi.ChannelsUnavailable.make({})
 type Failure = ChannelsApi.ChannelsUnavailable
 
 /**
@@ -171,7 +172,7 @@ const deliveryOf = (
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-		effect.pipe(Effect.mapError(unavailable))
+		effect.pipe(Effect.mapError(() => ChannelsApi.ChannelsUnavailable.make({})))
 	const eventWhere = (event: ClaimedEvent) =>
 		and(
 			eq(channelInbox.channelId, event.channelId),
@@ -197,7 +198,7 @@ export const make = Effect.gen(function* () {
 								channelId,
 								eventId: event.eventId,
 								conversationKey: event.conversation.key,
-								event: JSON.stringify(event),
+								event: encodeEvent(event),
 								// Events of one request keep their order.
 								receivedAt: now + index,
 								nextAt: now,
@@ -282,8 +283,8 @@ export const make = Effect.gen(function* () {
 						organizationId: input.organizationId,
 						channelId: input.channelId,
 						kind: "notice",
-						target: JSON.stringify(input.target),
-						body: JSON.stringify(input.message),
+						target: encodeTarget(input.target),
+						body: encodeMessage(input.message),
 						state: "pending",
 						nextAt: now,
 						updatedAt: now,
@@ -301,11 +302,11 @@ export const make = Effect.gen(function* () {
 							organizationId: input.organizationId,
 							channelId: input.channelId,
 							kind: "reply",
-							target: JSON.stringify(input.target),
+							target: encodeTarget(input.target),
 							chat: input.chat,
 							turn: input.turn,
-							body: JSON.stringify({ markdown: "" }),
-							ref: input.ref === null ? null : JSON.stringify(input.ref),
+							body: encodeMessage({ markdown: "" }),
+							ref: input.ref === null ? null : encodeRef(input.ref),
 							state: "live",
 							nextAt: now,
 							updatedAt: now,
@@ -324,10 +325,10 @@ export const make = Effect.gen(function* () {
 							organizationId: input.organizationId,
 							channelId: input.channelId,
 							kind: "reply",
-							target: JSON.stringify(input.target),
+							target: encodeTarget(input.target),
 							chat: input.chat,
 							turn: input.turn,
-							body: JSON.stringify(input.message),
+							body: encodeMessage(input.message),
 							state: "pending",
 							nextAt: now,
 							updatedAt: now,
@@ -335,7 +336,7 @@ export const make = Effect.gen(function* () {
 						.onConflictDoUpdate({
 							target: [channelDeliveries.chat, channelDeliveries.turn],
 							set: {
-								body: JSON.stringify(input.message),
+								body: encodeMessage(input.message),
 								state: "pending",
 								nextAt: now,
 								updatedAt: now,
@@ -356,9 +357,9 @@ export const make = Effect.gen(function* () {
 							organizationId: input.organizationId,
 							channelId: input.channelId,
 							kind: "request",
-							target: JSON.stringify(input.target),
+							target: encodeTarget(input.target),
 							request: input.request,
-							body: JSON.stringify(input.message),
+							body: encodeMessage(input.message),
 							state: "pending",
 							nextAt: now,
 							updatedAt: now,
@@ -366,7 +367,7 @@ export const make = Effect.gen(function* () {
 						.onConflictDoUpdate({
 							target: [channelDeliveries.channelId, channelDeliveries.request],
 							set: {
-								body: JSON.stringify(input.message),
+								body: encodeMessage(input.message),
 								state: "pending",
 								attempts: 0,
 								nextAt: now,
@@ -426,7 +427,7 @@ export const make = Effect.gen(function* () {
 					db
 						.update(channelDeliveries)
 						.set({
-							ref: JSON.stringify(ref),
+							ref: encodeRef(ref),
 							claim: null,
 							leaseUntil: 0,
 							updatedAt: now,

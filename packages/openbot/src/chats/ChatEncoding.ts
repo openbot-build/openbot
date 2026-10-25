@@ -2,18 +2,13 @@ import { ChatStore } from "@openbot-build/core"
 import { ChatResponse } from "@openbot-build/api"
 import { Effect, Schema } from "effect"
 
-export const storageError = () =>
-	new ChatStore.ChatStoreError({
-		reason: "storage-failed",
-		message: "Chat storage is unavailable",
-	})
-export const conflict = () =>
-	new ChatStore.ChatStoreError({
-		reason: "reference-conflict",
-		message: "The Chat revision is out of date",
-	})
 export const databaseError = (error: unknown) =>
-	error instanceof ChatStore.ChatStoreError ? error : storageError()
+	error instanceof ChatStore.ChatStoreError
+		? error
+		: new ChatStore.ChatStoreError({
+				reason: "storage-failed",
+				message: "Chat storage is unavailable",
+			})
 export const decode =
 	<S extends Schema.ConstraintDecoder<unknown>>(schema: S) =>
 	(value: unknown) =>

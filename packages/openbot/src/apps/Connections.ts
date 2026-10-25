@@ -161,11 +161,11 @@ export const make: Effect.Effect<
 			.select()
 			.from(appDrafts)
 			.where(StoredConnections.draftWhere(yield* owner, id))
-			.pipe(Effect.mapError(StoredConnections.unavailable)))[0]
+			.pipe(Effect.mapError(() => ExperienceStorageUnavailable.make({}))))[0]
 		if (row === undefined) return yield* ExperienceNotFound.make({ id })
 		const draft = yield* Schema.decodeEffect(StoredConnections.draftCodec)(
 			row.body,
-		).pipe(Effect.mapError(StoredConnections.unavailable))
+		).pipe(Effect.mapError(() => ExperienceStorageUnavailable.make({})))
 		if (draft.expiresAt <= (yield* Clock.currentTimeMillis))
 			return yield* Api.ConnectionConflict.make({
 				reason: "DraftExpired",

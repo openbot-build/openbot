@@ -20,12 +20,11 @@ import * as Db from "../database/Database.ts"
  */
 export type Database = Db.Database
 
-export const unavailable = () => Api.DeveloperUnavailable.make({})
 /** Every storage failure becomes one error. */
 export const stored = <A, E, R>(
 	effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, Api.DeveloperUnavailable, R> =>
-	effect.pipe(Effect.mapError(unavailable))
+	effect.pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
 /**
  * Run the effect in one database transaction. Drizzle queries on the `db` of
  * `Db.make` join this transaction. A nested call becomes a savepoint.
@@ -35,7 +34,11 @@ export const transaction =
 	<A, E, R>(effect: Effect.Effect<A, E, R>) =>
 		sql
 			.withTransaction(effect)
-			.pipe(Effect.catchTag("SqlError", () => Effect.fail(unavailable())))
+			.pipe(
+				Effect.catchTag("SqlError", () =>
+					Effect.fail(Api.DeveloperUnavailable.make({})),
+				),
+			)
 
 /** A column that holds a value as JSON text. */
 export const Json = <S extends Schema.Top>(schema: S) =>
@@ -43,11 +46,15 @@ export const Json = <S extends Schema.Top>(schema: S) =>
 const decodeRow =
 	<S extends Schema.Top>(schema: S) =>
 	(row: unknown) =>
-		Schema.decodeUnknownEffect(schema)(row).pipe(Effect.mapError(unavailable))
+		Schema.decodeUnknownEffect(schema)(row).pipe(
+			Effect.mapError(() => Api.DeveloperUnavailable.make({})),
+		)
 const encodeRow =
 	<S extends Schema.Top>(schema: S) =>
 	(value: S["Type"]) =>
-		Schema.encodeEffect(schema)(value).pipe(Effect.mapError(unavailable))
+		Schema.encodeEffect(schema)(value).pipe(
+			Effect.mapError(() => Api.DeveloperUnavailable.make({})),
+		)
 
 /** The account of an owner key, which is `[organizationId, userId]` as JSON. */
 export const identityOf = (owner: string) =>
@@ -113,11 +120,6 @@ const AppRow = Schema.Struct({
 })
 /** An App that a proof covers, with the state of its monitor check. */
 export type AppRecord = typeof AppRow.Type
-const appWhere = (namespace: string, cardUrl: string) =>
-	and(
-		eq(developerApps.namespace, namespace),
-		eq(developerApps.cardUrl, cardUrl),
-	)
 export const decodeApp = decodeRow(AppRow)
 /** Read an App. With `lock`, keep the row locked until the transaction ends. */
 export const findApp = (
@@ -129,7 +131,12 @@ export const findApp = (
 	const query = db
 		.select()
 		.from(developerApps)
-		.where(appWhere(namespace, cardUrl))
+		.where(
+			and(
+				eq(developerApps.namespace, namespace),
+				eq(developerApps.cardUrl, cardUrl),
+			),
+		)
 	return stored(lock ? query.for("update") : query).pipe(
 		Effect.flatMap((rows) =>
 			Effect.transposeOption(Option.map(Arr.head(rows), decodeApp)),
@@ -267,11 +274,6 @@ const FlowRow = Schema.Struct({
  */
 export type FlowRecord = typeof FlowRow.Type
 export const decodeFlow = decodeRow(FlowRow)
-const flowWhere = (namespace: string, flowId: string) =>
-	and(
-		eq(developerTestFlows.namespace, namespace),
-		eq(developerTestFlows.flowId, flowId),
-	)
 /** Read a flow. With `lock`, keep the row locked until the transaction ends. */
 export const getFlow = Effect.fn("DeveloperRows.getFlow")(function* (
 	db: Database,
@@ -282,7 +284,12 @@ export const getFlow = Effect.fn("DeveloperRows.getFlow")(function* (
 	const query = db
 		.select()
 		.from(developerTestFlows)
-		.where(flowWhere(namespace, flowId))
+		.where(
+			and(
+				eq(developerTestFlows.namespace, namespace),
+				eq(developerTestFlows.flowId, flowId),
+			),
+		)
 	const row = (yield* stored(lock ? query.for("update") : query))[0]
 	if (row === undefined) return yield* Api.DeveloperNotFound.make({})
 	return yield* decodeFlow(row)

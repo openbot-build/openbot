@@ -32,9 +32,6 @@ export const Capabilities = Domain.make({
 	resources: [CapabilityRequest],
 })
 
-const argumentsOf = (capability: BotsApi.Capability) =>
-	JSON.stringify(capability.arguments ?? {})
-
 /**
  * The policy of a list of Grants. A Grant with the target `*` covers every
  * target. A Grant with arguments covers only the same arguments, and a Grant
@@ -55,7 +52,9 @@ export const policyOf = (grants: ReadonlyArray<BotsApi.Grant>) =>
 							: [$.eq("target", capability.target)]),
 						...(capability.arguments === undefined
 							? []
-							: [$.eq("arguments", argumentsOf(capability))]),
+							: [
+									$.eq("arguments", JSON.stringify(capability.arguments ?? {})),
+								]),
 						...(grant.scope === "chat" && grant.chat !== undefined
 							? [$.eq("chat", grant.chat)]
 							: []),
@@ -77,7 +76,7 @@ export const decidingGrant = (input: {
 		action: input.capability.action,
 		resource: CapabilityRequest.make({
 			target: input.capability.target,
-			arguments: argumentsOf(input.capability),
+			arguments: JSON.stringify(input.capability.arguments ?? {}),
 			chat: input.chat,
 		}),
 	}

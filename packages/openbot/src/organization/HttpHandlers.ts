@@ -31,8 +31,6 @@ const ruleCount = (policy: Authorization.Policy): number => {
 				: node.policies.reduce((sum, child) => sum + count(child), 0)
 	return count(policy.node)
 }
-const unavailable = () =>
-	OrganizationApi.OrganizationStorageUnavailable.make({})
 
 const organizationGroup = HttpApiBuilder.group(
 	OpenBotApi,
@@ -59,7 +57,11 @@ const organizationGroup = HttpApiBuilder.group(
 						resource,
 						details,
 					})
-					.pipe(Effect.mapError(unavailable))
+					.pipe(
+						Effect.mapError(() =>
+							OrganizationApi.OrganizationStorageUnavailable.make({}),
+						),
+					)
 			/**
 			 * The Bot memory model must not be a `decision` model, because the
 			 * memory Bot writes text. The Rules model can be either type.
@@ -84,9 +86,9 @@ const organizationGroup = HttpApiBuilder.group(
 							model.provider === botMemoryModel.provider &&
 							model.id === botMemoryModel.model,
 					)?.type
-					if (type === "decision")
+					if (type !== undefined && type !== "language")
 						return yield* SettingsApi.SettingsInvalid.make({
-							message: "botMemoryModel cannot be a decision model.",
+							message: `botMemoryModel cannot be a ${type} model.`,
 						})
 				})
 			/** Fails unless the caller is a Super Administrator. */
@@ -98,7 +100,11 @@ const organizationGroup = HttpApiBuilder.group(
 				Effect.gen(function* () {
 					const self = yield* organization
 						.member(caller.organizationId, caller.userId)
-						.pipe(Effect.mapError(unavailable))
+						.pipe(
+							Effect.mapError(() =>
+								OrganizationApi.OrganizationStorageUnavailable.make({}),
+							),
+						)
 					if (
 						Option.exists(self, (member) =>
 							member.roles.includes(superAdministrator),
@@ -129,7 +135,9 @@ const organizationGroup = HttpApiBuilder.group(
 					: Effect.void
 			const target = (caller: Caller, userId: string) =>
 				organization.member(caller.organizationId, userId).pipe(
-					Effect.mapError(unavailable),
+					Effect.mapError(() =>
+						OrganizationApi.OrganizationStorageUnavailable.make({}),
+					),
 					Effect.flatMap(
 						Option.match({
 							onNone: () =>
@@ -143,17 +151,25 @@ const organizationGroup = HttpApiBuilder.group(
 					| OrganizationApi.MemberNotFound
 					| OrganizationApi.LastSuperAdministrator
 					| OrganizationUnavailable,
-			) => (error._tag === "OrganizationUnavailable" ? unavailable() : error)
+			) =>
+				error._tag === "OrganizationUnavailable"
+					? OrganizationApi.OrganizationStorageUnavailable.make({})
+					: error
 
 			const roleError = (
 				error:
 					| OrganizationApi.RoleNotFound
 					| OrganizationApi.RoleReadOnly
 					| { readonly _tag: "RolesUnavailable" },
-			) => (error._tag === "RolesUnavailable" ? unavailable() : error)
+			) =>
+				error._tag === "RolesUnavailable"
+					? OrganizationApi.OrganizationStorageUnavailable.make({})
+					: error
 			const findRole = (caller: Caller, roleId: string) =>
 				roles.get(caller.organizationId, roleId).pipe(
-					Effect.mapError(unavailable),
+					Effect.mapError(() =>
+						OrganizationApi.OrganizationStorageUnavailable.make({}),
+					),
 					Effect.flatMap(
 						Option.match({
 							onNone: () =>
@@ -174,10 +190,15 @@ const organizationGroup = HttpApiBuilder.group(
 					Effect.flatMap(Identity, (caller) =>
 						organization.get(caller.organizationId),
 					).pipe(
-						Effect.mapError(unavailable),
+						Effect.mapError(() =>
+							OrganizationApi.OrganizationStorageUnavailable.make({}),
+						),
 						Effect.flatMap(
 							Option.match({
-								onNone: () => Effect.fail(unavailable()),
+								onNone: () =>
+									Effect.fail(
+										OrganizationApi.OrganizationStorageUnavailable.make({}),
+									),
 								onSome: Effect.succeed,
 							}),
 						),
@@ -236,7 +257,11 @@ const organizationGroup = HttpApiBuilder.group(
 						const caller = yield* Identity
 						const updated = yield* organization
 							.update(caller.organizationId, payload)
-							.pipe(Effect.mapError(unavailable))
+							.pipe(
+								Effect.mapError(() =>
+									OrganizationApi.OrganizationStorageUnavailable.make({}),
+								),
+							)
 						yield* record(
 							caller,
 							"organization.updated",
@@ -252,7 +277,11 @@ const organizationGroup = HttpApiBuilder.group(
 							...(query.after === undefined ? {} : { after: query.after }),
 							limit: query.limit ?? 50,
 						}),
-					).pipe(Effect.mapError(unavailable)),
+					).pipe(
+						Effect.mapError(() =>
+							OrganizationApi.OrganizationStorageUnavailable.make({}),
+						),
+					),
 				)
 				.handle("getMember", ({ params }) =>
 					Effect.flatMap(Identity, (caller) => target(caller, params.userId)),
@@ -312,7 +341,9 @@ const organizationGroup = HttpApiBuilder.group(
 						organization.listInvitations(caller.organizationId, query.status),
 					).pipe(
 						Effect.map((items) => ({ items })),
-						Effect.mapError(unavailable),
+						Effect.mapError(() =>
+							OrganizationApi.OrganizationStorageUnavailable.make({}),
+						),
 					),
 				)
 				.handle("createInvitation", ({ payload }) =>
@@ -322,7 +353,11 @@ const organizationGroup = HttpApiBuilder.group(
 							payload.roles ??
 							(yield* settings
 								.organization(caller.organizationId)
-								.pipe(Effect.mapError(unavailable))).document.defaultRoles
+								.pipe(
+									Effect.mapError(() =>
+										OrganizationApi.OrganizationStorageUnavailable.make({}),
+									),
+								)).document.defaultRoles
 						for (const roleId of invited) yield* findRole(caller, roleId)
 						// Only a Super Administrator can give the Super Administrator role.
 						if (invited.includes(superAdministrator))
@@ -337,7 +372,7 @@ const organizationGroup = HttpApiBuilder.group(
 							.pipe(
 								Effect.mapError((error) =>
 									error._tag === "OrganizationUnavailable"
-										? unavailable()
+										? OrganizationApi.OrganizationStorageUnavailable.make({})
 										: error,
 								),
 							)
@@ -362,7 +397,7 @@ const organizationGroup = HttpApiBuilder.group(
 							.pipe(
 								Effect.mapError((error) =>
 									error._tag === "OrganizationUnavailable"
-										? unavailable()
+										? OrganizationApi.OrganizationStorageUnavailable.make({})
 										: error,
 								),
 							)
@@ -380,7 +415,11 @@ const organizationGroup = HttpApiBuilder.group(
 				.handle("listRoles", () =>
 					Effect.flatMap(Identity, (caller) =>
 						roles.list(caller.organizationId),
-					).pipe(Effect.mapError(unavailable)),
+					).pipe(
+						Effect.mapError(() =>
+							OrganizationApi.OrganizationStorageUnavailable.make({}),
+						),
+					),
 				)
 				.handle("getRole", ({ params }) =>
 					Effect.gen(function* () {
@@ -394,7 +433,11 @@ const organizationGroup = HttpApiBuilder.group(
 						yield* checkRolePolicy(caller, payload.policy)
 						const role = yield* roles
 							.create(caller.organizationId, payload)
-							.pipe(Effect.mapError(unavailable))
+							.pipe(
+								Effect.mapError(() =>
+									OrganizationApi.OrganizationStorageUnavailable.make({}),
+								),
+							)
 						yield* record(
 							caller,
 							"role.created",
@@ -433,7 +476,11 @@ const organizationGroup = HttpApiBuilder.group(
 						if (
 							yield* organization
 								.roleInUse(caller.organizationId, role.id)
-								.pipe(Effect.mapError(unavailable))
+								.pipe(
+									Effect.mapError(() =>
+										OrganizationApi.OrganizationStorageUnavailable.make({}),
+									),
+								)
 						)
 							return yield* OrganizationApi.RoleInUse.make({ roleId: role.id })
 						yield* roles
@@ -455,7 +502,11 @@ const organizationGroup = HttpApiBuilder.group(
 							...(query.actor === undefined ? {} : { actor: query.actor }),
 							limit: query.limit ?? 50,
 						}),
-					).pipe(Effect.mapError(unavailable)),
+					).pipe(
+						Effect.mapError(() =>
+							OrganizationApi.OrganizationStorageUnavailable.make({}),
+						),
+					),
 				)
 		}),
 )
@@ -485,7 +536,11 @@ const organizationsGroup = HttpApiBuilder.group(
 						resource: userKey({ organizationId, userId }),
 						details,
 					})
-					.pipe(Effect.mapError(unavailable))
+					.pipe(
+						Effect.mapError(() =>
+							OrganizationApi.OrganizationStorageUnavailable.make({}),
+						),
+					)
 			/** An answer to an invitation needs the session cookie, not a token of one organization. */
 			const answer = (invitationId: string, answer: "accepted" | "declined") =>
 				Effect.gen(function* () {
@@ -499,7 +554,7 @@ const organizationsGroup = HttpApiBuilder.group(
 						.pipe(
 							Effect.mapError((error) =>
 								error._tag === "OrganizationUnavailable"
-									? unavailable()
+									? OrganizationApi.OrganizationStorageUnavailable.make({})
 									: error,
 							),
 						)
@@ -532,13 +587,19 @@ const organizationsGroup = HttpApiBuilder.group(
 							if (Option.isSome(found)) items.push(found.value)
 						}
 						return { items }
-					}).pipe(Effect.mapError(unavailable)),
+					}).pipe(
+						Effect.mapError(() =>
+							OrganizationApi.OrganizationStorageUnavailable.make({}),
+						),
+					),
 				)
 				.handle("createOrganization", ({ payload }) =>
 					Effect.gen(function* () {
 						const account = yield* Account
 						const platform = yield* settings.platform.pipe(
-							Effect.mapError(unavailable),
+							Effect.mapError(() =>
+								OrganizationApi.OrganizationStorageUnavailable.make({}),
+							),
 						)
 						const anyone = Option.exists(
 							platform,
@@ -548,14 +609,22 @@ const organizationsGroup = HttpApiBuilder.group(
 							!anyone &&
 							!(yield* admins
 								.check({ id: account.userId })
-								.pipe(Effect.mapError(unavailable)))
+								.pipe(
+									Effect.mapError(() =>
+										OrganizationApi.OrganizationStorageUnavailable.make({}),
+									),
+								))
 						)
 							return yield* OrganizationApi.OrganizationCreationDisabled.make(
 								{},
 							)
 						return yield* organization
 							.create({ name: payload.name, owner: { id: account.userId } })
-							.pipe(Effect.mapError(unavailable))
+							.pipe(
+								Effect.mapError(() =>
+									OrganizationApi.OrganizationStorageUnavailable.make({}),
+								),
+							)
 					}),
 				)
 				.handle("leaveOrganization", ({ params }) =>
@@ -574,7 +643,7 @@ const organizationsGroup = HttpApiBuilder.group(
 							.pipe(
 								Effect.mapError((error) =>
 									error._tag === "OrganizationUnavailable"
-										? unavailable()
+										? OrganizationApi.OrganizationStorageUnavailable.make({})
 										: error,
 								),
 							)
@@ -591,18 +660,20 @@ const organizationsGroup = HttpApiBuilder.group(
 						organization.invitationsFor(account.userId),
 					).pipe(
 						Effect.map((items) => ({ items })),
-						Effect.mapError(unavailable),
+						Effect.mapError(() =>
+							OrganizationApi.OrganizationStorageUnavailable.make({}),
+						),
 					),
 				)
 				.handle("acceptInvitation", ({ params }) =>
 					Effect.gen(function* () {
 						const invitation = yield* answer(params.invitationId, "accepted")
-						return yield* organization
-							.get(invitation.organizationId)
-							.pipe(
-								Effect.flatMap(Effect.fromOption),
-								Effect.mapError(unavailable),
-							)
+						return yield* organization.get(invitation.organizationId).pipe(
+							Effect.flatMap(Effect.fromOption),
+							Effect.mapError(() =>
+								OrganizationApi.OrganizationStorageUnavailable.make({}),
+							),
+						)
 					}),
 				)
 				.handle("declineInvitation", ({ params }) =>

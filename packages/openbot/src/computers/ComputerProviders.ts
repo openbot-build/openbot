@@ -19,9 +19,11 @@ type ComputerProvider = ComputersApi.ComputerProvider
 type Credentials = ComputersApi.ComputerProviderCredentials
 
 /** The opened secret holds JSON that only this file writes, from a checked request. */
-const decodeCredentials = Schema.decodeUnknownEffect(
-	Schema.fromJsonString(ComputersApi.ComputerProviderCredentials),
+const CredentialsJson = Schema.fromJsonString(
+	ComputersApi.ComputerProviderCredentials,
 )
+const decodeCredentials = Schema.decodeUnknownEffect(CredentialsJson)
+const encodeCredentials = Schema.encodeSync(CredentialsJson)
 
 /** The fields of the credentials that are not secret. The key is always empty here. */
 const Plain = Schema.Union([
@@ -43,16 +45,12 @@ type Plain = typeof Plain.Type
 const decodeKind = Schema.decodeUnknownSync(ComputersApi.ComputerProviderKind)
 
 /** The hints column holds JSON that only this file writes. */
-const decodeHints = Schema.decodeUnknownSync(
-	Schema.fromJsonString(
-		Schema.Struct({ apiKey: Schema.NullOr(Schema.String), plain: Plain }),
-	),
+const HintsJson = Schema.fromJsonString(
+	Schema.Struct({ apiKey: Schema.NullOr(Schema.String), plain: Plain }),
 )
+const decodeHints = Schema.decodeUnknownSync(HintsJson)
+const encodeHints = Schema.encodeSync(HintsJson)
 type Row = typeof computerProviders.$inferSelect
-
-export const unavailable = () => ComputersApi.ComputersUnavailable.make({})
-const notFound = (id: string) =>
-	ComputersApi.ComputerProviderNotFound.make({ id })
 
 export type Failure =
 	| ComputersApi.ComputerProviderNotFound
@@ -90,12 +88,6 @@ const viewOf = (
 			}
 	}
 }
-
-/** The fields of the credentials without the key, so the API can show them. */
-const plainOf = (credentials: Credentials): Credentials => ({
-	...credentials,
-	apiKey: "",
-})
 
 const fromRow = (row: Row): ComputerProvider => {
 	const stored = decodeHints(row.hints)
@@ -162,7 +154,9 @@ export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const secrets = yield* Secrets
 	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-		effect.pipe(Effect.mapError(unavailable))
+		effect.pipe(
+			Effect.mapError(() => ComputersApi.ComputersUnavailable.make({})),
+		)
 	const where = (organizationId: string, id: string) =>
 		and(
 			eq(computerProviders.organizationId, organizationId),
@@ -175,13 +169,13 @@ export const make = Effect.gen(function* () {
 	const seal = (id: string, credentials: Credentials) =>
 		Effect.gen(function* () {
 			const sealed = yield* stored(
-				secrets.seal(JSON.stringify(credentials), binding(id)),
+				secrets.seal(encodeCredentials(credentials), binding(id)),
 			)
 			return {
 				credentials: sealed,
-				hints: JSON.stringify({
+				hints: encodeHints({
 					...hintsOf(credentials),
-					plain: plainOf(credentials),
+					plain: { ...credentials, apiKey: "" },
 				}),
 			}
 		})
@@ -193,7 +187,8 @@ export const make = Effect.gen(function* () {
 	) =>
 		Effect.gen(function* () {
 			const found = yield* row(caller.organizationId, id)
-			if (Option.isNone(found)) return yield* notFound(id)
+			if (Option.isNone(found))
+				return yield* ComputersApi.ComputerProviderNotFound.make({ id })
 			const provider = fromRow(found.value)
 			yield* guard(
 				caller,
@@ -205,7 +200,7 @@ export const make = Effect.gen(function* () {
 					}),
 				},
 				{
-					hide: () => notFound(id),
+					hide: () => ComputersApi.ComputerProviderNotFound.make({ id }),
 				},
 			)
 			return { provider, row: found.value }
@@ -344,7 +339,8 @@ export const make = Effect.gen(function* () {
 		credentials: (organizationId, id) =>
 			Effect.gen(function* () {
 				const found = yield* row(organizationId, id)
-				if (Option.isNone(found)) return yield* notFound(id)
+				if (Option.isNone(found))
+					return yield* ComputersApi.ComputerProviderNotFound.make({ id })
 				const json = yield* stored(
 					secrets.open(found.value.credentials, binding(id)),
 				)

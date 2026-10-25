@@ -73,21 +73,6 @@ export const layerTools = toolkit.toLayer({
 		Effect.succeed({ confirmed: description }),
 })
 
-const invalidRequest = (description: string) =>
-	AiError.make({
-		module: "DevelopmentModel",
-		method: "generateText",
-		reason: AiError.InvalidRequestError.make({ description }),
-	})
-const failedScenario = () =>
-	AiError.make({
-		module: "DevelopmentModel",
-		method: "generateText",
-		reason: AiError.InvalidOutputError.make({
-			description: "The mock-failure development scenario failed on purpose",
-		}),
-	})
-
 const currentInput = Effect.fn("DevelopmentModel.currentInput")(function* (
 	prompt: Prompt.Prompt,
 ) {
@@ -98,7 +83,13 @@ const currentInput = Effect.fn("DevelopmentModel.currentInput")(function* (
 		Match.when({ role: "user" }, (message) =>
 			message.content.some((part) => part.type !== "text")
 				? Effect.fail(
-						invalidRequest("Development scenarios require text input"),
+						AiError.make({
+							module: "DevelopmentModel",
+							method: "generateText",
+							reason: AiError.InvalidRequestError.make({
+								description: "Development scenarios require text input",
+							}),
+						}),
 					)
 				: Effect.succeed(
 						message.content
@@ -109,7 +100,13 @@ const currentInput = Effect.fn("DevelopmentModel.currentInput")(function* (
 		),
 		Match.orElse(() =>
 			Effect.fail(
-				invalidRequest("Development scenarios require a user message"),
+				AiError.make({
+					module: "DevelopmentModel",
+					method: "generateText",
+					reason: AiError.InvalidRequestError.make({
+						description: "Development scenarios require a user message",
+					}),
+				}),
 			),
 		),
 	)
@@ -142,13 +139,16 @@ const structured = Effect.fn("DevelopmentModel.structured")(function* (
 	prompt: Prompt.Prompt,
 ) {
 	yield* currentInput(prompt)
-	return yield* invalidRequest(
-		`Unsupported structured development request: ${objectName}`,
-	)
+	return yield* AiError.make({
+		module: "DevelopmentModel",
+		method: "generateText",
+		reason: AiError.InvalidRequestError.make({
+			description: `Unsupported structured development request: ${objectName}`,
+		}),
+	})
 })
 
 /** A call that waits for a decision has a pending result. Its answer comes later. */
-const isPending = (result: unknown) => Predicate.hasProperty(result, "pending")
 
 const toolParts = Effect.fn("DevelopmentModel.toolParts")(function* (
 	options: LanguageModel.ProviderOptions,
@@ -171,7 +171,7 @@ const toolParts = Effect.fn("DevelopmentModel.toolParts")(function* (
 		)
 		.findLast((part) => part.type === "tool-result")
 	if (result !== undefined) {
-		if (isPending(result.result))
+		if (Predicate.hasProperty(result.result, "pending"))
 			return textParts(
 				"mock-tool",
 				"Development confirmation waits for a decision.",
@@ -185,7 +185,14 @@ const toolParts = Effect.fn("DevelopmentModel.toolParts")(function* (
 			result.result,
 		).pipe(
 			Effect.mapError(() =>
-				invalidRequest("The development tool returned an invalid confirmation"),
+				AiError.make({
+					module: "DevelopmentModel",
+					method: "generateText",
+					reason: AiError.InvalidRequestError.make({
+						description:
+							"The development tool returned an invalid confirmation",
+					}),
+				}),
 			),
 		)
 		return textParts(
@@ -194,9 +201,13 @@ const toolParts = Effect.fn("DevelopmentModel.toolParts")(function* (
 		)
 	}
 	if (!options.tools.some((tool) => tool.name === confirmation.name))
-		return yield* invalidRequest(
-			"The DevelopmentConfirmation tool is unavailable",
-		)
+		return yield* AiError.make({
+			module: "DevelopmentModel",
+			method: "generateText",
+			reason: AiError.InvalidRequestError.make({
+				description: "The DevelopmentConfirmation tool is unavailable",
+			}),
+		})
 	return [
 		Response.makePart("tool-call", {
 			id,
@@ -229,7 +240,7 @@ const appParts = Effect.fn("DevelopmentModel.appParts")(function* (
 		)
 		.findLast((part) => part.type === "tool-result")
 	if (result !== undefined) {
-		if (isPending(result.result))
+		if (Predicate.hasProperty(result.result, "pending"))
 			return textParts(
 				"mock-app",
 				"The simulated App call waits for a decision.",
@@ -238,7 +249,13 @@ const appParts = Effect.fn("DevelopmentModel.appParts")(function* (
 			result.result,
 		).pipe(
 			Effect.mapError(() =>
-				invalidRequest("The simulated App result does not match its contract"),
+				AiError.make({
+					module: "DevelopmentModel",
+					method: "generateText",
+					reason: AiError.InvalidRequestError.make({
+						description: "The simulated App result does not match its contract",
+					}),
+				}),
 			),
 		)
 		return textParts(
@@ -336,7 +353,18 @@ const generate = Effect.fn("DevelopmentModel.generate")(function* (
 		),
 		Match.when({ type: "text" }, () =>
 			Match.value(scenario).pipe(
-				Match.when("mock-failure", () => Effect.fail(failedScenario())),
+				Match.when("mock-failure", () =>
+					Effect.fail(
+						AiError.make({
+							module: "DevelopmentModel",
+							method: "generateText",
+							reason: AiError.InvalidOutputError.make({
+								description:
+									"The mock-failure development scenario failed on purpose",
+							}),
+						}),
+					),
+				),
 				Match.when("mock-tool", () => toolParts(options)),
 				Match.when("mock-app", () => appParts(options)),
 				Match.whenOr("mock-text", "mock-slow", (scenario) =>
@@ -410,7 +438,20 @@ export const layer = (scenario: Scenario): Model.Model =>
 									id: "answer",
 									delta: "Development failure: partial output.",
 								}),
-							).pipe(Stream.concat(Stream.fail(failedScenario()))),
+							).pipe(
+								Stream.concat(
+									Stream.fail(
+										AiError.make({
+											module: "DevelopmentModel",
+											method: "generateText",
+											reason: AiError.InvalidOutputError.make({
+												description:
+													"The mock-failure development scenario failed on purpose",
+											}),
+										}),
+									),
+								),
+							),
 						),
 						Match.orElse(() =>
 							Stream.unwrap(

@@ -158,25 +158,14 @@ const FlowRecord = Schema.Struct({
 	revision: Schema.Natural,
 	callback: Schema.NullOr(Schema.String),
 })
-const unavailable = () => ExperienceStorageUnavailable.make({})
-const revisionChanged = () =>
-	ConnectionsApi.ConnectionConflict.make({
-		reason: "RevisionChanged",
-		message: "This connection changed. Review it before authorizing.",
-	})
-const consumed = () =>
-	Api.AppAuthorizationFailed.make({
-		reason: "AlreadyConsumed",
-		message:
-			"This authorization has already been handled. Open My Apps to view the current connection.",
-	})
 /** Keep the errors that callers handle. Every other storage failure becomes one error. */
 const storageFailure = (error: unknown) =>
 	error instanceof ExperienceNotFound ||
 	error instanceof ConnectionsApi.ConnectionConflict ||
 	error instanceof Api.AppAuthorizationFailed
 		? error
-		: unavailable()
+		: ExperienceStorageUnavailable.make({})
+const ScopesJson = Schema.fromJsonString(Schema.Array(Schema.String))
 const flowCodec = Schema.fromJsonString(Schema.toCodecJson(Authorization.Flow))
 
 export const make = (
@@ -204,9 +193,7 @@ export const make = (
 		const decodeFlow = Effect.fn("AppAuthorizations.decode")(function* (
 			row: typeof appAuthorizations.$inferSelect,
 		) {
-			const scopes = yield* Schema.decodeEffect(
-				Schema.fromJsonString(Schema.Array(Schema.String)),
-			)(row.scopes)
+			const scopes = yield* Schema.decodeEffect(ScopesJson)(row.scopes)
 			const callback =
 				row.callback === null
 					? null
@@ -236,9 +223,11 @@ export const make = (
 				.select()
 				.from(appAuthorizations)
 				.where(eq(appAuthorizations.id, id))
-				.pipe(Effect.mapError(unavailable)))[0]
+				.pipe(Effect.mapError(() => ExperienceStorageUnavailable.make({}))))[0]
 			if (row === undefined) return yield* ExperienceNotFound.make({ id })
-			return yield* decodeFlow(row).pipe(Effect.mapError(unavailable))
+			return yield* decodeFlow(row).pipe(
+				Effect.mapError(() => ExperienceStorageUnavailable.make({})),
+			)
 		})
 		const beginFlow = (
 			flow: Authorization.Flow,
@@ -266,7 +255,11 @@ export const make = (
 								id: flow.binding.connectionId,
 							})
 						if (connection.revision !== input.revision)
-							return yield* revisionChanged()
+							return yield* ConnectionsApi.ConnectionConflict.make({
+								reason: "RevisionChanged",
+								message:
+									"This connection changed. Review it before authorizing.",
+							})
 						const encoded = yield* Schema.encodeEffect(flowCodec)(flow)
 						const body = yield* secrets.seal(
 							encoded,
@@ -279,6 +272,7 @@ export const make = (
 							connectionId: flow.binding.connectionId,
 							body,
 						})
+						const scopes = yield* Schema.encodeEffect(ScopesJson)(flow.scopes)
 						yield* tx.insert(appAuthorizations).values({
 							id: flow.flowId,
 							owner: flow.binding.owner,
@@ -289,7 +283,7 @@ export const make = (
 							status: "Waiting",
 							issuer: flow.binding.issuer,
 							resource: input.resource,
-							scopes: JSON.stringify(flow.scopes),
+							scopes,
 						})
 					}),
 				)
@@ -308,7 +302,9 @@ export const make = (
 					? null
 					: yield* secrets
 							.seal(input.callback, callbackBinding(record.owner, id))
-							.pipe(Effect.mapError(unavailable))
+							.pipe(
+								Effect.mapError(() => ExperienceStorageUnavailable.make({})),
+							)
 			const rows = yield* db
 				.update(appAuthorizations)
 				.set({ ...input, callback })
@@ -319,8 +315,13 @@ export const make = (
 					),
 				)
 				.returning({ id: appAuthorizations.id })
-				.pipe(Effect.mapError(unavailable))
-			if (rows.length === 0) return yield* consumed()
+				.pipe(Effect.mapError(() => ExperienceStorageUnavailable.make({})))
+			if (rows.length === 0)
+				return yield* Api.AppAuthorizationFailed.make({
+					reason: "AlreadyConsumed",
+					message:
+						"This authorization has already been handled. Open My Apps to view the current connection.",
+				})
 		})
 		const claimFlow = (owner: string, id: string) =>
 			db
@@ -337,7 +338,12 @@ export const make = (
 							)
 							.for("update"))[0]
 						if (row === undefined) return yield* ExperienceNotFound.make({ id })
-						if (row.status !== "Received") return yield* consumed()
+						if (row.status !== "Received")
+							return yield* Api.AppAuthorizationFailed.make({
+								reason: "AlreadyConsumed",
+								message:
+									"This authorization has already been handled. Open My Apps to view the current connection.",
+							})
 						if (row.expiresAt <= (yield* Clock.currentTimeMillis))
 							return yield* Api.AppAuthorizationFailed.make({
 								reason: "FlowExpired",
@@ -353,7 +359,11 @@ export const make = (
 							connection === undefined ||
 							connection.revision !== row.revision
 						)
-							return yield* revisionChanged()
+							return yield* ConnectionsApi.ConnectionConflict.make({
+								reason: "RevisionChanged",
+								message:
+									"This connection changed. Review it before authorizing.",
+							})
 						yield* tx
 							.update(appAuthorizations)
 							.set({ status: "Processing" })
@@ -380,9 +390,17 @@ export const make = (
 				)
 				.returning({ id: appAuthorizations.id })
 				.pipe(
-					Effect.mapError(unavailable),
+					Effect.mapError(() => ExperienceStorageUnavailable.make({})),
 					Effect.flatMap((rows) =>
-						rows.length === 1 ? Effect.void : Effect.fail(consumed()),
+						rows.length === 1
+							? Effect.void
+							: Effect.fail(
+									Api.AppAuthorizationFailed.make({
+										reason: "AlreadyConsumed",
+										message:
+											"This authorization has already been handled. Open My Apps to view the current connection.",
+									}),
+								),
 					),
 				)
 		// A flow that was processing when the host stopped can never finish.
@@ -390,7 +408,7 @@ export const make = (
 			.update(appAuthorizations)
 			.set({ status: "Failed", reason: "Interrupted", callback: null })
 			.where(eq(appAuthorizations.status, "Processing"))
-			.pipe(Effect.mapError(unavailable))
+			.pipe(Effect.mapError(() => ExperienceStorageUnavailable.make({})))
 		const owned = Effect.fn("AppAuthorizations.owned")(function* (
 			owner: string,
 			id: string,

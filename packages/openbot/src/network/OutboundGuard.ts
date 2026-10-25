@@ -26,9 +26,6 @@ export class OutboundBlocked extends Error {
 	}
 }
 
-const isBlocked = (error: unknown) =>
-	error instanceof Network.NetworkError && error.reason === "BlockedTarget"
-
 /**
  * Builds a dispatcher that checks every new socket. Node skips the DNS lookup
  * for an IP literal, so the connector checks literals itself.
@@ -54,7 +51,11 @@ export const dispatcher = (options: {
 			}
 			connect(target, (error, socket) => {
 				if (error === null) callback(null, socket)
-				else if (isBlocked(error)) blocked()
+				else if (
+					error instanceof Network.NetworkError &&
+					error.reason === "BlockedTarget"
+				)
+					blocked()
 				else callback(error, null)
 			})
 		},

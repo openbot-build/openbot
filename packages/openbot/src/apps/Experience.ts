@@ -94,7 +94,7 @@ export const make = Effect.gen(function* () {
 								)
 						}),
 					)
-					.pipe(Effect.mapError(StoredConnections.unavailable))
+					.pipe(Effect.mapError(() => ExperienceStorageUnavailable.make({})))
 				return { removed, pending }
 			}),
 	}

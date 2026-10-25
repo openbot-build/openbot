@@ -16,6 +16,8 @@ import {
 	Option,
 	PubSub,
 	Schedule,
+	Schema,
+	SchemaTransformation,
 	Stream,
 } from "effect"
 import { Bots } from "../bots/Bots.ts"
@@ -80,24 +82,40 @@ const decisions = {
 	chat: { decision: "allow", scope: "chat" },
 	deny: { decision: "deny" },
 } as const
-type Choice = keyof typeof decisions
+const Choice = Schema.Literals(["once", "chat", "deny"])
+type Choice = typeof Choice.Type
 
 /** The value of an approval button: the request, the choice and the revision it saw. */
-const buttonValue = (request: string, choice: Choice, revision: number) =>
-	`${request} ${choice} ${revision}`
+const Button = Schema.TemplateLiteralParser([
+	Schema.NonEmptyString,
+	" ",
+	Choice,
+	" ",
+	Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+]).pipe(
+	Schema.decodeTo(
+		Schema.Struct({
+			request: Schema.String,
+			choice: Choice,
+			revision: Schema.Int,
+		}),
+		SchemaTransformation.transform({
+			decode: ([request, , choice, , revision]) => ({
+				request,
+				choice,
+				revision,
+			}),
+			encode: ({ request, choice, revision }) =>
+				[request, " ", choice, " ", revision] as const,
+		}),
+	),
+)
 
-const readButton = (value: string) => {
-	const [request, choice, revision] = value.split(" ")
-	if (
-		request === undefined ||
-		choice === undefined ||
-		!(choice in decisions) ||
-		revision === undefined ||
-		!/^\d+$/.test(revision)
-	)
-		return undefined
-	return { request, choice: choice as Choice, revision: Number(revision) }
-}
+const buttonValue = (request: string, choice: Choice, revision: number) =>
+	Schema.encodeSync(Button)({ request, choice, revision })
+
+const readButton = (value: string) =>
+	Option.getOrUndefined(Schema.decodeUnknownOption(Button)(value))
 
 const describe = (request: RequestsApi.CapabilityRequest) => {
 	const { action, target } = request.capability

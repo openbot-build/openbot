@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto"
-import { Context, Effect, Layer, Redacted, Schema } from "effect"
+import { Context, Effect, Layer, Option, Redacted, Schema } from "effect"
 
 export class SecretStorageError extends Schema.TaggedError<SecretStorageError>()(
 	"SecretStorageError",
@@ -31,8 +31,14 @@ export class Secrets extends Context.Service<
 	}
 >()("@openbot-build/openbot/secrets/Secrets") {}
 
-const KeyId = /^[a-z0-9_-]{1,32}$/
-const KeyHex = /^[a-fA-F0-9]{64}$/
+/** One entry of the key list: `<id>:<64 hexadecimal characters>`. */
+const decodeEntry = Schema.decodeUnknownOption(
+	Schema.TemplateLiteralParser([
+		Schema.String.check(Schema.isPattern(/^[a-z0-9_-]{1,32}$/)),
+		":",
+		Schema.String.check(Schema.isPattern(/^[a-fA-F0-9]{64}$/)),
+	]),
+)
 
 /**
  * Reads a key list like `k2:<hex>,k1:<hex>`. Each key is 32 bytes as 64 hexadecimal characters.
@@ -54,25 +60,20 @@ export const parseKeys = (
 			.map((entry) => entry.trim())
 			.filter((entry) => entry !== "")
 		for (const entry of entries) {
-			const [id, hex, ...rest] = entry.split(":")
-			if (
-				id === undefined ||
-				hex === undefined ||
-				rest.length > 0 ||
-				!KeyId.test(id) ||
-				!KeyHex.test(hex)
-			)
+			const decoded = decodeEntry(entry)
+			if (Option.isNone(decoded))
 				return yield* SecretKeysInvalid.make({
 					message:
 						"Each entry of OPENBOT_SECRET_KEYS must be <id>:<64 hexadecimal characters>.",
 				})
+			const [id, , hex] = decoded.value
 			if (keys.has(id))
 				return yield* SecretKeysInvalid.make({
 					message: `The key ID ${id} appears twice in OPENBOT_SECRET_KEYS.`,
 				})
 			keys.set(id, Buffer.from(hex, "hex"))
 		}
-		const current = entries[0]?.split(":")[0]
+		const current = keys.keys().next().value
 		if (current === undefined)
 			return yield* SecretKeysInvalid.make({
 				message: "OPENBOT_SECRET_KEYS must name at least one key.",

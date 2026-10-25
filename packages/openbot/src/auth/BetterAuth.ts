@@ -271,7 +271,6 @@ export const layer = (
 						encodeURIComponent(Redacted.value(credential)),
 					origin: config.publicOrigin,
 				})
-			const rejected = () => CredentialRejected.make({ kind: "session" })
 			/**
 			 * An SSO connection may only sign in people with an email in its own domains.
 			 * When a connection enforces SSO, people with an email in its domains may not
@@ -299,10 +298,12 @@ export const layer = (
 						),
 					)
 					if (Option.isSome(used)) {
-						if (byEmail?.id !== used.value.id) return yield* rejected()
+						if (byEmail?.id !== used.value.id)
+							return yield* CredentialRejected.make({ kind: "session" })
 						return Option.some(used.value.organizationId)
 					}
-					if (byEmail?.enforce === true) return yield* rejected()
+					if (byEmail?.enforce === true)
+						return yield* CredentialRejected.make({ kind: "session" })
 					return Option.none<string>()
 				})
 
@@ -358,7 +359,8 @@ export const layer = (
 					).pipe(
 						Effect.flatMap(({ response: result, headers }) =>
 							Effect.gen(function* () {
-								if (result === null) return yield* rejected()
+								if (result === null)
+									return yield* CredentialRejected.make({ kind: "session" })
 								const ssoOrganization = yield* checkProvider(result.user)
 								const account = {
 									id: result.user.id,

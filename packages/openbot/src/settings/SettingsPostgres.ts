@@ -48,7 +48,6 @@ const columns = (scope: DocumentScope) =>
 export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const client = yield* PgClient.PgClient
-	const unavailable = () => Api.SettingsUnavailable.make({})
 	const where = (scope: DocumentScope) => {
 		const { scopeKind, scopeId } = columns(scope)
 		return and(eq(settings.scopeKind, scopeKind), eq(settings.scopeId, scopeId))
@@ -61,7 +60,7 @@ export const make = Effect.gen(function* () {
 			.where(where(scope))
 			.pipe(
 				Effect.map((rows) => Option.fromNullishOr(rows[0])),
-				Effect.mapError(unavailable),
+				Effect.mapError(() => Api.SettingsUnavailable.make({})),
 			)
 
 	const decodePlatform = (row: typeof settings.$inferSelect) =>
@@ -71,7 +70,7 @@ export const make = Effect.gen(function* () {
 				version: row.version,
 				updatedAt: row.updatedAt,
 			})),
-			Effect.mapError(unavailable),
+			Effect.mapError(() => Api.SettingsUnavailable.make({})),
 		)
 	const decodeOrganization = (row: typeof settings.$inferSelect) =>
 		Schema.decodeEffect(organizationCodec)(row.document).pipe(
@@ -80,7 +79,7 @@ export const make = Effect.gen(function* () {
 				version: row.version,
 				updatedAt: row.updatedAt,
 			})),
-			Effect.mapError(unavailable),
+			Effect.mapError(() => Api.SettingsUnavailable.make({})),
 		)
 
 	/**
@@ -139,7 +138,7 @@ export const make = Effect.gen(function* () {
 									version: row.version,
 									updatedAt: row.updatedAt,
 								})),
-								Effect.mapError(unavailable),
+								Effect.mapError(() => Api.SettingsUnavailable.make({})),
 							),
 					}),
 				),
@@ -204,45 +203,47 @@ export const make = Effect.gen(function* () {
 					if (Option.isSome(input.initial)) {
 						const encoded = yield* Schema.encodeEffect(input.codec)(
 							input.initial.value,
-						).pipe(Effect.mapError(unavailable))
+						).pipe(Effect.mapError(() => Api.SettingsUnavailable.make({})))
 						yield* tx
 							.insert(settings)
 							.values({ ...key, document: encoded, version: 0, updatedAt: 0 })
 							.onConflictDoNothing()
-							.pipe(Effect.mapError(unavailable))
+							.pipe(Effect.mapError(() => Api.SettingsUnavailable.make({})))
 					}
 					const row = (yield* tx
 						.select()
 						.from(settings)
 						.where(where(input.scope))
 						.for("update")
-						.pipe(Effect.mapError(unavailable)))[0]
+						.pipe(Effect.mapError(() => Api.SettingsUnavailable.make({}))))[0]
 					if (row === undefined) return yield* Effect.fail(input.missing())
 					if (row.version !== input.expectedVersion)
 						return yield* Api.SettingsConflict.make({ version: row.version })
 					const current = yield* Schema.decodeEffect(input.codec)(
 						row.document,
-					).pipe(Effect.mapError(unavailable))
+					).pipe(Effect.mapError(() => Api.SettingsUnavailable.make({})))
 					const next = yield* input.change(current)
 					const encoded = yield* Schema.encodeEffect(input.codec)(next).pipe(
-						Effect.mapError(unavailable),
+						Effect.mapError(() => Api.SettingsUnavailable.make({})),
 					)
 					const version = row.version + 1
 					yield* tx
 						.update(settings)
 						.set({ document: encoded, version, updatedAt: now })
 						.where(where(input.scope))
-						.pipe(Effect.mapError(unavailable))
+						.pipe(Effect.mapError(() => Api.SettingsUnavailable.make({})))
 					yield* tx
 						.execute(
 							sql`SELECT pg_notify(${channel}, ${scopeKey(input.scope)})`,
 						)
-						.pipe(Effect.mapError(unavailable))
+						.pipe(Effect.mapError(() => Api.SettingsUnavailable.make({})))
 					return { document: next, version, updatedAt: now }
 				}),
 			)
 			.pipe(
-				Effect.catchTag("SqlError", () => Effect.fail(unavailable())),
+				Effect.catchTag("SqlError", () =>
+					Effect.fail(Api.SettingsUnavailable.make({})),
+				),
 				// This instance does not wait for its own notice.
 				Effect.tap(() => invalidate(input.scope)),
 			)
@@ -256,7 +257,7 @@ export const make = Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
 				const encoded = yield* Schema.encodeEffect(platformCodec)(
 					document,
-				).pipe(Effect.mapError(unavailable))
+				).pipe(Effect.mapError(() => Api.SettingsUnavailable.make({})))
 				const inserted = yield* db
 					.insert(settings)
 					.values({
@@ -267,11 +268,11 @@ export const make = Effect.gen(function* () {
 					})
 					.onConflictDoNothing()
 					.returning({ version: settings.version })
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => Api.SettingsUnavailable.make({})))
 				if (inserted.length === 0) return false
 				yield* client
 					.notify(channel, scopeKey(platformScope))
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => Api.SettingsUnavailable.make({})))
 				yield* invalidate(platformScope)
 				return true
 			}),
@@ -280,7 +281,7 @@ export const make = Effect.gen(function* () {
 				const now = yield* Clock.currentTimeMillis
 				const encoded = yield* Schema.encodeEffect(platformCodec)(
 					document,
-				).pipe(Effect.mapError(unavailable))
+				).pipe(Effect.mapError(() => Api.SettingsUnavailable.make({})))
 				const [row] = yield* db
 					.insert(settings)
 					.values({
@@ -298,10 +299,10 @@ export const make = Effect.gen(function* () {
 						},
 					})
 					.returning({ version: settings.version })
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => Api.SettingsUnavailable.make({})))
 				yield* client
 					.notify(channel, scopeKey(platformScope))
-					.pipe(Effect.mapError(unavailable))
+					.pipe(Effect.mapError(() => Api.SettingsUnavailable.make({})))
 				yield* invalidate(platformScope)
 				return { document, version: row?.version ?? 1, updatedAt: now }
 			}),
@@ -321,7 +322,7 @@ export const make = Effect.gen(function* () {
 				codec: organizationCodec,
 				initial: Option.some(organizationDefaults),
 				change,
-				missing: unavailable,
+				missing: () => Api.SettingsUnavailable.make({}),
 			}),
 		member: (organizationId, userId) =>
 			Cache.get(memberCache, memberScope({ organizationId, userId }).id),
@@ -332,12 +333,12 @@ export const make = Effect.gen(function* () {
 				codec: memberCodec,
 				initial: Option.some(memberDefaults),
 				change,
-				missing: unavailable,
+				missing: () => Api.SettingsUnavailable.make({}),
 			}),
 		notify: (scope) =>
 			client
 				.notify(channel, scopeKey(scope))
-				.pipe(Effect.mapError(unavailable)),
+				.pipe(Effect.mapError(() => Api.SettingsUnavailable.make({}))),
 		changes: Stream.fromPubSub(pubsub),
 	})
 })

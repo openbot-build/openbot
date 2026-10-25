@@ -91,7 +91,6 @@ export class DeveloperTests extends Context.Service<
 		readonly sweep: Effect.Effect<void, DeveloperFailure>
 	}
 >()("@openbot-build/openbot/apps/DeveloperTests") {}
-const conflict = (reason: string) => Api.DeveloperConflict.make({ reason })
 /** Remote cleanup has nothing more to do in these states. */
 const remoteCleanupDone: ReadonlyArray<Api.ConnectionTest["cleanupRemote"]> = [
 	"NotRequired",
@@ -170,12 +169,12 @@ export const make = (
 			const record = yield* owned(owner, id)
 			yield* access.authorize(owner, record.value.cardUrl, true)
 			if (record.value.expiresAt <= (yield* Clock.currentTimeMillis))
-				return yield* conflict("TestExpired")
+				return yield* Api.DeveloperConflict.make({ reason: "TestExpired" })
 			if (
 				record.value.cleanup === "Pending" ||
 				record.value.status === "Cancelled"
 			)
-				return yield* conflict("TestStopped")
+				return yield* Api.DeveloperConflict.make({ reason: "TestStopped" })
 			return record
 		})
 		const view = Effect.fn("DeveloperTests.view")(function* (
@@ -216,7 +215,9 @@ export const make = (
 			record.owner !== owner ||
 			record.value.cardUrl !== input.cardUrl ||
 			record.value.remoteIndex !== input.remoteIndex
-				? Effect.fail(conflict("TestIdentityConflict"))
+				? Effect.fail(
+						Api.DeveloperConflict.make({ reason: "TestIdentityConflict" }),
+					)
 				: Effect.succeed(record.value)
 		const configure = (
 			owner: string,
@@ -227,7 +228,8 @@ export const make = (
 				id,
 				Effect.gen(function* () {
 					const record = yield* editable(owner, id)
-					if (working(record.value)) return yield* conflict("TestBusy")
+					if (working(record.value))
+						return yield* Api.DeveloperConflict.make({ reason: "TestBusy" })
 					const configured = yield* rules
 						.configureEndpoint({
 							candidate: record.value.candidate,
@@ -261,7 +263,9 @@ export const make = (
 							),
 						)
 					if (record.value.authorization !== null)
-						return yield* conflict("ClearTestBeforeReconfiguration")
+						return yield* Api.DeveloperConflict.make({
+							reason: "ClearTestBeforeReconfiguration",
+						})
 					const connection = yield* Store.UserConnection.decode({
 						owner,
 						connectionId: id,
@@ -272,7 +276,13 @@ export const make = (
 						headers: Redacted.make(configured.headers),
 						state: "Enabled",
 						authorization: { _tag: "Unprotected" },
-					}).pipe(Effect.mapError(() => conflict("InvalidTestConfiguration")))
+					}).pipe(
+						Effect.mapError(() =>
+							Api.DeveloperConflict.make({
+								reason: "InvalidTestConfiguration",
+							}),
+						),
+					)
 					yield* stores
 						.bind(owner, id)
 						.apps.save({ app: record.value.candidate, connection })
@@ -350,7 +360,9 @@ export const make = (
 						Effect.gen(function* () {
 							const latest = yield* owned(owner, id)
 							if (latest.cleanupToken !== token)
-								return yield* conflict("CleanupLeaseChanged")
+								return yield* Api.DeveloperConflict.make({
+									reason: "CleanupLeaseChanged",
+								})
 							yield* put({
 								...latest,
 								value: {
@@ -505,7 +517,11 @@ export const make = (
 					return yield* same(current.value, owner, input)
 				const candidate = yield* discovery
 					.refreshCard(input.cardUrl)
-					.pipe(Effect.mapError(() => conflict("CardUnavailable")))
+					.pipe(
+						Effect.mapError(() =>
+							Api.DeveloperConflict.make({ reason: "CardUnavailable" }),
+						),
+					)
 				if (
 					!candidate.endpoints.some(
 						(endpoint) => endpoint.index === input.remoteIndex,
@@ -564,10 +580,16 @@ export const make = (
 						const previous = yield* editable(owner, id)
 						if (working(previous.value)) return previous
 						if (previous.value.endpoint === null)
-							return yield* conflict("ConfigurationRequired")
+							return yield* Api.DeveloperConflict.make({
+								reason: "ConfigurationRequired",
+							})
 						const current = yield* discovery
 							.refreshCard(previous.value.cardUrl)
-							.pipe(Effect.mapError(() => conflict("CardUnavailable")))
+							.pipe(
+								Effect.mapError(() =>
+									Api.DeveloperConflict.make({ reason: "CardUnavailable" }),
+								),
+							)
 						if (
 							!Schema.toEquivalence(Schema.UndefinedOr(Document.Remote))(
 								previous.value.candidate.card.remotes?.[
@@ -576,7 +598,9 @@ export const make = (
 								current.card.remotes?.[previous.value.remoteIndex],
 							)
 						)
-							return yield* conflict("TestTargetChanged")
+							return yield* Api.DeveloperConflict.make({
+								reason: "TestTargetChanged",
+							})
 						const next: TestRecord = {
 							...previous,
 							value: {
@@ -694,7 +718,9 @@ export const make = (
 			remove: Effect.fn("DeveloperTests.remove")(function* (owner, id) {
 				const value = yield* cleanup(owner, id)
 				if (value.cleanup !== "Complete")
-					return yield* conflict("TestCleanupPending")
+					return yield* Api.DeveloperConflict.make({
+						reason: "TestCleanupPending",
+					})
 				// The flows of the test go with it.
 				yield* Rows.stored(
 					db
@@ -712,7 +738,8 @@ export const make = (
 					id,
 					Effect.gen(function* () {
 						const record = yield* editable(owner, id)
-						if (working(record.value)) return yield* conflict("TestBusy")
+						if (working(record.value))
+							return yield* Api.DeveloperConflict.make({ reason: "TestBusy" })
 						if (
 							record.value.authorization !== null &&
 							openAuthorization.includes(record.value.authorization.status) &&
@@ -721,7 +748,9 @@ export const make = (
 						)
 							return record.value
 						if (record.value.status !== "AwaitingAuthorization")
-							return yield* conflict("AuthorizationNotRequired")
+							return yield* Api.DeveloperConflict.make({
+								reason: "AuthorizationNotRequired",
+							})
 						const authorization = yield* runtime.begin(owner, id, input)
 						const value = { ...record.value, authorization }
 						yield* put({ ...record, value })
@@ -734,7 +763,9 @@ export const make = (
 					Effect.gen(function* () {
 						const record = yield* editable(owner, id)
 						if (record.value.authorization?.status !== "Received")
-							return yield* conflict("AuthorizationNotReceived")
+							return yield* Api.DeveloperConflict.make({
+								reason: "AuthorizationNotReceived",
+							})
 						const flow = yield* Rows.getFlow(
 							db,
 							namespace,
@@ -747,9 +778,13 @@ export const make = (
 							sealed === null ||
 							flow.consumed
 						)
-							return yield* conflict("AuthorizationFlowUnavailable")
+							return yield* Api.DeveloperConflict.make({
+								reason: "AuthorizationFlowUnavailable",
+							})
 						if (flow.value.expiresAt <= (yield* Clock.currentTimeMillis))
-							return yield* conflict("AuthorizationExpired")
+							return yield* Api.DeveloperConflict.make({
+								reason: "AuthorizationExpired",
+							})
 						yield* put({
 							...record,
 							value: {
@@ -819,7 +854,8 @@ export const make = (
 			receive: Effect.fn("DeveloperTests.receive")(function* (input, owners) {
 				const url = yield* Effect.try({
 					try: () => new URL(input, publicOrigin),
-					catch: () => conflict("CallbackMismatch"),
+					catch: () =>
+						Api.DeveloperConflict.make({ reason: "CallbackMismatch" }),
 				})
 				if (
 					url.origin !== publicOrigin ||
@@ -829,9 +865,14 @@ export const make = (
 						(key) => url.searchParams.getAll(key).length !== 1,
 					)
 				)
-					return yield* conflict("CallbackMismatch")
+					return yield* Api.DeveloperConflict.make({
+						reason: "CallbackMismatch",
+					})
 				const id = url.searchParams.get("state")
-				if (id === null) return yield* conflict("CallbackMismatch")
+				if (id === null)
+					return yield* Api.DeveloperConflict.make({
+						reason: "CallbackMismatch",
+					})
 				const found = yield* Rows.getFlow(db, namespace, id)
 				return yield* testTransaction(
 					found.testId,
@@ -845,10 +886,14 @@ export const make = (
 							flow.value.status !== "Waiting" ||
 							flow.consumed
 						)
-							return yield* conflict("AuthorizationAlreadyReceived")
+							return yield* Api.DeveloperConflict.make({
+								reason: "AuthorizationAlreadyReceived",
+							})
 						const now = yield* Clock.currentTimeMillis
 						if (flow.value.expiresAt <= now || test.value.expiresAt <= now)
-							return yield* conflict("AuthorizationExpired")
+							return yield* Api.DeveloperConflict.make({
+								reason: "AuthorizationExpired",
+							})
 						const protocol = yield* stores
 							.bind(flow.owner, flow.testId)
 							.flows.get({
@@ -856,7 +901,11 @@ export const make = (
 								flowId: id,
 							})
 							.pipe(
-								Effect.mapError(() => conflict("AuthorizationFlowUnavailable")),
+								Effect.mapError(() =>
+									Api.DeveloperConflict.make({
+										reason: "AuthorizationFlowUnavailable",
+									}),
+								),
 							)
 						const issuer = url.searchParams.get("iss")
 						if (
@@ -865,12 +914,16 @@ export const make = (
 								.authorization_response_iss_parameter_supported === true &&
 								issuer === null)
 						)
-							return yield* conflict("CallbackMismatch")
+							return yield* Api.DeveloperConflict.make({
+								reason: "CallbackMismatch",
+							})
 						if (
 							!url.searchParams.has("error") &&
 							(url.searchParams.get("code") ?? "") === ""
 						)
-							return yield* conflict("CallbackMismatch")
+							return yield* Api.DeveloperConflict.make({
+								reason: "CallbackMismatch",
+							})
 						const status = url.searchParams.has("error")
 							? url.searchParams.get("error") === "access_denied"
 								? ("Cancelled" as const)

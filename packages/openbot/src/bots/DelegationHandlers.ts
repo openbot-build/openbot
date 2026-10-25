@@ -4,8 +4,6 @@ import { HttpApiBuilder } from "effect/http-api"
 import { Coordinator } from "./Coordinator.ts"
 import { Delegations, view } from "./Delegations.ts"
 
-const unavailable = () => DelegationsApi.DelegationStorageUnavailable.make({})
-
 const implementations = Effect.gen(function* () {
 	const delegations = yield* Delegations
 	const coordinator = yield* Coordinator
@@ -15,7 +13,11 @@ const implementations = Effect.gen(function* () {
 			const caller = yield* Identity
 			const found = yield* delegations
 				.find(caller.organizationId, id)
-				.pipe(Effect.mapError(unavailable))
+				.pipe(
+					Effect.mapError(() =>
+						DelegationsApi.DelegationStorageUnavailable.make({}),
+					),
+				)
 			if (Option.isNone(found) || found.value.userId !== caller.userId)
 				return yield* DelegationsApi.DelegationNotFound.make({ delegation: id })
 			return { caller, stored: found.value }
@@ -44,7 +46,11 @@ const implementations = Effect.gen(function* () {
 						params.delegationId,
 						"A person stopped the work.",
 					)
-					.pipe(Effect.mapError(unavailable))
+					.pipe(
+						Effect.mapError(() =>
+							DelegationsApi.DelegationStorageUnavailable.make({}),
+						),
+					)
 				return view(
 					(yield* own(params.delegationId)).stored,
 					yield* Clock.currentTimeMillis,

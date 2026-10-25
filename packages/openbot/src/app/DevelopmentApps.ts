@@ -13,11 +13,6 @@ const Request = Schema.Struct({
 	method: Schema.String,
 	params: Schema.optionalKey(Schema.JsonObject),
 })
-const unavailable = () =>
-	new Network.NetworkError({
-		reason: "Transport",
-		message: "No simulated App is configured for this request.",
-	})
 
 export const PublicationMode = Schema.Literals([
 	"published",
@@ -100,7 +95,10 @@ export const layerPublicNetwork = Layer.effect(
 			}) {
 				const target = new URL(url)
 				if (target.origin !== "https://app.development.test")
-					return yield* unavailable()
+					return yield* new Network.NetworkError({
+						reason: "Transport",
+						message: "No simulated App is configured for this request.",
+					})
 				const mode = yield* publication.mode
 				const scenario = yield* scenarios.mode
 				const tokens =
@@ -215,7 +213,10 @@ const network = (
 					request.url === "https://app.development.test/configured" &&
 					request.headers["x-development-key"] !== "development-test-key"
 				)
-					return yield* unavailable()
+					return yield* new Network.NetworkError({
+						reason: "Transport",
+						message: "No simulated App is configured for this request.",
+					})
 
 				if (
 					![
@@ -227,12 +228,22 @@ const network = (
 						"https://app.development.test/revoke",
 					].includes(request.url)
 				)
-					return yield* unavailable()
+					return yield* new Network.NetworkError({
+						reason: "Transport",
+						message: "No simulated App is configured for this request.",
+					})
 				const body = yield* Match.value(request.body).pipe(
 					Match.tag("Uint8Array", (body) =>
 						Effect.succeed(new TextDecoder().decode(body.body)),
 					),
-					Match.orElse(() => Effect.fail(unavailable())),
+					Match.orElse(() =>
+						Effect.fail(
+							new Network.NetworkError({
+								reason: "Transport",
+								message: "No simulated App is configured for this request.",
+							}),
+						),
+					),
 				)
 				if (request.url.endsWith("/token") || request.url.endsWith("/revoke")) {
 					const text = yield* authorization.grant(
@@ -332,7 +343,13 @@ const network = (
 										.pipe(
 											Effect.flatMap((result) =>
 												mode === "result-unknown"
-													? Effect.fail(unavailable())
+													? Effect.fail(
+															new Network.NetworkError({
+																reason: "Transport",
+																message:
+																	"No simulated App is configured for this request.",
+															}),
+														)
 													: Effect.succeed(
 															mode === "business-failure"
 																? {
@@ -348,7 +365,13 @@ const network = (
 														),
 											),
 										)
-								: Effect.fail(unavailable()),
+								: Effect.fail(
+										new Network.NetworkError({
+											reason: "Transport",
+											message:
+												"No simulated App is configured for this request.",
+										}),
+									),
 					),
 					Match.when("resources/read", () =>
 						Effect.succeed({
@@ -382,7 +405,14 @@ const network = (
 							],
 						}),
 					),
-					Match.orElse(() => Effect.fail(unavailable())),
+					Match.orElse(() =>
+						Effect.fail(
+							new Network.NetworkError({
+								reason: "Transport",
+								message: "No simulated App is configured for this request.",
+							}),
+						),
+					),
 				)
 				return {
 					url: request.url,

@@ -150,7 +150,6 @@ export const make: Effect.Effect<
 	const network = yield* Network.PublicNetwork
 	const robots = yield* Robots.Robots
 	const inspections = yield* AppInspections
-	const notFound = () => Api.DeveloperNotFound.make({})
 	const conflict = (reason: string) => Api.DeveloperConflict.make({ reason })
 	const proofWhere = (id: string) =>
 		and(eq(developerProofs.namespace, namespace), eq(developerProofs.id, id))
@@ -163,7 +162,7 @@ export const make: Effect.Effect<
 	) {
 		const query = db.select().from(developerProofs).where(proofWhere(id))
 		const row = (yield* Rows.stored(lock ? query.for("update") : query))[0]
-		if (row === undefined) return yield* notFound()
+		if (row === undefined) return yield* Api.DeveloperNotFound.make({})
 		return yield* Rows.decodeProof(row)
 	})
 	const writeProof = Effect.fn("DeveloperAccess.writeProof")(function* (
@@ -200,7 +199,7 @@ export const make: Effect.Effect<
 			)
 			if (usable(proof.value, now) && member.length > 0)
 				return yield* Api.DeveloperForbidden.make({})
-			return yield* notFound()
+			return yield* Api.DeveloperNotFound.make({})
 		}
 		return proof
 	})
@@ -211,7 +210,8 @@ export const make: Effect.Effect<
 	) {
 		const query = db.select().from(developerClaims).where(claimWhere(id))
 		const row = (yield* Rows.stored(lock ? query.for("update") : query))[0]
-		if (row === undefined || row.owner !== owner) return yield* notFound()
+		if (row === undefined || row.owner !== owner)
+			return yield* Api.DeveloperNotFound.make({})
 		return yield* Rows.decodeClaim(row)
 	})
 	const setClaimStatus = (id: string, status: Api.Challenge["status"]) =>
@@ -318,7 +318,7 @@ export const make: Effect.Effect<
 				const { value } = yield* Rows.decodeProof(row.proof)
 				const role = yield* Schema.decodeUnknownEffect(Api.MemberRole)(
 					row.role,
-				).pipe(Effect.mapError(Rows.unavailable))
+				).pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
 				return {
 					proofId: value.id,
 					memberId: row.memberId,
@@ -352,7 +352,7 @@ export const make: Effect.Effect<
 		const all = (yield* grants(owner)).filter((grant) =>
 			covers(grant.scope, app.candidate),
 		)
-		if (all.length === 0) return yield* notFound()
+		if (all.length === 0) return yield* Api.DeveloperNotFound.make({})
 		if (write && all.every((grant) => grant.role === "viewer"))
 			return yield* Api.DeveloperForbidden.make({})
 		return all
@@ -393,7 +393,7 @@ export const make: Effect.Effect<
 				const candidate = yield* Discovery.Candidate.decode({
 					...observed,
 					sources,
-				}).pipe(Effect.mapError(Rows.unavailable))
+				}).pipe(Effect.mapError(() => Api.DeveloperUnavailable.make({})))
 				if (!covers(scope, candidate)) return true
 				if (Option.isSome(previous)) {
 					yield* Rows.putApp(db, namespace, { ...previous.value, candidate })
@@ -402,7 +402,9 @@ export const make: Effect.Effect<
 				const now = yield* Clock.currentTimeMillis
 				const encoded = yield* Schema.encodeEffect(
 					Rows.Json(Discovery.Candidate),
-				)(candidate).pipe(Effect.mapError(Rows.unavailable))
+				)(candidate).pipe(
+					Effect.mapError(() => Api.DeveloperUnavailable.make({})),
+				)
 				// Another request may add the same App first. Then read it again and merge.
 				const inserted = yield* Rows.stored(
 					db
