@@ -44,11 +44,6 @@
 
 - OpenBot uses `AGPL-3.0-only`. Every `package.json` sets
   `"license": "AGPL-3.0-only"`, and new packages must do the same.
-- `packages/ability` is a git subtree of
-  [nmnmcc/ability](https://github.com/nmnmcc/ability). It keeps its own
-  `Apache-2.0` license and its own `AGENTS.md`. The Apache license lets us share
-  it under the AGPL. Put a change to it in its own commit that touches only that
-  folder. Send it upstream with `git subtree push` only when the user asks.
 - Add a new dependency only when its license lets us share it under the AGPL.
 
 ## Docs

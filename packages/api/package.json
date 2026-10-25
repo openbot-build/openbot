@@ -23,7 +23,7 @@
 		"effect": "4.0.6"
 	},
 	"dependencies": {
-		"@nmnmcc/ability": "workspace:*",
+		"@nmnmcc/ability": "1.0.1",
 		"@openbot-build/core": "workspace:*",
 		"@openbot-build/protocol": "workspace:*"
 	}
