@@ -14,6 +14,7 @@ import {
 	Option,
 	PubSub,
 	Queue,
+	Ref,
 	Result,
 	Schedule,
 	Schema,
@@ -69,15 +70,44 @@ const decodeSessionNotice = Schema.decodeUnknownOption(
 /** Where the output of a session goes on the instance with the connection. */
 type Route =
 	| { readonly _tag: "Here"; readonly sink: ProcessSink.Sink }
-	| { readonly _tag: "Away"; readonly order: { value: number } }
+	| { readonly _tag: "Away"; readonly order: Ref.Ref<number> }
 
 /** A session that this instance started on a connection of another instance. */
 interface Owned {
 	readonly sink: ProcessSink.Sink
-	/** The order of the next message, and the messages that came too early. */
-	next: number
-	readonly early: Map<number, ComputersApi.FromConnector>
+	readonly reorder: Ref.Ref<Reorder>
 }
+
+/** The order of the next message, and the messages that came too early. */
+interface Reorder {
+	readonly next: number
+	readonly early: HashMap.HashMap<number, ComputersApi.FromConnector>
+}
+
+/** Keeps a message, and takes the messages that are now in order. */
+const reorder = (
+	state: Reorder,
+	order: number,
+	message: ComputersApi.FromConnector,
+): readonly [ReadonlyArray<ComputersApi.FromConnector>, Reorder] => {
+	let early = HashMap.set(state.early, order, message)
+	let next = state.next
+	const ready: Array<ComputersApi.FromConnector> = []
+	for (
+		let found = HashMap.get(early, next);
+		Option.isSome(found);
+		found = HashMap.get(early, next)
+	) {
+		ready.push(found.value)
+		early = HashMap.remove(early, next)
+		next++
+	}
+	return [ready, { next, early }]
+}
+
+/** Gives the next order number of a session, and counts it. */
+const nextOrder = (order: Ref.Ref<number>) =>
+	Ref.getAndUpdate(order, (value) => value + 1)
 
 const closedExit: Exit = {
 	code: null,
@@ -191,7 +221,7 @@ export const make = Effect.gen(function* () {
 		client
 			.notify(sessionChannel, encodeSessionNotice(value))
 			.pipe(Effect.ignore)
-	const owned = new Map<string, Owned>()
+	const owned = yield* Ref.make(HashMap.empty<string, Owned>())
 
 	/** Gives a message of the machine to the sink of its session. */
 	const deliverTo = (
@@ -216,18 +246,22 @@ export const make = Effect.gen(function* () {
 	/** Passes output of the machine to the instance that started the session. */
 	const forward = (
 		session: string,
-		order: { value: number },
+		order: Ref.Ref<number>,
 		message: ComputersApi.FromConnector,
 	) =>
 		Effect.gen(function* () {
 			if (message._tag !== "Output") {
-				yield* notifySession({ from: session, order: order.value++, message })
+				yield* notifySession({
+					from: session,
+					order: yield* nextOrder(order),
+					message,
+				})
 				return
 			}
 			for (let at = 0; at < message.data.length; at += partLength)
 				yield* notifySession({
 					from: session,
-					order: order.value++,
+					order: yield* nextOrder(order),
 					message: {
 						...message,
 						data: message.data.slice(at, at + partLength),
@@ -245,26 +279,25 @@ export const make = Effect.gen(function* () {
 				const found = yield* local(value.to)
 				if (Option.isNone(found)) return
 				const message = value.message
-				if (message._tag === "Start")
+				if (message._tag === "Start") {
+					const order = yield* Ref.make(0)
 					yield* SynchronizedRef.update(
 						found.value.sessions,
-						HashMap.set(message.session, {
-							_tag: "Away",
-							order: { value: 0 },
-						} as Route),
+						HashMap.set(message.session, { _tag: "Away", order } as Route),
 					)
+				}
 				yield* found.value.send(message)
 				return
 			}
-			const target = owned.get(value.from)
-			if (target === undefined) return
-			target.early.set(value.order, value.message)
-			while (target.early.has(target.next)) {
-				const message = target.early.get(target.next)!
-				target.early.delete(target.next)
-				target.next++
-				yield* deliverTo(target.sink, message)
-				if (message._tag === "Exit") owned.delete(value.from)
+			const target = HashMap.get(yield* Ref.get(owned), value.from)
+			if (Option.isNone(target)) return
+			const ready = yield* Ref.modify(target.value.reorder, (state) =>
+				reorder(state, value.order, value.message),
+			)
+			for (const message of ready) {
+				yield* deliverTo(target.value.sink, message)
+				if (message._tag === "Exit")
+					yield* Ref.update(owned, HashMap.remove(value.from))
 			}
 		})
 
@@ -382,12 +415,11 @@ export const make = Effect.gen(function* () {
 						createdAt: now,
 					})
 					.pipe(
-						Effect.mapError(
-							() =>
-								new ComputerCallFailed({
-									message: "OpenBot could not store the call.",
-									retry: true,
-								}),
+						Effect.mapError(() =>
+							ComputerCallFailed.make({
+								message: "OpenBot could not store the call.",
+								retry: true,
+							}),
 						),
 					)
 				yield* notify(notice("call", call.id))
@@ -453,17 +485,21 @@ export const make = Effect.gen(function* () {
 									([session, route]) =>
 										route._tag === "Here"
 											? route.sink.end(closedExit)
-											: notifySession({
-													from: session,
-													order: route.order.value++,
-													message: {
-														_tag: "Exit",
-														session,
-														code: null,
-														signal: null,
-														error: closedExit.error!,
-													},
-												}),
+											: nextOrder(route.order).pipe(
+													Effect.flatMap((order) =>
+														notifySession({
+															from: session,
+															order,
+															message: {
+																_tag: "Exit",
+																session,
+																code: null,
+																signal: null,
+																error: closedExit.error!,
+															},
+														}),
+													),
+												),
 									{ discard: true },
 								),
 							),
@@ -576,16 +612,16 @@ export const make = Effect.gen(function* () {
 					? yield* callLocal(found.value, call, wait)
 					: (yield* isConnected(computerId))
 						? yield* callRemote(computerId, call, wait)
-						: yield* new ComputerGone({
+						: yield* ComputerGone.make({
 								reason: "The machine is not connected.",
 							})
 				if (Option.isNone(result))
-					return yield* new ComputerCallFailed({
+					return yield* ComputerCallFailed.make({
 						message: "The machine did not answer in time.",
 						retry: true,
 					})
 				if (result.value._tag === "Failed")
-					return yield* new ComputerCallFailed({
+					return yield* ComputerCallFailed.make({
 						message: result.value.message,
 						retry: false,
 					})
@@ -608,9 +644,18 @@ export const make = Effect.gen(function* () {
 						HashMap.set(session, { _tag: "Here", sink } as Route),
 					)
 				else if (yield* isConnected(computerId))
-					owned.set(session, { sink, next: 0, early: new Map() })
+					yield* Ref.update(
+						owned,
+						HashMap.set(session, {
+							sink,
+							reorder: yield* Ref.make<Reorder>({
+								next: 0,
+								early: HashMap.empty(),
+							}),
+						}),
+					)
 				else
-					return yield* new ComputerGone({
+					return yield* ComputerGone.make({
 						reason: "The machine is not connected.",
 					})
 				const send = (message: ComputersApi.ToConnector) =>
@@ -620,7 +665,7 @@ export const make = Effect.gen(function* () {
 				yield* Effect.addFinalizer(() =>
 					Effect.gen(function* () {
 						if (!(yield* sink.ended)) yield* send({ _tag: "Close", session })
-						owned.delete(session)
+						yield* Ref.update(owned, HashMap.remove(session))
 						if (Option.isSome(found))
 							yield* SynchronizedRef.update(
 								found.value.sessions,

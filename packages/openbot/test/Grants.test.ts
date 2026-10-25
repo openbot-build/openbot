@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import { BotsApi } from "@openbot-build/api"
 import { Chat } from "@openbot-build/core"
-import { Option } from "effect"
+import { Effect, Option } from "effect"
 import { decidingGrant } from "../src/capabilities/Policy.ts"
 
 const bot = BotsApi.BotId.make("bot_1")
@@ -39,7 +39,7 @@ const decide = (
 	chat: Chat.Id = here,
 ) =>
 	Option.map(
-		decidingGrant({ grants, bot, capability, chat }),
+		Effect.runSync(decidingGrant({ grants, bot, capability, chat })),
 		(found) => found.id,
 	)
 

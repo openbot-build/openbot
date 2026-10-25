@@ -4,17 +4,19 @@ import type { Chat } from "@openbot-build/core"
 import { PgClient } from "@effect/sql-pg"
 import { eq } from "drizzle-orm"
 import {
+	Chunk,
 	Clock,
 	Context,
-	Data,
 	Deferred,
 	Duration,
 	Effect,
 	Exit as EffectExit,
+	HashMap,
 	Layer,
 	Option,
 	PubSub,
 	Queue,
+	Ref,
 	Schedule,
 	Schema,
 	Scope,
@@ -38,9 +40,12 @@ export interface Owner {
 }
 
 /** The session is not there. It ended, or another owner has it. */
-export class SessionGone extends Data.TaggedError("SessionGone")<{
-	readonly id: string
-}> {}
+export class SessionGone extends Schema.TaggedError<SessionGone>()(
+	"SessionGone",
+	{
+		id: Schema.String,
+	},
+) {}
 
 /** A session ends when nobody reads it or writes to it for this long. */
 export const idleLimit = Duration.minutes(30)
@@ -56,11 +61,35 @@ interface Session {
 	readonly scope: Scope.Closeable
 	/** It is done when the command ends and all its output is here. */
 	readonly ended: Deferred.Deferred<Exit>
-	unread: Array<Uint8Array>
-	unreadBytes: number
+	/** The output that nobody has read yet. */
+	readonly unread: Ref.Ref<Unread>
+	readonly touchedAt: Ref.Ref<number>
+	/** Who to tell at the end. It is taken once, by the first that sees the end. */
+	readonly onEnd: Ref.Ref<Option.Option<OnEnd>>
+}
+
+type OnEnd = (exit: Exit, output: string) => Effect.Effect<void>
+
+interface Unread {
+	readonly chunks: Chunk.Chunk<Uint8Array>
+	readonly bytes: number
 	/** Output was lost because nobody read it in time. */
-	dropped: boolean
-	touchedAt: number
+	readonly dropped: boolean
+}
+
+const noUnread: Unread = { chunks: Chunk.empty(), bytes: 0, dropped: false }
+
+/** Adds a chunk. Old output goes when there is too much. */
+const keep = (unread: Unread, chunk: Uint8Array): Unread => {
+	let chunks: Chunk.Chunk<Uint8Array> = Chunk.append(unread.chunks, chunk)
+	let bytes = unread.bytes + chunk.length
+	let dropped = unread.dropped
+	while (bytes > keepLimit && Chunk.size(chunks) > 1) {
+		bytes -= Chunk.headUnsafe(chunks).length
+		chunks = Chunk.drop(chunks, 1)
+		dropped = true
+	}
+	return { chunks, bytes, dropped }
 }
 
 /** The call of another instance for a session on this instance. */
@@ -167,33 +196,30 @@ export const make = Effect.gen(function* () {
 	const db = yield* Db.make
 	const client = yield* PgClient.PgClient
 	const scope = yield* Scope.Scope
-	const sessions = new Map<string, Session>()
+	const sessions = yield* Ref.make(HashMap.empty<string, Session>())
 	const replies = yield* PubSub.unbounded<string>()
 	yield* Effect.addFinalizer(() => PubSub.shutdown(replies))
-	const ended = new Map<
-		string,
-		(exit: Exit, output: string) => Effect.Effect<void>
-	>()
 
 	const remove = (session: Session) =>
-		Effect.suspend(() => {
-			sessions.delete(session.id)
-			ended.delete(session.id)
-			return Scope.close(session.scope, EffectExit.void)
-		})
+		Ref.update(sessions, HashMap.remove(session.id)).pipe(
+			Effect.andThen(Ref.set(session.onEnd, Option.none())),
+			Effect.andThen(Scope.close(session.scope, EffectExit.void)),
+		)
 
 	/** Takes the output since the last read. */
-	const take = (session: Session, max: number) => {
-		const { bytes, truncated } = joinTail(session.unread, max)
-		const dropped = session.dropped
-		session.unread = []
-		session.unreadBytes = 0
-		session.dropped = false
-		return {
-			output: new TextDecoder().decode(bytes),
-			truncated: truncated || dropped,
-		}
-	}
+	const take = (session: Session, max: number) =>
+		Ref.getAndSet(session.unread, noUnread).pipe(
+			Effect.map((unread) => {
+				const { bytes, truncated } = joinTail(
+					Chunk.toReadonlyArray(unread.chunks),
+					max,
+				)
+				return {
+					output: new TextDecoder().decode(bytes),
+					truncated: truncated || unread.dropped,
+				}
+			}),
+		)
 
 	/** Waits for the end or the yield time, then gives the new output. */
 	const read = (
@@ -205,8 +231,8 @@ export const make = Effect.gen(function* () {
 			const exit = yield* Deferred.await(session.ended).pipe(
 				Effect.timeoutOption(yieldMs),
 			)
-			session.touchedAt = yield* Clock.currentTimeMillis
-			const { output, truncated } = take(session, maxBytes)
+			yield* Ref.set(session.touchedAt, yield* Clock.currentTimeMillis)
+			const { output, truncated } = yield* take(session, maxBytes)
 			if (Option.isNone(exit))
 				return {
 					session: session.id,
@@ -217,7 +243,6 @@ export const make = Effect.gen(function* () {
 					truncated,
 				}
 			// The caller sees the end now, so nobody needs to be told later.
-			ended.delete(session.id)
 			yield* remove(session)
 			return {
 				session: null,
@@ -261,38 +286,25 @@ export const make = Effect.gen(function* () {
 				process,
 				scope: sessionScope,
 				ended: yield* Deferred.make<Exit>(),
-				unread: [],
-				unreadBytes: 0,
-				dropped: false,
-				touchedAt: yield* Clock.currentTimeMillis,
+				unread: yield* Ref.make(noUnread),
+				touchedAt: yield* Ref.make(yield* Clock.currentTimeMillis),
+				onEnd: yield* Ref.make(Option.fromNullishOr(onEnd)),
 			}
-			sessions.set(session.id, session)
-			if (onEnd !== undefined) ended.set(session.id, onEnd)
-			// Keeps the output until the next read. Old output goes when there is too much.
+			yield* Ref.update(sessions, HashMap.set(session.id, session))
+			// Keeps the output until the next read.
 			yield* process.output.pipe(
 				Stream.runForEach((chunk) =>
-					Effect.sync(() => {
-						session.unread.push(chunk)
-						session.unreadBytes += chunk.length
-						while (
-							session.unreadBytes > keepLimit &&
-							session.unread.length > 1
-						) {
-							session.unreadBytes -= session.unread.shift()!.length
-							session.dropped = true
-						}
-					}),
+					Ref.update(session.unread, (unread) => keep(unread, chunk)),
 				),
 				Effect.andThen(process.exit),
 				Effect.flatMap((exit) =>
 					Effect.gen(function* () {
 						yield* Deferred.succeed(session.ended, exit)
-						const tell = ended.get(session.id)
-						if (tell === undefined) return
-						ended.delete(session.id)
-						const { output } = take(session, 4096)
+						const tell = yield* Ref.getAndSet(session.onEnd, Option.none())
+						if (Option.isNone(tell)) return
+						const { output } = yield* take(session, 4096)
 						yield* remove(session)
-						yield* tell(exit, output)
+						yield* tell.value(exit, output)
 					}),
 				),
 				Effect.forkIn(sessionScope),
@@ -302,7 +314,8 @@ export const make = Effect.gen(function* () {
 				while (true) {
 					yield* Effect.sleep(Duration.minutes(1))
 					const now = yield* Clock.currentTimeMillis
-					if (now - session.touchedAt > Duration.toMillis(idleLimit)) {
+					const touchedAt = yield* Ref.get(session.touchedAt)
+					if (now - touchedAt > Duration.toMillis(idleLimit)) {
 						yield* process.signal("SIGKILL").pipe(Effect.ignore)
 						yield* remove(session)
 						return
@@ -317,12 +330,14 @@ export const make = Effect.gen(function* () {
 		})
 
 	/** The session on this instance, when the owner may use it. */
-	const own = (owner: Owner, id: string) => {
-		const session = sessions.get(id)
-		return session === undefined || !sameOwner(session.owner, owner)
-			? Option.none<Session>()
-			: Option.some(session)
-	}
+	const own = (owner: Owner, id: string) =>
+		Ref.get(sessions).pipe(
+			Effect.map((all) =>
+				HashMap.get(all, id).pipe(
+					Option.filter((session) => sameOwner(session.owner, owner)),
+				),
+			),
+		)
 
 	/** Does a call on a session of this instance. */
 	const callLocal = (
@@ -330,7 +345,7 @@ export const make = Effect.gen(function* () {
 		call: SessionCall,
 	): Effect.Effect<ComputersApi.SessionOutput | null, ComputerError> =>
 		Effect.gen(function* () {
-			session.touchedAt = yield* Clock.currentTimeMillis
+			yield* Ref.set(session.touchedAt, yield* Clock.currentTimeMillis)
 			switch (call._tag) {
 				case "Write": {
 					const bytes = unescape(call.request.chars)
@@ -397,9 +412,9 @@ export const make = Effect.gen(function* () {
 						? Option.none()
 						: decodeReply(row.reply)
 				if (Option.isNone(reply) || reply.value._tag === "Gone")
-					return yield* new SessionGone({ id })
+					return yield* SessionGone.make({ id })
 				if (reply.value._tag === "Failed")
-					return yield* new ComputerCallFailed({
+					return yield* ComputerCallFailed.make({
 						message: reply.value.message,
 						retry: false,
 					})
@@ -419,8 +434,9 @@ export const make = Effect.gen(function* () {
 			const parsed = decodeRow(row.call)
 			if (Option.isNone(parsed)) return
 			const { session: id, owner, call } = parsed.value
-			const session = sessions.get(id)
-			if (session === undefined) return
+			const found = HashMap.get(yield* Ref.get(sessions), id)
+			if (Option.isNone(found)) return
+			const session = found.value
 			const reply: typeof CallReply.Type = !sameOwner(
 				session.owner,
 				owner as Owner,
@@ -475,12 +491,12 @@ export const make = Effect.gen(function* () {
 		ComputersApi.SessionOutput | null,
 		ComputerError | SessionGone
 	> =>
-		Option.match(own(owner, id), {
-			onSome: (session) => callLocal(session, call),
-			onNone: () =>
-				sessions.has(id)
-					? Effect.fail(new SessionGone({ id }))
-					: callRemote(owner, id, call, wait),
+		Effect.gen(function* () {
+			const session = yield* own(owner, id)
+			if (Option.isSome(session)) return yield* callLocal(session.value, call)
+			if (HashMap.has(yield* Ref.get(sessions), id))
+				return yield* SessionGone.make({ id })
+			return yield* callRemote(owner, id, call, wait)
 		})
 	const yieldOf = (request: { readonly yieldTimeMs?: number }) =>
 		Duration.millis(
@@ -493,7 +509,7 @@ export const make = Effect.gen(function* () {
 			route(owner, id, { _tag: "Write", request }, yieldOf(request)).pipe(
 				Effect.filterOrFail(
 					(output): output is ComputersApi.SessionOutput => output !== null,
-					() => new SessionGone({ id }),
+					() => SessionGone.make({ id }),
 				),
 			),
 		resize: (owner, id, request) =>
@@ -504,7 +520,7 @@ export const make = Effect.gen(function* () {
 			route(owner, id, { _tag: "Close" }, "20 seconds").pipe(
 				Effect.filterOrFail(
 					(output): output is ComputersApi.SessionOutput => output !== null,
-					() => new SessionGone({ id }),
+					() => SessionGone.make({ id }),
 				),
 			),
 	})

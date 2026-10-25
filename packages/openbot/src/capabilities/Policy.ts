@@ -69,7 +69,7 @@ export const decidingGrant = (input: {
 	readonly bot: string
 	readonly capability: BotsApi.Capability
 	readonly chat: Chat.Id
-}): Option.Option<BotsApi.Grant> => {
+}) => {
 	const policy = policyOf(input.grants)
 	const request = {
 		principal: { bot: input.bot, chat: input.chat },
@@ -80,15 +80,17 @@ export const decidingGrant = (input: {
 			chat: input.chat,
 		}),
 	}
-	// A policy of Grants has no predicates, so it runs at once.
-	const { decision, steps } = Effect.runSync(Policy.explain(policy, request))
-	if (decision._tag === "NotApplicable") return Option.none()
-	// The rules are tested in order, so the first rule that applies with the
-	// same effect is the one that decides. Its ID is the ID of the Grant.
-	const winner = steps.find(
-		(step) => step.applies && step.rule._tag === decision._tag,
-	)
-	return Option.fromNullishOr(
-		input.grants.find((grant) => grant.id === winner?.rule.id),
+	return Policy.explain(policy, request).pipe(
+		Effect.map(({ decision, steps }): Option.Option<BotsApi.Grant> => {
+			if (decision._tag === "NotApplicable") return Option.none()
+			// The rules are tested in order, so the first rule that applies with
+			// the same effect is the one that decides. Its ID is the ID of the Grant.
+			const winner = steps.find(
+				(step) => step.applies && step.rule._tag === decision._tag,
+			)
+			return Option.fromNullishOr(
+				input.grants.find((grant) => grant.id === winner?.rule.id),
+			)
+		}),
 	)
 }

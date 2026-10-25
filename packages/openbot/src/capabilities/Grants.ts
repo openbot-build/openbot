@@ -96,7 +96,7 @@ export const make: Effect.Effect<typeof Grants.Service, never, BotRecords> =
 						status: "active",
 					})
 					.pipe(
-						Effect.map((list) =>
+						Effect.flatMap((list) =>
 							decidingGrant({
 								grants: list,
 								bot: input.bot,
