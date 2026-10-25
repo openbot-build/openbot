@@ -6,6 +6,7 @@ import type { Position } from "../../apps/Invocations.ts"
 import type { CodeRuns } from "../../code/CodeRuns.ts"
 import { name, ToolResult, toolResult } from "../../code/CodeRuns.ts"
 import { declarations } from "../../code/Declarations.ts"
+import * as VaultCode from "../../vaults/CodeMode.ts"
 import type { Entry } from "./AppPlugin.ts"
 
 /** The names of the Code Mode tools. */
@@ -51,6 +52,8 @@ export const entries = (input: {
 	readonly codeRuns: typeof CodeRuns.Service
 	readonly position: Position
 	readonly bindings: ReadonlyArray<Bindings.Binding>
+	/** The Vault items of the Bot. Programs name them, and never see their values. */
+	readonly vault: ReadonlyArray<VaultCode.Entry>
 	readonly occupied: ReadonlyArray<string>
 }): ReadonlyArray<Entry> => {
 	if (
@@ -67,6 +70,13 @@ export const entries = (input: {
 				"apps." + alias + ": " + binding.description.slice(0, 80),
 		)
 		.join("\n")
+	const vaultDeclarations = VaultCode.declarations(input.vault)
+	const vaultIndex =
+		input.vault.length === 0
+			? ""
+			: "\nThe Vault items are: " +
+				input.vault.map((entry) => "vault." + entry.alias).join(", ") +
+				". `vault.<item>.<field>` is a reference to a secret, not the secret. Put it in a string argument of an App tool. OpenBot puts the secret in when it sends the call, and only to the tools that the item allows."
 	const api: Entry = {
 		tool: Tool.dynamic(names.api, {
 			description:
@@ -83,22 +93,28 @@ export const entries = (input: {
 						.toLowerCase()
 						.split(/\s+/)
 						.filter((word) => word.length > 0)
+					const found = declarations(named, ({ alias, binding }) => {
+						const group = alias.split(".")[0]!
+						const text = (
+							alias +
+							" " +
+							binding.source.name +
+							" " +
+							binding.description
+						).toLowerCase()
+						return (
+							(query.connections === undefined ||
+								query.connections.includes(group)) &&
+							words.every((word) => text.includes(word))
+						)
+					})
 					return {
-						declarations: declarations(named, ({ alias, binding }) => {
-							const group = alias.split(".")[0]!
-							const text = (
-								alias +
-								" " +
-								binding.source.name +
-								" " +
-								binding.description
-							).toLowerCase()
-							return (
-								(query.connections === undefined ||
-									query.connections.includes(group)) &&
-								words.every((word) => text.includes(word))
-							)
-						}),
+						declarations:
+							vaultDeclarations === "" ||
+							(query.connections !== undefined &&
+								!query.connections.includes("vault"))
+								? found
+								: found + "\n\n" + vaultDeclarations,
 					}
 				}),
 				Effect.orElseSucceed(() => ({
@@ -121,7 +137,8 @@ export const entries = (input: {
 				index +
 				(named.length > 200
 					? "\n(More bindings exist. Search them with `" + names.api + "`.)"
-					: ""),
+					: "") +
+				vaultIndex,
 			parameters: RunInput,
 			success: ToolResult,
 			needsApproval: (raw, context) =>

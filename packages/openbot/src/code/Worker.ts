@@ -3,7 +3,7 @@
  * QuickJS is a small JavaScript engine. Here it runs as WebAssembly, so the
  * program has no access to Node.js: no network, no files, no process.
  * The program can only call the App bindings that the host gives it. The host
- * answers each call. This file is a worker entry point, so it starts work when it loads.
+ * answers each call. `vault` holds only references to secrets, never their values. This file is a worker entry point, so it starts work when it loads.
  */
 import { parentPort } from "node:worker_threads"
 import { performance } from "node:perf_hooks"
@@ -19,7 +19,7 @@ const port = parentPort
 if (port === null)
 	throw new Error("The Code Mode worker must run in a worker thread.")
 
-/** Code that runs in QuickJS before the program. It builds `apps`, `console`, the clock and random numbers. */
+/** Code that runs in QuickJS before the program. It builds `apps`, `vault`, `console`, the clock and random numbers. */
 const prelude = `(() => {
 	const host = globalThis.__openbot_host
 	delete globalThis.__openbot_host
@@ -53,6 +53,13 @@ const prelude = `(() => {
 		if (!Object.hasOwn(apps, group)) apps[group] = {}
 		apps[group][name] = (args) => call(binding, args)
 	}
+	const vault = {}
+	for (const item of JSON.parse(host.vault)) {
+		const fields = {}
+		for (const field of item.fields) fields[field] = "⟦vault:" + item.alias + "/" + field + "⟧"
+		vault[item.alias] = Object.freeze(fields)
+	}
+	globalThis.vault = Object.freeze(vault)
 	const show = (value) => {
 		if (typeof value === "string") return value
 		try { return JSON.stringify(value) ?? String(value) } catch { return String(value) }
@@ -135,6 +142,9 @@ const run = async (start: Extract<ToWorker, { type: "start" }>) => {
 		})
 		context.setProp(host, "bindings", bindings)
 		bindings.dispose()
+		const vault = context.newString(JSON.stringify(start.vault))
+		context.setProp(host, "vault", vault)
+		vault.dispose()
 		const seed = context.newNumber(start.seed)
 		context.setProp(host, "seed", seed)
 		seed.dispose()

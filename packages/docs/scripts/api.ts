@@ -107,6 +107,16 @@ const groups = [
 		"Pair your own machine and keep it connected. The token is the only credential.",
 	],
 	[
+		"secretProviders",
+		"Secret providers",
+		"Add your accounts at password managers and secrets services, such as 1Password, Bitwarden and HashiCorp Vault.",
+	],
+	[
+		"vaults",
+		"Vaults",
+		"Collect secrets from many providers, and let Bots use them in Code Mode without seeing them.",
+	],
+	[
 		"memberSettings",
 		"Your settings",
 		"Read and change your own settings, such as how your plans are approved.",

@@ -442,6 +442,8 @@ export interface Check {
 	/** The tool call that waits for the decision. It is `callId` unless the call comes from a program. */
 	readonly toolCallId?: string
 	readonly code?: CodeRunsApi.RequestCode
+	/** True when a decider must see the call, even for a tool that only reads. A call with Vault values is one. */
+	readonly explicit?: boolean
 }
 
 /**
@@ -473,10 +475,12 @@ export const decide = (
 			app: invocation,
 			...(check.code === undefined ? {} : { code: check.code }),
 			// The deployment owner says which tools only read.
-			implicit: yield* services.policy.isRead({
-				organizationId: organizationOf(position.owner),
-				source: binding.source,
-			}),
+			implicit:
+				check.explicit !== true &&
+				(yield* services.policy.isRead({
+					organizationId: organizationOf(position.owner),
+					source: binding.source,
+				})),
 		})
 		if (answer._tag === "Allow")
 			yield* services.invocations.approve(position, check.callId, true)

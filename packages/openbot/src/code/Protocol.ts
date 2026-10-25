@@ -13,12 +13,22 @@ export type Settled =
 	| { readonly index: number; readonly ok: true; readonly value: string }
 	| { readonly index: number; readonly ok: false; readonly error: string }
 
+/**
+ * A Vault item that the program can name. It has no values. The worker makes the
+ * same references as `reference` in `../vaults/CodeMode.ts`.
+ */
+export interface VaultItem {
+	readonly alias: string
+	readonly fields: ReadonlyArray<string>
+}
+
 export type ToWorker =
 	| {
 			readonly type: "start"
 			readonly code: string
 			/** The names that the program can call, such as `calendar.list_events`. */
 			readonly bindings: ReadonlyArray<string>
+			readonly vault: ReadonlyArray<VaultItem>
 			readonly seed: number
 			readonly clock: number
 			readonly limits: Limits

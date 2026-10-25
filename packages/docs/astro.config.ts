@@ -80,6 +80,7 @@ export default defineConfig({
 						"docs/memory",
 						"docs/apps",
 						"docs/code-mode",
+						"docs/vaults",
 						"docs/app-index",
 						"docs/developer-tools",
 					],

@@ -28,6 +28,7 @@ import {
 	ComputerProvidersApi,
 	ComputersApi,
 } from "./ComputersApi.ts"
+import { SecretProvidersApi, VaultsApi } from "./VaultsApi.ts"
 import { AppOperationsApi } from "./AppOperationsApi.ts"
 import { CodeRunsApi } from "./CodeRunsApi.ts"
 import { AppViewsApi } from "./AppViewsApi.ts"
@@ -78,6 +79,8 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 		ComputerProvidersApi,
 		ComputersApi,
 		ComputerHooksApi,
+		SecretProvidersApi,
+		VaultsApi,
 		UsageApi,
 		BudgetsApi,
 		AppOperationsApi.annotate(GroupRequired, { read: apps, write: apps })

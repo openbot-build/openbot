@@ -71,11 +71,12 @@ return busy.filter((event) => event.attendees > 10).map((event) => event.title)
 
 工具调用会把 App 发来的结果交给程序。调用不成功时，程序会得到一个 `Error`：
 
-| Error 名称         | 原因                                                                          |
-| ------------------ | ----------------------------------------------------------------------------- |
-| `AppCallDenied`    | 决定者没有允许这次调用。                                                      |
-| `AppCallFailed`    | App 调用失败。`details.reason` 说明原因。                                     |
-| `AppInputRequired` | App 需要更多输入。请在代码之外回答 `details.operationId` 中的 App operation。 |
+| Error 名称         | 原因                                                                                         |
+| ------------------ | -------------------------------------------------------------------------------------------- |
+| `AppCallDenied`    | 决定者没有允许这次调用。                                                                     |
+| `AppCallFailed`    | App 调用失败。`details.reason` 说明原因。                                                    |
+| `AppInputRequired` | App 需要更多输入。请在代码之外回答 `details.operationId` 中的 App operation。                |
+| `VaultDenied`      | 调用里有一个 Bot 不能在这里使用的 [Vault](/zh-cn/docs/vaults) 引用。OpenBot 什么都没有发送。 |
 
 程序可以捕获这些错误，然后继续运行。
 
@@ -106,6 +107,15 @@ return busy.filter((event) => event.attendees > 10).map((event) => event.title)
 每次运行都给出相同的数字。如果程序做了和上次不同的调用，OpenBot 会以
 `ReplayMismatch`
 停止它。程序等待期间连接发生变化时，就可能出现这种情况。不会有任何调用被误发。
+
+---
+
+## 使用机密
+
+程序可以使用 [Vault](/zh-cn/docs/vaults) 中的机密，但看不到它们。Bot 在 `apps`
+旁边还有 `vault`。`vault.github.token` 是一个引用，例如
+`⟦vault:github/token⟧`，不是机密。只有当 OpenBot 发出条目允许的 App 工具调用时，才会放入机密。带引用的调用总是需要决定。App 结果回来时，机密的位置是
+`⟦hidden:github/token⟧`。
 
 ---
 

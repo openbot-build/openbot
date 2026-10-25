@@ -1,0 +1,174 @@
+---
+title: Vaults
+description:
+  汇集来自多个提供方的机密，让 Bots 在 Code Mode 中使用它们，但看不到它们。
+---
+
+**Vault**（保险箱）是一组机密的集合。Bot 可以使用这些机密，但永远看不到它们，例如登录信息和 API 密钥。Vault 中的每个机密可以来自不同的地方：OpenBot 自己、1Password、Bitwarden 或 HashiCorp
+Vault。所以一个 Vault 可以把团队存放在各处的机密汇集到一起。
+
+Bot 只能在 [Code Mode](/zh-cn/docs/code-mode)
+中使用这些机密。Bot 的程序拿到的是一个**引用**，不是机密本身。只有当 OpenBot 发出 App 工具调用时，它才把机密放到引用的位置，而且只发给你允许的工具。
+
+| 词         | 含义                                                                        |
+| ---------- | --------------------------------------------------------------------------- |
+| Vault      | 一组有名字的条目。Bot 得到的是使用整个 Vault 的权利。                       |
+| 条目       | Vault 中的一件机密，例如一个登录。它有字段，例如 `username` 和 `password`。 |
+| 机密提供方 | 你在某个密码管理器或机密服务上的账户。条目从它读取值。                      |
+| 引用       | 一段短文本，例如 `⟦vault:github/token⟧`。它代表一个字段。它不是机密。       |
+| 出口       | 条目的值可以去的地方：某个 App 连接的某个工具的参数。                       |
+
+---
+
+## OpenBot 怎样保守机密
+
+1. **程序永远拿不到机密。** 在沙箱里，`vault.github.token` 只是文本
+   `⟦vault:github/token⟧`。程序改动它时，例如做 base64 编码，改动的只是引用文本。改动过的引用就不再是引用了。
+2. **OpenBot 在出口处放入机密。**
+   程序把 App 调用交出去之后，OpenBot 在字符串参数里找出每个引用。它检查 Bot 有权使用这个 Vault，并且条目允许这个工具。然后它读取值并发出调用。程序看不到带着值的参数。
+3. **决策者会看到这个调用。**
+   带引用的调用总是一个[请求](/zh-cn/docs/requests)，只读的工具也一样。决策者看到的是引用和工具，不是机密。
+4. **OpenBot 把机密从结果中拿掉。** 在程序或模型看到 App 结果之前，OpenBot 用
+   `⟦hidden:github/token⟧`
+   替换值。它也会拿掉值的 base64、base64url、十六进制、URL 和 JSON 形式。短于 4 个字符的值会留在结果里。
+5. **记录里只有引用。**
+   代码运行、App 操作和请求保存的参数里只有引用。结果保存时不带机密。
+
+出口是最重要的部分。第 4 步只是第二道防线：App 仍然可能用 OpenBot 不认识的形式把机密送回来，例如哈希值或机密的一部分。所以只为你放心交出这个机密的工具允许条目。不要允许会把参数写到 Bot 能读到的地方的工具，例如笔记工具。
+
+---
+
+## 添加机密提供方
+
+只有存放在 OpenBot 之外的机密才需要机密提供方。
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Team 1Password","credentials":{"kind":"onepassword","url":"https://connect.example.com","token":"eyJ..."}}' \
+  https://api.example.com/v1/secret-providers
+```
+
+| 类型          | 字段                                 | 它是什么                                                                                            |
+| ------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `onepassword` | `url`、`token`                       | 一台 [1Password Connect](https://developer.1password.com/docs/connect/) 服务器和一个 Connect 令牌。 |
+| `bitwarden`   | `url`、`token`                       | `bw serve`，即 Bitwarden 命令行工具的 API。它适用于 Bitwarden 和 Vaultwarden。`token` 可选。        |
+| `hashicorp`   | `url`、`token`、`mount`、`namespace` | HashiCorp Vault 或 OpenBao 的 KV 第 2 版引擎。`mount` 默认是 `secret`。                             |
+
+OpenBot 只读取机密提供方，从不写入。OpenBot 会先检查令牌。令牌不会再出来。API 只显示它的最后几个字符。给令牌的权限越少越好：只给 Bots 可以使用的 1Password 保险库或 Vault 路径。对于
+`bitwarden`，保险库必须为 `bw serve` 解锁。把 `bw serve`
+放在私有网络里，或者在它前面放一个带令牌的代理。
+
+发送 `"shared": true` 可以创建组织共享的提供方。`GET /v1/secret-providers`
+列出你的提供方和共享的提供方。`GET`、`PATCH` 和
+`DELETE /v1/secret-providers/:providerId`
+读取、修改和删除一个提供方。当还有条目从某个提供方读取时，不能删除它。
+
+---
+
+## 创建 Vault
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Team secrets"}' \
+  https://api.example.com/v1/vaults
+```
+
+发送 `"shared": true` 可以创建组织共享的 Vault。`GET /v1/vaults`
+列出你的 Vaults 和共享的 Vaults。`GET`、`PATCH` 和 `DELETE /v1/vaults/:vaultId`
+读取、修改和删除一个 Vault。删除 Vault 会删除它的条目和 Bots 的使用权。机密提供方里的机密保持不变。
+
+---
+
+## 添加条目
+
+条目说明机密在哪里、程序可以使用哪些字段，以及值可以去哪里。同一个 Vault 的条目可以来自不同的地方：
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"github","description":"The GitHub token of the team.","source":{"_tag":"OnePassword","provider":"spr_...","vault":"<vault id>","item":"<item id>"},"fields":["password"],"exits":[{"_tag":"App","connection":"<connection id>","tool":"create_issue"}]}' \
+  https://api.example.com/v1/vaults/vlt_.../items
+
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"deploy","source":{"_tag":"Builtin"},"values":{"key":"..."},"exits":[{"_tag":"App","connection":"<connection id>","tool":null}]}' \
+  https://api.example.com/v1/vaults/vlt_.../items
+```
+
+| 字段          | 它是什么                                                                            |
+| ------------- | ----------------------------------------------------------------------------------- |
+| `name`        | 程序使用的名字，例如 `vault.github.password` 中的 `github`。小写字母、数字和 `_`。  |
+| `description` | 可选。告诉 Bot 这个条目是做什么的。不要在里面放机密。                               |
+| `source`      | 值在哪里。见下表。                                                                  |
+| `fields`      | 程序可以使用的字段。`Builtin` 条目不用填。                                          |
+| `values`      | 只用于 `Builtin` 条目：按字段给出的值，例如 `{"token":"ghp_..."}`。它们不会再出来。 |
+| `exits`       | 值可以去的地方。`"tool": null` 允许该连接的所有工具。没有出口时，哪里都不能去。     |
+
+| `source` 标签 | 字段                        | 条目的字段                                                                               |
+| ------------- | --------------------------- | ---------------------------------------------------------------------------------------- |
+| `Builtin`     | 无                          | `values` 的键。OpenBot 保存它们，用 `OPENBOT_SECRET_KEYS` 加密。                         |
+| `OnePassword` | `provider`、`vault`、`item` | 每个字段的标签或 ID。登录的用户名和密码也叫 `username` 和 `password`。                   |
+| `Bitwarden`   | `provider`、`item`          | `username`、`password`、`notes`、按名字的自定义字段，以及 `totp`，即当前的一次性验证码。 |
+| `HashiCorp`   | `provider`、`path`          | 机密的每个键，例如 `bots/github`。                                                       |
+
+`provider`
+的类型必须和标签一致，而且你必须能使用它。OpenBot 会读取一次条目，检查它的字段都在。`GET`、`PATCH`
+和 `DELETE /v1/vaults/:vaultId/items/:itemId` 读取、修改和删除一个条目。要修改
+`Builtin` 条目，发送新的 `values`。`Builtin` 条目始终是
+`Builtin`。你需要对 Vault 有 `write` 权限。
+
+---
+
+## 让 Bot 使用 Vault
+
+```sh
+curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/vaults/vlt_.../bots/bot_...
+```
+
+之后 Bot 可以使用这个 Vault 的所有条目，每个条目只能去它的出口允许的地方。你必须能使用这个 Vault，并且能修改这个 Bot。`GET /v1/vaults/:vaultId/bots`
+列出有使用权的 Bots。`DELETE /v1/vaults/:vaultId/bots/:botId`
+收回使用权。Bot 被归档时，使用权也会结束。
+
+---
+
+## 在 Code Mode 中使用条目
+
+Bot 在 Code
+Mode 工具里看到自己的条目：名字、字段、描述和出口，但从不看到值。在程序里，`vault.<条目>.<字段>`
+是一个引用。把它放进 App 工具的字符串参数里，可以单独使用，也可以放在更长的字符串中：
+
+```js
+const issue = await apps.github.create_issue({
+	token: vault.github.password,
+	title: "Build failed",
+})
+return issue.structuredContent.url
+```
+
+Bot 所有 Vault 的条目都在 `vault` 里。如果两个 Vault 有同名的条目，第二个叫
+`vault.github_2`。如果调用带着 Bot 不能使用的引用，会抛出名为 `VaultDenied` 的
+`Error`，OpenBot 什么都不发送。带引用的调用不能发给资源或提示。如果 App 要求更多输入，调用会失败，因为后续的回答不会经过这个检查。
+
+---
+
+## 权限
+
+`Vault` 和 `SecretProvider` 是[资源](/zh-cn/docs/permissions)，各有三个动作：
+
+| 资源             | 动作    | 它允许你做什么                                     |
+| ---------------- | ------- | -------------------------------------------------- |
+| `Vault`          | `read`  | 读取 Vaults、它们的条目，以及可以使用它们的 Bots。 |
+| `Vault`          | `write` | 添加、修改和删除 Vaults 和它们的条目，并设置值。   |
+| `Vault`          | `use`   | 让你的 Bots 在 Code Mode 中使用 Vaults。           |
+| `SecretProvider` | `read`  | 读取机密提供方的账户。                             |
+| `SecretProvider` | `write` | 添加、修改和删除机密提供方的账户，以及它们的令牌。 |
+| `SecretProvider` | `use`   | 让 Vault 条目从机密提供方的账户读取机密。          |
+
+成员对自己的 Vaults 和提供方有所有动作，对共享的有 `read` 和 `use`。管理员还可以
+`write` 共享的。不能读取某个 Vault 或提供方的调用者会得到
+`404`，就像它不存在一样。[审计日志](/zh-cn/docs/organization#审计日志)会记录每次修改，动作包括
+`vault.created`、`vault.item.created`、`vault.granted`、`secret_provider.created`
+等。

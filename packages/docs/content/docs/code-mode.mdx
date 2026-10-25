@@ -79,11 +79,12 @@ return busy.filter((event) => event.attendees > 10).map((event) => event.title)
 A tool call gives the program the result that the App sent. The program gets an
 `Error` when a call does not work:
 
-| Error name         | Why                                                                                           |
-| ------------------ | --------------------------------------------------------------------------------------------- |
-| `AppCallDenied`    | A decider did not allow the call.                                                             |
-| `AppCallFailed`    | The App call failed. `details.reason` says why.                                               |
-| `AppInputRequired` | The App needs more input. Answer the App operation in `details.operationId` outside the code. |
+| Error name         | Why                                                                                                 |
+| ------------------ | --------------------------------------------------------------------------------------------------- |
+| `AppCallDenied`    | A decider did not allow the call.                                                                   |
+| `AppCallFailed`    | The App call failed. `details.reason` says why.                                                     |
+| `AppInputRequired` | The App needs more input. Answer the App operation in `details.operationId` outside the code.       |
+| `VaultDenied`      | The call has a [Vault](/docs/vaults) reference that the Bot may not use here. OpenBot sent nothing. |
 
 The program can catch these errors and go on.
 
@@ -120,6 +121,17 @@ time. So the program sees a fixed time in `Date.now()`, and `Math.random()`
 gives the same numbers in each run. If a program makes other calls than before,
 OpenBot stops it with `ReplayMismatch`. This can happen when a connection
 changed while the program waited. Nothing is sent by mistake.
+
+---
+
+## Use secrets
+
+A program can use secrets from a [Vault](/docs/vaults) without seeing them. The
+Bot gets `vault` next to `apps`. `vault.github.token` is a reference such as
+`⟦vault:github/token⟧`, not the secret. OpenBot puts the secret in only when it
+sends an App tool call that the item allows. A call with a reference always
+needs a decision. The App result comes back with `⟦hidden:github/token⟧` in
+place of the secret.
 
 ---
 

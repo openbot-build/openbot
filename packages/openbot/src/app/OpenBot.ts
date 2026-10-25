@@ -50,6 +50,9 @@ import * as ComputerWorker from "../computers/Worker.ts"
 import * as Files from "../files/Files.ts"
 import * as FileWorker from "../files/Worker.ts"
 import * as ComputerPlugin from "../plugins/computers/ComputerPlugin.ts"
+import * as VaultReaders from "../vaults/Readers.ts"
+import * as SecretProviders from "../vaults/SecretProviders.ts"
+import * as Vaults from "../vaults/Vaults.ts"
 import * as Judge from "../capabilities/Judge.ts"
 import * as Chats from "../chats/Chats.ts"
 import { Config } from "@openbot-build/core"
@@ -107,6 +110,8 @@ export interface Options<
 	readonly files?: FileWorker.Options
 	/** The drivers of the Computer providers. Tests give fake ones. */
 	readonly computerDrivers?: Layer.Layer<Drivers.Drivers>
+	/** The readers of the password managers. Tests give fake ones. */
+	readonly vaultReaders?: Layer.Layer<VaultReaders.Readers>
 }
 
 /**
@@ -267,6 +272,11 @@ export const layer = <
 		Layer.provideMerge(options.computerDrivers ?? Drivers.layer),
 	)
 
+	const vaults = Vaults.layer.pipe(
+		Layer.provideMerge(SecretProviders.layer),
+		Layer.provideMerge(options.vaultReaders ?? VaultReaders.layer),
+	)
+
 	const indexNamespace = options.indexNamespace ?? "public"
 	const apps = Layer.mergeAll(
 		Lifecycle.layer,
@@ -350,7 +360,7 @@ export const layer = <
 		.pipe(
 			Layer.provideMerge(apps),
 			Layer.provideMerge(Triggers.layer),
-			Layer.provideMerge(Layer.merge(channels, computers)),
+			Layer.provideMerge(Layer.mergeAll(channels, computers, vaults)),
 			Layer.provideMerge(bots),
 			Layer.provideMerge(index),
 			Layer.provideMerge(Governance.layer),

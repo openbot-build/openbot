@@ -7,6 +7,8 @@ import { Coordinator } from "../src/bots/Coordinator.ts"
 import { Connectors } from "../src/computers/connector/Connectors.ts"
 import { Drivers } from "../src/computers/Drivers.ts"
 import { Pairings } from "../src/computers/Pairings.ts"
+import { SecretProviders } from "../src/vaults/SecretProviders.ts"
+import { Vaults } from "../src/vaults/Vaults.ts"
 import { Files } from "../src/files/Files.ts"
 import * as ChannelQueue from "../src/channels/ChannelQueue.ts"
 import * as ChannelRegistry from "../src/channels/ChannelRegistry.ts"
@@ -461,6 +463,7 @@ const startApi = async (
 					),
 					Layer.succeed(CodeRuns, {
 						settings: Effect.succeedNone,
+						vault: Effect.succeed([]),
 						start: unused,
 						resume: unused,
 						forCall: unused,
@@ -530,6 +533,11 @@ const startApi = async (
 				Layer.succeed(Computers, {} as Computers["Service"]),
 				Layer.succeed(Connectors, {} as Connectors["Service"]),
 				Layer.succeed(Drivers, {} as Drivers["Service"]),
+				// Discovery never uses Vaults. Their handlers only need the services to exist.
+				Layer.mergeAll(
+					Layer.succeed(Vaults, {} as Vaults["Service"]),
+					Layer.succeed(SecretProviders, {} as SecretProviders["Service"]),
+				),
 				Layer.succeed(Pairings, {} as Pairings["Service"]),
 				// Discovery never uses files. Their handlers only need the service to exist.
 				Layer.succeed(Files, {} as Files["Service"]),

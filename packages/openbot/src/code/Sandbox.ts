@@ -3,11 +3,20 @@ import { fileURLToPath } from "node:url"
 import { Worker } from "node:worker_threads"
 import type { CodeRunsApi } from "@openbot-build/api"
 import { Context, Duration, Effect, Layer, Option, Queue, Schema } from "effect"
-import type { Call, FromWorker, Limits, Settled, ToWorker } from "./Protocol.ts"
+import type {
+	Call,
+	FromWorker,
+	Limits,
+	Settled,
+	ToWorker,
+	VaultItem,
+} from "./Protocol.ts"
 
 export interface Program {
 	readonly code: string
 	readonly bindings: ReadonlyArray<string>
+	/** The Vault items that the program can name. Without it, `vault` is empty. */
+	readonly vault?: ReadonlyArray<VaultItem>
 	readonly seed: number
 	readonly clock: number
 	readonly limits: Limits
@@ -119,6 +128,7 @@ export const make: Effect.Effect<typeof Sandbox.Service> = Effect.sync(() => {
 					type: "start",
 					code: program.code,
 					bindings: program.bindings,
+					vault: program.vault ?? [],
 					seed: program.seed,
 					clock: program.clock,
 					limits: program.limits,

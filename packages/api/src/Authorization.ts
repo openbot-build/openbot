@@ -155,6 +155,28 @@ export class ComputerProvider extends Resource.Class<ComputerProvider>()(
 	},
 ) {}
 
+export class Vault extends Resource.Class<Vault>()("Vault", {
+	actions: ["read", "write", "use"],
+	fields: sharedFields,
+	path: (f) => ["org", f.organizationId, "user", f.ownerUserId, "vault", f.id],
+}) {}
+
+export class SecretProvider extends Resource.Class<SecretProvider>()(
+	"SecretProvider",
+	{
+		actions: ["read", "write", "use"],
+		fields: sharedFields,
+		path: (f) => [
+			"org",
+			f.organizationId,
+			"user",
+			f.ownerUserId,
+			"secret_provider",
+			f.id,
+		],
+	},
+) {}
+
 export class Channel extends Resource.Class<Channel>()("Channel", {
 	actions: ["read", "write", "use"],
 	fields: { organizationId: Schema.String, id: Schema.String },
@@ -251,6 +273,8 @@ const resources = [
 	Trigger,
 	Computer,
 	ComputerProvider,
+	Vault,
+	SecretProvider,
 	Channel,
 	Model,
 	Organization,
@@ -302,6 +326,8 @@ const ownKinds = [
 	Trigger,
 	Computer,
 	ComputerProvider,
+	Vault,
+	SecretProvider,
 ] as const
 /** Every kind of an organization. */
 const organizationKinds = resources.filter(
@@ -366,6 +392,18 @@ const descriptions: {
 		write:
 			"Add, change and delete accounts at Computer providers, and their keys.",
 		use: "Create Computers with an account at a Computer provider.",
+	},
+	Vault: {
+		read: "Read Vaults, their items, and the Bots that may use them. Secrets are never shown.",
+		write:
+			"Add, change and delete Vaults and their items, and set their secrets.",
+		use: "Let your Bots use the items of Vaults in Code Mode.",
+	},
+	SecretProvider: {
+		read: "Read the accounts at secret providers.",
+		write:
+			"Add, change and delete accounts at secret providers, and their tokens.",
+		use: "Let Vault items read their secrets from an account at a secret provider.",
 	},
 	Channel: {
 		read: "Read the Channels of the organization and the people linked to them.",
@@ -581,9 +619,17 @@ const useSharedBots = (_: Builder) =>
 const readSharedTriggers = (_: Builder) => _.allow("read", Trigger, sharedOnly)
 const useChannels = (_: Builder) => _.allow("use", Channel, inOrganization)
 const useSharedComputers = (_: Builder) =>
-	_.allow(["read", "use"], [Computer, ComputerProvider], sharedOnly)
+	_.allow(
+		["read", "use"],
+		[Computer, ComputerProvider, Vault, SecretProvider],
+		sharedOnly,
+	)
 const readSharedComputers = (_: Builder) =>
-	_.allow("read", [Computer, ComputerProvider], sharedOnly)
+	_.allow(
+		"read",
+		[Computer, ComputerProvider, Vault, SecretProvider],
+		sharedOnly,
+	)
 
 /**
  * Built-in roles. Every organization has them, and their policies cannot
@@ -611,7 +657,11 @@ export const builtinRoles = [
 			yield* useChannels(_)
 			yield* useSharedComputers(_)
 			yield* _.allow(["write", "share"], Bot, sharedOnly)
-			yield* _.allow("write", [Computer, ComputerProvider], sharedOnly)
+			yield* _.allow(
+				"write",
+				[Computer, ComputerProvider, Vault, SecretProvider],
+				sharedOnly,
+			)
 			yield* _.allow("write", Trigger, sharedOnly)
 			yield* _.allow(
 				"*",

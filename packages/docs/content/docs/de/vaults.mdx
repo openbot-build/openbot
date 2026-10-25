@@ -1,0 +1,213 @@
+---
+title: Vaults
+description:
+  Geheimnisse von vielen Providern sammeln und Bots sie in Code Mode nutzen
+  lassen, ohne dass sie sie sehen.
+---
+
+Ein **Vault** ist eine Sammlung von Geheimnissen, die ein Bot nutzen, aber nie
+sehen darf, zum Beispiel Logins und API-Schlüssel. Jedes Geheimnis in einem
+Vault kann von einem anderen Ort kommen: von OpenBot selbst, von 1Password, von
+Bitwarden oder von HashiCorp Vault. So kann ein Vault die Geheimnisse eines
+Teams von allen Orten zusammenbringen, an denen das Team sie hält.
+
+Ein Bot nutzt die Geheimnisse nur in [Code Mode](/de/docs/code-mode). Das
+Programm des Bots bekommt eine **Referenz**, nicht das Geheimnis. OpenBot setzt
+das Geheimnis erst dann an die Stelle der Referenz, wenn es einen Aufruf eines
+App-Tools sendet, und nur an die Tools, die du erlaubst.
+
+| Wort            | Bedeutung                                                                                                  |
+| --------------- | ---------------------------------------------------------------------------------------------------------- |
+| Vault           | Eine Sammlung von Einträgen mit einem Namen. Ein Bot bekommt das Recht, einen ganzen Vault zu nutzen.      |
+| Eintrag         | Ein Geheimnis in einem Vault, zum Beispiel ein Login. Er hat Felder wie `username` und `password`.         |
+| Secret-Provider | Dein Konto bei einem Passwort-Manager oder einem Dienst für Geheimnisse. Einträge lesen ihre Werte daraus. |
+| Referenz        | Ein kurzer Text wie `⟦vault:github/token⟧`. Er steht für ein Feld. Er ist nicht das Geheimnis.             |
+| Ausgang         | Ein Ort, an den die Werte eines Eintrags gehen dürfen: die Argumente eines Tools einer App-Verbindung.     |
+
+---
+
+## Wie OpenBot das Geheimnis schützt
+
+1. **Das Programm hat das Geheimnis nie.** In der Sandbox ist
+   `vault.github.token` nur der Text `⟦vault:github/token⟧`. Wenn das Programm
+   ihn ändert, zum Beispiel mit Base64, ändert es nur den Text der Referenz.
+   Eine geänderte Referenz ist keine Referenz mehr.
+2. **OpenBot setzt das Geheimnis am Ausgang ein.** Nachdem das Programm einen
+   App-Aufruf abgegeben hat, sucht OpenBot jede Referenz in den Text-Argumenten.
+   Es prüft, dass der Bot den Vault nutzen darf und dass der Eintrag dieses Tool
+   erlaubt. Dann liest es den Wert und sendet den Aufruf. Das Programm sieht die
+   Argumente mit dem Wert nicht.
+3. **Ein Entscheider sieht den Aufruf.** Ein Aufruf mit einer Referenz ist immer
+   eine [Anfrage](/de/docs/requests), auch für ein Tool, das nur liest. Der
+   Entscheider sieht die Referenz und das Tool, nicht das Geheimnis.
+4. **OpenBot nimmt das Geheimnis aus dem Ergebnis.** Bevor das Programm oder das
+   Modell das App-Ergebnis sieht, setzt OpenBot `⟦hidden:github/token⟧` an die
+   Stelle des Werts. Es nimmt den Wert auch in Base64-, Base64url-,
+   Hexadezimal-, URL- und JSON-Form heraus. Werte mit weniger als 4 Zeichen
+   bleiben im Ergebnis.
+5. **Die Aufzeichnungen haben nur Referenzen.** Code-Läufe, App-Operationen und
+   Anfragen speichern die Argumente mit Referenzen. Ergebnisse werden ohne das
+   Geheimnis gespeichert.
+
+Die Ausgänge sind der wichtige Teil. Schritt 4 ist nur eine zweite Linie: Eine
+App kann das Geheimnis immer noch in einer Form zurückgeben, die OpenBot nicht
+kennt, zum Beispiel als Hash oder als Teil davon. Erlaube einen Eintrag also nur
+für Tools, denen du ihn anvertraust. Erlaube ihn nicht für ein Tool, das seine
+Argumente dort speichert, wo der Bot sie lesen kann, zum Beispiel ein
+Notizen-Tool.
+
+---
+
+## Einen Secret-Provider hinzufügen
+
+Ein Secret-Provider ist nur für Geheimnisse nötig, die außerhalb von OpenBot
+liegen.
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Team 1Password","credentials":{"kind":"onepassword","url":"https://connect.example.com","token":"eyJ..."}}' \
+  https://api.example.com/v1/secret-providers
+```
+
+| Art           | Felder                               | Was es ist                                                                                                           |
+| ------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `onepassword` | `url`, `token`                       | Ein [1Password-Connect](https://developer.1password.com/docs/connect/)-Server und ein Connect-Token.                 |
+| `bitwarden`   | `url`, `token`                       | `bw serve`, die API des Bitwarden-Kommandozeilen-Tools. Es geht mit Bitwarden und Vaultwarden. `token` ist optional. |
+| `hashicorp`   | `url`, `token`, `mount`, `namespace` | Die KV-Engine Version 2 von HashiCorp Vault oder OpenBao. `mount` ist standardmäßig `secret`.                        |
+
+OpenBot liest einen Secret-Provider nur. Es schreibt nie hinein. OpenBot prüft
+zuerst das Token. Das Token kommt nie wieder heraus. Die API zeigt nur seine
+letzten Zeichen. Gib dem Token so wenig Rechte wie möglich: nur die
+1Password-Tresore oder Vault-Pfade, die Bots nutzen dürfen. Für `bitwarden` muss
+der Tresor für `bw serve` entsperrt sein. Halte `bw serve` in einem privaten
+Netz, oder setze einen Proxy mit einem Token davor.
+
+Sende `"shared": true`, um einen geteilten Provider der Organisation zu
+erstellen. `GET /v1/secret-providers` listet deine Provider und die geteilten.
+`GET`, `PATCH` und `DELETE /v1/secret-providers/:providerId` lesen, ändern und
+löschen einen. Solange Einträge aus einem Provider lesen, kannst du ihn nicht
+löschen.
+
+---
+
+## Einen Vault erstellen
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Team secrets"}' \
+  https://api.example.com/v1/vaults
+```
+
+Sende `"shared": true`, um einen geteilten Vault der Organisation zu erstellen.
+`GET /v1/vaults` listet deine Vaults und die geteilten. `GET`, `PATCH` und
+`DELETE /v1/vaults/:vaultId` lesen, ändern und löschen einen Vault. Das Löschen
+eines Vaults löscht seine Einträge und die Rechte der Bots. Die Secret-Provider
+behalten ihre Geheimnisse.
+
+---
+
+## Einen Eintrag hinzufügen
+
+Ein Eintrag sagt, wo das Geheimnis ist, welche Felder Programme nutzen dürfen
+und wohin die Werte gehen dürfen. Die Einträge eines Vaults können von
+verschiedenen Orten kommen:
+
+```sh
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"github","description":"The GitHub token of the team.","source":{"_tag":"OnePassword","provider":"spr_...","vault":"<vault id>","item":"<item id>"},"fields":["password"],"exits":[{"_tag":"App","connection":"<connection id>","tool":"create_issue"}]}' \
+  https://api.example.com/v1/vaults/vlt_.../items
+
+curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"deploy","source":{"_tag":"Builtin"},"values":{"key":"..."},"exits":[{"_tag":"App","connection":"<connection id>","tool":null}]}' \
+  https://api.example.com/v1/vaults/vlt_.../items
+```
+
+| Feld          | Was es ist                                                                                                       |
+| ------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `name`        | Der Name für Programme, zum Beispiel `github` in `vault.github.password`. Kleine Buchstaben, Ziffern und `_`.    |
+| `description` | Optional. Sagt dem Bot, wofür der Eintrag ist. Schreibe kein Geheimnis hinein.                                   |
+| `source`      | Wo die Werte sind. Siehe die Tabelle unten.                                                                      |
+| `fields`      | Die Felder, die Programme nutzen dürfen. Lass es bei einem `Builtin`-Eintrag weg.                                |
+| `values`      | Nur für einen `Builtin`-Eintrag: die Werte nach Feld, zum Beispiel `{"token":"ghp_..."}`. Sie kommen nie heraus. |
+| `exits`       | Wohin die Werte gehen dürfen. `"tool": null` erlaubt jedes Tool der Verbindung. Ohne Ausgang: nirgends.          |
+
+| `source`-Tag  | Felder                      | Felder des Eintrags                                                                                              |
+| ------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `Builtin`     | keine                       | Die Schlüssel von `values`. OpenBot hält sie, versiegelt mit `OPENBOT_SECRET_KEYS`.                              |
+| `OnePassword` | `provider`, `vault`, `item` | Das Label oder die ID jedes Felds. Benutzername und Passwort eines Logins heißen auch `username` und `password`. |
+| `Bitwarden`   | `provider`, `item`          | `username`, `password`, `notes`, eigene Felder nach Name, und `totp`, der aktuelle Einmal-Code.                  |
+| `HashiCorp`   | `provider`, `path`          | Jeder Schlüssel des Geheimnisses, zum Beispiel `bots/github`.                                                    |
+
+Der `provider` muss von der Art des Tags sein, und du musst ihn nutzen dürfen.
+OpenBot liest den Eintrag einmal, um zu prüfen, dass seine Felder da sind.
+`GET`, `PATCH` und `DELETE /v1/vaults/:vaultId/items/:itemId` lesen, ändern und
+löschen einen Eintrag. Sende neue `values`, um einen `Builtin`-Eintrag zu
+ändern. Ein `Builtin`-Eintrag bleibt `Builtin`. Du brauchst `write` auf dem
+Vault.
+
+---
+
+## Einen Bot einen Vault nutzen lassen
+
+```sh
+curl -X PUT -H "Authorization: Bearer $OPENBOT_TOKEN" \
+  https://api.example.com/v1/vaults/vlt_.../bots/bot_...
+```
+
+Dann kann der Bot jeden Eintrag des Vaults nutzen, jeden nur dort, wo seine
+Ausgänge es erlauben. Du musst den Vault nutzen und den Bot ändern dürfen.
+`GET /v1/vaults/:vaultId/bots` listet die Bots mit dem Recht.
+`DELETE /v1/vaults/:vaultId/bots/:botId` nimmt das Recht weg. Das Recht endet
+auch, wenn der Bot archiviert wird.
+
+---
+
+## Einen Eintrag in Code Mode nutzen
+
+Der Bot sieht seine Einträge in den Code-Mode-Tools: ihre Namen, Felder,
+Beschreibungen und Ausgänge, nie ihre Werte. In einem Programm ist
+`vault.<eintrag>.<feld>` eine Referenz. Setze sie in ein Text-Argument eines
+App-Tools, allein oder in einem längeren Text:
+
+```js
+const issue = await apps.github.create_issue({
+	token: vault.github.password,
+	title: "Build failed",
+})
+return issue.structuredContent.url
+```
+
+Die Einträge aller Vaults des Bots sind in `vault`. Wenn zwei Vaults einen
+Eintrag mit demselben Namen haben, heißt der zweite `vault.github_2`. Ein Aufruf
+mit einer Referenz, die der Bot nicht nutzen darf, wirft einen `Error` mit dem
+Namen `VaultDenied`, und OpenBot sendet nichts. Ein Aufruf mit einer Referenz
+kann nicht an eine Ressource oder einen Prompt gehen. Wenn die App mehr Eingaben
+verlangt, schlägt der Aufruf fehl, weil die Antworten ohne diese Prüfung
+zurückkämen.
+
+---
+
+## Berechtigungen
+
+`Vault` und `SecretProvider` sind [Ressourcen](/de/docs/permissions) mit je drei
+Aktionen:
+
+| Ressource        | Aktion  | Was sie erlaubt                                                                         |
+| ---------------- | ------- | --------------------------------------------------------------------------------------- |
+| `Vault`          | `read`  | Vaults, ihre Einträge und die Bots lesen, die sie nutzen dürfen.                        |
+| `Vault`          | `write` | Vaults und ihre Einträge hinzufügen, ändern und löschen, und ihre Werte setzen.         |
+| `Vault`          | `use`   | Deine Bots Vaults in Code Mode nutzen lassen.                                           |
+| `SecretProvider` | `read`  | Die Konten bei Secret-Providern lesen.                                                  |
+| `SecretProvider` | `write` | Konten bei Secret-Providern und ihre Tokens hinzufügen, ändern und löschen.             |
+| `SecretProvider` | `use`   | Vault-Einträge ihre Geheimnisse aus einem Konto bei einem Secret-Provider lesen lassen. |
+
+Ein Mitglied hat jede Aktion auf seinen eigenen Vaults und Providern, und `read`
+und `use` auf geteilten. Ein Administrator darf geteilte auch `write`. Wer einen
+Vault oder Provider nicht lesen darf, bekommt `404`, als gäbe es ihn nicht. Das
+[Audit-Log](/de/docs/organization#audit-log) zeichnet jede Änderung auf, mit
+`vault.created`, `vault.item.created`, `vault.granted`,
+`secret_provider.created` und den anderen Aktionen.
