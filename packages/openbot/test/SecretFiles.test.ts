@@ -26,7 +26,7 @@ it.effect(
 				clientSecret: Config.Redacted("OPENBOT_SETUP_OIDC_CLIENT_SECRET").pipe(
 					Config.withDefault(undefined),
 				),
-				missing: Config.String("OPENBOT_TLS_CERT").pipe(
+				missing: Config.String("OPENBOT_NOT_SET").pipe(
 					Config.withDefault("default"),
 				),
 			})

@@ -674,22 +674,7 @@ it.effect("an instance reads only its own settings and the secret keys", () =>
 		)
 		const plain = yield* load(required)
 		assert.ok(Result.isSuccess(plain))
-		assert.strictEqual(plain.success.tls, undefined)
 		assert.strictEqual(plain.success.port, 3000)
-		const secure = yield* load({
-			...required,
-			OPENBOT_TLS_CERT: "/certs/cert.pem",
-			OPENBOT_TLS_KEY: "/certs/key.pem",
-		})
-		assert.ok(Result.isSuccess(secure))
-		assert.deepStrictEqual(secure.success.tls, {
-			certFile: "/certs/cert.pem",
-			keyFile: "/certs/key.pem",
-		})
-		assert.strictEqual(
-			(yield* load({ ...required, OPENBOT_TLS_CERT: "/certs/cert.pem" }))._tag,
-			"Failure",
-		)
 	}),
 )
 

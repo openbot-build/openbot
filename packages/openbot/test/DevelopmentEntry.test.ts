@@ -20,13 +20,8 @@ const dist = join(import.meta.dirname, "..", "dist")
 it("built development entry migrates and runs, and production keeps missing-model behavior", async () => {
 	const database = await PostgresTest.start()
 	const publicOrigin = "https://localhost:8443"
-	const {
-		OPENBOT_TLS_CERT: _cert,
-		OPENBOT_TLS_KEY: _key,
-		...inherited
-	} = process.env
 	const env = {
-		...inherited,
+		...process.env,
 		OPENBOT_DATABASE_URL: database.url,
 		OPENBOT_SECRET_KEYS:
 			"test:1111111111111111111111111111111111111111111111111111111111111111",

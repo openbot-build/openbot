@@ -2,9 +2,7 @@ import type { PgClient } from "@effect/sql-pg"
 import type { Discovery } from "@openbot-build/protocol"
 import type { Settings as Api } from "@openbot-build/api"
 import * as AppDiscovery from "../apps/Discovery.ts"
-import { readFileSync } from "node:fs"
 import { createServer } from "node:http"
-import { createServer as createSecureServer } from "node:https"
 import { NodeHttpServer } from "@effect/platform-node"
 import * as Http from "./Http.ts"
 import { Effect, Layer, Option, Redacted } from "effect"
@@ -80,22 +78,15 @@ export const layerApp =
 			Layer.provideMerge(options.discovery ?? AppDiscovery.layerPublic),
 		)
 
+// OpenBot serves plain HTTP only. A reverse proxy in front of it serves HTTPS.
 const nodeServer = (options: {
 	readonly host: string
 	readonly port: number
-	readonly tls?:
-		{ readonly certFile: string; readonly keyFile: string } | undefined
 }) =>
-	NodeHttpServer.layer(
-		() =>
-			options.tls === undefined
-				? createServer()
-				: createSecureServer({
-						cert: readFileSync(options.tls.certFile),
-						key: readFileSync(options.tls.keyFile),
-					}),
-		{ host: options.host, port: options.port },
-	)
+	NodeHttpServer.layer(() => createServer(), {
+		host: options.host,
+		port: options.port,
+	})
 
 /**
  * Serves one fixed sign-in configuration, without the supervisor, and gives
@@ -130,8 +121,6 @@ export const layerFixed = <
 		readonly force?: boolean
 		/** The object storage for files of a new platform, or of a forced one. */
 		readonly fileStorage?: Api.FileStorageInput | undefined
-		readonly tls?:
-			{ readonly certFile: string; readonly keyFile: string } | undefined
 	},
 ) =>
 	HttpRouter.serve(layerApp(options)(options.auth)).pipe(
@@ -177,9 +166,6 @@ export const layer = <
 		readonly secretKeys: Redacted.Redacted<string>
 		/** Use the local test account instead of a sign-in provider. */
 		readonly development?: boolean
-		/** Serve HTTPS directly. In production, a proxy usually terminates TLS. */
-		readonly tls?:
-			{ readonly certFile: string; readonly keyFile: string } | undefined
 	},
 ) =>
 	Supervisor.layer({
