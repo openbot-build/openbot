@@ -1,3 +1,4 @@
+import { Settings as Api } from "@openbot-build/api"
 import { DateTime, Effect, Option, Schema } from "effect"
 
 export const Timestamp = Schema.String.check(
@@ -60,14 +61,11 @@ export const OidcConfiguration = Schema.Struct({
 export const DevelopmentConfiguration = Schema.Struct({
 	...SharedConfiguration.fields,
 	mode: Schema.Literal("development"),
-	publicOrigin: SharedConfiguration.fields.publicOrigin.check(
-		Schema.makeFilter(
-			(value) =>
-				["localhost", "127.0.0.1", "[::1]"].includes(new URL(value).hostname),
-			{
-				message: "Development authentication needs a loopback HTTPS origin",
-			},
-		),
+	// The development server runs on this computer, so plain HTTP is enough.
+	publicOrigin: Api.PublicOrigin.check(
+		Schema.makeFilter((value) => Api.isLoopbackHost(new URL(value).hostname), {
+			message: "Development authentication needs an origin on this computer",
+		}),
 	),
 })
 /** The platform has no sign-in provider. People sign in through the SSO connections of organizations. */

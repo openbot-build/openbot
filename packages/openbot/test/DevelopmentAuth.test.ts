@@ -47,7 +47,7 @@ it("the development sign-in secret comes from the first secret key and stays the
 })
 
 it.effect(
-	"development authentication accepts only loopback HTTPS origins in standard form",
+	"development authentication accepts only origins on this computer in standard form",
 	() =>
 		Effect.gen(function* () {
 			const decode = (publicOrigin: string) =>
@@ -66,11 +66,23 @@ it.effect(
 			)
 			assert.strictEqual((yield* decode("https://[::1]:8443"))._tag, "Success")
 			assert.strictEqual(
+				(yield* decode("https://openbot.localhost"))._tag,
+				"Success",
+			)
+			assert.strictEqual(
+				(yield* decode("https://openbot.localhost.example.com"))._tag,
+				"Failure",
+			)
+			assert.strictEqual(
 				(yield* decode("https://e.example.com"))._tag,
 				"Failure",
 			)
 			assert.strictEqual(
-				(yield* decode("http://localhost:8443"))._tag,
+				(yield* decode("http://openbot.localhost"))._tag,
+				"Success",
+			)
+			assert.strictEqual(
+				(yield* decode("http://e.example.com"))._tag,
 				"Failure",
 			)
 			assert.strictEqual(

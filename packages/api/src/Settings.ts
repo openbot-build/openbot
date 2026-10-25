@@ -25,20 +25,33 @@ export const SecretState = Schema.Struct({
 })
 export type SecretState = typeof SecretState.Type
 
-/** An HTTPS origin with no path, such as `https://api.example.com`. */
+/** True when the host is this computer. Every name under .localhost is (RFC 6761). */
+export const isLoopbackHost = (hostname: string): boolean =>
+	["localhost", "127.0.0.1", "[::1]"].includes(hostname) ||
+	hostname.endsWith(".localhost")
+
+/**
+ * An origin with no path, such as `https://api.example.com`. It must use HTTPS.
+ * Only an origin on this computer, such as `http://openbot.localhost`, may use
+ * plain HTTP.
+ */
 export const PublicOrigin = Schema.NonEmptyString.check(
 	Schema.makeFilter(
 		(value) => {
 			if (!URL.canParse(value)) return false
 			const origin = new URL(value)
 			return (
-				origin.protocol === "https:" &&
+				(origin.protocol === "https:" ||
+					(origin.protocol === "http:" && isLoopbackHost(origin.hostname))) &&
 				origin.origin === value &&
 				origin.username === "" &&
 				origin.password === ""
 			)
 		},
-		{ message: "Expected a canonical HTTPS origin" },
+		{
+			message:
+				"Expected a canonical HTTPS origin, or an HTTP origin on this computer",
+		},
 	),
 )
 /** The HTTPS address of an OpenID Connect provider, with no trailing slash. */
