@@ -1,1151 +1,1082 @@
 {
-  "type": "diff",
-  "version": "9",
-  "dialect": "postgres",
-  "id": "3499256c-1a48-4033-a765-d9660d43a518",
-  "prevIds": [
-    "75af90e4-dde7-4630-8908-987d7e19654c"
-  ],
-  "footprints": [
-    {
-      "statementType": "create_table",
-      "statementTarget": [
-        "table",
-        "public",
-        "openbot_secret_providers"
-      ],
-      "writes": [
-        "s|tbl|public.openbot_secret_providers",
-        "n|tbl|public.openbot_secret_providers",
-        "e|tbl|public.openbot_secret_providers",
-        "n|rel|public.openbot_secret_providers",
-        "n|type|public.openbot_secret_providers",
-        "n|rel|public.openbot_secret_providers_pkey"
-      ],
-      "reads": [
-        "n|sch|public"
-      ]
-    },
-    {
-      "statementType": "create_table",
-      "statementTarget": [
-        "table",
-        "public",
-        "openbot_vault_access"
-      ],
-      "writes": [
-        "s|tbl|public.openbot_vault_access",
-        "n|tbl|public.openbot_vault_access",
-        "e|tbl|public.openbot_vault_access",
-        "n|rel|public.openbot_vault_access",
-        "n|type|public.openbot_vault_access",
-        "n|rel|public.openbot_vault_access_pkey"
-      ],
-      "reads": [
-        "n|sch|public"
-      ]
-    },
-    {
-      "statementType": "create_table",
-      "statementTarget": [
-        "table",
-        "public",
-        "openbot_vault_items"
-      ],
-      "writes": [
-        "s|tbl|public.openbot_vault_items",
-        "n|tbl|public.openbot_vault_items",
-        "e|tbl|public.openbot_vault_items",
-        "n|rel|public.openbot_vault_items",
-        "n|type|public.openbot_vault_items",
-        "n|rel|public.openbot_vault_items_pkey"
-      ],
-      "reads": [
-        "n|sch|public"
-      ]
-    },
-    {
-      "statementType": "create_table",
-      "statementTarget": [
-        "table",
-        "public",
-        "openbot_vaults"
-      ],
-      "writes": [
-        "s|tbl|public.openbot_vaults",
-        "n|tbl|public.openbot_vaults",
-        "e|tbl|public.openbot_vaults",
-        "n|rel|public.openbot_vaults",
-        "n|type|public.openbot_vaults",
-        "n|rel|public.openbot_vaults_pkey"
-      ],
-      "reads": [
-        "n|sch|public"
-      ]
-    },
-    {
-      "statementType": "create_index",
-      "statementTarget": [
-        "index",
-        "public",
-        "openbot_secret_providers",
-        "openbot_secret_providers_owner"
-      ],
-      "writes": [
-        "s|idx|public.openbot_secret_providers_owner",
-        "n|idx|public.openbot_secret_providers_owner",
-        "e|idx|public.openbot_secret_providers_owner",
-        "n|rel|public.openbot_secret_providers_owner"
-      ],
-      "reads": [
-        "n|tbl|public.openbot_secret_providers",
-        "n|sch|public",
-        "n|col|public.openbot_secret_providers.organization_id",
-        "n|col|public.openbot_secret_providers.owner_user_id"
-      ]
-    },
-    {
-      "statementType": "create_index",
-      "statementTarget": [
-        "index",
-        "public",
-        "openbot_vault_access",
-        "openbot_vault_access_bot"
-      ],
-      "writes": [
-        "s|idx|public.openbot_vault_access_bot",
-        "n|idx|public.openbot_vault_access_bot",
-        "e|idx|public.openbot_vault_access_bot",
-        "n|rel|public.openbot_vault_access_bot"
-      ],
-      "reads": [
-        "n|tbl|public.openbot_vault_access",
-        "n|sch|public",
-        "n|col|public.openbot_vault_access.organization_id",
-        "n|col|public.openbot_vault_access.bot"
-      ]
-    },
-    {
-      "statementType": "create_index",
-      "statementTarget": [
-        "index",
-        "public",
-        "openbot_vault_items",
-        "openbot_vault_items_name"
-      ],
-      "writes": [
-        "s|idx|public.openbot_vault_items_name",
-        "n|idx|public.openbot_vault_items_name",
-        "e|idx|public.openbot_vault_items_name",
-        "n|rel|public.openbot_vault_items_name"
-      ],
-      "reads": [
-        "n|tbl|public.openbot_vault_items",
-        "n|sch|public",
-        "n|col|public.openbot_vault_items.organization_id",
-        "n|col|public.openbot_vault_items.vault_id",
-        "n|col|public.openbot_vault_items.name"
-      ]
-    },
-    {
-      "statementType": "create_index",
-      "statementTarget": [
-        "index",
-        "public",
-        "openbot_vault_items",
-        "openbot_vault_items_provider"
-      ],
-      "writes": [
-        "s|idx|public.openbot_vault_items_provider",
-        "n|idx|public.openbot_vault_items_provider",
-        "e|idx|public.openbot_vault_items_provider",
-        "n|rel|public.openbot_vault_items_provider"
-      ],
-      "reads": [
-        "n|tbl|public.openbot_vault_items",
-        "n|sch|public",
-        "n|col|public.openbot_vault_items.organization_id",
-        "n|col|public.openbot_vault_items.provider_id"
-      ]
-    },
-    {
-      "statementType": "create_index",
-      "statementTarget": [
-        "index",
-        "public",
-        "openbot_vaults",
-        "openbot_vaults_owner"
-      ],
-      "writes": [
-        "s|idx|public.openbot_vaults_owner",
-        "n|idx|public.openbot_vaults_owner",
-        "e|idx|public.openbot_vaults_owner",
-        "n|rel|public.openbot_vaults_owner"
-      ],
-      "reads": [
-        "n|tbl|public.openbot_vaults",
-        "n|sch|public",
-        "n|col|public.openbot_vaults.organization_id",
-        "n|col|public.openbot_vaults.owner_user_id"
-      ]
-    },
-    {
-      "statementType": "create_fk",
-      "statementTarget": [
-        "table",
-        "public",
-        "openbot_vault_access"
-      ],
-      "writes": [
-        "s|fk|public.openbot_vault_access.openbot_vault_access_ECcG1VGAC3Ru_fkey",
-        "n|fk|public.openbot_vault_access.openbot_vault_access_ECcG1VGAC3Ru_fkey",
-        "e|fk|public.openbot_vault_access.openbot_vault_access_ECcG1VGAC3Ru_fkey",
-        "n|con|public.openbot_vault_access.openbot_vault_access_ECcG1VGAC3Ru_fkey"
-      ],
-      "reads": [
-        "n|tbl|public.openbot_vault_access",
-        "n|sch|public",
-        "n|tbl|public.openbot_vaults",
-        "n|sch|public",
-        "n|col|public.openbot_vault_access.organization_id",
-        "n|col|public.openbot_vault_access.vault_id",
-        "n|col|public.openbot_vaults.organization_id",
-        "n|col|public.openbot_vaults.id",
-        "e|uniqueness|public.openbot_vaults.id.organization_id"
-      ]
-    },
-    {
-      "statementType": "create_fk",
-      "statementTarget": [
-        "table",
-        "public",
-        "openbot_vault_items"
-      ],
-      "writes": [
-        "s|fk|public.openbot_vault_items.openbot_vault_items_374bOUnyEYRe_fkey",
-        "n|fk|public.openbot_vault_items.openbot_vault_items_374bOUnyEYRe_fkey",
-        "e|fk|public.openbot_vault_items.openbot_vault_items_374bOUnyEYRe_fkey",
-        "n|con|public.openbot_vault_items.openbot_vault_items_374bOUnyEYRe_fkey"
-      ],
-      "reads": [
-        "n|tbl|public.openbot_vault_items",
-        "n|sch|public",
-        "n|tbl|public.openbot_vaults",
-        "n|sch|public",
-        "n|col|public.openbot_vault_items.organization_id",
-        "n|col|public.openbot_vault_items.vault_id",
-        "n|col|public.openbot_vaults.organization_id",
-        "n|col|public.openbot_vaults.id",
-        "e|uniqueness|public.openbot_vaults.id.organization_id"
-      ]
-    },
-    {
-      "statementType": "create_fk",
-      "statementTarget": [
-        "table",
-        "public",
-        "openbot_vault_items"
-      ],
-      "writes": [
-        "s|fk|public.openbot_vault_items.openbot_vault_items_JOInQ3rIvhT1_fkey",
-        "n|fk|public.openbot_vault_items.openbot_vault_items_JOInQ3rIvhT1_fkey",
-        "e|fk|public.openbot_vault_items.openbot_vault_items_JOInQ3rIvhT1_fkey",
-        "n|con|public.openbot_vault_items.openbot_vault_items_JOInQ3rIvhT1_fkey"
-      ],
-      "reads": [
-        "n|tbl|public.openbot_vault_items",
-        "n|sch|public",
-        "n|tbl|public.openbot_secret_providers",
-        "n|sch|public",
-        "n|col|public.openbot_vault_items.organization_id",
-        "n|col|public.openbot_vault_items.provider_id",
-        "n|col|public.openbot_secret_providers.organization_id",
-        "n|col|public.openbot_secret_providers.id",
-        "e|uniqueness|public.openbot_secret_providers.id.organization_id"
-      ]
-    }
-  ],
-  "deltas": [
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "name": "openbot_secret_providers",
-        "isRlsEnabled": false,
-        "entityType": "tables"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "name": "openbot_vault_access",
-        "isRlsEnabled": false,
-        "entityType": "tables"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "name": "openbot_vault_items",
-        "isRlsEnabled": false,
-        "entityType": "tables"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "name": "openbot_vaults",
-        "isRlsEnabled": false,
-        "entityType": "tables"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_secret_providers",
-        "name": "organization_id",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_secret_providers",
-        "name": "id",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_secret_providers",
-        "name": "owner_user_id",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": false,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_secret_providers",
-        "name": "kind",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_secret_providers",
-        "name": "name",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_secret_providers",
-        "name": "credentials",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_secret_providers",
-        "name": "hints",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_secret_providers",
-        "name": "version",
-        "type": "integer",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_secret_providers",
-        "name": "created_at",
-        "type": "bigint",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_secret_providers",
-        "name": "updated_at",
-        "type": "bigint",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_access",
-        "name": "organization_id",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_access",
-        "name": "vault_id",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_access",
-        "name": "bot",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_access",
-        "name": "granted_by",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_access",
-        "name": "granted_at",
-        "type": "bigint",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_items",
-        "name": "organization_id",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_items",
-        "name": "id",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_items",
-        "name": "vault_id",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_items",
-        "name": "name",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_items",
-        "name": "description",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_items",
-        "name": "provider_id",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": false,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_items",
-        "name": "source",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_items",
-        "name": "fields",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_items",
-        "name": "exits",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_items",
-        "name": "values",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": false,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_items",
-        "name": "version",
-        "type": "integer",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_items",
-        "name": "created_at",
-        "type": "bigint",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_items",
-        "name": "updated_at",
-        "type": "bigint",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vaults",
-        "name": "organization_id",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vaults",
-        "name": "id",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vaults",
-        "name": "owner_user_id",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": false,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vaults",
-        "name": "name",
-        "type": "text",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vaults",
-        "name": "version",
-        "type": "integer",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vaults",
-        "name": "created_at",
-        "type": "bigint",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vaults",
-        "name": "updated_at",
-        "type": "bigint",
-        "typeSchema": null,
-        "notNull": true,
-        "dimensions": 0,
-        "default": null,
-        "generated": null,
-        "identity": null,
-        "entityType": "columns"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_secret_providers",
-        "name": "openbot_secret_providers_owner",
-        "nameExplicit": true,
-        "columns": [
-          {
-            "value": "organization_id",
-            "isExpression": false,
-            "asc": true,
-            "nullsFirst": false,
-            "opclass": null
-          },
-          {
-            "value": "owner_user_id",
-            "isExpression": false,
-            "asc": true,
-            "nullsFirst": false,
-            "opclass": null
-          }
-        ],
-        "isUnique": false,
-        "where": null,
-        "with": "",
-        "method": "btree",
-        "concurrently": false,
-        "entityType": "indexes"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_access",
-        "name": "openbot_vault_access_bot",
-        "nameExplicit": true,
-        "columns": [
-          {
-            "value": "organization_id",
-            "isExpression": false,
-            "asc": true,
-            "nullsFirst": false,
-            "opclass": null
-          },
-          {
-            "value": "bot",
-            "isExpression": false,
-            "asc": true,
-            "nullsFirst": false,
-            "opclass": null
-          }
-        ],
-        "isUnique": false,
-        "where": null,
-        "with": "",
-        "method": "btree",
-        "concurrently": false,
-        "entityType": "indexes"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_items",
-        "name": "openbot_vault_items_name",
-        "nameExplicit": true,
-        "columns": [
-          {
-            "value": "organization_id",
-            "isExpression": false,
-            "asc": true,
-            "nullsFirst": false,
-            "opclass": null
-          },
-          {
-            "value": "vault_id",
-            "isExpression": false,
-            "asc": true,
-            "nullsFirst": false,
-            "opclass": null
-          },
-          {
-            "value": "name",
-            "isExpression": false,
-            "asc": true,
-            "nullsFirst": false,
-            "opclass": null
-          }
-        ],
-        "isUnique": true,
-        "where": null,
-        "with": "",
-        "method": "btree",
-        "concurrently": false,
-        "entityType": "indexes"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_items",
-        "name": "openbot_vault_items_provider",
-        "nameExplicit": true,
-        "columns": [
-          {
-            "value": "organization_id",
-            "isExpression": false,
-            "asc": true,
-            "nullsFirst": false,
-            "opclass": null
-          },
-          {
-            "value": "provider_id",
-            "isExpression": false,
-            "asc": true,
-            "nullsFirst": false,
-            "opclass": null
-          }
-        ],
-        "isUnique": false,
-        "where": null,
-        "with": "",
-        "method": "btree",
-        "concurrently": false,
-        "entityType": "indexes"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vaults",
-        "name": "openbot_vaults_owner",
-        "nameExplicit": true,
-        "columns": [
-          {
-            "value": "organization_id",
-            "isExpression": false,
-            "asc": true,
-            "nullsFirst": false,
-            "opclass": null
-          },
-          {
-            "value": "owner_user_id",
-            "isExpression": false,
-            "asc": true,
-            "nullsFirst": false,
-            "opclass": null
-          }
-        ],
-        "isUnique": false,
-        "where": null,
-        "with": "",
-        "method": "btree",
-        "concurrently": false,
-        "entityType": "indexes"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_access",
-        "name": "openbot_vault_access_ECcG1VGAC3Ru_fkey",
-        "nameExplicit": false,
-        "columns": [
-          "organization_id",
-          "vault_id"
-        ],
-        "schemaTo": "public",
-        "tableTo": "openbot_vaults",
-        "columnsTo": [
-          "organization_id",
-          "id"
-        ],
-        "onUpdate": "NO ACTION",
-        "onDelete": "CASCADE",
-        "entityType": "fks"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_items",
-        "name": "openbot_vault_items_374bOUnyEYRe_fkey",
-        "nameExplicit": false,
-        "columns": [
-          "organization_id",
-          "vault_id"
-        ],
-        "schemaTo": "public",
-        "tableTo": "openbot_vaults",
-        "columnsTo": [
-          "organization_id",
-          "id"
-        ],
-        "onUpdate": "NO ACTION",
-        "onDelete": "CASCADE",
-        "entityType": "fks"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_items",
-        "name": "openbot_vault_items_JOInQ3rIvhT1_fkey",
-        "nameExplicit": false,
-        "columns": [
-          "organization_id",
-          "provider_id"
-        ],
-        "schemaTo": "public",
-        "tableTo": "openbot_secret_providers",
-        "columnsTo": [
-          "organization_id",
-          "id"
-        ],
-        "onUpdate": "NO ACTION",
-        "onDelete": "NO ACTION",
-        "entityType": "fks"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_secret_providers",
-        "name": "openbot_secret_providers_pkey",
-        "columns": [
-          "organization_id",
-          "id"
-        ],
-        "nameExplicit": false,
-        "entityType": "pks"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_access",
-        "name": "openbot_vault_access_pkey",
-        "columns": [
-          "organization_id",
-          "vault_id",
-          "bot"
-        ],
-        "nameExplicit": false,
-        "entityType": "pks"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vault_items",
-        "name": "openbot_vault_items_pkey",
-        "columns": [
-          "organization_id",
-          "id"
-        ],
-        "nameExplicit": false,
-        "entityType": "pks"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
-        "table": "openbot_vaults",
-        "name": "openbot_vaults_pkey",
-        "columns": [
-          "organization_id",
-          "id"
-        ],
-        "nameExplicit": false,
-        "entityType": "pks"
-      }
-    }
-  ]
+	"type": "diff",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "3499256c-1a48-4033-a765-d9660d43a518",
+	"prevIds": ["75af90e4-dde7-4630-8908-987d7e19654c"],
+	"footprints": [
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_secret_providers"],
+			"writes": [
+				"s|tbl|public.openbot_secret_providers",
+				"n|tbl|public.openbot_secret_providers",
+				"e|tbl|public.openbot_secret_providers",
+				"n|rel|public.openbot_secret_providers",
+				"n|type|public.openbot_secret_providers",
+				"n|rel|public.openbot_secret_providers_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_vault_access"],
+			"writes": [
+				"s|tbl|public.openbot_vault_access",
+				"n|tbl|public.openbot_vault_access",
+				"e|tbl|public.openbot_vault_access",
+				"n|rel|public.openbot_vault_access",
+				"n|type|public.openbot_vault_access",
+				"n|rel|public.openbot_vault_access_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_vault_items"],
+			"writes": [
+				"s|tbl|public.openbot_vault_items",
+				"n|tbl|public.openbot_vault_items",
+				"e|tbl|public.openbot_vault_items",
+				"n|rel|public.openbot_vault_items",
+				"n|type|public.openbot_vault_items",
+				"n|rel|public.openbot_vault_items_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "public", "openbot_vaults"],
+			"writes": [
+				"s|tbl|public.openbot_vaults",
+				"n|tbl|public.openbot_vaults",
+				"e|tbl|public.openbot_vaults",
+				"n|rel|public.openbot_vaults",
+				"n|type|public.openbot_vaults",
+				"n|rel|public.openbot_vaults_pkey"
+			],
+			"reads": ["n|sch|public"]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_secret_providers",
+				"openbot_secret_providers_owner"
+			],
+			"writes": [
+				"s|idx|public.openbot_secret_providers_owner",
+				"n|idx|public.openbot_secret_providers_owner",
+				"e|idx|public.openbot_secret_providers_owner",
+				"n|rel|public.openbot_secret_providers_owner"
+			],
+			"reads": [
+				"n|tbl|public.openbot_secret_providers",
+				"n|sch|public",
+				"n|col|public.openbot_secret_providers.organization_id",
+				"n|col|public.openbot_secret_providers.owner_user_id"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_vault_access",
+				"openbot_vault_access_bot"
+			],
+			"writes": [
+				"s|idx|public.openbot_vault_access_bot",
+				"n|idx|public.openbot_vault_access_bot",
+				"e|idx|public.openbot_vault_access_bot",
+				"n|rel|public.openbot_vault_access_bot"
+			],
+			"reads": [
+				"n|tbl|public.openbot_vault_access",
+				"n|sch|public",
+				"n|col|public.openbot_vault_access.organization_id",
+				"n|col|public.openbot_vault_access.bot"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_vault_items",
+				"openbot_vault_items_name"
+			],
+			"writes": [
+				"s|idx|public.openbot_vault_items_name",
+				"n|idx|public.openbot_vault_items_name",
+				"e|idx|public.openbot_vault_items_name",
+				"n|rel|public.openbot_vault_items_name"
+			],
+			"reads": [
+				"n|tbl|public.openbot_vault_items",
+				"n|sch|public",
+				"n|col|public.openbot_vault_items.organization_id",
+				"n|col|public.openbot_vault_items.vault_id",
+				"n|col|public.openbot_vault_items.name"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_vault_items",
+				"openbot_vault_items_provider"
+			],
+			"writes": [
+				"s|idx|public.openbot_vault_items_provider",
+				"n|idx|public.openbot_vault_items_provider",
+				"e|idx|public.openbot_vault_items_provider",
+				"n|rel|public.openbot_vault_items_provider"
+			],
+			"reads": [
+				"n|tbl|public.openbot_vault_items",
+				"n|sch|public",
+				"n|col|public.openbot_vault_items.organization_id",
+				"n|col|public.openbot_vault_items.provider_id"
+			]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": [
+				"index",
+				"public",
+				"openbot_vaults",
+				"openbot_vaults_owner"
+			],
+			"writes": [
+				"s|idx|public.openbot_vaults_owner",
+				"n|idx|public.openbot_vaults_owner",
+				"e|idx|public.openbot_vaults_owner",
+				"n|rel|public.openbot_vaults_owner"
+			],
+			"reads": [
+				"n|tbl|public.openbot_vaults",
+				"n|sch|public",
+				"n|col|public.openbot_vaults.organization_id",
+				"n|col|public.openbot_vaults.owner_user_id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_vault_access"],
+			"writes": [
+				"s|fk|public.openbot_vault_access.openbot_vault_access_ECcG1VGAC3Ru_fkey",
+				"n|fk|public.openbot_vault_access.openbot_vault_access_ECcG1VGAC3Ru_fkey",
+				"e|fk|public.openbot_vault_access.openbot_vault_access_ECcG1VGAC3Ru_fkey",
+				"n|con|public.openbot_vault_access.openbot_vault_access_ECcG1VGAC3Ru_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_vault_access",
+				"n|sch|public",
+				"n|tbl|public.openbot_vaults",
+				"n|sch|public",
+				"n|col|public.openbot_vault_access.organization_id",
+				"n|col|public.openbot_vault_access.vault_id",
+				"n|col|public.openbot_vaults.organization_id",
+				"n|col|public.openbot_vaults.id",
+				"e|uniqueness|public.openbot_vaults.id.organization_id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_vault_items"],
+			"writes": [
+				"s|fk|public.openbot_vault_items.openbot_vault_items_374bOUnyEYRe_fkey",
+				"n|fk|public.openbot_vault_items.openbot_vault_items_374bOUnyEYRe_fkey",
+				"e|fk|public.openbot_vault_items.openbot_vault_items_374bOUnyEYRe_fkey",
+				"n|con|public.openbot_vault_items.openbot_vault_items_374bOUnyEYRe_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_vault_items",
+				"n|sch|public",
+				"n|tbl|public.openbot_vaults",
+				"n|sch|public",
+				"n|col|public.openbot_vault_items.organization_id",
+				"n|col|public.openbot_vault_items.vault_id",
+				"n|col|public.openbot_vaults.organization_id",
+				"n|col|public.openbot_vaults.id",
+				"e|uniqueness|public.openbot_vaults.id.organization_id"
+			]
+		},
+		{
+			"statementType": "create_fk",
+			"statementTarget": ["table", "public", "openbot_vault_items"],
+			"writes": [
+				"s|fk|public.openbot_vault_items.openbot_vault_items_JOInQ3rIvhT1_fkey",
+				"n|fk|public.openbot_vault_items.openbot_vault_items_JOInQ3rIvhT1_fkey",
+				"e|fk|public.openbot_vault_items.openbot_vault_items_JOInQ3rIvhT1_fkey",
+				"n|con|public.openbot_vault_items.openbot_vault_items_JOInQ3rIvhT1_fkey"
+			],
+			"reads": [
+				"n|tbl|public.openbot_vault_items",
+				"n|sch|public",
+				"n|tbl|public.openbot_secret_providers",
+				"n|sch|public",
+				"n|col|public.openbot_vault_items.organization_id",
+				"n|col|public.openbot_vault_items.provider_id",
+				"n|col|public.openbot_secret_providers.organization_id",
+				"n|col|public.openbot_secret_providers.id",
+				"e|uniqueness|public.openbot_secret_providers.id.organization_id"
+			]
+		}
+	],
+	"deltas": [
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_secret_providers",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_vault_access",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_vault_items",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"name": "openbot_vaults",
+				"isRlsEnabled": false,
+				"entityType": "tables"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_secret_providers",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_secret_providers",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_secret_providers",
+				"name": "owner_user_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_secret_providers",
+				"name": "kind",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_secret_providers",
+				"name": "name",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_secret_providers",
+				"name": "credentials",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_secret_providers",
+				"name": "hints",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_secret_providers",
+				"name": "version",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_secret_providers",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_secret_providers",
+				"name": "updated_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_access",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_access",
+				"name": "vault_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_access",
+				"name": "bot",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_access",
+				"name": "granted_by",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_access",
+				"name": "granted_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_items",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_items",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_items",
+				"name": "vault_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_items",
+				"name": "name",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_items",
+				"name": "description",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_items",
+				"name": "provider_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_items",
+				"name": "source",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_items",
+				"name": "fields",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_items",
+				"name": "exits",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_items",
+				"name": "values",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_items",
+				"name": "version",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_items",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_items",
+				"name": "updated_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vaults",
+				"name": "organization_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vaults",
+				"name": "id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vaults",
+				"name": "owner_user_id",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": false,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vaults",
+				"name": "name",
+				"type": "text",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vaults",
+				"name": "version",
+				"type": "integer",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vaults",
+				"name": "created_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vaults",
+				"name": "updated_at",
+				"type": "bigint",
+				"typeSchema": null,
+				"notNull": true,
+				"dimensions": 0,
+				"default": null,
+				"generated": null,
+				"identity": null,
+				"entityType": "columns"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_secret_providers",
+				"name": "openbot_secret_providers_owner",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "organization_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "owner_user_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_access",
+				"name": "openbot_vault_access_bot",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "organization_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "bot",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_items",
+				"name": "openbot_vault_items_name",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "organization_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "vault_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "name",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": true,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_items",
+				"name": "openbot_vault_items_provider",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "organization_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "provider_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vaults",
+				"name": "openbot_vaults_owner",
+				"nameExplicit": true,
+				"columns": [
+					{
+						"value": "organization_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					},
+					{
+						"value": "owner_user_id",
+						"isExpression": false,
+						"asc": true,
+						"nullsFirst": false,
+						"opclass": null
+					}
+				],
+				"isUnique": false,
+				"where": null,
+				"with": "",
+				"method": "btree",
+				"concurrently": false,
+				"entityType": "indexes"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_access",
+				"name": "openbot_vault_access_ECcG1VGAC3Ru_fkey",
+				"nameExplicit": false,
+				"columns": ["organization_id", "vault_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_vaults",
+				"columnsTo": ["organization_id", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_items",
+				"name": "openbot_vault_items_374bOUnyEYRe_fkey",
+				"nameExplicit": false,
+				"columns": ["organization_id", "vault_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_vaults",
+				"columnsTo": ["organization_id", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "CASCADE",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_items",
+				"name": "openbot_vault_items_JOInQ3rIvhT1_fkey",
+				"nameExplicit": false,
+				"columns": ["organization_id", "provider_id"],
+				"schemaTo": "public",
+				"tableTo": "openbot_secret_providers",
+				"columnsTo": ["organization_id", "id"],
+				"onUpdate": "NO ACTION",
+				"onDelete": "NO ACTION",
+				"entityType": "fks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_secret_providers",
+				"name": "openbot_secret_providers_pkey",
+				"columns": ["organization_id", "id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_access",
+				"name": "openbot_vault_access_pkey",
+				"columns": ["organization_id", "vault_id", "bot"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vault_items",
+				"name": "openbot_vault_items_pkey",
+				"columns": ["organization_id", "id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		},
+		{
+			"op": "create",
+			"row": {
+				"schema": "public",
+				"table": "openbot_vaults",
+				"name": "openbot_vaults_pkey",
+				"columns": ["organization_id", "id"],
+				"nameExplicit": false,
+				"entityType": "pks"
+			}
+		}
+	]
 }
