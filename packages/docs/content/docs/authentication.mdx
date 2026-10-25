@@ -110,8 +110,8 @@ never does. See [Configuration](/docs/configuration#development).
 This command signs in and saves the cookie in a file:
 
 ```sh
-curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
-  -H "Origin: https://localhost:8443" \
+curl -c cookies.txt -X POST http://localhost/auth/development/sign-in \
+  -H "Origin: http://localhost" \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
@@ -211,10 +211,10 @@ returns `403` with `ForbiddenOrigin`.
 
 ```sh
 curl -b cookies.txt \
-  -H "Origin: https://localhost:8443" \
+  -H "Origin: http://localhost" \
   -H "Content-Type: application/json" \
   -d '{"input":"Hello"}' \
-  https://localhost:8443/v1/bots/$BOT/messages
+  http://localhost/v1/bots/$BOT/messages
 ```
 
 Requests with a user token do not need the `Origin` header.

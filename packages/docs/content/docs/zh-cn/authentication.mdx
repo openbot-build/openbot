@@ -101,8 +101,8 @@ secret 时，OpenBot 作为公共客户端，使用 PKCE 登录。PKCE 是一种
 下面的命令会登录，并把 cookie 保存到文件中：
 
 ```sh
-curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
-  -H "Origin: https://localhost:8443" \
+curl -c cookies.txt -X POST http://localhost/auth/development/sign-in \
+  -H "Origin: http://localhost" \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
@@ -196,10 +196,10 @@ curl -b cookies.txt \
 
 ```sh
 curl -b cookies.txt \
-  -H "Origin: https://localhost:8443" \
+  -H "Origin: http://localhost" \
   -H "Content-Type: application/json" \
   -d '{"input":"Hello"}' \
-  https://localhost:8443/v1/bots/$BOT/messages
+  http://localhost/v1/bots/$BOT/messages
 ```
 
 使用用户令牌的请求不需要 `Origin` 请求头。

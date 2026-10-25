@@ -11,11 +11,12 @@ computer, run the server and the checks, and find your way in the code.
 ## Set up
 
 You need [devenv](https://devenv.sh). devenv gives you the exact tools for the
-project: Node.js, pnpm, PostgreSQL, mkcert, and more. You also need
-[Docker](https://docs.docker.com/get-docker/). The development database runs in
-Docker, and you use Docker to build and check the images. See
-[Deploy](/docs/deploy#build-the-images). Run every command through
-`devenv shell -- <command>`, so you always use these tools.
+project: Node.js, pnpm, PostgreSQL, and more. You also need
+[Docker](https://docs.docker.com/get-docker/). The development database and the
+development object storage run in Docker, and you use Docker to build and check
+the images. devenv gives the Docker command line tools. Your computer only needs
+a running Docker service. See [Deploy](/docs/deploy#build-the-images). Run every
+command through `devenv shell -- <command>`, so you always use these tools.
 
 <Steps>
 <Step>
@@ -34,15 +35,12 @@ cd openbot
 
 ```sh
 devenv shell -- pnpm dev:setup
-devenv shell -- mkcert -install
 ```
 
 `dev:setup` makes `.env.development` with a new random secret key in
-`OPENBOT_SECRET_KEYS`. It also makes a local TLS certificate in `.devenv/dev/`.
-If your `.env.development` is from an older version, delete it and run
-`dev:setup` again. You can also reset the development database. See
-[Configuration](/docs/configuration#development). `mkcert -install` makes your
-computer trust that certificate.
+`OPENBOT_SECRET_KEYS`. If your `.env.development` is from an older version,
+delete it and run `dev:setup` again. You can also reset the development
+database. See [Configuration](/docs/configuration#development).
 
 </Step>
 <Step>
@@ -55,16 +53,26 @@ devenv shell -- pnpm dev
 
 `pnpm dev` runs `devenv up`. It does these steps:
 
-1. It starts PostgreSQL 18 on `127.0.0.1:5433`, with the user `openbot_dev`. It
-   runs in Docker, from the same image as the production Compose file. Its data
-   lives in the Docker volume `openbot-dev-postgres`. To reset the database,
-   stop `pnpm dev` and run `docker volume rm openbot-dev-postgres`.
-2. It installs the packages with `pnpm install --frozen-lockfile`.
-3. It builds OpenBot and the packages it needs.
-4. It runs the database migrations.
-5. It starts the development server at `https://localhost:8443`. The server
-   writes the platform settings for this origin itself, so there is no setup
-   step.
+1. It starts PostgreSQL 18 on `127.0.0.1`, with the user `openbot_dev`. It runs
+   in Docker, from the same image as the production Compose file. Its data lives
+   in the Docker volume `openbot-dev-postgres`. To reset the database, stop
+   `pnpm dev` and run `docker volume rm openbot-dev-postgres`.
+2. It starts [RustFS](https://rustfs.com), the object storage for files, on
+   `127.0.0.1`. It also runs in Docker. Its data lives in the Docker volume
+   `openbot-dev-rustfs`. To delete the stored files, stop `pnpm dev` and run
+   `docker volume rm openbot-dev-rustfs`.
+3. It installs the packages with `pnpm install --frozen-lockfile`.
+4. It builds OpenBot and the packages it needs.
+5. It runs the database migrations.
+6. It starts the development server at `http://localhost`. The server writes the
+   platform settings for this origin itself, so there is no setup step.
+
+devenv picks a free port for each service. It starts at a base port: `5433` for
+PostgreSQL, `9000` for RustFS, and `3000` for OpenBot. It shows the ports in its
+process list. The devenv proxy gives OpenBot the stable address
+`http://localhost` on port 80, whatever port OpenBot gets. On Linux, the proxy
+asks for your password with `sudo` the first time, so that it can listen on
+port 80.
 
 When you change a file in `packages/*/src`, devenv starts OpenBot again.
 

@@ -10,8 +10,8 @@ description: 准备代码，运行检查，并遵守项目规则。
 ## 准备环境
 
 你需要
-[devenv](https://devenv.sh)。devenv 为项目提供确切版本的工具：Node.js、pnpm、PostgreSQL、mkcert 等。你还需要
-[Docker](https://docs.docker.com/get-docker/)。开发数据库在 Docker 中运行，构建和检查镜像也要用 Docker。请看[部署](/zh-cn/docs/deploy#构建镜像)。每条命令都通过
+[devenv](https://devenv.sh)。devenv 为项目提供确切版本的工具：Node.js、pnpm、PostgreSQL 等。你还需要
+[Docker](https://docs.docker.com/get-docker/)。开发数据库和开发用的对象存储在 Docker 中运行，构建和检查镜像也要用 Docker。devenv 提供 Docker 命令行工具，你的电脑只需要一个正在运行的 Docker 服务。请看[部署](/zh-cn/docs/deploy#构建镜像)。每条命令都通过
 `devenv shell -- <command>` 运行，这样你用的总是这些工具。
 
 <Steps>
@@ -31,15 +31,12 @@ cd openbot
 
 ```sh
 devenv shell -- pnpm dev:setup
-devenv shell -- mkcert -install
 ```
 
 `dev:setup` 创建 `.env.development`，并在 `OPENBOT_SECRET_KEYS`
-中放入一个新的随机密钥。它还会在 `.devenv/dev/`
-中创建一个本地 TLS 证书。如果你的 `.env.development`
+中放入一个新的随机密钥。如果你的 `.env.development`
 来自旧版本，请删除它，然后再次运行
 `dev:setup`。你也可以重置开发数据库。请看[配置](/zh-cn/docs/configuration#开发)。
-`mkcert -install` 让你的电脑信任这个证书。
 
 </Step>
 <Step>
@@ -52,15 +49,25 @@ devenv shell -- pnpm dev
 
 `pnpm dev` 运行 `devenv up`。它执行以下步骤：
 
-1. 在 `127.0.0.1:5433` 上启动 PostgreSQL 18，用户为
+1. 在 `127.0.0.1` 上启动 PostgreSQL 18，用户为
    `openbot_dev`。它在 Docker 中运行，使用和生产 Compose 文件相同的镜像。它的数据存放在 Docker 卷
    `openbot-dev-postgres` 中。要重置数据库，先停止 `pnpm dev`，再运行
    `docker volume rm openbot-dev-postgres`。
-2. 用 `pnpm install --frozen-lockfile` 安装包。
-3. 构建 OpenBot 及其需要的包。
-4. 运行数据库迁移。
-5. 在 `https://localhost:8443`
+2. 在 `127.0.0.1` 上启动
+   [RustFS](https://rustfs.com)，即文件的对象存储。它同样在 Docker 中运行。它的数据存放在 Docker 卷
+   `openbot-dev-rustfs` 中。要删除存储的文件，先停止 `pnpm dev`，再运行
+   `docker volume rm openbot-dev-rustfs`。
+3. 用 `pnpm install --frozen-lockfile` 安装包。
+4. 构建 OpenBot 及其需要的包。
+5. 运行数据库迁移。
+6. 在 `http://localhost`
    启动开发服务器。服务器会自己为这个源写入平台设置，所以不需要设置步骤。
+
+devenv 会为每个服务选择一个空闲端口。它从基础端口开始：PostgreSQL 是
+`5433`，RustFS 是 `9000`，OpenBot 是
+`3000`。它会在进程列表中显示这些端口。不管 OpenBot 得到哪个端口，devenv 的代理都在 80 端口上给它一个固定的地址
+`http://localhost`。在 Linux 上，代理第一次会用 `sudo`
+要求你输入密码，这样它才能监听 80 端口。
 
 当你修改 `packages/*/src` 中的文件时，devenv 会重新启动 OpenBot。
 

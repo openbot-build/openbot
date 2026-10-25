@@ -12,10 +12,12 @@ Testmodellen. Du brauchst keinen Identitätsanbieter und keinen Modell-Schlüsse
 
 Du brauchst:
 
-1. [devenv](https://devenv.sh) 2.0 oder neuer. Es gibt dir die richtigen
-   Versionen von Node.js, pnpm, PostgreSQL und mkcert. devenv führt auch die
-   Datenbank für die Entwicklung aus. Du brauchst also kein Docker.
-2. Eine Kopie des Codes:
+1. [devenv](https://devenv.sh) 2.3 oder neuer. Es gibt dir die richtigen
+   Versionen von Node.js, pnpm, den PostgreSQL-Werkzeugen und den
+   Befehlszeilen-Werkzeugen von Docker.
+2. Einen laufenden [Docker](https://docs.docker.com/get-docker/)-Dienst. Die
+   Datenbank und der Objektspeicher für die Entwicklung laufen in Docker.
+3. Eine Kopie des Codes:
 
 ```sh
 git clone https://github.com/openbot-build/openbot.git
@@ -37,13 +39,11 @@ Führe jeden Befehl im obersten Ordner des Codes aus, innerhalb von
 
 ```sh
 devenv shell -- pnpm dev:setup
-devenv shell -- mkcert -install
 ```
 
-Der erste Befehl erstellt `.env.development` mit einem neuen geheimen Schlüssel
-und ein Zertifikat für `localhost`. Wenn du eine `.env.development` von einer
-älteren Version hast, lösche sie zuerst. Der zweite Befehl sorgt dafür, dass
-dein Computer diesem Zertifikat vertraut. Er kann nach deinem Passwort fragen.
+Dieser Befehl erstellt `.env.development` mit einem neuen geheimen Schlüssel.
+Wenn du eine `.env.development` von einer älteren Version hast, lösche sie
+zuerst.
 
 </Step>
 
@@ -55,11 +55,13 @@ dein Computer diesem Zertifikat vertraut. Er kann nach deinem Passwort fragen.
 devenv shell -- pnpm dev
 ```
 
-Das startet PostgreSQL, baut OpenBot, aktualisiert die Datenbank und startet
-OpenBot unter `https://localhost:8443`. Der Entwicklungsserver richtet die
-Platform selbst ein. Du führst das Einrichtungsprogramm also nicht aus. Der
-erste Start kann ein paar Minuten dauern. Drücke **Strg+C**, um zu stoppen.
-Deine Daten bleiben in der Datenbank.
+Das startet PostgreSQL und RustFS in Docker, baut OpenBot, aktualisiert die
+Datenbank und startet OpenBot unter `http://localhost`. Unter Linux fragt devenv
+beim ersten Mal mit `sudo` nach deinem Passwort. Sein Proxy braucht das, um auf
+Port 80 zu lauschen. Der Entwicklungsserver richtet die Platform selbst ein. Du
+führst das Einrichtungsprogramm also nicht aus. Der erste Start kann ein paar
+Minuten dauern. Drücke **Strg+C**, um zu stoppen. Deine Daten bleiben in der
+Datenbank.
 
 </Step>
 
@@ -68,8 +70,8 @@ Deine Daten bleiben in der Datenbank.
 ### Anmelden
 
 ```sh
-curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
-  -H "Origin: https://localhost:8443" \
+curl -c cookies.txt -X POST http://localhost/auth/development/sign-in \
+  -H "Origin: http://localhost" \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
@@ -89,10 +91,10 @@ Erstelle eine für dich:
 
 ```sh
 curl -b cookies.txt \
-  -H 'Origin: https://localhost:8443' \
+  -H 'Origin: http://localhost' \
   -H 'Content-Type: application/json' \
   -d '{"name":"My lab"}' \
-  https://localhost:8443/v1/organizations
+  http://localhost/v1/organizations
 ```
 
 Du bist der Super Administrator dieser Organisation.
@@ -105,10 +107,10 @@ Du bist der Super Administrator dieser Organisation.
 
 ```sh
 curl -b cookies.txt \
-  -H 'Origin: https://localhost:8443' \
+  -H 'Origin: http://localhost' \
   -H 'Content-Type: application/json' \
   -d '{"name":"local"}' \
-  https://localhost:8443/v1/user/tokens
+  http://localhost/v1/user/tokens
 ```
 
 Das Token gehört zu deiner neuen Organisation. Die Antwort enthält ein `secret`,
@@ -131,7 +133,7 @@ Erstelle also einen:
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"name":"Assistant","role":"Helps me","instructions":"Answer in short sentences."}' \
-  https://localhost:8443/v1/bots
+  http://localhost/v1/bots
 ```
 
 Nimm `id` aus der Antwort. Wenn du diesen Bot auch ohne Angabe eines Bots nutzen
@@ -149,7 +151,7 @@ Schicke deinem Bot eine Nachricht:
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"input":"Hello"}' \
-  https://localhost:8443/v1/bots/<botId>/messages
+  http://localhost/v1/bots/<botId>/messages
 ```
 
 OpenBot erstellt deinen Chat mit dem Bot, und die Nachricht startet einen Turn.

@@ -479,7 +479,7 @@ The token counts in their answers are not real. To pick one, save it on a Chat:
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
   -d '{"expected":1,"model":{"_tag":"Config.Selection","provider":"development","model":"mock-slow"}}' \
-  https://localhost:8443/v1/chats/$CHAT_ID
+  http://localhost/v1/chats/$CHAT_ID
 ```
 
 The development entry point gives these models with `builtinModels`, so every

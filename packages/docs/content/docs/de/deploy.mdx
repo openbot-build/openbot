@@ -323,8 +323,8 @@ auf jeder Instanz.
 ## TLS und der Reverse Proxy
 
 Im Produktivbetrieb kümmert sich ein Reverse Proxy um HTTPS. Er schickt den
-Verkehr an OpenBot auf `127.0.0.1:8080`. Lass `OPENBOT_TLS_CERT` und
-`OPENBOT_TLS_KEY` leer.
+Verkehr an OpenBot auf `127.0.0.1:8080`. OpenBot liefert nur einfaches HTTP.
+Darum liefert nur der Proxy HTTPS.
 
 Der Proxy muss:
 

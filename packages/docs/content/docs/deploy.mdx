@@ -313,7 +313,8 @@ the migration program and the setup program only once, not on each instance.
 ## TLS and the reverse proxy
 
 In production, a reverse proxy handles HTTPS and sends the traffic to OpenBot on
-`127.0.0.1:8080`. Leave `OPENBOT_TLS_CERT` and `OPENBOT_TLS_KEY` empty.
+`127.0.0.1:8080`. OpenBot serves plain HTTP only, so the proxy is the only part
+that serves HTTPS.
 
 The proxy must:
 

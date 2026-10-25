@@ -12,10 +12,11 @@ You do not need an identity provider or a model key.
 
 You need:
 
-1. [devenv](https://devenv.sh) 2.0 or newer. It gives you the right Node.js,
-   pnpm, PostgreSQL, and mkcert. devenv also runs the development database, so
-   you do not need Docker.
-2. A copy of the code:
+1. [devenv](https://devenv.sh) 2.3 or newer. It gives you the right Node.js,
+   pnpm, PostgreSQL tools, and Docker command line tools.
+2. A running [Docker](https://docs.docker.com/get-docker/) service. The
+   development database and object storage run in Docker.
+3. A copy of the code:
 
 ```sh
 git clone https://github.com/openbot-build/openbot.git
@@ -36,13 +37,10 @@ Run every command from the top folder of the code, inside `devenv shell --`.
 
 ```sh
 devenv shell -- pnpm dev:setup
-devenv shell -- mkcert -install
 ```
 
-The first command makes `.env.development` with a new secret key, and a
-certificate for `localhost`. If you have an `.env.development` from an older
-version, delete it first. The second command makes your computer trust that
-certificate. It can ask for your password.
+This command makes `.env.development` with a new secret key. If you have an
+`.env.development` from an older version, delete it first.
 
 </Step>
 
@@ -54,10 +52,12 @@ certificate. It can ask for your password.
 devenv shell -- pnpm dev
 ```
 
-This starts PostgreSQL, builds OpenBot, updates the database, and starts OpenBot
-at `https://localhost:8443`. The development server sets up the platform by
-itself, so you do not run the setup program. The first start can take a few
-minutes. Press **Ctrl+C** to stop. Your data stays in the database.
+This starts PostgreSQL and RustFS in Docker, builds OpenBot, updates the
+database, and starts OpenBot at `http://localhost`. On Linux, devenv asks for
+your password with `sudo` the first time. Its proxy needs it to listen on
+port 80. The development server sets up the platform by itself, so you do not
+run the setup program. The first start can take a few minutes. Press **Ctrl+C**
+to stop. Your data stays in the database.
 
 </Step>
 
@@ -66,8 +66,8 @@ minutes. Press **Ctrl+C** to stop. Your data stays in the database.
 ### Sign in
 
 ```sh
-curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
-  -H "Origin: https://localhost:8443" \
+curl -c cookies.txt -X POST http://localhost/auth/development/sign-in \
+  -H "Origin: http://localhost" \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
@@ -87,10 +87,10 @@ for yourself:
 
 ```sh
 curl -b cookies.txt \
-  -H 'Origin: https://localhost:8443' \
+  -H 'Origin: http://localhost' \
   -H 'Content-Type: application/json' \
   -d '{"name":"My lab"}' \
-  https://localhost:8443/v1/organizations
+  http://localhost/v1/organizations
 ```
 
 You are the Super Administrator of this organization.
@@ -103,10 +103,10 @@ You are the Super Administrator of this organization.
 
 ```sh
 curl -b cookies.txt \
-  -H 'Origin: https://localhost:8443' \
+  -H 'Origin: http://localhost' \
   -H 'Content-Type: application/json' \
   -d '{"name":"local"}' \
-  https://localhost:8443/v1/user/tokens
+  http://localhost/v1/user/tokens
 ```
 
 The token belongs to your new organization. The answer has a `secret` that
@@ -128,7 +128,7 @@ You give work to a [Bot](/docs/bots). A new account has no Bots, so make one:
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"name":"Assistant","role":"Helps me","instructions":"Answer in short sentences."}' \
-  https://localhost:8443/v1/bots
+  http://localhost/v1/bots
 ```
 
 Take `id` from the answer. To use this Bot when you name no Bot, make it your
@@ -146,7 +146,7 @@ Send your Bot a message:
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"input":"Hello"}' \
-  https://localhost:8443/v1/bots/<botId>/messages
+  http://localhost/v1/bots/<botId>/messages
 ```
 
 OpenBot makes your Chat with the Bot, and the message starts a Turn. The Turn

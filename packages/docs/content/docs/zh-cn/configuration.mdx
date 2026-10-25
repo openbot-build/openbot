@@ -31,8 +31,6 @@ OpenBot 可以运行多个实例。一个实例就是一个正在运行的 OpenB
 | `OPENBOT_PORT`           | 否   | `3000`      | 服务器监听的端口。                             |
 | `OPENBOT_DATABASE_URL`   | 是   |             | 一个 PostgreSQL 连接 URL。                     |
 | `OPENBOT_SECRET_KEYS`    | 是   |             | 用来加密数据库中机密的密钥。见下文。           |
-| `OPENBOT_TLS_CERT`       | 否   |             | PEM 证书文件的路径。                           |
-| `OPENBOT_TLS_KEY`        | 否   |             | 该证书对应的 PEM 私钥文件的路径。              |
 | `OPENBOT_OUTBOUND_ALLOW` | 否   |             | OpenBot 可以连接的私有主机和 IP 范围。见下文。 |
 
 Docker 镜像设置了 `OPENBOT_HOST=0.0.0.0` 和
@@ -47,10 +45,7 @@ Docker 镜像设置了 `OPENBOT_HOST=0.0.0.0` 和
 
 ### TLS
 
-同时设置 `OPENBOT_TLS_CERT` 和
-`OPENBOT_TLS_KEY`，OpenBot 就会自己提供 HTTPS。两个都不设置，则提供普通 HTTP。如果只设置其中一个，OpenBot 不会启动。
-
-在生产环境中，通常由反向代理处理 HTTPS。这时两个值都留空。参见[部署](/zh-cn/docs/deploy)。
+OpenBot 只提供普通 HTTP，它自己没有 HTTPS。要提供 HTTPS，请在它前面放一个反向代理，例如 Caddy 或 nginx。代理持有证书，并把流量转发给 OpenBot。参见[部署](/zh-cn/docs/deploy#tls-和反向代理)。
 
 ### 出站连接
 
@@ -257,10 +252,7 @@ Compose 文件把 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS` 以 `/run/sec
 | 变量                        | 默认值    | 含义                                      |
 | --------------------------- | --------- | ----------------------------------------- |
 | `OPENBOT_SECRET_KEYS`       |           | `dev:<random key>`。由 `dev:setup` 填写。 |
-| `OPENBOT_DEV_HTTPS_PORT`    | `8443`    | 本地 OpenBot 的 HTTPS 端口。              |
-| `OPENBOT_DEV_DATABASE_PORT` | `5433`    | 开发用 PostgreSQL 的本地端口。            |
 | `OPENBOT_DEV_DATABASE_NAME` | `openbot` | 开发数据库的名称。                        |
-| `OPENBOT_DEV_S3_PORT`       | `9000`    | 开发用 RustFS 的本地端口。                |
 
 <Callout type="info">
 	如果你的 `.env.development` 来自旧版本，请删除它，然后再次运行 `devenv shell
@@ -268,18 +260,26 @@ Compose 文件把 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS` 以 `/run/sec
 	[参与贡献](/zh-cn/docs/contributing#启动开发服务器)。
 </Callout>
 
-然后 devenv 会为你设置这些值：
+然后 devenv 会为你设置这些值。devenv 会自己选择每个端口：它从基础端口开始，取下一个空闲的端口。它只把带端口的值交给 OpenBot 进程，不交给
+`devenv shell`。
 
-| 变量                        | 值                                                          |
-| --------------------------- | ----------------------------------------------------------- |
-| `OPENBOT_DEV_PUBLIC_ORIGIN` | `https://localhost:8443`                                    |
-| `OPENBOT_HOST`              | `127.0.0.1`                                                 |
-| `OPENBOT_PORT`              | `OPENBOT_DEV_HTTPS_PORT` 的值                               |
-| `OPENBOT_DATABASE_URL`      | `postgres://openbot_dev:openbot_dev@127.0.0.1:5433/openbot` |
-| `OPENBOT_TLS_CERT`          | `.devenv/dev/cert.pem`，由 mkcert 生成                      |
-| `OPENBOT_TLS_KEY`           | `.devenv/dev/key.pem`，由 mkcert 生成                       |
-| `OPENBOT_DEV_S3_ENDPOINT`   | `http://127.0.0.1:9000`                                     |
-| `OPENBOT_DEV_S3_BUCKET`     | `openbot`                                                   |
+| 变量                        | 值                                                                                            |
+| --------------------------- | --------------------------------------------------------------------------------------------- |
+| `OPENBOT_DEV_PUBLIC_ORIGIN` | `http://localhost`                                                                            |
+| `OPENBOT_HOST`              | `127.0.0.1`                                                                                   |
+| `OPENBOT_PORT`              | 从 `3000` 开始的一个空闲端口                                                                  |
+| `OPENBOT_DATABASE_URL`      | `postgres://openbot_dev:openbot_dev@127.0.0.1:<port>/openbot`，端口是从 `5433` 开始的空闲端口 |
+| `OPENBOT_DEV_S3_ENDPOINT`   | `http://127.0.0.1:<port>`，端口是从 `9000` 开始的空闲端口                                     |
+| `OPENBOT_DEV_S3_BUCKET`     | `openbot`                                                                                     |
+
+devenv 的代理在 `http://localhost`
+的 80 端口上提供 OpenBot。开发不需要 HTTPS。即使没有 HTTPS，浏览器和 curl 也会在
+`localhost` 上保留安全的登录 cookie。
+
+代理监听 80 端口。如果有其他程序在用它，请在 shell 中给代理别的端口，例如
+`DEVENV_PROXY_LISTEN=127.0.0.1:8080`。然后在 `.env.development` 中设置
+`OPENBOT_DEV_PUBLIC_ORIGIN=http://localhost:8080`。端口大于 1023 时，代理不需要
+`sudo`。
 
 只有开发入口会读取
 `OPENBOT_DEV_PUBLIC_ORIGIN`。它不需要设置步骤。每次启动时，它会自己为这个源写入平台设置。它会把本地账号
@@ -293,8 +293,8 @@ Compose 文件把 `OPENBOT_DATABASE_URL` 和 `OPENBOT_SECRET_KEYS` 以 `/run/sec
 `OPENBOT_OUTBOUND_ALLOW=localhost`。参见[出站连接](#出站连接)。
 
 devenv 还会为[文件](/zh-cn/docs/files)启动
-[RustFS](https://rustfs.com)，一个小的对象存储。它的数据在
-`.devenv/state/rustfs` 中。每次启动时，开发入口会创建 bucket
+[RustFS](https://rustfs.com)，一个小的对象存储。它在 Docker 中运行，它的数据在 Docker 卷
+`openbot-dev-rustfs` 中。每次启动时，开发入口会创建 bucket
 `openbot`，并把存储写入平台设置。RustFS 在 `127.0.0.1`
 上，这是一个私有地址。所以开发入口会为自己打开这一个主机。你不需要把它加入
 `OPENBOT_OUTBOUND_ALLOW`。

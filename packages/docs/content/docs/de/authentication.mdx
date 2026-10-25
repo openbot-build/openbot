@@ -115,8 +115,8 @@ Produktionsprogramm tut das nie. Siehe
 Dieser Befehl meldet dich an und speichert das Cookie in einer Datei:
 
 ```sh
-curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
-  -H "Origin: https://localhost:8443" \
+curl -c cookies.txt -X POST http://localhost/auth/development/sign-in \
+  -H "Origin: http://localhost" \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
@@ -220,10 +220,10 @@ Sonst antwortet OpenBot mit `403` und `ForbiddenOrigin`.
 
 ```sh
 curl -b cookies.txt \
-  -H "Origin: https://localhost:8443" \
+  -H "Origin: http://localhost" \
   -H "Content-Type: application/json" \
   -d '{"input":"Hello"}' \
-  https://localhost:8443/v1/bots/$BOT/messages
+  http://localhost/v1/bots/$BOT/messages
 ```
 
 Anfragen mit einem User-Token brauchen den Header `Origin` nicht.

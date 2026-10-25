@@ -32,29 +32,29 @@ app.
 
 ## Quick start
 
-You need [devenv](https://devenv.sh).
+You need [devenv](https://devenv.sh) 2.3 or newer and a running
+[Docker](https://docs.docker.com/get-docker/) service.
 
 ```sh
 devenv shell -- pnpm dev:setup
-devenv shell -- mkcert -install
 devenv shell -- pnpm dev
 ```
 
-OpenBot now runs at `https://localhost:8443` with a test account and test
-models. Sign in and make a user token:
+OpenBot now runs at `http://localhost` with a test account and test models. Sign
+in and make a user token:
 
 ```sh
-curl -c cookies.txt -X POST -H 'Origin: https://localhost:8443' -H 'Content-Type: application/json' \
-  -d '{}' https://localhost:8443/auth/development/sign-in
-curl -b cookies.txt -H 'Origin: https://localhost:8443' -H 'Content-Type: application/json' \
-  -d '{"name":"local"}' https://localhost:8443/v1/user/tokens
+curl -c cookies.txt -X POST -H 'Origin: http://localhost' -H 'Content-Type: application/json' \
+  -d '{}' http://localhost/auth/development/sign-in
+curl -b cookies.txt -H 'Origin: http://localhost' -H 'Content-Type: application/json' \
+  -d '{"name":"local"}' http://localhost/v1/user/tokens
 ```
 
 Then call the API with the `secret` from the answer:
 
 ```sh
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"title":"My first Session"}' https://localhost:8443/v1/sessions
+  -d '{"title":"My first Session"}' http://localhost/v1/sessions
 ```
 
 ## Docs

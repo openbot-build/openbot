@@ -12,8 +12,10 @@ description: 在你的电脑上运行 OpenBot，并完成第一次调用。
 你需要：
 
 1. [devenv](https://devenv.sh)
-   2.0 或更新版本。它提供合适版本的 Node.js、pnpm、PostgreSQL 和 mkcert。devenv 还会运行开发用的数据库，所以你不需要 Docker。
-2. 一份代码：
+   2.3 或更新版本。它提供合适版本的 Node.js、pnpm、PostgreSQL 工具和 Docker 命令行工具。
+2. 一个正在运行的 [Docker](https://docs.docker.com/get-docker/)
+   服务。开发数据库和对象存储在 Docker 中运行。
+3. 一份代码：
 
 ```sh
 git clone https://github.com/openbot-build/openbot.git
@@ -34,12 +36,10 @@ cd openbot
 
 ```sh
 devenv shell -- pnpm dev:setup
-devenv shell -- mkcert -install
 ```
 
-第一条命令会生成 `.env.development`，其中有一个新的密钥，同时为 `localhost`
-生成一个证书。如果你有旧版本留下的
-`.env.development`，请先删除它。第二条命令让你的电脑信任这个证书。它可能会要求你输入密码。
+这条命令会生成 `.env.development`，其中有一个新的密钥。如果你有旧版本留下的
+`.env.development`，请先删除它。
 
 </Step>
 
@@ -51,9 +51,9 @@ devenv shell -- mkcert -install
 devenv shell -- pnpm dev
 ```
 
-这条命令会启动 PostgreSQL，构建 OpenBot，更新数据库，然后在
-`https://localhost:8443`
-启动 OpenBot。开发服务器会自己设置好平台，所以你不需要运行设置程序。第一次启动可能需要几分钟。按
+这条命令会在 Docker 中启动 PostgreSQL 和 RustFS，构建 OpenBot，更新数据库，然后在
+`http://localhost` 启动 OpenBot。在 Linux 上，devenv 第一次会用 `sudo`
+要求你输入密码。它的代理需要这样才能监听 80 端口。开发服务器会自己设置好平台，所以你不需要运行设置程序。第一次启动可能需要几分钟。按
 **Ctrl+C** 停止。你的数据会保留在数据库中。
 
 </Step>
@@ -63,8 +63,8 @@ devenv shell -- pnpm dev
 ### 登录
 
 ```sh
-curl -c cookies.txt -X POST https://localhost:8443/auth/development/sign-in \
-  -H "Origin: https://localhost:8443" \
+curl -c cookies.txt -X POST http://localhost/auth/development/sign-in \
+  -H "Origin: http://localhost" \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
@@ -83,10 +83,10 @@ Bots、Chats 和令牌都属于一个[组织](/zh-cn/docs/organization)。为你
 
 ```sh
 curl -b cookies.txt \
-  -H 'Origin: https://localhost:8443' \
+  -H 'Origin: http://localhost' \
   -H 'Content-Type: application/json' \
   -d '{"name":"My lab"}' \
-  https://localhost:8443/v1/organizations
+  http://localhost/v1/organizations
 ```
 
 你是这个组织的 Super Administrator（超级管理员）。
@@ -99,10 +99,10 @@ curl -b cookies.txt \
 
 ```sh
 curl -b cookies.txt \
-  -H 'Origin: https://localhost:8443' \
+  -H 'Origin: http://localhost' \
   -H 'Content-Type: application/json' \
   -d '{"name":"local"}' \
-  https://localhost:8443/v1/user/tokens
+  http://localhost/v1/user/tokens
 ```
 
 这个令牌属于你的新组织。回答中有一个以 `obut_` 开头的
@@ -124,7 +124,7 @@ export OPENBOT_TOKEN=obut_...
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"name":"Assistant","role":"Helps me","instructions":"Answer in short sentences."}' \
-  https://localhost:8443/v1/bots
+  http://localhost/v1/bots
 ```
 
 从回答中取出
@@ -142,7 +142,7 @@ curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
 curl -H "Authorization: Bearer $OPENBOT_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"input":"Hello"}' \
-  https://localhost:8443/v1/bots/<botId>/messages
+  http://localhost/v1/bots/<botId>/messages
 ```
 
 OpenBot 会创建你和这个 Bot 的 Chat，这条消息会启动一个 Turn。Turn 在后台运行，你会立即得到

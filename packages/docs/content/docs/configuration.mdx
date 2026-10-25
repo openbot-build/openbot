@@ -41,8 +41,6 @@ This is the complete list of environment variables that the server reads.
 | `OPENBOT_PORT`           | No       | `3000`      | The port that the server listens on.                                |
 | `OPENBOT_DATABASE_URL`   | Yes      |             | A PostgreSQL connection URL.                                        |
 | `OPENBOT_SECRET_KEYS`    | Yes      |             | The keys that encrypt secrets in the database. See below.           |
-| `OPENBOT_TLS_CERT`       | No       |             | The path to a PEM certificate file.                                 |
-| `OPENBOT_TLS_KEY`        | No       |             | The path to the PEM private key file for that certificate.          |
 | `OPENBOT_OUTBOUND_ALLOW` | No       |             | Private hosts and IP ranges that OpenBot may connect to. See below. |
 
 The Docker image sets `OPENBOT_HOST=0.0.0.0` and `OPENBOT_PORT=3000`, so the
@@ -59,12 +57,10 @@ it stops. Run the migration program first. See [Deploy](/docs/deploy).
 
 ### TLS
 
-Set both `OPENBOT_TLS_CERT` and `OPENBOT_TLS_KEY` to make OpenBot serve HTTPS
-itself. Set neither to serve plain HTTP. If you set only one, OpenBot does not
-start.
-
-In production, a reverse proxy usually handles HTTPS. Then you leave both values
-empty. See [Deploy](/docs/deploy).
+OpenBot serves plain HTTP only. It has no HTTPS of its own. To serve HTTPS, put
+a reverse proxy in front of it, such as Caddy or nginx. The proxy holds the
+certificate and sends the traffic to OpenBot. See
+[Deploy](/docs/deploy#tls-and-the-reverse-proxy).
 
 ### Outbound connections
 
@@ -292,13 +288,10 @@ See [Deploy](/docs/deploy#run-with-compose). A full template is in
 `.env.development.example`. It fills in `OPENBOT_SECRET_KEYS` with one new
 random key named `dev`.
 
-| Variable                    | Default   | Meaning                                       |
-| --------------------------- | --------- | --------------------------------------------- |
-| `OPENBOT_SECRET_KEYS`       |           | `dev:<random key>`. `dev:setup` fills it in.  |
-| `OPENBOT_DEV_HTTPS_PORT`    | `8443`    | The HTTPS port of the local OpenBot.          |
-| `OPENBOT_DEV_DATABASE_PORT` | `5433`    | The local port of the development PostgreSQL. |
-| `OPENBOT_DEV_DATABASE_NAME` | `openbot` | The name of the development database.         |
-| `OPENBOT_DEV_S3_PORT`       | `9000`    | The local port of the development RustFS.     |
+| Variable                    | Default   | Meaning                                      |
+| --------------------------- | --------- | -------------------------------------------- |
+| `OPENBOT_SECRET_KEYS`       |           | `dev:<random key>`. `dev:setup` fills it in. |
+| `OPENBOT_DEV_DATABASE_NAME` | `openbot` | The name of the development database.        |
 
 <Callout type="info">
 	If your `.env.development` is from an older version, delete it and run `devenv
@@ -306,18 +299,27 @@ random key named `dev`.
 	See [Contributing](/docs/contributing#start-the-development-server).
 </Callout>
 
-devenv then sets these values for you:
+devenv then sets these values for you. devenv picks each port: it starts at the
+base port and takes the next free one. It gives the values with a port only to
+the OpenBot process, not to `devenv shell`.
 
-| Variable                    | Value                                                       |
-| --------------------------- | ----------------------------------------------------------- |
-| `OPENBOT_DEV_PUBLIC_ORIGIN` | `https://localhost:8443`                                    |
-| `OPENBOT_HOST`              | `127.0.0.1`                                                 |
-| `OPENBOT_PORT`              | the value of `OPENBOT_DEV_HTTPS_PORT`                       |
-| `OPENBOT_DATABASE_URL`      | `postgres://openbot_dev:openbot_dev@127.0.0.1:5433/openbot` |
-| `OPENBOT_TLS_CERT`          | `.devenv/dev/cert.pem`, made by mkcert                      |
-| `OPENBOT_TLS_KEY`           | `.devenv/dev/key.pem`, made by mkcert                       |
-| `OPENBOT_DEV_S3_ENDPOINT`   | `http://127.0.0.1:9000`                                     |
-| `OPENBOT_DEV_S3_BUCKET`     | `openbot`                                                   |
+| Variable                    | Value                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------- |
+| `OPENBOT_DEV_PUBLIC_ORIGIN` | `http://localhost`                                                                          |
+| `OPENBOT_HOST`              | `127.0.0.1`                                                                                 |
+| `OPENBOT_PORT`              | a free port, from `3000`                                                                    |
+| `OPENBOT_DATABASE_URL`      | `postgres://openbot_dev:openbot_dev@127.0.0.1:<port>/openbot`, with a free port from `5433` |
+| `OPENBOT_DEV_S3_ENDPOINT`   | `http://127.0.0.1:<port>`, with a free port from `9000`                                     |
+| `OPENBOT_DEV_S3_BUCKET`     | `openbot`                                                                                   |
+
+The devenv proxy serves OpenBot at `http://localhost`, on port 80. Development
+needs no HTTPS. Browsers and curl keep the secure sign-in cookie on `localhost`,
+also without HTTPS.
+
+The proxy listens on port 80. If another program uses it, give the proxy another
+port in your shell, such as `DEVENV_PROXY_LISTEN=127.0.0.1:8080`. Then set
+`OPENBOT_DEV_PUBLIC_ORIGIN=http://localhost:8080` in `.env.development`. With a
+port above 1023, the proxy needs no `sudo`.
 
 Only the development entry point reads `OPENBOT_DEV_PUBLIC_ORIGIN`. It needs no
 setup step. At each start, it writes the platform settings for this origin
@@ -333,11 +335,11 @@ your machine, such as Ollama, set `OPENBOT_OUTBOUND_ALLOW=localhost` in
 `.env.development`. See [Outbound connections](#outbound-connections).
 
 devenv also starts [RustFS](https://rustfs.com), a small object storage, for
-[files](/docs/files). Its data lives in `.devenv/state/rustfs`. At each start,
-the development entry point makes the bucket `openbot` and writes the storage
-into the platform settings. RustFS is at `127.0.0.1`, a private address. So the
-development entry point opens that one host for itself. You do not need to add
-it to `OPENBOT_OUTBOUND_ALLOW`.
+[files](/docs/files). It runs in Docker. Its data lives in the Docker volume
+`openbot-dev-rustfs`. At each start, the development entry point makes the
+bucket `openbot` and writes the storage into the platform settings. RustFS is at
+`127.0.0.1`, a private address. So the development entry point opens that one
+host for itself. You do not need to add it to `OPENBOT_OUTBOUND_ALLOW`.
 
 To use another database, set `OPENBOT_DATABASE_URL` in `.env.development`. See
 [Contributing](/docs/contributing).

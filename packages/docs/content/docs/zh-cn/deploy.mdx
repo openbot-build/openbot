@@ -289,7 +289,7 @@ docker compose --env-file .env.production -f deploy/docker/compose.production.ya
 ## TLS 和反向代理
 
 在生产环境中，由反向代理处理 HTTPS，并把流量转发给 `127.0.0.1:8080`
-上的 OpenBot。 `OPENBOT_TLS_CERT` 和 `OPENBOT_TLS_KEY` 留空。
+上的 OpenBot。OpenBot 只提供普通 HTTP，所以只有代理提供 HTTPS。
 
 代理必须：
 

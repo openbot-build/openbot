@@ -445,7 +445,7 @@ compaction）会把很长的历史变短，让它能放进模型的上下文窗�
 ```sh
 curl -X PATCH -H "Authorization: Bearer $OPENBOT_TOKEN" -H 'Content-Type: application/json' \
   -d '{"expected":1,"model":{"_tag":"Config.Selection","provider":"development","model":"mock-slow"}}' \
-  https://localhost:8443/v1/chats/$CHAT_ID
+  http://localhost/v1/chats/$CHAT_ID
 ```
 
 开发入口通过 `builtinModels`
