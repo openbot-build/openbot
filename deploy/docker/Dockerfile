@@ -2,7 +2,7 @@
 # check=error=true
 
 # Build stages make only JavaScript, so they run on the build machine's own platform.
-FROM --platform=$BUILDPLATFORM node:26.12.0-trixie-slim@sha256:e556a144463cc8dc53afe8de6d2fa0db5c132fd39ffa232c17641bd40df2bf11 AS workspace
+FROM --platform=$BUILDPLATFORM node:26.12.1-trixie-slim@sha256:36793bcbb160a6a16cede1e62b93f84e26b78a972a8a4c0b879c1c12f22761ec AS workspace
 RUN npm install --global pnpm@9.15.9
 WORKDIR /workspace
 # This layer changes only when the lockfile changes, so the registry cache keeps the downloaded packages.
@@ -22,7 +22,7 @@ RUN pnpm --filter @openbot-build/protocol-test... build \
     && pnpm --filter @openbot-build/protocol-test deploy --prod /deployment
 
 # The Node.js binary for the target platform, at the same version as development.
-FROM node:26.12.0-trixie-slim@sha256:e556a144463cc8dc53afe8de6d2fa0db5c132fd39ffa232c17641bd40df2bf11 AS node
+FROM node:26.12.1-trixie-slim@sha256:36793bcbb160a6a16cede1e62b93f84e26b78a972a8a4c0b879c1c12f22761ec AS node
 
 # Distroless has no shell and no package manager. Its user is "nonroot" (65532).
 # The cc image has the C and C++ libraries that Node.js needs, except libatomic.
