@@ -48,6 +48,11 @@ export const LiveQuery = Schema.Struct({
 	outputFormat: Schema.optionalKey(AudioFormatText),
 	/** `client` means push-to-talk: the client sends `input.audio.commit`. */
 	turnDetection: Schema.optionalKey(Schema.Literals(["server", "client"])),
+	/**
+	 * The organization of a browser session. A browser cannot send the
+	 * `OpenBot-Organization` header with a WebSocket, so it sends the ID here.
+	 */
+	organization: Schema.optionalKey(Schema.NonEmptyString),
 })
 export type LiveQuery = typeof LiveQuery.Type
 

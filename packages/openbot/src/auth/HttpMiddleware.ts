@@ -107,6 +107,20 @@ const chooseOrganization = (
 		: Effect.fail(AuthApi.OrganizationRequired.make({}))
 }
 
+const isWebSocket = (request: HttpServerRequest.HttpServerRequest) =>
+	request.headers["upgrade"]?.toLowerCase() === "websocket"
+
+/**
+ * A browser cannot send headers with a WebSocket. So a WebSocket may name its
+ * organization in the `organization` query field. Other requests use the header.
+ */
+const organizationQuery = (request: HttpServerRequest.HttpServerRequest) =>
+	isWebSocket(request)
+		? (new URL(request.url, "http://localhost").searchParams.get(
+				"organization",
+			) ?? undefined)
+		: undefined
+
 /**
  * Resolve the session cookie. A write from the browser must come from the public origin.
  * So must a WebSocket, because a page on another site can open one with the cookie.
@@ -119,8 +133,7 @@ const resolveCookie = (
 	Effect.gen(function* () {
 		const request = yield* HttpServerRequest.HttpServerRequest
 		const forbiddenOrigin =
-			(HttpMethod.hasBody(request.method) ||
-				request.headers["upgrade"]?.toLowerCase() === "websocket") &&
+			(HttpMethod.hasBody(request.method) || isWebSocket(request)) &&
 			request.headers["origin"] !== config.publicOrigin
 		const session = yield* auth
 			.resolveSession(credential, { refresh: !forbiddenOrigin })
@@ -179,7 +192,8 @@ export const layerBotAuth = (config: { readonly publicOrigin: string }) =>
 						)
 						const organizationId = yield* chooseOrganization(
 							session,
-							request.headers[AuthApi.OrganizationHeader],
+							request.headers[AuthApi.OrganizationHeader] ??
+								organizationQuery(request),
 						)
 						const caller: Caller = {
 							kind: "member",

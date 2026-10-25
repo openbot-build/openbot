@@ -77,11 +77,15 @@ The Chat must be a live Chat. The model is the model of the Chat.
 | `inputFormat`   | Optional. The sound that the client sends, such as `pcm16@24000`. The default is the first of the model. |
 | `outputFormat`  | Optional. The sound that the client wants back. The default is the first of the model.                   |
 | `turnDetection` | Optional. `server`: the model hears when the person stops. `client`: push-to-talk.                       |
+| `organization`  | Optional. The organization of a browser session, when the account has more than one.                     |
 
 A program sends `Authorization: Bearer <token>`. A browser sends the session
 cookie. Then the page must be on the public origin of OpenBot. Otherwise OpenBot
 returns `403` with `ForbiddenOrigin`, so a page on another site cannot use your
-cookie.
+cookie. A browser cannot send the `OpenBot-Organization` header with a
+WebSocket. So when the account is a member of more than one organization, it
+sends the ID in `organization`. Without it, OpenBot returns `400` with
+`OrganizationRequired`.
 
 OpenBot checks the request before it opens the socket. It returns `409` with
 `LiveUnavailable` when the Chat is not a live Chat, or when the model does not

@@ -396,6 +396,30 @@ it(
 			assert.ok(history?._tag === "History")
 			assert.strictEqual(history.messages[0]?.text, "Remember me")
 			keyed.socket.close()
+
+			// With a second organization, a browser names the organization in the query,
+			// because it cannot send the header with a WebSocket.
+			const listedOrganizations = await json(
+				send(alice.session, "/v1/organizations"),
+			)
+			const first: string = listedOrganizations.items[0].id
+			await json(
+				send(alice.session, "/v1/organizations", "POST", { name: "Second" }),
+			)
+			assert.strictEqual(
+				await handshake(liveUrl.replace(/^ws/, "http"), {
+					cookie,
+					origin: publicOrigin,
+				}),
+				400,
+			)
+			const named = connect(liveUrl + "?organization=" + first, {
+				cookie,
+				origin: publicOrigin,
+			})
+			await named.opened
+			await named.until((all) => all.some((m) => m.type === "session.ready"))
+			named.socket.close()
 		} finally {
 			await host.close()
 		}

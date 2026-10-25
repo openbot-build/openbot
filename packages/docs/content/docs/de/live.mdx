@@ -73,20 +73,21 @@ Ein Live-Chat ist in der Liste von `GET /v1/chats`, und
 Öffne einen WebSocket auf `GET /v1/chats/:chatId/live`. Du brauchst `run` auf
 dem Chat. Der Chat muss ein Live-Chat sein. Das Model ist das Model des Chats.
 
-| Query | Regeln |
-| ----- | ------ |
-
-| `voice` | Optional. Eine Stimme aus `capabilities.voices`. | | `inputFormat` |
-Optional. Der Ton, den der Client schickt, etwa `pcm16@24000`. Der Standard ist
-das erste Format des Models. | | `outputFormat` | Optional. Der Ton, den der
-Client zurück haben will. Der Standard ist das erste Format des Models. | |
-`turnDetection` | Optional. `server`: Das Model hört, wann die Person aufhört.
-`client`: Push-to-talk. |
+| Query           | Regeln                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------ |
+| `voice`         | Optional. Eine Stimme aus `capabilities.voices`.                                                             |
+| `inputFormat`   | Optional. Der Ton, den der Client schickt, etwa `pcm16@24000`. Der Standard ist das erste Format des Models. |
+| `outputFormat`  | Optional. Der Ton, den der Client zurück haben will. Der Standard ist das erste Format des Models.           |
+| `turnDetection` | Optional. `server`: Das Model hört, wann die Person aufhört. `client`: Push-to-talk.                         |
+| `organization`  | Optional. Die Organisation einer Browser-Session, wenn das Konto mehr als eine hat.                          |
 
 Ein Programm schickt `Authorization: Bearer <token>`. Ein Browser schickt das
 Session-Cookie. Dann muss die Seite auf dem öffentlichen Origin von OpenBot
 sein. Sonst gibt OpenBot `403` mit `ForbiddenOrigin` zurück, so kann eine Seite
-auf einer anderen Website dein Cookie nicht nutzen.
+auf einer anderen Website dein Cookie nicht nutzen. Ein Browser kann bei einem
+WebSocket den Header `OpenBot-Organization` nicht schicken. Wenn das Konto
+Mitglied in mehr als einer Organisation ist, schickt er die ID darum in
+`organization`. Ohne sie gibt OpenBot `400` mit `OrganizationRequired` zurück.
 
 OpenBot prüft die Anfrage, bevor es den Socket öffnet. Es gibt `409` mit
 `LiveUnavailable` zurück, wenn der Chat kein Live-Chat ist, oder wenn das Model

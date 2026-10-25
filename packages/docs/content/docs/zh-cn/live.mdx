@@ -65,17 +65,20 @@ live Chat 会出现在 `GET /v1/chats` 的列表中，`DELETE /v1/chats/:chatId`
 在 `GET /v1/chats/:chatId/live` 打开一个 WebSocket。你需要 Chat 上的
 `run`。这个 Chat 必须是 live Chat。模型就是这个 Chat 的模型。
 
-| 查询参数 | 规则 |
-| -------- | ---- |
-
-| `voice` | 可选。`capabilities.voices` 中的一个声音。 | | `inputFormat`
-| 可选。客户端发送的声音格式，例如 `pcm16@24000`。默认是模型的第一个格式。 | |
-`outputFormat` | 可选。客户端想收到的声音格式。默认是模型的第一个格式。 | |
-`turnDetection` | 可选。`server`：模型听出这个人何时停下。`client`：按住说话。 |
+| 查询参数        | 规则                                                                     |
+| --------------- | ------------------------------------------------------------------------ |
+| `voice`         | 可选。`capabilities.voices` 中的一个声音。                               |
+| `inputFormat`   | 可选。客户端发送的声音格式，例如 `pcm16@24000`。默认是模型的第一个格式。 |
+| `outputFormat`  | 可选。客户端想收到的声音格式。默认是模型的第一个格式。                   |
+| `turnDetection` | 可选。`server`：模型听出这个人何时停下。`client`：按住说话。             |
+| `organization`  | 可选。浏览器会话的组织，在账户属于多个组织时使用。                       |
 
 程序发送
 `Authorization: Bearer <token>`。浏览器发送会话 cookie，这时页面必须在 OpenBot 的公开来源上。否则 OpenBot 返回
-`403` 和 `ForbiddenOrigin`，所以其他网站的页面不能使用你的 cookie。
+`403` 和
+`ForbiddenOrigin`，所以其他网站的页面不能使用你的 cookie。浏览器不能在 WebSocket 上发送
+`OpenBot-Organization` 头。所以当账户属于多个组织时，它在 `organization`
+中发送组织 ID。没有它，OpenBot 返回 `400` 和 `OrganizationRequired`。
 
 OpenBot 在打开 socket 之前检查请求。这个 Chat 不是 live
 Chat，或者模型没有你要的格式、声音或轮次检测时，它返回 `409` 和
