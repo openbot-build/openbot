@@ -19,24 +19,20 @@ erst, wenn du ihn startest.
 Dieses Programm macht dasselbe wie `openbot`:
 
 ```ts
-import { NodeRuntime } from "@effect/platform-node"
-import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
-import { Effect, Layer } from "effect"
-import { FetchHttpClient } from "effect/http"
+import { Launch, Server } from "@openbot-build/openbot"
 
-NodeRuntime.runMain(
-	Effect.gen(function* () {
-		const settings = yield* EnvironmentConfiguration.load
-		return yield* Layer.launch(
-			Server.layer(settings).pipe(Layer.provide(FetchHttpClient.layer)),
-		)
-	}),
-)
+Launch.main(Server.layer)
 ```
 
-`EnvironmentConfiguration.load` liest die Variablen aus
-[Konfiguration](/de/docs/configuration). Es gibt `host`, `port`, `databaseUrl`,
-`secretKeys` und `tls` zurück. Du kannst diese Werte auch im Code schreiben.
+`Launch.main` liest die Variablen aus [Konfiguration](/de/docs/configuration),
+aus der Umgebung oder aus geheimen Dateien. Es sperrt ausgehende Verbindungen zu
+privaten Adressen und schreibt einen fehlgeschlagenen Start ins Log. Dann führt
+es den Layer aus, den du ihm gibst, bis der Prozess endet. `Launch.server` ist
+dasselbe Programm als Effect, wenn du es selbst ausführst.
+
+`EnvironmentConfiguration.load` gibt dieselben Einstellungen zurück: `host`,
+`port`, `databaseUrl`, `secretKeys` und `outboundAllow`. Du kannst diese Werte
+auch im Code schreiben.
 
 Das Programm braucht trotzdem eine Plattform. Führe das Einrichtungsprogramm
 einmal aus, bevor Menschen es nutzen. Siehe [Platform](/de/docs/platform#setup).
@@ -45,9 +41,10 @@ einmal aus, bevor Menschen es nutzen. Siehe [Platform](/de/docs/platform#setup).
 
 | Export                                                   | Was es ist                                                                                                                     |
 | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `Server.layer(options)`                                  | OpenBot mit eigenem Node.js-Server für HTTP oder HTTPS. Er liest die Anmeldung aus den Plattform-Einstellungen.                |
+| `Server.layer(options)`                                  | OpenBot mit eigenem Node.js-Server für HTTP. Er liest die Anmeldung aus den Plattform-Einstellungen.                           |
 | `Server.layerFixed(options)`                             | OpenBot mit einer festen Anmelde-Konfiguration. Für Tests und den Entwicklungsserver.                                          |
 | `Server.layerApi(options)`                               | Nur die HTTP-Routen, für einen HTTP-Server, den du schon hast.                                                                 |
+| `Launch.main(make)`, `Launch.server(make)`               | Führt den Layer aus `make` so aus wie `openbot-server`.                                                                        |
 | `OpenBot.layerShared(options)`                           | Die Dienste, die so lange leben wie die Instanz: der Datenbank-Pool, die geheimen Schlüssel und die gemeinsamen Einstellungen. |
 | `OpenBot.layer(options)`                                 | Die Dienste hinter den Routen: Anmeldung, Tokens, Berechtigungen, Speicher, Chats und Apps.                                    |
 | `DatabasePostgres`                                       | Der Datenbank-Layer und das Programm `migrate`.                                                                                |
@@ -72,7 +69,6 @@ Entwicklungsserver. Siehe
 | `port`        | `number`           | Pflicht. Der Port, auf dem der Server hört, zum Beispiel `3000`.                                                |
 | `databaseUrl` | `Redacted<string>` | Pflicht. Die PostgreSQL-URL.                                                                                    |
 | `secretKeys`  | `Redacted<string>` | Pflicht. Die Liste der geheimen Schlüssel. Siehe [Geheime Schlüssel](/de/docs/configuration#geheime-schlüssel). |
-| `tls`         | object             | Optional. `{ certFile, keyFile }`: Pfade zu PEM-Dateien. OpenBot stellt dann selbst HTTPS bereit.               |
 
 ### Anmeldung
 
@@ -239,37 +235,20 @@ kann denselben Server aus seinem eigenen Programm starten:
 
 ```ts
 import { NodeRuntime } from "@effect/platform-node"
-import { Settings } from "@openbot-build/api"
-import { EnvironmentConfiguration } from "@openbot-build/openbot"
 import * as Development from "@openbot-build/openbot/Development"
-import { Config, Effect, Layer } from "effect"
 
-NodeRuntime.runMain(
-	Effect.gen(function* () {
-		const settings = yield* EnvironmentConfiguration.load
-		const publicOrigin = yield* Config.schema(
-			Settings.PublicOrigin,
-			"OPENBOT_DEV_PUBLIC_ORIGIN",
-		)
-		return yield* Layer.launch(
-			Development.layer({
-				...settings,
-				auth: {
-					mode: "development",
-					publicOrigin,
-					secret: Development.developmentSecret(settings.secretKeys),
-				},
-			}),
-		)
-	}),
-)
+NodeRuntime.runMain(Development.launch)
 ```
 
-`Development.layer` schreibt die Plattform-Einstellungen selbst. Darum braucht
-es kein Einrichtungsprogramm. `Development.developmentSecret` macht das
-Anmelde-Geheimnis aus dem ersten geheimen Schlüssel. So bleibt es nach einem
-Neustart gleich. Nutze den Entwicklungsserver nie in der Produktion. Jeder, der
-ihn erreicht, kann sich anmelden.
+`Development.launch` liest dieselben Einstellungen wie `Launch.main` und
+`OPENBOT_DEV_PUBLIC_ORIGIN`. Wenn die Variablen `OPENBOT_DEV_S3_*` gesetzt sind,
+nutzt es diesen lokalen Objektspeicher für Dateien und legt seinen Bucket an.
+`Development.layer` ist der Server ohne diese Schritte. Er schreibt die
+Plattform-Einstellungen selbst. Darum braucht er kein Einrichtungsprogramm.
+`Development.developmentSecret` macht das Anmelde-Geheimnis aus dem ersten
+geheimen Schlüssel. So bleibt es nach einem Neustart gleich. Nutze den
+Entwicklungsserver nie in der Produktion. Jeder, der ihn erreicht, kann sich
+anmelden.
 
 ## Fehler-Logs an deinen eigenen Dienst senden
 

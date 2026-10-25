@@ -1,4 +1,5 @@
 export * as Server from "./app/Server.ts"
+export * as Launch from "./app/Launch.ts"
 export * as OpenBot from "./app/OpenBot.ts"
 export * as DatabasePostgres from "./database/DatabasePostgres.ts"
 export * as EnvironmentConfiguration from "./configuration/EnvironmentConfiguration.ts"

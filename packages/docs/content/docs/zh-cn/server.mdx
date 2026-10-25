@@ -17,40 +17,34 @@ OpenBot 用 [Effect](https://effect.website)
 这个程序和 `openbot` 做的事情相同：
 
 ```ts
-import { NodeRuntime } from "@effect/platform-node"
-import { EnvironmentConfiguration, Server } from "@openbot-build/openbot"
-import { Effect, Layer } from "effect"
-import { FetchHttpClient } from "effect/http"
+import { Launch, Server } from "@openbot-build/openbot"
 
-NodeRuntime.runMain(
-	Effect.gen(function* () {
-		const settings = yield* EnvironmentConfiguration.load
-		return yield* Layer.launch(
-			Server.layer(settings).pipe(Layer.provide(FetchHttpClient.layer)),
-		)
-	}),
-)
+Launch.main(Server.layer)
 ```
 
+`Launch.main`
+从环境变量或机密文件中读取[配置](/zh-cn/docs/configuration)中的变量。它会阻止到私有地址的出站连接，并在启动失败时写入日志。然后它运行你给它的 Layer，直到进程停止。`Launch.server`
+是同一个程序的 Effect 形式，供你自己运行。
+
 `EnvironmentConfiguration.load`
-读取[配置](/zh-cn/docs/configuration)中的变量。它返回
-`host`、`port`、`databaseUrl`、`secretKeys` 和
-`tls`。你也可以在代码中直接写出这些值。
+给出同样的设置：`host`、`port`、`databaseUrl`、`secretKeys` 和
+`outboundAllow`。你也可以在代码中直接写出这些值。
 
 这个程序仍然需要一个平台。在用户使用之前，先运行一次设置程序。请看[平台](/zh-cn/docs/platform#设置)。
 
 ## 包导出了什么
 
-| 导出                                                     | 是什么                                                                          |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `Server.layer(options)`                                  | 带有自己的 Node.js HTTP 或 HTTPS 服务器的 OpenBot。它从平台设置中读取登录配置。 |
-| `Server.layerFixed(options)`                             | 使用一份固定登录配置的 OpenBot。用于测试和开发服务器。                          |
-| `Server.layerApi(options)`                               | 只有 HTTP 路由，用于你已有的 HTTP 服务器。                                      |
-| `OpenBot.layerShared(options)`                           | 与实例同生命周期的服务：数据库连接池、密钥和共享设置。                          |
-| `OpenBot.layer(options)`                                 | 路由背后的服务：登录、令牌、权限、存储、Chat 和 App。                           |
-| `DatabasePostgres`                                       | 数据库 Layer 和 `migrate` 程序。                                                |
-| `EnvironmentConfiguration`                               | 从环境变量读取实例设置。                                                        |
-| `Auth`、`Chats`、`AppHost`、`AppPlugin`、`Configuration` | 用于高级配置的服务类型。                                                        |
+| 导出                                                     | 是什么                                                                 |
+| -------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `Server.layer(options)`                                  | 带有自己的 Node.js HTTP 服务器的 OpenBot。它从平台设置中读取登录配置。 |
+| `Server.layerFixed(options)`                             | 使用一份固定登录配置的 OpenBot。用于测试和开发服务器。                 |
+| `Server.layerApi(options)`                               | 只有 HTTP 路由，用于你已有的 HTTP 服务器。                             |
+| `Launch.main(make)`、`Launch.server(make)`               | 像 `openbot-server` 一样运行 `make` 给出的 Layer。                     |
+| `OpenBot.layerShared(options)`                           | 与实例同生命周期的服务：数据库连接池、密钥和共享设置。                 |
+| `OpenBot.layer(options)`                                 | 路由背后的服务：登录、令牌、权限、存储、Chat 和 App。                  |
+| `DatabasePostgres`                                       | 数据库 Layer 和 `migrate` 程序。                                       |
+| `EnvironmentConfiguration`                               | 从环境变量读取实例设置。                                               |
+| `Auth`、`Chats`、`AppHost`、`AppPlugin`、`Configuration` | 用于高级配置的服务类型。                                               |
 
 子路径 `@openbot-build/openbot/Development` 导出开发服务器。见
 [运行开发服务器](#运行开发服务器)。
@@ -63,13 +57,12 @@ NodeRuntime.runMain(
 
 ### 实例选项
 
-| 选项          | 类型               | 是什么                                                                            |
-| ------------- | ------------------ | --------------------------------------------------------------------------------- |
-| `host`        | `string`           | 必需。监听的地址，例如 `127.0.0.1`。                                              |
-| `port`        | `number`           | 必需。监听的端口，例如 `3000`。                                                   |
-| `databaseUrl` | `Redacted<string>` | 必需。PostgreSQL URL。                                                            |
-| `secretKeys`  | `Redacted<string>` | 必需。密钥列表。请看[密钥](/zh-cn/docs/configuration#机密密钥)。                  |
-| `tls`         | 对象               | 可选。`{ certFile, keyFile }`，即 PEM 文件的路径。这样 OpenBot 会自己提供 HTTPS。 |
+| 选项          | 类型               | 是什么                                                           |
+| ------------- | ------------------ | ---------------------------------------------------------------- |
+| `host`        | `string`           | 必需。监听的地址，例如 `127.0.0.1`。                             |
+| `port`        | `number`           | 必需。监听的端口，例如 `3000`。                                  |
+| `databaseUrl` | `Redacted<string>` | 必需。PostgreSQL URL。                                           |
+| `secretKeys`  | `Redacted<string>` | 必需。密钥列表。请看[密钥](/zh-cn/docs/configuration#机密密钥)。 |
 
 ### 登录
 
@@ -222,34 +215,15 @@ NodeRuntime.runMain(
 
 ```ts
 import { NodeRuntime } from "@effect/platform-node"
-import { Settings } from "@openbot-build/api"
-import { EnvironmentConfiguration } from "@openbot-build/openbot"
 import * as Development from "@openbot-build/openbot/Development"
-import { Config, Effect, Layer } from "effect"
 
-NodeRuntime.runMain(
-	Effect.gen(function* () {
-		const settings = yield* EnvironmentConfiguration.load
-		const publicOrigin = yield* Config.schema(
-			Settings.PublicOrigin,
-			"OPENBOT_DEV_PUBLIC_ORIGIN",
-		)
-		return yield* Layer.launch(
-			Development.layer({
-				...settings,
-				auth: {
-					mode: "development",
-					publicOrigin,
-					secret: Development.developmentSecret(settings.secretKeys),
-				},
-			}),
-		)
-	}),
-)
+NodeRuntime.runMain(Development.launch)
 ```
 
-`Development.layer`
-自己写入平台设置，所以它不需要设置程序。`Development.developmentSecret`
+`Development.launch` 读取与 `Launch.main` 相同的设置，以及
+`OPENBOT_DEV_PUBLIC_ORIGIN`。设置了 `OPENBOT_DEV_S3_*`
+变量时，它会把这个本地对象存储用于文件，并创建存储桶。`Development.layer`
+是没有这些步骤的服务器。它自己写入平台设置，所以它不需要设置程序。`Development.developmentSecret`
 用第一个机密密钥生成登录密钥，所以重启后它保持不变。永远不要在生产环境中使用开发服务器。任何能访问它的人都可以登录。
 
 ## 把错误日志发送到你自己的服务
