@@ -60,7 +60,7 @@ Computer 有一个
 
 | 路由                                                   | 作用                                                            |
 | ------------------------------------------------------ | --------------------------------------------------------------- |
-| `POST /v1/computers/:computerId/commands`              | 用 `bash -lc` 运行一条 shell 命令，并等待它结束。               |
+| `POST /v1/computers/:computerId/sessions`              | 启动一条 shell 命令。见[命令](#命令)。                          |
 | `GET`、`PUT`、`DELETE /v1/computers/:computerId/files` | 读取、写入和删除一个文件。文本用 `utf8`，其他字节用 `base64`。  |
 | `GET /v1/computers/:computerId/directory?path=`        | 列出一个目录。                                                  |
 | `PUT /v1/computers/:computerId/ports/:port`            | 给一个端口一个公开的 HTTPS 地址。任何有这个地址的人都能使用它。 |
@@ -71,6 +71,41 @@ Computer 有一个
 
 在暂停的 Computer 上运行命令时，会先恢复它。`DELETE /v1/computers/:computerId`
 删除 Computer 和它的沙箱。它的文件也会消失。
+
+### 命令
+
+命令在一个**会话**里用 `bash -lc` 运行。OpenBot 最多等待
+`yieldTimeMs`（默认 10 秒，范围是 0.25 到 30 秒），然后给出到目前为止的输出：
+
+```json
+{
+	"session": "cse_…",
+	"running": true,
+	"exitCode": null,
+	"signal": null,
+	"output": ">>> ",
+	"truncated": false
+}
+```
+
+命令结束后，`session` 是 `null`，`exitCode` 或 `signal`
+说明它怎样结束。命令还在运行时，用这个会话继续：
+
+| 路由                                                        | 作用                                                            |
+| ----------------------------------------------------------- | --------------------------------------------------------------- |
+| `POST /v1/computers/:computerId/sessions`                   | 启动命令：`command`、`cwd`、`env`、`tty`、`rows`、`cols`。      |
+| `POST /v1/computers/:computerId/sessions/:sessionId/input`  | 把 `chars` 发送到 stdin，并给出新的输出。`chars` 为空时只读取。 |
+| `POST /v1/computers/:computerId/sessions/:sessionId/resize` | 给终端一个新的大小。                                            |
+| `DELETE /v1/computers/:computerId/sessions/:sessionId`      | 停止命令，并给出它最后的输出。                                  |
+
+`chars` 支持 C 转义：`\n` 是回车，`\x03` 是 Ctrl-C，`\x04`
+是 Ctrl-D，也就是输入的结束。使用 `tty`
+时，命令会得到一个**终端**（PTY），适用于 `python3`、`ssh` 或 `top`
+这样的程序。这时 stdout 和 stderr 会合在一起。每次回答最多给出 `maxOutputBytes`
+的新输出（默认 64 KiB）。输出更多时，只给出最后的部分，`truncated` 是 `true`。
+
+会话只属于启动它的人。30 分钟没有使用后，会话会结束。Daytona
+Computer 没有终端，所以在那里 `tty` 会失败。
 
 ---
 
@@ -106,6 +141,14 @@ openbot computer connect
 它保持一个到 OpenBot 的连接，所以机器不需要打开端口。连接断开后，它会自己重新连接。`openbot computer status`
 显示保存的地址和机器 ID。
 
+OpenBot 只接受使用第 2 版连接协议的 connector。旧版 `openbot-computer`
+不能连接，OpenBot 会让它升级。在这台机器上安装新版本，然后重新连接：
+
+```sh
+npm install -g @openbot-build/computer
+openbot computer connect
+```
+
 同一台机器在同一个组织中再次配对时，它会保留自己的 Computer，并得到一个新令牌。对于服务器和脚本，用
 `"source":{"_tag":"Connector"}` 创建一台 Computer，然后用
 `PUT /v1/computers/:computerId/connector-token`
@@ -137,7 +180,10 @@ Bot 有用于 Computer 的工具。它用 `openbot_computers_list`
   的格式相同，另外还有一个 `reason`。`source` 必须是一个 provider。
 - 用 `openbot_computers_release` 放弃它的使用权。带上 `destroy`
   时，它还会删除这台 Computer。
-- 运行命令、修改文件、打开端口和使用桌面。截图会作为图片返回，模型可以看到它。
+- 用 `openbot_computer_exec` 运行命令，用 `openbot_computer_write_stdin`
+  给命令发送输入，方式和[命令](#命令)一样。命令在等待时间之后仍在运行时，它结束时 Chat 会收到一个
+  `computer_session` 类的通知。
+- 修改文件、打开端口和使用桌面。截图会作为图片返回，模型可以看到它。
 
 这四个动作是[能力](/zh-cn/docs/requests#能力)。[决策者链](/zh-cn/docs/requests#决策者链)会决定它们，和其他能力一样：
 

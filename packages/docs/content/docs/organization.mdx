@@ -134,6 +134,9 @@ them. It needs `read` on `Organization`.
 	"botMemory": true,
 	"requestTimeoutMs": 86400000,
 	"delegationTimeLimitMs": 3600000,
+	"toolForegroundBudgetMs": 30000,
+	"toolMaxDurationMs": 3600000,
+	"maxBackgroundOperations": 8,
 	"planApproval": {
 		"approver": "chain",
 		"timeoutMs": 86400000,
@@ -152,18 +155,21 @@ them. It needs `read` on `Organization`.
 }
 ```
 
-| Field                   | Default                                           | What it does                                                                                                                                                                   |
-| ----------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `rulesModel`            | `null`                                            | The model that judges [Rules](/docs/rules). It can be a language model or a decision model. `null` means that no model judges them. See [Models](/docs/models#choose-a-model). |
-| `botMemoryModel`        | `null`                                            | The model that learns [Bot memory](/docs/memory). `null` means that Bots learn nothing.                                                                                        |
-| `botMemory`             | `true`                                            | Let the memory Bot learn from Chats and add to the input of Turns.                                                                                                             |
-| `requestTimeoutMs`      | 24 hours                                          | How long a [request](/docs/requests) waits for an answer before OpenBot denies it. From 1 second to 7 days.                                                                    |
-| `delegationTimeLimitMs` | 1 hour                                            | The time limit of [work](/docs/delegation#limits) that has none of its own, such as the work of a trigger. From 1 minute to 30 days.                                           |
-| `planApproval`          | ask the decider above, stay a plan after 24 hours | How a plan is approved when no member, Bot or Chat sets it. See [Plan mode](/docs/chats#plan-mode).                                                                            |
-| `appReadRules`          | `[]`                                              | App tools that only read: `{ cardUrl, tool }`. See [Requests](/docs/requests).                                                                                                 |
-| `defaultRoles`          | `["member"]`                                      | The roles of a new member.                                                                                                                                                     |
-| `joinByDomain`          | `true`                                            | People with a verified email in a verified domain of the organization join when they sign in.                                                                                  |
-| `tokenRate`             | no limit                                          | Token rates of each scope. Where the platform sets a lower rate, the lower rate applies. See [Token rate](/docs/usage#token-rate).                                             |
+| Field                     | Default                                           | What it does                                                                                                                                                                   |
+| ------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `rulesModel`              | `null`                                            | The model that judges [Rules](/docs/rules). It can be a language model or a decision model. `null` means that no model judges them. See [Models](/docs/models#choose-a-model). |
+| `botMemoryModel`          | `null`                                            | The model that learns [Bot memory](/docs/memory). `null` means that Bots learn nothing.                                                                                        |
+| `botMemory`               | `true`                                            | Let the memory Bot learn from Chats and add to the input of Turns.                                                                                                             |
+| `requestTimeoutMs`        | 24 hours                                          | How long a [request](/docs/requests) waits for an answer before OpenBot denies it. From 1 second to 7 days.                                                                    |
+| `delegationTimeLimitMs`   | 1 hour                                            | The time limit of [work](/docs/delegation#limits) that has none of its own, such as the work of a trigger. From 1 minute to 30 days.                                           |
+| `toolForegroundBudgetMs`  | 30 seconds                                        | How long a tool call runs in its Turn before it goes to the [background](/docs/chats#background-work). From 0 to 10 minutes. 0 sends every call to the background.             |
+| `toolMaxDurationMs`       | 1 hour                                            | The longest time of a background tool call. After it, the call stops and fails. From 1 second to 24 hours.                                                                     |
+| `maxBackgroundOperations` | 8                                                 | How many background tool calls of one Chat may run at one time. From 0 to 100.                                                                                                 |
+| `planApproval`            | ask the decider above, stay a plan after 24 hours | How a plan is approved when no member, Bot or Chat sets it. See [Plan mode](/docs/chats#plan-mode).                                                                            |
+| `appReadRules`            | `[]`                                              | App tools that only read: `{ cardUrl, tool }`. See [Requests](/docs/requests).                                                                                                 |
+| `defaultRoles`            | `["member"]`                                      | The roles of a new member.                                                                                                                                                     |
+| `joinByDomain`            | `true`                                            | People with a verified email in a verified domain of the organization join when they sign in.                                                                                  |
+| `tokenRate`               | no limit                                          | Token rates of each scope. Where the platform sets a lower rate, the lower rate applies. See [Token rate](/docs/usage#token-rate).                                             |
 
 `PATCH /v1/organization/settings` changes them. It needs `write` on
 `Organization`. The body needs `expectedVersion`, the `version` that you read.

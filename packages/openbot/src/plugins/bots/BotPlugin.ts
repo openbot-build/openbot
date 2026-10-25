@@ -6,6 +6,7 @@ import {
 	Config,
 	type Item,
 	Plugin,
+	Operation,
 } from "@openbot-build/core"
 import {
 	BotsApi,
@@ -331,7 +332,8 @@ export const make: Effect.Effect<typeof BotPlugin.Service, never, Services> =
 				parameters,
 				success: Schema.Json,
 				...(needsApproval === undefined ? {} : { needsApproval }),
-			}) as Tools[string],
+				// Delegated work already goes on by itself, so these calls stay in their Turn.
+			}).annotate(Operation.Budget, "foreground") as Tools[string],
 			handle: (input, context) =>
 				handle(input, context).pipe(
 					Effect.catchCause((cause) =>
@@ -985,8 +987,13 @@ export const make: Effect.Effect<typeof BotPlugin.Service, never, Services> =
 				`You are ${input.bot.name}. Your role: ${input.bot.role}.`,
 				input.bot.instructions,
 				`You work with ${input.person} now.`,
-				input.state.kind === "direct" || input.state.kind === "channel"
+				input.state.kind === "direct" ||
+				input.state.kind === "channel" ||
+				input.state.kind === "live"
 					? `People talk with you in this Chat. Answer them at once. Give long work, and work with many steps, to delegations with ${names.delegate}. You can also give it to yourself. Then you stay free to answer. The result of each delegation comes back to this Chat as a message.`
+					: "",
+				input.state.kind === "live"
+					? "This is a talk with sound. The person hears your answers and does not read them. Keep each answer short, like in a talk. Do not use Markdown, lists, tables or links. Say numbers, names and dates in a way that is easy to hear. When work takes long, say so in a few words and give it to a delegation."
 					: "",
 				input.state.kind === "task"
 					? `You do one task that ${input.giver} gave you. Your last answer is the result, so end with what the task asks for. While work that you gave away, a request or a reminder is still open, do not say that you are done.`

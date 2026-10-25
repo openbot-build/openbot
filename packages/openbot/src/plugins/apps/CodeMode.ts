@@ -1,4 +1,5 @@
 import { CodeRunsApi } from "@openbot-build/api"
+import { Operation } from "@openbot-build/core"
 import { Effect, Option, Schema } from "effect"
 import { Tool } from "effect/ai"
 import type * as Bindings from "../../apps/Bindings.ts"
@@ -75,7 +76,9 @@ export const entries = (input: {
 				"` can call. Read them before you write a program.",
 			parameters: ApiInput,
 			success: ApiResult,
-		}).annotate(Tool.Readonly, true) as unknown as Entry["tool"],
+		})
+			.annotate(Tool.Readonly, true)
+			.annotate(Operation.Budget, "foreground") as unknown as Entry["tool"],
 		handle: (raw) =>
 			Schema.decodeUnknownEffect(ApiInput)(raw).pipe(
 				Effect.map((query) => {
@@ -144,7 +147,7 @@ export const entries = (input: {
 						),
 					),
 				),
-		}) as unknown as Entry["tool"],
+		}).annotate(Operation.Budget, "foreground") as unknown as Entry["tool"],
 		handle: (_raw, context) =>
 			(context.toolCallId === undefined
 				? Effect.succeed(unavailable("The program has no tool call."))

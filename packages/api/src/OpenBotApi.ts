@@ -3,6 +3,7 @@ import { AppExperienceApi } from "./AppExperienceApi.ts"
 import { ConnectionsApi } from "./ConnectionsApi.ts"
 import { HttpApi, OpenApi } from "effect/http-api"
 import { ChatsApi } from "./ChatsApi.ts"
+import { LiveApi } from "./LiveApi.ts"
 import { DelegationsApi } from "./DelegationsApi.ts"
 import { HealthApi } from "./HealthApi.ts"
 import { AccountApi, BotAuth, SignInApi } from "./AuthApi.ts"
@@ -29,6 +30,7 @@ import {
 	ComputersApi,
 } from "./ComputersApi.ts"
 import { AppOperationsApi } from "./AppOperationsApi.ts"
+import { OperationsApi } from "./OperationsApi.ts"
 import { CodeRunsApi } from "./CodeRunsApi.ts"
 import { AppViewsApi } from "./AppViewsApi.ts"
 import { BudgetsApi, UsageApi } from "./BillingApi.ts"
@@ -64,6 +66,8 @@ export class OpenBotApi extends HttpApi.make("openbot-api")
 			.middleware(Authorize)
 			.middleware(BotAuth),
 		ChatsApi,
+		OperationsApi,
+		LiveApi,
 		FilesApi,
 		DelegationsApi,
 		BotsApi,

@@ -31,6 +31,7 @@ OpenBot makes every Chat itself. `kind` says why a Chat exists:
 | `channel` | The first message in a chat of a [Channel](/docs/channels).                                                    | The actor of the Channel.                 |
 | `task`    | Each time a Bot gives work to a Bot, or a [trigger](/docs/triggers) fires. See [Delegation](/docs/delegation). | The owner of the Chat that gave the work. |
 | `review`  | A Bot must decide a [request](/docs/requests).                                                                 | The person that the request is for.       |
+| `live`    | Each time a person calls `POST /v1/bots/:botId/live`. See [Live mode](/docs/live).                             | That person.                              |
 
 Each person has one direct Chat with each Bot. A Chat has no end. It goes on for
 as long as people talk to the Bot, unless you
@@ -90,9 +91,10 @@ A message can also have files that you uploaded, with `input_image` and
 [Give a file to a Bot](/docs/files#give-a-file-to-a-bot).
 
 `POST /v1/chats/:chatId/messages` takes the same body. Use it for a direct Chat,
-or for a task Chat when you want to add to the work of a Bot. In a task Chat,
-the Bot reads your message as a message from you. Other kinds of Chats return
-`409` with `ChatConflict`.
+for a live Chat, or for a task Chat when you want to add to the work of a Bot.
+In a task Chat, the Bot reads your message as a message from you. In a live
+Chat, the message waits until a Live session is open. Other kinds of Chats
+return `409` with `ChatConflict`.
 
 ### The answer
 
@@ -262,12 +264,54 @@ Open work also decides when the work of a task Chat ends. See
 
 ---
 
+## Background work
+
+A tool call gets a **budget** of time. When the call ends inside its budget, the
+model gets its result in the same Turn, as usual. When it does not end in time,
+the call goes on in the **background**, and the model gets an **operation** at
+once:
+
+```json
+{ "operation": "0f3c…", "status": "running", "note": "…" }
+```
+
+The Turn does not wait. When the call ends, its end comes back to the Chat as a
+notice of kind `operation`, and a new Turn starts when the Chat is free. The
+notice holds the status: `Completed` with the result, `Failed`, `Cancelled`, or
+`Interrupted` when its server stopped.
+
+The Bot has three tools for its operations:
+
+| Tool                       | What it does                                                     |
+| -------------------------- | ---------------------------------------------------------------- |
+| `openbot_operation_status` | Shows where an operation is.                                     |
+| `openbot_operation_wait`   | Waits until one of some operations ends, for at most 30 seconds. |
+| `openbot_operation_cancel` | Stops an operation. The Chat still gets the notice of its end.   |
+
+Some tools never go to the background, because they change the state of their
+Turn: the work tools, delegation, Code Mode, and the tools that get or give up a
+Computer. The command tools of a [Computer](/docs/computers#commands) give their
+own sessions.
+
+The organization sets the budget, the longest time of an operation, and how many
+operations of one Chat may run at one time. See
+[Organization settings](/docs/organization#settings). When a Chat has its most
+operations, more calls wait in their Turn.
+
+| Route                                          | What it does                      |
+| ---------------------------------------------- | --------------------------------- |
+| `GET /v1/chats/:chatId/operations`             | Lists the operations of the Chat. |
+| `GET /v1/chats/:chatId/operations/:id`         | Gets one operation.               |
+| `POST /v1/chats/:chatId/operations/:id/cancel` | Stops an operation.               |
+
+---
+
 ## Read a Chat
 
-`GET /v1/chats` lists your direct Chats and channel Chats, oldest first. Add
-`bot=<id>` to list the Chats of one Bot. Add `kind=<kind>` to list one kind,
-such as `task` or `review`. Each summary has `chat`, `status`, `turn`, a short
-`response` and `activity`.
+`GET /v1/chats` lists your direct Chats, channel Chats and live Chats, oldest
+first. Add `bot=<id>` to list the Chats of one Bot. Add `kind=<kind>` to list
+one kind, such as `task` or `review`. Each summary has `chat`, `status`, `turn`,
+a short `response` and `activity`.
 
 `GET /v1/chats/:chatId` returns the view of one Chat. Reading never starts work.
 Here is a short form of it:
@@ -561,10 +605,10 @@ service, such as `ResponsesCompaction.layer()`.
 
 ## Delete the history
 
-`DELETE /v1/chats/:chatId` deletes the history of a direct Chat or a channel
-Chat, and returns `204`. First it stops the running Turn and cancels the
-[open work](#open-work) of the Chat. Task Chats and review Chats return `409`
-with `ChatConflict`.
+`DELETE /v1/chats/:chatId` deletes the history of a direct Chat, a channel Chat
+or a live Chat, and returns `204`. First it stops the running Turn and cancels
+the [open work](#open-work) of the Chat. Task Chats and review Chats return
+`409` with `ChatConflict`.
 
 The Chat then no longer keeps the [files](/docs/files#how-files-go-away) that it
 named.

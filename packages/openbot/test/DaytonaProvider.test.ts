@@ -1,10 +1,11 @@
 import { assert, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Stream } from "effect"
 import {
 	HttpClient,
 	type HttpClientRequest,
 	HttpClientResponse,
 } from "effect/http"
+import type { Process } from "../src/computers/Computer.ts"
 import * as DaytonaProvider from "../src/computers/daytona/DaytonaProvider.ts"
 
 interface Seen {
@@ -81,12 +82,25 @@ const attach = (answer: Answer, desktop = false) =>
 		return { machine, log }
 	})
 
-/** Answers the wrapped command like bash would, with the marker of the request. */
-const executed = (seen: Seen, stdout: string, stderr: string, code: number) => {
-	const command = (seen.body as { command: string }).command
-	const mark = /__OPENBOT_[0-9a-f]+__/.exec(command)?.[0] ?? ""
-	return json({ exitCode: 0, result: `${stdout}\n${mark}${code}\n${stderr}` })
+/** Answers the session routes of the toolbox: a command that gives `output` and ends with `code`. */
+const session = (seen: Seen, output: string, code: number) => {
+	const path = seen.url.pathname.slice(toolbox.length)
+	if (/^\/process\/session\/[^/]+\/exec$/.test(path))
+		return json({ cmdId: "cmd1" })
+	if (path.endsWith("/command/cmd1/logs")) return new Response(output)
+	if (path.endsWith("/command/cmd1"))
+		return json({ id: "cmd1", exitCode: code })
+	return json({})
 }
+
+const collect = (process: Process) =>
+	Effect.gen(function* () {
+		const chunks = yield* Stream.runCollect(process.output)
+		return {
+			output: chunks.map((chunk) => new TextDecoder().decode(chunk)).join(""),
+			exit: yield* process.exit,
+		}
+	})
 
 it.effect(
 	"Daytona makes a sandbox from a snapshot, in the target, with labels",
@@ -114,65 +128,56 @@ it.effect(
 )
 
 it.effect(
-	"Daytona runs a command through the toolbox and splits stdout and stderr",
+	"Daytona runs a command in a toolbox session and gives its output and exit code",
 	() =>
-		Effect.gen(function* () {
-			const { machine, log } = yield* attach((seen) =>
-				executed(seen, "hello", "warn", 3),
-			)
-			const result = yield* machine.shell.run({
-				command: "echo hello",
-				cwd: "/tmp",
-				env: { A: "1" },
-				timeout: 5,
-			})
-			assert.strictEqual(result.exitCode, 3)
-			assert.strictEqual(result.stdout, "hello")
-			assert.strictEqual(result.stderr, "warn")
-			assert.strictEqual(result.truncated, false)
-			const call = log.find((seen) =>
-				seen.url.pathname.endsWith("/process/execute"),
-			)
-			assert.strictEqual(
-				call?.url.href,
-				`https://proxy.daytona.test${toolbox}/process/execute`,
-			)
-			assert.strictEqual(call?.headers["authorization"], "Bearer dtn-test-key")
-			const body = call?.body as {
-				command: string
-				cwd: string
-				envs: unknown
-				timeout: number
-			}
-			assert.strictEqual(body.cwd, "/tmp")
-			assert.deepStrictEqual(body.envs, { A: "1" })
-			assert.strictEqual(body.timeout, 35)
-			assert.match(body.command, /timeout -k 5 5 bash -lc/)
-			assert.match(body.command, /echo hello/)
-		}),
+		Effect.scoped(
+			Effect.gen(function* () {
+				const { machine, log } = yield* attach((seen) =>
+					session(seen, "hello\nwarn\n", 3),
+				)
+				const process = yield* machine.shell.start({
+					command: "echo hello",
+					cwd: "/tmp",
+					env: { A: "1" },
+					tty: false,
+				})
+				yield* process.write(new TextEncoder().encode("input"))
+				const result = yield* collect(process)
+				assert.strictEqual(result.output, "hello\nwarn\n")
+				assert.deepStrictEqual(result.exit, { code: 3, signal: null })
+				const created = log.find((seen) =>
+					seen.url.pathname.endsWith("/process/session"),
+				)
+				assert.strictEqual(
+					created?.headers["authorization"],
+					"Bearer dtn-test-key",
+				)
+				const id = (created?.body as { sessionId: string }).sessionId
+				const exec = log.find((seen) =>
+					seen.url.pathname.endsWith(`/process/session/${id}/exec`),
+				)
+				const body = exec?.body as { command: string; runAsync: boolean }
+				assert.strictEqual(body.runAsync, true)
+				assert.match(
+					body.command,
+					/^cd '\/tmp' && export A='1'; bash -lc 'echo hello'$/,
+				)
+				const input = log.find((seen) => seen.url.pathname.endsWith("/input"))
+				assert.deepStrictEqual(input?.body, { data: "input" })
+			}),
+		),
 )
 
-it.effect(
-	"Daytona marks a command that `timeout` stopped, and keeps only the end of long output",
-	() =>
+it.effect("Daytona gives no terminal to a command", () =>
+	Effect.scoped(
 		Effect.gen(function* () {
-			const long = "x".repeat(150_000)
-			const { machine } = yield* attach((seen) =>
-				executed(
-					seen,
-					long,
-					"",
-					(seen.body as { timeout: number }).timeout === 31 ? 124 : 0,
-				),
+			const { machine } = yield* attach((seen) => session(seen, "", 0))
+			const exit = yield* Effect.exit(
+				machine.shell.start({ command: "python3", tty: true }),
 			)
-			const stopped = yield* machine.shell.run({
-				command: "sleep 9",
-				timeout: 1,
-			})
-			assert.strictEqual(stopped.exitCode, null)
-			assert.strictEqual(stopped.truncated, true)
-			assert.strictEqual(stopped.stdout.length, 100_000)
+			assert.strictEqual(exit._tag, "Failure")
 		}),
+	),
 )
 
 it.effect(
@@ -264,13 +269,18 @@ it.live(
 					state = "started"
 					return json(sandbox("starting"))
 				}
-				return executed(seen, "ok", "", 0)
+				return session(seen, "ok", 0)
 			})
 			const machine = yield* (yield* provider(client)).attach("sb1")
 			yield* machine.pausable!.pause
 			assert.strictEqual(yield* machine.state, "paused")
-			const result = yield* machine.shell.run({ command: "true" })
-			assert.strictEqual(result.stdout, "ok")
+			const result = yield* Effect.scoped(
+				Effect.flatMap(
+					machine.shell.start({ command: "true", tty: false }),
+					collect,
+				),
+			)
+			assert.strictEqual(result.output, "ok")
 			assert.strictEqual(
 				log.filter((seen) => seen.url.pathname === "/api/sandbox/sb1/start")
 					.length,

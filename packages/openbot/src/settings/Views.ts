@@ -7,14 +7,13 @@ import {
 	rateLimitOf,
 	tokenRateOf,
 	delegationTimeLimitOf,
+	operationsOf,
 	type FilesDocument,
 	type MemberDocument,
 	type OrganizationDocument,
 	type PlatformDocument,
 	type Snapshot,
 } from "./Documents.ts"
-
-const iso = (millis: number) => DateTime.formatIso(DateTime.makeUnsafe(millis))
 
 /** The API form of the platform settings. Secrets only show whether they are set. */
 export const platform = (
@@ -42,7 +41,7 @@ export const platform = (
 		rateLimit: rateLimitOf(document),
 		tokenRate: tokenRateOf(document),
 		files: files(filesOf(document)),
-		updatedAt: iso(snapshot.updatedAt),
+		updatedAt: DateTime.formatIso(DateTime.makeUnsafe(snapshot.updatedAt)),
 	}
 }
 
@@ -65,9 +64,10 @@ export const organization = (
 ): Api.OrganizationSettings => ({
 	...snapshot.document,
 	delegationTimeLimitMs: delegationTimeLimitOf(snapshot.document),
+	...operationsOf(snapshot.document),
 	tokenRate: tokenRateOf(snapshot.document),
 	version: snapshot.version,
-	updatedAt: iso(snapshot.updatedAt),
+	updatedAt: DateTime.formatIso(DateTime.makeUnsafe(snapshot.updatedAt)),
 })
 
 export const member = (
@@ -76,5 +76,5 @@ export const member = (
 	...snapshot.document,
 	defaultBot: snapshot.document.defaultBot ?? null,
 	version: snapshot.version,
-	updatedAt: iso(snapshot.updatedAt),
+	updatedAt: DateTime.formatIso(DateTime.makeUnsafe(snapshot.updatedAt)),
 })

@@ -62,7 +62,7 @@ const start = (url: string, token: string) =>
 	Effect.forkScoped(
 		Connect.connect({
 			config: { url, token, machineId: "machine-0123456789" },
-			calls: { maxOutput: 1024 * 1024, home: tmpdir() },
+			calls: { home: tmpdir() },
 			backoff: { firstMs: 10, maxMs: 50 },
 		}).pipe(
 			Effect.provide(
@@ -86,7 +86,7 @@ it("the WebSocket address comes from the OpenBot address", () => {
 })
 
 it.live(
-	"connect says Hello, answers Ping, does calls, and connects again",
+	"connect says Hello, answers Ping, does calls and sessions, and connects again",
 	() =>
 		Effect.gen(function* () {
 			const openbot = yield* fakeOpenBot({ token: "good-token" })
@@ -96,7 +96,7 @@ it.live(
 			assert.deepStrictEqual(yield* Effect.promise(connection.next), {
 				_tag: "Hello",
 				hello: {
-					version: "0.1.0",
+					version: 2,
 					os: process.platform,
 					arch: process.arch,
 					desktop: false,
@@ -111,21 +111,34 @@ it.live(
 			connection.socket.send(
 				JSON.stringify({
 					_tag: "Call",
-					call: {
-						id: "call-7",
-						operation: {
-							_tag: "Run",
-							request: { command: "echo hi; sh -c 'exit 2'" },
-						},
-					},
+					call: { id: "call-7", operation: { _tag: "List", path: "." } },
 				}),
 			)
 			const reply = yield* Effect.promise(connection.next)
 			assert.strictEqual(reply._tag, "Reply")
 			assert.strictEqual(reply.reply.id, "call-7")
 			assert.strictEqual(reply.reply.result._tag, "Done")
-			assert.strictEqual(reply.reply.result.value.exitCode, 2)
-			assert.strictEqual(reply.reply.result.value.stdout, "hi\n")
+
+			connection.socket.send(
+				JSON.stringify({
+					_tag: "Start",
+					session: "s-1",
+					command: "echo hi; sh -c 'exit 2'",
+					tty: false,
+				}),
+			)
+			assert.deepStrictEqual(yield* Effect.promise(connection.next), {
+				_tag: "Output",
+				session: "s-1",
+				seq: 0,
+				data: Buffer.from("hi\n").toString("base64"),
+			})
+			assert.deepStrictEqual(yield* Effect.promise(connection.next), {
+				_tag: "Exit",
+				session: "s-1",
+				code: 2,
+				signal: null,
+			})
 
 			// When OpenBot drops the connection, the connector comes back and says Hello again.
 			const second = openbot.nextConnection()

@@ -23,6 +23,8 @@ import {
 	type MachineState,
 	Provider,
 	type Spec,
+	type RunRequest,
+	type StartRequest,
 } from "../Computer.ts"
 import * as Desktop from "./Desktop.ts"
 import * as Envd from "./Envd.ts"
@@ -59,9 +61,6 @@ const sandboxTimeout = 3600
 const controlTimeoutMs = 30_000
 const createTimeoutMs = 120_000
 
-const gone = (id: string) =>
-	new ComputerGone({ reason: `The E2B sandbox ${id} does not exist` })
-
 export const make = (credentials: Credentials) =>
 	Effect.gen(function* () {
 		const client = yield* HttpClient.HttpClient
@@ -79,12 +78,9 @@ export const make = (credentials: Credentials) =>
 				timeoutMs,
 			)
 
-		const domainOf = (body: unknown) =>
-			credentials.sandboxDomain ?? string(body, "domain") ?? defaultDomain
-
 		const connectionOf = (id: string, body: unknown): Envd.Connection => ({
 			sandboxId: id,
-			url: `https://${Envd.envdPort}-${id}.${domainOf(body)}`,
+			url: `https://${Envd.envdPort}-${id}.${credentials.sandboxDomain ?? string(body, "domain") ?? defaultDomain}`,
 			accessToken: string(body, "envdAccessToken"),
 		})
 
@@ -128,7 +124,11 @@ export const make = (credentials: Credentials) =>
 						ComputerCallFailed | ComputerGone
 					> =>
 						reply.status === 404
-							? Effect.fail(gone(id))
+							? Effect.fail(
+									new ComputerGone({
+										reason: `The E2B sandbox ${id} does not exist`,
+									}),
+								)
 							: ok(reply)
 								? Effect.succeed(connectionOf(id, json(reply)))
 								: Effect.fail(failed(reply, "Resuming the E2B sandbox")),
@@ -149,7 +149,11 @@ export const make = (credentials: Credentials) =>
 						reply: Reply,
 					): Effect.Effect<void, ComputerCallFailed | ComputerGone> =>
 						reply.status === 404
-							? Effect.fail(gone(id))
+							? Effect.fail(
+									new ComputerGone({
+										reason: `The E2B sandbox ${id} does not exist`,
+									}),
+								)
 							: // 409 means that the sandbox is paused already.
 								ok(reply) || reply.status === 409
 								? Effect.void
@@ -206,7 +210,10 @@ export const make = (credentials: Credentials) =>
 		const attach = (id: string) =>
 			Effect.gen(function* () {
 				const found = yield* detail(id)
-				if (Option.isNone(found)) return yield* gone(id)
+				if (Option.isNone(found))
+					return yield* new ComputerGone({
+						reason: `The E2B sandbox ${id} does not exist`,
+					})
 				const body = found.value
 				const running = string(body, "state") !== "paused"
 				const cached = yield* Ref.make(
@@ -227,11 +234,11 @@ export const make = (credentials: Credentials) =>
 				 * Runs one envd call. When the sandbox is away, such as paused by E2B at
 				 * its timeout, it resumes the sandbox and tries once more.
 				 */
-				const withEnvd = <A>(
+				const withEnvd = <A, R = never>(
 					call: (
 						connection: Envd.Connection,
-					) => Effect.Effect<A, ComputerCallFailed | Envd.SandboxAway>,
-				): Effect.Effect<A, ComputerCallFailed | ComputerGone> =>
+					) => Effect.Effect<A, ComputerCallFailed | Envd.SandboxAway, R>,
+				): Effect.Effect<A, ComputerCallFailed | ComputerGone, R> =>
 					Effect.flatMap(connection, call).pipe(
 						Effect.catchTag("SandboxAway", () =>
 							Effect.gen(function* () {
@@ -250,11 +257,12 @@ export const make = (credentials: Credentials) =>
 						),
 					)
 
-				const run = (request: ComputersApi.RunCommandRequest) =>
+				const run = (request: RunRequest) =>
 					withEnvd((current) => Envd.run(client, current, request))
 
 				const shell = {
-					run,
+					start: (request: StartRequest) =>
+						withEnvd((current) => Envd.start(client, current, request)),
 					read: (path: string, encoding: ComputersApi.FileEncoding) =>
 						withEnvd((current) => Envd.read(client, current, path)).pipe(
 							Effect.map((bytes): ComputersApi.FileContent => ({

@@ -52,6 +52,11 @@ const groups = [
 		"Talk to a Bot. Each Bot has one Chat with each person, and the Bot always answers at once.",
 	],
 	[
+		"live",
+		"Live",
+		"Talk with a Bot in real time, with sound, over one WebSocket.",
+	],
+	[
 		"files",
 		"Files",
 		"Upload files, such as pictures and PDFs, and give them to a Bot in a message.",
@@ -123,6 +128,11 @@ const groups = [
 		"appAuthorizationPublic",
 		"App authorization callbacks",
 		"Pages that an App sends you back to after authorization.",
+	],
+	[
+		"operations",
+		"Background tool calls",
+		"Read and stop the tool calls of a Chat that run in the background.",
 	],
 	[
 		"appOperations",

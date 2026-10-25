@@ -25,22 +25,21 @@ import {
 	type MachineState,
 	Provider,
 	type Spec,
+	type Process,
+	type StartRequest,
 } from "../Computer.ts"
+import * as ProcessSink from "../Process.ts"
 import {
-	appendTail,
-	emptyTail,
 	failed,
 	field,
 	json,
 	number,
 	ok,
-	outputLimit,
 	pngSize,
 	quote,
 	type Reply,
 	send,
 	string,
-	tailText,
 	text,
 } from "../Http.ts"
 
@@ -66,9 +65,6 @@ const controlTimeoutMs = 30_000
 const startTimeoutMs = 180_000
 /** After a check finds the sandbox running, calls skip the check for this time. */
 const freshMs = 60_000
-
-const gone = (id: string) =>
-	new ComputerGone({ reason: `The Daytona sandbox ${id} does not exist` })
 
 /** Daytona has many states. OpenBot needs four. */
 export const stateOf = (state: string | undefined): MachineState => {
@@ -96,47 +92,6 @@ const marker = () =>
 	`__OPENBOT_${Array.from(crypto.getRandomValues(new Uint8Array(8)), (byte) =>
 		byte.toString(16).padStart(2, "0"),
 	).join("")}__`
-
-/**
- * The toolbox gives stdout and stderr together and has no clear form for a timeout.
- * So OpenBot wraps the command: `timeout` stops it, stderr goes to a file, and the
- * script prints a marker, the exit code and then stderr after the command.
- */
-export const wrap = (
-	request: ComputersApi.RunCommandRequest,
-	mark: string,
-	seconds: number,
-) =>
-	`bash -c ${quote(
-		[
-			"__e=$(mktemp)",
-			`timeout -k 5 ${seconds} bash -lc ${quote(request.command)} 2>"$__e"`,
-			"__c=$?",
-			`printf '\\n${mark}%s\\n' "$__c"`,
-			'cat "$__e"',
-			'rm -f "$__e"',
-		].join("\n"),
-	)}`
-
-/** `timeout` exits with 124 when it stops the command, and 137 when it must kill it. */
-const timedOutCodes = [124, 137]
-
-export const unwrap = (result: string, mark: string) => {
-	const at = result.lastIndexOf(`\n${mark}`)
-	if (at < 0) return { stdout: result, stderr: "", exitCode: undefined }
-	const rest = result.slice(at + mark.length + 1)
-	const newline = rest.indexOf("\n")
-	const code = Number(newline < 0 ? rest : rest.slice(0, newline))
-	return {
-		stdout: result.slice(0, at),
-		stderr: newline < 0 ? "" : rest.slice(newline + 1),
-		exitCode: Number.isInteger(code) ? code : undefined,
-	}
-}
-
-/** Keeps the end of the text when it is longer than the limit. */
-const tail = (value: string) =>
-	appendTail(emptyTail, new TextEncoder().encode(value), outputLimit)
 
 const entry = (value: unknown): ComputersApi.FileEntry => {
 	const modified = string(value, "modTime") ?? string(value, "modifiedAt")
@@ -232,7 +187,10 @@ export const make = (credentials: Credentials) =>
 		const attach = (id: string) =>
 			Effect.gen(function* () {
 				const found = yield* detail(id)
-				if (Option.isNone(found)) return yield* gone(id)
+				if (Option.isNone(found))
+					return yield* new ComputerGone({
+						reason: `The Daytona sandbox ${id} does not exist`,
+					})
 				const body = found.value
 				/** The toolbox address, and when OpenBot last saw the sandbox run. */
 				const running = yield* Ref.make(
@@ -271,9 +229,15 @@ export const make = (credentials: Credentials) =>
 						let started = false
 						while ((yield* Clock.currentTimeMillis) - now < startTimeoutMs) {
 							const current = yield* detail(id)
-							if (Option.isNone(current)) return yield* gone(id)
+							if (Option.isNone(current))
+								return yield* new ComputerGone({
+									reason: `The Daytona sandbox ${id} does not exist`,
+								})
 							const state = stateOf(string(current.value, "state"))
-							if (state === "gone") return yield* gone(id)
+							if (state === "gone")
+								return yield* new ComputerGone({
+									reason: `The Daytona sandbox ${id} does not exist`,
+								})
 							if (state === "running") {
 								const toolbox = yield* toolboxOf(current.value)
 								yield* Ref.set(
@@ -306,50 +270,145 @@ export const make = (credentials: Credentials) =>
 						call(build(base), timeoutMs).pipe(Effect.flatMap(expect(what))),
 					)
 
-				const run = (request: ComputersApi.RunCommandRequest) =>
-					Effect.gen(function* () {
-						const seconds = request.timeout ?? 60
-						const mark = marker()
-						const startedAt = yield* Clock.currentTimeMillis
-						const reply = yield* toolbox(
-							(base) =>
-								HttpClientRequest.post(`${base}/process/execute`).pipe(
-									HttpClientRequest.bodyJsonUnsafe({
-										command: wrap(request, mark, seconds),
-										...(request.cwd === undefined ? {} : { cwd: request.cwd }),
-										...(request.env === undefined ? {} : { envs: request.env }),
-										// The wrapper stops the command first. This limit is only a safety net.
-										timeout: seconds + 30,
-									}),
-								),
-							"Running the command",
-							(seconds + 60) * 1000,
-						)
-						const body = json(reply)
-						const parts = unwrap(string(body, "result") ?? "", mark)
-						const exitCode = parts.exitCode ?? number(body, "exitCode") ?? null
-						const stdout = tail(parts.stdout)
-						const stderr = tail(parts.stderr)
-						return {
-							exitCode:
-								exitCode !== null && timedOutCodes.includes(exitCode)
-									? null
-									: exitCode,
-							stdout: tailText(stdout),
-							stderr: tailText(stderr),
-							truncated: stdout.truncated || stderr.truncated,
-							durationMs: (yield* Clock.currentTimeMillis) - startedAt,
-						} satisfies ComputersApi.CommandResult
-					})
-
 				const query = (
 					base: string,
 					path: string,
 					params: Record<string, string>,
 				) => `${base}${path}?${new URLSearchParams(params)}`
 
+				/**
+				 * A command in a session of the toolbox. The toolbox has no terminal for a
+				 * session, so OpenBot reads the log again and again and gives what is new.
+				 */
+				const startCommand = (request: StartRequest) =>
+					Effect.gen(function* () {
+						if (request.tty)
+							return yield* new ComputerCallFailed({
+								message:
+									"A Daytona Computer gives no terminal to a command in OpenBot. Run it without tty.",
+								retry: false,
+							})
+						const sessionId = `openbot-${marker().slice(9, 25)}`
+						const sessionPath = `/process/session/${sessionId}`
+						yield* toolbox(
+							(base) =>
+								HttpClientRequest.post(`${base}/process/session`).pipe(
+									HttpClientRequest.bodyJsonUnsafe({ sessionId }),
+								),
+							"Starting a command session",
+						)
+						const remove = toolbox(
+							(base) => HttpClientRequest.delete(`${base}${sessionPath}`),
+							"Closing the command session",
+						).pipe(Effect.ignore)
+						yield* Effect.addFinalizer(() => remove)
+						const prefix = [
+							...(request.cwd === undefined
+								? []
+								: [`cd ${quote(request.cwd)} &&`]),
+							...Object.entries(request.env ?? {}).map(
+								([key, value]) => `export ${key}=${quote(value)};`,
+							),
+						].join(" ")
+						const started = yield* toolbox(
+							(base) =>
+								HttpClientRequest.post(`${base}${sessionPath}/exec`).pipe(
+									HttpClientRequest.bodyJsonUnsafe({
+										command:
+											`${prefix} bash -lc ${quote(request.command)}`.trim(),
+										runAsync: true,
+									}),
+								),
+							"Starting the command",
+						)
+						const commandId =
+							string(json(started), "cmdId") ??
+							string(json(started), "commandId")
+						if (commandId === undefined)
+							return yield* new ComputerCallFailed({
+								message: "Daytona did not give the command an ID.",
+								retry: true,
+							})
+						const commandPath = `${sessionPath}/command/${commandId}`
+						const sink = yield* ProcessSink.make
+						const encoder = new TextEncoder()
+						let seen = 0
+						const poll = Effect.gen(function* () {
+							while (true) {
+								const logs = yield* toolbox(
+									(base) => HttpClientRequest.get(`${base}${commandPath}/logs`),
+									"Reading the output",
+								)
+								const all = text(logs)
+								if (all.length > seen) {
+									yield* sink.push(encoder.encode(all.slice(seen)))
+									seen = all.length
+								}
+								const detail = json(
+									yield* toolbox(
+										(base) => HttpClientRequest.get(`${base}${commandPath}`),
+										"Reading the command",
+									),
+								)
+								const exitCode = number(detail, "exitCode")
+								if (exitCode !== undefined) {
+									// Output can come after the last read, so read once more.
+									const last = text(
+										yield* toolbox(
+											(base) =>
+												HttpClientRequest.get(`${base}${commandPath}/logs`),
+											"Reading the output",
+										),
+									)
+									if (last.length > seen)
+										yield* sink.push(encoder.encode(last.slice(seen)))
+									return yield* sink.end({ code: exitCode, signal: null })
+								}
+								yield* Effect.sleep("250 millis")
+							}
+						}).pipe(
+							Effect.catchCause((cause) =>
+								sink.end({ code: null, signal: null, error: String(cause) }),
+							),
+						)
+						yield* Effect.forkScoped(poll)
+						const process: Process = {
+							output: sink.output,
+							exit: sink.exit,
+							write: (data) =>
+								toolbox(
+									(base) =>
+										HttpClientRequest.post(`${base}${commandPath}/input`).pipe(
+											HttpClientRequest.bodyJsonUnsafe({
+												data: new TextDecoder().decode(data),
+											}),
+										),
+									"Sending input",
+								).pipe(Effect.asVoid),
+							resize: () => Effect.void,
+							signal: (signal) =>
+								signal === "SIGKILL" || signal === "SIGTERM"
+									? remove.pipe(
+											Effect.andThen(
+												sink.end({
+													code: null,
+													signal,
+													error: "The session was closed.",
+												}),
+											),
+										)
+									: Effect.fail(
+											new ComputerCallFailed({
+												message: `A Daytona Computer cannot send ${signal} to a command. Close the session to stop it.`,
+												retry: false,
+											}),
+										),
+						}
+						return process
+					})
+
 				const shell = {
-					run,
+					start: startCommand,
 					read: (path: string, encoding: ComputersApi.FileEncoding) =>
 						toolbox(
 							(base) =>
@@ -581,7 +640,11 @@ export const make = (credentials: Credentials) =>
 					Effect.flatMap(
 						(reply): Effect.Effect<void, ComputerCallFailed | ComputerGone> =>
 							reply.status === 404
-								? Effect.fail(gone(id))
+								? Effect.fail(
+										new ComputerGone({
+											reason: `The Daytona sandbox ${id} does not exist`,
+										}),
+									)
 								: ok(reply)
 									? Effect.void
 									: // Daytona refuses to stop a sandbox that is stopped already.

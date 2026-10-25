@@ -6,6 +6,8 @@ export default defineConfig({
 	entry: {
 		"bot/Bot": "src/bot/Bot.ts",
 		"chat/Turn": "src/chat/Turn.ts",
+		"chat/Operation": "src/chat/Operation.ts",
+		"chat/Operations": "src/chat/Operations.ts",
 		"chat/Item": "src/chat/Item.ts",
 		"chat/ChatState": "src/chat/ChatState.ts",
 		"store/ChatStoreRepository": "src/store/ChatStoreRepository.ts",
@@ -16,6 +18,8 @@ export default defineConfig({
 		"chat/Chat": "src/chat/Chat.ts",
 		"models/Config": "src/models/Config.ts",
 		"context/ConversationContext": "src/context/ConversationContext.ts",
+		"models/Live": "src/models/Live.ts",
+		"models/LiveDriver": "src/models/LiveDriver.ts",
 		"models/Model": "src/models/Model.ts",
 		"plugins/Plugin": "src/plugins/Plugin.ts",
 		"models/Provider": "src/models/Provider.ts",

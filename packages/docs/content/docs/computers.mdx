@@ -66,7 +66,7 @@ machine is not connected) or `failed`.
 
 | Route                                                  | What it does                                                                 |
 | ------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| `POST /v1/computers/:computerId/commands`              | Runs a shell command with `bash -lc` and waits for it to end.                |
+| `POST /v1/computers/:computerId/sessions`              | Starts a shell command. See [Commands](#commands).                           |
 | `GET`, `PUT`, `DELETE /v1/computers/:computerId/files` | Reads, writes and removes a file. `utf8` for text, `base64` for other bytes. |
 | `GET /v1/computers/:computerId/directory?path=`        | Lists a directory.                                                           |
 | `PUT /v1/computers/:computerId/ports/:port`            | Gives a port a public HTTPS address. Anyone with the address can use it.     |
@@ -78,6 +78,42 @@ machine is not connected) or `failed`.
 A command on a paused Computer resumes it first.
 `DELETE /v1/computers/:computerId` deletes the Computer and its sandbox. Its
 files are gone.
+
+### Commands
+
+A command runs with `bash -lc` in a **session**. OpenBot waits up to
+`yieldTimeMs` for it (10 seconds by default, from 0.25 to 30 seconds). Then it
+gives the output so far:
+
+```json
+{
+	"session": "cse_…",
+	"running": true,
+	"exitCode": null,
+	"signal": null,
+	"output": ">>> ",
+	"truncated": false
+}
+```
+
+When the command has ended, `session` is `null` and `exitCode` or `signal` says
+how it ended. While it runs, use the session for more:
+
+| Route                                                       | What it does                                                               |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `POST /v1/computers/:computerId/sessions`                   | Starts a command: `command`, `cwd`, `env`, `tty`, `rows`, `cols`.          |
+| `POST /v1/computers/:computerId/sessions/:sessionId/input`  | Sends `chars` to stdin and gives the new output. Empty `chars` only reads. |
+| `POST /v1/computers/:computerId/sessions/:sessionId/resize` | Gives the terminal a new size.                                             |
+| `DELETE /v1/computers/:computerId/sessions/:sessionId`      | Stops the command and gives its last output.                               |
+
+`chars` takes C escapes: `\n` is Enter, `\x03` is Ctrl-C, and `\x04` is Ctrl-D,
+the end of the input. With `tty`, the command gets a **terminal** (a PTY), for
+programs such as `python3`, `ssh` or `top`. Then stdout and stderr come
+together. Each answer gives at most `maxOutputBytes` of new output (64 KiB by
+default). With more, only its end comes, and `truncated` is `true`.
+
+A session belongs to the one who started it. It ends after 30 minutes with no
+use. A Daytona Computer gives no terminal, so `tty` fails there.
 
 ---
 
@@ -114,6 +150,15 @@ It keeps a connection open to OpenBot, so the machine needs no open port. It
 connects again by itself after a break. `openbot computer status` shows the
 saved address and machine ID.
 
+OpenBot takes only connectors that speak version 2 of the connector protocol. An
+older `openbot-computer` cannot connect, and OpenBot tells it to upgrade.
+Install the new version on the machine and connect again:
+
+```sh
+npm install -g @openbot-build/computer
+openbot computer connect
+```
+
 When the same machine pairs again in the same organization, it keeps its
 Computer and gets a new token. For servers and scripts, create a Computer with
 `"source":{"_tag":"Connector"}`, then make a token with
@@ -148,8 +193,12 @@ it can:
   and a `reason`. The `source` must be a provider.
 - Give up its right with `openbot_computers_release`. With `destroy`, it also
   deletes the Computer.
-- Run commands, change files, open ports and use the desktop. A screenshot comes
-  back as an image that the model sees.
+- Run commands with `openbot_computer_exec`, and send input to them with
+  `openbot_computer_write_stdin`, in the same way as [Commands](#commands). When
+  a command still runs after its yield time, the Chat gets a notice of kind
+  `computer_session` when it ends.
+- Change files, open ports and use the desktop. A screenshot comes back as an
+  image that the model sees.
 
 These four actions are [capabilities](/docs/requests#capabilities). The
 [chain of deciders](/docs/requests#the-chain-of-deciders) decides them, as for

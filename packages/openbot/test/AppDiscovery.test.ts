@@ -7,6 +7,7 @@ import { Coordinator } from "../src/bots/Coordinator.ts"
 import { Connectors } from "../src/computers/connector/Connectors.ts"
 import { Drivers } from "../src/computers/Drivers.ts"
 import { Pairings } from "../src/computers/Pairings.ts"
+import { Sessions } from "../src/computers/Sessions.ts"
 import { Files } from "../src/files/Files.ts"
 import * as ChannelQueue from "../src/channels/ChannelQueue.ts"
 import * as ChannelRegistry from "../src/channels/ChannelRegistry.ts"
@@ -531,6 +532,7 @@ const startApi = async (
 				Layer.succeed(Connectors, {} as Connectors["Service"]),
 				Layer.succeed(Drivers, {} as Drivers["Service"]),
 				Layer.succeed(Pairings, {} as Pairings["Service"]),
+				Layer.succeed(Sessions, {} as Sessions["Service"]),
 				// Discovery never uses files. Their handlers only need the service to exist.
 				Layer.succeed(Files, {} as Files["Service"]),
 				// Discovery never uses Chats. Their handlers only need the Coordinator to exist.

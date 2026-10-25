@@ -1,4 +1,12 @@
-import { Bot, Chat, ChatStore, Config, Item, Turn } from "@openbot-build/core"
+import {
+	Bot,
+	Chat,
+	ChatStore,
+	Config,
+	Item,
+	type Operations,
+	Turn,
+} from "@openbot-build/core"
 import {
 	ChatModelInvalid,
 	ChatNotFound,
@@ -34,6 +42,8 @@ export interface CreateInput {
 	readonly bot: BotsApi.Bot
 	readonly kind: ChatKind
 	readonly chain: ChatHost.Chain
+	/** The model of a live Chat. Without it, the Chat gets the first Live model. */
+	readonly model?: Config.Selection
 	readonly parent?: ChatParent
 	readonly review?: string
 	readonly planApproval?: PlanApproval.PlanApproval
@@ -81,6 +91,11 @@ export interface Options<
 		readonly providers: ReadonlyArray<Config.Provider>
 		readonly models: ReadonlyArray<Config.Model>
 	}>
+	/** The Live models that a live Chat can use. Without it, OpenBot makes no live Chats. */
+	readonly liveCatalog?: Effect.Effect<{
+		readonly providers: ReadonlyArray<Config.Provider>
+		readonly models: ReadonlyArray<Config.Model>
+	}>
 	/**
 	 * Settings that the host gives to each new Chat, such as the simulated
 	 * model of a development platform or of a test. They come before the model
@@ -108,8 +123,8 @@ export interface Options<
 }
 
 /** The options that come from the settings of an organization. */
-export type OrganizationOptions = Required<
-	Pick<Options, "modelCatalog" | "resolveModel">
+export type OrganizationOptions = Partial<
+	Pick<Options, "modelCatalog" | "resolveModel" | "liveCatalog">
 >
 
 export class Chats extends Context.Service<
@@ -194,6 +209,8 @@ export class Chats extends Context.Service<
 			id: Chat.Id,
 			turn: Turn.Id,
 		) => Effect.Effect<void, ServiceError>
+		/** The tool calls of the Chats that went on in the background. */
+		readonly operations: typeof Operations.Operations.Service
 		readonly startAction: (
 			id: Chat.Id,
 			input: {

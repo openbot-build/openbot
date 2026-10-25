@@ -12,18 +12,17 @@ import { AuditLog } from "../audit/AuditLog.ts"
 import type { Services as AuthorizationServices } from "../authorization/Check.ts"
 import { computerKey } from "../audit/Resources.ts"
 import type { Machine } from "./Computer.ts"
-import { ComputerProviders, unavailable } from "./ComputerProviders.ts"
+import { ComputerProviders } from "./ComputerProviders.ts"
 import { Computers } from "./Computers.ts"
 import { Connectors } from "./connector/Connectors.ts"
 import { Drivers } from "./Drivers.ts"
 import { Pairings } from "./Pairings.ts"
-
-const unsupported = (feature: string) =>
-	ComputersApi.ComputerUnsupported.make({ feature })
+import { SessionGone, Sessions } from "./Sessions.ts"
+import { ownerKey } from "../apps/StoredConnections.ts"
 
 const desktopOf = (machine: Machine) =>
 	machine.desktop === undefined
-		? Effect.fail(unsupported("desktop"))
+		? Effect.fail(ComputersApi.ComputerUnsupported.make({ feature: "desktop" }))
 		: Effect.succeed(machine.desktop)
 
 export const layerProviders = HttpApiBuilder.group(
@@ -54,7 +53,9 @@ export const layerProviders = HttpApiBuilder.group(
 						}),
 						details,
 					})
-					.pipe(Effect.mapError(unavailable))
+					.pipe(
+						Effect.mapError(() => ComputersApi.ComputersUnavailable.make({})),
+					)
 			/** The provider must take the key before OpenBot stores it. */
 			const verify = (credentials: ComputersApi.ComputerProviderCredentials) =>
 				drivers.make(credentials).pipe(
@@ -121,6 +122,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 	Effect.gen(function* () {
 		const computers = yield* Computers
 		const pairings = yield* Pairings
+		const sessions = yield* Sessions
 		const audit = yield* AuditLog
 		const services = yield* Effect.context<AuthorizationServices>()
 		const record = (
@@ -142,7 +144,7 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 					}),
 					details,
 				})
-				.pipe(Effect.mapError(unavailable))
+				.pipe(Effect.mapError(() => ComputersApi.ComputersUnavailable.make({})))
 		/** Work on the machine of a Computer that the caller may use. */
 		const onMachine = <A, E>(
 			id: string,
@@ -154,6 +156,39 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 					.machine(caller, id)
 					.pipe(Effect.provideContext(services))
 				return yield* use(machine)
+			})
+		/** Maps the errors of the machine, and keeps a missing session as it is. */
+		const workOn = <A, E extends { readonly _tag: string }>(
+			effect: Effect.Effect<A, E>,
+		) =>
+			effect.pipe(
+				Effect.catchIf(
+					(error): error is Exclude<E, { readonly _tag: "SessionGone" }> =>
+						error._tag !== "SessionGone",
+					(error) => computers.work(Effect.fail(error as never)),
+				),
+			)
+		/** The sessions of a caller, on a Computer that the caller may still use. */
+		const onSession = <A, E>(
+			computerId: string,
+			sessionId: string,
+			use: (owner: { readonly key: string }) => Effect.Effect<A, E>,
+		) =>
+			Effect.gen(function* () {
+				const caller = yield* Identity
+				yield* computers
+					.get(caller, computerId)
+					.pipe(Effect.provideContext(services))
+				return yield* use({ key: ownerKey(caller) }).pipe(
+					Effect.catchIf(
+						(error): error is Extract<E, SessionGone> =>
+							error instanceof SessionGone,
+						() =>
+							Effect.fail(
+								ComputersApi.ComputerSessionNotFound.make({ id: sessionId }),
+							),
+					),
+				)
 			})
 		return handlers
 			.handle("listComputers", ({ query }) =>
@@ -274,9 +309,32 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 					return { token }
 				}),
 			)
-			.handle("runCommand", ({ params, payload }) =>
-				onMachine(params.computerId, (machine) =>
-					computers.work(machine.shell.run(payload)),
+			.handle("exec", ({ params, payload }) =>
+				Effect.flatMap(Identity, (caller) =>
+					onMachine(params.computerId, (machine) =>
+						computers.work(
+							sessions.exec({
+								owner: { key: ownerKey(caller) },
+								machine,
+								request: payload,
+							}),
+						),
+					),
+				),
+			)
+			.handle("writeStdin", ({ params, payload }) =>
+				onSession(params.computerId, params.sessionId, (owner) =>
+					sessions.write(owner, params.sessionId, payload).pipe(workOn),
+				),
+			)
+			.handle("resizeSession", ({ params, payload }) =>
+				onSession(params.computerId, params.sessionId, (owner) =>
+					sessions.resize(owner, params.sessionId, payload).pipe(workOn),
+				),
+			)
+			.handle("closeSession", ({ params }) =>
+				onSession(params.computerId, params.sessionId, (owner) =>
+					sessions.close(owner, params.sessionId).pipe(workOn),
 				),
 			)
 			.handle("readFile", ({ params, query }) =>
@@ -307,7 +365,10 @@ export const layer = HttpApiBuilder.group(OpenBotApi, "computers", (handlers) =>
 					const { computer, machine } = yield* computers
 						.machine(caller, params.computerId)
 						.pipe(Effect.provideContext(services))
-					if (machine.ports === undefined) return yield* unsupported("ports")
+					if (machine.ports === undefined)
+						return yield* ComputersApi.ComputerUnsupported.make({
+							feature: "ports",
+						})
 					const url = yield* computers.work(machine.ports.open(params.port))
 					yield* record(caller, "computer.port_opened", computer, {
 						port: params.port,
@@ -366,13 +427,11 @@ export const layerHooks = HttpApiBuilder.group(
 			const computers = yield* Computers
 			const pairings = yield* Pairings
 			const connectors = yield* Connectors
-			const invalid = () => ComputersApi.PairingInvalid.make({})
-			const denied = () => ComputersApi.ConnectorDenied.make({})
 			return handlers
 				.handle("startPairing", ({ payload }) => pairings.start(payload))
 				.handle("pollPairing", ({ params, headers }) =>
 					Option.match(bearer(headers.authorization), {
-						onNone: () => Effect.fail(invalid()),
+						onNone: () => Effect.fail(ComputersApi.PairingInvalid.make({})),
 						onSome: (secret) => pairings.poll(params.pairingId, secret),
 					}),
 				)
@@ -380,11 +439,15 @@ export const layerHooks = HttpApiBuilder.group(
 					Effect.gen(function* () {
 						const request = yield* HttpServerRequest.HttpServerRequest
 						const token = bearer(request.headers["authorization"])
-						if (Option.isNone(token)) return yield* denied()
+						if (Option.isNone(token))
+							return yield* ComputersApi.ConnectorDenied.make({})
 						const found = yield* computers.byToken(token.value)
-						if (Option.isNone(found)) return yield* denied()
+						if (Option.isNone(found))
+							return yield* ComputersApi.ConnectorDenied.make({})
 						const { organizationId, id } = found.value
-						const socket = yield* request.upgrade.pipe(Effect.mapError(denied))
+						const socket = yield* request.upgrade.pipe(
+							Effect.mapError(() => ComputersApi.ConnectorDenied.make({})),
+						)
 						yield* connectors.serve({
 							computerId: id,
 							socket,

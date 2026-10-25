@@ -1,5 +1,5 @@
 import { BotsApi, ComputersApi } from "@openbot-build/api"
-import { Plugin } from "@openbot-build/core"
+import { type Chat, Operation, Plugin, type Turn } from "@openbot-build/core"
 import {
 	Context,
 	Data,
@@ -18,6 +18,8 @@ import { Work } from "../../capabilities/Work.ts"
 import type { Machine } from "../../computers/Computer.ts"
 import { ComputerProviders } from "../../computers/ComputerProviders.ts"
 import { Computers } from "../../computers/Computers.ts"
+import { Sessions } from "../../computers/Sessions.ts"
+import * as ChatHost from "../../chats/ChatHost.ts"
 import { imageKey, imageOf } from "../../providers/ToolImages.ts"
 import { toolJson } from "../ToolJson.ts"
 
@@ -44,7 +46,8 @@ export const names = {
 	create: "openbot_computers_create",
 	pause: "openbot_computers_pause",
 	resume: "openbot_computers_resume",
-	run: "openbot_computer_run",
+	exec: "openbot_computer_exec",
+	writeStdin: "openbot_computer_write_stdin",
 	read: "openbot_computer_read_file",
 	write: "openbot_computer_write_file",
 	files: "openbot_computer_list_files",
@@ -104,10 +107,39 @@ const CreateInput = Schema.Struct({
 })
 /** Paths and ports take the same form as in the Computer routes. */
 const Path = ComputersApi.FileContent.fields.path
-const RunInput = Schema.Struct({
+const ExecInput = Schema.Struct({
 	computer: Schema.String,
-	...ComputersApi.RunCommandRequest.fields,
+	command: ComputersApi.ExecRequest.fields.command,
+	cwd: ComputersApi.ExecRequest.fields.cwd,
+	env: ComputersApi.ExecRequest.fields.env,
+	tty: ComputersApi.ExecRequest.fields.tty,
+	rows: ComputersApi.ExecRequest.fields.rows,
+	cols: ComputersApi.ExecRequest.fields.cols,
+	yield_time_ms: ComputersApi.ExecRequest.fields.yieldTimeMs,
+	max_output_bytes: ComputersApi.ExecRequest.fields.maxOutputBytes,
 })
+const WriteStdinInput = Schema.Struct({
+	session: Schema.String,
+	chars: ComputersApi.WriteStdinRequest.fields.chars,
+	yield_time_ms: ComputersApi.WriteStdinRequest.fields.yieldTimeMs,
+	max_output_bytes: ComputersApi.WriteStdinRequest.fields.maxOutputBytes,
+	rows: ComputersApi.ExecRequest.fields.rows,
+	cols: ComputersApi.ExecRequest.fields.cols,
+})
+
+/**
+ * These tools stay in their Turn. The command tools give their own session IDs, and
+ * the others change which Computers the Bot holds.
+ */
+const foreground: ReadonlySet<string> = new Set([
+	names.exec,
+	names.writeStdin,
+	names.acquire,
+	names.release,
+	names.create,
+	names.pause,
+	names.resume,
+])
 const ReadInput = Schema.Struct({
 	computer: Schema.String,
 	path: Path,
@@ -191,6 +223,19 @@ export const keepNewestImage = (prompt: Prompt.Prompt): Prompt.Prompt => {
 	)
 }
 
+/** What the Chats of one member give to the Computer plugin. */
+interface ForOwnerInput {
+	/** Tells a Chat that a command of one of its sessions ended. */
+	readonly notify: (
+		chat: Chat.Id,
+		notice: {
+			readonly text: string
+			readonly ref: string
+			readonly author: Turn.Author
+		},
+	) => Effect.Effect<void>
+}
+
 /**
  * Builds the Computer plugin. It gives each Bot tools to get, make and use Computers.
  * It runs inside the Bot plugin, so getting, making and deleting a Computer and
@@ -199,11 +244,12 @@ export const keepNewestImage = (prompt: Prompt.Prompt): Prompt.Prompt => {
  */
 export class ComputerPlugin extends Context.Service<
 	ComputerPlugin,
-	{ readonly plugin: Plugin.Plugin<Tools> }
+	{ readonly forOwner: (input: ForOwnerInput) => Plugin.Plugin<Tools> }
 >()("@openbot-build/openbot/plugins/computers/ComputerPlugin") {}
 
 export const make = Effect.gen(function* () {
 	const computers = yield* Computers
+	const sessions = yield* Sessions
 	const providers = yield* ComputerProviders
 	const gate = yield* Gate
 	const services = yield* Effect.context<AuthorizationServices>()
@@ -299,8 +345,13 @@ export const make = Effect.gen(function* () {
 								Effect.catchCause(() => Effect.succeed(false)),
 							),
 					})
+		const read = readonly
+			? definition.annotate(Tool.Readonly, true)
+			: definition
 		const marked = (
-			readonly ? definition.annotate(Tool.Readonly, true) : definition
+			foreground.has(name)
+				? read.annotate(Operation.Budget, "foreground")
+				: read
 		) as Tools[string]
 		const run = (raw: unknown) =>
 			decode(raw).pipe(
@@ -318,7 +369,7 @@ export const make = Effect.gen(function* () {
 		return { definition: marked, run }
 	}
 
-	const tools = [
+	const toolsFor = (input: ForOwnerInput) => [
 		tool(
 			names.list,
 			"List the Computers that you may use, and the Computers that you may ask for. Also list the Computer providers where you can make a new Computer.",
@@ -570,9 +621,11 @@ export const make = Effect.gen(function* () {
 				}),
 		),
 		tool(
-			names.run,
-			"Run a shell command on a Computer and wait for it to end.",
-			RunInput,
+			names.exec,
+			"Start a shell command on a Computer. It waits up to yield_time_ms for the command. When the command still runs then, you get a session ID: use " +
+				names.writeStdin +
+				" with it to send input and read more output. When it ends later, you get a message with its end. Set tty for programs that need a terminal, such as python3, ssh or top.",
+			ExecInput,
 			{
 				type: "object",
 				properties: {
@@ -580,17 +633,125 @@ export const make = Effect.gen(function* () {
 					command: { type: "string", description: "It runs with bash -lc." },
 					cwd: { type: "string" },
 					env: { type: "object", additionalProperties: { type: "string" } },
-					timeout: {
+					tty: {
+						type: "boolean",
+						description:
+							"Give the command a terminal. Then stdout and stderr come together.",
+					},
+					rows: { type: "integer", minimum: 1, maximum: 1000 },
+					cols: { type: "integer", minimum: 1, maximum: 1000 },
+					yield_time_ms: {
 						type: "integer",
-						description: "Seconds. The default is 60. The longest is 3600.",
+						minimum: 250,
+						maximum: 30000,
+						description: "How long to wait for output. The default is 10000.",
+					},
+					max_output_bytes: {
+						type: "integer",
+						minimum: 1,
+						maximum: 1048576,
+						description: "The most output to give back. The default is 65536.",
 					},
 				},
 				required: ["computer", "command"],
 			},
-			({ computer, ...request }) =>
-				onMachine(computer, (machine) =>
-					computers.work(machine.shell.run(request)),
-				),
+			({ computer, yield_time_ms, max_output_bytes, ...request }) =>
+				Effect.gen(function* () {
+					const current = yield* work
+					const owner = { key: current.namespace, chat: current.chat }
+					return yield* onMachine(computer, (machine) =>
+						computers.work(
+							sessions.exec({
+								owner,
+								machine,
+								request: {
+									...request,
+									...(yield_time_ms === undefined
+										? {}
+										: { yieldTimeMs: yield_time_ms }),
+									...(max_output_bytes === undefined
+										? {}
+										: { maxOutputBytes: max_output_bytes }),
+								},
+								onEnd: (exit, output) =>
+									input.notify(current.chat, {
+										text: JSON.stringify({
+											computer,
+											command: request.command.slice(0, 200),
+											exitCode: exit.code,
+											signal: exit.signal,
+											...(exit.error === undefined
+												? {}
+												: { error: exit.error }),
+											output,
+										}),
+										ref: computer,
+										author: ChatHost.chainAuthor(current.chain),
+									}),
+							}),
+						),
+					)
+				}),
+		),
+		tool(
+			names.writeStdin,
+			"Send text to the stdin of a command session, and read its output since the last call. Send empty chars to only read. C escapes work: \\x03 is Ctrl-C, \\x04 is Ctrl-D (end of input), \\n is Enter.",
+			WriteStdinInput,
+			{
+				type: "object",
+				properties: {
+					session: {
+						type: "string",
+						description: `The session ID from ${names.exec}.`,
+					},
+					chars: { type: "string" },
+					yield_time_ms: { type: "integer", minimum: 250, maximum: 30000 },
+					max_output_bytes: { type: "integer", minimum: 1, maximum: 1048576 },
+					rows: {
+						type: "integer",
+						minimum: 1,
+						maximum: 1000,
+						description: "A new terminal size, with cols.",
+					},
+					cols: { type: "integer", minimum: 1, maximum: 1000 },
+				},
+				required: ["session", "chars"],
+			},
+			({ session, chars, yield_time_ms, max_output_bytes, rows, cols }) =>
+				Effect.gen(function* () {
+					const current = yield* work
+					const owner = { key: current.namespace, chat: current.chat }
+					const gone = () =>
+						new ToolFailure({
+							message: `There is no session ${session}. It ended, or it is not one of this Chat.`,
+						})
+					if (rows !== undefined && cols !== undefined)
+						yield* computers.work(
+							sessions
+								.resize(owner, session, { rows, cols })
+								.pipe(Effect.catchTag("SessionGone", () => Effect.void)),
+						)
+					return yield* sessions
+						.write(owner, session, {
+							chars,
+							...(yield_time_ms === undefined
+								? {}
+								: { yieldTimeMs: yield_time_ms }),
+							...(max_output_bytes === undefined
+								? {}
+								: { maxOutputBytes: max_output_bytes }),
+						})
+						.pipe(
+							Effect.catchTag("SessionGone", () => Effect.fail(gone())),
+							(effect) =>
+								Effect.catchIf(
+									effect,
+									(error): error is Exclude<typeof error, ToolFailure> =>
+										!(error instanceof ToolFailure),
+									(error) => computers.work(Effect.fail(error)),
+								),
+						)
+				}),
 		),
 		tool(
 			names.read,
@@ -762,58 +923,63 @@ export const make = Effect.gen(function* () {
 		),
 	]
 
-	const plugin = Plugin.make({ id: pluginId })<Tools>(() =>
-		Effect.succeed((next, options) =>
-			Stream.unwrap(
-				Effect.gen(function* () {
-					const current = yield* Effect.serviceOption(Work)
-					if (Option.isNone(current)) return next(options)
-					const own = Toolkit.make(...tools.map((entry) => entry.definition))
-					const handlers = yield* own.toHandlers(
-						Record.fromEntries(
-							tools.map((entry) => [entry.definition.name, entry.run] as const),
-						),
-					)
-					const mine = yield* computers
-						.heldBy(current.value.caller.organizationId, current.value.bot.id)
-						.pipe(Effect.orElseSucceed(() => []))
-					const instructions = Prompt.concat(
-						options.instructions,
-						Prompt.make([
-							{
-								role: "system",
-								content: [
-									`You can work on Computers: machines where you run commands, change files and use a desktop. Use ${names.list} to see them.`,
-									mine.length === 0
-										? "You may use no Computer yet."
-										: "Computers that you may use:\n" +
-											mine
-												.map(
-													(computer) =>
-														`- ${computer.id}: ${computer.name} (${computer.state})`,
-												)
-												.join("\n"),
-								].join("\n\n"),
-							},
-						]),
-					)
-					const incoming = options.transformPrompt
-					return next({
-						...options,
-						instructions,
-						transformPrompt: (prompt) =>
-							(incoming === undefined
-								? Effect.succeed(prompt)
-								: incoming(prompt)
-							).pipe(Effect.map(keepNewestImage)),
-						toolkit: Effect.map(options.toolkit, (incoming) =>
-							Toolkit.merge(incoming, own),
-						),
-					}).pipe(Stream.provideContext(handlers))
-				}),
+	const forOwner = (input: ForOwnerInput) => {
+		const tools = toolsFor(input)
+		return Plugin.make({ id: pluginId })<Tools>(() =>
+			Effect.succeed((next, options) =>
+				Stream.unwrap(
+					Effect.gen(function* () {
+						const current = yield* Effect.serviceOption(Work)
+						if (Option.isNone(current)) return next(options)
+						const own = Toolkit.make(...tools.map((entry) => entry.definition))
+						const handlers = yield* own.toHandlers(
+							Record.fromEntries(
+								tools.map(
+									(entry) => [entry.definition.name, entry.run] as const,
+								),
+							),
+						)
+						const mine = yield* computers
+							.heldBy(current.value.caller.organizationId, current.value.bot.id)
+							.pipe(Effect.orElseSucceed(() => []))
+						const instructions = Prompt.concat(
+							options.instructions,
+							Prompt.make([
+								{
+									role: "system",
+									content: [
+										`You can work on Computers: machines where you run commands, change files and use a desktop. Use ${names.list} to see them.`,
+										mine.length === 0
+											? "You may use no Computer yet."
+											: "Computers that you may use:\n" +
+												mine
+													.map(
+														(computer) =>
+															`- ${computer.id}: ${computer.name} (${computer.state})`,
+													)
+													.join("\n"),
+									].join("\n\n"),
+								},
+							]),
+						)
+						const incoming = options.transformPrompt
+						return next({
+							...options,
+							instructions,
+							transformPrompt: (prompt) =>
+								(incoming === undefined
+									? Effect.succeed(prompt)
+									: incoming(prompt)
+								).pipe(Effect.map(keepNewestImage)),
+							toolkit: Effect.map(options.toolkit, (incoming) =>
+								Toolkit.merge(incoming, own),
+							),
+						}).pipe(Stream.provideContext(handlers))
+					}),
+				),
 			),
-		),
-	)
-	return ComputerPlugin.of({ plugin })
+		)
+	}
+	return ComputerPlugin.of({ forOwner })
 })
 export const layer = Layer.effect(ComputerPlugin, make)

@@ -85,6 +85,19 @@ export const delegationTimeLimitOf = (document: {
 	readonly delegationTimeLimitMs?: number
 }): number => document.delegationTimeLimitMs ?? Api.delegationTimeLimitDefault
 
+/** The limits of the background tool calls of an organization. */
+export const operationsOf = (document: {
+	readonly toolForegroundBudgetMs?: number
+	readonly toolMaxDurationMs?: number
+	readonly maxBackgroundOperations?: number
+}) => ({
+	toolForegroundBudgetMs:
+		document.toolForegroundBudgetMs ?? Api.toolForegroundBudgetDefault,
+	toolMaxDurationMs: document.toolMaxDurationMs ?? Api.toolMaxDurationDefault,
+	maxBackgroundOperations:
+		document.maxBackgroundOperations ?? Api.maxBackgroundOperationsDefault,
+})
+
 export const OrganizationDocument = Schema.Struct({
 	rulesModel: Api.OrganizationSettings.fields.rulesModel,
 	botMemoryModel: Api.OrganizationSettings.fields.botMemoryModel,
@@ -93,6 +106,10 @@ export const OrganizationDocument = Schema.Struct({
 	/** Missing in documents from before delegation limits. Then it is one hour. */
 	delegationTimeLimitMs: Schema.optionalKey(Api.DelegationTimeLimit),
 	planApproval: PlanApproval.PlanApproval,
+	/** Missing in documents from before background tool calls. Then the defaults apply. */
+	toolForegroundBudgetMs: Schema.optionalKey(Api.ToolForegroundBudget),
+	toolMaxDurationMs: Schema.optionalKey(Api.ToolMaxDuration),
+	maxBackgroundOperations: Schema.optionalKey(Api.MaxBackgroundOperations),
 	appReadRules: Api.AppReadRules,
 	defaultRoles: Api.DefaultRoles,
 	joinByDomain: Schema.Boolean,

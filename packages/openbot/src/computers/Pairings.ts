@@ -11,7 +11,6 @@ import type { Services as AuthorizationServices } from "../authorization/Check.t
 import * as Db from "../database/Database.ts"
 import { computerPairings } from "../database/Schema.ts"
 import { Secrets } from "../secrets/Secrets.ts"
-import { unavailable } from "./ComputerProviders.ts"
 import { Computers, type Failure } from "./Computers.ts"
 
 /** A pairing code works this long. */
@@ -39,8 +38,6 @@ export const normalize = (code: string) =>
 	code.toUpperCase().replaceAll(/[^A-Z0-9]/g, "")
 
 const binding = (id: string) => `openbot_computer_pairings:${id}:token`
-
-const invalidPairing = () => ComputersApi.PairingInvalid.make({})
 
 /**
  * Pairings of the machines of people. A machine starts one without a key. A person
@@ -93,7 +90,9 @@ export const make = Effect.gen(function* () {
 	const secrets = yield* Secrets
 	const computers = yield* Computers
 	const stored = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-		effect.pipe(Effect.mapError(unavailable))
+		effect.pipe(
+			Effect.mapError(() => ComputersApi.ComputersUnavailable.make({})),
+		)
 	/** A pairing that still waits for a person. */
 	const waiting = (code: string) =>
 		Effect.gen(function* () {
@@ -105,7 +104,7 @@ export const make = Effect.gen(function* () {
 					.where(eq(computerPairings.codeHash, sha(normalize(code)))),
 			))[0]
 			if (row === undefined || row.status !== "waiting" || row.expiresAt <= now)
-				return yield* invalidPairing()
+				return yield* ComputersApi.PairingInvalid.make({})
 			return row
 		})
 	return Pairings.of({
@@ -119,7 +118,8 @@ export const make = Effect.gen(function* () {
 						.where(gt(computerPairings.expiresAt, now)),
 				)
 				// Starting needs no key, so a limit keeps the table small.
-				if ((open[0]?.value ?? 0) >= openLimit) return yield* unavailable()
+				if ((open[0]?.value ?? 0) >= openLimit)
+					return yield* ComputersApi.ComputersUnavailable.make({})
 				const id = "cpa_" + randomBytes(16).toString("hex")
 				const code = newCode()
 				const secret = "ocp_" + randomBytes(32).toString("base64url")
@@ -134,7 +134,7 @@ export const make = Effect.gen(function* () {
 						os: input.os,
 						arch: input.arch,
 						desktop: input.desktop,
-						version: input.version,
+						version: String(input.version),
 						status: "waiting",
 						expiresAt,
 						createdAt: now,
@@ -154,10 +154,12 @@ export const make = Effect.gen(function* () {
 				const row = (yield* stored(
 					db.select().from(computerPairings).where(eq(computerPairings.id, id)),
 				))[0]
-				if (row === undefined) return yield* invalidPairing()
+				if (row === undefined)
+					return yield* ComputersApi.PairingInvalid.make({})
 				const expected = Buffer.from(row.secretHash, "hex")
 				const given = Buffer.from(sha(secret), "hex")
-				if (!timingSafeEqual(expected, given)) return yield* invalidPairing()
+				if (!timingSafeEqual(expected, given))
+					return yield* ComputersApi.PairingInvalid.make({})
 				if (row.status === "waiting" && row.expiresAt > now)
 					return { _tag: "Pending" } as const
 				if (
@@ -165,7 +167,7 @@ export const make = Effect.gen(function* () {
 					row.token === null ||
 					row.computerId === null
 				)
-					return yield* invalidPairing()
+					return yield* ComputersApi.PairingInvalid.make({})
 				const token = yield* stored(secrets.open(row.token, binding(id)))
 				// The token goes out only once.
 				yield* stored(

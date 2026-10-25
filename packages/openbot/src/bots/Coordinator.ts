@@ -1,4 +1,4 @@
-import { Chat, Turn } from "@openbot-build/core"
+import { Chat, Operations, Turn } from "@openbot-build/core"
 import { type BotsApi, DelegationsApi, type Identity } from "@openbot-build/api"
 import {
 	Cause,
@@ -33,6 +33,7 @@ import {
 } from "../capabilities/Requests.ts"
 import * as ChatHost from "../chats/ChatHost.ts"
 import * as StoredChats from "../chats/StoredChats.ts"
+import * as StoredOperations from "../operations/StoredOperations.ts"
 import type * as Chats from "../chats/Chats.ts"
 import * as Db from "../database/Database.ts"
 import { homeOf } from "./BotMemories.ts"
@@ -70,9 +71,6 @@ const memberOf = (chain: ChatHost.Chain): Member => ({
 	organizationId: chain.organizationId,
 	userId: ChatHost.ownerOf(chain),
 })
-
-const terminal = (status: Turn.Status["_tag"]) =>
-	status === "Completed" || status === "Failed" || status === "Interrupted"
 
 /** A running Turn that has not said for this long that it runs belongs to a stopped server. */
 const staleAfter = Duration.minutes(2)
@@ -510,7 +508,7 @@ export const layer = Layer.effect(
 
 		/** Gives the end of a program to its Chat as a message. */
 		const finishCode = (member: Member, run: CodeRun, author: Turn.Author) =>
-			notify(member, run.chat as Chat.Id, {
+			notify(member, run.chat, {
 				text: notice(
 					`The program of the call ${run.callId} ended.`,
 					"Result:\n" + JSON.stringify(toolResult(run)),
@@ -561,7 +559,7 @@ export const layer = Layer.effect(
 						return
 					const position = {
 						owner: ownerOfRun,
-						chat: run.chat as Chat.Id,
+						chat: run.chat,
 						turn: run.turn,
 					}
 					const callId = run.callId + ":" + waiting.index
@@ -594,12 +592,7 @@ export const layer = Layer.effect(
 						}
 					}
 				}
-				const work = yield* workOf(
-					member,
-					run.chat as Chat.Id,
-					run.turn,
-					author,
-				)
+				const work = yield* workOf(member, run.chat, run.turn, author)
 				if (Option.isNone(work)) return
 				const resumed = yield* codeRuns.value
 					.resume({
@@ -786,7 +779,12 @@ export const layer = Layer.effect(
 
 		const onTurn = (signal: Extract<Signal, { _tag: "TurnChanged" }>) =>
 			Effect.gen(function* () {
-				if (!terminal(signal.status)) return
+				if (
+					signal.status !== "Completed" &&
+					signal.status !== "Failed" &&
+					signal.status !== "Interrupted"
+				)
+					return
 				const member = {
 					organizationId: signal.organizationId,
 					userId: signal.userId,
@@ -1338,6 +1336,42 @@ export const layer = Layer.effect(
 		)
 
 		/**
+		 * Ends the background tool calls of servers that stopped, and tells their Chats.
+		 * Only one server ends each call, so each Chat gets one notice.
+		 */
+		const sweepOperations = (before: number) =>
+			StoredOperations.stale(db, before).pipe(
+				Effect.flatMap((found) =>
+					Effect.forEach(found, (entry) =>
+						Effect.gen(function* () {
+							const ended = yield* StoredOperations.interrupt(db, entry)
+							if (ended === undefined) return
+							const ref = yield* StoredChats.ref(
+								db,
+								entry.namespace,
+								ended.chat,
+							)
+							if (ref === undefined) return
+							const member = memberOf(ChatHost.hostState(ref).chain)
+							const chats = yield* backend.get(entry.namespace, owner(member))
+							yield* chats.deliver(ended.chat, {
+								input: Operations.noticeText(ended),
+								author: ChatHost.chainAuthor(ChatHost.hostState(ref).chain),
+								notice: { kind: "operation", ref: ended.id },
+							})
+						}).pipe(
+							Effect.catchCause((cause) =>
+								Effect.logDebug("An Operation could not be swept", cause),
+							),
+						),
+					),
+				),
+				Effect.catchCause((cause) =>
+					Effect.logWarning("The Operations could not be swept", cause),
+				),
+			)
+
+		/**
 		 * Starts the next Turn of Chats whose input waits while no Turn runs, and ends
 		 * running Turns of servers that stopped. This covers signals that got lost and
 		 * work on other servers.
@@ -1362,6 +1396,7 @@ export const layer = Layer.effect(
 					),
 				),
 			)
+			yield* sweepOperations(now - Duration.toMillis(staleAfter))
 		}).pipe(
 			Effect.catchCause((cause) =>
 				Effect.logWarning("The Chats could not be swept", cause),
@@ -1427,7 +1462,7 @@ export const layer = Layer.effect(
 											}
 											const list = yield* requests.forChat(
 												run.organizationId,
-												run.chat as Chat.Id,
+												run.chat,
 											)
 											yield* settleCode(member, run, run.userId, list)
 										}),

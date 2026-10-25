@@ -8,6 +8,7 @@ import {
 	Config,
 	ConfigurationOperations,
 	Item,
+	Operations,
 	Plugin,
 	PluginComposition,
 	Store,
@@ -50,7 +51,12 @@ import {
 } from "@openbot-build/api"
 import type { PgClient } from "@effect/sql-pg"
 import * as StoredChats from "./StoredChats.ts"
+import * as StoredOperations from "../operations/StoredOperations.ts"
+import * as OperationsPlugin from "../plugins/operations/OperationsPlugin.ts"
+import { Settings } from "../settings/Settings.ts"
+import { operationsOf } from "../settings/Documents.ts"
 import { withAttribution } from "../billing/MeteredModel.ts"
+import { LiveSessions } from "./live/LiveSessions.ts"
 import { Files } from "../files/Files.ts"
 import { withFiles } from "../files/ModelFiles.ts"
 import {
@@ -59,6 +65,7 @@ import {
 	type Instance,
 	type ExecutionServices,
 	type ServiceError,
+	type CreateInput,
 } from "./Chats.ts"
 import { publicError, inputPrompt, response } from "./ResponseMapping.ts"
 import * as ChatEvents from "./ChatEvents.ts"
@@ -76,20 +83,9 @@ import { Signal, publish } from "../bots/Signals.ts"
 import * as Db from "../database/Database.ts"
 import { type Methods, methodsOf, withMethods } from "../models/ModelMethods.ts"
 
-/** New Chats get IDs like the other resources of OpenBot. */
-const newId = () => Chat.Id.make("chat_" + randomUUID().replaceAll("-", ""))
 /** How often a server says that its running Turns still run. */
 const heartbeatEvery = Duration.seconds(30)
 
-/** The parts of a model that a router passes on. */
-const unavailable = (method: string) =>
-	AiError.make({
-		module: "OpenBot",
-		method,
-		reason: AiError.UnknownError.make({
-			description: "No model is available for this Chat.",
-		}),
-	})
 /**
  * A model that finds the real model at the time of each call. A Turn that starts by
  * itself, after another Turn ends, then uses the model of its own settings.
@@ -100,7 +96,15 @@ const route = (
 ): LanguageModel.LanguageModel => {
 	const plain = (method: string) =>
 		select.pipe(
-			Effect.mapError(() => unavailable(method)),
+			Effect.mapError(() =>
+				AiError.make({
+					module: "OpenBot",
+					method,
+					reason: AiError.UnknownError.make({
+						description: "No model is available for this Chat.",
+					}),
+				}),
+			),
 			Effect.map(methodsOf),
 		)
 	const methods: Methods = {
@@ -144,6 +148,7 @@ export const make = <
 		const workPlugin = yield* Effect.serviceOption(WorkPlugin)
 		const channelPlugin = yield* Effect.serviceOption(ChannelPlugin)
 		const computerPlugin = yield* Effect.serviceOption(ComputerPlugin)
+		const liveSessions = yield* Effect.serviceOption(LiveSessions)
 		const files = yield* Effect.serviceOption(Files)
 		const openWork = Option.getOrUndefined(
 			yield* Effect.serviceOption(OpenWork),
@@ -187,8 +192,23 @@ export const make = <
 					...(chain?.tokenId === undefined ? {} : { tokenId: chain.tokenId }),
 				}
 			})
-		/** The model of a Chat: the model of its Turn, or of the Chat. */
+		const isLive = (chat: Chat.Ref) => ChatHost.hostState(chat).kind === "live"
+		/**
+		 * The model of a Chat. A live Chat uses the Live session of this process, and
+		 * nothing else. Other Chats use the model of their Turn, or of the Chat.
+		 */
 		const modelFor = (chat: Chat.Ref, turn?: Turn.Record) =>
+			isLive(chat)
+				? Effect.gen(function* () {
+						const found = Option.isNone(liveSessions)
+							? Option.none()
+							: yield* liveSessions.value.find(chat.id)
+						if (Option.isNone(found))
+							return yield* ChatExecutionUnavailable.make({ chat: chat.id })
+						return withAttribution(found.value, attribution(chat.id))
+					})
+				: chatModelFor(chat, turn)
+		const chatModelFor = (chat: Chat.Ref, turn?: Turn.Record) =>
 			options.resolveModel === undefined
 				? Effect.fromOption(fallback).pipe(
 						Effect.mapError(() =>
@@ -365,8 +385,30 @@ export const make = <
 		// The work, Channel and Computer plugins run inside the Bot plugin, so they see the current Bot.
 		// The plugins add tools at run time with JSON Schema parameters. TypeScript cannot see
 		// that their merged tool types fit the type of the plugin they join.
+		const settingsService = yield* Effect.serviceOption(Settings)
+		const owner = options.owner
+		const operations = yield* Operations.make({
+			store: yield* StoredOperations.make(namespace),
+			settings: () =>
+				owner === undefined || Option.isNone(settingsService)
+					? Effect.succeed(Operations.defaultSettings)
+					: settingsService.value.organization(owner.organizationId).pipe(
+							Effect.map((snapshot) => {
+								const limits = operationsOf(snapshot.document)
+								return {
+									budget: Duration.millis(limits.toolForegroundBudgetMs),
+									maxDuration: Duration.millis(limits.toolMaxDurationMs),
+									limit: limits.maxBackgroundOperations,
+								}
+							}),
+							Effect.orElseSucceed(() => Operations.defaultSettings),
+						),
+		})
 		const withInner = (bot: ReturnType<typeof botPluginFor>) => {
-			let inner = bot
+			let inner = PluginComposition.merge(
+				bot,
+				OperationsPlugin.make(operations),
+			) as unknown as typeof bot
 			if (Option.isSome(workPlugin))
 				inner = PluginComposition.merge(
 					inner,
@@ -380,7 +422,24 @@ export const make = <
 			if (Option.isSome(computerPlugin))
 				inner = PluginComposition.merge(
 					inner,
-					computerPlugin.value.plugin,
+					computerPlugin.value.forOwner({
+						notify: (chat, notice) =>
+							Effect.suspend(() =>
+								deliver(chat, {
+									input: notice.text,
+									author: notice.author,
+									notice: { kind: "computer_session", ref: notice.ref },
+								}),
+							).pipe(
+								Effect.catchCause((cause) =>
+									Effect.logWarning(
+										"The end of a command session could not reach its Chat",
+										cause,
+									),
+								),
+								Effect.asVoid,
+							),
+					}),
 				) as unknown as typeof inner
 			return inner
 		}
@@ -395,6 +454,14 @@ export const make = <
 			options.modelCatalog ?? Effect.succeed({ providers: [], models: [] })
 		const runtime = yield* ChatRuntime.make({
 			store,
+			// Only the process with the Live session of a live Chat runs its Turns.
+			// Input from other places waits in the inbox until that process takes it.
+			canStart: (view) =>
+				!isLive(view.chat)
+					? Effect.succeed(true)
+					: Option.isNone(liveSessions)
+						? Effect.succeed(false)
+						: liveSessions.value.has(view.chat.id),
 			bot: {
 				...options.runtime,
 				plugin: host,
@@ -407,7 +474,7 @@ export const make = <
 					),
 				compaction: options.runtime?.compaction ?? Compaction.service,
 			},
-		})
+		}).pipe(Effect.provideService(Operations.Operations, operations))
 		const read = (id: Chat.Id) =>
 			store.read(id).pipe(Effect.mapError(publicError))
 		const info = (ref: Chat.Ref): ChatInfo => {
@@ -494,9 +561,60 @@ export const make = <
 					? selection
 					: yield* options.modelDefaults(selection)
 			})
+		const liveCatalog =
+			options.liveCatalog ?? Effect.succeed({ providers: [], models: [] })
+		/** A live Chat can use only a Live model, and other Chats never can. */
+		const validateLive = (selection: Config.Selection) =>
+			Effect.gen(function* () {
+				const problem = ConfigurationOperations.selectionProblem(
+					yield* liveCatalog,
+					selection,
+				)
+				if (Option.isSome(problem))
+					return yield* ChatModelInvalid.make(problem.value)
+				return selection
+			})
+		/** The model of a new live Chat: the one asked for, or the first Live model. */
+		const liveModel = (selection: Config.Selection | undefined) =>
+			Effect.gen(function* () {
+				if (selection !== undefined) return yield* validateLive(selection)
+				const first = (yield* liveCatalog).models[0]
+				if (first === undefined)
+					return yield* ChatModelInvalid.make({
+						reason: "missing",
+						message: "The organization has no Live model.",
+					})
+				return Config.Selection.make({
+					provider: first.provider,
+					model: first.id,
+				})
+			})
+		const stateOf = (input: CreateInput): ChatHost.ChatHostState => ({
+			bot: input.bot.id,
+			kind: input.kind,
+			chain: input.chain,
+			...(input.parent === undefined ? {} : { parent: input.parent }),
+			...(input.review === undefined ? {} : { review: input.review }),
+			...(input.planApproval === undefined
+				? {}
+				: { planApproval: input.planApproval }),
+			...(input.trigger === undefined ? {} : { trigger: input.trigger }),
+			...(input.channel === undefined ? {} : { channel: input.channel }),
+			...(input.title === undefined ? {} : { title: input.title }),
+		})
 		const create: typeof Chats.Service.create = (input) =>
 			Effect.gen(function* () {
 				const defaults = yield* options.defaults ?? Effect.succeed({})
+				if (input.kind === "live")
+					return yield* store
+						.create({
+							id:
+								input.id ??
+								Chat.Id.make("chat_" + randomUUID().replaceAll("-", "")),
+							settings: { ...defaults, model: yield* liveModel(input.model) },
+							business: { [chatHostId]: stateOf(input) },
+						})
+						.pipe(Effect.mapError(publicError), Effect.flatMap(project))
 				// A linked Bot comes from another organization. This organization may not
 				// have its model, and then the Chat uses the defaults of the host.
 				const botModel =
@@ -522,22 +640,12 @@ export const make = <
 					settings.model === undefined
 						? undefined
 						: yield* validateSelection(settings.model)
-				const state: ChatHost.ChatHostState = {
-					bot: input.bot.id,
-					kind: input.kind,
-					chain: input.chain,
-					...(input.parent === undefined ? {} : { parent: input.parent }),
-					...(input.review === undefined ? {} : { review: input.review }),
-					...(input.planApproval === undefined
-						? {}
-						: { planApproval: input.planApproval }),
-					...(input.trigger === undefined ? {} : { trigger: input.trigger }),
-					...(input.channel === undefined ? {} : { channel: input.channel }),
-					...(input.title === undefined ? {} : { title: input.title }),
-				}
+				const state = stateOf(input)
 				return yield* store
 					.create({
-						id: input.id ?? newId(),
+						id:
+							input.id ??
+							Chat.Id.make("chat_" + randomUUID().replaceAll("-", "")),
 						settings: {
 							...settings,
 							...(model === undefined ? {} : { model }),
@@ -571,17 +679,26 @@ export const make = <
 				kinds:
 					input?.kind !== undefined
 						? [input.kind]
-						: (input?.kinds ?? ["direct", "channel"]),
+						: (input?.kinds ?? ["direct", "channel", "live"]),
 			}).pipe(
 				Effect.mapError(publicError),
 				Effect.flatMap((refs) => Effect.forEach(refs, summary)),
 			)
 		const update: typeof Chats.Service.update = (id, input) =>
 			Effect.gen(function* () {
+				const live = isLive((yield* read(id)).chat)
+				// A live Chat always has a Live model. It cannot follow its Bot.
+				if (live && input.model === null)
+					return yield* ChatModelInvalid.make({
+						reason: "missing",
+						message: "A live Chat needs a Live model.",
+					})
 				const model =
 					input.model === undefined || input.model === null
 						? input.model
-						: yield* validateSelection(input.model)
+						: live
+							? yield* validateLive(input.model)
+							: yield* validateSelection(input.model)
 				const { view } = yield* store
 					.modifyEffect({
 						chat: id,
@@ -675,8 +792,10 @@ export const make = <
 			Effect.gen(function* () {
 				const view = yield* read(id)
 				// A person learns at once when no model can run the work of this Chat.
-				// A message from OpenBot waits in the Chat all the same.
-				if (input.notice === undefined) yield* modelFor(view.chat)
+				// A message from OpenBot waits in the Chat all the same. Input to a live
+				// Chat waits for its Live session, so it needs no model now.
+				if (input.notice === undefined && !isLive(view.chat))
+					yield* modelFor(view.chat)
 				const delivery = yield* runtime
 					.deliver({
 						chat: id,
@@ -1074,13 +1193,14 @@ export const make = <
 				remove: (id) =>
 					Effect.gen(function* () {
 						yield* interrupt(id)
+						yield* operations.cancelChat(id)
 						const view = yield* read(id)
 						yield* store.remove(view.chat).pipe(Effect.mapError(publicError))
 					}),
 				models: (id) =>
 					Effect.gen(function* () {
 						const view = yield* read(id),
-							available = yield* catalog
+							available = yield* isLive(view.chat) ? liveCatalog : catalog
 						return {
 							...available,
 							...(view.chat.settings.model === undefined
@@ -1119,6 +1239,7 @@ export const make = <
 				deliverStream,
 				drain,
 				closeStale,
+				operations,
 				startAction,
 				turns,
 				turn,

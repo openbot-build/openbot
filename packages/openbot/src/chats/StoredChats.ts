@@ -1,4 +1,4 @@
-import { Chat, type ChatStore } from "@openbot-build/core"
+import { Chat, ChatStore } from "@openbot-build/core"
 import { Array, Clock, Effect, Option, Schema } from "effect"
 import {
 	and,
@@ -16,7 +16,7 @@ import { chats, chatItems, chatTurns, fileRefs } from "../database/Schema.ts"
 import { fileIdsIn } from "../files/Refs.ts"
 import * as Db from "../database/Database.ts"
 import { chatHostId } from "./ChatHost.ts"
-import { conflict, databaseError, decode } from "./ChatEncoding.ts"
+import { databaseError, decode } from "./ChatEncoding.ts"
 
 /** The Chats of each namespace, kept in Postgres. */
 type Database = Db.Database
@@ -41,7 +41,11 @@ const columnsOf = (ref: Schema.Json) =>
 	Effect.gen(function* () {
 		const record = yield* decode(Columns)(ref)
 		const host = record.business[chatHostId]
-		if (host === undefined) return yield* conflict()
+		if (host === undefined)
+			return yield* new ChatStore.ChatStoreError({
+				reason: "reference-conflict",
+				message: "The Chat revision is out of date",
+			})
 		return {
 			bot: host.bot,
 			kind: host.kind,
@@ -219,7 +223,11 @@ export const save = (
 									),
 								)
 								.returning({ id: chats.id })
-				if (written.length !== 1) return yield* conflict()
+				if (written.length !== 1)
+					return yield* new ChatStore.ChatStoreError({
+						reason: "reference-conflict",
+						message: "The Chat revision is out of date",
+					})
 				const items = delta.items.map((item) => ({
 					namespace,
 					chat: delta.chat,
@@ -412,5 +420,23 @@ export const running = (
 		.where(and(eq(chats.namespace, namespace), eq(chats.status, "Running")))
 		.pipe(
 			Effect.map((rows) => rows.map((row) => Chat.Id.make(row.id))),
+			Effect.mapError(databaseError),
+		)
+
+/** The record of one Chat, or nothing when it is gone. */
+export const ref = (
+	db: Database,
+	namespace: string,
+	id: Chat.Id,
+): Effect.Effect<Chat.Ref | undefined, ChatStore.ChatStoreError> =>
+	db
+		.select({ body: chats.body })
+		.from(chats)
+		.where(and(eq(chats.namespace, namespace), eq(chats.id, id)))
+		.pipe(
+			Effect.flatMap((rows) =>
+				Effect.forEach(rows.slice(0, 1), (row) => decodeRef(row.body)),
+			),
+			Effect.map((refs) => refs[0]),
 			Effect.mapError(databaseError),
 		)

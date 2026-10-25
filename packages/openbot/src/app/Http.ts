@@ -11,6 +11,8 @@ import * as IndexHandlers from "../apps/IndexHttpHandlers.ts"
 import * as AppAuthorizationHandlers from "../apps/AuthorizationHttpHandlers.ts"
 import * as ConnectionHandlers from "../apps/ConnectionHttpHandlers.ts"
 import * as ChatHandlers from "../chats/ChatHandlers.ts"
+import * as OperationHandlers from "../operations/HttpHandlers.ts"
+import * as LiveHandlers from "../chats/live/LiveHandlers.ts"
 import * as DelegationHandlers from "../bots/DelegationHandlers.ts"
 import * as BotHandlers from "../bots/HttpHandlers.ts"
 import * as RequestHandlers from "../capabilities/HttpHandlers.ts"
@@ -47,6 +49,8 @@ export const layerPlatform = (publicOrigin: string) =>
 					AppAuthorizationHandlers.layer(publicOrigin),
 					ConnectionHandlers.layer,
 					ChatHandlers.layerPlatform,
+					OperationHandlers.layer,
+					LiveHandlers.layer,
 					DelegationHandlers.layerPlatform,
 					BotHandlers.layer(publicOrigin),
 					BotHandlers.layerInvitations,

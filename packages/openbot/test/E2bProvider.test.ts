@@ -1,11 +1,11 @@
 import { assert, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Stream } from "effect"
 import {
 	HttpClient,
 	type HttpClientRequest,
 	HttpClientResponse,
 } from "effect/http"
-import type { Machine, Provider } from "../src/computers/Computer.ts"
+import type { Machine, Process, Provider } from "../src/computers/Computer.ts"
 import * as E2bProvider from "../src/computers/e2b/E2bProvider.ts"
 import { envelope } from "../src/computers/e2b/Envd.ts"
 
@@ -143,108 +143,153 @@ it.effect(
 		}),
 )
 
+/** All the output of a process as text, and how it ended. */
+const collect = (process: Process) =>
+	Effect.gen(function* () {
+		const chunks = yield* Stream.runCollect(process.output)
+		return {
+			output: chunks.map((chunk) => new TextDecoder().decode(chunk)).join(""),
+			exit: yield* process.exit,
+		}
+	})
+
 it.effect(
-	"E2B runs a command over the envd stream and keeps stdout, stderr and the exit code",
+	"E2B starts a command over the envd stream and gives its output and exit code",
 	() =>
+		Effect.scoped(
+			Effect.gen(function* () {
+				const { machine, log } = yield* attach(() =>
+					processStream([
+						{ start: { pid: 7 } },
+						{ data: { stdout: base64("hello\n") } },
+						{ data: { stderr: base64("warn\n") } },
+						{ keepalive: {} },
+						{ end: { exitCode: 3, exited: true, status: "exit status 3" } },
+					]),
+				)
+				const process = yield* machine.shell.start({
+					command: "echo hello",
+					cwd: "/tmp",
+					env: { A: "1" },
+					tty: false,
+				})
+				const result = yield* collect(process)
+				assert.strictEqual(result.output, "hello\nwarn\n")
+				assert.deepStrictEqual(result.exit, { code: 3, signal: null })
+				const start = log.find(
+					(seen) => seen.url.pathname === "/process.Process/Start",
+				)
+				assert.strictEqual(start?.url.host, "49983-sbx1.e2b.test")
+				assert.strictEqual(start?.headers["x-access-token"], "envd-token")
+				assert.strictEqual(start?.headers["x-api-key"], undefined)
+				assert.strictEqual(
+					start?.headers["content-type"],
+					"application/connect+json",
+				)
+				const sent = start?.body as Uint8Array
+				assert.deepStrictEqual(
+					JSON.parse(new TextDecoder().decode(sent.subarray(5))),
+					{
+						process: {
+							cmd: "/bin/bash",
+							args: ["-l", "-c", "echo hello"],
+							envs: { A: "1" },
+							cwd: "/tmp",
+						},
+						stdin: true,
+					},
+				)
+			}),
+		),
+)
+
+it.effect("E2B gives a terminal, and a signal stops the command", () =>
+	Effect.scoped(
 		Effect.gen(function* () {
-			const { machine, log } = yield* attach(() =>
-				processStream([
-					{ start: { pid: 7 } },
-					{ data: { stdout: base64("hello\n") } },
-					{ data: { stderr: base64("warn\n") } },
-					{ keepalive: {} },
-					{ end: { exitCode: 3, exited: true, status: "exit status 3" } },
-				]),
+			const { machine, log } = yield* attach((seen) =>
+				seen.url.pathname === "/process.Process/Start"
+					? processStream([
+							{ start: { pid: 9 } },
+							{ data: { pty: base64(">>> ") } },
+							{ end: { exitCode: -1, exited: true, status: "signal: killed" } },
+						])
+					: json({}),
 			)
-			const result = yield* machine.shell.run({
-				command: "echo hello",
-				cwd: "/tmp",
-				env: { A: "1" },
+			const process = yield* machine.shell.start({
+				command: "python3",
+				tty: true,
+				rows: 40,
+				cols: 120,
 			})
-			assert.strictEqual(result.exitCode, 3)
-			assert.strictEqual(result.stdout, "hello\n")
-			assert.strictEqual(result.stderr, "warn\n")
-			assert.strictEqual(result.truncated, false)
+			yield* process.write(new TextEncoder().encode("1+1\n"))
+			yield* process.resize(50, 100)
+			const result = yield* collect(process)
+			assert.strictEqual(result.output, ">>> ")
+			assert.deepStrictEqual(result.exit, { code: null, signal: "SIGKILL" })
 			const start = log.find(
 				(seen) => seen.url.pathname === "/process.Process/Start",
 			)
-			assert.strictEqual(start?.url.host, "49983-sbx1.e2b.test")
-			assert.strictEqual(start?.headers["x-access-token"], "envd-token")
-			assert.strictEqual(start?.headers["x-api-key"], undefined)
-			assert.strictEqual(
-				start?.headers["content-type"],
-				"application/connect+json",
+			const body = JSON.parse(
+				new TextDecoder().decode((start?.body as Uint8Array).subarray(5)),
+			) as { pty?: unknown }
+			assert.deepStrictEqual(body.pty, { size: { rows: 40, cols: 120 } })
+			const input = log.find(
+				(seen) => seen.url.pathname === "/process.Process/SendInput",
 			)
-			const sent = start?.body as Uint8Array
-			assert.deepStrictEqual(
-				JSON.parse(new TextDecoder().decode(sent.subarray(5))),
-				{
-					process: {
-						cmd: "/bin/bash",
-						args: ["-l", "-c", "echo hello"],
-						envs: { A: "1" },
-						cwd: "/tmp",
+			assert.deepStrictEqual(input?.body, {
+				process: { pid: 9 },
+				input: { pty: base64("1+1\n") },
+			})
+			const update = log.find(
+				(seen) => seen.url.pathname === "/process.Process/Update",
+			)
+			assert.deepStrictEqual(update?.body, {
+				process: { pid: 9 },
+				pty: { size: { rows: 50, cols: 100 } },
+			})
+		}),
+	),
+)
+
+it.live("E2B kills a command when its Scope closes before it ends", () =>
+	Effect.gen(function* () {
+		const { machine, log } = yield* attach((seen) => {
+			if (seen.url.pathname !== "/process.Process/Start") return json({})
+			const parts = [
+				envelope({ event: { start: { pid: 42 } } }),
+				envelope({ event: { data: { stdout: base64("partial") } } }),
+			]
+			return new Response(
+				new ReadableStream({
+					start(controller) {
+						for (const part of parts) controller.enqueue(part)
 					},
-					stdin: false,
-				},
+				}),
 			)
-		}),
-)
-
-it.effect(
-	"E2B keeps only the end of long output, and a missing exit code is 0",
-	() =>
-		Effect.gen(function* () {
-			const first = "a".repeat(80_000)
-			const second = "b".repeat(70_000)
-			const { machine } = yield* attach(() =>
-				processStream([
-					{ start: { pid: 7 } },
-					{ data: { stdout: base64(first) } },
-					{ data: { stdout: base64(second) } },
-					{ end: { exited: true } },
-				]),
-			)
-			const result = yield* machine.shell.run({ command: "big" })
-			assert.strictEqual(result.exitCode, 0)
-			assert.strictEqual(result.truncated, true)
-			assert.strictEqual(result.stdout.length, 100_000)
-			assert.ok(result.stdout.endsWith(second))
-		}),
-)
-
-it.live(
-	"E2B stops a command at its timeout, kills it and gives back the output so far",
-	() =>
-		Effect.gen(function* () {
-			const { machine, log } = yield* attach((seen) => {
-				if (seen.url.pathname === "/process.Process/SendSignal") return json({})
-				const parts = [
-					envelope({ event: { start: { pid: 42 } } }),
-					envelope({ event: { data: { stdout: base64("partial") } } }),
-				]
-				return new Response(
-					new ReadableStream({
-						start(controller) {
-							for (const part of parts) controller.enqueue(part)
-						},
-					}),
-				)
-			})
-			const result = yield* machine.shell.run({
-				command: "sleep 100",
-				timeout: 1,
-			})
-			assert.strictEqual(result.exitCode, null)
-			assert.strictEqual(result.stdout, "partial")
-			const kill = log.find(
-				(seen) => seen.url.pathname === "/process.Process/SendSignal",
-			)
-			assert.deepStrictEqual(kill?.body, {
-				process: { pid: 42 },
-				signal: "SIGNAL_SIGKILL",
-			})
-		}),
+		})
+		yield* Effect.scoped(
+			Effect.gen(function* () {
+				const process = yield* machine.shell.start({
+					command: "sleep 100",
+					tty: false,
+				})
+				// Ctrl-D closes stdin when there is no terminal.
+				yield* process.write(new Uint8Array([0x04]))
+				yield* Effect.sleep("100 millis")
+			}),
+		)
+		const close = log.find(
+			(seen) => seen.url.pathname === "/process.Process/CloseStdin",
+		)
+		assert.deepStrictEqual(close?.body, { process: { pid: 42 } })
+		const kill = log.find(
+			(seen) => seen.url.pathname === "/process.Process/SendSignal",
+		)
+		assert.deepStrictEqual(kill?.body, {
+			process: { pid: 42 },
+			signal: "SIGNAL_SIGKILL",
+		})
+	}),
 )
 
 it.effect("E2B reads, writes, lists and removes files through envd", () =>

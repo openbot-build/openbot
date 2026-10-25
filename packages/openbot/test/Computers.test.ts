@@ -2,7 +2,8 @@ import { assert, it } from "@effect/vitest"
 import { ChatView, ComputersApi, RequestsApi } from "@openbot-build/api"
 import { Effect, Layer, Redacted, Schema, Stream } from "effect"
 import { LanguageModel, Prompt, Response } from "effect/ai"
-import { Machine, Provider } from "../src/computers/Computer.ts"
+import { Machine, type Process, Provider } from "../src/computers/Computer.ts"
+import * as ProcessSink from "../src/computers/Process.ts"
 import { Drivers } from "../src/computers/Drivers.ts"
 import {
 	keepNewestImage,
@@ -25,16 +26,32 @@ const fakeProvider = () => {
 	const machine = (ref: string) =>
 		new Machine({
 			shell: {
-				run: (request) =>
-					Effect.sync(() => {
+				start: (request) =>
+					Effect.gen(function* () {
 						log.push("run " + ref + " " + request.command)
-						return {
-							exitCode: 0,
-							stdout: "ran: " + request.command,
-							stderr: "",
-							truncated: false,
-							durationMs: 1,
+						const sink = yield* ProcessSink.make
+						const process: Process = {
+							output: sink.output,
+							exit: sink.exit,
+							// `cat` gives back its input until Ctrl-D, like the real one.
+							write: (data) =>
+								data.includes(4)
+									? sink
+											.push(data.filter((byte) => byte !== 4))
+											.pipe(Effect.andThen(sink.end({ code: 0, signal: null })))
+									: sink.push(data),
+							resize: () => Effect.void,
+							signal: (signal) => sink.end({ code: null, signal }),
 						}
+						if (request.command !== "cat") {
+							yield* sink.push(
+								new TextEncoder().encode(
+									(request.tty ? "tty " : "") + "ran: " + request.command,
+								),
+							)
+							yield* sink.end({ code: 0, signal: null })
+						}
+						return process
 					}),
 				read: (path, encoding) =>
 					Effect.succeed({ path, encoding, content: files.get(path) ?? "" }),
@@ -157,7 +174,7 @@ const model = Effect.runSync(
 				if (result !== undefined)
 					return answer("Result: " + JSON.stringify(result.content))
 				if (verb === "run")
-					return call(names.run, { computer: id, command: "echo hi" })
+					return call(names.exec, { computer: id, command: "echo hi" })
 				if (verb === "get")
 					return call(names.acquire, { computer: id, reason: "I need it." })
 				if (verb === "make")
@@ -280,10 +297,77 @@ it(
 			assert.strictEqual((await send(bob.session, path)).status, 404)
 
 			const ran = await json(
-				ComputersApi.CommandResult,
-				send(alice.session, path + "/commands", "POST", { command: "ls" }),
+				ComputersApi.SessionOutput,
+				send(alice.session, path + "/sessions", "POST", { command: "ls" }),
 			)
-			assert.strictEqual(ran.stdout, "ran: ls")
+			assert.deepStrictEqual(ran, {
+				session: null,
+				running: false,
+				exitCode: 0,
+				signal: null,
+				output: "ran: ls",
+				truncated: false,
+			})
+			const terminal = await json(
+				ComputersApi.SessionOutput,
+				send(alice.session, path + "/sessions", "POST", {
+					command: "ls",
+					tty: true,
+				}),
+			)
+			assert.strictEqual(terminal.output, "tty ran: ls")
+
+			// A command that waits for input keeps a session until its input ends.
+			const opened = await json(
+				ComputersApi.SessionOutput,
+				send(alice.session, path + "/sessions", "POST", {
+					command: "cat",
+					yieldTimeMs: 250,
+				}),
+			)
+			assert.strictEqual(opened.running, true)
+			assert.ok(opened.session !== null)
+			const sessionPath = path + "/sessions/" + opened.session
+			const echoed = await json(
+				ComputersApi.SessionOutput,
+				send(alice.session, sessionPath + "/input", "POST", {
+					chars: "hello\\n",
+					yieldTimeMs: 250,
+				}),
+			)
+			assert.strictEqual(echoed.output, "hello\n")
+			assert.strictEqual(echoed.running, true)
+			// Another member cannot use the session.
+			assert.strictEqual(
+				(
+					await send(bob.session, sessionPath + "/input", "POST", {
+						chars: "",
+					})
+				).status,
+				404,
+			)
+			const closed = await json(
+				ComputersApi.SessionOutput,
+				send(alice.session, sessionPath + "/input", "POST", {
+					chars: "bye\\x04",
+				}),
+			)
+			assert.deepStrictEqual(
+				{
+					output: closed.output,
+					running: closed.running,
+					exitCode: closed.exitCode,
+				},
+				{ output: "bye", running: false, exitCode: 0 },
+			)
+			assert.strictEqual(
+				(
+					await send(alice.session, sessionPath + "/input", "POST", {
+						chars: "",
+					})
+				).status,
+				404,
+			)
 			const written = await send(alice.session, path + "/files", "PUT", {
 				path: "/tmp/a.txt",
 				encoding: "utf8",
@@ -315,8 +399,8 @@ it(
 			)
 			assert.strictEqual(paused.state, "paused")
 			await json(
-				ComputersApi.CommandResult,
-				send(alice.session, path + "/commands", "POST", { command: "pwd" }),
+				ComputersApi.SessionOutput,
+				send(alice.session, path + "/sessions", "POST", { command: "pwd" }),
 			)
 			assert.strictEqual(
 				(await json(ComputersApi.Computer, send(alice.session, path))).state,
@@ -397,7 +481,7 @@ it(
 			const { send, json, until } = client(host)
 			const alice = await host.login("pair-alice")
 			const machine = {
-				version: "1.0.0",
+				version: 2,
 				os: "linux",
 				arch: "x64",
 				desktop: false,
@@ -463,6 +547,21 @@ it(
 				socket.onerror = () => resolve(true)
 			})
 			assert.ok(denied)
+			// An old connector cannot connect. It must update first.
+			const old = new WebSocket(url, {
+				headers: { authorization: "Bearer " + approved.token },
+			} as never)
+			const refused = await new Promise<number>((resolve) => {
+				old.onopen = () =>
+					old.send(
+						JSON.stringify({
+							_tag: "Hello",
+							hello: { version: 1, os: "linux", arch: "x64", desktop: false },
+						}),
+					)
+				old.onclose = (event) => resolve(event.code)
+			})
+			assert.strictEqual(refused, 4426)
 			const socket = new WebSocket(url, {
 				headers: { authorization: "Bearer " + approved.token },
 			} as never)
@@ -473,25 +572,25 @@ it(
 					call?: { id: string; operation: { _tag: string } }
 				}
 				seen.push(message)
-				if (message._tag === "Call" && message.call !== undefined)
+				const start = message as { _tag: string; session?: string }
+				if (start._tag === "Start" && start.session !== undefined) {
 					socket.send(
 						JSON.stringify({
-							_tag: "Reply",
-							reply: {
-								id: message.call.id,
-								result: {
-									_tag: "Done",
-									value: {
-										exitCode: 0,
-										stdout: "from the laptop",
-										stderr: "",
-										truncated: false,
-										durationMs: 2,
-									},
-								},
-							},
+							_tag: "Output",
+							session: start.session,
+							seq: 0,
+							data: Buffer.from("from the laptop").toString("base64"),
 						}),
 					)
+					socket.send(
+						JSON.stringify({
+							_tag: "Exit",
+							session: start.session,
+							code: 0,
+							signal: null,
+						}),
+					)
+				}
 			}
 			await new Promise<void>((resolve) => {
 				socket.onopen = () => resolve()
@@ -499,7 +598,7 @@ it(
 			socket.send(
 				JSON.stringify({
 					_tag: "Hello",
-					hello: { version: "1.0.0", os: "linux", arch: "x64", desktop: false },
+					hello: { version: 2, os: "linux", arch: "x64", desktop: false },
 				}),
 			)
 			const path = "/v1/computers/" + computer.id
@@ -511,10 +610,11 @@ it(
 				return current.state === "running" ? current : undefined
 			})
 			const ran = await json(
-				ComputersApi.CommandResult,
-				send(alice.session, path + "/commands", "POST", { command: "uname" }),
+				ComputersApi.SessionOutput,
+				send(alice.session, path + "/sessions", "POST", { command: "uname" }),
 			)
-			assert.strictEqual(ran.stdout, "from the laptop")
+			assert.strictEqual(ran.output, "from the laptop")
+			assert.strictEqual(ran.exitCode, 0)
 			socket.close()
 			await until("the machine is offline", async () => {
 				const current = await json(

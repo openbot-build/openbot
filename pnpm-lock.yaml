@@ -88,6 +88,9 @@ importers:
       "@effect/platform-node":
         specifier: 4.0.6
         version: 4.0.6(effect@4.0.6(patch_hash=sjqjutaw2n7kkagy3tqbjfx5oy))(redis@6.3.0)
+      "@lydell/node-pty":
+        specifier: 1.2.0-beta.18
+        version: 1.2.0-beta.18
       "@openbot-build/api":
         specifier: workspace:*
         version: link:../api
@@ -1497,6 +1500,60 @@ packages:
     resolution:
       {
         integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==,
+      }
+
+  "@lydell/node-pty-darwin-arm64@1.2.0-beta.18":
+    resolution:
+      {
+        integrity: sha512-gJizeNHkkKCoggtj5Q0yf4btK6dPfr7E063SrOh1jHXp3IyjiErU4KwT7Cn29qb/OY5pBo/Utctenl03MyBtAg==,
+      }
+    cpu: [arm64]
+    os: [darwin]
+
+  "@lydell/node-pty-darwin-x64@1.2.0-beta.18":
+    resolution:
+      {
+        integrity: sha512-xnJQz+i5v7pkR1xo14ffTwvMm2DoK3KqPACQaJqxtMVkM7ojv14/KmkaV2jte7Q0BIzfU+VbKVUL9Zmf23G8VQ==,
+      }
+    cpu: [x64]
+    os: [darwin]
+
+  "@lydell/node-pty-linux-arm64@1.2.0-beta.18":
+    resolution:
+      {
+        integrity: sha512-fM8jRcZDZwG7ihEOx/R7N1aGHdT4Fd6IQj1d6Jp7Qb9FeDWlIwLuVlxUkJOsW4V1ZmJe1xZl2+WR0RjqMvb2+Q==,
+      }
+    cpu: [arm64]
+    os: [linux]
+
+  "@lydell/node-pty-linux-x64@1.2.0-beta.18":
+    resolution:
+      {
+        integrity: sha512-LGikvfcvoPrxXO7o1gCsd5ErrRWnQFYLxjJfX0uwBpi0oGPiTERUBLzKspzZs7wjXZqF30mnNB/C09uotu5vRA==,
+      }
+    cpu: [x64]
+    os: [linux]
+
+  "@lydell/node-pty-win32-arm64@1.2.0-beta.18":
+    resolution:
+      {
+        integrity: sha512-S6h4G3zYGe+pPQxhlNxg+MvJNUIwXFxhnUufx1QT45TgratKMxQfoGPidvnwoLwuXQ3hqQ7SsI93rH8RUoL09g==,
+      }
+    cpu: [arm64]
+    os: [win32]
+
+  "@lydell/node-pty-win32-x64@1.2.0-beta.18":
+    resolution:
+      {
+        integrity: sha512-wBSMeAwEL04t694ln+QbLnc98YeF3mAwWm/NP8acYDAobPw/WK7KKpk8z07iyxv0gRH2Z2/L/f6vgtnBgxE0Bg==,
+      }
+    cpu: [x64]
+    os: [win32]
+
+  "@lydell/node-pty@1.2.0-beta.18":
+    resolution:
+      {
+        integrity: sha512-ryy4liRcw6QBBKWDIbJgTW7Pw8NI2xjri/5s/LZg/jJ8ZVg8MgA1xI/vjpT5qTvDvPjUpU5NybJBrKRgK/QvlA==,
       }
 
   "@modelcontextprotocol/client@2.3.1":
@@ -6755,6 +6812,33 @@ snapshots:
     dependencies:
       "@jridgewell/resolve-uri": 3.1.2
       "@jridgewell/sourcemap-codec": 1.6.0
+
+  "@lydell/node-pty-darwin-arm64@1.2.0-beta.18":
+    optional: true
+
+  "@lydell/node-pty-darwin-x64@1.2.0-beta.18":
+    optional: true
+
+  "@lydell/node-pty-linux-arm64@1.2.0-beta.18":
+    optional: true
+
+  "@lydell/node-pty-linux-x64@1.2.0-beta.18":
+    optional: true
+
+  "@lydell/node-pty-win32-arm64@1.2.0-beta.18":
+    optional: true
+
+  "@lydell/node-pty-win32-x64@1.2.0-beta.18":
+    optional: true
+
+  "@lydell/node-pty@1.2.0-beta.18":
+    optionalDependencies:
+      "@lydell/node-pty-darwin-arm64": 1.2.0-beta.18
+      "@lydell/node-pty-darwin-x64": 1.2.0-beta.18
+      "@lydell/node-pty-linux-arm64": 1.2.0-beta.18
+      "@lydell/node-pty-linux-x64": 1.2.0-beta.18
+      "@lydell/node-pty-win32-arm64": 1.2.0-beta.18
+      "@lydell/node-pty-win32-x64": 1.2.0-beta.18
 
   "@modelcontextprotocol/client@2.3.1":
     dependencies:

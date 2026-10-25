@@ -72,7 +72,7 @@ Ein Computer hat einen `state` (Zustand): `starting`, `running`, `paused`,
 
 | Route                                                  | Was sie tut                                                                            |
 | ------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| `POST /v1/computers/:computerId/commands`              | Führt einen Shell-Befehl mit `bash -lc` aus und wartet, bis er endet.                  |
+| `POST /v1/computers/:computerId/sessions`              | Startet einen Shell-Befehl. Siehe [Befehle](#befehle).                                 |
 | `GET`, `PUT`, `DELETE /v1/computers/:computerId/files` | Liest, schreibt und entfernt eine Datei. `utf8` für Text, `base64` für andere Bytes.   |
 | `GET /v1/computers/:computerId/directory?path=`        | Listet ein Verzeichnis.                                                                |
 | `PUT /v1/computers/:computerId/ports/:port`            | Gibt einem Port eine öffentliche HTTPS-Adresse. Jeder mit der Adresse kann ihn nutzen. |
@@ -84,6 +84,43 @@ Ein Computer hat einen `state` (Zustand): `starting`, `running`, `paused`,
 Ein Befehl auf einem pausierten Computer setzt ihn zuerst fort.
 `DELETE /v1/computers/:computerId` löscht den Computer und seine Sandbox. Seine
 Dateien sind dann weg.
+
+### Befehle
+
+Ein Befehl läuft mit `bash -lc` in einer **Session**. OpenBot wartet bis zu
+`yieldTimeMs` auf ihn (standardmäßig 10 Sekunden, von 0,25 bis 30 Sekunden).
+Dann gibt es die Ausgabe bis dahin:
+
+```json
+{
+	"session": "cse_…",
+	"running": true,
+	"exitCode": null,
+	"signal": null,
+	"output": ">>> ",
+	"truncated": false
+}
+```
+
+Hat der Befehl geendet, ist `session` gleich `null`, und `exitCode` oder
+`signal` sagt, wie er endete. Solange er läuft, nutzen Sie die Session weiter:
+
+| Route                                                       | Was sie tut                                                                  |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `POST /v1/computers/:computerId/sessions`                   | Startet einen Befehl: `command`, `cwd`, `env`, `tty`, `rows`, `cols`.        |
+| `POST /v1/computers/:computerId/sessions/:sessionId/input`  | Schickt `chars` an stdin und gibt die neue Ausgabe. Leere `chars` lesen nur. |
+| `POST /v1/computers/:computerId/sessions/:sessionId/resize` | Gibt dem Terminal eine neue Größe.                                           |
+| `DELETE /v1/computers/:computerId/sessions/:sessionId`      | Stoppt den Befehl und gibt seine letzte Ausgabe.                             |
+
+`chars` nimmt C-Escapes: `\n` ist Enter, `\x03` ist Strg-C und `\x04` ist
+Strg-D, das Ende der Eingabe. Mit `tty` bekommt der Befehl ein **Terminal** (ein
+PTY), für Programme wie `python3`, `ssh` oder `top`. Dann kommen stdout und
+stderr zusammen. Jede Antwort gibt höchstens `maxOutputBytes` neue Ausgabe
+(standardmäßig 64 KiB). Bei mehr kommt nur ihr Ende, und `truncated` ist `true`.
+
+Eine Session gehört dem, der sie gestartet hat. Sie endet nach 30 Minuten ohne
+Nutzung. Ein Daytona-Computer gibt kein Terminal, deshalb schlägt `tty` dort
+fehl.
 
 ---
 
@@ -122,6 +159,16 @@ keinen offenen Port. Nach einer Unterbrechung verbindet er sich von selbst
 wieder. `openbot computer status` zeigt die gespeicherte Adresse und die ID der
 Maschine.
 
+OpenBot nimmt nur Connectors an, die Version 2 des Connector-Protokolls
+sprechen. Ein älteres `openbot-computer` kann sich nicht verbinden, und OpenBot
+sagt ihm, dass es ein Upgrade braucht. Installiere die neue Version auf der
+Maschine und verbinde sie wieder:
+
+```sh
+npm install -g @openbot-build/computer
+openbot computer connect
+```
+
 Wenn dieselbe Maschine sich in derselben Organisation wieder koppelt, behält sie
 ihren Computer und bekommt ein neues Token. Für Server und Skripte erstellst du
 einen Computer mit `"source":{"_tag":"Connector"}`. Dann erstellst du ein Token
@@ -157,8 +204,12 @@ kann er:
   sein.
 - Mit `openbot_computers_release` sein Recht aufgeben. Mit `destroy` löscht er
   auch den Computer.
-- Befehle ausführen, Dateien ändern, Ports öffnen und den Desktop nutzen. Ein
-  Screenshot kommt als Bild zurück, das das Model sieht.
+- Befehle mit `openbot_computer_exec` ausführen und ihnen mit
+  `openbot_computer_write_stdin` Eingabe schicken, so wie bei
+  [Befehle](#befehle). Läuft ein Befehl nach seiner Wartezeit noch, bekommt der
+  Chat eine Notice der Art `computer_session`, wenn er endet.
+- Dateien ändern, Ports öffnen und den Desktop nutzen. Ein Screenshot kommt als
+  Bild zurück, das das Model sieht.
 
 Diese vier Aktionen sind [Fähigkeiten](/de/docs/requests#fähigkeiten). Die
 [Kette der Entscheider](/de/docs/requests#die-kette-der-entscheider) entscheidet

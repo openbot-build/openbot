@@ -285,6 +285,31 @@ export const appInvocations = table(
 	],
 )
 /**
+ * The tool calls of each Chat that went on in the background. `body` is the
+ * Operation record. A running Operation says often that its server still runs it,
+ * so a sweep can end the Operations of a server that stopped.
+ */
+export const operations = table(
+	"openbot_operations",
+	{
+		namespace: text().notNull(),
+		id: text().notNull(),
+		chat: text().notNull(),
+		status: text().notNull(),
+		body: text().notNull(),
+		/** The last time that the server of a running Operation said that it still runs it. */
+		heartbeatAt: time("heartbeat_at").notNull(),
+		startedAt: time("started_at").notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.namespace, t.id] }),
+		index("openbot_operations_chat").on(t.namespace, t.chat, t.startedAt),
+		index("openbot_operations_running")
+			.on(t.heartbeatAt)
+			.where(sql`${t.status} = 'Running'`),
+	],
+)
+/**
  * The Code Mode programs of each owner. The body is sealed. It holds the program,
  * its seed and clock, and the record of every App call, so a run can start again
  * and get the same results without sending a call twice.

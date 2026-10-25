@@ -44,6 +44,8 @@ import * as ChannelPlugin from "../plugins/channels/ChannelPlugin.ts"
 import * as ComputerProviders from "../computers/ComputerProviders.ts"
 import * as Computers from "../computers/Computers.ts"
 import * as Connectors from "../computers/connector/Connectors.ts"
+import * as ComputerSessions from "../computers/Sessions.ts"
+import * as StoredOperations from "../operations/StoredOperations.ts"
 import * as Drivers from "../computers/Drivers.ts"
 import * as Pairings from "../computers/Pairings.ts"
 import * as ComputerWorker from "../computers/Worker.ts"
@@ -55,7 +57,7 @@ import * as Chats from "../chats/Chats.ts"
 import { Config } from "@openbot-build/core"
 import * as Backend from "./Backend.ts"
 import type { PgClient } from "@effect/sql-pg"
-import { NodeServices, NodeCrypto } from "@effect/platform-node"
+import { NodeServices, NodeCrypto, NodeSocket } from "@effect/platform-node"
 import { Effect, Layer, type Redacted, Schema, SchemaIssue } from "effect"
 import { type Tool } from "effect/ai"
 import { FetchHttpClient } from "effect/http"
@@ -68,6 +70,9 @@ import * as PlatformAdminsPostgres from "../platform/PlatformAdminsPostgres.ts"
 import * as AuthorizationLayer from "../authorization/Layer.ts"
 import * as RolesPostgres from "../authorization/RolesPostgres.ts"
 import * as ModelRegistry from "../models/ModelRegistry.ts"
+import * as LiveBackends from "../models/LiveBackends.ts"
+import * as LiveSessions from "../chats/live/LiveSessions.ts"
+import * as OpenAiRealtime from "../providers/openai/OpenAiRealtime.ts"
 import * as BillingPostgres from "../billing/BillingPostgres.ts"
 import * as RateLimit from "../billing/RateLimit.ts"
 import * as TokenThrottle from "../billing/TokenThrottle.ts"
@@ -107,7 +112,14 @@ export interface Options<
 	readonly files?: FileWorker.Options
 	/** The drivers of the Computer providers. Tests give fake ones. */
 	readonly computerDrivers?: Layer.Layer<Drivers.Drivers>
+	/** The Live backends. Tests give fake ones. */
+	readonly liveBackends?: Layer.Layer<LiveBackends.LiveBackends>
 }
+
+/** The Live backends of a real server. The `ws` package can send the key in a header. */
+export const defaultLiveBackends = Layer.unwrap(
+	Effect.map(OpenAiRealtime.backend, (openai) => LiveBackends.layer([openai])),
+).pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS))
 
 /**
  * The services that live as long as the instance, outside of each app:
@@ -159,6 +171,10 @@ export const layer = <
 	> = Layer.unwrap(
 		Effect.gen(function* () {
 			const registry = yield* ModelRegistry.ModelRegistry
+			const liveCatalogOf = (organizationId: string) =>
+				registry
+					.liveCatalog(organizationId)
+					.pipe(Effect.orElseSucceed(() => ({ providers: [], models: [] })))
 			const organization = (
 				organizationId: string,
 			): Chats.OrganizationOptions => ({
@@ -169,6 +185,7 @@ export const layer = <
 					selection === undefined
 						? noModel
 						: registry.resolve(organizationId, selection),
+				liveCatalog: liveCatalogOf(organizationId),
 			})
 			// A runtime without an owner has no organization. It can use only the built-in models.
 			const builtin = options.builtinModels
@@ -186,7 +203,13 @@ export const layer = <
 			return BackendLayers.layer(
 				options.chats?.resolveModel === undefined
 					? { ...fallback, ...options.chats, organization }
-					: options.chats,
+					: // A host with its own models still gets the Live models of the organization.
+						{
+							...options.chats,
+							organization: (organizationId: string) => ({
+								liveCatalog: liveCatalogOf(organizationId),
+							}),
+						},
 			)
 		}),
 	)
@@ -224,8 +247,6 @@ export const layer = <
 							: resolve(selection)
 					}),
 				)
-			const unavailable = (error: Config.ModelConfigurationError) =>
-				new Judge.HelperModelUnavailable({ message: error.message })
 			return Judge.HelperModel.of({
 				rules: (organizationId) =>
 					Effect.mapError(
@@ -236,14 +257,16 @@ export const layer = <
 										ModelRegistry.AnyModel.Language({ model }),
 									),
 								),
-						unavailable,
+						(error) =>
+							new Judge.HelperModelUnavailable({ message: error.message }),
 					),
 				botMemory: (organizationId) =>
 					Effect.mapError(
 						resolve === undefined
 							? registry.botMemoryModel(organizationId)
 							: hosted(organizationId, "botMemoryModel"),
-						unavailable,
+						(error) =>
+							new Judge.HelperModelUnavailable({ message: error.message }),
 					),
 			})
 		}),
@@ -260,6 +283,8 @@ export const layer = <
 	)
 
 	const computers = ComputerPlugin.layer.pipe(
+		Layer.provideMerge(ComputerSessions.layer),
+		Layer.provideMerge(StoredOperations.layerChannel),
 		Layer.provideMerge(Pairings.layer),
 		Layer.provideMerge(Computers.layer),
 		Layer.provideMerge(Connectors.layer),
@@ -367,6 +392,12 @@ export const layer = <
 					options.builtinModels === undefined
 						? {}
 						: { builtin: options.builtinModels },
+				),
+			),
+			Layer.provideMerge(
+				Layer.merge(
+					options.liveBackends ?? defaultLiveBackends,
+					LiveSessions.layer,
 				),
 			),
 			Layer.provideMerge(ModelProvidersPostgres.layer),

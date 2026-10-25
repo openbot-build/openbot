@@ -4,6 +4,7 @@ import { Socket } from "effect/socket"
 import * as Calls from "./Calls.ts"
 import * as Config from "./Config.ts"
 import * as Machine from "./Machine.ts"
+import * as Sessions from "./Sessions.ts"
 
 const decodeMessage = Schema.decodeUnknownEffect(
 	Schema.fromJsonString(ComputersApi.ToConnector),
@@ -93,6 +94,11 @@ export const connect = (options: {
 			yield* Ref.set(failures, 0)
 			yield* events.connected
 			const running = yield* FiberSet.make<void, Socket.SocketError>()
+			// The sessions belong to the scope of this connection, so they stop when it closes.
+			const sessions = yield* Sessions.make(
+				{ home: calls.home, maxFrame: Sessions.defaultFrame },
+				send,
+			)
 			const text = new TextDecoder()
 			while (true) {
 				const frames = yield* reader.pull
@@ -108,13 +114,14 @@ export const connect = (options: {
 					}
 					const message = decoded.value
 					if (message._tag === "Ping") yield* send({ _tag: "Pong" })
-					else
+					else if (message._tag === "Call")
 						yield* FiberSet.run(
 							running,
 							Calls.execute(message.call, calls).pipe(
 								Effect.flatMap((reply) => send({ _tag: "Reply", reply })),
 							),
 						)
+					else yield* sessions.handle(message)
 				}
 			}
 		}).pipe(Effect.scoped)

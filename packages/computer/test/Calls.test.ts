@@ -17,7 +17,7 @@ import * as Calls from "../src/Calls.ts"
 
 const home = mkdtempSync(join(tmpdir(), "openbot-computer-calls-"))
 afterAll(() => rmSync(home, { recursive: true, force: true }))
-const options: Calls.Options = { maxOutput: 1024 * 1024, home }
+const options: Calls.Options = { home }
 
 const call = (
 	operation: ComputersApi.ConnectorCall["operation"],
@@ -36,76 +36,6 @@ const done = Effect.fnUntraced(function* (
 	if (reply.result._tag !== "Done") return assert.fail(reply.result.message)
 	return reply.result.value as any
 })
-
-it.live("Run gives the exit code and the output of the command", () =>
-	Effect.gen(function* () {
-		const result = yield* done({
-			_tag: "Run",
-			request: {
-				command:
-					'echo out; echo err >&2; echo "$GREETING"; pwd; sh -c "exit 3"',
-			},
-		})
-		assert.strictEqual(result.exitCode, 3)
-		assert.strictEqual(result.stdout, `out\n\n${home}\n`)
-		assert.strictEqual(result.stderr, "err\n")
-		assert.strictEqual(result.truncated, false)
-		assert.strictEqual(typeof result.durationMs, "number")
-	}),
-)
-
-it.live("Run uses the folder and the variables of the request", () =>
-	Effect.gen(function* () {
-		const result = yield* done({
-			_tag: "Run",
-			request: {
-				command: 'pwd; echo "$GREETING"',
-				cwd: "/",
-				env: { GREETING: "hello" },
-			},
-		})
-		assert.strictEqual(result.exitCode, 0)
-		assert.strictEqual(result.stdout, "/\nhello\n")
-	}),
-)
-
-it.live("Run stops the command at its timeout", () =>
-	Effect.gen(function* () {
-		const started = Date.now()
-		const result = yield* done({
-			_tag: "Run",
-			request: { command: "sleep 30", timeout: 1 },
-		})
-		assert.strictEqual(result.exitCode, null)
-		assert.ok(Date.now() - started < 10_000)
-	}),
-)
-
-it.live("Run keeps only the end of long output", () =>
-	Effect.gen(function* () {
-		const result = yield* done(
-			{ _tag: "Run", request: { command: "seq 1 1000" } },
-			{ ...options, maxOutput: 100 },
-		)
-		assert.strictEqual(result.truncated, true)
-		assert.strictEqual(result.stdout.length, 100)
-		assert.ok(result.stdout.endsWith("999\n1000\n"))
-	}),
-)
-
-it.live("Run fails clearly when the folder does not exist", () =>
-	Effect.gen(function* () {
-		const reply = yield* call({
-			_tag: "Run",
-			request: { command: "true", cwd: "no-such-folder" },
-		})
-		assert.strictEqual(reply.result._tag, "Failed")
-		assert.match(
-			reply.result._tag === "Failed" ? reply.result.message : "",
-			/does not exist/,
-		)
-	}),
-)
 
 it.live("Write makes missing folders, and Read gives the content back", () =>
 	Effect.gen(function* () {

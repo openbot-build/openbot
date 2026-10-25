@@ -5,6 +5,7 @@ import {
 	Item,
 	Plugin,
 	type Turn,
+	Operation,
 } from "@openbot-build/core"
 import { Todo } from "@openbot-build/api"
 import {
@@ -168,7 +169,8 @@ export const make: Effect.Effect<
 			parameters,
 			success: Schema.Json,
 			...(needsApproval === undefined ? {} : { needsApproval }),
-		}) as Tools[string],
+			// Work tools change the state of their Turn, so they never go to the background.
+		}).annotate(Operation.Budget, "foreground") as Tools[string],
 		handle: (input, context) =>
 			handle(input, context).pipe(
 				Effect.catchCause((cause) =>

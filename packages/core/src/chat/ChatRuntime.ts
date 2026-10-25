@@ -22,6 +22,7 @@ import {
 } from "effect"
 import { dual } from "effect/Function"
 import {
+	AiError,
 	Chat as AiChat,
 	IdGenerator,
 	LanguageModel,
@@ -45,6 +46,8 @@ import { ChatStoreError } from "../store/ChatStore.ts"
 import type * as ChatStore from "../store/ChatStore.ts"
 import * as Plugin from "../plugins/Plugin.ts"
 import * as PluginComposition from "../plugins/PluginComposition.ts"
+import * as Operation from "./Operation.ts"
+import * as Operations from "./Operations.ts"
 
 /** What the model gets for a tool call that waits for a decision, when no host decides. */
 const pendingResult = {
@@ -54,6 +57,115 @@ const pendingResult = {
 /** The first message of a window that was rebuilt for another model. */
 const compactedNote =
 	"Earlier messages of this Chat were compacted for another model, so they are not shown here."
+
+/** Where a tool call of a Turn sends the end of its Operation. */
+interface Background {
+	readonly chat: Chat.Id
+	readonly turn: Turn.Id
+	readonly author?: Turn.Author
+	readonly notify: (input: Chat.DeliverInput) => Effect.Effect<void>
+}
+
+/**
+ * Gives every call a time budget. A call that ends in its budget gives its result as
+ * before. A call that does not goes on as an Operation, and the model gets its id.
+ * The handler runs inside the Operation fiber, so its work does not end with the Turn.
+ */
+const inBackground = <Tools extends Record<string, Tool.Any>>(
+	raw: Toolkit.WithHandler<Tools>,
+	operations: typeof Operations.Operations.Service,
+	background: Background,
+): Toolkit.WithHandler<Tools> => ({
+	tools: raw.tools,
+	handle: ((
+		name: string,
+		params: unknown,
+		toolCallId?: string,
+		options?: unknown,
+	) =>
+		Effect.gen(function* () {
+			const tool = (raw.tools as Record<string, Tool.Any>)[name]
+			const budget =
+				tool === undefined
+					? undefined
+					: Option.getOrUndefined(
+							Context.getOption(tool.annotations, Operation.Budget),
+						)
+			const handle = raw.handle as (
+				...args: ReadonlyArray<unknown>
+			) => Effect.Effect<
+				Stream.Stream<Tool.HandlerResult<Tool.Any>, AiError.AiError>,
+				AiError.AiError
+			>
+			const call = handle(name, params, toolCallId, options)
+			if (budget === "foreground") return yield* call
+			// Preliminary results only matter to a waiting caller, so the work keeps the last one.
+			const work = Effect.flatMap(call, (results) =>
+				results.pipe(
+					Stream.filter((result) => !result.preliminary),
+					Stream.runLast,
+				),
+			)
+			const outcome = yield* operations.run(
+				{
+					chat: background.chat,
+					turn: background.turn,
+					callId: toolCallId ?? name,
+					tool: name,
+					...(budget === undefined ? {} : { budget }),
+					notify: (record) =>
+						background.notify({
+							chat: background.chat,
+							input: Operations.noticeText(record),
+							notice: { kind: "operation", ref: record.id },
+							...(background.author === undefined
+								? {}
+								: { author: background.author }),
+						}),
+				},
+				work,
+				(exit) =>
+					Exit.match(exit, {
+						onFailure: (cause) =>
+							Operation.Status.Failed({
+								message: Operations.failureMessage(cause),
+							}),
+						onSuccess: (last) =>
+							Option.match(last, {
+								onNone: () =>
+									Operation.Status.Failed({
+										message: "The call gave no result.",
+									}),
+								onSome: (result) =>
+									result.isFailure
+										? Operation.Status.Failed({
+												message: "The call failed.",
+												result: result.encodedResult as never,
+											})
+										: Operation.Status.Completed({
+												result: result.encodedResult as never,
+											}),
+							}),
+					}),
+			)
+			if (outcome._tag === "Done")
+				return Exit.match(outcome.exit, {
+					onFailure: (cause) => Stream.failCause(cause),
+					onSuccess: (last) =>
+						Option.match(last, {
+							onNone: () => Stream.empty,
+							onSome: (result) => Stream.succeed(result),
+						}),
+				})
+			const result = Operations.backgroundResult(outcome.record)
+			return Stream.succeed({
+				result,
+				encodedResult: result,
+				isFailure: false,
+				preliminary: false,
+			})
+		})) as never,
+})
 
 /** One Turn that the runtime accepted, with its first Items. */
 interface Accepted<P> {
@@ -135,6 +247,7 @@ export const make = <
 					Effect.succeed(Chat.Decision.Pending({ result: pendingResult })),
 				onSome: (service) => service.decide(request),
 			})
+		const operations = yield* Effect.serviceOption(Operations.Operations)
 		const findModel = (selection: Config.Selection | undefined) =>
 			(bot.modelCatalog ?? Effect.succeed([])).pipe(
 				Effect.map((models) =>
@@ -327,6 +440,14 @@ export const make = <
 								return yield* new Chat.Conflict({
 									chat: view.chat.id,
 									message: "The Chat already has an unfinished Turn",
+								})
+							if (
+								options.canStart !== undefined &&
+								!(yield* options.canStart(view))
+							)
+								return yield* new Chat.Conflict({
+									chat: view.chat.id,
+									message: "Another process runs the Turns of this Chat",
 								})
 							const selected = input.select(view)
 							if (selected === undefined || selected.length === 0)
@@ -681,8 +802,34 @@ export const make = <
 						Stream.unwrap(
 							Effect.gen(function* () {
 								const definitions: Toolkit.Any = yield* inner.toolkit
-								const toolkit = definitions as Toolkit.Toolkit<Tools>,
-									handlers = yield* toolkit
+								const toolkit = definitions as Toolkit.Toolkit<Tools>
+								const raw = yield* toolkit
+								const services = yield* Effect.context<never>()
+								const toolHandlers = Option.isNone(operations)
+									? raw
+									: inBackground(raw, operations.value, {
+											chat: chatId,
+											turn,
+											...(turnRecord.author === undefined
+												? {}
+												: { author: turnRecord.author }),
+											notify: (input) =>
+												deliver(input).pipe(
+													// The services are the ones of this Turn. The background call ends later.
+													Effect.provideContext(
+														services as Context.Context<
+															Effect.Services<ReturnType<typeof deliver>>
+														>,
+													),
+													Effect.catchCause((cause) =>
+														Effect.logWarning(
+															"The end of an Operation could not reach its Chat",
+															cause,
+														),
+													),
+													Effect.asVoid,
+												),
+										})
 								const loop = (
 									n: number,
 								): Stream.Stream<
@@ -892,7 +1039,7 @@ export const make = <
 											const nativeResponse = chat
 												.streamText({
 													prompt: Prompt.empty,
-													toolkit: handlers,
+													toolkit: toolHandlers,
 													toolChoice:
 														action === undefined ? inner.toolChoice : "auto",
 													concurrency: inner.concurrency,
@@ -1606,8 +1753,6 @@ export const make = <
 		/** An event with a view takes its position from it. Other events carry `at`. */
 		const positionOf = (event: Event) =>
 			"view" in event ? Chat.position(event.view.chat) : event.at
-		const belongs = (event: Event, chat: Chat.Id) =>
-			positionOf(event).chat === chat
 		const revision = (event: Event) => positionOf(event).revision
 		const events: Chat.Runtime<P, Tools, E, R, HostTools>["events"] = (input) =>
 			Stream.unwrap(
@@ -1616,14 +1761,14 @@ export const make = <
 					const subscription = yield* PubSub.subscribe(bus)
 					const snapshot = (yield* Ref.get(retained)).filter(
 						(event) =>
-							belongs(event, input.chat) &&
+							positionOf(event).chat === input.chat &&
 							input.after !== undefined &&
 							revision(event) > input.after,
 					)
 					return Stream.concat(
 						Stream.fromArray(snapshot),
 						Stream.fromEffectRepeat(PubSub.take(subscription)).pipe(
-							Stream.filter((event) => belongs(event, input.chat)),
+							Stream.filter((event) => positionOf(event).chat === input.chat),
 						),
 					)
 				}),

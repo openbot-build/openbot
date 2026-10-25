@@ -33,12 +33,7 @@ export const make = (input: {
 	) => input.connectors.call(input.computerId, operation, wait)
 	return new Machine({
 		shell: {
-			run: (request) =>
-				call(
-					{ _tag: "Run", request },
-					// The machine stops the command at its timeout, so wait a little longer.
-					Duration.seconds((request.timeout ?? 60) + 15),
-				).pipe(Effect.flatMap(as(ComputersApi.CommandResult))),
+			start: (request) => input.connectors.start(input.computerId, request),
 			read: (path, encoding) =>
 				call({ _tag: "Read", path, encoding }).pipe(
 					Effect.flatMap(as(ComputersApi.FileContent)),

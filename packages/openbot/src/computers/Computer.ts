@@ -1,5 +1,5 @@
 import type { ComputersApi } from "@openbot-build/api"
-import { Data, type Effect } from "effect"
+import { Data, type Effect, type Scope, type Stream } from "effect"
 
 /** The provider or the connector did not do the call. */
 export class ComputerCallFailed extends Data.TaggedError("ComputerCallFailed")<{
@@ -18,14 +18,67 @@ export type ComputerError = ComputerCallFailed | ComputerGone
 /** What the provider says about a sandbox, in the form that every kind shares. */
 export type MachineState = "starting" | "running" | "paused" | "gone"
 
+/** A command that a provider runs to its end for its own work, such as a desktop script. */
+export interface RunRequest {
+	readonly command: string
+	readonly cwd?: string
+	readonly env?: Readonly<Record<string, string>>
+	/** Seconds. The provider stops the command after this time. The default is 60. */
+	readonly timeout?: number
+}
+export interface RunResult {
+	/** `null` when the provider stopped the command at its timeout. */
+	readonly exitCode: number | null
+	readonly stdout: string
+	readonly stderr: string
+	readonly truncated: boolean
+	readonly durationMs: number
+}
+
+/** A command to start. It runs with `bash -lc` in its own process group. */
+export interface StartRequest {
+	readonly command: string
+	readonly cwd?: string
+	readonly env?: Readonly<Record<string, string>>
+	/** Give the command a terminal (a PTY). Then stdout and stderr come together. */
+	readonly tty: boolean
+	readonly rows?: number
+	readonly cols?: number
+}
+
+/** How a command ended. */
+export interface Exit {
+	/** `null` when a signal stopped it, or when it did not start. */
+	readonly code: number | null
+	readonly signal: string | null
+	/** Why the command did not start, or why its stream broke. */
+	readonly error?: string
+}
+
+/** A command that runs. Closing its Scope stops it. */
+export interface Process {
+	/** The output as it comes: stdout and stderr together. It ends when the command ends. */
+	readonly output: Stream.Stream<Uint8Array>
+	readonly exit: Effect.Effect<Exit>
+	readonly write: (data: Uint8Array) => Effect.Effect<void, ComputerError>
+	readonly resize: (
+		rows: number,
+		cols: number,
+	) => Effect.Effect<void, ComputerError>
+	readonly signal: (
+		signal: ComputersApi.SessionSignal,
+	) => Effect.Effect<void, ComputerError>
+}
+
 /**
  * The work that every Computer can do: commands and files.
  * A paused sandbox resumes by itself on the first call, so callers do not check the state.
  */
 export interface Shell {
-	readonly run: (
-		request: ComputersApi.RunCommandRequest,
-	) => Effect.Effect<ComputersApi.CommandResult, ComputerError>
+	/** Starts a command. It stops when the Scope closes. */
+	readonly start: (
+		request: StartRequest,
+	) => Effect.Effect<Process, ComputerError, Scope.Scope>
 	readonly read: (
 		path: string,
 		encoding: ComputersApi.FileEncoding,

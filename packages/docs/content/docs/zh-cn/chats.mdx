@@ -27,6 +27,7 @@ cookie。见 [身份验证](/zh-cn/docs/authentication)。
 | `channel` | [Channel](/zh-cn/docs/channels) 的某个聊天中的第一条消息。                                                         | Channel 的 actor。             |
 | `task`    | 每次一个 Bot 把工作交给一个 Bot，或者一个[触发器](/zh-cn/docs/triggers)触发时。见 [委派](/zh-cn/docs/delegation)。 | 交出这项工作的 Chat 的所有者。 |
 | `review`  | 一个 Bot 必须决定一个 [request](/zh-cn/docs/requests) 时。                                                         | 这个请求为之服务的人。         |
+| `live`    | 每次一个人调用 `POST /v1/bots/:botId/live` 时。见 [Live 模式](/zh-cn/docs/live)。                                  | 这个人。                       |
 
 每个人和每个 Bot 只有一个 direct
 Chat。Chat 没有终点。只要人们还在和 Bot 说话，它就一直继续，除非你[删除它的历史](#删除历史)。review
@@ -83,9 +84,10 @@ Chat。第一条消息会创建这个 Chat。你需要在这个 Bot 上拥有
 消息里也可以有你上传的文件，用 `input_image` 和 `input_file`
 部分。见[把文件交给 Bot](/zh-cn/docs/files#把文件交给-bot)。
 
-`POST /v1/chats/:chatId/messages` 接受同样的请求体。它用于 direct
+`POST /v1/chats/:chatId/messages` 接受同样的请求体。它用于 direct Chat、live
 Chat，或者当你想给一个 Bot 的工作补充内容时，用于 task Chat。在 task
-Chat 中，Bot 把你的消息当作你发来的消息来读。其他种类的 Chat 会返回 `409` 和
+Chat 中，Bot 把你的消息当作你发来的消息来读。在 live
+Chat 中，消息会等到有 Live 会话打开。其他种类的 Chat 会返回 `409` 和
 `ChatConflict`。
 
 ### 回答
@@ -239,12 +241,47 @@ Chat 视图中的 `open` 会统计它们：
 
 ---
 
+## 后台工作
+
+每个工具调用都有一个时间**预算**。调用在预算内结束时，模型会像平常一样在同一个 Turn 里得到结果。没有按时结束时，调用会在**后台**继续运行，模型会马上得到一个
+**operation**：
+
+```json
+{ "operation": "0f3c…", "status": "running", "note": "…" }
+```
+
+Turn 不会等待。调用结束时，它的结果会作为 `operation`
+类的通知回到 Chat，Chat 空闲时会开始一个新的 Turn。通知里有状态：带结果的
+`Completed`、`Failed`、`Cancelled`，或者服务器停止时的 `Interrupted`。
+
+Bot 有三个工具来管理它的 operation：
+
+| 工具                       | 作用                                            |
+| -------------------------- | ----------------------------------------------- |
+| `openbot_operation_status` | 显示一个 operation 的状态。                     |
+| `openbot_operation_wait`   | 等待几个 operation 中的一个结束，最多 30 秒。   |
+| `openbot_operation_cancel` | 停止一个 operation。Chat 仍会收到它结束的通知。 |
+
+有些工具永远不会进入后台，因为它们会改变自己 Turn 的状态：工作工具、委派、Code
+Mode，以及获取或放弃 Computer 的工具。[Computer](/zh-cn/docs/computers#命令)
+的命令工具有自己的会话。
+
+组织设置决定预算、一个 operation 最长的时间，以及一个 Chat 同时最多能运行多少个 operation。见[组织设置](/zh-cn/docs/organization#设置)。Chat 达到上限时，更多的调用会在自己的 Turn 里等待。
+
+| 路由                                           | 作用                     |
+| ---------------------------------------------- | ------------------------ |
+| `GET /v1/chats/:chatId/operations`             | 列出 Chat 的 operation。 |
+| `GET /v1/chats/:chatId/operations/:id`         | 读取一个 operation。     |
+| `POST /v1/chats/:chatId/operations/:id/cancel` | 停止一个 operation。     |
+
+---
+
 ## 读取 Chat
 
-`GET /v1/chats` 列出你的 direct Chat 和 channel Chat，最早的排在前面。加上
-`bot=<id>` 可以列出某个 Bot 的 Chat。加上 `kind=<kind>` 可以只列出一种，例如
-`task` 或 `review`。每个摘要包含 `chat`、`status`、`turn`、一个简短的 `response`
-和 `activity`。
+`GET /v1/chats` 列出你的 direct Chat、channel Chat 和 live
+Chat，最早的排在前面。加上 `bot=<id>` 可以列出某个 Bot 的 Chat。加上
+`kind=<kind>` 可以只列出一种，例如 `task` 或 `review`。每个摘要包含
+`chat`、`status`、`turn`、一个简短的 `response` 和 `activity`。
 
 `GET /v1/chats/:chatId`
 返回一个 Chat 的视图。读取永远不会启动工作。下面是它的简短形式：
@@ -513,8 +550,8 @@ OpenBot 默认不使用提供方的原生压缩，例如 OpenAI 的 `/responses/
 
 ## 删除历史
 
-`DELETE /v1/chats/:chatId` 删除一个 direct Chat 或 channel Chat 的历史，并返回
-`204`。它会先停止正在运行的 Turn，并取消这个 Chat
+`DELETE /v1/chats/:chatId` 删除一个 direct Chat、channel Chat 或 live
+Chat 的历史，并返回 `204`。它会先停止正在运行的 Turn，并取消这个 Chat
 [未完成的工作](#未完成的工作)。task Chat 和 review Chat 会返回 `409` 和
 `ChatConflict`。
 

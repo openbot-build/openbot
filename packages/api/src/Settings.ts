@@ -357,6 +357,26 @@ export const DelegationTimeLimit = Schema.Int.check(
 )
 /** One hour. */
 export const delegationTimeLimitDefault = 60 * 60 * 1000
+/**
+ * How long a tool call runs in its Turn before it goes on in the background, in
+ * milliseconds. Zero sends every call to the background at once.
+ */
+export const ToolForegroundBudget = Schema.Int.check(
+	Schema.isBetween({ minimum: 0, maximum: 10 * 60 * 1000 }),
+)
+/** Thirty seconds. */
+export const toolForegroundBudgetDefault = 30 * 1000
+/** How long a tool call may run in all, in milliseconds. After that it stops and fails. */
+export const ToolMaxDuration = Schema.Int.check(
+	Schema.isBetween({ minimum: 1000, maximum: 24 * 60 * 60 * 1000 }),
+)
+/** One hour. */
+export const toolMaxDurationDefault = 60 * 60 * 1000
+/** How many tool calls of one Chat may run in the background at one time. */
+export const MaxBackgroundOperations = Schema.Int.check(
+	Schema.isBetween({ minimum: 0, maximum: 100 }),
+)
+export const maxBackgroundOperationsDefault = 8
 export const DefaultRoles = Schema.Array(RoleId).check(Schema.isMinLength(1))
 
 export const OrganizationSettings = Schema.Struct({
@@ -375,6 +395,9 @@ export const OrganizationSettings = Schema.Struct({
 	delegationTimeLimitMs: DelegationTimeLimit,
 	/** How plans are approved when no member, Bot or Chat sets it. */
 	planApproval: PlanApproval,
+	toolForegroundBudgetMs: ToolForegroundBudget,
+	toolMaxDurationMs: ToolMaxDuration,
+	maxBackgroundOperations: MaxBackgroundOperations,
 	appReadRules: AppReadRules,
 	/** The roles of a new member. */
 	defaultRoles: DefaultRoles,
@@ -396,6 +419,9 @@ export const UpdateOrganizationSettingsRequest = Schema.Struct({
 	requestTimeoutMs: Schema.optionalKey(RequestTimeout),
 	delegationTimeLimitMs: Schema.optionalKey(DelegationTimeLimit),
 	planApproval: Schema.optionalKey(PlanApproval),
+	toolForegroundBudgetMs: Schema.optionalKey(ToolForegroundBudget),
+	toolMaxDurationMs: Schema.optionalKey(ToolMaxDuration),
+	maxBackgroundOperations: Schema.optionalKey(MaxBackgroundOperations),
 	appReadRules: Schema.optionalKey(AppReadRules),
 	defaultRoles: Schema.optionalKey(DefaultRoles),
 	joinByDomain: Schema.optionalKey(Schema.Boolean),

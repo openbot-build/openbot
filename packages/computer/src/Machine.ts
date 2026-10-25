@@ -1,12 +1,12 @@
 import { arch, hostname, platform } from "node:os"
-import type { ComputersApi } from "@openbot-build/api"
+import { ComputersApi } from "@openbot-build/api"
 
-/** The version of this connector. OpenBot sees it in `Hello`. */
+/** The version of this connector program. */
 export const version = "0.1.0"
 
 /** What the connector tells OpenBot about this machine. It has no desktop yet. */
 export const hello = (): ComputersApi.ConnectorHello => ({
-	version,
+	version: ComputersApi.connectorProtocolVersion,
 	os: platform(),
 	arch: arch(),
 	desktop: false,

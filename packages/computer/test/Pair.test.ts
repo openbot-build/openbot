@@ -134,7 +134,7 @@ it.live("pair shows the code, polls until approval, and saves the token", () =>
 		assert.strictEqual(start.os, process.platform)
 		assert.strictEqual(start.arch, process.arch)
 		assert.strictEqual(typeof start.hostname, "string")
-		assert.strictEqual(typeof start.version, "string")
+		assert.strictEqual(start.version, 2)
 		assert.ok(start.machineId.length >= 16)
 		assert.deepStrictEqual(first.config, {
 			url: openbot.url,

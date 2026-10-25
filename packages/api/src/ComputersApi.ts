@@ -249,35 +249,6 @@ const Path = Schema.String.check(
 	Schema.isMaxLength(4096),
 )
 
-export const RunCommandRequest = Schema.Struct({
-	/** A shell command. It runs with `bash -lc`. */
-	command: Schema.String.check(
-		Schema.isMinLength(1),
-		Schema.isMaxLength(100_000),
-	),
-	cwd: Schema.optionalKey(Path),
-	env: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
-	/** Seconds. OpenBot stops the command after this time. The default is 60. */
-	timeout: Schema.optionalKey(
-		Schema.Int.check(
-			Schema.isGreaterThanOrEqualTo(1),
-			Schema.isLessThanOrEqualTo(3600),
-		),
-	),
-})
-export type RunCommandRequest = typeof RunCommandRequest.Type
-
-export const CommandResult = Schema.Struct({
-	/** `null` when OpenBot stopped the command at its timeout. */
-	exitCode: Schema.NullOr(Schema.Int),
-	stdout: Schema.String,
-	stderr: Schema.String,
-	/** True when the output was too long and OpenBot kept only its end. */
-	truncated: Schema.Boolean,
-	durationMs: Schema.Finite,
-})
-export type CommandResult = typeof CommandResult.Type
-
 /** `utf8` for text. `base64` for any other bytes. */
 export const FileEncoding = Schema.Literals(["utf8", "base64"])
 export type FileEncoding = typeof FileEncoding.Type
@@ -367,7 +338,6 @@ export type DesktopStream = typeof DesktopStream.Type
 export const ConnectorCall = Schema.Struct({
 	id: Schema.String,
 	operation: Schema.TaggedUnion({
-		Run: { request: RunCommandRequest },
 		Read: { path: Path, encoding: FileEncoding },
 		Write: { file: FileContent },
 		List: { path: Path },
@@ -387,32 +357,180 @@ export const ConnectorReply = Schema.Struct({
 })
 export type ConnectorReply = typeof ConnectorReply.Type
 
+/** The version of the connector protocol in this contract. */
+export const connectorProtocolVersion = 2
+
 /** The first message of a connector. It tells OpenBot what the machine can do. */
 export const ConnectorHello = Schema.Struct({
-	version: Schema.String,
+	/**
+	 * The version of the protocol that the connector speaks. OpenBot does not take a
+	 * connector with a version lower than `connectorProtocolVersion`.
+	 */
+	version: Schema.Int,
 	os: Schema.String,
 	arch: Schema.String,
 	desktop: Schema.Boolean,
 })
 export type ConnectorHello = typeof ConnectorHello.Type
 
+/** The ID that OpenBot gives to a command session on a connector. */
+export const ConnectorSessionId = Schema.String.check(
+	Schema.isMinLength(1),
+	Schema.isMaxLength(128),
+)
+
+/** The size of a terminal, in rows or columns of letters. */
+const TerminalSize = Schema.Int.check(
+	Schema.isGreaterThanOrEqualTo(1),
+	Schema.isLessThanOrEqualTo(1000),
+)
+
+/** Base64 bytes of the input or the output of a command. */
+const SessionBytes = Schema.String
+
+/** A signal that OpenBot can send to the processes of a session. */
+export const SessionSignal = Schema.Literals([
+	"SIGINT",
+	"SIGTERM",
+	"SIGKILL",
+	"SIGHUP",
+	"SIGQUIT",
+])
+export type SessionSignal = typeof SessionSignal.Type
+
 /**
  * A message from OpenBot to a connector. Each WebSocket text frame holds one message as JSON.
  * OpenBot sends `Ping` every 20 seconds. The connector answers with `Pong`.
+ *
+ * `Start` runs a command in a new session. The command runs with `bash -lc` in its own
+ * process group. With `tty`, it gets a terminal (a PTY), and stdout and stderr come
+ * together on that terminal. Without `tty`, stdin is a pipe, and stdout and stderr
+ * come together in one stream. The connector stops all its sessions when the
+ * connection closes.
  */
 export const ToConnector = Schema.TaggedUnion({
 	Call: { call: ConnectorCall },
 	Ping: {},
+	Start: {
+		session: ConnectorSessionId,
+		/** A shell command. It runs with `bash -lc`. */
+		command: Schema.String.check(
+			Schema.isMinLength(1),
+			Schema.isMaxLength(100_000),
+		),
+		cwd: Schema.optionalKey(Path),
+		env: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+		tty: Schema.Boolean,
+		/** The size of the terminal. It is only for `tty`. The default is 24 rows and 80 columns. */
+		rows: Schema.optionalKey(TerminalSize),
+		cols: Schema.optionalKey(TerminalSize),
+	},
+	/**
+	 * Bytes for stdin. Without `tty`, the byte `0x04` (Ctrl-D) closes stdin, as it does at
+	 * the start of a line on a terminal. The connector does not send that byte.
+	 */
+	Input: { session: ConnectorSessionId, data: SessionBytes },
+	/** Gives the terminal a new size. It does nothing without `tty`. */
+	Resize: {
+		session: ConnectorSessionId,
+		rows: TerminalSize,
+		cols: TerminalSize,
+	},
+	/** Sends a signal to all the processes of the session. */
+	Signal: { session: ConnectorSessionId, signal: SessionSignal },
+	/** Stops all the processes of the session. The connector then sends `Exit`. */
+	Close: { session: ConnectorSessionId },
 })
 export type ToConnector = typeof ToConnector.Type
 
-/** A message from a connector to OpenBot. The first message must be `Hello`. */
+/**
+ * A message from a connector to OpenBot. The first message must be `Hello`.
+ *
+ * `Output` gives new output of a session as soon as it comes. `seq` starts at 0 and
+ * goes up by 1 with each `Output` of the session. `Exit` is the last message of a
+ * session. It comes after all its `Output`.
+ */
 export const FromConnector = Schema.TaggedUnion({
 	Hello: { hello: ConnectorHello },
 	Reply: { reply: ConnectorReply },
 	Pong: {},
+	Output: {
+		session: ConnectorSessionId,
+		seq: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+		data: SessionBytes,
+	},
+	Exit: {
+		session: ConnectorSessionId,
+		/** `null` when a signal stopped the command, or when it did not start. */
+		code: Schema.NullOr(Schema.Int),
+		/** The name of the signal that stopped the command, such as `SIGINT`. */
+		signal: Schema.NullOr(Schema.String),
+		/** Why the command did not start, such as a folder that does not exist. */
+		error: Schema.optionalKey(Schema.String),
+	},
 })
 export type FromConnector = typeof FromConnector.Type
+
+/** How long a call waits for output before it gives back what it has, in milliseconds. */
+export const YieldTime = Schema.Int.check(
+	Schema.isBetween({ minimum: 250, maximum: 30_000 }),
+)
+/** Ten seconds. */
+export const yieldTimeDefault = 10_000
+/** The most output that one call gives back, in bytes. */
+export const MaxOutputBytes = Schema.Int.check(
+	Schema.isBetween({ minimum: 1, maximum: 1024 * 1024 }),
+)
+export const maxOutputBytesDefault = 64 * 1024
+
+export const ExecRequest = Schema.Struct({
+	/** A shell command. It runs with `bash -lc`. */
+	command: Schema.String.check(
+		Schema.isMinLength(1),
+		Schema.isMaxLength(100_000),
+	),
+	cwd: Schema.optionalKey(Path),
+	env: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+	/**
+	 * Give the command a terminal (a PTY), for programs that need one, such as a
+	 * Python prompt or ssh. Then stdout and stderr come together.
+	 */
+	tty: Schema.optionalKey(Schema.Boolean),
+	rows: Schema.optionalKey(TerminalSize),
+	cols: Schema.optionalKey(TerminalSize),
+	yieldTimeMs: Schema.optionalKey(YieldTime),
+	maxOutputBytes: Schema.optionalKey(MaxOutputBytes),
+})
+export type ExecRequest = typeof ExecRequest.Type
+
+export const WriteStdinRequest = Schema.Struct({
+	/** Text for stdin. It may be empty, to only read new output. */
+	chars: Schema.String.check(Schema.isMaxLength(100_000)),
+	yieldTimeMs: Schema.optionalKey(YieldTime),
+	maxOutputBytes: Schema.optionalKey(MaxOutputBytes),
+})
+export type WriteStdinRequest = typeof WriteStdinRequest.Type
+
+export const ResizeRequest = Schema.Struct({
+	rows: TerminalSize,
+	cols: TerminalSize,
+})
+export type ResizeRequest = typeof ResizeRequest.Type
+
+/** What a command session gave since the last call. */
+export const SessionOutput = Schema.Struct({
+	/** Give it to the next call. It is `null` when the command has ended. */
+	session: Schema.NullOr(Schema.String),
+	running: Schema.Boolean,
+	/** `null` while the command runs, or when a signal stopped it. */
+	exitCode: Schema.NullOr(Schema.Int),
+	signal: Schema.NullOr(Schema.String),
+	/** The new output, as UTF-8 text. */
+	output: Schema.String,
+	/** True when there was more new output than `maxOutputBytes`. Then only its end is here. */
+	truncated: Schema.Boolean,
+})
+export type SessionOutput = typeof SessionOutput.Type
 
 export const PairingId = Schema.String.check(
 	Schema.isMinLength(1),
@@ -529,9 +647,15 @@ export class PairingInvalid extends Schema.TaggedError<PairingInvalid>()(
 	{},
 ) {}
 
+/** The session is not there. It ended long ago, or it belongs to another Chat. */
+export class ComputerSessionNotFound extends Schema.TaggedError<ComputerSessionNotFound>()(
+	"ComputerSessionNotFound",
+	{ id: Schema.String },
+) {}
 export const ComputerErrors = [
 	...AuthorizationErrors,
 	ComputerNotFound.pipe(HttpApiSchema.status(404)),
+	ComputerSessionNotFound.pipe(HttpApiSchema.status(404)),
 	ComputerProviderNotFound.pipe(HttpApiSchema.status(404)),
 	ComputerConflict.pipe(HttpApiSchema.status(409)),
 	ComputerInvalid.pipe(HttpApiSchema.status(400)),
@@ -544,6 +668,7 @@ export const ComputerErrors = [
 
 const providerParams = { providerId: ComputerProviderId }
 const computerParams = { computerId: ComputerId }
+const sessionParams = { ...computerParams, sessionId: ConnectorSessionId }
 
 export class ComputerProvidersApi extends HttpApiGroup.make("computerProviders")
 	.add(
@@ -707,14 +832,49 @@ export class ComputersApi extends HttpApiGroup.make("computers")
 			OpenApi.Description,
 			"Makes a new token for the connector of a connector Computer. The old token stops working, and its connection closes.",
 		),
-		HttpApiEndpoint.post("runCommand", "/v1/computers/:computerId/commands", {
+		HttpApiEndpoint.post("exec", "/v1/computers/:computerId/sessions", {
 			params: computerParams,
-			payload: RunCommandRequest,
-			success: CommandResult,
+			payload: ExecRequest,
+			success: SessionOutput,
 			error: ComputerErrors,
 		}).annotate(
 			OpenApi.Description,
-			"Runs a shell command and waits for it to end. A paused Computer resumes first.",
+			"Starts a shell command and waits up to yieldTimeMs for it. When it still runs, the answer has a session ID for more input and output. A paused Computer resumes first.",
+		),
+		HttpApiEndpoint.post(
+			"writeStdin",
+			"/v1/computers/:computerId/sessions/:sessionId/input",
+			{
+				params: sessionParams,
+				payload: WriteStdinRequest,
+				success: SessionOutput,
+				error: ComputerErrors,
+			},
+		).annotate(
+			OpenApi.Description,
+			"Sends text to the stdin of a session, and gives the output since the last call.",
+		),
+		HttpApiEndpoint.post(
+			"resizeSession",
+			"/v1/computers/:computerId/sessions/:sessionId/resize",
+			{
+				params: sessionParams,
+				payload: ResizeRequest,
+				success: HttpApiSchema.NoContent,
+				error: ComputerErrors,
+			},
+		),
+		HttpApiEndpoint.delete(
+			"closeSession",
+			"/v1/computers/:computerId/sessions/:sessionId",
+			{
+				params: sessionParams,
+				success: SessionOutput,
+				error: ComputerErrors,
+			},
+		).annotate(
+			OpenApi.Description,
+			"Stops the command of a session, and gives its last output.",
 		),
 		HttpApiEndpoint.get("readFile", "/v1/computers/:computerId/files", {
 			params: computerParams,
