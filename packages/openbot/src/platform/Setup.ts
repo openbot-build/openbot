@@ -1,10 +1,11 @@
-import { Authorization, type Settings as Api } from "@openbot-build/api"
+import { Authorization, Settings as Api } from "@openbot-build/api"
 import { Crypto, Effect, Option, Redacted, Schema } from "effect"
 import { Hex } from "effect/encoding"
 import { hint, Secrets } from "../secrets/Secrets.ts"
 import {
 	filesDefaults,
 	filesOf,
+	browserAuthOf,
 	type PlatformDocument,
 } from "../settings/Documents.ts"
 import { bindings, changeFiles } from "../settings/Platform.ts"
@@ -15,10 +16,14 @@ export interface Input {
 	readonly publicOrigin: string
 	/** None means that the platform has no sign-in provider of its own. */
 	readonly identityProvider: Option.Option<{
+		readonly providerId?: string
+		readonly callbackPath?: string
+		readonly scopes?: typeof Api.OidcScopes.Type
 		readonly issuer: string
 		readonly clientId: string
 		readonly clientSecret: Option.Option<Redacted.Redacted<string>>
 	}>
+	readonly browserAuth?: Api.BrowserAuth
 	/** People with these verified emails become platform admins. */
 	readonly adminEmails: ReadonlyArray<string>
 	/** Write the settings even when they exist. Use it only when no admin can sign in. */
@@ -81,13 +86,21 @@ export const run = (input: Input) =>
 			})
 		const sameAsCurrent = (document: PlatformDocument) =>
 			document.publicOrigin === input.publicOrigin &&
+			(input.browserAuth === undefined || (
+				browserAuthOf(document).sessionCookie === input.browserAuth.sessionCookie &&
+				browserAuthOf(document).loginCookie === input.browserAuth.loginCookie &&
+				browserAuthOf(document).sessionTtlMs === input.browserAuth.sessionTtlMs
+			)) &&
 			sameStorage(document) &&
 			Option.match(input.identityProvider, {
 				onNone: () => document.identityProvider === null,
 				onSome: (provider) =>
 					document.identityProvider !== null &&
 					document.identityProvider.issuer === provider.issuer &&
-					document.identityProvider.clientId === provider.clientId,
+					document.identityProvider.clientId === provider.clientId &&
+					(provider.providerId === undefined || (document.identityProvider.providerId ?? "oidc") === provider.providerId) &&
+					(provider.callbackPath === undefined || (document.identityProvider.callbackPath ?? "/auth/callback/oidc") === provider.callbackPath) &&
+					(provider.scopes === undefined || JSON.stringify(document.identityProvider.scopes ?? Api.defaultOidcScopes) === JSON.stringify(provider.scopes)),
 			})
 		if (
 			Option.isSome(current) &&
@@ -108,6 +121,9 @@ export const run = (input: Input) =>
 					),
 				).pipe(
 					Effect.map((clientSecret) => ({
+						providerId: provider.providerId ?? Option.getOrUndefined(current)?.document.identityProvider?.providerId ?? "oidc",
+						callbackPath: provider.callbackPath ?? Option.getOrUndefined(current)?.document.identityProvider?.callbackPath ?? "/auth/callback/oidc",
+						scopes: provider.scopes ?? Option.getOrUndefined(current)?.document.identityProvider?.scopes ?? Api.defaultOidcScopes,
 						issuer: provider.issuer,
 						clientId: provider.clientId,
 						clientSecret: Option.getOrNull(clientSecret),
@@ -162,6 +178,7 @@ export const run = (input: Input) =>
 		})
 		const document: PlatformDocument = {
 			...kept,
+			...(input.browserAuth === undefined ? {} : {browserAuth: input.browserAuth}),
 			...changedFiles,
 			publicOrigin: input.publicOrigin,
 			authSecret,

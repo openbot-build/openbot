@@ -50,6 +50,13 @@ export interface Delta {
 	readonly state?: Schema.Json
 	readonly items: ReadonlyArray<StoredItem>
 	readonly turn?: { readonly id: string; readonly value: Schema.Json }
+	/** Terminal Turns copied when a Chat is made from a fixed prefix. */
+	readonly turns?: ReadonlyArray<{
+		readonly id: string
+		readonly value: Schema.Json
+	}>
+	/** The source must still have this revision when the new Chat is saved. */
+	readonly source?: Chat.Position
 }
 /** Where a store keeps its data. Every value is JSON, so a database can keep it as text. */
 export interface Persistence {
@@ -162,6 +169,11 @@ export interface Store<P = {}> {
 		readonly value?: ChatState.Value<P>
 		readonly settings?: Partial<Turn.Settings>
 		readonly business?: Chat.Ref["business"]
+		readonly seed?: {
+			readonly items: ReadonlyArray<Item.Entry>
+			readonly turns: ReadonlyArray<Turn.Record>
+			readonly source?: Chat.Position
+		}
 	}) => Effect.Effect<Chat.View<P>, ChatStoreError>
 	/**
 	 * Changes a Chat. Writes to one Chat run one at a time. `update` must not write

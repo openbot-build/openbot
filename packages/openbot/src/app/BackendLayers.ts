@@ -163,6 +163,10 @@ export const layer = (options: Options = {}) =>
 				) => Effect.scoped(Effect.flatMap(current, f))
 				return Chats.Chats.of({
 					create: (input) => use((chats) => chats.create(input)),
+					fork: (id, input) => use((chats) => chats.fork(id, input)),
+					branches: (id) => use((chats) => chats.branches(id)),
+					withMemoryWrite: (id, epoch, write) =>
+						use((chats) => chats.withMemoryWrite(id, epoch, write)),
 					direct: (bot, chain) => use((chats) => chats.direct(bot, chain)),
 					get: (id) => use((chats) => chats.get(id)),
 					read: (id) => use((chats) => chats.read(id)),

@@ -4,11 +4,10 @@ description:
   Talk to a Bot. It always answers at once, and long work runs in parallel.
 ---
 
-A **Chat** is a conversation with a [Bot](/docs/bots). You do not make Chats,
-pick them or close them. You send a message to a Bot, and OpenBot keeps one Chat
-for you and that Bot. The Bot always answers at once. Long work goes to other
-Chats that run in parallel, and the results come back to your Chat later. This
-page shows how to talk to a Bot and how to read a Chat. Every route accepts a
+A **Chat** is a conversation with a [Bot](/docs/bots). Send a message to a Bot
+for one lasting `direct` Chat, or create separate `conversation` Chats with
+`POST /v1/chats`. Both use the same Turns, Items, tools and permissions. Long
+work goes to task Chats and its results come back later. Every route accepts a
 user token or the session cookie. See [Authentication](/docs/authentication).
 
 | Term     | Meaning                                                                                                            |
@@ -23,15 +22,16 @@ user token or the session cookie. See [Authentication](/docs/authentication).
 
 ## Kinds of Chats
 
-OpenBot makes every Chat itself. `kind` says why a Chat exists:
+`kind` says why a Chat exists:
 
-| Kind      | When OpenBot makes it                                                                                          | Who owns it                               |
-| --------- | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `direct`  | The first time a person sends a message to a Bot.                                                              | That person.                              |
-| `channel` | The first message in a chat of a [Channel](/docs/channels).                                                    | The actor of the Channel.                 |
-| `task`    | Each time a Bot gives work to a Bot, or a [trigger](/docs/triggers) fires. See [Delegation](/docs/delegation). | The owner of the Chat that gave the work. |
-| `review`  | A Bot must decide a [request](/docs/requests).                                                                 | The person that the request is for.       |
-| `live`    | Each time a person calls `POST /v1/bots/:botId/live`. See [Live mode](/docs/live).                             | That person.                              |
+| Kind           | When OpenBot makes it                                                                                          | Who owns it                               |
+| -------------- | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `direct`       | The first time a person sends a message to a Bot.                                                              | That person.                              |
+| `conversation` | Each call to `POST /v1/chats`.                                                                                 | That person.                              |
+| `channel`      | The first message in a chat of a [Channel](/docs/channels).                                                    | The actor of the Channel.                 |
+| `task`         | Each time a Bot gives work to a Bot, or a [trigger](/docs/triggers) fires. See [Delegation](/docs/delegation). | The owner of the Chat that gave the work. |
+| `review`       | A Bot must decide a [request](/docs/requests).                                                                 | The person that the request is for.       |
+| `live`         | Each time a person calls `POST /v1/bots/:botId/live`. See [Live mode](/docs/live).                             | That person.                              |
 
 Each person has one direct Chat with each Bot. A Chat has no end. It goes on for
 as long as people talk to the Bot, unless you
@@ -644,3 +644,34 @@ every 30 seconds. Every minute, OpenBot looks at all Chats:
 So no input is lost when a server stops, and no Chat stays stuck.
 
 See all fields in the [Chats reference](/docs/api/operations/tags/chats/).
+
+---
+
+## Separate conversations and branches
+
+Create a Chat with `POST /v1/chats` and
+`{ "botId": "bot_id", "requestId": "request_1" }`. It returns `201` and a Chat
+view. You need `delegate` on that Bot. The same `requestId` and body find the
+same existing Chat; a changed body returns `409`. Use a new request ID for each
+new action. The ID has 1 to 96 letters, digits, dashes or underscores. Keep it
+until an uncertain request has been checked.
+
+`POST /v1/chats/:chatId/forks` copies saved history without running a model,
+tool or memory helper. Its body has `expected`, `requestId`, and `reason`
+(`fork` or `regenerate`). Optional
+`through: { turnId, edge: "before" | "after" }` selects a full Turn boundary.
+Regeneration needs `edge: "before"`; the caller then sends the old input once as
+a new message. A fork alone never sends it. Never repeat a message or outside
+write to recover a lost response.
+
+A running Chat, waiting input, open request, delegation, reminder, background
+operation, or App operation with an unknown result blocks the fork. The source
+revision is checked in the same database transaction as the copy. Copied Items
+and Turns keep their IDs, but their Chat ID names the new Chat. The source does
+not change. Each branch may take new messages; saved prefixes stay unchanged.
+
+`GET /v1/chats/:chatId/branches` returns the root and its branches in your own
+namespace. `branchOf` records the source Chat, source revision, Item sequence,
+root Chat and reason. It is separate from `parent`, which means delegation. Read
+old branches to switch versions. Do not delete them when selecting a new
+version. Import every old version as a branch; never replay its model or tools.

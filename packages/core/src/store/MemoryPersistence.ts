@@ -133,6 +133,14 @@ export const make: Effect.Effect<ChatStore.Persistence> = Effect.gen(
 			save: (delta) =>
 				SynchronizedRef.updateEffect(state, (s) =>
 					Effect.gen(function* () {
+						if (
+							delta.source !== undefined &&
+							Option.getOrUndefined(HashMap.get(s.chats, delta.source.chat))
+								?.revision !== delta.source.revision
+						)
+							return yield* error("reference-conflict", {
+								message: "The source Chat changed",
+							})
 						const current = HashMap.get(s.chats, delta.chat)
 						const revision = Option.match(current, {
 							onNone: () => null,
@@ -151,7 +159,10 @@ export const make: Effect.Effect<ChatStore.Persistence> = Effect.gen(
 								before.items,
 								Chunk.fromIterable(delta.items),
 							),
-							turns: upsert(before.turns, delta.turn),
+							turns: upsert(
+								Arr.reduce(delta.turns ?? [], before.turns, upsert),
+								delta.turn,
+							),
 						}
 						return {
 							chats: HashMap.set(s.chats, delta.chat, stored),

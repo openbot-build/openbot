@@ -1,6 +1,7 @@
-import type { Settings as Api } from "@openbot-build/api"
+import { Settings as Api } from "@openbot-build/api"
 import { DateTime } from "effect"
 import {
+	browserAuthOf,
 	codeModeOf,
 	filesOf,
 	quotaOf,
@@ -21,12 +22,16 @@ export const platform = (
 ): Api.PlatformSettings => {
 	const { document } = snapshot
 	return {
+		browserAuth: browserAuthOf(document),
 		version: snapshot.version,
 		publicOrigin: document.publicOrigin,
 		identityProvider:
 			document.identityProvider === null
 				? null
 				: {
+						providerId: document.identityProvider.providerId ?? "oidc",
+						callbackPath: document.identityProvider.callbackPath ?? "/auth/callback/oidc",
+						scopes: document.identityProvider.scopes ?? Api.defaultOidcScopes,
 						issuer: document.identityProvider.issuer,
 						clientId: document.identityProvider.clientId,
 						clientSecret: {

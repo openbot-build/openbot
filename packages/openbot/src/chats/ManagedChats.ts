@@ -1,6 +1,7 @@
 import {
 	Bot,
 	Chat,
+	ChatState,
 	ChatRuntime,
 	ChatStore,
 	ChatStoreRepository,
@@ -19,6 +20,7 @@ import {
 	Crypto,
 	Duration,
 	Effect,
+	Exit,
 	HashMap,
 	Layer,
 	Option,
@@ -31,6 +33,7 @@ import {
 } from "effect"
 import { AiError, LanguageModel, type Tool } from "effect/ai"
 import {
+	defaultChatMemory,
 	ChatConflict,
 	ChatExecutionUnavailable,
 	ChatModelInvalid,
@@ -401,6 +404,8 @@ export const factory: Effect.Effect<
 					kind: state.kind,
 					bot: state.bot,
 					parent: state.parent ?? null,
+					...(state.branchOf === undefined ? {} : { branchOf: state.branchOf }),
+					memory: state.memory ?? defaultChatMemory,
 					...(state.title === undefined ? {} : { title: state.title }),
 					settings: ref.settings,
 					...(state.planApproval === undefined
@@ -511,6 +516,7 @@ export const factory: Effect.Effect<
 			const stateOf = (input: CreateInput): ChatHost.ChatHostState => ({
 				bot: input.bot.id,
 				kind: input.kind,
+				...(input.memory === undefined ? {} : { memory: input.memory }),
 				chain: input.chain,
 				...(input.parent === undefined ? {} : { parent: input.parent }),
 				...(input.review === undefined ? {} : { review: input.review }),
@@ -527,8 +533,37 @@ export const factory: Effect.Effect<
 					Chat.Id.make("chat_" + Str.replaceAll("-", "")(uuid)),
 				),
 			)
+			const requestChatId = (requestId: string) =>
+				Chat.Id.make("chat_request_" + requestId)
+			const sameRequest = (
+				ref: Chat.Ref,
+				requestId: string,
+				signature: string,
+			) =>
+				ChatHost.hostState(ref).creation?.requestId === requestId &&
+				ChatHost.hostState(ref).creation?.signature === signature
+			const createSignature = (input: CreateInput) =>
+				Schema.encodeEffect(Schema.fromJsonString(Schema.JsonObject))({
+					bot: input.bot.id,
+					kind: input.kind,
+					memory: input.memory ?? defaultChatMemory,
+				})
 			const create: typeof Chats.Service.create = (input) =>
 				Effect.gen(function* () {
+					const signature = yield* createSignature(input).pipe(Effect.orDie)
+					if (input.requestId !== undefined) {
+						const previous = yield* store
+							.get(requestChatId(input.requestId))
+							.pipe(toPublic)
+						if (Option.isSome(previous)) {
+							if (!sameRequest(previous.value, input.requestId, signature))
+								return yield* ChatConflict.make({
+									message:
+										"This request ID already names a different Chat request",
+								})
+							return yield* get(previous.value.id)
+						}
+					}
 					if (input.kind === "live")
 						return yield* store
 							.create({
@@ -555,10 +590,18 @@ export const factory: Effect.Effect<
 							message: "Set the model of the Bot.",
 						})
 					const model = yield* validateSelection(selected)
-					const state = stateOf(input)
+					const state = {
+						...stateOf(input),
+						...(input.requestId === undefined
+							? {}
+							: { creation: { requestId: input.requestId, signature } }),
+					}
 					return yield* store
 						.create({
-							id: input.id ?? (yield* newChatId),
+							id:
+								input.requestId === undefined
+									? (input.id ?? (yield* newChatId))
+									: requestChatId(input.requestId),
 							settings: { model },
 							business: { [chatHostId]: state },
 						})
@@ -592,11 +635,188 @@ export const factory: Effect.Effect<
 					kinds:
 						input?.kind !== undefined
 							? [input.kind]
-							: (input?.kinds ?? ["direct", "channel", "live"]),
+							: (input?.kinds ?? ["direct", "conversation", "channel", "live"]),
 				}).pipe(
 					toPublic,
 					Effect.flatMap((refs) => Effect.forEach(refs, summary)),
 				)
+			const branches: typeof Chats.Service.branches = (id) =>
+				Effect.gen(function* () {
+					const source = yield* read(id)
+					const root = ChatHost.hostState(source.chat).branchOf?.root ?? id
+					const rows = yield* StoredChats.list(db, namespace, {
+						kinds: ["conversation"],
+					}).pipe(toPublic)
+					return yield* Effect.forEach(
+						Arr.filter(
+							rows,
+							(row) =>
+								row.id === root ||
+								ChatHost.hostState(row).branchOf?.root === root,
+						),
+						summary,
+					)
+				})
+			const fork: typeof Chats.Service.fork = (id, input) =>
+				Effect.gen(function* () {
+					const signature = yield* Schema.encodeEffect(
+						Schema.fromJsonString(Schema.JsonObject),
+					)({
+						source: id,
+						expected: input.expected,
+						through: input.through ?? null,
+						reason: input.reason,
+					}).pipe(Effect.orDie)
+					const destination = requestChatId(input.requestId)
+					const existing = yield* store.get(destination).pipe(toPublic)
+					if (Option.isSome(existing)) {
+						if (!sameRequest(existing.value, input.requestId, signature))
+							return yield* ChatConflict.make({
+								message:
+									"This request ID already names a different Chat request",
+							})
+						return yield* get(destination)
+					}
+					if (
+						input.reason === "regenerate" &&
+						(input.through === undefined || input.through.edge !== "before")
+					)
+						return yield* ChatConflict.make({
+							message: "Regeneration needs the start of a recorded Turn",
+						})
+					const copied = yield* store
+						.modifyEffect({
+							chat: id,
+							expectedRevision: input.expected,
+							update: (source) =>
+								Effect.gen(function* () {
+									const state = ChatHost.hostState(source.chat)
+									if (state.kind !== "conversation")
+										return yield* ChatConflict.make({
+											message: "Only a conversation can be forked",
+										})
+									const open = yield* openWork
+										.count(state.chain.organizationId, id)
+										.pipe(
+											Failures.replace(
+												"OpenBot could not check the open work of a Chat.",
+												() =>
+													ChatConflict.make({
+														message: "The open work could not be checked",
+													}),
+											),
+										)
+									const background = yield* operations.list(id).pipe(toPublic)
+									if (
+										source.chat.turn?.status._tag === "Running" ||
+										source.chat.inbox.length > 0 ||
+										(yield* runtime.isActive(id)) ||
+										open.delegations > 0 ||
+										open.requests > 0 ||
+										open.reminders > 0 ||
+										Arr.some(
+											background,
+											(operation) => operation.status._tag === "Running",
+										)
+									)
+										return yield* ChatConflict.make({
+											message: "The Chat still has work to settle",
+										})
+									const all = yield* store.items(id)
+									const turns = yield* store.turns(id)
+									let throughSeq = source.chat.seq
+									if (input.through !== undefined) {
+										const chosen = Option.getOrUndefined(
+											Arr.findFirst(
+												turns,
+												(turn) => turn.id === input.through?.turnId,
+											),
+										)
+										if (chosen === undefined || !Turn.isTerminal(chosen.status))
+											return yield* ChatConflict.make({
+												message: "The source Turn has not ended",
+											})
+										const own = Arr.filter(
+											all,
+											(item) => item.origin?.turn === chosen.id,
+										)
+										if (own.length === 0)
+											return yield* ChatConflict.make({
+												message: "The source Turn has no saved Items",
+											})
+										throughSeq = Item.Seq.make(
+											input.through.edge === "before"
+												? Math.min(...Arr.map(own, (item) => item.seq)) - 1
+												: Math.max(...Arr.map(own, (item) => item.seq)),
+										)
+									}
+									const items = Arr.filter(
+										all,
+										(item) => item.seq <= throughSeq,
+									)
+									const retained = Arr.filter(turns, (turn) =>
+										Arr.some(items, (item) => item.origin?.turn === turn.id),
+									)
+									if (
+										Arr.some(
+											retained,
+											(turn) =>
+												!Turn.isTerminal(turn.status) ||
+												Arr.some(
+													[...turn.input, ...turn.items],
+													(item) =>
+														!Arr.some(items, (entry) => entry.id === item),
+												),
+										)
+									)
+										return yield* ChatConflict.make({
+											message: "The boundary cuts through a Turn",
+										})
+									const branchOf = {
+										chat: id,
+										revision: input.expected,
+										throughSeq,
+										root: state.branchOf?.root ?? id,
+										reason: input.reason,
+									}
+									const view = yield* store.create({
+										id: destination,
+										settings: source.chat.settings,
+										business: {
+											[chatHostId]: {
+												bot: state.bot,
+												kind: "conversation",
+												chain: state.chain,
+												memory: state.memory ?? defaultChatMemory,
+												branchOf,
+												creation: { requestId: input.requestId, signature },
+												learnAfterSeq: throughSeq,
+												...(state.planApproval === undefined
+													? {}
+													: { planApproval: state.planApproval }),
+											},
+										},
+										value: {
+											conversation: {
+												context: {
+													_tag: "Prompt",
+													prompt: ChatState.promptOf(items),
+												},
+												closed: true,
+											},
+										},
+										seed: {
+											items,
+											turns: retained,
+											source: { chat: id, revision: input.expected },
+										},
+									})
+									return [view, Option.none()] as const
+								}),
+						})
+						.pipe(toPublic)
+					return yield* project(copied.result)
+				})
 			const update: typeof Chats.Service.update = (id, input) =>
 				Effect.gen(function* () {
 					const live = isLive((yield* read(id)).chat)
@@ -626,18 +846,26 @@ export const factory: Effect.Effect<
 								const state = ChatHost.hostState(current.chat)
 								// A `null` makes the Chat follow its Bot and the member again.
 								const { planApproval: _approval, ...kept } = state
-								const business =
-									input.planApproval === undefined
+								const nextState = {
+									...(input.planApproval === undefined
+										? state
+										: input.planApproval === null
+											? kept
+											: { ...kept, planApproval: input.planApproval }),
+									...(input.memory === undefined
 										? {}
 										: {
-												business: {
-													...current.chat.business,
-													[chatHostId]:
-														input.planApproval === null
-															? kept
-															: { ...kept, planApproval: input.planApproval },
-												},
-											}
+												memory: input.memory,
+												memoryEpoch: (state.memoryEpoch ?? 0) + 1,
+												learnAfterSeq: current.chat.seq,
+											}),
+								}
+								const business = {
+									business: {
+										...current.chat.business,
+										[chatHostId]: nextState,
+									},
+								}
 								return Effect.succeed([
 									undefined,
 									Option.some({ chat: { settings, ...business } }),
@@ -709,6 +937,7 @@ export const factory: Effect.Effect<
 						.deliver({
 							chat: id,
 							input: inputPrompt(input.input),
+							metadata: ChatHost.memoryMetadata(view.chat, input.memory),
 							author: input.author,
 							...(input.notice === undefined ? {} : { notice: input.notice }),
 							...(input.approved === undefined
@@ -1048,8 +1277,27 @@ export const factory: Effect.Effect<
 						.pipe(toPublic)
 					return pageOf(rows, limit, (item) => item.seq)
 				})
+			const withMemoryWrite: typeof Chats.Service.withMemoryWrite = (
+				id,
+				epoch,
+				write,
+			) =>
+				StoredChats.withMemoryWrite(db, namespace, id, epoch, write).pipe(
+					toPublic,
+					Effect.flatMap((result) =>
+						Option.match(result, {
+							onNone: () => Effect.succeedNone,
+							onSome: (exit) =>
+								Exit.match(exit, {
+									onFailure: Effect.failCause,
+									onSuccess: Effect.succeed,
+								}).pipe(Effect.asSome),
+						}),
+					),
+				)
 			const itemsAfter: typeof Chats.Service.itemsAfter = (id, after) =>
 				Effect.gen(function* () {
+					const current = yield* read(id)
 					const items = yield* store.items(id, { after }).pipe(toPublic)
 					const turns = Arr.dedupe(
 						Arr.flatMap(items, (item) =>
@@ -1061,6 +1309,12 @@ export const factory: Effect.Effect<
 					)
 					return {
 						items,
+						memoryDenied: Arr.flatMap(records, (record) =>
+							Option.isSome(record) &&
+							!ChatHost.memoryOf(current.chat, record.value).write
+								? [record.value.id]
+								: [],
+						),
 						authors: new Map(
 							Arr.flatMap(records, (record) =>
 								Option.isSome(record) && record.value.author !== undefined
@@ -1073,6 +1327,8 @@ export const factory: Effect.Effect<
 			return {
 				...Chats.of({
 					create,
+					fork,
+					branches,
 					direct,
 					get,
 					read,
@@ -1131,6 +1387,7 @@ export const factory: Effect.Effect<
 					turnItems,
 					turnLog: (id, turn) => store.items(id, { turn }).pipe(toPublic),
 					itemsAfter,
+					withMemoryWrite,
 					items,
 				}),
 				runtime,

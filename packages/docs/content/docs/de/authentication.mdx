@@ -397,3 +397,9 @@ bereitstellen. Zwei Abläufe fügen einen Query-Wert hinzu:
   `POST /v1/app-authorizations/<flowId>/complete` auf, um den Ablauf zu beenden.
 - **Entwickler-Tests.** Eine Autorisierung für einen Entwickler-Test kehrt zu
   `/?developerTest=<testId>` zurück.
+
+## Bestehende Browser-Clients
+
+Der Plattform-Anbieter kann `providerId`, `callbackPath` und `scopes` setzen. Die Vorgaben bleiben `oidc`, `/auth/callback/oidc` und `openid profile email`. Ein Anbieter kann `offline_access` für erneuerten Zugriff ergänzen. `browserAuth` behält vorhandene Host-Cookie-Namen und die Sitzungsdauer. Änderungen nutzen die Version der Plattform-Einstellungen. Fehlende Werte behalten die gespeicherte Einstellung.
+
+`GET /auth/login?returnTo=...`, der konfigurierte Rückruf und `POST /auth/logout` nutzen dasselbe native OAuth-SDK. State, Nonce, PKCE, Cookies und Widerruf werden weiter geprüft. Rückruf und Rückweg bleiben auf dem konfigurierten Ursprung. Diese Optionen verbinden keine Konten anhand der E-Mail.

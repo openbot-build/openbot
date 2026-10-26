@@ -3,6 +3,8 @@ import { Effect, Schema, String as Str } from "effect"
 
 export const Credential = Schema.Redacted(Schema.NonEmptyString)
 const SharedConfiguration = Schema.Struct({
+	sessionCookie: Api.BrowserAuth.fields.sessionCookie.pipe(Schema.withDecodingDefault(Effect.succeed("__Host-openbot-session"))),
+	loginCookie: Api.BrowserAuth.fields.loginCookie.pipe(Schema.withDecodingDefault(Effect.succeed("__Host-openbot-login"))),
 	publicOrigin: Api.PublicOrigin.check(
 		Schema.makeFilter(Str.startsWith("https://"), {
 			message: "Expected a canonical HTTPS origin",
@@ -18,6 +20,9 @@ export const OidcConfiguration = Schema.Struct({
 	mode: Schema.Literal("oidc").pipe(
 		Schema.withDecodingDefault(Effect.succeed("oidc")),
 	),
+	providerId: Api.ProviderId.pipe(Schema.withDecodingDefault(Effect.succeed("oidc"))),
+	callbackPath: Api.CallbackPath.pipe(Schema.withDecodingDefault(Effect.succeed("/auth/callback/oidc"))),
+	scopes: Api.OidcScopes.pipe(Schema.withDecodingDefault(Effect.succeed(Api.defaultOidcScopes))),
 	issuer: Api.Issuer,
 	clientId: Schema.NonEmptyString,
 	clientSecret: Schema.optional(Credential),

@@ -13,13 +13,13 @@ export const ResolvedConfiguration = Schema.Union([
 			{ redirectUri: Schema.String },
 			{
 				redirectUri: (config) =>
-					Option.some(config.publicOrigin + "/auth/callback/oidc"),
+					Option.some(config.publicOrigin + config.callbackPath),
 			},
 		),
 	),
 	DevelopmentConfiguration,
 	NoProviderConfiguration,
-])
+]).check(Schema.makeFilter((config) => config.sessionCookie !== config.loginCookie, { message: "Session and login cookies must have different names" }))
 export type ResolvedConfiguration = typeof ResolvedConfiguration.Type
 
 /** Checks a sign-in configuration. A bad public origin has its own field, so the error can name it. */

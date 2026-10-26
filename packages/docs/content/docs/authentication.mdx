@@ -386,3 +386,9 @@ query value:
   finish the flow.
 - **Developer tests.** A developer test authorization returns to
   `/?developerTest=<testId>`.
+
+## Existing browser clients
+
+The platform provider can set `providerId`, `callbackPath` and `scopes`. The defaults remain `oidc`, `/auth/callback/oidc` and `openid profile email`. A provider that needs refresh access can add `offline_access`. `browserAuth` can keep existing Host cookie names and the session lifetime. Changes use the platform settings version; an omitted value keeps the saved value.
+
+`GET /auth/login?returnTo=...`, the configured callback and `POST /auth/logout` use the same native OAuth SDK. State, nonce, PKCE, cookie checks and revocation still apply. The callback and return paths must stay on the configured origin. These options do not link accounts by email.

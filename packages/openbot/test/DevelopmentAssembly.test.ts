@@ -36,7 +36,8 @@ import {
 } from "effect/http"
 import type * as Chats from "../src/chats/Chats.ts"
 import { authorOf } from "../src/chats/ChatHost.ts"
-import * as Backend from "../dist/app/Backend.js"
+// tsdown removes declarations of private modules. Use the source service key in this test.
+import * as Backend from "../src/app/Backend.ts"
 import * as Development from "../dist/Development.js"
 import * as Server from "../dist/app/Server.js"
 import { HostTools, OpenBot } from "@openbot-build/openbot"

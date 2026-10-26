@@ -45,7 +45,7 @@ import { Organization } from "../../organization/Organization.ts"
 import * as ChatHost from "../../chats/ChatHost.ts"
 import type * as Chats from "../../chats/Chats.ts"
 import { homeOf } from "../../bots/BotMemories.ts"
-import { MemoryBot, confideTool } from "../../bots/MemoryBot.ts"
+import { MemoryBot, confideTool, fallbackReply } from "../../bots/MemoryBot.ts"
 import { Bots } from "../../bots/Bots.ts"
 import {
 	Delegations,
@@ -836,18 +836,25 @@ export const make: Effect.Effect<
 						const { words } = yield* decode(ConfideInput)(raw)
 						const view = yield* input.read(current.chat)
 						const home = homeOf(current.caller.organizationId, current.bot)
-						const answer = yield* memoryBot.confess({
-							home,
-							bot: current.bot,
-							chat: view.chat,
-							items: yield* input.items(current.chat, {
-								turn: current.turn,
-							}),
-							turn: current.turn,
-							text: words,
-						})
+						const answer =
+							!(yield* memoryOn(view.chat)) ||
+							!ChatHost.memoryOf(view.chat).read
+								? fallbackReply
+								: yield* memoryBot.confess({
+										home,
+										bot: current.bot,
+										chat: view.chat,
+										items: yield* input.items(current.chat, {
+											turn: current.turn,
+										}),
+										turn: current.turn,
+										text: words,
+									})
 						// When the organization turns Bot memory off, nothing is learned.
-						if (yield* memoryOn(view.chat))
+						if (
+							(yield* memoryOn(view.chat)) &&
+							ChatHost.memoryOf(view.chat).write
+						)
 							yield* memoryBot.queue({
 								home,
 								organizationId: current.caller.organizationId,
@@ -1021,6 +1028,7 @@ export const make: Effect.Effect<
 				input.bot.instructions,
 				`You work with ${input.person} now.`,
 				input.state.kind === "direct" ||
+				input.state.kind === "conversation" ||
 				input.state.kind === "channel" ||
 				input.state.kind === "live"
 					? `People talk with you in this Chat. Answer them at once. Give long work, and work with many steps, to delegations with ${names.delegate}. You can also give it to yourself. Then you stay free to answer. The result of each delegation comes back to this Chat as a message.`
@@ -1181,7 +1189,8 @@ export const make: Effect.Effect<
 								const enriched =
 									state.kind === "review" ||
 									original.length === 0 ||
-									!(yield* memoryOn(view.chat))
+									!(yield* memoryOn(view.chat)) ||
+									!ChatHost.memoryOf(view.chat).read
 										? Option.none<string>()
 										: yield* memoryBot.enrich({
 												home,

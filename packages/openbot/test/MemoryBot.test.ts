@@ -465,3 +465,108 @@ describe("The memory Bot", () => {
 		},
 	)
 })
+
+it.effect(
+	"a memory-off Chat does not read memory or call a helper when it confides",
+	() =>
+		Effect.gen(function* () {
+			const memory = yield* setup()
+			const disabled = {
+				...chat,
+				business: {
+					[chatHostId]: { ...host, memory: { read: false, write: false } },
+				},
+			}
+			const reply = yield* memory.memoryBot.confess({
+				home,
+				bot: botOf,
+				chat: disabled,
+				items,
+				turn,
+				text: "Private work.",
+			})
+			assert.strictEqual(reply, MemoryBot.fallbackReply)
+			assert.isTrue(
+				Option.isNone(
+					yield* memory.memoryBot.enrich({
+						home,
+						bot: botOf,
+						chat: disabled,
+						author: "alice",
+						turn,
+						text: "Private work.",
+					}),
+				),
+			)
+			assert.strictEqual(yield* memory.calls, 0)
+			assert.deepStrictEqual(
+				yield* memory.memoryBot.confessions("org_1", chatId),
+				[],
+			)
+		}),
+)
+
+it.effect(
+	"copied history and memory-off Turns never become new memory evidence",
+	() =>
+		Effect.gen(function* () {
+			const memory = yield* setup()
+			yield* memory.queue
+			yield* memory.memoryBot.learn({
+				job: yield* memory.job,
+				bot: botOf,
+				chat: {
+					...chat,
+					business: { [chatHostId]: { ...host, learnAfterSeq: 1 } },
+				},
+				read,
+				own: HashSet.empty(),
+			})
+			assert.strictEqual(yield* memory.calls, 0)
+			assert.deepStrictEqual(yield* memory.entries, [])
+			yield* memory.queue
+			yield* memory.memoryBot.learn({
+				job: yield* memory.job,
+				bot: botOf,
+				chat: {
+					...chat,
+					business: {
+						[chatHostId]: { ...host, memory: { read: false, write: false } },
+					},
+				},
+				read,
+				own: HashSet.empty(),
+			})
+			assert.strictEqual(yield* memory.calls, 0)
+			assert.deepStrictEqual(yield* memory.entries, [])
+		}),
+)
+
+it.effect(
+	"a policy change while the helper works discards the result before writing",
+	() =>
+		Effect.gen(function* () {
+			const memory = yield* setup()
+			yield* memory.queue
+			const allow = yield* Ref.make(true)
+			const learning = yield* memory.memoryBot
+				.learn({
+					job: yield* memory.job,
+					bot: botOf,
+					chat,
+					read,
+					own: HashSet.empty(),
+					commit: (save) =>
+						Effect.flatMap(Ref.get(allow), (enabled) =>
+							enabled ? save.pipe(Effect.asSome) : Effect.succeedNone,
+						),
+				})
+				.pipe(Effect.forkChild({ startImmediately: true }))
+			yield* memory.asked
+			yield* Ref.set(allow, false)
+			yield* memory.open
+			yield* Fiber.join(learning)
+			assert.strictEqual(yield* memory.calls, 1)
+			assert.deepStrictEqual(yield* memory.entries, [])
+		}),
+)

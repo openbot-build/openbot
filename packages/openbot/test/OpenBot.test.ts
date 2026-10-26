@@ -27,9 +27,16 @@ import {
 	Server,
 	DatabasePostgres,
 } from "@openbot-build/openbot"
-import * as Backend from "../dist/app/Backend.js"
+// tsdown removes declarations of private modules. Use the source service key in this test.
+import * as Backend from "../src/app/Backend.ts"
 import { Chat, Config, Model, Provider } from "@openbot-build/core"
-import { AuthApi, BotsApi, MessageReceipt } from "@openbot-build/api"
+import {
+	AuthApi,
+	BotsApi,
+	MessageReceipt,
+	ChatView,
+	UserTokensApi,
+} from "@openbot-build/api"
 
 import { LanguageModel, Response } from "effect/ai"
 import { Base64, Base64Url } from "effect/encoding"
@@ -559,6 +566,71 @@ layer(platform, { excludeTestServices: true })((it) => {
 						model,
 					}),
 					Caller.json(Schema.toEncoded(BotsApi.Bot), 201),
+				)
+				// Independent conversations use the same cookie and token guards as direct Chats.
+				const createdToken = yield* Effect.flatMap(
+					session(alice.session, "/v1/user/tokens", "POST", {
+						name: "Conversation test",
+					}),
+					Caller.json(Schema.toEncoded(UserTokensApi.CreatedToken), 201),
+				)
+				const conversation = yield* Effect.flatMap(
+					session(alice.session, "/v1/chats", "POST", {
+						botId: aliceBot.id,
+						requestId: "cookie-conversation",
+					}),
+					Caller.json(Schema.toEncoded(ChatView), 201),
+				)
+				const branch = yield* Effect.flatMap(
+					request(`/v1/chats/${conversation.chat.id}/forks`, {
+						method: "POST",
+						headers: { authorization: "Bearer " + createdToken.secret },
+						payload: {
+							expected: conversation.chat.revision,
+							requestId: "token-fork",
+							reason: "fork",
+						},
+					}),
+					Caller.json(Schema.toEncoded(ChatView), 201),
+				)
+				assert.strictEqual(branch.chat.branchOf?.chat, conversation.chat.id)
+				assert.strictEqual(
+					(yield* session(
+						alice.session,
+						`/v1/chats/${conversation.chat.id}/branches`,
+					)).status,
+					200,
+				)
+				assert.strictEqual(
+					(yield* session(
+						bobSession,
+						`/v1/chats/${conversation.chat.id}/branches`,
+					)).status,
+					404,
+				)
+				assert.strictEqual(
+					(yield* session(
+						bobSession,
+						`/v1/chats/${conversation.chat.id}/forks`,
+						"POST",
+						{
+							expected: conversation.chat.revision,
+							requestId: "foreign-fork",
+							reason: "fork",
+						},
+					)).status,
+					404,
+				)
+				yield* session(alice.session, `/v1/chats/${branch.chat.id}`, "DELETE")
+				yield* session(
+					alice.session,
+					`/v1/chats/${conversation.chat.id}`,
+					"DELETE",
+				)
+				yield* session(
+					alice.session,
+					`/v1/user/tokens/${createdToken.token.id}`,
+					"DELETE",
 				)
 				const receipt = yield* Effect.flatMap(
 					session(alice.session, `/v1/bots/${aliceBot.id}/messages`, "POST", {

@@ -163,6 +163,7 @@ export const evidenceOf = (input: {
 	readonly items: ReadonlyArray<Item.Record>
 	/** The author of each Turn of the Items. */
 	readonly authors: ReadonlyMap<Turn.Id, Turn.Author>
+	readonly memoryDenied?: ReadonlyArray<Turn.Id>
 	/** OpenBot tools. Results of every other tool came from outside. */
 	readonly own: HashSet.HashSet<string>
 }): ReadonlyArray<BotMemory.Evidence> => {
@@ -301,8 +302,16 @@ export class MemoryBot extends Context.Service<
 				{
 					readonly items: ReadonlyArray<Item.Record>
 					readonly authors: ReadonlyMap<Turn.Id, Turn.Author>
+					readonly memoryDenied?: ReadonlyArray<Turn.Id>
 				},
 				Chats.ServiceError
+			>
+			/** The host holds the Chat lock and checks its policy before the save. */
+			readonly commit?: <A>(
+				save: Effect.Effect<A, BotsApi.BotStorageUnavailable>,
+			) => Effect.Effect<
+				Option.Option<A>,
+				BotsApi.BotStorageUnavailable | ChatNotFound
 			>
 			readonly own: HashSet.HashSet<string>
 		}) => Effect.Effect<void, BotsApi.BotStorageUnavailable | ChatNotFound>
@@ -490,6 +499,7 @@ export const make: Effect.Effect<
 			),
 		confess: (input) =>
 			Effect.gen(function* () {
+				if (!ChatHost.memoryOf(input.chat).read) return fallbackReply
 				const chain = ChatHost.turnChain(
 					input.chat,
 					input.chat.turn?.id === input.turn
@@ -531,7 +541,10 @@ export const make: Effect.Effect<
 										words: input.text,
 										conversation,
 										memory: BotMemory.render(
-											Arr.filter(pool, BotMemory.isActive),
+											visibleEntries(
+												pool,
+												viewerOf(input.chat, input.chat.turn?.author),
+											),
 											20000,
 										),
 									}),
@@ -569,6 +582,7 @@ export const make: Effect.Effect<
 			}).pipe(orFallback("The memory Bot could not answer", fallbackReply)),
 		enrich: (input) =>
 			Effect.gen(function* () {
+				if (!ChatHost.memoryOf(input.chat).read) return Option.none<string>()
 				const viewer = viewerOf(input.chat, input.author)
 				const candidates = visibleEntries(
 					yield* memories.pool(input.home),
@@ -669,22 +683,30 @@ export const make: Effect.Effect<
 				const cursorId = job.home.bot + "/" + job.chat
 				const cursorOrganization = job.home.organizationId
 				const after = yield* cursorOf(cursorOrganization, cursorId)
-				const fresh = yield* input.read(after).pipe(
-					// A Chat that is gone is not a broken store, so it keeps its own error.
-					Effect.catchIf(
-						(error): error is Exclude<Chats.ServiceError, ChatNotFound> =>
-							error._tag !== "ChatNotFound",
-						(error) =>
-							Effect.fail(error).pipe(
-								Failures.replace("The memory Bot could not read a Chat", () =>
-									BotsApi.BotStorageUnavailable.make({}),
+				const fresh = yield* input
+					.read(
+						Math.max(after, ChatHost.hostState(input.chat).learnAfterSeq ?? 0),
+					)
+					.pipe(
+						// A Chat that is gone is not a broken store, so it keeps its own error.
+						Effect.catchIf(
+							(error): error is Exclude<Chats.ServiceError, ChatNotFound> =>
+								error._tag !== "ChatNotFound",
+							(error) =>
+								Effect.fail(error).pipe(
+									Failures.replace("The memory Bot could not read a Chat", () =>
+										BotsApi.BotStorageUnavailable.make({}),
+									),
 								),
-							),
-					),
-				)
+						),
+					)
 				const evidence = evidenceOf({
 					chat: input.chat,
-					items: fresh.items,
+					items: Arr.filter(fresh.items, (item) =>
+						item.origin === undefined || fresh.memoryDenied === undefined
+							? (ChatHost.hostState(input.chat).memory?.write ?? true)
+							: !Arr.contains(fresh.memoryDenied, item.origin.turn),
+					),
 					authors: fresh.authors,
 					own: input.own,
 				}).slice(-60)
@@ -695,7 +717,7 @@ export const make: Effect.Effect<
 				 * When another run moved the cursor first, that run took this evidence, so
 				 * this run saves nothing. This also holds for runs on other servers.
 				 */
-				const settle = <A, E>(save: Effect.Effect<A, E>) =>
+				const transaction = <A, E>(save: Effect.Effect<A, E>) =>
 					records.transaction(
 						"memory_cursor:" + cursorOrganization + ":" + cursorId,
 						Effect.gen(function* () {
@@ -727,6 +749,12 @@ export const make: Effect.Effect<
 							return Option.some(saved)
 						}),
 					)
+				const settle = <A>(
+					save: Effect.Effect<A, BotsApi.BotStorageUnavailable>,
+				) =>
+					input.commit === undefined
+						? transaction(save)
+						: input.commit(transaction(save)).pipe(Effect.map(Option.flatten))
 				if (evidence.length === 0)
 					return yield* Effect.asVoid(settle(Effect.void))
 				const pool = yield* memories.pool(job.home)

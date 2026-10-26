@@ -29,12 +29,16 @@ export type FilesDocument = typeof FilesDocument.Type
  * secret keys of the instance, and only this code opens them.
  */
 export const PlatformDocument = Schema.Struct({
+	browserAuth: Schema.optionalKey(Api.BrowserAuth),
 	publicOrigin: Api.PublicOrigin,
 	/** Signs the sign-in cookies of Better Auth. `openbot setup` makes it. */
 	authSecret: Schema.String,
 	/** Null means that people sign in only through the SSO connections of organizations. */
 	identityProvider: Schema.NullOr(
 		Schema.Struct({
+			providerId: Schema.optionalKey(Api.ProviderId),
+			callbackPath: Schema.optionalKey(Api.CallbackPath),
+			scopes: Schema.optionalKey(Api.OidcScopes),
 			issuer: Api.Issuer,
 			clientId: Api.ClientId,
 			clientSecret: Schema.NullOr(Schema.String),
@@ -54,6 +58,8 @@ export const PlatformDocument = Schema.Struct({
 	files: Schema.optionalKey(FilesDocument),
 })
 export type PlatformDocument = typeof PlatformDocument.Type
+export const browserAuthDefaults: Api.BrowserAuth = { sessionCookie: "__Host-openbot-session", loginCookie: "__Host-openbot-login", sessionTtlMs: 30 * 24 * 60 * 60 * 1000 }
+export const browserAuthOf = (document: { readonly browserAuth?: Api.BrowserAuth }): Api.BrowserAuth => document.browserAuth ?? browserAuthDefaults
 
 /** The Code Mode settings of the platform. */
 export const codeModeOf = (document: PlatformDocument): Api.CodeMode =>

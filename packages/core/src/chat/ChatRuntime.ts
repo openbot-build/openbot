@@ -614,6 +614,9 @@ export const make = <
 							const record: Turn.Record = {
 								...(input.action === undefined ? {} : { action: input.action }),
 								...(author === undefined ? {} : { author }),
+								...(head.metadata === undefined
+									? {}
+									: { metadata: head.metadata }),
 								id: turn,
 								chat: view.chat.id,
 								settings,
@@ -1771,7 +1774,12 @@ export const make = <
 							Arr.prepend(
 								Arr.takeWhile(
 									Arr.tailNonEmpty(messages),
-									(entry) => entry.author === head.author,
+									(entry) =>
+										entry.author === head.author &&
+										Schema.toEquivalence(Schema.JsonObject)(
+											entry.metadata ?? {},
+											head.metadata ?? {},
+										),
 								),
 								head,
 							),
@@ -1833,6 +1841,7 @@ export const make = <
 				content: Prompt.make(input.input),
 				kind: "message",
 				...(input.author === undefined ? {} : { author: input.author }),
+				...(input.metadata === undefined ? {} : { metadata: input.metadata }),
 				...(input.notice === undefined ? {} : { notice: input.notice }),
 				...(input.approved === undefined ? {} : { approved: input.approved }),
 			}))
@@ -1849,6 +1858,10 @@ export const make = <
 								current !== undefined &&
 								current.status._tag === "Running" &&
 								current.author === input.author &&
+								Schema.toEquivalence(Schema.JsonObject)(
+									current.metadata ?? {},
+									input.metadata ?? {},
+								) &&
 								input.queue !== true
 									? Option.some(current.id)
 									: Option.none()

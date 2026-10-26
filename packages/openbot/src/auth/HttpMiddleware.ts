@@ -30,6 +30,28 @@ import { Organization } from "../organization/Organization.ts"
 import { RateLimiter } from "../billing/RateLimit.ts"
 import * as Platform from "../settings/Platform.ts"
 import { Settings } from "../settings/Settings.ts"
+import { browserAuthDefaults, browserAuthOf } from "../settings/Documents.ts"
+
+/** Read the cookie name from the same settings as the sign-in SDK. */
+const sessionCookie = (settings: typeof Settings.Service) =>
+	Effect.gen(function* () {
+		const request = yield* HttpServerRequest.HttpServerRequest
+		const platform = yield* settings.platform.pipe(Failures.replace(
+			"OpenBot could not read the session cookie settings",
+			() => AuthUnavailable.make({dependency: "settings"}),
+		))
+		const config = Option.match(platform, {
+			onNone: () => browserAuthDefaults,
+			onSome: ({document}) => browserAuthOf(document),
+		})
+		return Option.map(Option.fromNullishOr(request.cookies[config.sessionCookie]), Redacted.make)
+	})
+
+const requireSessionCookie = (settings: typeof Settings.Service) =>
+	sessionCookie(settings).pipe(Effect.flatMap(Option.match({
+		onNone: () => Effect.fail(CredentialRejected.make({kind: "session"})),
+		onSome: Effect.succeed,
+	})))
 
 /** The public error for a credential that failed to resolve. */
 const publicError = (error: AuthUnavailable | CredentialRejected) =>
@@ -57,15 +79,14 @@ export const setSessionCookies = (setCookies: ReadonlyArray<string>) =>
  * The session of the session cookie, if the request has one. A rejected cookie
  * counts as no cookie, so the caller must log in first.
  */
-export const optionalSession = (auth: typeof Auth.Service) =>
+export const optionalSession = (auth: typeof Auth.Service, settings: typeof Settings.Service) =>
 	Effect.gen(function* () {
-		const request = yield* HttpServerRequest.HttpServerRequest
 		return yield* Effect.transposeOption(
 			Option.map(
-				Option.fromNullishOr(request.cookies[AuthApi.SessionCookie]),
+				yield* sessionCookie(settings),
 				(cookie) =>
 					auth
-						.resolveSession(Redacted.make(cookie))
+						.resolveSession(cookie)
 						.pipe(
 							Effect.tap(({ setCookies }) => setSessionCookies(setCookies)),
 						),
@@ -105,9 +126,12 @@ export const layerSessionAuth = Layer.effect(
 	AuthApi.SessionAuth,
 	Effect.gen(function* () {
 		const auth = yield* Auth
+		const settings = yield* Settings
 		return {
-			session: (httpEffect, { credential }) =>
-				auth.resolveSession(credential).pipe(
+			session: (httpEffect) =>
+				requireSessionCookie(settings).pipe(
+					Effect.mapError(publicError),
+					Effect.flatMap((credential) => auth.resolveSession(credential).pipe(
 					Effect.mapError(publicError),
 					Effect.flatMap(({ setCookies, ...session }) =>
 						Effect.andThen(
@@ -118,6 +142,7 @@ export const layerSessionAuth = Layer.effect(
 							}),
 						),
 					),
+					)),
 				),
 		}
 	}),
@@ -182,10 +207,10 @@ const organizationQuery = (
 const resolveCookie = (
 	auth: typeof Auth.Service,
 	settings: typeof Settings.Service,
-	credential: Parameters<typeof auth.resolveSession>[0],
 ) =>
 	Effect.gen(function* () {
 		const request = yield* HttpServerRequest.HttpServerRequest
+		const credential = yield* requireSessionCookie(settings).pipe(Effect.mapError(publicError))
 		const publicOrigin = yield* Platform.publicOriginOr(settings, () =>
 			AuthApi.AuthenticationUnavailable.make({}),
 		)
@@ -243,12 +268,11 @@ export const layerBotAuth = Layer.effect(
 						Effect.provideService(httpEffect, Identity, caller),
 					),
 				),
-			session: (httpEffect, { credential }) =>
+			session: (httpEffect) =>
 				Effect.gen(function* () {
 					const { request, session } = yield* resolveCookie(
 						auth,
 						settings,
-						credential,
 					)
 					const organizationId = yield* chooseOrganization(
 						session,
@@ -294,9 +318,9 @@ export const layerAccountAuth = Layer.effect(
 						return Effect.provideService(httpEffect, Account, account)
 					}),
 				),
-			session: (httpEffect, { credential }) =>
+			session: (httpEffect) =>
 				Effect.gen(function* () {
-					const { session } = yield* resolveCookie(auth, settings, credential)
+					const { session } = yield* resolveCookie(auth, settings)
 					const account: AccountCaller = {
 						kind: "member",
 						userId: session.userId,

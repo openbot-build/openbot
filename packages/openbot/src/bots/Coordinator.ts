@@ -6,7 +6,7 @@ import {
 	Turn,
 } from "@openbot-build/core"
 import {
-	type BotsApi,
+	BotsApi,
 	type ChatExecutionUnavailable,
 	DelegationsApi,
 	type Identity,
@@ -386,7 +386,11 @@ export const layer = Layer.effect(
 		) =>
 			chatsFor(member).pipe(
 				Effect.flatMap((chats) =>
-					chats.deliver(chat, { ...rest, input: text }),
+					chats.deliver(chat, {
+						...rest,
+						memory: rest.memory ?? { read: false, write: false },
+						input: text,
+					}),
 				),
 				Effect.asVoid,
 				Effect.catchTag("ChatNotFound", () => Effect.void),
@@ -460,6 +464,24 @@ export const layer = Layer.effect(
 					.pipe(Background.logFailure("The audit log could not record work"))
 			})
 
+		/** New delegated work keeps the memory choice of the Turn that gave it. */
+		const parentMemory = (
+			chats: typeof Chats.Chats.Service,
+			parent: DelegationsApi.DelegationParent,
+		) =>
+			Effect.gen(function* () {
+				const view = yield* chats.read(parent.chat)
+				const record =
+					parent.turn === undefined
+						? undefined
+						: (yield* chats.turn(parent.chat, parent.turn)).turn
+				return ChatHost.memoryOf(view.chat, record)
+			}).pipe(
+				Effect.catchTag("ChatNotFound", () =>
+					Effect.succeed({ read: false, write: false }),
+				),
+			)
+
 		/**
 		 * Makes the task Chat of claimed work, or finds the Chat that an earlier start
 		 * made, and saves it on the work. None when the work changed in the meantime:
@@ -484,6 +506,7 @@ export const layer = Layer.effect(
 						id,
 						bot,
 						kind: "task",
+						memory: yield* parentMemory(chats, delegation.parent),
 						chain,
 						parent: { chat: delegation.parent.chat, delegation: delegation.id },
 						...(delegation.trigger === undefined
@@ -803,6 +826,7 @@ export const layer = Layer.effect(
 					id,
 					bot: bot.value,
 					kind: "review",
+					memory: { read: false, write: false },
 					review: stored.request.id,
 					chain: {
 						...forPerson,
@@ -1122,6 +1146,30 @@ export const layer = Layer.effect(
 					bot: bot.value,
 					chat: view.chat,
 					read: (after) => chats.itemsAfter(chat, after),
+					commit: (save) =>
+						chats.withMemoryWrite(chat, state.memoryEpoch ?? 0, save).pipe(
+							Effect.catchTags({
+								ChatConflict: (error) =>
+									Effect.logWarning(
+										"The memory policy could not be checked",
+										error,
+									).pipe(Effect.as(Option.none())),
+								ChatStorageUnavailable: (error) =>
+									Effect.logWarning(
+										"The memory policy could not be checked",
+										error,
+									).pipe(
+										Effect.andThen(
+											Effect.fail(BotsApi.BotStorageUnavailable.make({})),
+										),
+									),
+								ChatModelInvalid: (error) =>
+									Effect.logWarning(
+										"The memory policy could not be checked",
+										error,
+									).pipe(Effect.as(Option.none())),
+							}),
+						),
 					own,
 				})
 			})

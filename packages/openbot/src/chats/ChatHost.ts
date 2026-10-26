@@ -2,6 +2,9 @@ import { Chat, type Plugin, type Turn } from "@openbot-build/core"
 import {
 	BotsApi,
 	ChatKind,
+	ChatBranch,
+	ChatMemory,
+	defaultChatMemory,
 	ChatParent,
 	PlanApproval,
 	UserTokensApi,
@@ -40,6 +43,15 @@ export type Chain = typeof Chain.Type
 export const ChatHostState = Schema.Struct({
 	bot: BotsApi.BotId,
 	kind: ChatKind,
+	branchOf: Schema.optionalKey(ChatBranch),
+	memory: Schema.optionalKey(ChatMemory),
+	memoryEpoch: Schema.optionalKey(Schema.Natural),
+	/** Fixed input of the create request, used to reject a changed retry. */
+	creation: Schema.optionalKey(
+		Schema.Struct({ requestId: Schema.String, signature: Schema.String }),
+	),
+	/** Copied history is never new evidence for memory. */
+	learnAfterSeq: Schema.optionalKey(Schema.Natural),
 	parent: Schema.optionalKey(ChatParent),
 	chain: Chain,
 	/** The request that a review Chat decides. */
@@ -133,3 +145,20 @@ export const chainAuthor = (chain: Chain): Turn.Author =>
 
 /** The member whose Chats hold the work of a chain. */
 export const ownerOf = (chain: Chain) => chain.owner ?? chain.userId
+
+/** Memory is latched when a message enters the inbox. Changing it cannot revive old work. */
+export const memoryMetadata = (
+	chat: Chat.Ref,
+	override?: ChatMemory,
+): Schema.JsonObject => ({
+	memory: override ?? hostState(chat).memory ?? defaultChatMemory,
+	memoryEpoch: hostState(chat).memoryEpoch ?? 0,
+})
+export const memoryOf = (chat: Chat.Ref, turn = chat.turn): ChatMemory => {
+	const state = hostState(chat)
+	if (turn?.metadata === undefined) return state.memory ?? defaultChatMemory
+	if (turn.metadata["memoryEpoch"] !== (state.memoryEpoch ?? 0))
+		return { read: false, write: false }
+	const value = turn.metadata["memory"]
+	return Schema.is(ChatMemory)(value) ? value : { read: false, write: false }
+}

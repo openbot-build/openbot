@@ -363,3 +363,9 @@ OpenBot 没有页面，所以你的客户端必须提供这些路径。有两个
   [登录](#登录)），并把这个地址作为 `returnTo`。然后它调用
   `POST /v1/app-authorizations/<flowId>/complete` 来完成流程。
 - **开发者测试。** 开发者测试授权会返回到 `/?developerTest=<testId>`。
+
+## 现有浏览器客户端
+
+平台身份提供方可设置 `providerId`、`callbackPath` 和 `scopes`。默认值仍为 `oidc`、`/auth/callback/oidc` 和 `openid profile email`。需要刷新授权的提供方可加入 `offline_access`。`browserAuth` 可保留现有 Host Cookie 名称与会话有效期。修改使用平台设置版本；省略的值保留当前配置。
+
+`GET /auth/login?returnTo=...`、配置的回调和 `POST /auth/logout` 使用同一原生 OAuth SDK，继续检查 state、nonce、PKCE、Cookie 和撤销状态。回调与返回路径必须留在配置的来源内。这些选项不会按邮箱关联账号。

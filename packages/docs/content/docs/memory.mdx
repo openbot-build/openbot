@@ -228,3 +228,25 @@ Two routes show what happened in one of your Chats:
 
 Both need `read` on the Chat, so only the person who owns the Chat can read
 them.
+
+---
+
+## Chat and Turn memory choices
+
+Direct Chats and separate conversations with the same Bot share its memory pool
+by default. They still use the current organization and person tags. A second
+Bot keeps its own pool unless its normal memory link grants access; there is no
+pool shared by all people or all organizations.
+
+Create or update a Chat with `memory: { read: false, write: false }` to stop
+both reading and learning. Updates use the normal `expected` revision. Send a
+message with `memory` to override it for that Turn only. It never changes the
+Chat's default. Inputs with different choices wait in separate Turns instead of
+being joined as steering. Delegated work keeps the choice of the source Turn.
+Reviews and system notices do not add personal memory.
+
+A changed Chat choice invalidates pending learning before its database write.
+Turning it on later does not learn from the earlier disabled history. Copied
+branch history is not new evidence. Turning memory off does not erase context
+already read by a running Turn, and does not delete saved entries or Chat
+history.

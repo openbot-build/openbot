@@ -50,9 +50,19 @@ export const MessageInput = Schema.Union([
 ])
 export type MessageInput = typeof MessageInput.Type
 
+/** Whether a Chat may read or add to the memory of its Bot. */
+export const ChatMemory = Schema.Struct({
+	read: Schema.Boolean,
+	write: Schema.Boolean,
+})
+export type ChatMemory = typeof ChatMemory.Type
+export const defaultChatMemory: ChatMemory = { read: true, write: true }
+/** The fixed prefix that a new conversation took from another Chat. */
 /** A message for a Bot. There is no revision: a message is always taken. */
 export const SendMessageRequest = Schema.Struct({
 	input: MessageInput,
+	/** Memory for this Turn only. This does not change the Chat. */
+	memory: Schema.optionalKey(ChatMemory),
 	/** Send live events when the message starts a new Turn. */
 	stream: Schema.optionalKey(Schema.Boolean),
 	/** Every Turn runs in the background. Only `true` is allowed. */
@@ -216,6 +226,7 @@ export const ChatResponseSseEvent: Schema.Codec<
  */
 export const ChatKind = Schema.Literals([
 	"direct",
+	"conversation",
 	"channel",
 	"task",
 	"review",
@@ -251,6 +262,37 @@ export type OpenWork = typeof OpenWork.Type
 export const ChatStatus = Schema.Literals(["Idle", ...Turn.StatusTag.literals])
 export type ChatStatus = typeof ChatStatus.Type
 
+export const ChatBranch = Schema.Struct({
+	chat: Chat.Id,
+	revision: Chat.Revision,
+	throughSeq: Item.Seq,
+	root: Chat.Id,
+	reason: Schema.Literals(["fork", "regenerate"]),
+})
+export type ChatBranch = typeof ChatBranch.Type
+/** An ID for one create request. The same request finds the same Chat. */
+export const ChatRequestId = Schema.String.check(
+	Schema.isPattern(/^[A-Za-z0-9_-]{1,96}$/),
+)
+export const CreateConversationRequest = Schema.Struct({
+	botId: BotId,
+	requestId: ChatRequestId,
+	memory: Schema.optionalKey(ChatMemory),
+})
+export type CreateConversationRequest = typeof CreateConversationRequest.Type
+export const ForkChatRequest = Schema.Struct({
+	expected: Chat.Revision,
+	requestId: ChatRequestId,
+	through: Schema.optionalKey(
+		Schema.Struct({
+			turnId: Turn.Id,
+			edge: Schema.Literals(["before", "after"]),
+		}),
+	),
+	reason: Schema.Literals(["fork", "regenerate"]),
+})
+export type ForkChatRequest = typeof ForkChatRequest.Type
+
 /** What a Chat is, without its history. */
 export const ChatInfo = Schema.Struct({
 	id: Chat.Id,
@@ -258,6 +300,8 @@ export const ChatInfo = Schema.Struct({
 	kind: ChatKind,
 	bot: BotId,
 	parent: Schema.NullOr(ChatParent),
+	branchOf: Schema.optionalKey(ChatBranch),
+	memory: Schema.optionalKey(ChatMemory),
 	/** The name of the chat on the platform of a Channel. */
 	title: Schema.optionalKey(Schema.String),
 	settings: Turn.Settings,
@@ -350,6 +394,7 @@ export type ChatModels = typeof ChatModels.Type
 
 export const UpdateChatRequest = Schema.Struct({
 	expected: Chat.Revision,
+	memory: Schema.optionalKey(ChatMemory),
 	mode: Schema.optionalKey(Config.Mode),
 	/** `null` makes the Chat use the model of its Bot again. */
 	model: Schema.optionalKey(Schema.NullOr(Config.Selection)),
@@ -412,6 +457,25 @@ const sendErrors = [
 
 export class ChatsApi extends HttpApiGroup.make("chats")
 	.add(
+		HttpApiEndpoint.post("createConversation", "/v1/chats", {
+			payload: CreateConversationRequest,
+			success: ChatView.pipe(HttpApiSchema.status(201)),
+			error: [...ChatOperationErrors, ...BotErrors],
+		}).annotate(Required, [own("write", "Chat")]),
+		HttpApiEndpoint.post("forkChat", "/v1/chats/:chatId/forks", {
+			params: chatParams,
+			payload: ForkChatRequest,
+			success: ChatView.pipe(HttpApiSchema.status(201)),
+			error: [...ChatOperationErrors, ...BotErrors],
+		}).annotate(Required, [
+			own("read", "Chat", "chatId"),
+			own("write", "Chat"),
+		]),
+		HttpApiEndpoint.get("chatBranches", "/v1/chats/:chatId/branches", {
+			params: chatParams,
+			success: Schema.Array(ChatSummary),
+			error: ChatOperationErrors,
+		}),
 		HttpApiEndpoint.post("sendBotMessage", "/v1/bots/:botId/messages", {
 			params: { botId: BotId },
 			payload: SendMessageRequest,

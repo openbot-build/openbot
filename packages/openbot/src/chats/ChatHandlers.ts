@@ -70,6 +70,7 @@ const send = (
 				}),
 			),
 			author: ChatHost.authorOf(caller.userId, caller.tokenId),
+			...(payload.memory === undefined ? {} : { memory: payload.memory }),
 		}
 		if (payload.stream !== true) return yield* chats.deliver(chat, input)
 		const result = yield* chats.deliverStream(chat, input)
@@ -87,6 +88,40 @@ const implementations = Effect.gen(function* () {
 	const files = yield* Files
 	const { check } = yield* Check.make
 	return {
+		createConversation: ({ payload }: Request<"createConversation">) =>
+			Effect.gen(function* () {
+				const caller = yield* Identity
+				const bot = yield* bots.access(caller, payload.botId, "delegate")
+				if (bot.archived)
+					return yield* BotsApi.BotInvalid.make({
+						message: "An archived Bot does no new work.",
+					})
+				return yield* (yield* current).create({
+					bot,
+					kind: "conversation",
+					chain: chainFor(caller, bot),
+					requestId: payload.requestId,
+					...(payload.memory === undefined ? {} : { memory: payload.memory }),
+				})
+			}),
+		forkChat: ({ params, payload }: Request<"forkChat">) =>
+			Effect.gen(function* () {
+				const caller = yield* Identity
+				const chats = yield* current
+				const source = yield* chats.read(params.chatId)
+				const bot = yield* bots.access(
+					caller,
+					ChatHost.hostState(source.chat).bot,
+					"delegate",
+				)
+				if (bot.archived)
+					return yield* BotsApi.BotInvalid.make({
+						message: "An archived Bot does no new work.",
+					})
+				return yield* chats.fork(params.chatId, payload)
+			}),
+		chatBranches: ({ params }: Request<"chatBranches">) =>
+			Effect.flatMap(current, (chats) => chats.branches(params.chatId)),
 		sendBotMessage: ({ params, payload }: Request<"sendBotMessage">) =>
 			Effect.gen(function* () {
 				const caller = yield* Identity
@@ -109,10 +144,15 @@ const implementations = Effect.gen(function* () {
 				const kind = ChatHost.hostState(view.chat).kind
 				// A person talks in a direct Chat or a live Chat, or adds to the work of a
 				// task Chat. In a live Chat, the message waits for its Live session.
-				if (kind !== "direct" && kind !== "task" && kind !== "live")
+				if (
+					kind !== "direct" &&
+					kind !== "conversation" &&
+					kind !== "task" &&
+					kind !== "live"
+				)
 					return yield* ChatConflict.make({
 						message:
-							"Only direct Chats, task Chats and live Chats take messages.",
+							"Only direct Chats, conversations, task Chats and live Chats take messages.",
 					})
 				return yield* send(files, chats, params.chatId, payload, caller)
 			}),
@@ -147,10 +187,15 @@ const implementations = Effect.gen(function* () {
 				const chats = yield* current
 				const view = yield* chats.read(params.chatId)
 				const kind = ChatHost.hostState(view.chat).kind
-				if (kind !== "direct" && kind !== "channel" && kind !== "live")
+				if (
+					kind !== "direct" &&
+					kind !== "conversation" &&
+					kind !== "channel" &&
+					kind !== "live"
+				)
 					return yield* ChatConflict.make({
 						message:
-							"Only direct Chats, channel Chats and live Chats can be deleted.",
+							"Only direct Chats, conversations, channel Chats and live Chats can be deleted.",
 					})
 				// The work that the Chat gave away ends first.
 				yield* coordinator

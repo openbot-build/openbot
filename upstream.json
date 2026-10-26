@@ -1,0 +1,12 @@
+{
+  "repository": "https://github.com/openbot-build/openbot",
+  "commit": "2a123ffae6f5aea2cfa02f36975efbacc83f1305",
+  "license": "AGPL-3.0-only",
+  "derivativeRepository": "https://gitlab.kai.com/KAI/Kay/OpenBot",
+  "localExtensions": [
+    "Independent conversation Chats and immutable branches",
+    "Per-Chat and per-Turn memory read and write policy",
+    "Configurable OIDC scopes, callback and existing browser cookie names"
+  ],
+  "deployment": "Isolated candidate. Account execution fencing and full historical data conversion are required before production activation."
+}

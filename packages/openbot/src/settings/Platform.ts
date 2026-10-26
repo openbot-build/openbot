@@ -3,7 +3,7 @@ import { Effect, Option, Redacted } from "effect"
 import * as Failures from "../app/Failures.ts"
 import type { Configuration } from "../auth/Model.ts"
 import { hint, Secrets } from "../secrets/Secrets.ts"
-import type { FilesDocument, PlatformDocument } from "./Documents.ts"
+import { browserAuthOf, type FilesDocument, type PlatformDocument } from "./Documents.ts"
 import type { Settings } from "./Settings.ts"
 
 /** The places of the sealed secrets in the platform settings. */
@@ -52,7 +52,7 @@ export const publicOriginOr = <E>(
  */
 export type SignInSettings = Pick<
 	PlatformDocument,
-	"publicOrigin" | "authSecret" | "identityProvider"
+	"publicOrigin" | "authSecret" | "identityProvider" | "browserAuth"
 >
 
 /**
@@ -64,6 +64,7 @@ export const signInKey = (document: PlatformDocument): SignInSettings => ({
 	publicOrigin: document.publicOrigin,
 	authSecret: document.authSecret,
 	identityProvider: document.identityProvider,
+	...(document.browserAuth === undefined ? {} : { browserAuth: document.browserAuth }),
 })
 
 /**
@@ -80,6 +81,7 @@ export const authConfiguration = (
 	Effect.gen(function* () {
 		const { settings } = input
 		const shared = {
+			...browserAuthOf(settings),
 			publicOrigin: settings.publicOrigin,
 			secret: Redacted.make(
 				yield* secrets.open(settings.authSecret, bindings.authSecret),
@@ -102,6 +104,9 @@ export const authConfiguration = (
 		return {
 			...shared,
 			mode: "oidc",
+			providerId: provider.providerId ?? "oidc",
+			callbackPath: provider.callbackPath ?? "/auth/callback/oidc",
+			scopes: provider.scopes ?? Api.defaultOidcScopes,
 			issuer: provider.issuer,
 			clientId: provider.clientId,
 			...(clientSecret === undefined ? {} : { clientSecret }),

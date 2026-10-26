@@ -29,6 +29,8 @@ import {
 	type UpdateTodosRequest,
 	type BotsApi,
 	type PlanApproval,
+	type ChatMemory,
+	type ForkChatRequest,
 } from "@openbot-build/api"
 import {
 	Context,
@@ -45,6 +47,8 @@ import type * as ChatHost from "./ChatHost.ts"
 export interface CreateInput {
 	/** A fixed ID, so a second attempt finds the first Chat. */
 	readonly id?: Chat.Id
+	readonly requestId?: string
+	readonly memory?: ChatMemory
 	readonly bot: BotsApi.Bot
 	readonly kind: ChatKind
 	readonly chain: ChatHost.Chain
@@ -64,6 +68,7 @@ export interface CreateInput {
  * A `notice` marks input from OpenBot, such as the end of a delegation.
  */
 export interface DeliverInput {
+	readonly memory?: ChatMemory
 	readonly input: MessageInput | Prompt.Prompt
 	readonly author: Turn.Author
 	readonly notice?: Item.Notice
@@ -117,6 +122,13 @@ export class Chats extends Context.Service<
 		 * The direct Chat of a member with a Bot. OpenBot makes it the first time.
 		 * Each member has one direct Chat with each Bot.
 		 */
+		readonly fork: (
+			id: Chat.Id,
+			input: ForkChatRequest,
+		) => Effect.Effect<ChatView, ServiceError>
+		readonly branches: (
+			id: Chat.Id,
+		) => Effect.Effect<ReadonlyArray<ChatSummary>, ServiceError>
 		readonly direct: (
 			bot: BotsApi.Bot,
 			chain: ChatHost.Chain,
@@ -233,6 +245,12 @@ export class Chats extends Context.Service<
 			turn: Turn.Id,
 		) => Effect.Effect<ReadonlyArray<Item.Record>, ServiceError>
 		/** The Items after a place in the log, oldest first, with the authors of their Turns. */
+		/** Holds the Chat lock while memory is saved. A changed policy discards this result. */
+		readonly withMemoryWrite: <A, E, R>(
+			id: Chat.Id,
+			epoch: number,
+			write: Effect.Effect<A, E, R>,
+		) => Effect.Effect<Option.Option<A>, E | ServiceError, R>
 		readonly itemsAfter: (
 			id: Chat.Id,
 			after: number,
@@ -240,6 +258,7 @@ export class Chats extends Context.Service<
 			{
 				readonly items: ReadonlyArray<Item.Record>
 				readonly authors: ReadonlyMap<Turn.Id, Turn.Author>
+				readonly memoryDenied?: ReadonlyArray<Turn.Id>
 			},
 			ServiceError
 		>

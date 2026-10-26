@@ -4,8 +4,11 @@ description: 和 Bot 说话。它总是马上回答，长的工作会并行运�
 ---
 
 **Chat**（聊天）是和一个 [Bot](/zh-cn/docs/bots)
-的对话。你不用创建、选择或关闭 Chat。你给一个 Bot 发消息，OpenBot 就为你和这个 Bot 保留一个 Chat。Bot 总是马上回答。长的工作会交给其他 Chat 并行运行，结果之后会回到你的 Chat。本页介绍如何和 Bot 说话，以及如何读取 Chat。每个路由都接受用户令牌或 session
-cookie。见 [身份验证](/zh-cn/docs/authentication)。
+的对话。给 Bot 发消息会使用长期保留的 `direct` Chat；调用 `POST /v1/chats`
+可以创建独立的 `conversation`
+Chat。两者复用相同的 Turn、Item、工具和权限。长任务在 task
+Chat 中运行，结果会回到原对话。每个路由都接受用户令牌或 session
+cookie。见[身份验证](/zh-cn/docs/authentication)。
 
 | 术语     | 含义                                                                             |
 | -------- | -------------------------------------------------------------------------------- |
@@ -19,15 +22,16 @@ cookie。见 [身份验证](/zh-cn/docs/authentication)。
 
 ## Chat 的种类
 
-每个 Chat 都由 OpenBot 自己创建。`kind` 说明这个 Chat 为什么存在：
+`kind` 说明这个 Chat 为什么存在：
 
-| 种类      | OpenBot 什么时候创建它                                                                                             | 归谁所有                       |
-| --------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
-| `direct`  | 一个人第一次给某个 Bot 发消息时。                                                                                  | 这个人。                       |
-| `channel` | [Channel](/zh-cn/docs/channels) 的某个聊天中的第一条消息。                                                         | Channel 的 actor。             |
-| `task`    | 每次一个 Bot 把工作交给一个 Bot，或者一个[触发器](/zh-cn/docs/triggers)触发时。见 [委派](/zh-cn/docs/delegation)。 | 交出这项工作的 Chat 的所有者。 |
-| `review`  | 一个 Bot 必须决定一个 [request](/zh-cn/docs/requests) 时。                                                         | 这个请求为之服务的人。         |
-| `live`    | 每次一个人调用 `POST /v1/bots/:botId/live` 时。见 [Live 模式](/zh-cn/docs/live)。                                  | 这个人。                       |
+| 种类           | OpenBot 什么时候创建它                                                                                             | 归谁所有                       |
+| -------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
+| `direct`       | 一个人第一次给某个 Bot 发消息时。                                                                                  | 这个人。                       |
+| `conversation` | 每次调用 `POST /v1/chats` 时。                                                                                     | 调用者。                       |
+| `channel`      | [Channel](/zh-cn/docs/channels) 的某个聊天中的第一条消息。                                                         | Channel 的 actor。             |
+| `task`         | 每次一个 Bot 把工作交给一个 Bot，或者一个[触发器](/zh-cn/docs/triggers)触发时。见 [委派](/zh-cn/docs/delegation)。 | 交出这项工作的 Chat 的所有者。 |
+| `review`       | 一个 Bot 必须决定一个 [request](/zh-cn/docs/requests) 时。                                                         | 这个请求为之服务的人。         |
+| `live`         | 每次一个人调用 `POST /v1/bots/:botId/live` 时。见 [Live 模式](/zh-cn/docs/live)。                                  | 这个人。                       |
 
 每个人和每个 Bot 只有一个 direct
 Chat。Chat 没有终点。只要人们还在和 Bot 说话，它就一直继续，除非你[删除它的历史](#删除历史)。review
@@ -580,3 +584,28 @@ Chat 被删除后，那个聊天里的下一条消息会开始一个新的 Chat�
 所以服务器停止时，输入不会丢失，也不会有 Chat 卡住。
 
 所有字段见 [Chats 参考](/docs/api/operations/tags/chats/)。
+
+---
+
+## 独立对话和分支
+
+调用 `POST /v1/chats`，传入
+`{ "botId": "bot_id", "requestId": "request_1" }`。接口返回 `201`
+和 Chat 视图，调用者需要对 Bot 的 `delegate` 权限。相同的 `requestId`
+和请求内容会返回同一个已有 Chat；复用 ID 但改变内容会返回
+`409`。每个新操作使用新 ID。ID 是 1 至 96 个字母、数字、短横线或下划线。结果不确定时保留 ID 并查询。
+
+`POST /v1/chats/:chatId/forks`
+只复制已保存的历史，不运行模型、工具或记忆助手。请求包含 `expected`、`requestId`
+和 `reason`（`fork` 或 `regenerate`）。可选的
+`through: { turnId, edge: "before" | "after" }`
+指定完整 Turn 的边界。重新生成必须选
+`before`；调用者随后仅发送一次旧输入。分支接口本身不会发送消息。不能为了恢复丢失的响应而重复消息或外部写操作。
+
+对话运行中、有排队输入、待处理审批、委派、提醒、后台操作，或 App 操作结果未知时，接口拒绝分支。源 revision 的校验和复制在同一数据库事务中完成。复制的 Item 和 Turn 保留原 ID，但 Chat
+ID 指向新分支。源历史不变。分支可以接收新消息，已保存的前缀不会改变。
+
+`GET /v1/chats/:chatId/branches` 返回当前用户 namespace 内的根对话和分支。
+`branchOf` 记录源 Chat、revision、Item 序号、根 Chat 和原因，与表示委派的
+`parent`
+分开。切换版本时读取旧分支，不删除旧分支。迁移时每个旧版本都要保留，不重放模型或工具。

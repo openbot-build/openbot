@@ -576,3 +576,55 @@ it.effect(
 	},
 	5000,
 )
+
+it.effect(
+	"Turn metadata keeps different memory choices out of steering and shared inbox batches",
+	() => {
+		const prompts = { value: [] as ReadonlyArray<Prompt.Prompt> }
+		return Effect.gen(function* () {
+			const ready = yield* Deferred.make<void>()
+			const gate = yield* Deferred.make<void>()
+			yield* Effect.gen(function* () {
+				const { runtime, runtimeStore, chat } = yield* ChatTest()
+				const first = yield* runtime.deliver({
+					chat,
+					input: "First",
+					author: "alice",
+					metadata: { memory: { read: true, write: true } },
+				})
+				yield* Deferred.await(ready)
+				const off = yield* runtime.deliver({
+					chat,
+					input: "Private",
+					author: "alice",
+					metadata: { memory: { read: false, write: false } },
+				})
+				const on = yield* runtime.deliver({
+					chat,
+					input: "Last",
+					author: "alice",
+					queue: true,
+					metadata: { memory: { read: true, write: true } },
+				})
+				assert.strictEqual(off.delivery, "queued")
+				assert.strictEqual(on.delivery, "queued")
+				yield* Deferred.succeed(gate, undefined)
+				yield* settled(runtime, chat)
+				const turns = yield* runtimeStore.turns(chat)
+				assert.strictEqual(turns.length, 3)
+				assert.deepStrictEqual(turns[0]?.metadata, {
+					memory: { read: true, write: true },
+				})
+				assert.deepStrictEqual(turns[1]?.metadata, {
+					memory: { read: false, write: false },
+				})
+				assert.deepStrictEqual(turns[2]?.metadata, {
+					memory: { read: true, write: true },
+				})
+				assert.deepStrictEqual(turns[0]?.input, [first.item])
+				assert.deepStrictEqual(turns[1]?.input, [off.item])
+				assert.deepStrictEqual(turns[2]?.input, [on.item])
+			}).pipe(Effect.provide(heldModel({ ready, gate, prompts })))
+		})
+	},
+)

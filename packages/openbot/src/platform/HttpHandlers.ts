@@ -172,6 +172,9 @@ const group = HttpApiBuilder.group(OpenBotApi, "platform", (handlers) =>
 											: identityProvider === null
 												? null
 												: {
+														providerId: identityProvider.providerId ?? document.identityProvider?.providerId ?? "oidc",
+														callbackPath: identityProvider.callbackPath ?? document.identityProvider?.callbackPath ?? "/auth/callback/oidc",
+														scopes: identityProvider.scopes ?? document.identityProvider?.scopes ?? SettingsApi.defaultOidcScopes,
 														issuer: identityProvider.issuer,
 														clientId: identityProvider.clientId,
 														...(identityProvider.clientSecret === undefined

@@ -76,8 +76,46 @@ export const ClientId = Schema.String.check(
 	Schema.isMaxLength(512),
 )
 
+export const BrowserAuth = Schema.Struct({
+	sessionCookie: Schema.String.check(
+		Schema.isPattern(/^__Host-[A-Za-z0-9_-]+$/),
+	),
+	loginCookie: Schema.String.check(Schema.isPattern(/^__Host-[A-Za-z0-9_-]+$/)),
+	sessionTtlMs: Schema.Int.check(Schema.isGreaterThan(0)),
+}).check(
+	Schema.makeFilter((value) => value.sessionCookie !== value.loginCookie),
+)
+export type BrowserAuth = typeof BrowserAuth.Type
+export const ProviderId = Schema.String.check(
+	Schema.isPattern(/^[A-Za-z0-9_-]+$/),
+)
+export const CallbackPath = Schema.String.check(
+	Schema.isPattern(/^\/auth\/callback(?:\/[A-Za-z0-9_-]+)?$/),
+)
+/** OpenID Connect needs openid. Add any other scopes that the provider requires. */
+export const OidcScopes = Schema.Array(
+	Schema.String.check(
+		Schema.isPattern(/^[\x21\x23-\x5b\x5d-\x7e]+$/),
+		Schema.isMaxLength(256),
+	),
+).check(
+	Schema.isMinLength(1),
+	Schema.isMaxLength(50),
+	Schema.makeFilter((scopes) => scopes.includes("openid"), {
+		message: "OpenID Connect scopes must include openid",
+	}),
+)
+export const defaultOidcScopes: typeof OidcScopes.Type = [
+	"openid",
+	"profile",
+	"email",
+]
+
 /** The OpenID Connect provider that signs people in to the whole platform. */
 export const IdentityProvider = Schema.Struct({
+	providerId: ProviderId,
+	callbackPath: CallbackPath,
+	scopes: OidcScopes,
 	issuer: Issuer,
 	clientId: ClientId,
 	/** Not set means a public client that uses PKCE only. */
@@ -85,6 +123,9 @@ export const IdentityProvider = Schema.Struct({
 })
 export type IdentityProvider = typeof IdentityProvider.Type
 export const IdentityProviderInput = Schema.Struct({
+	providerId: Schema.optionalKey(ProviderId),
+	callbackPath: Schema.optionalKey(CallbackPath),
+	scopes: Schema.optionalKey(OidcScopes),
 	issuer: Issuer,
 	clientId: ClientId,
 	/** Leave it out to keep the current secret. Send null for a public client. */
@@ -292,6 +333,7 @@ export const fileDefaults: Omit<Files, "storage"> = {
 }
 
 export const PlatformSettings = Schema.Struct({
+	browserAuth: BrowserAuth,
 	version: Version,
 	/**
 	 * The public HTTPS address of OpenBot. A change signs everyone out and
@@ -318,6 +360,7 @@ export const PlatformSettings = Schema.Struct({
 })
 export type PlatformSettings = typeof PlatformSettings.Type
 export const UpdatePlatformSettingsRequest = Schema.Struct({
+	browserAuth: Schema.optionalKey(BrowserAuth),
 	expectedVersion: Version,
 	publicOrigin: Schema.optionalKey(PublicOrigin),
 	identityProvider: Schema.optionalKey(Schema.NullOr(IdentityProviderInput)),

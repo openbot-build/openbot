@@ -54,6 +54,8 @@ export const Record = Schema.Struct({
 	id: Id,
 	chat: ChatIdentity.Id,
 	settings: Settings,
+	/** Data set by the host for this Turn only. */
+	metadata: Schema.optionalKey(Schema.JsonObject),
 	action: Schema.optionalKey(Action),
 	author: Schema.optionalKey(Author),
 	activeAction: Schema.optionalKey(

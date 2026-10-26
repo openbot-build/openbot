@@ -242,3 +242,24 @@ Zwei Routen zeigen, was in einem deiner Chats passiert ist:
 
 Beide brauchen `read` auf dem Chat. So kann nur die Person sie lesen, der der
 Chat gehört.
+
+---
+
+## Gedächtniswahl für Chat und Turn
+
+Direkte Chats und getrennte Gespräche mit demselben Bot teilen sein Gedächtnis
+als Standard. Die Tags für Organisation und Person gelten weiter. Andere Bots
+behalten eigene Pools, außer ihre normale Gedächtnisverknüpfung gibt Zugriff. Es
+gibt keinen globalen Pool über alle Menschen oder Organisationen.
+
+`memory: { read: false, write: false }` beim Erstellen oder Ändern eines Chats
+stoppt Lesen und Lernen. Änderungen brauchen die `expected` Revision. `memory`
+in einer Nachricht gilt nur für ihren Turn und ändert keinen Standard. Eingaben
+mit verschiedenen Werten kommen in getrennte Turns. Delegierte Arbeit übernimmt
+die Wahl des Quell-Turns. Reviews und Systemmitteilungen fügen kein persönliches
+Gedächtnis hinzu.
+
+Eine Änderung verwirft wartende Lernergebnisse vor dem Datenbankschreiben.
+Späteres Einschalten lernt nicht aus dem zuvor ausgeschalteten Verlauf.
+Kopierter Verlauf ist kein neuer Beleg. Ausschalten entfernt weder bereits
+gelesenen Kontext eines laufenden Turns noch gespeicherte Einträge oder Chats.

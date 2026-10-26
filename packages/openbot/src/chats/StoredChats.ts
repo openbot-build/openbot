@@ -12,10 +12,16 @@ import {
 	or,
 	sql,
 } from "drizzle-orm"
-import { chats, chatItems, chatTurns, fileRefs } from "../database/Schema.ts"
+import {
+	chats,
+	chatItems,
+	chatTurns,
+	fileRefs,
+	appInvocations,
+} from "../database/Schema.ts"
 import { fileIdsIn } from "../files/Refs.ts"
 import * as Db from "../database/Database.ts"
-import { chatHostId } from "./ChatHost.ts"
+import { chatHostId, ChatHostState } from "./ChatHost.ts"
 import { databaseError, decode } from "./ChatEncoding.ts"
 
 /** The Chats of each namespace, kept in Postgres. */
@@ -66,6 +72,35 @@ const columnsOf = (ref: Schema.Json, chat: Chat.Id) =>
 			createdAt: record.createdAt,
 		}
 	})
+
+/** Shares the row lock with Chat updates, so a policy change cannot race a memory save. */
+export const withMemoryWrite = <A, E, R>(
+	db: Database,
+	namespace: string,
+	id: Chat.Id,
+	epoch: number,
+	write: Effect.Effect<A, E, R>,
+) =>
+	db
+		.transaction((tx) =>
+			Effect.gen(function* () {
+				const rows = yield* tx
+					.select({ body: chats.body })
+					.from(chats)
+					.where(and(eq(chats.namespace, namespace), eq(chats.id, id)))
+					.for("update")
+				const row = rows[0]
+				if (row === undefined) return Option.none()
+				const ref = yield* decodeRef(row.body, id)
+				const state = yield* decode(Schema.toCodecJson(ChatHostState))(
+					ref.business[chatHostId],
+					id,
+				)
+				if ((state.memoryEpoch ?? 0) !== epoch) return Option.none()
+				return Option.some(yield* Effect.exit(write))
+			}),
+		)
+		.pipe(Effect.mapError(databaseError))
 
 /** The core Chat store persistence of one namespace. */
 export const persistence = (
@@ -191,6 +226,44 @@ export const save = (
 	db
 		.transaction((tx) =>
 			Effect.gen(function* () {
+				if (delta.source !== undefined) {
+					const source = yield* tx
+						.select({ revision: chats.revision })
+						.from(chats)
+						.where(
+							and(
+								eq(chats.namespace, namespace),
+								eq(chats.id, delta.source.chat),
+							),
+						)
+						.for("update")
+					if (source[0]?.revision !== delta.source.revision)
+						return yield* ChatStore.ChatStoreError.make({
+							reason: "reference-conflict",
+							message: "The source Chat changed",
+						})
+					const unsettled = yield* tx
+						.select({ id: appInvocations.id })
+						.from(appInvocations)
+						.where(
+							and(
+								eq(appInvocations.owner, namespace),
+								eq(appInvocations.chat, delta.source.chat),
+								inArray(appInvocations.status, [
+									"PendingApproval",
+									"Approved",
+									"Sending",
+									"OutcomeUnknown",
+								]),
+							),
+						)
+						.limit(1)
+					if (unsettled.length > 0)
+						return yield* ChatStore.ChatStoreError.make({
+							reason: "reference-conflict",
+							message: "The source Chat has an unsettled App operation",
+						})
+				}
 				const columns = yield* columnsOf(delta.ref, Chat.Id.make(delta.chat))
 				const now = yield* Clock.currentTimeMillis
 				const state = yield* stringify(delta.state ?? null)
@@ -260,6 +333,17 @@ export const save = (
 							Arr.map(used, (file) => ({ file, namespace, chat: delta.chat })),
 						)
 						.onConflictDoNothing()
+				if (delta.turns !== undefined && delta.turns.length > 0) {
+					const copied = yield* Effect.forEach(delta.turns, (turn) =>
+						Effect.map(stringify(turn.value), (value) => ({
+							namespace,
+							chat: delta.chat,
+							id: turn.id,
+							value,
+						})),
+					)
+					yield* tx.insert(chatTurns).values(copied)
+				}
 				if (delta.turn !== undefined) {
 					const value = yield* stringify(delta.turn.value)
 					yield* tx
