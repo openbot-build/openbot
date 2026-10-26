@@ -27,7 +27,7 @@ import {
 import * as NodeHttpServer from "@openbot-build/protocol/NodeHttpServer"
 import { assert, it } from "@effect/vitest"
 import { NodeCrypto, NodeServices } from "@effect/platform-node"
-import { Base64Url } from "effect/encoding"
+import { Base64, Base64Url } from "effect/encoding"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 
 import { TestClock } from "effect/testing"
@@ -44,6 +44,13 @@ it.live(
 			let origin = ""
 			let oidc = false
 			let cimd = true
+			let registration = false
+			let registrationRedirect = true
+			let registrationHttps = true
+			let registrations = 0
+			let clientAuth: "none" | "client_secret_basic" | "client_secret_post" =
+				"none"
+			let expectedClientId = ""
 			let wrongClient = false
 			let expanded = false
 			let exchanges = 0
@@ -87,14 +94,49 @@ it.live(
 							token_endpoint: origin + "/token",
 							revocation_endpoint: origin + "/revoke",
 							client_id_metadata_document_supported: cimd,
+							...(registration
+								? {
+										registration_endpoint: registrationHttps
+											? origin + "/register"
+											: "http://example.test/register",
+									}
+								: {}),
 							authorization_response_iss_parameter_supported: true,
 							code_challenge_methods_supported: ["S256"],
 							response_types_supported: ["code"],
-							token_endpoint_auth_methods_supported: ["none"],
+							token_endpoint_auth_methods_supported: [clientAuth],
 							jwks_uri: origin + "/jwks",
 							subject_types_supported: ["public"],
 							id_token_signing_alg_values_supported: ["RS256"],
 						})
+					if (url.pathname === "/register") {
+						registrations++
+						const input = yield* Schema.decodeUnknownEffect(Schema.JsonObject)(
+							yield* request.json,
+						)
+						assert.strictEqual(input["token_endpoint_auth_method"], clientAuth)
+						assert.deepStrictEqual(input["redirect_uris"], [
+							origin + "/callback?host=trusted",
+						])
+						assert.strictEqual(input["scope"], "notes")
+						expectedClientId = "registered-client"
+						return yield* HttpServerResponse.json(
+							{
+								...input,
+								client_id: expectedClientId,
+								redirect_uris: [
+									origin +
+										(registrationRedirect
+											? "/callback?host=trusted"
+											: "/changed"),
+								],
+								...(clientAuth === "none"
+									? {}
+									: { client_secret: "registered-client-secret" }),
+							},
+							{ status: 201 },
+						)
+					}
 					if (url.pathname === "/authorize") {
 						assert.strictEqual(
 							url.searchParams.get("code_challenge_method"),
@@ -106,7 +148,7 @@ it.live(
 						)
 						assert.strictEqual(
 							url.searchParams.get("client_id"),
-							origin + "/client.json",
+							expectedClientId,
 						)
 						const code = yield* crypto.randomUUIDv4()
 						codes = HashMap.set(codes, code, url.searchParams)
@@ -123,7 +165,20 @@ it.live(
 						return yield* HttpServerResponse.json({ received: true })
 					if (url.pathname === "/token" || url.pathname === "/revoke") {
 						const form = new URLSearchParams(yield* request.text)
-						assert.strictEqual(form.get("client_id"), origin + "/client.json")
+						if (clientAuth === "client_secret_basic") {
+							assert.strictEqual(
+								request.headers["authorization"],
+								`Basic ${Base64.encode(new TextEncoder().encode(`${expectedClientId}:registered-client-secret`))}`,
+							)
+						} else {
+							assert.strictEqual(form.get("client_id"), expectedClientId)
+							assert.strictEqual(
+								form.get("client_secret"),
+								clientAuth === "client_secret_post"
+									? "registered-client-secret"
+									: null,
+							)
+						}
 						if (url.pathname === "/revoke") {
 							revocations++
 							assert.strictEqual(form.get("token"), "refresh-secret")
@@ -166,6 +221,7 @@ it.live(
 				}),
 			)
 			origin = fixture.origin
+			expectedClientId = origin + "/client.json"
 			const key = { owner: "alice", connectionId: "notes" }
 			const clientId = origin + "/client.json"
 			const redirectUri = origin + "/callback?host=trusted"
@@ -463,6 +519,89 @@ it.live(
 						(yield* apps.get(key)).authorization._tag,
 						"PendingAuthorization",
 					)
+					registration = true
+					cimd = false
+					for (const method of [
+						"none",
+						"client_secret_post",
+						"client_secret_basic",
+					] as const) {
+						clientAuth = method
+						const before = registrations
+						const pending = yield* OAuthAuthorization.begin(options)
+						assert.strictEqual(registrations, before + 1)
+						assert.strictEqual(
+							new URL(pending.authorizationUrl).searchParams.get("client_id"),
+							"registered-client",
+						)
+						assert.ok(
+							!Str.includes("registered-client-secret")(
+								yield* encodeJson(pending),
+							),
+						)
+						const flow = yield* flows.get({ key, flowId: pending.flowId })
+						assert.strictEqual(flow.clientAuthMethod, method)
+						const received = (yield* network.readDocument({
+							url: pending.authorizationUrl,
+						})).url
+						const completed = yield* OAuthAuthorization.complete({
+							key,
+							flowId: pending.flowId,
+							callbackUrl: received,
+						})
+						const binding = Match.value(completed.authorization).pipe(
+							Match.tag("Authorized", (value) => value),
+							Match.orElse(() => assert.fail("Expected the registered grant")),
+						)
+						const saved = yield* credentials.get({
+							binding: binding.binding,
+							reference: binding.credentialRef,
+						})
+						assert.strictEqual(saved.clientId, "registered-client")
+						assert.strictEqual(saved.clientAuthMethod, method)
+						assert.strictEqual(
+							saved.clientSecret === undefined
+								? undefined
+								: Redacted.value(saved.clientSecret),
+							method === "none" ? undefined : "registered-client-secret",
+						)
+						yield* OAuthAuthorization.refresh(key)
+						assert.strictEqual(registrations, before + 1)
+						const scopedAway = yield* Effect.flip(
+							credentials.get({
+								binding: { ...binding.binding, owner: "bob" },
+								reference: binding.credentialRef,
+							}),
+						)
+						assert.strictEqual(scopedAway.reason, "Missing")
+						yield* OAuthAuthorization.revoke(key)
+					}
+					clientAuth = "none"
+					registrationRedirect = false
+					const changedRedirect = yield* Effect.flip(
+						OAuthAuthorization.begin(options),
+					)
+					assert.strictEqual(changedRedirect._tag, "AuthorizationError")
+					if (changedRedirect._tag === "AuthorizationError")
+						assert.strictEqual(changedRedirect.reason, "ClientMetadata")
+					registrationRedirect = true
+					registrationHttps = false
+					const beforeUnsafe = registrations
+					const unsafeRegistration = yield* Effect.flip(
+						OAuthAuthorization.begin(options),
+					)
+					assert.strictEqual(unsafeRegistration._tag, "AuthorizationError")
+					assert.strictEqual(registrations, beforeUnsafe)
+					registrationHttps = true
+					cimd = true
+					expectedClientId = clientId
+					const beforeCimd = registrations
+					const preferred = yield* OAuthAuthorization.begin(options)
+					assert.strictEqual(
+						new URL(preferred.authorizationUrl).searchParams.get("client_id"),
+						clientId,
+					)
+					assert.strictEqual(registrations, beforeCimd)
 				}),
 			).pipe(
 				Effect.provide(

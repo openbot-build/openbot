@@ -100,7 +100,7 @@ const failureMessages: Readonly<Record<string, string>> = {
 	FlowExpired:
 		"This authorization expired. Start a new authorization from My Apps.",
 	CimdUnsupported:
-		"This authorization provider does not support the required public client metadata.",
+		"This authorization provider supports neither a compatible client metadata document nor dynamic client registration.",
 	CallbackMismatch:
 		"The callback does not match this account's authorization flow.",
 	Metadata:

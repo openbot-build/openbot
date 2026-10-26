@@ -59,6 +59,10 @@ export class Credential extends Schema.Opaque<
 		clientId: Schema.optional(Schema.String),
 		accessToken: Schema.Redacted(Schema.NonEmptyString),
 		refreshToken: Schema.optional(Schema.Redacted(Schema.NonEmptyString)),
+		clientSecret: Schema.optional(Schema.Redacted(Schema.NonEmptyString)),
+		clientAuthMethod: Schema.optional(
+			Schema.Literals(["none", "client_secret_basic", "client_secret_post"]),
+		),
 		expiresAt: Schema.optional(Schema.Finite),
 		scopes: Schema.Array(Schema.String),
 	}),
